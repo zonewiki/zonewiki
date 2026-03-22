@@ -113,6 +113,10 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
 
+Every page view includes:
+- **Breadcrumb** — `Wiki › Page Title` above the page header, linking back to the home page.
+- **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
+
 ---
 
 ## Rendering
@@ -144,10 +148,17 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ## In-Browser Editor
 
 - `/edit/<slug>` renders a split-pane view: `<textarea>` on the left, live preview on the right.
-- Live preview updates as the user types (debounced, ~300ms) by calling `GET /api/preview` with the raw markdown, which returns rendered HTML.
+- Live preview updates as the user types (debounced, ~300ms) by calling `POST /api/preview`, which returns rendered HTML.
 - "Save" POSTs the textarea content to `POST /edit/<slug>`.
 - After save, server writes the file and redirects back to `/page/<slug>`.
-- The editor textarea must preserve tabs and disable spell-check.
+- The editor textarea preserves tabs and disables spell-check.
+
+### Editor smart helpers
+
+- **Wikilink autocomplete** — typing `[[` opens a dropdown of existing page slugs filtered as you type. Arrow keys navigate, Enter or Tab inserts `[[slug]]`, Escape closes. Slugs are fetched once from `/api/pages` on load.
+- **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
+- **Image paste** — pasting an image from the clipboard uploads it via `POST /api/upload` and inserts `![image](url)` at the cursor.
+- **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `wiki.js`.
 
 ### Rename
 

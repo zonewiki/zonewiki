@@ -79,6 +79,22 @@ def strip_h1(content: str) -> str:
     return "\n".join(lines)
 
 
+def find_backlinks(slug: str) -> list[dict]:
+    """Return pages that contain a wikilink resolving to slug."""
+    results = []
+    for md_file in PAGES_DIR.glob("*.md"):
+        if md_file.stem == slug:
+            continue
+        content = md_file.read_text(encoding="utf-8")
+        for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
+            page_name = m.group(1).split("|")[0].strip()
+            if to_slug(page_name) == slug:
+                results.append({"slug": md_file.stem, "title": page_title(content, md_file.stem)})
+                break
+    results.sort(key=lambda r: r["title"].lower())
+    return results
+
+
 def update_references(old_slug: str, new_slug: str) -> None:
     """Rewrite [[wikilinks]] across all pages after a rename."""
     for md_file in PAGES_DIR.glob("*.md"):
@@ -100,7 +116,7 @@ def update_references(old_slug: str, new_slug: str) -> None:
             md_file.write_text(new_content, encoding="utf-8")
 
 
-def shell(title: str, body: str, *, slug: str = "", editor: bool = False) -> str:
+def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_head: str = "") -> str:
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     safe_title = html.escape(title)
@@ -115,6 +131,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False) -> str
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
   <script src="/public/wiki.js" defer></script>
+  {extra_head}
 </head>
 <body{body_class}>
   <nav>
@@ -157,13 +174,28 @@ def view_page(slug):
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    body = f"""<header class="page-header">
+    backlinks = find_backlinks(slug)
+    if backlinks:
+        bl_items = "".join(
+            f'<li><a href="/page/{r["slug"]}">{html.escape(r["title"])}</a></li>'
+            for r in backlinks
+        )
+        bl_html = f'<section class="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
+    else:
+        bl_html = '<section class="backlinks backlinks-empty"><h3>Backlinks</h3><p>No pages link here.</p></section>'
+    body = f"""<div class="breadcrumb">
+  <a href="/">Wiki</a>
+  <span class="breadcrumb-sep">›</span>
+  <span>{html.escape(title)}</span>
+</div>
+<header class="page-header">
   <h1>{html.escape(title)}</h1>
   <a href="/edit/{slug}" class="btn">Edit</a>
 </header>
 <article class="page-content">
   {render_md(strip_h1(content))}
-</article>"""
+</article>
+{bl_html}"""
     return shell(title, body)
 
 

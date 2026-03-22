@@ -348,6 +348,58 @@ main {
   white-space: nowrap;
 }
 
+/* ── Breadcrumb ─────────────────────────────────────────────────────────────── */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  font-size: .8125rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+.breadcrumb a { color: var(--muted); text-decoration: none; }
+.breadcrumb a:hover { color: var(--link); }
+.breadcrumb-sep { opacity: .5; }
+
+/* ── Backlinks ───────────────────────────────────────────────────────────────── */
+
+.backlinks {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.backlinks h3 {
+  font-size: .7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: .75rem;
+}
+
+.backlinks ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+
+.backlinks li a {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  font-size: .8125rem;
+  text-decoration: none;
+  color: var(--link);
+}
+.backlinks li a:hover { border-color: var(--link); }
+
+.backlinks-empty p { font-size: .8125rem; color: var(--muted); }
+
 /* ── Editor layout ─────────────────────────────────────────────────────────── */
 
 body.editor-page main {
@@ -424,4 +476,33 @@ body.editor-page main {
   letter-spacing: .08em;
   color: var(--muted);
   margin-bottom: 1rem;
+}
+
+/* ── Wikilink autocomplete ──────────────────────────────────────────────────── */
+
+.wikilink-ac {
+  position: fixed;
+  z-index: 500;
+  background: var(--nav-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  min-width: 180px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.wikilink-ac-item {
+  padding: .35rem .75rem;
+  cursor: pointer;
+  font-size: .875rem;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.wikilink-ac-item:hover,
+.wikilink-ac-item.selected {
+  background: var(--code-bg);
+  color: var(--link);
 }
