@@ -2,6 +2,7 @@ import html
 import mimetypes
 import re
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request
@@ -77,6 +78,20 @@ def strip_h1(content: str) -> str:
                 del lines[i]
             break
     return "\n".join(lines)
+
+
+def all_backlink_counts() -> dict[str, int]:
+    """Return a mapping of slug → number of pages that link to it."""
+    counts: dict[str, int] = {}
+    for md_file in PAGES_DIR.glob("*.md"):
+        content = md_file.read_text(encoding="utf-8")
+        seen: set[str] = set()
+        for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
+            target = to_slug(m.group(1).split("|")[0].strip())
+            if target != md_file.stem and target not in seen:
+                counts[target] = counts.get(target, 0) + 1
+                seen.add(target)
+    return counts
 
 
 def find_backlinks(slug: str) -> list[dict]:
@@ -297,26 +312,51 @@ def rename_page(slug):
     return redirect(f"/page/{new_slug}")
 
 
+def fmt_date(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
 @app.get("/pages")
 def pages_list():
+    counts = all_backlink_counts()
     pages = []
     for md_file in PAGES_DIR.glob("*.md"):
         slug = md_file.stem
         content = md_file.read_text(encoding="utf-8")
         title = page_title(content, slug)
-        pages.append((title, slug))
+        stat = md_file.stat()
+        mtime = stat.st_mtime
+        ctime = getattr(stat, "st_birthtime", stat.st_ctime)
+        pages.append((title, slug, counts.get(slug, 0), mtime, ctime))
     pages.sort(key=lambda x: x[0].lower())
 
     items = "".join(
-        f'<li class="page-list-item" data-title="{html.escape(t.lower())}" data-slug="{html.escape(s)}">'
+        f'<li class="page-list-item" data-title="{html.escape(t.lower())}" data-slug="{html.escape(s)}"'
+        f' data-links="{n}" data-mtime="{int(m)}">'
         f'<a href="/page/{s}">{html.escape(t)}</a>'
+        f'<span class="page-item-right">'
         f'<span class="page-slug">{html.escape(s)}</span>'
+        f'<span class="page-dates">'
+        f'<span title="Created">{fmt_date(c)}</span>'
+        f'<span title="Last edited">{fmt_date(m)}</span>'
+        f'</span></span>'
         f'</li>'
-        for t, s in pages
+        for t, s, n, m, c in pages
     )
     body = f"""<div class="page-list-wrap">
   <h1>All Pages <span class="page-count">({len(pages)})</span></h1>
-  <input type="text" id="page-filter" placeholder="Filter pages…" autocomplete="off">
+  <div class="page-list-controls">
+    <input type="text" id="page-filter" placeholder="Filter pages…" autocomplete="off">
+    <select id="page-sort">
+      <option value="title-asc">Title A–Z</option>
+      <option value="title-desc">Title Z–A</option>
+      <option value="mtime-desc">Recently edited</option>
+      <option value="links-desc">Most linked</option>
+    </select>
+    <label class="unlinked-label">
+      <input type="checkbox" id="unlinked-only"> Unlinked only
+    </label>
+  </div>
   <ul class="page-list" id="page-list">
     {items}
   </ul>

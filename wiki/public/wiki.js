@@ -303,19 +303,41 @@ function expandSnippet() {
   return false;
 }
 
-// ── Page list filter ─────────────────────────────────────────────────────────
+// ── Page list controls ────────────────────────────────────────────────────────
 
 const pageFilter = document.getElementById('page-filter');
 const pageList = document.getElementById('page-list');
+const pageSort = document.getElementById('page-sort');
+const unlinkedOnly = document.getElementById('unlinked-only');
 
 if (pageFilter && pageList) {
   pageFilter.focus();
-  pageFilter.addEventListener('input', () => {
-    const q = pageFilter.value.toLowerCase();
-    pageList.querySelectorAll('.page-list-item').forEach(item => {
-      const match = item.dataset.title.includes(q) || item.dataset.slug.includes(q);
-      item.classList.toggle('hidden', !match);
-    });
+  pageFilter.addEventListener('input', applyPageControls);
+  pageSort.addEventListener('change', applyPageControls);
+  unlinkedOnly.addEventListener('change', applyPageControls);
+}
+
+function applyPageControls() {
+  const q = pageFilter.value.toLowerCase();
+  const sort = pageSort.value;
+  const unlinked = unlinkedOnly.checked;
+
+  let items = Array.from(pageList.querySelectorAll('.page-list-item'));
+
+  // Sort
+  items.sort((a, b) => {
+    if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
+    if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
+    if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
+    return a.dataset.title.localeCompare(b.dataset.title); // title-asc
+  });
+  items.forEach(item => pageList.appendChild(item));
+
+  // Filter visibility
+  items.forEach(item => {
+    const textMatch = !q || item.dataset.title.includes(q) || item.dataset.slug.includes(q);
+    const linkMatch = !unlinked || item.dataset.links === '0';
+    item.classList.toggle('hidden', !textMatch || !linkMatch);
   });
 }
 

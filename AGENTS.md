@@ -175,12 +175,13 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ## Page List
 
 - `GET /pages` renders a full-page list of every page in the wiki.
-- The list is sorted alphabetically by title.
-- Each entry shows the page title linking to `/page/<slug>` and the slug in muted monospace beside it.
-- A plain text `<input>` at the top of the page filters the list client-side as the user types (no server round-trip). Matching is case-insensitive against both title and slug.
-- The filter input is focused automatically on page load.
-- A "Pages" link is added to the nav bar (between the search bar and the "New Page" button).
-- No pagination — the full list is rendered server-side into the page.
+- Each entry shows the page title linking to `/page/<slug>` and the slug in muted monospace.
+- Controls row (all client-side, no round-trip):
+  - **Filter** input — matches title and slug, case-insensitive.
+  - **Sort by** select — Title A–Z (default), Title Z–A, Recently edited, Most linked.
+  - **Unlinked only** checkbox — shows only pages with zero incoming wikilinks.
+- Each row shows the slug, creation date (`st_birthtime` → `st_ctime` fallback), and last-edited date (`st_mtime`), formatted `YYYY-MM-DD`.
+- Backlink counts and timestamps are computed server-side and embedded as `data-links` / `data-mtime` on each `<li>`; sorting reads these attributes client-side.
 
 ---
 
