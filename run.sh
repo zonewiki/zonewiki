@@ -3,8 +3,12 @@ set -e
 
 cd "$(dirname "$0")"
 
-# Ensure pages bind-mount directory exists on the host before Docker creates it as root
-mkdir -p wiki/pages
+# Read WIKI_DATA from .env, fall back to ./wiki-data
+WIKI_DATA=$(grep '^WIKI_DATA=' .env 2>/dev/null | cut -d= -f2-)
+WIKI_DATA="${WIKI_DATA:-./wiki-data}"
+
+# Ensure subdirs exist on the host before Docker creates them as root
+mkdir -p "$WIKI_DATA" "$WIKI_DATA/_uploads"
 
 case "${1:-up}" in
   build)
@@ -13,6 +17,7 @@ case "${1:-up}" in
   up)
     docker compose up --build -d
     echo "Wiki running at http://localhost:5000"
+    echo "Wiki data: $WIKI_DATA"
     ;;
   down)
     docker compose down

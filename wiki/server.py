@@ -1,20 +1,21 @@
 import html
 import mimetypes
+import os
 import re
 import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, request
+from flask import Flask, abort, jsonify, redirect, request, send_from_directory
 from markdown_it import MarkdownIt
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
 
-PAGES_DIR = Path(__file__).parent / "pages"
-PAGES_DIR.mkdir(exist_ok=True)
-
-UPLOADS_DIR = Path(__file__).parent / "public" / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)
+WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
+PAGES_DIR = WIKI_DIR
+UPLOADS_DIR = WIKI_DIR / "_uploads"
+PAGES_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
 
@@ -140,7 +141,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{safe_title} — Wiki</title>
+  <title>{safe_title} — Leave</title>
   <link rel="stylesheet" href="/public/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
@@ -150,7 +151,13 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 </head>
 <body{body_class}>
   <nav>
-    <a href="/" class="site-title">Wiki</a>
+    <a href="/" class="site-title">
+      <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+        <path d="M5 16C3 14 2.5 10.5 4 7.5C6 3.5 11.5 2 17 2C17 7.5 15 13 10 15.5C8.5 16.2 6.5 16.5 5 16Z" fill="#4ade80"/>
+        <path d="M5 16L2.5 18.5" stroke="#16a34a" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Leave
+    </a>
     <div class="search-wrap">
       <input type="search" id="search-input" placeholder="Search…" autocomplete="off">
       <div id="search-dropdown" class="search-dropdown hidden"></div>
@@ -199,7 +206,7 @@ def view_page(slug):
     else:
         bl_html = '<section class="backlinks backlinks-empty"><h3>Backlinks</h3><p>No pages link here.</p></section>'
     body = f"""<div class="breadcrumb">
-  <a href="/">Wiki</a>
+  <a href="/">Leave</a>
   <span class="breadcrumb-sep">›</span>
   <span>{html.escape(title)}</span>
 </div>
@@ -318,6 +325,7 @@ def fmt_date(ts: float) -> str:
 
 @app.get("/pages")
 def pages_list():
+    q = request.args.get("q", "")
     counts = all_backlink_counts()
     pages = []
     for md_file in PAGES_DIR.glob("*.md"):
@@ -344,9 +352,10 @@ def pages_list():
         for t, s, n, m, c in pages
     )
     body = f"""<div class="page-list-wrap">
-  <h1>All Pages <span class="page-count">({len(pages)})</span></h1>
+  <h1>Pages <span class="page-count">({len(pages)})</span></h1>
   <div class="page-list-controls">
-    <input type="text" id="page-filter" placeholder="Filter pages…" autocomplete="off">
+    <input type="text" id="page-filter" placeholder="Search and filter pages…"
+           autocomplete="off" value="{html.escape(q)}">
     <select id="page-sort">
       <option value="title-asc">Title A–Z</option>
       <option value="title-desc">Title Z–A</option>
@@ -357,11 +366,12 @@ def pages_list():
       <input type="checkbox" id="unlinked-only"> Unlinked only
     </label>
   </div>
+  <div id="content-matches" class="content-matches hidden"></div>
   <ul class="page-list" id="page-list">
     {items}
   </ul>
 </div>"""
-    return shell("All Pages", body)
+    return shell("Pages", body)
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
@@ -463,7 +473,12 @@ def api_upload():
         ext = ".jpg"
     filename = uuid.uuid4().hex + ext
     f.save(UPLOADS_DIR / filename)
-    return jsonify({"url": f"/public/uploads/{filename}"})
+    return jsonify({"url": f"/uploads/{filename}"})
+
+
+@app.get("/uploads/<filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOADS_DIR, filename)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

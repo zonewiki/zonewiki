@@ -4,9 +4,9 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./wiki/pages:/app/pages
-      - ./wiki/public/uploads:/app/public/uploads
+      - ${WIKI_DATA:-./wiki-data}:/wiki-data
     environment:
       - FLASK_ENV=production
+      - WIKI_DATA=/wiki-data
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"

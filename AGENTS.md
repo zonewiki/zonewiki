@@ -1,4 +1,4 @@
-# Markdown Wiki
+# Leave
 
 A local-first, browser-based wiki. Markdown files are served and rendered at runtime by a Python server. Pages can be edited directly on disk or via an in-browser editor. Full-text search runs server-side.
 
@@ -67,7 +67,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ### Files
 
 - **`Dockerfile`** — Arch Linux base, installs Python + pip, installs `requirements.txt`, copies the `wiki/` directory into `/app`.
-- **`compose.yaml`** — runs the wiki container, mounts `wiki/pages` and `wiki/public/uploads` as volumes so content and images persist across rebuilds, uses `UID`/`GID` from `.env`.
+- **`compose.yaml`** — runs the wiki container, mounts `$WIKI_DATA` (from `.env`) to `/wiki-data` inside the container, passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives.
 - **`run.sh`** — convenience script wrapping `docker build` and `docker compose` commands.
 - **`.env`** — sets `UID` and `GID` (default `1000:1000`) used by the compose file.
 
@@ -83,11 +83,19 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 Wiki is available at **http://localhost:5000** after `./run.sh up`.
 
-### Pages persistence
+### Data directory
 
-`wiki/pages/` is bind-mounted into the container at `/app/pages`. Edit `.md` files directly on the host — changes are reflected immediately without rebuilding.
+Set `WIKI_DATA` in `.env` to any host path (default: `./wiki-data`). The server reads this env var at startup:
 
-`wiki/public/uploads/` is bind-mounted at `/app/public/uploads`. Uploaded images persist across container rebuilds. Ensure this directory is writable by the container user (`UID:GID` from `.env`).
+```
+WIKI_DATA=./wiki-data   # or /home/user/my-wiki, /mnt/nas/wiki, etc.
+```
+
+Inside the container it is always mounted at `/wiki-data`. Layout:
+- `$WIKI_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
+- `$WIKI_DATA/_uploads/` — uploaded images, served at `/uploads/<filename>` (created automatically)
+
+Uploaded image URLs use `/uploads/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
 
 ### Image paste
 
@@ -174,14 +182,13 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ## Page List
 
-- `GET /pages` renders a full-page list of every page in the wiki.
-- Each entry shows the page title linking to `/page/<slug>` and the slug in muted monospace.
-- Controls row (all client-side, no round-trip):
-  - **Filter** input — matches title and slug, case-insensitive.
-  - **Sort by** select — Title A–Z (default), Title Z–A, Recently edited, Most linked.
-  - **Unlinked only** checkbox — shows only pages with zero incoming wikilinks.
-- Each row shows the slug, creation date (`st_birthtime` → `st_ctime` fallback), and last-edited date (`st_mtime`), formatted `YYYY-MM-DD`.
-- Backlink counts and timestamps are computed server-side and embedded as `data-links` / `data-mtime` on each `<li>`; sorting reads these attributes client-side.
+- `GET /pages` is the unified search and browse hub. Accepts `?q=` to pre-fill the search input (nav search Enter navigates here instead of `/search`).
+- **Controls row:**
+  - **Search/filter input** — instantly filters the page list by title/slug (client-side), and after 300ms debounce fetches `/api/search` to show full-text **Content matches** with excerpts above the list.
+  - **Sort by** — Title A–Z (default), Title Z–A, Recently edited, Most linked.
+  - **Unlinked only** — shows only pages with zero incoming wikilinks.
+- Each row shows slug, creation date (`st_birthtime` → `st_ctime` fallback), and last-edited date (`st_mtime`), formatted `YYYY-MM-DD`.
+- Backlink counts and timestamps are embedded server-side as `data-links` / `data-mtime`; sorting/filtering reads them client-side.
 
 ---
 

@@ -65,6 +65,9 @@ nav {
 }
 
 .site-title {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
   font-weight: 700;
   font-size: 1.05rem;
   text-decoration: none;
@@ -452,6 +455,28 @@ main {
 .backlinks li a:hover { border-color: var(--link); }
 
 .backlinks-empty p { font-size: .8125rem; color: var(--muted); }
+
+/* ── Content matches (pages list search) ────────────────────────────────────── */
+
+.content-matches {
+  margin-bottom: 1.5rem;
+}
+.content-matches.hidden { display: none; }
+
+.content-matches .section-label {
+  font-size: .7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: .6rem;
+}
+
+.content-matches .search-result-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
 
 /* ── Editor layout ─────────────────────────────────────────────────────────── */
 

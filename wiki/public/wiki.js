@@ -15,7 +15,7 @@ if (searchInput) {
   searchInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       const q = searchInput.value.trim();
-      if (q) window.location.href = `/search?q=${encodeURIComponent(q)}`;
+      if (q) window.location.href = `/pages?q=${encodeURIComponent(q)}`;
     }
     if (e.key === 'Escape') {
       searchDropdown.classList.add('hidden');
@@ -309,36 +309,66 @@ const pageFilter = document.getElementById('page-filter');
 const pageList = document.getElementById('page-list');
 const pageSort = document.getElementById('page-sort');
 const unlinkedOnly = document.getElementById('unlinked-only');
+const contentMatches = document.getElementById('content-matches');
+let contentMatchTimer = null;
 
 if (pageFilter && pageList) {
   pageFilter.focus();
   pageFilter.addEventListener('input', applyPageControls);
   pageSort.addEventListener('change', applyPageControls);
   unlinkedOnly.addEventListener('change', applyPageControls);
+  // Handle ?q= pre-fill from URL (e.g. nav search → Enter)
+  if (pageFilter.value) applyPageControls();
 }
 
 function applyPageControls() {
-  const q = pageFilter.value.toLowerCase();
+  const q = pageFilter.value.toLowerCase().trim();
   const sort = pageSort.value;
   const unlinked = unlinkedOnly.checked;
 
+  // Sort + filter the page list
   let items = Array.from(pageList.querySelectorAll('.page-list-item'));
-
-  // Sort
   items.sort((a, b) => {
     if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
     if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
     if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
-    return a.dataset.title.localeCompare(b.dataset.title); // title-asc
+    return a.dataset.title.localeCompare(b.dataset.title);
   });
   items.forEach(item => pageList.appendChild(item));
-
-  // Filter visibility
   items.forEach(item => {
     const textMatch = !q || item.dataset.title.includes(q) || item.dataset.slug.includes(q);
     const linkMatch = !unlinked || item.dataset.links === '0';
     item.classList.toggle('hidden', !textMatch || !linkMatch);
   });
+
+  // Full-text content matches (debounced)
+  clearTimeout(contentMatchTimer);
+  if (q.length >= 2) {
+    contentMatchTimer = setTimeout(() => fetchContentMatches(q), 300);
+  } else {
+    contentMatches.innerHTML = '';
+    contentMatches.classList.add('hidden');
+  }
+}
+
+async function fetchContentMatches(q) {
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const results = await res.json();
+    if (!results.length) {
+      contentMatches.innerHTML = '';
+      contentMatches.classList.add('hidden');
+      return;
+    }
+    contentMatches.innerHTML =
+      '<p class="section-label">Content matches</p>' +
+      results.map(r => `
+        <a class="search-result-card" href="/page/${r.slug}">
+          <span class="result-title">${r.title}</span>
+          <p>${r.excerpt}</p>
+        </a>`).join('');
+    contentMatches.classList.remove('hidden');
+  } catch (_) { /* ignore */ }
 }
 
 // ── Rename bar toggle ─────────────────────────────────────────────────────────
