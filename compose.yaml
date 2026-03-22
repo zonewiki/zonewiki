@@ -5,6 +5,7 @@ services:
       - "5000:5000"
     volumes:
       - ./wiki/pages:/app/pages
+      - ./wiki/public/uploads:/app/public/uploads
     environment:
       - FLASK_ENV=production
     restart: unless-stopped

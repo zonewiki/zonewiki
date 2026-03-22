@@ -54,7 +54,8 @@ No build step. No database. No auth (local use only).
     │   └── *.md
     └── public/
         ├── style.css       # All styling
-        └── wiki.js         # Client-side JS (editor toggle, live preview, search UI)
+        ├── wiki.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
+        └── uploads/        # Uploaded images (volume-mounted, persisted across rebuilds)
 ```
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
@@ -66,7 +67,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ### Files
 
 - **`Dockerfile`** — Arch Linux base, installs Python + pip, installs `requirements.txt`, copies the `wiki/` directory into `/app`.
-- **`compose.yaml`** — runs the wiki container, mounts `wiki/pages` as a volume so content persists across rebuilds, uses `UID`/`GID` from `.env`.
+- **`compose.yaml`** — runs the wiki container, mounts `wiki/pages` and `wiki/public/uploads` as volumes so content and images persist across rebuilds, uses `UID`/`GID` from `.env`.
 - **`run.sh`** — convenience script wrapping `docker build` and `docker compose` commands.
 - **`.env`** — sets `UID` and `GID` (default `1000:1000`) used by the compose file.
 
@@ -86,6 +87,12 @@ Wiki is available at **http://localhost:5000** after `./run.sh up`.
 
 `wiki/pages/` is bind-mounted into the container at `/app/pages`. Edit `.md` files directly on the host — changes are reflected immediately without rebuilding.
 
+`wiki/public/uploads/` is bind-mounted at `/app/public/uploads`. Uploaded images persist across container rebuilds. Ensure this directory is writable by the container user (`UID:GID` from `.env`).
+
+### Image paste
+
+In the editor, pasting an image from the clipboard (e.g. a screenshot) automatically uploads it via `POST /api/upload` and inserts `![image](/public/uploads/<uuid>.ext)` at the cursor. Accepted types: PNG, JPEG, GIF, WebP, AVIF.
+
 ---
 
 ## Routes
@@ -102,6 +109,7 @@ Wiki is available at **http://localhost:5000** after `./run.sh up`.
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI)     |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
+| POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
 

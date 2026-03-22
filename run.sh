@@ -3,6 +3,9 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Ensure pages bind-mount directory exists on the host before Docker creates it as root
+mkdir -p wiki/pages
+
 case "${1:-up}" in
   build)
     docker build -t wiki .

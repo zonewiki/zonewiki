@@ -1,5 +1,7 @@
 import html
+import mimetypes
 import re
+import uuid
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request
@@ -9,6 +11,11 @@ app = Flask(__name__, static_folder="public", static_url_path="/public")
 
 PAGES_DIR = Path(__file__).parent / "pages"
 PAGES_DIR.mkdir(exist_ok=True)
+
+UPLOADS_DIR = Path(__file__).parent / "public" / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
 
 md = MarkdownIt(options_update={"html": True}).enable("table")
 
@@ -372,6 +379,19 @@ def api_preview():
 @app.get("/api/pages")
 def api_pages():
     return jsonify(all_slugs())
+
+
+@app.post("/api/upload")
+def api_upload():
+    f = request.files.get("file")
+    if not f or f.mimetype not in ALLOWED_IMAGE_TYPES:
+        abort(400)
+    ext = mimetypes.guess_extension(f.mimetype) or ".bin"
+    if ext == ".jpeg":
+        ext = ".jpg"
+    filename = uuid.uuid4().hex + ext
+    f.save(UPLOADS_DIR / filename)
+    return jsonify({"url": f"/public/uploads/{filename}"})
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

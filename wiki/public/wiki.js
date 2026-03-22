@@ -75,6 +75,32 @@ if (textarea && previewPane) {
     previewTimer = setTimeout(fetchPreview, 300);
   });
 
+  textarea.addEventListener('paste', async (e) => {
+    const imageItem = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+    if (!imageItem) return;
+    e.preventDefault();
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const placeholder = '![uploading…]()';
+    textarea.value = textarea.value.slice(0, start) + placeholder + textarea.value.slice(end);
+    textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
+
+    const formData = new FormData();
+    formData.append('file', imageItem.getAsFile());
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error();
+      const { url } = await res.json();
+      const md = `![image](${url})`;
+      textarea.value = textarea.value.slice(0, start) + md + textarea.value.slice(start + placeholder.length);
+      textarea.selectionStart = textarea.selectionEnd = start + md.length;
+    } catch (_) {
+      textarea.value = textarea.value.slice(0, start) + textarea.value.slice(start + placeholder.length);
+    }
+    fetchPreview();
+  });
+
   // Render initial preview on load
   fetchPreview();
 }
