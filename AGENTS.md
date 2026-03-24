@@ -29,7 +29,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | Syntax highlight    | `highlight.js` (loaded client-side from CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | Server reads all `.md` files, scores matches |
+| Search              | Integrated into the Pages view (`/pages`)    |
 | Storage             | Plain `.md` files in `pages/`               |
 | Container           | Docker (Arch Linux base image)              |
 
@@ -118,6 +118,9 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
+| POST   | `/api/save/<slug>`    | Save page content silently (no redirect); returns 204. Used by auto-save. |
+| POST   | `/api/memo`     | Create a new note file (`<timestamp>_<slug>.md`); returns `{ slug }` |
+| GET    | `/page/_memos`        | Auto-generated index of all memos, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
 
@@ -160,6 +163,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - "Save" POSTs the textarea content to `POST /edit/<slug>`.
 - After save, server writes the file and redirects back to `/page/<slug>`.
 - The editor textarea preserves tabs and disables spell-check.
+- The textarea receives focus automatically on page load.
+- **Auto-save on navigate away** — on the `pagehide` event, if the textarea content differs from what it was at load time, `navigator.sendBeacon` POSTs to `POST /api/save/<slug>` (no redirect, returns 204). This silently preserves edits when the user follows a link, presses the back button, or uses the `e` shortcut on another page.
 
 ### Editor smart helpers
 
@@ -182,13 +187,42 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ## Page List
 
-- `GET /pages` is the unified search and browse hub. Accepts `?q=` to pre-fill the search input (nav search Enter navigates here instead of `/search`).
-- **Controls row:**
-  - **Search/filter input** — instantly filters the page list by title/slug (client-side), and after 300ms debounce fetches `/api/search` to show full-text **Content matches** with excerpts above the list.
-  - **Sort by** — Title A–Z (default), Title Z–A, Recently edited, Most linked.
-  - **Unlinked only** — shows only pages with zero incoming wikilinks.
-- Each row shows slug, creation date (`st_birthtime` → `st_ctime` fallback), and last-edited date (`st_mtime`), formatted `YYYY-MM-DD`.
-- Backlink counts and timestamps are embedded server-side as `data-links` / `data-mtime`; sorting/filtering reads them client-side.
+- `GET /pages` redirects to `/`. The search/browse UI lives in a modal dialog, not a dedicated page.
+- **Search modal** — opened via the "Search" nav button or **Ctrl+P** (⌘P on Mac), closed with **Esc** or clicking the backdrop.
+  - Backdrop click detection: `e.target === searchModal` (not coordinate comparison — coordinates break with `<select>` dropdowns).
+  - Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime) and cached for the session. Each list item shows the page title and slug — dates are not shown in the modal.
+  - Filter input instantly narrows the list by title/slug; after 300ms debounce fetches `/api/search` for full-text **Content matches** with excerpts shown below the page list.
+  - **Sort by** — Title A–Z, Title Z–A, Recently edited, Most linked.
+  - **Unlinked only** checkbox — pages with zero incoming wikilinks.
+  - First match is highlighted; **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
+
+---
+
+## Memos
+
+- There is no nav bar. All navigation is via keyboard shortcuts.
+- **Keybinding:** `Ctrl+M` opens the memo modal.
+- User types a title and submits → `POST /api/memo` → server creates `<YYYYMMDDTHHMMSS>_<slug>.md` with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
+- **Memo filenames** match `NOTE_RE = r"^\d{8}T\d{6}_(.+)$"`. `is_note(slug)` identifies them.
+- **`/page/_memos`** — special auto-generated page (no `.md` file on disk) listing all memos newest-first with title and timestamp. Not editable.
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Memos" — matches searches for "memo" or "_memos".
+- Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
+
+---
+
+## Keyboard Shortcuts
+
+Defined in the `keydown` listener in `wiki.js`. Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `select`, or `[contenteditable]`.
+
+| Shortcut | Context | Action |
+|----------|---------|--------|
+| **Ctrl/⌘+P** | anywhere | Open search modal |
+| **Ctrl/⌘+M** | anywhere | Open memo modal |
+| **Ctrl/⌘+S** | editor | Save (submit editor form) |
+| **e** | page view | Navigate to edit mode |
+| **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts (Vimium-safe) |
+| **?** | anywhere | Show keyboard shortcuts (fallback) |
 
 ---
 
@@ -196,7 +230,6 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - `GET /api/search?q=...` reads every `.md` file in `pages/`, scores matches by frequency and title match, returns JSON: `[{ slug, title, excerpt }]`.
 - Excerpt shows ~150 chars around the first match, with the match term bolded.
-- The search bar in the nav fires requests on input (debounced 300ms) and shows a dropdown of results.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive, matches partial words.
 

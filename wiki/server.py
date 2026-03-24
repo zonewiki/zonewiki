@@ -40,8 +40,35 @@ def safe_path(slug: str) -> Path | None:
     return None
 
 
+NOTE_RE = re.compile(r"^(\d{8}T\d{6})_(.+)$")
+
+
+def is_note(slug: str) -> bool:
+    return bool(NOTE_RE.match(slug))
+
+
 def all_slugs() -> list[str]:
     return sorted(p.stem for p in PAGES_DIR.glob("*.md"))
+
+
+def list_memos() -> list[dict]:
+    """Return all memo pages sorted newest first."""
+    memos = []
+    for md_file in PAGES_DIR.glob("*.md"):
+        m = NOTE_RE.match(md_file.stem)
+        if not m:
+            continue
+        ts_str, _ = m.group(1), m.group(2)
+        content = md_file.read_text(encoding="utf-8")
+        ts = datetime.strptime(ts_str, "%Y%m%dT%H%M%S")
+        memos.append({
+            "slug": md_file.stem,
+            "title": page_title(content, md_file.stem),
+            "ts": ts,
+            "date": ts.strftime("%Y-%m-%d %H:%M"),
+        })
+    memos.sort(key=lambda n: n["ts"], reverse=True)
+    return memos
 
 
 def page_title(content: str, slug: str) -> str:
@@ -150,24 +177,45 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   {extra_head}
 </head>
 <body{body_class}>
-  <nav>
-    <a href="/" class="site-title">
-      <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
-        <path d="M5 16C3 14 2.5 10.5 4 7.5C6 3.5 11.5 2 17 2C17 7.5 15 13 10 15.5C8.5 16.2 6.5 16.5 5 16Z" fill="#4ade80"/>
-        <path d="M5 16L2.5 18.5" stroke="#16a34a" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      Leave
-    </a>
-    <div class="search-wrap">
-      <input type="search" id="search-input" placeholder="Search…" autocomplete="off">
-      <div id="search-dropdown" class="search-dropdown hidden"></div>
+  <dialog id="search-modal" class="search-modal">
+    <div class="search-modal-controls">
+      <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">
+      <select id="modal-sort">
+        <option value="title-asc">Title A–Z</option>
+        <option value="title-desc">Title Z–A</option>
+        <option value="mtime-desc">Recently edited</option>
+        <option value="links-desc">Most linked</option>
+      </select>
+      <label class="unlinked-label">
+        <input type="checkbox" id="modal-unlinked"> Unlinked only
+      </label>
     </div>
-    <div class="nav-actions">
-      {edit_btn}
-      <a href="/pages" class="btn">Pages</a>
-      <a href="/new" class="btn btn-primary">New Page</a>
+    <div class="modal-results">
+      <ul id="modal-page-list" class="page-list"></ul>
+      <div id="modal-content-matches" class="content-matches hidden"></div>
     </div>
-  </nav>
+  </dialog>
+  <dialog id="memo-modal" class="memo-modal">
+    <p class="memo-label">New memo</p>
+    <form id="memo-form">
+      <input type="text" id="memo-title" placeholder="Title…" autocomplete="off" spellcheck="false">
+      <div class="memo-actions">
+        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
+        <button type="button" class="btn" id="memo-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="shortcuts-modal" class="shortcuts-modal">
+    <p class="memo-label">Keyboard shortcuts</p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
+      <tr><td><kbd>Ctrl+M</kbd></td><td>New memo</td></tr>
+      <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
+      <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
+    </table>
+  </dialog>
   <main>
     {body}
   </main>
@@ -181,6 +229,40 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 @app.get("/")
 def index():
     return redirect("/page/index")
+
+
+@app.get("/page/_memos")
+def memos_page():
+    memos = list_memos()
+    if memos:
+        items = "".join(
+            f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
+            f'<span class="note-date">{n["date"]}</span></li>'
+            for n in memos
+        )
+        body_inner = f"<ul class='notes-list'>{items}</ul>"
+    else:
+        body_inner = "<p>No memos yet.</p>"
+    body = f"""<div class="breadcrumb">
+  <a href="/">Leave</a>
+  <span class="breadcrumb-sep">›</span>
+  <span>Memos</span>
+</div>
+<header class="page-header"><h1>Memos</h1></header>
+<article class="page-content">{body_inner}</article>"""
+    return shell("Memos", body)
+
+
+@app.post("/api/memo")
+def api_memo():
+    title = request.form.get("title", "").strip() or "Untitled"
+    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    slug = f"{ts}_{to_slug(title)}"
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    path.write_text(f"# {title}\n\n", encoding="utf-8")
+    return jsonify({"slug": slug})
 
 
 @app.get("/page/<slug>")
@@ -273,6 +355,16 @@ def save_page(slug):
     return redirect(f"/page/{slug}")
 
 
+@app.post("/api/save/<slug>")
+def api_save(slug):
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    content = request.form.get("content", "")
+    path.write_text(content, encoding="utf-8")
+    return "", 204
+
+
 @app.get("/new")
 def new_page():
     body = """<h1>New Page</h1>
@@ -325,53 +417,30 @@ def fmt_date(ts: float) -> str:
 
 @app.get("/pages")
 def pages_list():
-    q = request.args.get("q", "")
+    return redirect("/")
+
+
+@app.get("/api/pages-list")
+def api_pages_list():
     counts = all_backlink_counts()
     pages = []
     for md_file in PAGES_DIR.glob("*.md"):
         slug = md_file.stem
         content = md_file.read_text(encoding="utf-8")
-        title = page_title(content, slug)
         stat = md_file.stat()
         mtime = stat.st_mtime
-        ctime = getattr(stat, "st_birthtime", stat.st_ctime)
-        pages.append((title, slug, counts.get(slug, 0), mtime, ctime))
-    pages.sort(key=lambda x: x[0].lower())
-
-    items = "".join(
-        f'<li class="page-list-item" data-title="{html.escape(t.lower())}" data-slug="{html.escape(s)}"'
-        f' data-links="{n}" data-mtime="{int(m)}">'
-        f'<a href="/page/{s}">{html.escape(t)}</a>'
-        f'<span class="page-item-right">'
-        f'<span class="page-slug">{html.escape(s)}</span>'
-        f'<span class="page-dates">'
-        f'<span title="Created">{fmt_date(c)}</span>'
-        f'<span title="Last edited">{fmt_date(m)}</span>'
-        f'</span></span>'
-        f'</li>'
-        for t, s, n, m, c in pages
-    )
-    body = f"""<div class="page-list-wrap">
-  <h1>Pages <span class="page-count">({len(pages)})</span></h1>
-  <div class="page-list-controls">
-    <input type="text" id="page-filter" placeholder="Search and filter pages…"
-           autocomplete="off" value="{html.escape(q)}">
-    <select id="page-sort">
-      <option value="title-asc">Title A–Z</option>
-      <option value="title-desc">Title Z–A</option>
-      <option value="mtime-desc">Recently edited</option>
-      <option value="links-desc">Most linked</option>
-    </select>
-    <label class="unlinked-label">
-      <input type="checkbox" id="unlinked-only"> Unlinked only
-    </label>
-  </div>
-  <div id="content-matches" class="content-matches hidden"></div>
-  <ul class="page-list" id="page-list">
-    {items}
-  </ul>
-</div>"""
-    return shell("Pages", body)
+        pages.append({
+            "slug": slug,
+            "title": page_title(content, slug),
+            "links": counts.get(slug, 0),
+            "mtime": int(mtime),
+            "created": fmt_date(getattr(stat, "st_birthtime", stat.st_ctime)),
+            "edited": fmt_date(mtime),
+        })
+    pages.sort(key=lambda p: p["title"].lower())
+    # Inject virtual special pages
+    pages.insert(0, {"slug": "_memos", "title": "Memos", "links": counts.get("_memos", 0), "mtime": 0})
+    return jsonify(pages)
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
