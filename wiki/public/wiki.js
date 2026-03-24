@@ -1,56 +1,210 @@
-// ── Search ────────────────────────────────────────────────────────────────────
+// ── Search modal ──────────────────────────────────────────────────────────────
 
-const searchInput = document.getElementById('search-input');
-const searchDropdown = document.getElementById('search-dropdown');
-let searchTimer = null;
+const searchModal    = document.getElementById('search-modal');
+const modalFilter    = document.getElementById('modal-filter');
+const modalPageList  = document.getElementById('modal-page-list');
+const modalSort      = document.getElementById('modal-sort');
+const modalUnlinked  = document.getElementById('modal-unlinked');
+const modalCM        = document.getElementById('modal-content-matches');
 
-if (searchInput) {
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    const q = searchInput.value.trim();
-    if (!q) { searchDropdown.classList.add('hidden'); return; }
-    searchTimer = setTimeout(() => fetchSearch(q), 300);
-  });
+let modalPages = null;
+let modalActiveIdx = -1;
+let modalCMTimer = null;
 
-  searchInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      const q = searchInput.value.trim();
-      if (q) window.location.href = `/pages?q=${encodeURIComponent(q)}`;
-    }
-    if (e.key === 'Escape') {
-      searchDropdown.classList.add('hidden');
-      searchInput.blur();
-    }
-  });
+document.getElementById('open-search')?.addEventListener('click', openSearchModal);
 
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.search-wrap')) {
-      searchDropdown.classList.add('hidden');
-    }
-  });
+// Close when clicking the backdrop (backdrop clicks have the dialog as target)
+searchModal?.addEventListener('click', e => {
+  if (e.target === searchModal) searchModal.close();
+});
+
+function openSearchModal() {
+  if (!searchModal) return;
+  searchModal.showModal();
+  modalFilter.focus();
+  modalFilter.select();
+  if (!modalPages) loadModalPages();
 }
 
-async function fetchSearch(q) {
+async function loadModalPages() {
+  try {
+    const res = await fetch('/api/pages-list');
+    modalPages = await res.json();
+    renderModalList(modalPages);
+    applyModalControls();
+  } catch (_) {}
+}
+
+function he(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderModalList(pages) {
+  modalPageList.innerHTML = pages.map(p =>
+    `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
+    `<a href="/page/${p.slug}">${he(p.title)}</a>` +
+    `<span class="page-item-right"><span class="page-slug">${he(p.slug)}</span></span></li>`
+  ).join('');
+}
+
+function modalVisibleItems() {
+  const pages = Array.from(modalPageList.querySelectorAll('.page-list-item:not(.hidden)'));
+  const cards = Array.from(modalCM.querySelectorAll('.search-result-card'));
+  return [...pages, ...cards];
+}
+
+function setModalActive(idx) {
+  modalPageList.querySelectorAll('.page-list-item').forEach(i => i.classList.remove('active'));
+  modalCM.querySelectorAll('.search-result-card').forEach(i => i.classList.remove('active'));
+  const items = modalVisibleItems();
+  modalActiveIdx = items.length ? Math.max(0, Math.min(idx, items.length - 1)) : -1;
+  if (modalActiveIdx >= 0) {
+    items[modalActiveIdx].classList.add('active');
+    items[modalActiveIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+modalFilter?.addEventListener('input', applyModalControls);
+modalSort?.addEventListener('change', applyModalControls);
+modalUnlinked?.addEventListener('change', applyModalControls);
+
+modalFilter?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const item = modalVisibleItems()[modalActiveIdx];
+    const target = item?.tagName === 'A' ? item : item?.querySelector('a');
+    if (target) { e.preventDefault(); window.location.href = target.href; }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault(); setModalActive(modalActiveIdx < 0 ? 0 : modalActiveIdx + 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault(); setModalActive(Math.max(0, modalActiveIdx - 1));
+  }
+});
+
+function applyModalControls() {
+  if (!modalPages) return;
+  const q = modalFilter.value.toLowerCase().trim();
+  const sort = modalSort.value;
+  const unlinked = modalUnlinked.checked;
+
+  let items = Array.from(modalPageList.querySelectorAll('.page-list-item'));
+  items.sort((a, b) => {
+    if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
+    if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
+    if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
+    return a.dataset.title.localeCompare(b.dataset.title);
+  });
+  items.forEach(i => modalPageList.appendChild(i));
+  items.forEach(i => {
+    const textMatch = !q || i.dataset.title.includes(q) || i.dataset.slug.includes(q);
+    const linkMatch = !unlinked || i.dataset.links === '0';
+    i.classList.toggle('hidden', !textMatch || !linkMatch);
+  });
+
+  setModalActive(q ? 0 : -1);
+
+  clearTimeout(modalCMTimer);
+  if (q.length >= 2) {
+    modalCMTimer = setTimeout(() => fetchModalContentMatches(q), 300);
+  } else {
+    modalCM.innerHTML = '';
+    modalCM.classList.add('hidden');
+  }
+}
+
+async function fetchModalContentMatches(q) {
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
     const results = await res.json();
-    renderDropdown(results);
-  } catch (_) { /* network error — ignore */ }
+    if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
+    modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
+      results.map(r =>
+        `<a class="search-result-card" href="/page/${r.slug}"><span class="result-title">${r.title}</span><p>${r.excerpt}</p></a>`
+      ).join('');
+    modalCM.classList.remove('hidden');
+    // Re-clamp active index now that content cards are in the pool
+    if (modalActiveIdx >= 0) setModalActive(modalActiveIdx);
+  } catch (_) {}
 }
 
-function renderDropdown(results) {
-  if (!results.length) {
-    searchDropdown.innerHTML =
-      '<div class="search-result-item"><span class="result-title">No results</span></div>';
-  } else {
-    searchDropdown.innerHTML = results.map(r => `
-      <a class="search-result-item" href="/page/${r.slug}">
-        <div class="result-title">${r.title}</div>
-        <div class="result-excerpt">${r.excerpt}</div>
-      </a>`).join('');
-  }
-  searchDropdown.classList.remove('hidden');
+// ── Memo modal ────────────────────────────────────────────────────────────────
+
+const memoModal  = document.getElementById('memo-modal');
+const memoForm   = document.getElementById('memo-form');
+const memoTitle  = document.getElementById('memo-title');
+const memoCancel = document.getElementById('memo-cancel');
+
+document.getElementById('open-memo')?.addEventListener('click', openMemo);
+memoCancel?.addEventListener('click', () => memoModal.close());
+
+memoModal?.addEventListener('click', e => {
+  if (e.target === memoModal) memoModal.close();
+});
+
+function openMemo() {
+  if (!memoModal) return;
+  memoTitle.value = '';
+  memoModal.showModal();
+  memoTitle.focus();
 }
+
+memoForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = memoTitle.value.trim() || 'Untitled';
+  const data = new FormData();
+  data.append('title', title);
+  try {
+    const res = await fetch('/api/memo', { method: 'POST', body: data });
+    const { slug } = await res.json();
+    window.location.href = `/edit/${slug}`;
+  } catch (_) {}
+});
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+const shortcutsModal = document.getElementById('shortcuts-modal');
+shortcutsModal?.addEventListener('click', e => { if (e.target === shortcutsModal) shortcutsModal.close(); });
+
+document.addEventListener('keydown', e => {
+  // Ctrl/Cmd+P — open search modal
+  if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    openSearchModal();
+    return;
+  }
+
+  // Ctrl/Cmd+M — new memo
+  if (e.key === 'm' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    openMemo();
+    return;
+  }
+
+  // Ctrl/Cmd+/ — show keyboard shortcuts
+  if (e.key === '/' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    shortcutsModal?.showModal();
+    return;
+  }
+
+  // Ctrl/Cmd+S — save (in editor)
+  if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+    const form = document.getElementById('editor-form');
+    if (form) { e.preventDefault(); form.submit(); }
+    return;
+  }
+
+  // Bare key shortcuts — skip when focus is in an input/textarea/select
+  if (e.target.matches('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
+
+  // E — go to edit
+  if (e.key === 'e') {
+    const editLink = document.querySelector('a[href^="/edit/"]');
+    if (editLink) window.location.href = editLink.href;
+  }
+
+  // ? — show keyboard shortcuts
+  if (e.key === '?') shortcutsModal?.showModal();
+});
 
 // ── Editor ────────────────────────────────────────────────────────────────────
 
@@ -129,6 +283,20 @@ if (textarea && previewPane) {
   });
 
   fetchPreview();
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+
+  // Auto-save on navigation away if content has changed
+  const savedContent = textarea.value;
+  const editorForm = document.getElementById('editor-form');
+  const autoSaveUrl = editorForm?.action.replace('/edit/', '/api/save/');
+
+  window.addEventListener('pagehide', () => {
+    if (!autoSaveUrl || textarea.value === savedContent) return;
+    const data = new FormData();
+    data.append('content', textarea.value);
+    navigator.sendBeacon(autoSaveUrl, data);
+  });
 }
 
 async function fetchPreview() {
@@ -303,73 +471,6 @@ function expandSnippet() {
   return false;
 }
 
-// ── Page list controls ────────────────────────────────────────────────────────
-
-const pageFilter = document.getElementById('page-filter');
-const pageList = document.getElementById('page-list');
-const pageSort = document.getElementById('page-sort');
-const unlinkedOnly = document.getElementById('unlinked-only');
-const contentMatches = document.getElementById('content-matches');
-let contentMatchTimer = null;
-
-if (pageFilter && pageList) {
-  pageFilter.focus();
-  pageFilter.addEventListener('input', applyPageControls);
-  pageSort.addEventListener('change', applyPageControls);
-  unlinkedOnly.addEventListener('change', applyPageControls);
-  // Handle ?q= pre-fill from URL (e.g. nav search → Enter)
-  if (pageFilter.value) applyPageControls();
-}
-
-function applyPageControls() {
-  const q = pageFilter.value.toLowerCase().trim();
-  const sort = pageSort.value;
-  const unlinked = unlinkedOnly.checked;
-
-  // Sort + filter the page list
-  let items = Array.from(pageList.querySelectorAll('.page-list-item'));
-  items.sort((a, b) => {
-    if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
-    if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
-    if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
-    return a.dataset.title.localeCompare(b.dataset.title);
-  });
-  items.forEach(item => pageList.appendChild(item));
-  items.forEach(item => {
-    const textMatch = !q || item.dataset.title.includes(q) || item.dataset.slug.includes(q);
-    const linkMatch = !unlinked || item.dataset.links === '0';
-    item.classList.toggle('hidden', !textMatch || !linkMatch);
-  });
-
-  // Full-text content matches (debounced)
-  clearTimeout(contentMatchTimer);
-  if (q.length >= 2) {
-    contentMatchTimer = setTimeout(() => fetchContentMatches(q), 300);
-  } else {
-    contentMatches.innerHTML = '';
-    contentMatches.classList.add('hidden');
-  }
-}
-
-async function fetchContentMatches(q) {
-  try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-    const results = await res.json();
-    if (!results.length) {
-      contentMatches.innerHTML = '';
-      contentMatches.classList.add('hidden');
-      return;
-    }
-    contentMatches.innerHTML =
-      '<p class="section-label">Content matches</p>' +
-      results.map(r => `
-        <a class="search-result-card" href="/page/${r.slug}">
-          <span class="result-title">${r.title}</span>
-          <p>${r.excerpt}</p>
-        </a>`).join('');
-    contentMatches.classList.remove('hidden');
-  } catch (_) { /* ignore */ }
-}
 
 // ── Rename bar toggle ─────────────────────────────────────────────────────────
 

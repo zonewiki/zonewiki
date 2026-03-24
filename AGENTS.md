@@ -202,9 +202,9 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - There is no nav bar. All navigation is via keyboard shortcuts.
 - **Keybinding:** `Ctrl+M` opens the memo modal.
-- User types a title and submits → `POST /api/memo` → server creates `<YYYYMMDDTHHMMSS>_<slug>.md` with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- User types a title and submits → `POST /api/memo` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
-- **Memo filenames** match `NOTE_RE = r"^\d{8}T\d{6}_(.+)$"`. `is_note(slug)` identifies them.
+- **Memo filenames** match `NOTE_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-memo.md`. `is_note(slug)` identifies them.
 - **`/page/_memos`** — special auto-generated page (no `.md` file on disk) listing all memos newest-first with title and timestamp. Not editable.
 - Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Memos" — matches searches for "memo" or "_memos".
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.

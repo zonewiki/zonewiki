@@ -40,7 +40,7 @@ def safe_path(slug: str) -> Path | None:
     return None
 
 
-NOTE_RE = re.compile(r"^(\d{8}T\d{6})_(.+)$")
+NOTE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
 
 
 def is_note(slug: str) -> bool:
@@ -60,7 +60,7 @@ def list_memos() -> list[dict]:
             continue
         ts_str, _ = m.group(1), m.group(2)
         content = md_file.read_text(encoding="utf-8")
-        ts = datetime.strptime(ts_str, "%Y%m%dT%H%M%S")
+        ts = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
         memos.append({
             "slug": md_file.stem,
             "title": page_title(content, md_file.stem),
@@ -256,7 +256,7 @@ def memos_page():
 @app.post("/api/memo")
 def api_memo():
     title = request.form.get("title", "").strip() or "Untitled"
-    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     slug = f"{ts}_{to_slug(title)}"
     path = safe_path(slug)
     if path is None:
@@ -308,25 +308,32 @@ def edit_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = path.read_text(encoding="utf-8") if path.exists() else ""
-    title = page_title(content, slug) if content else slug.replace("-", " ").title()
+    if path.exists():
+        content = path.read_text(encoding="utf-8")
+        title = page_title(content, slug)
+    else:
+        title = slug.replace("-", " ").title()
+        content = f"# {title}\n\n"
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
     can_rename = slug != "index"
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename else ""
-    rename_bar = f"""<div class="rename-bar hidden" id="rename-bar">
+    rename_error = request.args.get("rename_error", "")
+    rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
+    rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
     <form method="post" action="/rename/{safe_slug}" class="rename-form">
       <label>New name</label>
       <input type="text" name="new_name" id="rename-input" value="{safe_title}" autocomplete="off">
       <button type="submit" class="btn btn-primary">Rename</button>
       <button type="button" class="btn" id="rename-cancel">Cancel</button>
+      {rename_error_html}
     </form>
   </div>""" if can_rename else ""
     body = f"""<div class="editor-wrap">
   <div class="editor-pane">
     <div class="editor-toolbar">
-      <span class="slug-label">/page/{safe_slug}</span>
+      <span class="slug-label">{safe_slug}</span>
       <button type="submit" form="editor-form" class="btn btn-primary">Save</button>
       <a href="/page/{safe_slug}" class="btn">Cancel</a>
       {rename_btn}
@@ -404,8 +411,10 @@ def rename_page(slug):
     if not new_slug or new_slug == slug:
         return redirect(f"/edit/{slug}")
     new_path = safe_path(new_slug)
-    if new_path is None or new_path.exists():
+    if new_path is None:
         abort(400)
+    if new_path.exists():
+        return redirect(f"/edit/{slug}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
     old_path.rename(new_path)
     update_references(slug, new_slug)
     return redirect(f"/page/{new_slug}")
