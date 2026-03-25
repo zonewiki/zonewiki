@@ -146,7 +146,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Wikilinks
 
-- Wikilinks use the `[[Page Name]]` syntax.
+- Wikilinks use the `[[Page Name]]` syntax. Nested pages can be linked as `[[journal/my-page]]`.
 - Before passing markdown to `markdown-it-py`, run a regex pre-processing step that rewrites wikilinks to standard markdown links:
   - `[[Page Name]]` → `[Page Name](/page/page-name)` (slug = lowercase, spaces → hyphens)
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`
@@ -274,8 +274,11 @@ markdown-it-py>=3.0
 - Do not use a database. Files are the only storage.
 - Do not add authentication — this is local use only.
 - Do not add a build step or bundler.
-- Slugs are derived from filenames: `my-page.md` → slug `my-page`. Slugs must be URL-safe (lowercase, hyphens only).
-- When creating a page from the browser, sanitize the slug before writing to disk (strip anything not `[a-z0-9-]`).
+- Slugs are derived from file paths relative to `PAGES_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).
+- Subdirectories are fully supported. `to_slug()` preserves `/` as a path separator while slugifying each component. `iter_pages()` does a recursive `rglob("*.md")` and skips `_*` subdirectories.
+- Flask routes use `<path:slug>` to capture slugs containing `/`.
+- `safe_path()` uses `target.relative_to(pages_root)` to validate the path is inside `PAGES_DIR` (allows subdirs).
+- File writes call `path.parent.mkdir(parents=True, exist_ok=True)` before writing to auto-create subdirectories.
 - `pages/index.md` is the home page and must always exist. Do not allow it to be deleted or renamed via the UI.
-- All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `pages/` before writing (prevent path traversal — use `Path.resolve()` and check it starts with the `pages/` absolute path).
+- All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `pages/` before writing (prevent path traversal — use `Path.resolve()` and `relative_to()`).
 - When a page is renamed, all other `.md` files are scanned for wikilinks referencing the old slug and updated to the new slug. Match both `[[Old Name]]` and `[[Old Name|Label]]` forms by comparing the slugified page name inside the brackets against the old slug. Replace only the page-name portion, preserving any `|Label` suffix.

@@ -26,18 +26,27 @@ md = MarkdownIt(options_update={"html": True}).enable("table")
 
 
 def to_slug(name: str) -> str:
-    slug = name.strip().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    return slug.strip("-")
+    """Slugify a name, preserving '/' as a path separator."""
+    parts = name.strip().split('/')
+    slugged = []
+    for part in parts:
+        s = part.strip().lower()
+        s = re.sub(r"[^a-z0-9]+", "-", s)
+        s = s.strip("-")
+        if s:
+            slugged.append(s)
+    return "/".join(slugged)
 
 
 def safe_path(slug: str) -> Path | None:
     """Return resolved path only if it's safely inside PAGES_DIR."""
     pages_root = PAGES_DIR.resolve()
     target = (PAGES_DIR / f"{slug}.md").resolve()
-    if target.parent == pages_root:
+    try:
+        target.relative_to(pages_root)
         return target
-    return None
+    except ValueError:
+        return None
 
 
 NOTE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
@@ -47,8 +56,17 @@ def is_note(slug: str) -> bool:
     return bool(NOTE_RE.match(slug))
 
 
+def iter_pages():
+    """Yield (path, slug) for all pages, skipping _* subdirectories."""
+    for md_file in PAGES_DIR.rglob("*.md"):
+        rel = md_file.relative_to(PAGES_DIR)
+        if any(part.startswith('_') for part in rel.parts[:-1]):
+            continue
+        yield md_file, str(rel.with_suffix(''))
+
+
 def all_slugs() -> list[str]:
-    return sorted(p.stem for p in PAGES_DIR.glob("*.md"))
+    return sorted(slug for _, slug in iter_pages())
 
 
 def list_memos() -> list[dict]:
@@ -73,7 +91,7 @@ def list_memos() -> list[dict]:
 
 def page_title(content: str, slug: str) -> str:
     m = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
-    return m.group(1).strip() if m else slug.replace("-", " ").title()
+    return m.group(1).strip() if m else slug.split('/')[-1].replace("-", " ").title()
 
 
 def process_wikilinks(text: str) -> str:
@@ -111,12 +129,12 @@ def strip_h1(content: str) -> str:
 def all_backlink_counts() -> dict[str, int]:
     """Return a mapping of slug → number of pages that link to it."""
     counts: dict[str, int] = {}
-    for md_file in PAGES_DIR.glob("*.md"):
+    for md_file, file_slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
         seen: set[str] = set()
         for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
             target = to_slug(m.group(1).split("|")[0].strip())
-            if target != md_file.stem and target not in seen:
+            if target != file_slug and target not in seen:
                 counts[target] = counts.get(target, 0) + 1
                 seen.add(target)
     return counts
@@ -125,14 +143,14 @@ def all_backlink_counts() -> dict[str, int]:
 def find_backlinks(slug: str) -> list[dict]:
     """Return pages that contain a wikilink resolving to slug."""
     results = []
-    for md_file in PAGES_DIR.glob("*.md"):
-        if md_file.stem == slug:
+    for md_file, file_slug in iter_pages():
+        if file_slug == slug:
             continue
         content = md_file.read_text(encoding="utf-8")
         for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
             page_name = m.group(1).split("|")[0].strip()
             if to_slug(page_name) == slug:
-                results.append({"slug": md_file.stem, "title": page_title(content, md_file.stem)})
+                results.append({"slug": file_slug, "title": page_title(content, file_slug)})
                 break
     results.sort(key=lambda r: r["title"].lower())
     return results
@@ -140,7 +158,7 @@ def find_backlinks(slug: str) -> list[dict]:
 
 def update_references(old_slug: str, new_slug: str) -> None:
     """Rewrite [[wikilinks]] across all pages after a rename."""
-    for md_file in PAGES_DIR.glob("*.md"):
+    for md_file, _ in iter_pages():
         content = md_file.read_text(encoding="utf-8")
 
         def replace(m: re.Match) -> str:
@@ -265,8 +283,11 @@ def api_memo():
     return jsonify({"slug": slug})
 
 
-@app.get("/page/<slug>")
+@app.get("/page/<path:slug>")
 def view_page(slug):
+    # Strip accidental .md suffix
+    if slug.endswith('.md'):
+        slug = slug[:-3]
     path = safe_path(slug)
     if path is None or not path.exists():
         body = f"""<div class="not-found">
@@ -287,11 +308,18 @@ def view_page(slug):
         bl_html = f'<section class="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
     else:
         bl_html = '<section class="backlinks backlinks-empty"><h3>Backlinks</h3><p>No pages link here.</p></section>'
-    body = f"""<div class="breadcrumb">
-  <a href="/">Leave</a>
-  <span class="breadcrumb-sep">›</span>
-  <span>{html.escape(title)}</span>
-</div>
+
+    # Build nested breadcrumb
+    parts = slug.split('/')
+    sep = '<span class="breadcrumb-sep">›</span>'
+    crumbs = [f'<a href="/">Leave</a>']
+    for i, part in enumerate(parts[:-1]):
+        ancestor = '/'.join(parts[:i + 1])
+        crumbs.append(f'<a href="/page/{ancestor}">{html.escape(part)}</a>')
+    crumbs.append(f'<span>{html.escape(title)}</span>')
+    breadcrumb = f'<div class="breadcrumb">{sep.join(crumbs)}</div>'
+
+    body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <a href="/edit/{slug}" class="btn">Edit</a>
@@ -303,7 +331,7 @@ def view_page(slug):
     return shell(title, body)
 
 
-@app.get("/edit/<slug>")
+@app.get("/edit/<path:slug>")
 def edit_page(slug):
     path = safe_path(slug)
     if path is None:
@@ -312,7 +340,7 @@ def edit_page(slug):
         content = path.read_text(encoding="utf-8")
         title = page_title(content, slug)
     else:
-        title = slug.replace("-", " ").title()
+        title = slug.split('/')[-1].replace("-", " ").title()
         content = f"# {title}\n\n"
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
@@ -352,22 +380,24 @@ def edit_page(slug):
     return shell(f"Edit — {title}", body, editor=True)
 
 
-@app.post("/edit/<slug>")
+@app.post("/edit/<path:slug>")
 def save_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
     content = request.form.get("content", "")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return redirect(f"/page/{slug}")
 
 
-@app.post("/api/save/<slug>")
+@app.post("/api/save/<path:slug>")
 def api_save(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
     content = request.form.get("content", "")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "", 204
 
@@ -395,11 +425,12 @@ def create_page():
         abort(400)
     if not path.exists():
         title = raw.strip().title()
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {title}\n\n", encoding="utf-8")
     return redirect(f"/edit/{slug}")
 
 
-@app.post("/rename/<slug>")
+@app.post("/rename/<path:slug>")
 def rename_page(slug):
     if slug == "index":
         abort(400)
@@ -433,8 +464,7 @@ def pages_list():
 def api_pages_list():
     counts = all_backlink_counts()
     pages = []
-    for md_file in PAGES_DIR.glob("*.md"):
-        slug = md_file.stem
+    for md_file, slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
         stat = md_file.stat()
         mtime = stat.st_mtime
@@ -459,10 +489,9 @@ def do_search(q: str) -> list[dict]:
     q_lower = q.lower()
     results = []
 
-    for md_file in PAGES_DIR.glob("*.md"):
+    for md_file, slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
         content_lower = content.lower()
-        slug = md_file.stem
         title = page_title(content, slug)
 
         score = (10 if q_lower in title.lower() else 0) + content_lower.count(q_lower)

@@ -286,6 +286,13 @@ if (textarea && previewPane) {
   textarea.focus();
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
+  // Sync preview scroll position with editor
+  const previewScroller = previewPane.parentElement;
+  textarea.addEventListener('scroll', () => {
+    const ratio = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight || 1);
+    previewScroller.scrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
+  });
+
   // Auto-save on navigation away if content has changed
   const savedContent = textarea.value;
   const editorForm = document.getElementById('editor-form');
