@@ -10,6 +10,7 @@ from flask import Flask, abort, jsonify, redirect, request, send_from_directory
 from markdown_it import MarkdownIt
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
+APP_NAME = "Leaf"
 
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
 PAGES_DIR = WIKI_DIR
@@ -186,12 +187,12 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{safe_title} — Leave</title>
+  <title>{safe_title} — {APP_NAME}</title>
   <link rel="stylesheet" href="/public/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
-  <script src="/public/wiki.js" defer></script>
+  <script src="/public/leaf.js" defer></script>
   {extra_head}
 </head>
 <body{body_class}>
@@ -252,6 +253,12 @@ def index():
 @app.get("/page/_memos")
 def memos_page():
     memos = list_memos()
+    home_link = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
+  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
+  </svg>
+  <span>{APP_NAME}</span>
+</a>"""
     if memos:
         items = "".join(
             f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
@@ -262,7 +269,7 @@ def memos_page():
     else:
         body_inner = "<p>No memos yet.</p>"
     body = f"""<div class="breadcrumb">
-  <a href="/">Leave</a>
+  {home_link}
   <span class="breadcrumb-sep">›</span>
   <span>Memos</span>
 </div>
@@ -312,7 +319,12 @@ def view_page(slug):
     # Build nested breadcrumb
     parts = slug.split('/')
     sep = '<span class="breadcrumb-sep">›</span>'
-    crumbs = [f'<a href="/">Leave</a>']
+    crumbs = [f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
+  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
+  </svg>
+  <span>{APP_NAME}</span>
+</a>"""]
     for i, part in enumerate(parts[:-1]):
         ancestor = '/'.join(parts[:i + 1])
         crumbs.append(f'<a href="/page/{ancestor}">{html.escape(part)}</a>')

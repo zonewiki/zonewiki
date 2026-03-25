@@ -1,5 +1,6 @@
 .env
-/wiki/public/uploads
-/wiki/pages
 /wiki-data
 /vimwiki
+.cache
+.copilot
+src/__pycache__

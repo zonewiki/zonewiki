@@ -1,4 +1,4 @@
-# Leave
+# Leaf
 
 A local-first, browser-based wiki. Markdown files are served and rendered at runtime by a Python server. Pages can be edited directly on disk or via an in-browser editor. Full-text search runs server-side.
 
@@ -45,18 +45,16 @@ No build step. No database. No auth (local use only).
 ├── Dockerfile              # Arch Linux-based container image
 ├── compose.yaml            # Docker Compose configuration
 ├── run.sh                  # Helper script: build/up/down/logs
-├── .env                    # UID/GID for container user
-└── wiki/
+├── .env                    # Host data path configuration
+└── src/
     ├── requirements.txt
     ├── server.py           # Flask server — all routes live here
-    ├── pages/              # Wiki content (markdown files, volume-mounted)
-    │   ├── index.md        # Home page (required)
-    │   └── *.md
     └── public/
         ├── style.css       # All styling
-        ├── wiki.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
-        └── uploads/        # Uploaded images (volume-mounted, persisted across rebuilds)
+        ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
 ```
+
+Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_uploads/`.
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
 
@@ -66,29 +64,29 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 ### Files
 
-- **`Dockerfile`** — Arch Linux base, installs Python + pip, installs `requirements.txt`, copies the `wiki/` directory into `/app`.
-- **`compose.yaml`** — runs the wiki container, mounts `$WIKI_DATA` (from `.env`) to `/wiki-data` inside the container, passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives.
-- **`run.sh`** — convenience script wrapping `docker build` and `docker compose` commands.
-- **`.env`** — sets `UID` and `GID` (default `1000:1000`) used by the compose file.
+- **`Dockerfile`** — Arch Linux base, installs Python + pip, installs `requirements.txt`, copies the `src/` directory into `/app`.
+- **`compose.yaml`** — runs the Leaf container, mounts `$WIKI_DATA` (from `.env`) to `/wiki-data` inside the container, passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives.
+- **`run.sh`** — convenience script wrapping `docker build` plus whichever Compose command is available: `docker compose` or `docker-compose`. When it falls back to legacy `docker-compose` v1, `up` first does a quiet `down --remove-orphans` to avoid the known `ContainerConfig` recreate bug on newer Docker versions.
+- **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. `run.sh` passes the current user's UID/GID into Compose automatically so the container can write to the mounted wiki directory.
 
 ### Commands
 
 ```bash
-./run.sh            # build image and start wiki (default: "up")
+./run.sh            # build image and start Leaf (default: "up")
 ./run.sh build      # build Docker image only
 ./run.sh up         # build and start in detached mode
 ./run.sh down       # stop and remove containers
 ./run.sh logs       # follow container logs
 ```
 
-Wiki is available at **http://localhost:5000** after `./run.sh up`.
+Leaf is available at **http://localhost:5000** after `./run.sh up`.
 
 ### Data directory
 
-Set `WIKI_DATA` in `.env` to any host path (default: `./wiki-data`). The server reads this env var at startup:
+Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before creating directories and invoking Compose:
 
 ```
-WIKI_DATA=./wiki-data   # or /home/user/my-wiki, /mnt/nas/wiki, etc.
+WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 ```
 
 Inside the container it is always mounted at `/wiki-data`. Layout:
@@ -125,7 +123,7 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
 
 Every page view includes:
-- **Breadcrumb** — `Wiki › Page Title` above the page header, linking back to the home page.
+- **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
 - **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
 
 ---
@@ -135,6 +133,7 @@ Every page view includes:
 - `server.py` reads `pages/<slug>.md`, converts it to HTML using `markdown-it-py`, and injects it into a shared HTML shell (Python f-string in `server.py` — not a separate template file).
 - The HTML shell includes: nav bar, page title, content area, edit button, search bar.
 - `highlight.js` auto-highlights fenced code blocks client-side after load.
+- The shared shell renders the product brand as `Leaf`, with a small green inline SVG leaf logo in the breadcrumb home link.
 
 ### Page header
 
@@ -171,7 +170,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **Wikilink autocomplete** — typing `[[` opens a dropdown of existing page slugs filtered as you type. Arrow keys navigate, Enter or Tab inserts `[[slug]]`, Escape closes. Slugs are fetched once from `/api/pages` on load.
 - **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
 - **Image paste** — pasting an image from the clipboard uploads it via `POST /api/upload` and inserts `![image](url)` at the cursor.
-- **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `wiki.js`.
+- **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
 
 ### Rename
 
@@ -213,7 +212,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ## Keyboard Shortcuts
 
-Defined in the `keydown` listener in `wiki.js`. Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `select`, or `[contenteditable]`.
+Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `select`, or `[contenteditable]`.
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
@@ -250,16 +249,16 @@ Defined in the `keydown` listener in `wiki.js`. Bare-key shortcuts are suppresse
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Create and activate virtualenv
-pip install -r wiki/requirements.txt                 # Install dependencies
-python wiki/server.py                                # Start server on http://localhost:5000
-flask --app wiki/server run --debug                  # Auto-reload during development
+pip install -r src/requirements.txt                  # Install dependencies
+python src/server.py                                 # Start server on http://localhost:5000
+flask --app src/server.py run --debug                # Auto-reload during development
 ```
 
 ---
 
 ## Dependencies
 
-`wiki/requirements.txt`:
+`src/requirements.txt`:
 ```
 flask>=3.0
 markdown-it-py>=3.0

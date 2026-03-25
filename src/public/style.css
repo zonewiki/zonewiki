@@ -48,6 +48,15 @@ body {
   font-size: 16px;
 }
 
+/* ── Brand ─────────────────────────────────────────────────────────────────── */
+
+.site-logo {
+  width: 1rem;
+  height: 1rem;
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
 /* ── Nav ───────────────────────────────────────────────────────────────────── */
 
 .rename-bar.hidden { display: none; }
@@ -375,6 +384,12 @@ main {
 }
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
+.breadcrumb-home {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-weight: 600;
+}
 .breadcrumb-sep { opacity: .5; }
 
 /* ── Backlinks ───────────────────────────────────────────────────────────────── */
