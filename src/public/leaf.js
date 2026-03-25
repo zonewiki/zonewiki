@@ -242,6 +242,24 @@ if (textarea && previewPane) {
       return;
     }
 
+    // Ctrl+Shift+X → toggle checkbox on current line
+    if (e.code === 'KeyX' && e.ctrlKey && e.shiftKey) {
+      e.preventDefault();
+      const pos = textarea.selectionStart;
+      const val = textarea.value;
+      const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+      const lineEnd = val.indexOf('\n', pos);
+      const line = val.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+      const toggled = line.replace(/^(\s*(?:[-*+]|\d+\.)\s+)\[([xX ])\]/, (_, pre, mark) => pre + (mark === ' ' ? '[x]' : '[ ]'));
+      if (toggled !== line) {
+        textarea.value = val.slice(0, lineStart) + toggled + val.slice(lineEnd === -1 ? val.length : lineEnd);
+        textarea.selectionStart = textarea.selectionEnd = pos;
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(fetchPreview, 300);
+      }
+      return;
+    }
+
     // Enter → continue list
     if (e.key === 'Enter' && !e.shiftKey) {
       continueList(e);
@@ -327,12 +345,31 @@ function continueList(e) {
   const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
   const line = val.slice(lineStart, pos);
 
-  const ul = line.match(/^(\s*)([-*+]) (.+)/);
-  const ulEmpty = line.match(/^(\s*)([-*+]) $/);
-  const ol = line.match(/^(\s*)(\d+)\. (.+)/);
-  const olEmpty = line.match(/^(\s*)(\d+)\. $/);
+  const cb       = line.match(/^(\s*)([-*+]) \[[xX ]\] (.+)/);
+  const cbEmpty  = line.match(/^(\s*)([-*+]) \[[xX ]\] $/);
+  const ocb      = line.match(/^(\s*)(\d+)\. \[[xX ]\] (.+)/);
+  const ocbEmpty = line.match(/^(\s*)(\d+)\. \[[xX ]\] $/);
+  const ul       = line.match(/^(\s*)([-*+]) (.+)/);
+  const ulEmpty  = line.match(/^(\s*)([-*+]) $/);
+  const ol       = line.match(/^(\s*)(\d+)\. (.+)/);
+  const olEmpty  = line.match(/^(\s*)(\d+)\. $/);
 
-  if (ulEmpty || olEmpty) {
+  if (cbEmpty || ocbEmpty) {
+    // Empty checkbox item → exit list
+    e.preventDefault();
+    textarea.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
+    textarea.selectionStart = textarea.selectionEnd = lineStart + 1;
+  } else if (cb) {
+    e.preventDefault();
+    const insert = '\n' + cb[1] + cb[2] + ' [ ] ';
+    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
+    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+  } else if (ocb) {
+    e.preventDefault();
+    const insert = '\n' + ocb[1] + (parseInt(ocb[2]) + 1) + '. [ ] ';
+    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
+    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+  } else if (ulEmpty || olEmpty) {
     // Empty list item → exit list
     e.preventDefault();
     textarea.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
@@ -502,4 +539,32 @@ if (renameToggle && renameBar) {
 document.addEventListener('DOMContentLoaded', () => {
   if (!window.hljs) return;
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+});
+
+// ── Task list checkboxes ───────────────────────────────────────────────────────
+
+document.addEventListener('change', e => {
+  if (!e.target.matches('.task-list-item-checkbox')) return;
+  const checkboxes = Array.from(document.querySelectorAll('.task-list-item-checkbox'));
+  const idx = checkboxes.indexOf(e.target);
+  if (idx === -1) return;
+
+  if (textarea) {
+    // Editor: toggle the Nth checkbox directly in the textarea, then refresh preview
+    const val = textarea.value;
+    const matches = [...val.matchAll(/\[([xX ])\]/g)];
+    if (idx < matches.length) {
+      const m = matches[idx];
+      const newChar = m[1] === ' ' ? 'x' : ' ';
+      textarea.value = val.slice(0, m.index) + `[${newChar}]` + val.slice(m.index + m[0].length);
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(fetchPreview, 300);
+    }
+  } else {
+    // Page view: persist toggle to server
+    const slug = window.location.pathname.replace(/^\/page\//, '');
+    const data = new FormData();
+    data.append('idx', idx);
+    fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data });
+  }
 });

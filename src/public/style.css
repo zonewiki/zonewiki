@@ -392,6 +392,11 @@ main {
 }
 .breadcrumb-sep { opacity: .5; }
 
+/* ── Task list checkboxes ────────────────────────────────────────────────────── */
+
+.task-list-item { list-style: none; margin-left: -1.25rem; }
+.task-list-item-checkbox { cursor: pointer; margin-right: .4rem; accent-color: var(--link); }
+
 /* ── Backlinks ───────────────────────────────────────────────────────────────── */
 
 .backlinks {
@@ -514,6 +519,7 @@ main {
 .shortcuts-table { border-collapse: collapse; width: 100%; font-size: .9rem; }
 .shortcuts-table td { padding: .3rem .5rem; }
 .shortcuts-table td:first-child { text-align: right; white-space: nowrap; }
+.shortcuts-hint { font-size: .8rem; opacity: .6; font-weight: normal; }
 kbd {
   display: inline-block;
   padding: .1rem .4rem;

@@ -4,3 +4,4 @@
 .cache
 .copilot
 src/__pycache__
+/wiki

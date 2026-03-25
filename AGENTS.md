@@ -117,6 +117,7 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Save page content silently (no redirect); returns 204. Used by auto-save. |
+| POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | POST   | `/api/memo`     | Create a new note file (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | GET    | `/page/_memos`        | Auto-generated index of all memos, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
@@ -171,6 +172,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
 - **Image paste** — pasting an image from the clipboard uploads it via `POST /api/upload` and inserts `![image](url)` at the cursor.
 - **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
+- **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin`). Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and returns 204. In the editor, clicking a checkbox in the live preview directly updates the textarea content (no server call — changes persist on save).
+- **Checkbox list continuation** — pressing Enter at the end of a `- [ ] task` or `- [x] task` line inserts `- [ ] ` on the next line (always unchecked). Pressing Enter on an empty checkbox item (`- [ ] ` with no text) exits the list.
 
 ### Rename
 
@@ -219,9 +222,10 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+M** | anywhere | Open memo modal |
 | **Ctrl/⌘+S** | editor | Save (submit editor form) |
+| **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **e** | page view | Navigate to edit mode |
-| **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts (Vimium-safe) |
-| **?** | anywhere | Show keyboard shortcuts (fallback) |
+| **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
+| **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
 
 ---
 
@@ -262,6 +266,7 @@ flask --app src/server.py run --debug                # Auto-reload during develo
 ```
 flask>=3.0
 markdown-it-py>=3.0
+mdit-py-plugins>=0.4
 ```
 
 `highlight.js` is loaded from a CDN in the HTML shell — no pip install needed.

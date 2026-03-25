@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory
 from markdown_it import MarkdownIt
+from mdit_py_plugins.tasklists import tasklists_plugin
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
 APP_NAME = "Leaf"
@@ -20,7 +21,7 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
 
-md = MarkdownIt(options_update={"html": True}).enable("table")
+md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,7 +114,19 @@ def process_wikilinks(text: str) -> str:
 
 
 def render_md(text: str) -> str:
-    return md.render(process_wikilinks(text))
+    result = md.render(process_wikilinks(text))
+    # Remove disabled attr so task checkboxes are interactive in the browser
+    result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
+    return result
+
+
+def toggle_nth_checkbox(content: str, idx: int) -> str:
+    matches = list(re.finditer(r'\[([xX ])\]', content))
+    if idx >= len(matches):
+        return content
+    m = matches[idx]
+    new_char = 'x' if m.group(1) == ' ' else ' '
+    return content[:m.start()] + f'[{new_char}]' + content[m.end():]
 
 
 def strip_h1(content: str) -> str:
@@ -230,9 +243,16 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+M</kbd></td><td>New memo</td></tr>
       <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
+      <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
       <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
+    </table>
+    <p class="memo-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>/date</kbd></td><td>Insert current date</td></tr>
+      <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
+      <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
   </dialog>
   <main>
@@ -569,6 +589,19 @@ def search_page():
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
+
+@app.post("/api/toggle-checkbox/<path:slug>")
+def api_toggle_checkbox(slug):
+    path = safe_path(slug)
+    if path is None or not path.exists():
+        abort(404)
+    idx = int(request.form.get("idx", -1))
+    if idx < 0:
+        abort(400)
+    content = path.read_text(encoding="utf-8")
+    path.write_text(toggle_nth_checkbox(content, idx), encoding="utf-8")
+    return "", 204
 
 
 @app.post("/api/preview")
