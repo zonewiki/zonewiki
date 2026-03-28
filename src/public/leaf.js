@@ -126,34 +126,34 @@ async function fetchModalContentMatches(q) {
   } catch (_) {}
 }
 
-// ── Memo modal ────────────────────────────────────────────────────────────────
+// ── Scratch modal ─────────────────────────────────────────────────────────────
 
-const memoModal  = document.getElementById('memo-modal');
-const memoForm   = document.getElementById('memo-form');
-const memoTitle  = document.getElementById('memo-title');
-const memoCancel = document.getElementById('memo-cancel');
+const scratchModal  = document.getElementById('scratch-modal');
+const scratchForm   = document.getElementById('scratch-form');
+const scratchTitle  = document.getElementById('scratch-title');
+const scratchCancel = document.getElementById('scratch-cancel');
 
-document.getElementById('open-memo')?.addEventListener('click', openMemo);
-memoCancel?.addEventListener('click', () => memoModal.close());
+document.getElementById('open-scratch')?.addEventListener('click', openScratch);
+scratchCancel?.addEventListener('click', () => scratchModal.close());
 
-memoModal?.addEventListener('click', e => {
-  if (e.target === memoModal) memoModal.close();
+scratchModal?.addEventListener('click', e => {
+  if (e.target === scratchModal) scratchModal.close();
 });
 
-function openMemo() {
-  if (!memoModal) return;
-  memoTitle.value = '';
-  memoModal.showModal();
-  memoTitle.focus();
+function openScratch() {
+  if (!scratchModal) return;
+  scratchTitle.value = '';
+  scratchModal.showModal();
+  scratchTitle.focus();
 }
 
-memoForm?.addEventListener('submit', async e => {
+scratchForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  const title = memoTitle.value.trim() || 'Untitled';
+  const title = scratchTitle.value.trim() || 'Untitled';
   const data = new FormData();
   data.append('title', title);
   try {
-    const res = await fetch('/api/memo', { method: 'POST', body: data });
+    const res = await fetch('/api/scratch', { method: 'POST', body: data });
     const { slug } = await res.json();
     window.location.href = `/edit/${slug}`;
   } catch (_) {}
@@ -172,17 +172,29 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl/Cmd+M — new memo
-  if (e.key === 'm' && (e.ctrlKey || e.metaKey)) {
+  // Ctrl/Cmd+1 — new scratch
+  if (e.key === '1' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
-    openMemo();
+    openScratch();
     return;
+  }
+
+  // Ctrl/Cmd+Alt+0–3 — navigate to pinned pages
+  if (e.altKey && (e.ctrlKey || e.metaKey)) {
+    const pinned = { '0': '/page/index', '1': '/page/_scratch', '2': '/page/tasks', '3': '/page/state' };
+    if (pinned[e.key]) { e.preventDefault(); window.location.href = pinned[e.key]; return; }
   }
 
   // Ctrl/Cmd+/ — show keyboard shortcuts
   if (e.key === '/' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     shortcutsModal?.showModal();
+    return;
+  }
+
+  // F2 — toggle preview (in editor)
+  if (e.key === 'F2' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    if (document.getElementById('editor-textarea')) { e.preventDefault(); togglePreview(); }
     return;
   }
 
@@ -300,7 +312,6 @@ if (textarea && previewPane) {
     fetchPreview();
   });
 
-  fetchPreview();
   textarea.focus();
   textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
@@ -324,7 +335,14 @@ if (textarea && previewPane) {
   });
 }
 
+function togglePreview() {
+  if (!previewPane) return;
+  const showing = previewPane.parentElement.classList.toggle('visible');
+  if (showing) fetchPreview();
+}
+
 async function fetchPreview() {
+  if (!previewPane?.parentElement.classList.contains('visible')) return;
   try {
     const res = await fetch('/api/preview', {
       method: 'POST',

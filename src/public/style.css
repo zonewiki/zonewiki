@@ -87,7 +87,6 @@ body {
   background: transparent;
   color: var(--link-missing);
   border-color: var(--link-missing);
-  margin-left: auto;
 }
 
 /* ── Main ──────────────────────────────────────────────────────────────────── */
@@ -106,7 +105,7 @@ main {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  padding-bottom: .35rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -120,7 +119,7 @@ main {
 /* ── Typography ────────────────────────────────────────────────────────────── */
 
 .page-content h1 { font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; line-height: 1.25; letter-spacing: -.02em; }
-.page-content h2 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 .625rem; padding-bottom: .375rem; border-bottom: 1px solid var(--border); }
+.page-content h2 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 .875rem; padding-bottom: .1rem; border-bottom: 1px solid var(--border); }
 .page-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; }
 .page-content h4 { font-size: .95rem; font-weight: 600; margin: 1.25rem 0 .4rem; }
 
@@ -144,8 +143,16 @@ main {
 
 /* ── Links ─────────────────────────────────────────────────────────────────── */
 
-.page-content a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
-.page-content a:hover { opacity: .8; }
+.page-content a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color .15s;
+}
+.page-content a:hover {
+  text-decoration-color: var(--link);
+}
 .page-content a.wikilink-missing { color: var(--link-missing); text-decoration-style: dashed; }
 
 /* ── Code ──────────────────────────────────────────────────────────────────── */
@@ -468,9 +475,9 @@ main {
   outline: none;
 }
 
-/* ── Memo modal ──────────────────────────────────────────────────────────────── */
+/* ── Scratch modal ───────────────────────────────────────────────────────────── */
 
-.memo-modal {
+.scratch-modal {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
@@ -480,10 +487,10 @@ main {
   box-shadow: 0 24px 64px rgba(0,0,0,.25);
   margin: 20vh auto auto;
 }
-.memo-modal[open] { display: flex; flex-direction: column; gap: .75rem; }
-.memo-modal::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
+.scratch-modal[open] { display: flex; flex-direction: column; gap: .75rem; }
+.scratch-modal::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
 
-.memo-label {
+.scratch-label {
   font-size: .75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -492,7 +499,7 @@ main {
   margin: 0;
 }
 
-#memo-title {
+#scratch-title {
   width: 100%;
   padding: .5rem .75rem;
   border: 1px solid var(--border);
@@ -503,9 +510,9 @@ main {
   outline: none;
   box-sizing: border-box;
 }
-#memo-title:focus { border-color: var(--link); }
+#scratch-title:focus { border-color: var(--link); }
 
-.memo-actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.scratch-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 
 /* ── Shortcuts modal ─────────────────────────────────────────────────────────── */
 
@@ -536,7 +543,7 @@ kbd {
   background: var(--code-bg);
 }
 
-/* ── Memos list (_memos page) ────────────────────────────────────────────────── */
+/* ── Scratch list (_scratch page) ───────────────────────────────────────────── */
 
 .notes-list { list-style: none; padding: 0; }
 .notes-list li {
@@ -549,6 +556,53 @@ kbd {
 }
 .notes-list li:last-child { border-bottom: none; }
 .note-date { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+
+/* ── Auth ────────────────────────────────────────────────────────────────────── */
+
+.signout-form {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 200;
+}
+
+.login-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 20vh;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  width: min(320px, 90vw);
+}
+
+.login-form h2 {
+  margin: 0 0 .25rem;
+  font-size: 1.1rem;
+}
+
+.login-form input[type="password"] {
+  width: 100%;
+  padding: .5rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 1rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.login-form input[type="password"]:focus { border-color: var(--link); }
+
+.login-error {
+  color: var(--link-missing);
+  font-size: .875rem;
+  margin: 0;
+}
 
 /* ── Editor layout ─────────────────────────────────────────────────────────── */
 
@@ -615,6 +669,10 @@ body.editor-page main {
 .preview-pane {
   flex: 1;
   min-width: 0;
+  display: none;
+}
+.preview-pane.visible {
+  display: block;
   overflow-y: auto;
   padding: 1.25rem 1.75rem;
 }

@@ -1,3 +1,4 @@
+import hmac
 import html
 import mimetypes
 import os
@@ -6,12 +7,33 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, redirect, request, send_from_directory
+from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
 APP_NAME = "Leaf"
+
+LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
+
+ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}
+
+@app.before_request
+def check_host():
+    if request.host not in ALLOWED_HOSTS:
+        abort(400)
+
+@app.before_request
+def check_auth():
+    if not LEAF_PASSWORD:
+        return
+    if request.endpoint in ("login", "logout", "static"):
+        return
+    if not session.get("authenticated"):
+        next_url = request.path
+        return redirect(url_for("login", next=next_url))
 
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
 PAGES_DIR = WIKI_DIR
@@ -20,6 +42,13 @@ PAGES_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
+
+HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
+  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
+  </svg>
+  <span>{APP_NAME}</span>
+</a>"""
 
 md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin)
 
@@ -51,11 +80,11 @@ def safe_path(slug: str) -> Path | None:
         return None
 
 
-NOTE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
+SCRATCH_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
 
 
-def is_note(slug: str) -> bool:
-    return bool(NOTE_RE.match(slug))
+def is_scratch(slug: str) -> bool:
+    return bool(SCRATCH_RE.match(slug))
 
 
 def iter_pages():
@@ -71,24 +100,24 @@ def all_slugs() -> list[str]:
     return sorted(slug for _, slug in iter_pages())
 
 
-def list_memos() -> list[dict]:
-    """Return all memo pages sorted newest first."""
-    memos = []
+def list_scratches() -> list[dict]:
+    """Return all scratch pages sorted newest first."""
+    scratches = []
     for md_file in PAGES_DIR.glob("*.md"):
-        m = NOTE_RE.match(md_file.stem)
+        m = SCRATCH_RE.match(md_file.stem)
         if not m:
             continue
         ts_str, _ = m.group(1), m.group(2)
         content = md_file.read_text(encoding="utf-8")
         ts = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
-        memos.append({
+        scratches.append({
             "slug": md_file.stem,
             "title": page_title(content, md_file.stem),
             "ts": ts,
             "date": ts.strftime("%Y-%m-%d %H:%M"),
         })
-    memos.sort(key=lambda n: n["ts"], reverse=True)
-    return memos
+    scratches.sort(key=lambda n: n["ts"], reverse=True)
+    return scratches
 
 
 def page_title(content: str, slug: str) -> str:
@@ -105,7 +134,8 @@ def process_wikilinks(text: str) -> str:
             page_name, label = inner.split("|", 1)
         else:
             page_name = label = inner
-        slug = to_slug(page_name)
+        raw = page_name.strip()
+        slug = raw if raw in slugs else to_slug(page_name)
         label = html.escape(label.strip())
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
         return f'<a href="/page/{slug}" class="{css}">{label}</a>'
@@ -179,10 +209,12 @@ def update_references(old_slug: str, new_slug: str) -> None:
             inner = m.group(1)
             if "|" in inner:
                 page_name, label = inner.split("|", 1)
-                if to_slug(page_name) == old_slug:
+                raw_name = page_name.strip()
+                if raw_name == old_slug or to_slug(page_name) == old_slug:
                     return f"[[{new_slug}|{label}]]"
             else:
-                if to_slug(inner) == old_slug:
+                raw_name = inner.strip()
+                if raw_name == old_slug or to_slug(inner) == old_slug:
                     return f"[[{new_slug}]]"
             return m.group(0)
 
@@ -201,6 +233,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{safe_title} — {APP_NAME}</title>
+  <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/public/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
@@ -227,39 +260,82 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <div id="modal-content-matches" class="content-matches hidden"></div>
     </div>
   </dialog>
-  <dialog id="memo-modal" class="memo-modal">
-    <p class="memo-label">New memo</p>
-    <form id="memo-form">
-      <input type="text" id="memo-title" placeholder="Title…" autocomplete="off" spellcheck="false">
-      <div class="memo-actions">
+  <dialog id="scratch-modal" class="scratch-modal">
+    <p class="scratch-label">New scratch</p>
+    <form id="scratch-form">
+      <input type="text" id="scratch-title" placeholder="Title…" autocomplete="off" spellcheck="false">
+      <div class="scratch-actions">
         <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="memo-cancel">Cancel</button>
+        <button type="button" class="btn" id="scratch-cancel">Cancel</button>
       </div>
     </form>
   </dialog>
   <dialog id="shortcuts-modal" class="shortcuts-modal">
-    <p class="memo-label">Keyboard shortcuts</p>
+    <p class="scratch-label">Keyboard shortcuts</p>
     <table class="shortcuts-table">
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
-      <tr><td><kbd>Ctrl+M</kbd></td><td>New memo</td></tr>
+      <tr><td><kbd>Ctrl+1</kbd></td><td>New scratch</td></tr>
+      <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
+      <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Scratch</td></tr>
+      <tr><td><kbd>Ctrl+Alt+2</kbd></td><td>Go to Tasks</td></tr>
+      <tr><td><kbd>Ctrl+Alt+3</kbd></td><td>Go to State</td></tr>
+      <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
       <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
     </table>
-    <p class="memo-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
+    <p class="scratch-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
     <table class="shortcuts-table">
       <tr><td><kbd>/date</kbd></td><td>Insert current date</td></tr>
       <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
   </dialog>
+  {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <main>
     {body}
   </main>
 </body>
 </html>"""
+
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+
+@app.get("/login")
+@app.post("/login")
+def login():
+    if not LEAF_PASSWORD:
+        return redirect("/")
+    error = ""
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if hmac.compare_digest(pw, LEAF_PASSWORD):
+            session.permanent = True
+            session["authenticated"] = True
+            next_url = request.args.get("next", "/")
+            if not next_url.startswith("/"):
+                next_url = "/"
+            return redirect(next_url)
+        error = "Incorrect password."
+    error_html = f'<p class="login-error">{html.escape(error)}</p>' if error else ""
+    body = f"""<div class="login-wrap">
+  <form class="login-form" method="post" action="/login{f'?next={html.escape(request.args.get("next", ""))}' if request.args.get("next") else ''}">
+    <h2>Sign in to {html.escape(APP_NAME)}</h2>
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
+    {error_html}
+    <button type="submit" class="btn btn-primary">Sign in</button>
+  </form>
+</div>"""
+    return shell("Sign in", body)
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────
@@ -270,36 +346,30 @@ def index():
     return redirect("/page/index")
 
 
-@app.get("/page/_memos")
-def memos_page():
-    memos = list_memos()
-    home_link = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
-  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
-  </svg>
-  <span>{APP_NAME}</span>
-</a>"""
-    if memos:
+@app.get("/page/_scratch")
+def scratch_page():
+    scratches = list_scratches()
+    if scratches:
         items = "".join(
             f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
             f'<span class="note-date">{n["date"]}</span></li>'
-            for n in memos
+            for n in scratches
         )
         body_inner = f"<ul class='notes-list'>{items}</ul>"
     else:
-        body_inner = "<p>No memos yet.</p>"
+        body_inner = "<p>No scratches yet.</p>"
     body = f"""<div class="breadcrumb">
-  {home_link}
+  {HOME_LINK}
   <span class="breadcrumb-sep">›</span>
-  <span>Memos</span>
+  <span>Scratch</span>
 </div>
-<header class="page-header"><h1>Memos</h1></header>
+<header class="page-header"><h1>Scratch</h1></header>
 <article class="page-content">{body_inner}</article>"""
-    return shell("Memos", body)
+    return shell("Scratch", body)
 
 
-@app.post("/api/memo")
-def api_memo():
+@app.post("/api/scratch")
+def api_scratch():
     title = request.form.get("title", "").strip() or "Untitled"
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     slug = f"{ts}_{to_slug(title)}"
@@ -339,12 +409,7 @@ def view_page(slug):
     # Build nested breadcrumb
     parts = slug.split('/')
     sep = '<span class="breadcrumb-sep">›</span>'
-    crumbs = [f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
-  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
-  </svg>
-  <span>{APP_NAME}</span>
-</a>"""]
+    crumbs = [HOME_LINK]
     for i, part in enumerate(parts[:-1]):
         ancestor = '/'.join(parts[:i + 1])
         crumbs.append(f'<a href="/page/{ancestor}">{html.escape(part)}</a>')
@@ -387,7 +452,7 @@ def edit_page(slug):
     rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
     <form method="post" action="/rename/{safe_slug}" class="rename-form">
       <label>New name</label>
-      <input type="text" name="new_name" id="rename-input" value="{safe_title}" autocomplete="off">
+      <input type="text" name="new_name" id="rename-input" value="{safe_slug}" autocomplete="off">
       <button type="submit" class="btn btn-primary">Rename</button>
       <button type="button" class="btn" id="rename-cancel">Cancel</button>
       {rename_error_html}
@@ -475,7 +540,12 @@ def rename_page(slug):
     if old_path is None or not old_path.exists():
         abort(404)
     raw = request.form.get("new_name", "").strip()
-    new_slug = to_slug(raw)
+    # Slugify but preserve underscores so scratch timestamps survive a rename
+    new_slug = "/".join(
+        re.sub(r"[^a-z0-9_]+", "-", p.strip().lower()).strip("-")
+        for p in raw.split("/")
+        if re.sub(r"[^a-z0-9_]+", "-", p.strip().lower()).strip("-")
+    )
     if not new_slug or new_slug == slug:
         return redirect(f"/edit/{slug}")
     new_path = safe_path(new_slug)
@@ -526,7 +596,7 @@ def api_pages_list():
         })
     pages.sort(key=lambda p: p["title"].lower())
     # Inject virtual special pages
-    pages.insert(0, {"slug": "_memos", "title": "Memos", "links": counts.get("_memos", 0), "mtime": 0})
+    pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
     return jsonify(pages)
 
 

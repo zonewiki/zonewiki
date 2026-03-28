@@ -118,8 +118,8 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Save page content silently (no redirect); returns 204. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
-| POST   | `/api/memo`     | Create a new note file (`<timestamp>_<slug>.md`); returns `{ slug }` |
-| GET    | `/page/_memos`        | Auto-generated index of all memos, newest first |
+| POST   | `/api/scratch`  | Create a new scratch file (`<timestamp>_<slug>.md`); returns `{ slug }` |
+| GET    | `/page/_scratch`      | Auto-generated index of all scratches, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
@@ -201,15 +201,15 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ---
 
-## Memos
+## Scratch
 
 - There is no nav bar. All navigation is via keyboard shortcuts.
-- **Keybinding:** `Ctrl+M` opens the memo modal.
-- User types a title and submits → `POST /api/memo` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- **Keybinding:** `Ctrl+0` opens the scratch modal.
+- User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
-- **Memo filenames** match `NOTE_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-memo.md`. `is_note(slug)` identifies them.
-- **`/page/_memos`** — special auto-generated page (no `.md` file on disk) listing all memos newest-first with title and timestamp. Not editable.
-- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Memos" — matches searches for "memo" or "_memos".
+- **Scratch filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-scratch.md`. `is_scratch(slug)` identifies them.
+- **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratches newest-first with title and timestamp. Not editable.
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch".
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
 ---
@@ -221,7 +221,12 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | Shortcut | Context | Action |
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
-| **Ctrl/⌘+M** | anywhere | Open memo modal |
+| **Ctrl/⌘+1** | anywhere | Open scratch modal |
+| **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
+| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) |
+| **Ctrl/⌘+Alt+2** | anywhere | Navigate to Tasks (`/page/tasks`) |
+| **Ctrl/⌘+Alt+3** | anywhere | Navigate to State (`/page/state`) |
+| **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Save (submit editor form) |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **e** | page view | Navigate to edit mode |
@@ -277,7 +282,9 @@ mdit-py-plugins>=0.4
 ## Key Constraints
 
 - Do not use a database. Files are the only storage.
-- Do not add authentication — this is local use only.
+- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the top-right corner when auth is enabled.
+- The server binds to `127.0.0.1` only (not `0.0.0.0`) to prevent LAN exposure. `compose.yaml` mirrors this with `127.0.0.1:5000:5000`.
+- A `before_request` hook in `server.py` validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks.
 - Do not add a build step or bundler.
 - Slugs are derived from file paths relative to `PAGES_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).
 - Subdirectories are fully supported. `to_slug()` preserves `/` as a path separator while slugifying each component. `iter_pages()` does a recursive `rglob("*.md")` and skips `_*` subdirectories.

@@ -2,11 +2,13 @@ services:
   leaf:
     build: .
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ${WIKI_DATA:-./wiki-data}:/wiki-data
     environment:
       - FLASK_ENV=production
       - WIKI_DATA=/wiki-data
+      - LEAF_PASSWORD=${LEAF_PASSWORD:-}
+      - SECRET_KEY=${SECRET_KEY:-}
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"
