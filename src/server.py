@@ -378,7 +378,10 @@ def edit_page(slug):
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
     can_rename = slug != "index"
+    can_delete = slug != "index"
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename else ""
+    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}">Delete</button>' if can_delete else ""
+    delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
     rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
@@ -397,7 +400,9 @@ def edit_page(slug):
       <button type="submit" form="editor-form" class="btn btn-primary">Save</button>
       <a href="/page/{safe_slug}" class="btn">Cancel</a>
       {rename_btn}
+      {delete_btn}
     </div>
+    {delete_form}
     {rename_bar}
     <form id="editor-form" method="post" action="/edit/{safe_slug}">
       <textarea id="editor-textarea" name="content"
@@ -481,6 +486,17 @@ def rename_page(slug):
     old_path.rename(new_path)
     update_references(slug, new_slug)
     return redirect(f"/page/{new_slug}")
+
+
+@app.post("/delete/<path:slug>")
+def delete_page(slug):
+    if slug == "index":
+        abort(400)
+    path = safe_path(slug)
+    if path is None or not path.exists():
+        abort(404)
+    path.unlink()
+    return redirect("/page/index")
 
 
 def fmt_date(ts: float) -> str:

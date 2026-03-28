@@ -333,8 +333,67 @@ async function fetchPreview() {
     });
     previewPane.innerHTML = await res.text();
     if (window.hljs) previewPane.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+    highlightPreviewBlock();
   } catch (_) { /* ignore */ }
 }
+
+function highlightPreviewBlock() {
+  if (!textarea || !previewPane) return;
+  const pos = textarea.selectionStart;
+  const text = textarea.value;
+  const cursorLine = text.slice(0, pos).split('\n').length - 1;
+  const lines = text.split('\n');
+
+  // Walk lines up to cursor, counting rendered block elements.
+  // Rules that mirror how markdown-it produces block elements:
+  //  - blank line ends the current block
+  //  - ATX headings (# …) always occupy their own block, regardless of surrounding blank lines
+  //  - fenced code blocks (``` / ~~~) are one block regardless of their interior content
+  let blockIdx = -1;
+  let inBlock = false;
+  let inFence = false;
+  for (let i = 0; i <= cursorLine; i++) {
+    const trimmed = lines[i].trim();
+
+    // Fenced code block toggle
+    if (!inFence && (trimmed.startsWith('```') || trimmed.startsWith('~~~'))) {
+      inFence = true;
+      if (!inBlock) { blockIdx++; inBlock = true; }
+      continue;
+    }
+    if (inFence) {
+      if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) inFence = false;
+      continue;
+    }
+
+    // Blank line → end current block
+    if (trimmed === '') { inBlock = false; continue; }
+
+    // ATX heading → always its own block; reset inBlock so the next
+    // non-blank line (if not separated by a blank) also opens a new block
+    if (/^#{1,6}\s/.test(trimmed)) {
+      blockIdx++;
+      inBlock = false;
+      continue;
+    }
+
+    // Regular content line
+    if (!inBlock) { blockIdx++; inBlock = true; }
+  }
+
+  const blockEls = previewPane.querySelectorAll(
+    ':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, ' +
+    ':scope > pre, :scope > ul, :scope > ol, :scope > blockquote, :scope > hr, :scope > table'
+  );
+  blockEls.forEach(el => el.classList.remove('preview-hl'));
+  if (blockIdx >= 0 && blockIdx < blockEls.length) {
+    blockEls[blockIdx].classList.add('preview-hl');
+  }
+}
+
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement === textarea) highlightPreviewBlock();
+});
 
 // ── List continuation ─────────────────────────────────────────────────────────
 
@@ -515,6 +574,13 @@ function expandSnippet() {
   return false;
 }
 
+
+// ── Delete confirmation ───────────────────────────────────────────────────────
+
+document.getElementById('delete-btn')?.addEventListener('click', e => {
+  const title = e.currentTarget.dataset.title;
+  if (!confirm(`Delete "${title}"? This cannot be undone.`)) e.preventDefault();
+});
 
 // ── Rename bar toggle ─────────────────────────────────────────────────────────
 

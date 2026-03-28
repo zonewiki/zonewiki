@@ -83,6 +83,12 @@ body {
   color: var(--btn-primary-fg);
   border-color: var(--btn-primary);
 }
+.btn-danger {
+  background: transparent;
+  color: var(--link-missing);
+  border-color: var(--link-missing);
+  margin-left: auto;
+}
 
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
@@ -611,6 +617,16 @@ body.editor-page main {
   min-width: 0;
   overflow-y: auto;
   padding: 1.25rem 1.75rem;
+}
+
+#editor-preview .preview-hl {
+  box-shadow: inset 3px 0 0 var(--link);
+  background-color: rgba(37, 99, 235, 0.06);
+  border-radius: 2px;
+  transition: box-shadow .1s, background-color .1s;
+}
+@media (prefers-color-scheme: dark) {
+  #editor-preview .preview-hl { background-color: rgba(88, 166, 255, 0.08); }
 }
 
 .pane-label {

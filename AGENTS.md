@@ -121,6 +121,7 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | POST   | `/api/memo`     | Create a new note file (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | GET    | `/page/_memos`        | Auto-generated index of all memos, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
+| POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
 
 Every page view includes:
