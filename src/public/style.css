@@ -744,6 +744,31 @@ body.editor-page main {
   color: var(--link);
 }
 
+/* ── Page header actions group ─────────────────────────────────────────────── */
+
+.page-header-actions { display: flex; gap: .5rem; align-items: center; flex-shrink: 0; }
+
+/* ── History ───────────────────────────────────────────────────────────────── */
+
+.hist-table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+.hist-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: .875rem; }
+.hist-table tr:last-child td { border-bottom: none; }
+.hist-date { white-space: nowrap; font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; color: var(--fg); }
+.hist-rel  { white-space: nowrap; color: var(--muted); }
+.hist-msg  { color: var(--fg); width: 100%; }
+.hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
+
+.revision-banner {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .5rem .875rem;
+  font-size: .875rem;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+.revision-banner code { font-size: .8125rem; }
+
 /* ── Editor mobile message ─────────────────────────────────────────────────── */
 
 .editor-mobile-msg { display: none; }

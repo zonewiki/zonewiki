@@ -123,6 +123,9 @@ In the editor, pasting an image from the clipboard (e.g. a screenshot) automatic
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
+| GET    | `/history/<slug>`     | Git commit log for a page (only when git is enabled) |
+| GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
+| POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
 
 Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
@@ -154,6 +157,14 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - If the target page does not exist, render the link with a CSS class `wikilink-missing` so it can be styled differently (e.g. red or dashed underline). Clicking a missing wikilink redirects to `/edit/<slug>` so the page can be created immediately.
 - The same pre-processing must run in the `/api/preview` endpoint so the live editor preview also renders wikilinks correctly.
 - Add a route `GET /api/pages` that returns a JSON list of all existing slugs — used by the editor to hint which wikilinks are valid.
+
+### Version history
+
+- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes a `.gitignore` excluding `_uploads/`, and commits all existing files.
+- Every write operation (save, auto-save, create, rename, delete, restore) calls `git_commit()` or `git_commit_rename()` to stage and commit the change.
+- `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
+- SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
+- History link appears next to Edit button on page view and in the editor toolbar.
 
 ### Table of Contents
 

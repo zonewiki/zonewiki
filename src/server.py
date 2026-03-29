@@ -3,6 +3,8 @@ import html
 import mimetypes
 import os
 import re
+import shutil
+import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +45,75 @@ PAGES_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
+
+# ── Git version control ────────────────────────────────────────────────────────
+
+GIT_ENABLED = shutil.which("git") is not None
+SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
+
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(list(args), cwd=WIKI_DIR, capture_output=True, text=True)
+
+
+def git_setup() -> None:
+    if not GIT_ENABLED:
+        return
+    if not (WIKI_DIR / ".git").exists():
+        _git("git", "init")
+        _git("git", "config", "user.email", "leaf@localhost")
+        _git("git", "config", "user.name", "Leaf")
+        gitignore = WIKI_DIR / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text("_uploads/\n", encoding="utf-8")
+        _git("git", "add", ".")
+        _git("git", "commit", "--allow-empty", "-m", "Initial import")
+    else:
+        r = _git("git", "config", "user.name")
+        if not r.stdout.strip():
+            _git("git", "config", "user.email", "leaf@localhost")
+            _git("git", "config", "user.name", "Leaf")
+
+
+def git_commit(path: Path, message: str) -> None:
+    if not GIT_ENABLED:
+        return
+    rel = str(path.relative_to(WIKI_DIR))
+    _git("git", "add", "--", rel)
+    _git("git", "commit", "-m", message)
+
+
+def git_commit_rename(old_path: Path, new_path: Path, message: str) -> None:
+    if not GIT_ENABLED:
+        return
+    _git("git", "add", "--",
+         str(old_path.relative_to(WIKI_DIR)),
+         str(new_path.relative_to(WIKI_DIR)))
+    _git("git", "commit", "-m", message)
+
+
+def git_log(path: Path) -> list[dict]:
+    if not GIT_ENABLED:
+        return []
+    rel = str(path.relative_to(WIKI_DIR))
+    r = _git("git", "log", "--follow",
+             "--format=%H\x1f%as\x1f%ar\x1f%s", "--", rel)
+    entries = []
+    for line in r.stdout.splitlines():
+        parts = line.split("\x1f", 3)
+        if len(parts) == 4:
+            entries.append({"sha": parts[0], "date": parts[1],
+                            "rel": parts[2], "msg": parts[3]})
+    return entries
+
+
+def git_show(sha: str, path: Path) -> str | None:
+    rel = str(path.relative_to(WIKI_DIR))
+    r = _git("git", "show", f"{sha}:{rel}")
+    return r.stdout if r.returncode == 0 else None
+
+
+git_setup()
 
 HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
   <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -416,6 +487,7 @@ def api_scratch():
     if path is None:
         abort(400)
     path.write_text(f"# {title}\n\n", encoding="utf-8")
+    git_commit(path, f"Create {slug}")
     return jsonify({"slug": slug})
 
 
@@ -452,10 +524,14 @@ def view_page(slug):
     crumbs.append(f'<span>{html.escape(title)}</span>')
     breadcrumb = f'<div class="breadcrumb">{sep.join(crumbs)}</div>'
 
+    hist_link = f'<a href="/history/{slug}" class="btn">History</a>' if GIT_ENABLED else ""
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
-  <a href="/edit/{slug}" class="btn">Edit</a>
+  <div class="page-header-actions">
+    {hist_link}
+    <a href="/edit/{slug}" class="btn">Edit</a>
+  </div>
 </header>
 <article class="page-content">
   {render_md(strip_h1(content))}
@@ -482,6 +558,7 @@ def edit_page(slug):
     can_delete = slug != "index"
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}">Delete</button>' if can_delete else ""
+    hist_btn = f'<a href="/history/{safe_slug}" class="btn">History</a>' if GIT_ENABLED else ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
@@ -502,6 +579,7 @@ def edit_page(slug):
       <button type="submit" form="editor-form" class="btn btn-primary">Save</button>
       <a href="/page/{safe_slug}" class="btn">Cancel</a>
       {rename_btn}
+      {hist_btn}
       {delete_btn}
     </div>
     {delete_form}
@@ -527,6 +605,7 @@ def save_page(slug):
     content = request.form.get("content", "")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    git_commit(path, f"Update {slug}")
     return redirect(f"/page/{slug}")
 
 
@@ -538,6 +617,7 @@ def api_save(slug):
     content = request.form.get("content", "")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    git_commit(path, f"Update {slug}")
     return "", 204
 
 
@@ -566,6 +646,7 @@ def create_page():
         title = raw.strip().title()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {title}\n\n", encoding="utf-8")
+        git_commit(path, f"Create {slug}")
     return redirect(f"/edit/{slug}")
 
 
@@ -592,6 +673,7 @@ def rename_page(slug):
         return redirect(f"/edit/{slug}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
     old_path.rename(new_path)
     update_references(slug, new_slug)
+    git_commit_rename(old_path, new_path, f"Rename {slug} to {new_slug}")
     return redirect(f"/page/{new_slug}")
 
 
@@ -603,7 +685,101 @@ def delete_page(slug):
     if path is None or not path.exists():
         abort(404)
     path.unlink()
+    git_commit(path, f"Delete {slug}")
     return redirect("/page/index")
+
+
+# ── History routes ────────────────────────────────────────────────────────────
+
+
+@app.get("/history/<path:slug>")
+def history_page_route(slug):
+    if not GIT_ENABLED:
+        abort(404)
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    if not path.exists():
+        return redirect(f"/edit/{slug}")
+    content = path.read_text(encoding="utf-8")
+    title = page_title(content, slug)
+    entries = git_log(path)
+
+    if entries:
+        rows = "".join(
+            f'<tr>'
+            f'<td class="hist-date">{e["date"]}</td>'
+            f'<td class="hist-rel">{html.escape(e["rel"])}</td>'
+            f'<td class="hist-msg">{html.escape(e["msg"])}</td>'
+            f'<td><a href="/revision/{slug}/{e["sha"]}" class="btn">View</a></td>'
+            f'</tr>'
+            for e in entries
+        )
+        table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'
+    else:
+        table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
+
+    sep = '<span class="breadcrumb-sep">›</span>'
+    body = f"""<div class="breadcrumb">
+  {HOME_LINK}{sep}<a href="/page/{slug}">{html.escape(title)}</a>{sep}<span>History</span>
+</div>
+<header class="page-header">
+  <h1>History — {html.escape(title)}</h1>
+  <a href="/page/{slug}" class="btn">← Page</a>
+</header>
+{table}"""
+    return shell(f"History — {title}", body)
+
+
+@app.get("/revision/<path:slug>/<sha>")
+def revision_view(slug, sha):
+    if not GIT_ENABLED:
+        abort(404)
+    if not SHA_RE.match(sha):
+        abort(400)
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    content = git_show(sha, path)
+    if content is None:
+        abort(404)
+    title = page_title(content, slug)
+    sep = '<span class="breadcrumb-sep">›</span>'
+    body = f"""<div class="breadcrumb">
+  {HOME_LINK}{sep}<a href="/page/{slug}">{html.escape(title)}</a>{sep}<a href="/history/{slug}">History</a>{sep}<span>{sha[:7]}</span>
+</div>
+<header class="page-header">
+  <h1>{html.escape(title)}</h1>
+  <div class="page-header-actions">
+    <form method="post" action="/restore/{slug}/{sha}" style="display:inline">
+      <button type="submit" class="btn btn-primary">Restore</button>
+    </form>
+    <a href="/history/{slug}" class="btn">← History</a>
+  </div>
+</header>
+<div class="revision-banner">Revision <code>{sha[:7]}</code> — restoring will create a new commit.</div>
+<article class="page-content">
+  {render_md(strip_h1(content))}
+</article>"""
+    return shell(f"Revision {sha[:7]} — {title}", body)
+
+
+@app.post("/restore/<path:slug>/<sha>")
+def restore_revision(slug, sha):
+    if not GIT_ENABLED:
+        abort(404)
+    if not SHA_RE.match(sha):
+        abort(400)
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    content = git_show(sha, path)
+    if content is None:
+        abort(404)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git_commit(path, f"Restore {slug} to {sha[:7]}")
+    return redirect(f"/page/{slug}")
 
 
 def fmt_date(ts: float) -> str:

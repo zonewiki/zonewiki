@@ -1,7 +1,7 @@
 FROM archlinux:latest
 
 RUN pacman -Syu --noconfirm && \
-    pacman -S --noconfirm python python-pip && \
+    pacman -S --noconfirm python python-pip git && \
     pacman -Scc --noconfirm
 
 WORKDIR /app
