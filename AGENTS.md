@@ -54,7 +54,7 @@ No build step. No database. No auth (local use only).
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
 ```
 
-Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `assets/`.
+Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
 
@@ -91,13 +91,13 @@ WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 
 Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$WIKI_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
-- `$WIKI_DATA/assets/` — uploaded images, served at `/uploads/<filename>` (created automatically)
+- `$WIKI_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
 
-Uploaded image URLs use `/uploads/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
+Uploaded image URLs use `/_assets/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
 
 ### File paste and drag & drop
 
-In the editor, pasting a file from the clipboard or dropping a file onto the textarea automatically uploads it via `POST /api/upload`. All file types are accepted. Images are inserted as `![name](url)`; other files as `[name](url)`. Multiple files dropped at once are uploaded sequentially. The upload route uses the original filename when available (falling back to MIME-type guessing). If a file with that name already exists in `assets/`, a numeric suffix is appended (`file-2.pdf`, `file-3.pdf`, …).
+In the editor, pasting a file from the clipboard or dropping a file onto the textarea automatically uploads it via `POST /api/upload`. All file types are accepted. Images are inserted as `![name](url)`; other files as `[name](url)`. Multiple files dropped at once are uploaded sequentially. The upload route uses the original filename when available (falling back to MIME-type guessing). If a file with that name already exists in `_assets/`, a numeric suffix is appended (`file-2.pdf`, `file-3.pdf`, …).
 
 ---
 
@@ -118,6 +118,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Save page content silently (no redirect); returns 204. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
+| POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | POST   | `/api/scratch`  | Create a new scratch file (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`      | Auto-generated index of all scratches, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
@@ -160,8 +161,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Version history
 
-- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes a `.gitignore` excluding `assets/`, and commits all existing files.
-- Every write operation (save, auto-save, create, rename, delete, restore) calls `git_commit()` or `git_commit_rename()` to stage and commit the change.
+- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
+- Every write operation (save, auto-save, create, rename, delete, restore, upload) calls `git_commit()` or `git_commit_rename()` to stage and commit the change. Assets are tracked like pages — a `git push` backs up everything.
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
 - History link appears next to Edit button on page view and in the editor toolbar.
@@ -241,6 +242,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
 | **Ctrl/⌘+1** | anywhere | Open scratch modal |
+| **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
 | **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
 | **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) |
 | **Ctrl/⌘+Alt+2** | anywhere | Navigate to Tasks (`/page/tasks`) |
@@ -303,6 +305,7 @@ mdit-py-plugins>=0.4
 
 - Do not use a database. Files are the only storage.
 - Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the top-right corner when auth is enabled.
+- Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
 - The server binds to `127.0.0.1` only (not `0.0.0.0`) to prevent LAN exposure. `compose.yaml` mirrors this with `127.0.0.1:5000:5000`.
 - A `before_request` hook in `server.py` validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks.
 - Do not add a build step or bundler.

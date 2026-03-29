@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ app = Flask(__name__, static_folder="public", static_url_path="/public")
 APP_NAME = "Leaf"
 
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
+GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
 
@@ -39,7 +41,7 @@ def check_auth():
 
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
 PAGES_DIR = WIKI_DIR
-UPLOADS_DIR = WIKI_DIR / "assets"
+UPLOADS_DIR = WIKI_DIR / "_assets"
 PAGES_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -63,7 +65,7 @@ def git_setup() -> None:
         _git("git", "config", "user.name", "Leaf")
         gitignore = WIKI_DIR / ".gitignore"
         if not gitignore.exists():
-            gitignore.write_text("assets/\n", encoding="utf-8")
+            gitignore.write_text("", encoding="utf-8")
         _git("git", "add", ".")
         _git("git", "commit", "--allow-empty", "-m", "Initial import")
     else:
@@ -71,6 +73,12 @@ def git_setup() -> None:
         if not r.stdout.strip():
             _git("git", "config", "user.email", "leaf@localhost")
             _git("git", "config", "user.name", "Leaf")
+    if GIT_REMOTE:
+        existing = _git("git", "remote", "get-url", "origin")
+        if existing.returncode == 0:
+            _git("git", "remote", "set-url", "origin", GIT_REMOTE)
+        else:
+            _git("git", "remote", "add", "origin", GIT_REMOTE)
 
 
 def git_commit(path: Path, message: str) -> None:
@@ -116,6 +124,7 @@ git_setup()
 HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
   <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
+    <path d="M3.5 12.5 Q3 15 2 15" stroke="black" stroke-width="1.1" stroke-linecap="round" fill="none"/>
   </svg>
   <span>{APP_NAME}</span>
 </a>"""
@@ -383,6 +392,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>Ctrl+1</kbd></td><td>New scratch</td></tr>
+      <tr><td><kbd>Ctrl+2</kbd></td><td>Add task to Inbox</td></tr>
       <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Scratch</td></tr>
       <tr><td><kbd>Ctrl+Alt+2</kbd></td><td>Go to Tasks</td></tr>
@@ -400,6 +410,34 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
+  </dialog>
+  <dialog id="quick-task-modal" class="scratch-modal">
+    <p class="scratch-label">Add task to Inbox</p>
+    <form id="quick-task-form">
+      <input type="text" id="quick-task-input" placeholder="Task description…" autocomplete="off" spellcheck="false">
+      <div class="scratch-actions">
+        <button type="submit" class="btn btn-primary">Add</button>
+        <button type="button" class="btn" id="quick-task-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="url-name-modal" class="scratch-modal">
+    <p class="scratch-label">Paste link</p>
+    <code id="url-name-href" class="url-name-href"></code>
+    <input type="text" id="url-name-input" placeholder="Display name (optional)" autocomplete="off" spellcheck="false">
+    <div class="scratch-actions">
+      <button type="button" class="btn btn-primary" id="url-name-confirm">Insert</button>
+      <button type="button" class="btn" id="url-name-cancel">Plain URL</button>
+    </div>
+  </dialog>
+  <dialog id="upload-conflict-modal" class="scratch-modal">
+    <p class="scratch-label">File already exists</p>
+    <p id="upload-conflict-msg" class="upload-conflict-msg"></p>
+    <input type="text" id="upload-conflict-name" autocomplete="off" spellcheck="false">
+    <div class="scratch-actions">
+      <button type="button" class="btn btn-primary" id="upload-conflict-confirm">Upload</button>
+      <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
+    </div>
   </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <main>
@@ -901,6 +939,41 @@ def api_toggle_checkbox(slug):
     return "", 204
 
 
+@app.post("/api/add-task")
+def api_add_task():
+    description = request.form.get("description", "").strip()
+    if not description:
+        abort(400)
+    path = safe_path("tasks")
+    if path is None:
+        abort(400)
+    content = path.read_text(encoding="utf-8") if path.exists() else ""
+    task_line = f"- [ ] {description}\n"
+    lines = content.splitlines(keepends=True)
+    todo_idx = next(
+        (i for i, l in enumerate(lines) if re.match(r"^##\s+Todo\s*$", l, re.IGNORECASE)),
+        None,
+    )
+    if todo_idx is None:
+        if content and not content.endswith("\n"):
+            content += "\n"
+        content += f"\n## Todo\n\n{task_line}"
+    else:
+        # Insert at end of the ## Todo section (before next ## or EOF)
+        insert_idx = todo_idx + 1
+        while insert_idx < len(lines) and not re.match(r"^##", lines[insert_idx]):
+            insert_idx += 1
+        if insert_idx == todo_idx + 1:
+            lines.insert(insert_idx, "\n")
+            insert_idx += 1
+        lines.insert(insert_idx, task_line)
+        content = "".join(lines)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git_commit(path, f"Add task: {description[:60]}")
+    return "", 204
+
+
 @app.post("/api/preview")
 def api_preview():
     text = request.get_data(as_text=True)
@@ -923,19 +996,28 @@ def api_upload():
         if ext == ".jpeg":
             ext = ".jpg"
         original_name = "upload" + ext
-    stem = Path(original_name).stem
-    ext = Path(original_name).suffix.lower()
-    # Find a unique filename, appending -2, -3, ... if needed
-    filename = stem + ext
-    counter = 2
-    while (UPLOADS_DIR / filename).exists():
-        filename = f"{stem}-{counter}{ext}"
-        counter += 1
-    f.save(UPLOADS_DIR / filename)
-    return jsonify({"url": f"/uploads/{filename}"})
+    # unique=1: generate a UUID filename (used for clipboard screenshots)
+    if request.form.get("unique") == "1":
+        ext = Path(original_name).suffix.lower() or (mimetypes.guess_extension(f.mimetype) or ".bin")
+        if ext == ".jpeg":
+            ext = ".jpg"
+        filename = uuid.uuid4().hex + ext
+        f.save(UPLOADS_DIR / filename)
+        git_commit(UPLOADS_DIR / filename, f"Upload {filename}")
+        return jsonify({"url": f"/_assets/{filename}"})
+    # Client may request a specific filename (e.g. after a conflict dialog)
+    requested_name = request.form.get("filename", "").strip()
+    filename = Path(requested_name).name if requested_name else original_name
+    overwrite = request.form.get("overwrite") == "1"
+    dest = UPLOADS_DIR / filename
+    if dest.exists() and not overwrite:
+        return jsonify({"conflict": True, "filename": filename}), 409
+    f.save(dest)
+    git_commit(dest, f"Upload {filename}")
+    return jsonify({"url": f"/_assets/{filename}"})
 
 
-@app.get("/uploads/<filename>")
+@app.get("/_assets/<filename>")
 def serve_upload(filename):
     return send_from_directory(UPLOADS_DIR, filename)
 

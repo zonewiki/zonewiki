@@ -126,6 +126,51 @@ async function fetchModalContentMatches(q) {
   } catch (_) {}
 }
 
+// ── Quick-task modal ──────────────────────────────────────────────────────────
+
+const quickTaskModal  = document.getElementById('quick-task-modal');
+const quickTaskForm   = document.getElementById('quick-task-form');
+const quickTaskInput  = document.getElementById('quick-task-input');
+const quickTaskCancel = document.getElementById('quick-task-cancel');
+
+quickTaskCancel?.addEventListener('click', () => quickTaskModal.close());
+quickTaskModal?.addEventListener('click', e => {
+  if (e.target === quickTaskModal) quickTaskModal.close();
+});
+
+function openQuickTask() {
+  if (!quickTaskModal) return;
+  quickTaskInput.value = '';
+  quickTaskModal.showModal();
+  quickTaskInput.focus();
+}
+
+quickTaskForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const description = quickTaskInput.value.trim();
+  if (!description) return;
+  quickTaskModal.close();
+  const data = new FormData();
+  data.append('description', description);
+  try {
+    await fetch('/api/add-task', { method: 'POST', body: data });
+    const path = window.location.pathname;
+    if (path === '/page/tasks') {
+      window.location.reload();
+    } else {
+      // If we're editing the tasks page, sync the textarea too
+      const editorTextarea = document.getElementById('editor-textarea');
+      if (editorTextarea && path === '/edit/tasks') {
+        const line = `- [ ] ${description}`;
+        if (editorTextarea.value && !editorTextarea.value.endsWith('\n'))
+          editorTextarea.value += '\n';
+        editorTextarea.value += line + '\n';
+        if (typeof fetchPreview === 'function') fetchPreview();
+      }
+    }
+  } catch (_) {}
+});
+
 // ── Scratch modal ─────────────────────────────────────────────────────────────
 
 const scratchModal  = document.getElementById('scratch-modal');
@@ -201,6 +246,13 @@ document.addEventListener('keydown', e => {
   if (e.key === '1' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
     openScratch();
+    return;
+  }
+
+  // Ctrl/Cmd+2 — quick add task
+  if (e.key === '2' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    openQuickTask();
     return;
   }
 
@@ -314,17 +366,70 @@ if (textarea && previewPane) {
     setTimeout(hideAcDropdown, 150);
   });
 
-  async function uploadFileAtCursor(file) {
+  const uploadConflictModal = document.getElementById('upload-conflict-modal');
+  const uploadConflictMsg   = document.getElementById('upload-conflict-msg');
+  const uploadConflictName  = document.getElementById('upload-conflict-name');
+  const uploadConflictOk    = document.getElementById('upload-conflict-confirm');
+  const uploadConflictCancel = document.getElementById('upload-conflict-cancel');
+
+  // Show conflict dialog; resolves with { name, overwrite } or null on cancel
+  function askConflict(existingName) {
+    return new Promise(resolve => {
+      uploadConflictMsg.textContent = `"${existingName}" already exists. Enter a new name or keep it to overwrite.`;
+      uploadConflictName.value = existingName;
+      updateConflictBtn();
+      uploadConflictModal.showModal();
+      uploadConflictName.focus();
+      uploadConflictName.select();
+
+      function updateConflictBtn() {
+        uploadConflictOk.textContent =
+          uploadConflictName.value.trim() === existingName ? 'Overwrite' : 'Upload';
+      }
+      uploadConflictName.oninput = updateConflictBtn;
+
+      function done(result) {
+        uploadConflictModal.close();
+        uploadConflictName.oninput = null;
+        uploadConflictOk.onclick = null;
+        uploadConflictCancel.onclick = null;
+        resolve(result);
+      }
+      uploadConflictOk.onclick = () => {
+        const n = uploadConflictName.value.trim() || existingName;
+        done({ name: n, overwrite: n === existingName });
+      };
+      uploadConflictCancel.onclick = () => done(null);
+    });
+  }
+  uploadConflictModal?.addEventListener('click', e => {
+    if (e.target === uploadConflictModal) uploadConflictModal.close();
+  });
+
+  async function uploadFileAtCursor(file, filenameOverride, overwrite, unique) {
     const start = textarea.selectionStart, end = textarea.selectionEnd;
     const isImage = file.type.startsWith('image/');
-    const name = file.name || 'file';
+    const name = filenameOverride || file.name || 'file';
     const placeholder = isImage ? '![uploading…]()' : `[${name}]()`;
     textarea.value = textarea.value.slice(0, start) + placeholder + textarea.value.slice(end);
     textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
     const fd = new FormData();
     fd.append('file', file, file.name || 'upload');
+    if (unique) fd.append('unique', '1');
+    if (filenameOverride) fd.append('filename', filenameOverride);
+    if (overwrite) fd.append('overwrite', '1');
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (res.status === 409) {
+        const { filename } = await res.json();
+        // Remove placeholder while dialog is open
+        textarea.value = textarea.value.slice(0, start) + textarea.value.slice(start + placeholder.length);
+        textarea.selectionStart = textarea.selectionEnd = start;
+        fetchPreview();
+        const choice = await askConflict(filename);
+        if (choice) await uploadFileAtCursor(file, choice.name, choice.overwrite);
+        return;
+      }
       if (!res.ok) throw new Error();
       const { url } = await res.json();
       const md = isImage ? `![${name}](${url})` : `[${name}](${url})`;
@@ -336,11 +441,59 @@ if (textarea && previewPane) {
     fetchPreview();
   }
 
+  const urlNameModal   = document.getElementById('url-name-modal');
+  const urlNameHref    = document.getElementById('url-name-href');
+  const urlNameInput   = document.getElementById('url-name-input');
+  const urlNameConfirm = document.getElementById('url-name-confirm');
+  const urlNameCancel  = document.getElementById('url-name-cancel');
+
+  function askUrlName(url) {
+    return new Promise(resolve => {
+      urlNameHref.textContent = url;
+      urlNameInput.value = '';
+      urlNameModal.showModal();
+      urlNameInput.focus();
+
+      function done(result) {
+        urlNameModal.close();
+        urlNameConfirm.onclick = null;
+        urlNameCancel.onclick = null;
+        resolve(result);
+      }
+      urlNameConfirm.onclick = () => done(urlNameInput.value.trim() || null);
+      urlNameCancel.onclick  = () => done(false);
+    });
+  }
+  urlNameModal?.addEventListener('click', e => {
+    if (e.target === urlNameModal) urlNameModal.close();
+  });
+
   textarea.addEventListener('paste', async (e) => {
     const fileItem = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
-    if (!fileItem) return;
-    e.preventDefault();
-    await uploadFileAtCursor(fileItem.getAsFile());
+    if (fileItem) {
+      e.preventDefault();
+      const file = fileItem.getAsFile();
+      // Clipboard images (screenshots) get a unique UUID — no conflict dialog
+      const unique = file.type.startsWith('image/');
+      await uploadFileAtCursor(file, null, false, unique);
+      return;
+    }
+    // URL paste: ask for display name
+    const text = (e.clipboardData.getData('text/plain') || '').trim();
+    if (/^https?:\/\/\S+$/.test(text)) {
+      e.preventDefault();
+      const name = await askUrlName(text);
+      if (name === false) {
+        // cancelled — insert raw URL
+        document.execCommand('insertText', false, text);
+        return;
+      }
+      const md = name ? `[${name}](${text})` : text;
+      const pos = textarea.selectionStart;
+      textarea.value = textarea.value.slice(0, pos) + md + textarea.value.slice(textarea.selectionEnd);
+      textarea.selectionStart = textarea.selectionEnd = pos + md.length;
+      fetchPreview();
+    }
   });
 
   textarea.addEventListener('dragover', (e) => { e.preventDefault(); });
