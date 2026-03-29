@@ -159,6 +159,24 @@ scratchForm?.addEventListener('submit', async e => {
   } catch (_) {}
 });
 
+// ── New-page modal ─────────────────────────────────────────────────────────────
+
+const newPageModal  = document.getElementById('new-page-modal');
+const newPageInput  = document.getElementById('new-page-input');
+const newPageCancel = document.getElementById('new-page-cancel');
+
+newPageCancel?.addEventListener('click', () => newPageModal.close());
+newPageModal?.addEventListener('click', e => {
+  if (e.target === newPageModal) newPageModal.close();
+});
+
+function openNewPage() {
+  if (!newPageModal) return;
+  newPageInput.value = '';
+  newPageModal.showModal();
+  newPageInput.focus();
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 const shortcutsModal = document.getElementById('shortcuts-modal');
@@ -169,6 +187,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     openSearchModal();
+    return;
+  }
+
+  // Ctrl/Cmd+N — new page
+  if (e.key === 'n' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    openNewPage();
     return;
   }
 

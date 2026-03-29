@@ -180,6 +180,23 @@ main {
   font-size: .8125rem;
 }
 
+/* ── Table of contents ─────────────────────────────────────────────────────── */
+
+.toc {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  margin: 1.5rem 0;
+  display: inline-block;
+  min-width: 200px;
+}
+.toc ul { margin: 0; padding: 0; list-style: none; }
+.toc li { padding: .15rem 0; }
+.toc li.toc-h3 { padding-left: 1rem; }
+.toc a { color: var(--muted); font-size: .875rem; text-decoration: none; }
+.toc a:hover { color: var(--link); }
+
 /* ── 404 ───────────────────────────────────────────────────────────────────── */
 
 .not-found { text-align: center; padding: 5rem 0; }
@@ -499,7 +516,8 @@ main {
   margin: 0;
 }
 
-#scratch-title {
+#scratch-title,
+#new-page-input {
   width: 100%;
   padding: .5rem .75rem;
   border: 1px solid var(--border);
@@ -510,7 +528,8 @@ main {
   outline: none;
   box-sizing: border-box;
 }
-#scratch-title:focus { border-color: var(--link); }
+#scratch-title:focus,
+#new-page-input:focus { border-color: var(--link); }
 
 .scratch-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 
@@ -723,4 +742,31 @@ body.editor-page main {
 .wikilink-ac-item.selected {
   background: var(--code-bg);
   color: var(--link);
+}
+
+/* ── Editor mobile message ─────────────────────────────────────────────────── */
+
+.editor-mobile-msg { display: none; }
+
+/* ── Mobile ────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  body { font-size: 15px; }
+
+  main { padding: 1.5rem 1rem 3rem; }
+
+  /* Tables scroll horizontally instead of overflowing */
+  .page-content table { display: block; overflow-x: auto; }
+
+  /* Images stay within bounds */
+  .page-content img { max-width: 100%; height: auto; }
+
+  /* Editor — show message, hide editor */
+  .editor-wrap { display: none; }
+  .editor-mobile-msg {
+    display: block;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--muted);
+  }
 }

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
+from mdit_py_plugins.anchors import anchors_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
@@ -50,7 +51,7 @@ HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home"
   <span>{APP_NAME}</span>
 </a>"""
 
-md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin)
+md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin).use(anchors_plugin)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -143,10 +144,37 @@ def process_wikilinks(text: str) -> str:
     return re.sub(r"\[\[([^\[\]]+)\]\]", replace, text)
 
 
+_TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
+_TOC_RE = re.compile(r'^\[\[toc\]\]\s*$', re.IGNORECASE | re.MULTILINE)
+
+
+def _heading_id(text: str) -> str:
+    """Match mdit-py-plugins anchors_plugin default slugify."""
+    return re.sub(r'[^\w\- ]+', '', text, flags=re.UNICODE).strip().lower().replace(' ', '-')
+
+
+def _build_toc(text: str) -> str:
+    headings = re.findall(r'^(#{2,3})\s+(.+)', text, re.MULTILINE)
+    if not headings:
+        return ''
+    items = []
+    for hashes, title in headings:
+        level = len(hashes)
+        hid = _heading_id(title.strip())
+        cls = ' class="toc-h3"' if level == 3 else ''
+        items.append(f'<li{cls}><a href="#{hid}">{html.escape(title.strip())}</a></li>')
+    return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
+
+
 def render_md(text: str) -> str:
+    toc_html = ''
+    if _TOC_RE.search(text):
+        toc_html = _build_toc(text)
+        text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
     result = md.render(process_wikilinks(text))
-    # Remove disabled attr so task checkboxes are interactive in the browser
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
+    if toc_html:
+        result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     return result
 
 
@@ -270,10 +298,21 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       </div>
     </form>
   </dialog>
+  <dialog id="new-page-modal" class="scratch-modal">
+    <p class="scratch-label">New page</p>
+    <form method="post" action="/new" id="new-page-form">
+      <input type="text" id="new-page-input" name="slug" placeholder="Page name…" autocomplete="off" spellcheck="false" required>
+      <div class="scratch-actions">
+        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
+        <button type="button" class="btn" id="new-page-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="shortcuts-modal" class="shortcuts-modal">
     <p class="scratch-label">Keyboard shortcuts</p>
     <table class="shortcuts-table">
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
+      <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>Ctrl+1</kbd></td><td>New scratch</td></tr>
       <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Scratch</td></tr>
@@ -386,13 +425,10 @@ def view_page(slug):
     if slug.endswith('.md'):
         slug = slug[:-3]
     path = safe_path(slug)
-    if path is None or not path.exists():
-        body = f"""<div class="not-found">
-  <h1>Page not found</h1>
-  <p>The page <strong>{html.escape(slug)}</strong> doesn't exist yet.</p>
-  <a href="/edit/{html.escape(slug)}" class="btn btn-primary">Create it</a>
-</div>"""
-        return shell("Not Found", body), 404
+    if path is None:
+        abort(400)
+    if not path.exists():
+        return redirect(f"/edit/{slug}")
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
@@ -458,7 +494,8 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename else ""
-    body = f"""<div class="editor-wrap">
+    body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
+<div class="editor-wrap">
   <div class="editor-pane">
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
