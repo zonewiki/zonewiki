@@ -314,27 +314,44 @@ if (textarea && previewPane) {
     setTimeout(hideAcDropdown, 150);
   });
 
-  textarea.addEventListener('paste', async (e) => {
-    const imageItem = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
-    if (!imageItem) return;
-    e.preventDefault();
+  async function uploadFileAtCursor(file) {
     const start = textarea.selectionStart, end = textarea.selectionEnd;
-    const placeholder = '![uploading…]()';
+    const isImage = file.type.startsWith('image/');
+    const name = file.name || 'file';
+    const placeholder = isImage ? '![uploading…]()' : `[${name}]()`;
     textarea.value = textarea.value.slice(0, start) + placeholder + textarea.value.slice(end);
     textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
     const fd = new FormData();
-    fd.append('file', imageItem.getAsFile());
+    fd.append('file', file, file.name || 'upload');
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (!res.ok) throw new Error();
       const { url } = await res.json();
-      const md = `![image](${url})`;
+      const md = isImage ? `![${name}](${url})` : `[${name}](${url})`;
       textarea.value = textarea.value.slice(0, start) + md + textarea.value.slice(start + placeholder.length);
       textarea.selectionStart = textarea.selectionEnd = start + md.length;
     } catch (_) {
       textarea.value = textarea.value.slice(0, start) + textarea.value.slice(start + placeholder.length);
     }
     fetchPreview();
+  }
+
+  textarea.addEventListener('paste', async (e) => {
+    const fileItem = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
+    if (!fileItem) return;
+    e.preventDefault();
+    await uploadFileAtCursor(fileItem.getAsFile());
+  });
+
+  textarea.addEventListener('dragover', (e) => { e.preventDefault(); });
+  textarea.addEventListener('drop', async (e) => {
+    const files = Array.from(e.dataTransfer.files);
+    if (!files.length) return;
+    e.preventDefault();
+    textarea.focus();
+    for (const file of files) {
+      await uploadFileAtCursor(file);
+    }
   });
 
   textarea.focus();

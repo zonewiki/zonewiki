@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import subprocess
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -40,11 +39,10 @@ def check_auth():
 
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
 PAGES_DIR = WIKI_DIR
-UPLOADS_DIR = WIKI_DIR / "_uploads"
+UPLOADS_DIR = WIKI_DIR / "assets"
 PAGES_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"}
 
 # ── Git version control ────────────────────────────────────────────────────────
 
@@ -65,7 +63,7 @@ def git_setup() -> None:
         _git("git", "config", "user.name", "Leaf")
         gitignore = WIKI_DIR / ".gitignore"
         if not gitignore.exists():
-            gitignore.write_text("_uploads/\n", encoding="utf-8")
+            gitignore.write_text("assets/\n", encoding="utf-8")
         _git("git", "add", ".")
         _git("git", "commit", "--allow-empty", "-m", "Initial import")
     else:
@@ -524,7 +522,7 @@ def view_page(slug):
     crumbs.append(f'<span>{html.escape(title)}</span>')
     breadcrumb = f'<div class="breadcrumb">{sep.join(crumbs)}</div>'
 
-    hist_link = f'<a href="/history/{slug}" class="btn">History</a>' if GIT_ENABLED else ""
+    hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -558,7 +556,7 @@ def edit_page(slug):
     can_delete = slug != "index"
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}">Delete</button>' if can_delete else ""
-    hist_btn = f'<a href="/history/{safe_slug}" class="btn">History</a>' if GIT_ENABLED else ""
+    hist_btn = f'<a href="/history/{safe_slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
@@ -917,12 +915,22 @@ def api_pages():
 @app.post("/api/upload")
 def api_upload():
     f = request.files.get("file")
-    if not f or f.mimetype not in ALLOWED_IMAGE_TYPES:
+    if not f:
         abort(400)
-    ext = mimetypes.guess_extension(f.mimetype) or ".bin"
-    if ext == ".jpeg":
-        ext = ".jpg"
-    filename = uuid.uuid4().hex + ext
+    original_name = Path(f.filename).name if f.filename else ""
+    if not original_name:
+        ext = mimetypes.guess_extension(f.mimetype) or ".bin"
+        if ext == ".jpeg":
+            ext = ".jpg"
+        original_name = "upload" + ext
+    stem = Path(original_name).stem
+    ext = Path(original_name).suffix.lower()
+    # Find a unique filename, appending -2, -3, ... if needed
+    filename = stem + ext
+    counter = 2
+    while (UPLOADS_DIR / filename).exists():
+        filename = f"{stem}-{counter}{ext}"
+        counter += 1
     f.save(UPLOADS_DIR / filename)
     return jsonify({"url": f"/uploads/{filename}"})
 

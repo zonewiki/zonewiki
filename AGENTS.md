@@ -54,7 +54,7 @@ No build step. No database. No auth (local use only).
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
 ```
 
-Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_uploads/`.
+Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `assets/`.
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
 
@@ -91,13 +91,13 @@ WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 
 Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$WIKI_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
-- `$WIKI_DATA/_uploads/` — uploaded images, served at `/uploads/<filename>` (created automatically)
+- `$WIKI_DATA/assets/` — uploaded images, served at `/uploads/<filename>` (created automatically)
 
 Uploaded image URLs use `/uploads/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
 
-### Image paste
+### File paste and drag & drop
 
-In the editor, pasting an image from the clipboard (e.g. a screenshot) automatically uploads it via `POST /api/upload` and inserts `![image](/public/uploads/<uuid>.ext)` at the cursor. Accepted types: PNG, JPEG, GIF, WebP, AVIF.
+In the editor, pasting a file from the clipboard or dropping a file onto the textarea automatically uploads it via `POST /api/upload`. All file types are accepted. Images are inserted as `![name](url)`; other files as `[name](url)`. Multiple files dropped at once are uploaded sequentially. The upload route uses the original filename when available (falling back to MIME-type guessing). If a file with that name already exists in `assets/`, a numeric suffix is appended (`file-2.pdf`, `file-3.pdf`, …).
 
 ---
 
@@ -160,7 +160,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Version history
 
-- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes a `.gitignore` excluding `_uploads/`, and commits all existing files.
+- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes a `.gitignore` excluding `assets/`, and commits all existing files.
 - Every write operation (save, auto-save, create, rename, delete, restore) calls `git_commit()` or `git_commit_rename()` to stage and commit the change.
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
@@ -189,7 +189,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - **Wikilink autocomplete** — typing `[[` opens a dropdown of existing page slugs filtered as you type. Arrow keys navigate, Enter or Tab inserts `[[slug]]`, Escape closes. Slugs are fetched once from `/api/pages` on load.
 - **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
-- **Image paste** — pasting an image from the clipboard uploads it via `POST /api/upload` and inserts `![image](url)` at the cursor.
+- **File paste and drag & drop** — pasting a file from the clipboard or dropping files onto the editor textarea uploads them via `POST /api/upload`. Images insert as `![name](url)`, other files as `[name](url)`.
 - **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
 - **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin`). Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and returns 204. In the editor, clicking a checkbox in the live preview directly updates the textarea content (no server call — changes persist on save).
 - **Checkbox list continuation** — pressing Enter at the end of a `- [ ] task` or `- [x] task` line inserts `- [ ] ` on the next line (always unchecked). Pressing Enter on an empty checkbox item (`- [ ] ` with no text) exits the list.
