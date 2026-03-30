@@ -80,25 +80,78 @@ modalFilter?.addEventListener('keydown', e => {
   }
 });
 
+function fuzzyScore(pattern, str) {
+  const p = pattern.toLowerCase();
+  const s = str.toLowerCase();
+  let pi = 0, score = 0, run = 0;
+  const indices = [];
+  for (let si = 0; si < s.length && pi < p.length; si++) {
+    if (s[si] === p[pi]) {
+      run++;
+      score += run;
+      if (si === 0) score += 8;
+      else if ('-/ _'.includes(s[si - 1])) score += 4;
+      indices.push(si);
+      pi++;
+    } else {
+      run = 0;
+    }
+  }
+  return pi === p.length ? { score, indices } : null;
+}
+
+function highlightIndices(str, indices) {
+  const set = new Set(indices);
+  let out = '', inMark = false;
+  for (let i = 0; i < str.length; i++) {
+    const matched = set.has(i);
+    if (matched && !inMark)  { out += '<mark>'; inMark = true; }
+    if (!matched && inMark)  { out += '</mark>'; inMark = false; }
+    out += he(str[i]);
+  }
+  if (inMark) out += '</mark>';
+  return out;
+}
+
 function applyModalControls() {
   if (!modalPages) return;
-  const q = modalFilter.value.toLowerCase().trim();
+  const q = modalFilter.value.trim();
   const sort = modalSort.value;
   const unlinked = modalUnlinked.checked;
 
-  let items = Array.from(modalPageList.querySelectorAll('.page-list-item'));
-  items.sort((a, b) => {
-    if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
-    if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
-    if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
-    return a.dataset.title.localeCompare(b.dataset.title);
-  });
-  items.forEach(i => modalPageList.appendChild(i));
-  items.forEach(i => {
-    const textMatch = !q || i.dataset.title.includes(q) || i.dataset.slug.includes(q);
-    const linkMatch = !unlinked || i.dataset.links === '0';
-    i.classList.toggle('hidden', !textMatch || !linkMatch);
-  });
+  if (q) {
+    // Fuzzy mode: score, rank by quality, render with highlights
+    const scored = [];
+    for (const p of modalPages) {
+      if (unlinked && p.links !== 0) continue;
+      const ts = fuzzyScore(q, p.title);
+      const ss = fuzzyScore(q, p.slug);
+      const best = ts && (!ss || ts.score >= ss.score) ? { ...ts, field: 'title' }
+                 : ss ? { ...ss, field: 'slug' } : null;
+      if (!best) continue;
+      scored.push({ p, ...best });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    modalPageList.innerHTML = scored.slice(0, 200).map(({ p, indices, field }) => {
+      const titleHtml = field === 'title' ? highlightIndices(p.title, indices) : he(p.title);
+      const slugHtml  = field === 'slug'  ? highlightIndices(p.slug,  indices) : he(p.slug);
+      return `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
+        `<a href="/page/${p.slug}">${titleHtml}</a>` +
+        `<span class="page-item-right"><span class="page-slug">${slugHtml}</span></span></li>`;
+    }).join('');
+  } else {
+    // No query: static list, sort by dropdown, filter by unlinked checkbox
+    renderModalList(modalPages.slice(0, 200));
+    let items = Array.from(modalPageList.querySelectorAll('.page-list-item'));
+    items.sort((a, b) => {
+      if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
+      if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
+      if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
+      return a.dataset.title.localeCompare(b.dataset.title);
+    });
+    items.forEach(i => modalPageList.appendChild(i));
+    items.forEach(i => i.classList.toggle('hidden', unlinked && parseInt(i.dataset.links) > 0));
+  }
 
   setModalActive(q ? 0 : -1);
 

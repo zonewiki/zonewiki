@@ -224,6 +224,7 @@ main {
 .search-result-card a { text-decoration: none; color: var(--link); font-weight: 600; font-size: 1rem; }
 .search-result-card p { margin: .3rem 0 0; font-size: .875rem; color: var(--muted); }
 .search-result-card mark { background: none; color: var(--link); font-weight: 600; font-style: normal; }
+.page-list-item a mark { background: none; color: var(--link); font-weight: 600; font-style: normal; }
 
 /* ── New page form ─────────────────────────────────────────────────────────── */
 
