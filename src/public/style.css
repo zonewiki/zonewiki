@@ -160,6 +160,7 @@ main {
   text-decoration-color: var(--link);
 }
 .page-content a.wikilink-missing { color: var(--link-missing); text-decoration-style: dashed; }
+.page-content a[href^="http"]::after { content: "\00a0\2197"; font-size: .75em; opacity: .6; }
 
 /* ── Code ──────────────────────────────────────────────────────────────────── */
 
@@ -509,6 +510,7 @@ main {
   margin: 20vh auto auto;
 }
 .scratch-modal[open] { display: flex; flex-direction: column; gap: .75rem; }
+.scratch-modal form { display: flex; flex-direction: column; gap: .75rem; }
 .scratch-modal::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
 
 .url-name-href {
@@ -534,8 +536,7 @@ main {
   margin: 0;
 }
 
-#scratch-title,
-#new-page-input {
+.scratch-modal input[type="text"] {
   width: 100%;
   padding: .5rem .75rem;
   border: 1px solid var(--border);
@@ -546,8 +547,7 @@ main {
   outline: none;
   box-sizing: border-box;
 }
-#scratch-title:focus,
-#new-page-input:focus { border-color: var(--link); }
+.scratch-modal input[type="text"]:focus { border-color: var(--link); }
 
 .scratch-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 

@@ -584,18 +584,21 @@ def edit_page(slug):
     if path.exists():
         content = path.read_text(encoding="utf-8")
         title = page_title(content, slug)
+        is_new = False
     else:
         title = slug.split('/')[-1].replace("-", " ").title()
         content = f"# {title}\n\n"
+        is_new = True
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
     can_rename = slug != "index"
-    can_delete = slug != "index"
-    rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename else ""
+    can_delete = slug != "index" and not is_new
+    rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}">Delete</button>' if can_delete else ""
-    hist_btn = f'<a href="/history/{safe_slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
+    hist_btn = f'<a href="/history/{safe_slug}" class="hist-link">History</a>' if GIT_ENABLED and not is_new else ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
+    cancel_btn = '<a href="javascript:history.back()" class="btn">Cancel</a>' if is_new else f'<a href="/page/{safe_slug}" class="btn">Cancel</a>'
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
     rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
@@ -606,14 +609,14 @@ def edit_page(slug):
       <button type="button" class="btn" id="rename-cancel">Cancel</button>
       {rename_error_html}
     </form>
-  </div>""" if can_rename else ""
+  </div>""" if can_rename and not is_new else ""
     body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
   <div class="editor-pane">
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
       <button type="submit" form="editor-form" class="btn btn-primary">Save</button>
-      <a href="/page/{safe_slug}" class="btn">Cancel</a>
+      {cancel_btn}
       {rename_btn}
       {hist_btn}
       {delete_btn}

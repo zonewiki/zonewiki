@@ -349,8 +349,30 @@ if (textarea && previewPane) {
       return;
     }
 
-    // Enter → continue list
+    // Enter → wikilink selection, follow wikilink under cursor, or continue list
     if (e.key === 'Enter' && !e.shiftKey) {
+      const start = textarea.selectionStart;
+      const end   = textarea.selectionEnd;
+      if (start !== end) {
+        // Selection → wrap as [[wikilink]]
+        e.preventDefault();
+        const selected = textarea.value.slice(start, end);
+        const wl = `[[${selected}]]`;
+        textarea.value = textarea.value.slice(0, start) + wl + textarea.value.slice(end);
+        textarea.selectionStart = textarea.selectionEnd = start + wl.length - 2; // before ]]
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(fetchPreview, 300);
+        return;
+      }
+      // Cursor inside [[...]] → follow the link
+      const wlText = wikilinkAtCursor();
+      if (wlText !== null) {
+        e.preventDefault();
+        const pageName = wlText.split('|')[0].trim();
+        const slug = pageName.toLowerCase().replace(/[^a-z0-9/]+/g, '-').replace(/^-+|-+$/g, '');
+        window.location.href = `/page/${slug}`;
+        return;
+      }
       continueList(e);
     }
   });
@@ -478,10 +500,22 @@ if (textarea && previewPane) {
       await uploadFileAtCursor(file, null, false, unique);
       return;
     }
-    // URL paste: ask for display name
+    // URL paste: wrap selection or ask for display name
     const text = (e.clipboardData.getData('text/plain') || '').trim();
     if (/^https?:\/\/\S+$/.test(text)) {
       e.preventDefault();
+      const start = textarea.selectionStart;
+      const end   = textarea.selectionEnd;
+      if (start !== end) {
+        // Text selected — wrap as [selection](url) without modal
+        const selected = textarea.value.slice(start, end);
+        const md = `[${selected}](${text})`;
+        textarea.value = textarea.value.slice(0, start) + md + textarea.value.slice(end);
+        textarea.selectionStart = textarea.selectionEnd = start + md.length;
+        fetchPreview();
+        return;
+      }
+      // No selection — existing modal behavior
       const name = await askUrlName(text);
       if (name === false) {
         // cancelled — insert raw URL
@@ -661,6 +695,19 @@ function continueList(e) {
   }
   clearTimeout(previewTimer);
   previewTimer = setTimeout(fetchPreview, 300);
+}
+
+function wikilinkAtCursor() {
+  const pos    = textarea.selectionStart;
+  const val    = textarea.value;
+  const before = val.slice(0, pos);
+  const after  = val.slice(pos);
+  const openIdx = before.lastIndexOf('[[');
+  if (openIdx === -1) return null;
+  if (before.slice(openIdx + 2).includes(']]')) return null; // already closed before cursor
+  const closeIdx = after.indexOf(']]');
+  if (closeIdx === -1) return null;
+  return before.slice(openIdx + 2) + after.slice(0, closeIdx);
 }
 
 // ── Wikilink autocomplete ─────────────────────────────────────────────────────
