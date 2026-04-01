@@ -429,6 +429,18 @@ main {
   font-weight: 600;
 }
 .breadcrumb-sep { opacity: .5; }
+.breadcrumb-clear {
+  margin-left: .25rem;
+  padding: 0 .25rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: .8rem;
+  opacity: .4;
+  cursor: pointer;
+  line-height: 1;
+}
+.breadcrumb-clear:hover { opacity: 1; }
 
 /* ── Task list checkboxes ────────────────────────────────────────────────────── */
 
@@ -551,6 +563,7 @@ main {
 .scratch-modal input[type="text"]:focus { border-color: var(--link); }
 
 .scratch-actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.modal-desc { font-size: .875rem; color: var(--muted); margin: 0; }
 
 /* ── Shortcuts modal ─────────────────────────────────────────────────────────── */
 
@@ -653,10 +666,12 @@ body.editor-page main {
 .editor-wrap {
   display: flex;
   height: 100vh;
+  justify-content: center;
 }
 
 .editor-pane {
   flex: 1;
+  max-width: 720px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -706,6 +721,7 @@ body.editor-page main {
 
 .preview-pane {
   flex: 1;
+  max-width: 720px;
   min-width: 0;
   display: none;
 }

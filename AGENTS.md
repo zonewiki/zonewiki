@@ -250,6 +250,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Save (submit editor form) |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
+| **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
 | **e** | page view | Navigate to edit mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |

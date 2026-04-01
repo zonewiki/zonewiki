@@ -129,6 +129,30 @@ HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home"
   <span>{APP_NAME}</span>
 </a>"""
 
+def build_breadcrumb(slug: str, title: str, *extra: tuple) -> str:
+    """Build a breadcrumb for a page slug.
+    slug/title are the page; extra is zero or more (label, url_or_None) pairs appended after.
+    """
+    sep = '<span class="breadcrumb-sep">›</span>'
+    parts = slug.split('/')
+    crumbs = [HOME_LINK]
+    for i, part in enumerate(parts[:-1]):
+        ancestor = '/'.join(parts[:i + 1])
+        label = part.replace('-', ' ').title()
+        crumbs.append(f'<a href="/page/{ancestor}">{html.escape(label)}</a>')
+    # Page itself — link if extra crumbs follow, plain span if it's the last
+    if extra:
+        crumbs.append(f'<a href="/page/{html.escape(slug)}">{html.escape(title)}</a>')
+        for label, url in extra:
+            if url:
+                crumbs.append(f'<a href="{html.escape(url)}">{html.escape(label)}</a>')
+            else:
+                crumbs.append(f'<span>{html.escape(label)}</span>')
+    else:
+        crumbs.append(f'<span>{html.escape(title)}</span>')
+    return f'<div class="breadcrumb" data-slug="{html.escape(slug)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>'
+
+
 md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin).use(anchors_plugin)
 
 
@@ -398,6 +422,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+Alt+2</kbd></td><td>Go to Tasks</td></tr>
       <tr><td><kbd>Ctrl+Alt+3</kbd></td><td>Go to State</td></tr>
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
+      <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
       <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
@@ -504,11 +529,7 @@ def scratch_page():
         body_inner = f"<ul class='notes-list'>{items}</ul>"
     else:
         body_inner = "<p>No scratches yet.</p>"
-    body = f"""<div class="breadcrumb">
-  {HOME_LINK}
-  <span class="breadcrumb-sep">›</span>
-  <span>Scratch</span>
-</div>
+    body = f"""{build_breadcrumb('_scratch', 'Scratch')}
 <header class="page-header"><h1>Scratch</h1></header>
 <article class="page-content">{body_inner}</article>"""
     return shell("Scratch", body)
@@ -550,18 +571,23 @@ def view_page(slug):
     else:
         bl_html = '<section class="backlinks backlinks-empty"><h3>Backlinks</h3><p>No pages link here.</p></section>'
 
-    # Build nested breadcrumb
-    parts = slug.split('/')
-    sep = '<span class="breadcrumb-sep">›</span>'
-    crumbs = [HOME_LINK]
-    for i, part in enumerate(parts[:-1]):
-        ancestor = '/'.join(parts[:i + 1])
-        crumbs.append(f'<a href="/page/{ancestor}">{html.escape(part)}</a>')
-    crumbs.append(f'<span>{html.escape(title)}</span>')
-    breadcrumb = f'<div class="breadcrumb">{sep.join(crumbs)}</div>'
+    breadcrumb = build_breadcrumb(slug, title)
+
+    delete_dialog = ''
+    if slug != 'index':
+        delete_dialog = (
+            f'<dialog id="page-delete-dialog" class="scratch-modal">'
+            f'<p class="scratch-label">Delete page</p>'
+            f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;? This cannot be undone.</p>'
+            f'<form method="post" action="/delete/{html.escape(slug)}">'
+            f'<div class="scratch-actions">'
+            f'<button type="button" class="btn" id="page-delete-cancel">Cancel</button>'
+            f'<button type="submit" class="btn btn-danger">Delete</button>'
+            f'</div></form></dialog>'
+        )
 
     hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
-    body = f"""{breadcrumb}
+    body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
@@ -610,7 +636,8 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new else ""
-    body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
+    body = f"""{build_breadcrumb(slug, title, ('Edit', None))}
+<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
   <div class="editor-pane">
     <div class="editor-toolbar">
@@ -758,10 +785,7 @@ def history_page_route(slug):
     else:
         table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
 
-    sep = '<span class="breadcrumb-sep">›</span>'
-    body = f"""<div class="breadcrumb">
-  {HOME_LINK}{sep}<a href="/page/{slug}">{html.escape(title)}</a>{sep}<span>History</span>
-</div>
+    body = f"""{build_breadcrumb(slug, title, ('History', None))}
 <header class="page-header">
   <h1>History — {html.escape(title)}</h1>
   <a href="/page/{slug}" class="btn">← Page</a>
@@ -783,10 +807,7 @@ def revision_view(slug, sha):
     if content is None:
         abort(404)
     title = page_title(content, slug)
-    sep = '<span class="breadcrumb-sep">›</span>'
-    body = f"""<div class="breadcrumb">
-  {HOME_LINK}{sep}<a href="/page/{slug}">{html.escape(title)}</a>{sep}<a href="/history/{slug}">History</a>{sep}<span>{sha[:7]}</span>
-</div>
+    body = f"""{build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (sha[:7], None))}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">

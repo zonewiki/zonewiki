@@ -1,3 +1,65 @@
+// ── Navigation trail breadcrumb ───────────────────────────────────────────────
+
+(function () {
+  const bc = document.querySelector('.breadcrumb[data-slug]');
+  if (!bc) return;
+  const slug  = bc.dataset.slug;
+  const title = bc.dataset.title;
+  if (!slug) return;
+
+  // MRU list: visiting a page already in the list moves it to the end
+  const KEY = 'leafHistory';
+  let hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
+  hist = hist.filter(p => p.slug !== slug);
+  hist.push({ slug, title });
+  if (hist.length > 6) hist = hist.slice(-6);
+  sessionStorage.setItem(KEY, JSON.stringify(hist));
+
+  // All entries before the current page (last) become breadcrumb links
+  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch');
+  if (!intermediates.length) return;
+
+  const homeEl = bc.querySelector('.breadcrumb-home');
+  if (!homeEl) return;
+
+  const mkSep = () => {
+    const s = document.createElement('span');
+    s.className = 'breadcrumb-sep';
+    s.textContent = '›';
+    return s;
+  };
+
+  bc.innerHTML = '';
+  bc.appendChild(homeEl);
+  for (const p of intermediates) {
+    bc.appendChild(mkSep());
+    const a = document.createElement('a');
+    a.href = `/page/${p.slug}`;
+    a.textContent = p.title;
+    bc.appendChild(a);
+  }
+  bc.appendChild(mkSep());
+  const cur = document.createElement('span');
+  cur.textContent = title;
+  bc.appendChild(cur);
+
+  const clr = document.createElement('button');
+  clr.className = 'breadcrumb-clear';
+  clr.title = 'Clear navigation history';
+  clr.textContent = '×';
+  clr.addEventListener('click', () => {
+    sessionStorage.removeItem(KEY);
+    bc.innerHTML = '';
+    bc.appendChild(homeEl);
+    bc.appendChild(mkSep());
+    const s = document.createElement('span');
+    s.textContent = title;
+    bc.appendChild(s);
+    clr.remove();
+  });
+  bc.appendChild(clr);
+}());
+
 // ── Search modal ──────────────────────────────────────────────────────────────
 
 const searchModal    = document.getElementById('search-modal');
@@ -257,6 +319,16 @@ scratchForm?.addEventListener('submit', async e => {
   } catch (_) {}
 });
 
+// ── Page delete dialog ────────────────────────────────────────────────────────
+
+document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
+  document.getElementById('page-delete-dialog').close();
+});
+document.getElementById('page-delete-dialog')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('page-delete-dialog'))
+    document.getElementById('page-delete-dialog').close();
+});
+
 // ── New-page modal ─────────────────────────────────────────────────────────────
 
 const newPageModal  = document.getElementById('new-page-modal');
@@ -332,6 +404,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
     const form = document.getElementById('editor-form');
     if (form) { e.preventDefault(); form.submit(); }
+    return;
+  }
+
+  // Ctrl/Cmd+Delete — delete current page (page view only)
+  if (e.key === 'Delete' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+    const dlg = document.getElementById('page-delete-dialog');
+    if (dlg) { e.preventDefault(); dlg.showModal(); }
     return;
   }
 
