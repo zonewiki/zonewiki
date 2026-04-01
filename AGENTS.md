@@ -127,6 +127,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/history/<slug>`     | Git commit log for a page (only when git is enabled) |
 | GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
+| GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
 Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
@@ -228,7 +229,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
 - **Scratch filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-scratch.md`. `is_scratch(slug)` identifies them.
 - **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratches newest-first with title and timestamp. Not editable.
-- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch".
+- **`/page/_deleted`** — special auto-generated page listing all pages that exist in git history but not on disk (deleted pages), newest deletion first. Each entry shows title, slug, deletion date, and a one-click Restore button that calls `POST /restore/<slug>/<sha>`. Only available when `GIT_ENABLED`. Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only).
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
 ---

@@ -203,6 +203,39 @@ def all_slugs() -> list[str]:
     return sorted(slug for _, slug in iter_pages())
 
 
+def list_deleted_pages() -> list[dict]:
+    """Pages that exist in git history but not on disk, newest deletion first."""
+    if not GIT_ENABLED:
+        return []
+    r = _git("git", "log", "--diff-filter=D", "--format=%H\t%P\t%as", "--name-only")
+    if r.returncode != 0:
+        return []
+    existing_slugs = set(slug for _, slug in iter_pages())
+    deleted, seen = [], set()
+    current_sha = current_parent = current_date = None
+    for raw in r.stdout.splitlines():
+        line = raw.rstrip()
+        if not line:
+            continue
+        if '\t' in line:
+            parts = line.split('\t', 2)
+            current_sha = parts[0]
+            parents = parts[1] if len(parts) > 1 else ''
+            current_parent = parents.split()[0] if parents.strip() else None
+            current_date = parts[2] if len(parts) > 2 else ''
+        elif current_parent and line.endswith('.md') and not line.startswith('.'):
+            slug = line[:-3]
+            if slug in existing_slugs or slug in seen:
+                continue
+            if slug.startswith('_assets'):
+                continue
+            seen.add(slug)
+            r2 = _git("git", "show", f"{current_parent}:{line}")
+            title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug.replace('-', ' ').title()
+            deleted.append({"slug": slug, "title": title, "date": current_date, "sha": current_parent})
+    return deleted
+
+
 def list_scratches() -> list[dict]:
     """Return all scratch pages sorted newest first."""
     scratches = []
@@ -535,6 +568,31 @@ def scratch_page():
     return shell("Scratch", body)
 
 
+@app.get("/page/_deleted")
+def deleted_pages_route():
+    if not GIT_ENABLED:
+        abort(404)
+    pages = list_deleted_pages()
+    if pages:
+        items = "".join(
+            f'<li>'
+            f'<span class="deleted-page-info">'
+            f'<a href="/revision/{html.escape(p["slug"])}/{html.escape(p["sha"])}" class="deleted-page-title">{html.escape(p["title"])}</a>'
+            f'<span class="note-date">{html.escape(p["slug"])} &middot; {html.escape(p["date"])}</span></span>'
+            f'<form method="post" action="/restore/{html.escape(p["slug"])}/{html.escape(p["sha"])}">'
+            f'<button type="submit" class="btn btn-sm">Restore</button>'
+            f'</form></li>'
+            for p in pages
+        )
+        body_inner = f"<ul class='notes-list'>{items}</ul>"
+    else:
+        body_inner = "<p>No deleted pages in history.</p>"
+    body = f"""{build_breadcrumb('_deleted', 'Deleted Pages')}
+<header class="page-header"><h1>Deleted Pages</h1></header>
+<article class="page-content">{body_inner}</article>"""
+    return shell("Deleted Pages", body)
+
+
 @app.post("/api/scratch")
 def api_scratch():
     title = request.form.get("title", "").strip() or "Untitled"
@@ -557,6 +615,26 @@ def view_page(slug):
     if path is None:
         abort(400)
     if not path.exists():
+        if GIT_ENABLED:
+            rel = slug + ".md"
+            r = _git("git", "log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
+            if r.returncode == 0 and r.stdout.strip():
+                parts = r.stdout.strip().split('\t', 2)
+                del_sha = parts[0]
+                parent_sha = parts[1].split()[0] if len(parts) > 1 and parts[1].strip() else None
+                del_date = parts[2] if len(parts) > 2 else ''
+                if parent_sha:
+                    r2 = _git("git", "show", f"{parent_sha}:{rel}")
+                    title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug.replace('-', ' ').title()
+                    body = f"""{build_breadcrumb(slug, title)}
+<header class="page-header"><h1>{html.escape(title)}</h1></header>
+<article class="page-content">
+<p>This page was deleted on {html.escape(del_date)}.</p>
+<form method="post" action="/restore/{html.escape(slug)}/{html.escape(parent_sha)}">
+  <button type="submit" class="btn">Restore page</button>
+</form>
+</article>"""
+                    return shell(title, body)
         return redirect(f"/edit/{slug}")
 
     content = path.read_text(encoding="utf-8")
@@ -807,14 +885,21 @@ def revision_view(slug, sha):
     if content is None:
         abort(404)
     title = page_title(content, slug)
-    body = f"""{build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (sha[:7], None))}
+    page_exists = path.exists()
+    if page_exists:
+        back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
+        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (sha[:7], None))
+    else:
+        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
+    body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
     <form method="post" action="/restore/{slug}/{sha}" style="display:inline">
       <button type="submit" class="btn btn-primary">Restore</button>
     </form>
-    <a href="/history/{slug}" class="btn">← History</a>
+    {back_link}
   </div>
 </header>
 <div class="revision-banner">Revision <code>{sha[:7]}</code> — restoring will create a new commit.</div>
@@ -870,6 +955,8 @@ def api_pages_list():
     pages.sort(key=lambda p: p["title"].lower())
     # Inject virtual special pages
     pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
+    if GIT_ENABLED:
+        pages.insert(0, {"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0})
     return jsonify(pages)
 
 
