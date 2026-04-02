@@ -374,6 +374,16 @@ document.addEventListener('keydown', e => {
     return;
   }
 
+  // Ctrl/Cmd+Space — open today's daily note
+  if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    fetch('/api/daily', { method: 'POST' })
+      .then(r => r.json())
+      .then(({ slug }) => { window.location.href = `/edit/${slug}`; })
+      .catch(() => {});
+    return;
+  }
+
   // Ctrl/Cmd+2 — quick add task
   if (e.key === '2' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
@@ -692,7 +702,14 @@ if (textarea && previewPane) {
   });
 
   textarea.focus();
-  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  const _slug = window.location.pathname.replace(/^\/edit\//, '');
+  if (_slug.endsWith('_daily')) {
+    const _marker = '## Notes\n- ';
+    const _idx = textarea.value.indexOf(_marker);
+    textarea.selectionStart = textarea.selectionEnd = _idx !== -1 ? _idx + _marker.length : textarea.value.length;
+  } else {
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  }
 
   // Sync preview scroll position with editor
   const previewScroller = previewPane.parentElement;
@@ -988,8 +1005,12 @@ function expandSnippet() {
 // ── Delete confirmation ───────────────────────────────────────────────────────
 
 document.getElementById('delete-btn')?.addEventListener('click', e => {
-  const title = e.currentTarget.dataset.title;
-  if (!confirm(`Delete "${title}"? This cannot be undone.`)) e.preventDefault();
+  const btn = e.currentTarget;
+  const title = btn.dataset.title;
+  const msg = btn.dataset.git
+    ? `Delete "${title}"? It can be restored from history.`
+    : `Delete "${title}"? This cannot be undone.`;
+  if (!confirm(msg)) e.preventDefault();
 });
 
 // ── Rename bar toggle ─────────────────────────────────────────────────────────

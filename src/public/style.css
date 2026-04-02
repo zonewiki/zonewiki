@@ -796,6 +796,19 @@ body.editor-page main {
 .hist-msg  { color: var(--fg); width: 100%; }
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
 
+/* ── Diff view ───────────────────────────────────────────────────────────────── */
+
+.diff-view { font-size: .8rem; line-height: 1.5; overflow-x: auto; padding: 1rem; border: 1px solid var(--border); border-radius: 6px; }
+.diff-view span { display: block; white-space: pre; }
+.diff-add  { color: #22863a; background: #f0fff4; }
+.diff-del  { color: #b31d28; background: #ffeef0; }
+.diff-hunk { color: var(--muted); font-weight: 600; }
+.diff-ctx  { color: var(--fg); }
+@media (prefers-color-scheme: dark) {
+  .diff-add { color: #7ee787; background: #0d1f17; }
+  .diff-del { color: #ffa198; background: #1f0d0d; }
+}
+
 .revision-banner {
   background: var(--code-bg);
   border: 1px solid var(--border);

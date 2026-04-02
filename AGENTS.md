@@ -120,6 +120,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | POST   | `/api/scratch`  | Create a new scratch file (`<timestamp>_<slug>.md`); returns `{ slug }` |
+| POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`      | Auto-generated index of all scratches, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
@@ -249,6 +250,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
 | **Ctrl/⌘+1** | anywhere | Open scratch modal |
+| **Ctrl/⌘+Space** | anywhere | Open today's daily note (create if absent) |
 | **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
 | **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
 | **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) |

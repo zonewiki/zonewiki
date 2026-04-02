@@ -119,6 +119,12 @@ def git_show(sha: str, path: Path) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
+def git_diff(sha: str, path: Path) -> str | None:
+    rel = str(path.relative_to(WIKI_DIR))
+    r = _git("git", "show", "--format=", "--patch", sha, "--", rel)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
 git_setup()
 
 HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
@@ -184,6 +190,7 @@ def safe_path(slug: str) -> Path | None:
 
 
 SCRATCH_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
+DAILY_RE  = re.compile(r"^(\d{4}-\d{2}-\d{2})_daily$")
 
 
 def is_scratch(slug: str) -> bool:
@@ -237,20 +244,26 @@ def list_deleted_pages() -> list[dict]:
 
 
 def list_scratches() -> list[dict]:
-    """Return all scratch pages sorted newest first."""
+    """Return all scratch and daily pages sorted newest first."""
     scratches = []
     for md_file in PAGES_DIR.glob("*.md"):
         m = SCRATCH_RE.match(md_file.stem)
-        if not m:
+        d = DAILY_RE.match(md_file.stem)
+        if m:
+            ts_str = m.group(1)
+            ts = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
+            date_str = ts.strftime("%Y-%m-%d %H:%M")
+        elif d:
+            ts = datetime.strptime(d.group(1), "%Y-%m-%d")
+            date_str = ts.strftime("%Y-%m-%d")
+        else:
             continue
-        ts_str, _ = m.group(1), m.group(2)
         content = md_file.read_text(encoding="utf-8")
-        ts = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
         scratches.append({
             "slug": md_file.stem,
             "title": page_title(content, md_file.stem),
             "ts": ts,
-            "date": ts.strftime("%Y-%m-%d %H:%M"),
+            "date": date_str,
         })
     scratches.sort(key=lambda n: n["ts"], reverse=True)
     return scratches
@@ -464,6 +477,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>Ctrl+1</kbd></td><td>New scratch</td></tr>
+      <tr><td><kbd>Ctrl+Space</kbd></td><td>Open today's daily note</td></tr>
       <tr><td><kbd>Ctrl+2</kbd></td><td>Add task to Inbox</td></tr>
       <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Scratch</td></tr>
@@ -609,6 +623,19 @@ def deleted_pages_route():
     return shell("Deleted Pages", body)
 
 
+@app.post("/api/daily")
+def api_daily():
+    today = datetime.now().strftime("%Y-%m-%d")
+    slug = f"{today}_daily"
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    if not path.exists():
+        path.write_text(f"# {today}\n\n## Notes\n- \n\n## Tasks\n- \n\n## Signals\n- \n\n", encoding="utf-8")
+        git_commit(path, f"Create daily {today}")
+    return jsonify({"slug": slug})
+
+
 @app.post("/api/scratch")
 def api_scratch():
     title = request.form.get("title", "").strip() or "Untitled"
@@ -672,7 +699,8 @@ def view_page(slug):
         delete_dialog = (
             f'<dialog id="page-delete-dialog" class="scratch-modal">'
             f'<p class="scratch-label">Delete page</p>'
-            f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;? This cannot be undone.</p>'
+            f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;?'
+            f'{" It can be restored from history." if GIT_ENABLED else " This cannot be undone."}</p>'
             f'<form method="post" action="/delete/{html.escape(slug)}">'
             f'<div class="scratch-actions">'
             f'<button type="button" class="btn" id="page-delete-cancel">Cancel</button>'
@@ -715,7 +743,7 @@ def edit_page(slug):
     can_rename = slug != "index"
     can_delete = slug != "index" and not is_new
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new else ""
-    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}">Delete</button>' if can_delete else ""
+    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete else ""
     hist_btn = f'<a href="/history/{safe_slug}" class="hist-link">History</a>' if GIT_ENABLED and not is_new else ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
     cancel_btn = '<a href="javascript:history.back()" class="btn">Cancel</a>' if is_new else f'<a href="/page/{safe_slug}" class="btn">Cancel</a>'
@@ -859,11 +887,15 @@ def history_page_route(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    if not path.exists():
-        return redirect(f"/edit/{slug}")
-    content = path.read_text(encoding="utf-8")
-    title = page_title(content, slug)
+    page_exists = path.exists()
+    if page_exists:
+        content = path.read_text(encoding="utf-8")
+        title = page_title(content, slug)
+    else:
+        title = slug.replace('-', ' ').title()
     entries = git_log(path)
+    if not entries and not page_exists:
+        abort(404)
 
     if entries:
         rows = "".join(
@@ -871,7 +903,9 @@ def history_page_route(slug):
             f'<td class="hist-date">{e["date"]}</td>'
             f'<td class="hist-rel">{html.escape(e["rel"])}</td>'
             f'<td class="hist-msg">{html.escape(e["msg"])}</td>'
-            f'<td><a href="/revision/{slug}/{e["sha"]}" class="btn">View</a></td>'
+            f'<td style="white-space:nowrap">'
+            f'<a href="/revision/{slug}/{e["sha"]}" class="btn">View</a> '
+            f'<a href="/diff/{slug}/{e["sha"]}" class="btn">Diff</a></td>'
             f'</tr>'
             for e in entries
         )
@@ -879,10 +913,16 @@ def history_page_route(slug):
     else:
         table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
 
-    body = f"""{build_breadcrumb(slug, title, ('History', None))}
+    if page_exists:
+        back_link = f'<a href="/page/{slug}" class="btn">← Page</a>'
+        breadcrumb = build_breadcrumb(slug, title, ('History', None))
+    else:
+        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
+    body = f"""{breadcrumb}
 <header class="page-header">
   <h1>History — {html.escape(title)}</h1>
-  <a href="/page/{slug}" class="btn">← Page</a>
+  {back_link}
 </header>
 {table}"""
     return shell(f"History — {title}", body)
@@ -898,8 +938,15 @@ def revision_view(slug, sha):
     if path is None:
         abort(400)
     content = git_show(sha, path)
+    restore_sha = sha
     if content is None:
-        abort(404)
+        # Deletion commit — file absent at this SHA; use parent
+        r_par = _git("git", "rev-parse", "--verify", f"{sha}^")
+        if r_par.returncode == 0:
+            restore_sha = r_par.stdout.strip()
+            content = git_show(restore_sha, path)
+        if content is None:
+            abort(404)
     title = page_title(content, slug)
     page_exists = path.exists()
     if page_exists:
@@ -912,7 +959,7 @@ def revision_view(slug, sha):
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
-    <form method="post" action="/restore/{slug}/{sha}" style="display:inline">
+    <form method="post" action="/restore/{slug}/{restore_sha}" style="display:inline">
       <button type="submit" class="btn btn-primary">Restore</button>
     </form>
     {back_link}
@@ -923,6 +970,50 @@ def revision_view(slug, sha):
   {render_md(strip_h1(content))}
 </article>"""
     return shell(f"Revision {sha[:7]} — {title}", body)
+
+
+@app.get("/diff/<path:slug>/<sha>")
+def diff_view(slug, sha):
+    if not GIT_ENABLED:
+        abort(404)
+    if not SHA_RE.match(sha):
+        abort(400)
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    diff = git_diff(sha, path)
+    if diff is None:
+        abort(404)
+    title = slug.replace('-', ' ').title()
+    lines = []
+    for line in diff.splitlines():
+        if line.startswith('+') and not line.startswith('+++'):
+            cls = 'diff-add'
+        elif line.startswith('-') and not line.startswith('---'):
+            cls = 'diff-del'
+        elif line.startswith('@@'):
+            cls = 'diff-hunk'
+        else:
+            cls = 'diff-ctx'
+        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
+    diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
+    page_exists = path.exists()
+    if page_exists:
+        back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
+        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (f'Diff {sha[:7]}', None))
+    else:
+        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, f'/history/{slug}'), (f'Diff {sha[:7]}', None))
+    body = f"""{breadcrumb}
+<header class="page-header">
+  <h1>Diff <code>{sha[:7]}</code> — {html.escape(title)}</h1>
+  <div class="page-header-actions">
+    <a href="/revision/{slug}/{sha}" class="btn">View</a>
+    {back_link}
+  </div>
+</header>
+<pre class="diff-view">{diff_html}</pre>"""
+    return shell(f"Diff {sha[:7]} — {title}", body)
 
 
 @app.post("/restore/<path:slug>/<sha>")
