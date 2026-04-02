@@ -301,12 +301,27 @@ def _build_toc(text: str) -> str:
     return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
 
 
+_IMG_SIZE_RE = re.compile(r'<img\b[^>]*\balt="([^"]*)\|(\d+)"[^>]*>', re.IGNORECASE)
+
+
+def _apply_img_sizes(html_str: str) -> str:
+    """Rewrite <img src=... alt="text|300"> → same tag with |300 stripped and style added."""
+    def fix(m: re.Match) -> str:
+        tag = m.group(0)
+        alt_text = m.group(1)
+        width = m.group(2)
+        tag = tag.replace(f'{alt_text}|{width}"', f'{alt_text}"', 1)
+        tag = tag[:-1] + f' style="max-width:100%;width:{width}px">'
+        return tag
+    return _IMG_SIZE_RE.sub(fix, html_str)
+
+
 def render_md(text: str) -> str:
     toc_html = ''
     if _TOC_RE.search(text):
         toc_html = _build_toc(text)
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
-    result = md.render(process_wikilinks(text))
+    result = _apply_img_sizes(md.render(process_wikilinks(text)))
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
@@ -457,6 +472,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
       <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
+      <tr><td><kbd>Ctrl+B</kbd></td><td>Bold (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>

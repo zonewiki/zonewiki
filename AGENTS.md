@@ -160,6 +160,11 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - The same pre-processing must run in the `/api/preview` endpoint so the live editor preview also renders wikilinks correctly.
 - Add a route `GET /api/pages` that returns a JSON list of all existing slugs — used by the editor to hint which wikilinks are valid.
 
+### Image sizing
+
+- `![alt|300](url)` sets the display width to 300px. markdown-it renders this as `<img alt="alt|300" ...>`, and a post-render regex (`_apply_img_sizes`) rewrites it to `<img alt="alt" style="max-width:100%;width:300px" ...>`.
+- Works for any integer pixel width. `max-width:100%` ensures the image never overflows on narrow screens.
+
 ### Version history
 
 - Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.

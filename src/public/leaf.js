@@ -463,6 +463,24 @@ if (textarea && previewPane) {
       return;
     }
 
+    // Ctrl/Cmd+B → bold (wrap selection or insert **)
+    if (e.key === 'b' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      const s = textarea.selectionStart, end = textarea.selectionEnd;
+      const selected = textarea.value.slice(s, end);
+      const replacement = `**${selected}**`;
+      textarea.value = textarea.value.slice(0, s) + replacement + textarea.value.slice(end);
+      if (s === end) {
+        textarea.selectionStart = textarea.selectionEnd = s + 2; // cursor between **|**
+      } else {
+        textarea.selectionStart = s;
+        textarea.selectionEnd = s + replacement.length;
+      }
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(fetchPreview, 300);
+      return;
+    }
+
     // Ctrl+Shift+X → toggle checkbox on current line
     if (e.code === 'KeyX' && e.ctrlKey && e.shiftKey) {
       e.preventDefault();
