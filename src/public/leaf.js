@@ -374,8 +374,8 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl/Cmd+Space — open today's daily note
-  if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+  // Ctrl/Cmd+3 — open today's daily note
+  if (e.key === '3' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
     fetch('/api/daily', { method: 'POST' })
       .then(r => r.json())
@@ -391,9 +391,9 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl/Cmd+Alt+0–3 — navigate to pinned pages
+  // Ctrl/Cmd+Alt+0–2 — navigate to pinned pages
   if (e.altKey && (e.ctrlKey || e.metaKey)) {
-    const pinned = { '0': '/page/index', '1': '/page/_scratch', '2': '/page/tasks', '3': '/page/state' };
+    const pinned = { '0': '/page/index', '1': '/page/_scratch', '2': '/page/tasks' };
     if (pinned[e.key]) { e.preventDefault(); window.location.href = pinned[e.key]; return; }
   }
 
@@ -467,9 +467,7 @@ if (textarea && previewPane) {
         previewTimer = setTimeout(fetchPreview, 300);
         return;
       }
-      const s = textarea.selectionStart, end = textarea.selectionEnd;
-      textarea.value = textarea.value.slice(0, s) + '  ' + textarea.value.slice(end);
-      textarea.selectionStart = textarea.selectionEnd = s + 2;
+      document.execCommand('insertText', false, '  ');
       return;
     }
 
@@ -478,13 +476,11 @@ if (textarea && previewPane) {
       e.preventDefault();
       const s = textarea.selectionStart, end = textarea.selectionEnd;
       const selected = textarea.value.slice(s, end);
-      const replacement = `**${selected}**`;
-      textarea.value = textarea.value.slice(0, s) + replacement + textarea.value.slice(end);
+      document.execCommand('insertText', false, `**${selected}**`);
       if (s === end) {
-        textarea.selectionStart = textarea.selectionEnd = s + 2; // cursor between **|**
+        textarea.setSelectionRange(s + 2, s + 2); // cursor between **|**
       } else {
-        textarea.selectionStart = s;
-        textarea.selectionEnd = s + replacement.length;
+        textarea.setSelectionRange(s, textarea.selectionStart); // re-select replacement
       }
       clearTimeout(previewTimer);
       previewTimer = setTimeout(fetchPreview, 300);
@@ -501,8 +497,9 @@ if (textarea && previewPane) {
       const line = val.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
       const toggled = line.replace(/^(\s*(?:[-*+]|\d+\.)\s+)\[([xX ])\]/, (_, pre, mark) => pre + (mark === ' ' ? '[x]' : '[ ]'));
       if (toggled !== line) {
-        textarea.value = val.slice(0, lineStart) + toggled + val.slice(lineEnd === -1 ? val.length : lineEnd);
-        textarea.selectionStart = textarea.selectionEnd = pos;
+        textarea.setSelectionRange(lineStart, lineEnd === -1 ? val.length : lineEnd);
+        document.execCommand('insertText', false, toggled);
+        textarea.setSelectionRange(pos, pos);
         clearTimeout(previewTimer);
         previewTimer = setTimeout(fetchPreview, 300);
       }
@@ -517,9 +514,9 @@ if (textarea && previewPane) {
         // Selection → wrap as [[wikilink]]
         e.preventDefault();
         const selected = textarea.value.slice(start, end);
-        const wl = `[[${selected}]]`;
-        textarea.value = textarea.value.slice(0, start) + wl + textarea.value.slice(end);
-        textarea.selectionStart = textarea.selectionEnd = start + wl.length - 2; // before ]]
+        document.execCommand('insertText', false, `[[${selected}]]`);
+        const p = textarea.selectionStart - 2; // before ]]
+        textarea.setSelectionRange(p, p);
         clearTimeout(previewTimer);
         previewTimer = setTimeout(fetchPreview, 300);
         return;
@@ -718,13 +715,35 @@ if (textarea && previewPane) {
     previewScroller.scrollTop = ratio * (previewScroller.scrollHeight - previewScroller.clientHeight);
   });
 
-  // Auto-save on navigation away if content has changed
-  const savedContent = textarea.value;
+  // Auto-save setup
   const editorForm = document.getElementById('editor-form');
   const autoSaveUrl = editorForm?.action.replace('/edit/', '/api/save/');
+  const saveDot = document.getElementById('save-dot');
+  let autoSaveTimer = null;
+  let lastSavedContent = textarea.value;
 
+  async function autoSave() {
+    if (!autoSaveUrl) return;
+    const data = new FormData();
+    data.append('content', textarea.value);
+    try {
+      const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
+      if (res.ok) {
+        lastSavedContent = textarea.value;
+        saveDot.classList.remove('unsaved');
+      }
+    } catch { /* ignore */ }
+  }
+
+  textarea.addEventListener('input', () => {
+    saveDot.classList.add('unsaved');
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(autoSave, 2000);
+  });
+
+  // Save file on navigation away if content has changed (no git commit)
   window.addEventListener('pagehide', () => {
-    if (!autoSaveUrl || textarea.value === savedContent) return;
+    if (!autoSaveUrl || textarea.value === lastSavedContent) return;
     const data = new FormData();
     data.append('content', textarea.value);
     navigator.sendBeacon(autoSaveUrl, data);
@@ -830,33 +849,25 @@ function continueList(e) {
   if (cbEmpty || ocbEmpty) {
     // Empty checkbox item → exit list
     e.preventDefault();
-    textarea.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = lineStart + 1;
+    textarea.setSelectionRange(lineStart, pos);
+    document.execCommand('insertText', false, '\n');
   } else if (cb) {
     e.preventDefault();
-    const insert = '\n' + cb[1] + cb[2] + ' [ ] ';
-    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+    document.execCommand('insertText', false, '\n' + cb[1] + cb[2] + ' [ ] ');
   } else if (ocb) {
     e.preventDefault();
-    const insert = '\n' + ocb[1] + (parseInt(ocb[2]) + 1) + '. [ ] ';
-    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+    document.execCommand('insertText', false, '\n' + ocb[1] + (parseInt(ocb[2]) + 1) + '. [ ] ');
   } else if (ulEmpty || olEmpty) {
     // Empty list item → exit list
     e.preventDefault();
-    textarea.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = lineStart + 1;
+    textarea.setSelectionRange(lineStart, pos);
+    document.execCommand('insertText', false, '\n');
   } else if (ul) {
     e.preventDefault();
-    const insert = '\n' + ul[1] + ul[2] + ' ';
-    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+    document.execCommand('insertText', false, '\n' + ul[1] + ul[2] + ' ');
   } else if (ol) {
     e.preventDefault();
-    const insert = '\n' + ol[1] + (parseInt(ol[2]) + 1) + '. ';
-    textarea.value = val.slice(0, pos) + insert + val.slice(pos);
-    textarea.selectionStart = textarea.selectionEnd = pos + insert.length;
+    document.execCommand('insertText', false, '\n' + ol[1] + (parseInt(ol[2]) + 1) + '. ');
   } else {
     return;
   }
@@ -970,9 +981,8 @@ function insertWikilink(page) {
   const pos = textarea.selectionStart;
   const val = textarea.value;
   const bracketPos = val.lastIndexOf('[[', pos);
-  textarea.value = val.slice(0, bracketPos) + '[[' + page + ']]' + val.slice(pos);
-  const newPos = bracketPos + 2 + page.length + 2;
-  textarea.selectionStart = textarea.selectionEnd = newPos;
+  textarea.setSelectionRange(bracketPos, pos);
+  document.execCommand('insertText', false, '[[' + page + ']]');
   hideAcDropdown();
   clearTimeout(previewTimer);
   previewTimer = setTimeout(fetchPreview, 300);
@@ -992,9 +1002,8 @@ function expandSnippet() {
   const before = textarea.value.slice(0, pos);
   for (const [trigger, expand] of Object.entries(snippets)) {
     if (before.endsWith(trigger)) {
-      const expansion = expand();
-      textarea.value = textarea.value.slice(0, pos - trigger.length) + expansion + textarea.value.slice(pos);
-      textarea.selectionStart = textarea.selectionEnd = pos - trigger.length + expansion.length;
+      textarea.setSelectionRange(pos - trigger.length, pos);
+      document.execCommand('insertText', false, expand());
       return true;
     }
   }

@@ -116,7 +116,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
-| POST   | `/api/save/<slug>`    | Save page content silently (no redirect); returns 204. Used by auto-save. |
+| POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect); returns 204. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | POST   | `/api/scratch`  | Create a new scratch file (`<timestamp>_<slug>.md`); returns `{ slug }` |
@@ -169,7 +169,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ### Version history
 
 - Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
-- Every write operation (save, auto-save, create, rename, delete, restore, upload) calls `git_commit()` or `git_commit_rename()` to stage and commit the change. Assets are tracked like pages — a `git push` backs up everything.
+- Every write operation (Done/save, create, rename, delete, restore, upload) calls `git_commit()` or `git_commit_rename()` to stage and commit the change. **Auto-save (`/api/save`) is the exception** — it writes the file to disk but does not create a git commit. Assets are tracked like pages — a `git push` backs up everything.
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
 - History link appears next to Edit button on page view and in the editor toolbar.
@@ -187,11 +187,12 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - `/edit/<slug>` renders a split-pane view: `<textarea>` on the left, live preview on the right.
 - Live preview updates as the user types (debounced, ~300ms) by calling `POST /api/preview`, which returns rendered HTML.
-- "Save" POSTs the textarea content to `POST /edit/<slug>`.
-- After save, server writes the file and redirects back to `/page/<slug>`.
 - The editor textarea preserves tabs and disables spell-check.
 - The textarea receives focus automatically on page load.
-- **Auto-save on navigate away** — on the `pagehide` event, if the textarea content differs from what it was at load time, `navigator.sendBeacon` POSTs to `POST /api/save/<slug>` (no redirect, returns 204). This silently preserves edits when the user follows a link, presses the back button, or uses the `e` shortcut on another page.
+- **Auto-save while typing** — debounced ~2s after the user stops typing, the editor silently POSTs to `POST /api/save/<slug>`, which writes the file to disk (no git commit, no redirect). An unsaved-changes indicator (`●` dot in the toolbar) appears while there are unsaved changes and disappears when auto-save completes.
+- **"Done" button** — POSTs to `POST /edit/<slug>`, which writes the file, creates a git commit, and redirects to `/page/<slug>`. This is the only editor action that commits. The toolbar has no Cancel button.
+- **Auto-save on navigate away** — on the `pagehide` event, if the textarea content differs from the last auto-saved content, `navigator.sendBeacon` POSTs to `POST /api/save/<slug>`. This silently preserves edits when the user follows a link or presses the back button (no git commit).
+- **Undo** — all programmatic text insertions (list continuation, bold, snippets, wikilink autocomplete, etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
 
 ### Editor smart helpers
 
@@ -250,14 +251,13 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
 | **Ctrl/⌘+1** | anywhere | Open scratch modal |
-| **Ctrl/⌘+Space** | anywhere | Open today's daily note (create if absent) |
 | **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
+| **Ctrl/⌘+3** | anywhere | Open today's daily note (create if absent) |
 | **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
 | **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) |
 | **Ctrl/⌘+Alt+2** | anywhere | Navigate to Tasks (`/page/tasks`) |
-| **Ctrl/⌘+Alt+3** | anywhere | Navigate to State (`/page/state`) |
 | **F2** | editor | Toggle preview pane |
-| **Ctrl/⌘+S** | editor | Save (submit editor form) |
+| **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
 | **e** | page view | Navigate to edit mode |

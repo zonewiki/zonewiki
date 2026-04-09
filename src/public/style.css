@@ -421,6 +421,13 @@ main {
   color: var(--muted);
   margin-bottom: 1rem;
 }
+.editor-pane > .breadcrumb {
+  margin-bottom: 0;
+  padding: .4rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--nav-bg);
+  flex-shrink: 0;
+}
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
 .breadcrumb-home {
@@ -663,12 +670,12 @@ kbd {
 body.editor-page main {
   max-width: 100%;
   padding: 0;
-  height: 100vh;
 }
 
 .editor-wrap {
   display: flex;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
   justify-content: center;
 }
 
@@ -697,6 +704,14 @@ body.editor-page main {
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   margin-right: auto;
 }
+
+.save-dot {
+  font-size: .5rem;
+  color: transparent;
+  user-select: none;
+  transition: color .3s;
+}
+.save-dot.unsaved { color: var(--muted); }
 
 .editor-pane form {
   flex: 1;

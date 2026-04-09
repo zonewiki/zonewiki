@@ -477,15 +477,15 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>Ctrl+1</kbd></td><td>New scratch</td></tr>
-      <tr><td><kbd>Ctrl+Space</kbd></td><td>Open today's daily note</td></tr>
+      <tr><td><kbd>Ctrl+3</kbd></td><td>Open today's daily note</td></tr>
       <tr><td><kbd>Ctrl+2</kbd></td><td>Add task to Inbox</td></tr>
       <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Scratch</td></tr>
       <tr><td><kbd>Ctrl+Alt+2</kbd></td><td>Go to Tasks</td></tr>
-      <tr><td><kbd>Ctrl+Alt+3</kbd></td><td>Go to State</td></tr>
+
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
-      <tr><td><kbd>Ctrl+S</kbd></td><td>Save (editor)</td></tr>
+      <tr><td><kbd>Ctrl+S</kbd></td><td>Done / go to page view (editor)</td></tr>
       <tr><td><kbd>Ctrl+B</kbd></td><td>Bold (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
@@ -758,14 +758,14 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new else ""
-    body = f"""{build_breadcrumb(slug, title, ('Edit', None))}
-<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
+    body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
   <div class="editor-pane">
+    {build_breadcrumb(slug, title, ('Edit', None))}
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
-      <button type="submit" form="editor-form" class="btn btn-primary">Save</button>
-      {cancel_btn}
+      <span id="save-dot" class="save-dot">●</span>
+      <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
       {rename_btn}
       {hist_btn}
       {delete_btn}
@@ -805,7 +805,6 @@ def api_save(slug):
     content = request.form.get("content", "")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    git_commit(path, f"Update {slug}")
     return "", 204
 
 
