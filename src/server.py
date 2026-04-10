@@ -12,6 +12,8 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
 from mdit_py_plugins.anchors import anchors_plugin
+from mdit_py_plugins.deflist import deflist_plugin
+from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 app = Flask(__name__, static_folder="public", static_url_path="/public")
@@ -159,7 +161,17 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple) -> str:
     return f'<div class="breadcrumb" data-slug="{html.escape(slug)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>'
 
 
-md = MarkdownIt(options_update={"html": True}).enable("table").use(tasklists_plugin).use(anchors_plugin)
+md = (
+    MarkdownIt(options_update={"html": True})
+    .enable("table")
+    .enable("strikethrough")
+    .enable("smartquotes")
+    .enable("replacements")
+    .use(tasklists_plugin)
+    .use(footnote_plugin)
+    .use(deflist_plugin)
+    .use(anchors_plugin)
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
