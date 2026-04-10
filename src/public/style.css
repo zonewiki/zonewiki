@@ -113,7 +113,7 @@ main {
   gap: 1rem;
   margin-bottom: 1.5rem;
   padding-bottom: .35rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 3px solid var(--border);
 }
 
 .page-header h1 {
@@ -125,9 +125,9 @@ main {
 
 /* ── Typography ────────────────────────────────────────────────────────────── */
 
-.page-content h1 { font-size: 1.875rem; font-weight: 700; margin-bottom: 1rem; line-height: 1.25; letter-spacing: -.02em; }
-.page-content h2 { font-size: 1.25rem; font-weight: 600; margin: 0; padding-bottom: .1rem; border-bottom: 1px solid var(--border); }
-.page-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; }
+.page-content h1 { font-size: 1.875rem; font-weight: 700; margin: 2rem 0 .875rem; padding-bottom: .35rem; border-bottom: 3px solid var(--border); line-height: 1.25; letter-spacing: -.02em; }
+.page-content h2 { font-size: 1.25rem; font-weight: 700; margin: 0; padding-bottom: .1rem; border-bottom: 2px solid var(--border); }
+.page-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; padding-bottom: .15rem; border-bottom: 1px solid var(--border); width: fit-content; }
 .page-content h4 { font-size: .95rem; font-weight: 600; margin: 1.25rem 0 .4rem; }
 
 /* Section edit wrapper injected around each <h2> in page view */
@@ -140,13 +140,13 @@ main {
 .section-header-h2 {
   margin: 2rem 0 .875rem;
   padding-bottom: .2rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--border);
 }
 .section-header-h2 h2 { margin: 0; padding: 0; border: none; }
 .section-header-h3 {
   margin: 1.5rem 0 .5rem;
 }
-.section-header-h3 h3 { margin: 0; }
+.section-header-h3 h3 { margin: 0; padding-bottom: .15rem; border-bottom: 1px solid var(--border); }
 .section-edit-btn {
   opacity: 0;
   font-size: .8rem;

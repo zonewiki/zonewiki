@@ -1090,41 +1090,36 @@ document.addEventListener('change', e => {
   let slides = [];
   let currentSlide = 0;
 
-  // Split article content into slides at each <h2> or <h3> boundary.
-  // The page H1 always leads the first slide; any intro content follows it.
+  // Each h1, h2, h3 starts a new slide. Content following a heading belongs to it.
+  // The page H1 (from the page header) always opens the first slide.
   function buildSlides() {
     const article = document.querySelector('.page-content');
     if (!article) return [];
 
     const groups = [];
-    let current = null;
+
+    // Open first slide with the page H1
+    let current = document.createElement('div');
+    current.className = 'slide-body page-content';
+    const pageH1 = document.querySelector('.page-header h1');
+    if (pageH1) {
+      const h = document.createElement('h1');
+      h.textContent = pageH1.textContent;
+      current.appendChild(h);
+    }
 
     for (const node of article.children) {
       const isH2 = node.matches('div.section-header') || node.tagName === 'H2';
       if (isH2 || node.tagName === 'H3') {
-        if (current && current.children.length) groups.push(current);
+        if (current.children.length) groups.push(current);
         current = document.createElement('div');
         current.className = 'slide-body page-content';
         current.appendChild(node.cloneNode(true));
       } else {
-        if (!current) {
-          current = document.createElement('div');
-          current.className = 'slide-body page-content';
-        }
         current.appendChild(node.cloneNode(true));
       }
     }
-    if (current && current.children.length) groups.push(current);
-
-    // Always prepend the page H1 to the first slide
-    if (groups.length) {
-      const pageH1 = document.querySelector('.page-header h1');
-      if (pageH1) {
-        const h = document.createElement('h1');
-        h.textContent = pageH1.textContent;
-        groups[0].insertBefore(h, groups[0].firstChild);
-      }
-    }
+    if (current.children.length) groups.push(current);
 
     return groups;
   }
