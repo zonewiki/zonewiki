@@ -362,6 +362,50 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
     return content[:m.start()] + f'[{new_char}]' + content[m.end():]
 
 
+def split_sections(content: str) -> list[str]:
+    """Split content at ## headings not inside fenced code blocks.
+    Returns [preamble, section1, section2, ...]
+    """
+    lines = content.splitlines(keepends=True)
+    h2_lines = []
+    in_fence = False
+    fence_marker = ''
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not in_fence:
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                in_fence = True
+                fence_marker = stripped[:3]
+            elif line.startswith('## '):
+                h2_lines.append(i)
+        else:
+            if stripped.startswith(fence_marker):
+                in_fence = False
+    if not h2_lines:
+        return [content]
+    sections = [''.join(lines[:h2_lines[0]])]
+    for j, pos in enumerate(h2_lines):
+        end = h2_lines[j + 1] if j + 1 < len(h2_lines) else len(lines)
+        sections.append(''.join(lines[pos:end]))
+    return sections
+
+
+def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
+    """Wrap each rendered <h2> with a .section-header div and append an edit link."""
+    counter = [0]
+
+    def wrap(m: re.Match) -> str:
+        counter[0] += 1
+        n = counter[0]
+        btn = (
+            f'<a href="/edit/{html.escape(slug)}?section={n}" '
+            f'class="section-edit-btn" title="Edit section">✎</a>'
+        )
+        return f'<div class="section-header">{m.group(0)}{btn}</div>'
+
+    return re.sub(r'<h2\b[^>]*>.*?</h2>', wrap, html_str, flags=re.DOTALL)
+
+
 def strip_h1(content: str) -> str:
     """Remove the first H1 line so it isn't duplicated below the page header."""
     lines = content.split("\n")
@@ -722,6 +766,7 @@ def view_page(slug):
         )
 
     hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
+    article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
     body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -732,7 +777,7 @@ def view_page(slug):
   </div>
 </header>
 <article class="page-content">
-  {render_md(strip_h1(content))}
+  {article_html}
 </article>
 {bl_html}"""
     return shell(title, body)
@@ -751,15 +796,24 @@ def edit_page(slug):
         title = slug.split('/')[-1].replace("-", " ").title()
         content = f"# {title}\n\n"
         is_new = True
+
+    section = request.args.get('section', type=int)
+    if section is not None and not is_new:
+        sections = split_sections(content)
+        if 1 <= section <= len(sections) - 1:
+            content = sections[section].rstrip('\n')
+        else:
+            section = None  # invalid index, fall back to full edit
+
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
     can_rename = slug != "index"
     can_delete = slug != "index" and not is_new
-    rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new else ""
-    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete else ""
+    rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new and section is None else ""
+    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete and section is None else ""
     hist_btn = ""
-    delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
+    delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete and section is None else ""
     cancel_btn = '<a href="javascript:history.back()" class="btn">Cancel</a>' if is_new else f'<a href="/page/{safe_slug}" class="btn">Cancel</a>'
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
@@ -771,11 +825,13 @@ def edit_page(slug):
       <button type="button" class="btn" id="rename-cancel">Cancel</button>
       {rename_error_html}
     </form>
-  </div>""" if can_rename and not is_new else ""
+  </div>""" if can_rename and not is_new and section is None else ""
+    form_action = f'/edit/{safe_slug}' + (f'?section={section}' if section is not None else '')
+    breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
     body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
   <div class="editor-pane">
-    {build_breadcrumb(slug, title, ('Edit', None))}
+    {build_breadcrumb(slug, title, breadcrumb_extra)}
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
       <span id="save-dot" class="save-dot">●</span>
@@ -786,7 +842,7 @@ def edit_page(slug):
     </div>
     {delete_form}
     {rename_bar}
-    <form id="editor-form" method="post" action="/edit/{safe_slug}">
+    <form id="editor-form" method="post" action="{form_action}">
       <textarea id="editor-textarea" name="content"
                 spellcheck="false" autocorrect="off" autocapitalize="off">{safe_content}</textarea>
     </form>
@@ -804,7 +860,19 @@ def save_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = request.form.get("content", "")
+    content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+    section = request.args.get('section', type=int)
+    if section is not None:
+        if not path.exists():
+            abort(400)
+        full = path.read_text(encoding="utf-8")
+        sections = split_sections(full)
+        if not (1 <= section <= len(sections) - 1):
+            abort(400)
+        if section < len(sections) - 1 and not content.endswith('\n'):
+            content += '\n'
+        sections[section] = content
+        content = ''.join(sections)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, f"Update {slug}")
@@ -816,7 +884,19 @@ def api_save(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = request.form.get("content", "")
+    content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+    section = request.args.get('section', type=int)
+    if section is not None:
+        if not path.exists():
+            return "", 204
+        full = path.read_text(encoding="utf-8")
+        sections = split_sections(full)
+        if not (1 <= section <= len(sections) - 1):
+            return "", 204
+        if section < len(sections) - 1 and not content.endswith('\n'):
+            content += '\n'
+        sections[section] = content
+        content = ''.join(sections)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "", 204

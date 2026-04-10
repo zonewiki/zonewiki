@@ -1090,8 +1090,8 @@ document.addEventListener('change', e => {
   let slides = [];
   let currentSlide = 0;
 
-  // Split article content into slides at each <h1>, <h2>, or <h3> boundary.
-  // The page title (from the page header) always becomes the heading of the first slide.
+  // Split article content into slides at each <h2> or <h3> boundary.
+  // The page H1 always leads the first slide; any intro content follows it.
   function buildSlides() {
     const article = document.querySelector('.page-content');
     if (!article) return [];
@@ -1100,14 +1100,14 @@ document.addEventListener('change', e => {
     let current = null;
 
     for (const node of article.children) {
-      if (node.tagName === 'H1' || node.tagName === 'H2' || node.tagName === 'H3') {
-        if (current) groups.push(current);
+      const isH2 = node.matches('div.section-header') || node.tagName === 'H2';
+      if (isH2 || node.tagName === 'H3') {
+        if (current && current.children.length) groups.push(current);
         current = document.createElement('div');
         current.className = 'slide-body page-content';
         current.appendChild(node.cloneNode(true));
       } else {
         if (!current) {
-          // content before first heading — start an intro group
           current = document.createElement('div');
           current.className = 'slide-body page-content';
         }
@@ -1116,10 +1116,8 @@ document.addEventListener('change', e => {
     }
     if (current && current.children.length) groups.push(current);
 
-    // Ensure the first slide has a heading. If it doesn't (because the page's
-    // own H1 was stripped from the article and moved to the page header),
-    // prepend the page title as an H1.
-    if (groups.length && groups[0].querySelector('h1, h2, h3') === null) {
+    // Always prepend the page H1 to the first slide
+    if (groups.length) {
       const pageH1 = document.querySelector('.page-header h1');
       if (pageH1) {
         const h = document.createElement('h1');
