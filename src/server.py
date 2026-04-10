@@ -363,11 +363,11 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
 
 
 def split_sections(content: str) -> list[str]:
-    """Split content at ## headings not inside fenced code blocks.
+    """Split content at ## and ### headings not inside fenced code blocks.
     Returns [preamble, section1, section2, ...]
     """
     lines = content.splitlines(keepends=True)
-    h2_lines = []
+    heading_lines = []
     in_fence = False
     fence_marker = ''
     for i, line in enumerate(lines):
@@ -376,34 +376,35 @@ def split_sections(content: str) -> list[str]:
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 in_fence = True
                 fence_marker = stripped[:3]
-            elif line.startswith('## '):
-                h2_lines.append(i)
+            elif line.startswith('## ') or line.startswith('### '):
+                heading_lines.append(i)
         else:
             if stripped.startswith(fence_marker):
                 in_fence = False
-    if not h2_lines:
+    if not heading_lines:
         return [content]
-    sections = [''.join(lines[:h2_lines[0]])]
-    for j, pos in enumerate(h2_lines):
-        end = h2_lines[j + 1] if j + 1 < len(h2_lines) else len(lines)
+    sections = [''.join(lines[:heading_lines[0]])]
+    for j, pos in enumerate(heading_lines):
+        end = heading_lines[j + 1] if j + 1 < len(heading_lines) else len(lines)
         sections.append(''.join(lines[pos:end]))
     return sections
 
 
 def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
-    """Wrap each rendered <h2> with a .section-header div and append an edit link."""
+    """Wrap each rendered <h2>/<h3> with a .section-header div and append an edit link."""
     counter = [0]
 
     def wrap(m: re.Match) -> str:
         counter[0] += 1
         n = counter[0]
+        level = m.group(1)[1]  # '2' or '3' (strip leading 'h')
         btn = (
             f'<a href="/edit/{html.escape(slug)}?section={n}" '
             f'class="section-edit-btn" title="Edit section">✎</a>'
         )
-        return f'<div class="section-header">{m.group(0)}{btn}</div>'
+        return f'<div class="section-header section-header-h{level}">{m.group(0)}{btn}</div>'
 
-    return re.sub(r'<h2\b[^>]*>.*?</h2>', wrap, html_str, flags=re.DOTALL)
+    return re.sub(r'<(h[23])\b[^>]*>.*?</\1>', wrap, html_str, flags=re.DOTALL)
 
 
 def strip_h1(content: str) -> str:
@@ -869,8 +870,9 @@ def save_page(slug):
         sections = split_sections(full)
         if not (1 <= section <= len(sections) - 1):
             abort(400)
-        if section < len(sections) - 1 and not content.endswith('\n'):
-            content += '\n'
+        orig = sections[section]
+        orig_trailing = orig[len(orig.rstrip('\n')):]
+        content = content.rstrip('\n') + orig_trailing
         sections[section] = content
         content = ''.join(sections)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -893,8 +895,9 @@ def api_save(slug):
         sections = split_sections(full)
         if not (1 <= section <= len(sections) - 1):
             return "", 204
-        if section < len(sections) - 1 and not content.endswith('\n'):
-            content += '\n'
+        orig = sections[section]
+        orig_trailing = orig[len(orig.rstrip('\n')):]
+        content = content.rstrip('\n') + orig_trailing
         sections[section] = content
         content = ''.join(sections)
     path.parent.mkdir(parents=True, exist_ok=True)
