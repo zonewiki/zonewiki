@@ -835,6 +835,88 @@ body.editor-page main {
 }
 .revision-banner code { font-size: .8125rem; }
 
+/* ── Presentation mode ─────────────────────────────────────────────────────── */
+
+.presentation-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+}
+
+.presentation-slide {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 3.5rem 2rem 2rem;
+}
+
+.slide-body-wrap {
+  width: 100%;
+  max-width: 760px;
+}
+
+.slide-body {
+  width: 100%;
+  font-size: 1.2rem;
+  line-height: 1.75;
+}
+
+.slide-body h1, .slide-body h2, .slide-body h3 {
+  font-size: 1.75rem;
+  margin: 2rem 0 1.25rem;
+  padding-bottom: .6rem;
+  letter-spacing: -.02em;
+  border-bottom: 1px solid var(--border);
+}
+.slide-body h4 { font-size: 1.05rem; }
+.slide-body p  { margin-bottom: 1rem; }
+.slide-body ul, .slide-body ol { margin: .5rem 0 1rem 1.75rem; }
+
+.presentation-controls {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  padding: .6rem 1.25rem .5rem;
+  border-top: 1px solid var(--border);
+  background: var(--nav-bg);
+}
+
+.pres-ctrl-left  { display: flex; gap: .5rem; }
+.pres-ctrl-right { display: flex; justify-content: flex-end; gap: .5rem; }
+
+.slide-counter {
+  text-align: center;
+  font-size: .8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.slide-progress {
+  width: 160px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.slide-progress-fill {
+  height: 100%;
+  background: var(--muted);
+  border-radius: 99px;
+  transition: width .2s ease;
+}
+
+.presentation-overlay .btn:disabled { opacity: .35; cursor: default; }
+
 /* ── Editor mobile message ─────────────────────────────────────────────────── */
 
 .editor-mobile-msg { display: none; }

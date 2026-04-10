@@ -433,6 +433,11 @@ document.addEventListener('keydown', e => {
     if (editLink) window.location.href = editLink.href;
   }
 
+  // P — enter presentation mode
+  if (e.key === 'p') {
+    document.getElementById('present-btn')?.click();
+  }
+
   // ? — show keyboard shortcuts
   if (e.key === '?') shortcutsModal?.showModal();
 });
@@ -1074,3 +1079,115 @@ document.addEventListener('change', e => {
     fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data });
   }
 });
+
+// ── Presentation mode ─────────────────────────────────────────────────────────
+
+(function () {
+  const presentBtn = document.getElementById('present-btn');
+  if (!presentBtn) return;
+
+  let overlay = null;
+  let slides = [];
+  let currentSlide = 0;
+
+  // Split article content into slides at each <h1>, <h2>, or <h3> boundary.
+  // The page title (from the page header) always becomes the heading of the first slide.
+  function buildSlides() {
+    const article = document.querySelector('.page-content');
+    if (!article) return [];
+
+    const groups = [];
+    let current = null;
+
+    for (const node of article.children) {
+      if (node.tagName === 'H1' || node.tagName === 'H2' || node.tagName === 'H3') {
+        if (current) groups.push(current);
+        current = document.createElement('div');
+        current.className = 'slide-body page-content';
+        current.appendChild(node.cloneNode(true));
+      } else {
+        if (!current) {
+          // content before first heading — start an intro group
+          current = document.createElement('div');
+          current.className = 'slide-body page-content';
+        }
+        current.appendChild(node.cloneNode(true));
+      }
+    }
+    if (current && current.children.length) groups.push(current);
+
+    // Ensure the first slide has a heading. If it doesn't (because the page's
+    // own H1 was stripped from the article and moved to the page header),
+    // prepend the page title as an H1.
+    if (groups.length && groups[0].querySelector('h1, h2, h3') === null) {
+      const pageH1 = document.querySelector('.page-header h1');
+      if (pageH1) {
+        const h = document.createElement('h1');
+        h.textContent = pageH1.textContent;
+        groups[0].insertBefore(h, groups[0].firstChild);
+      }
+    }
+
+    return groups;
+  }
+
+  function showSlide(n) {
+    currentSlide = n;
+    const body = overlay.querySelector('.slide-body-wrap');
+    body.innerHTML = '';
+    body.appendChild(slides[n].cloneNode(true));
+    overlay.querySelector('.slide-counter').textContent = `${n + 1} / ${slides.length}`;
+    overlay.querySelector('.slide-progress-fill').style.width =
+      `${((n + 1) / slides.length) * 100}%`;
+    // Re-run syntax highlighting on code blocks inside the new slide
+    body.querySelectorAll('pre code').forEach(block => {
+      if (window.hljs) window.hljs.highlightElement(block);
+    });
+    body.scrollTop = 0;
+  }
+
+  function openPresentation() {
+    slides = buildSlides();
+    if (!slides.length) return;
+
+    overlay = document.createElement('div');
+    overlay.className = 'presentation-overlay';
+    overlay.innerHTML = `
+      <div class="presentation-slide">
+        <div class="slide-body-wrap"></div>
+      </div>
+      <div class="presentation-controls">
+        <span class="slide-counter"></span>
+        <div class="slide-progress"><div class="slide-progress-fill"></div></div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    showSlide(0);
+    document.addEventListener('keydown', onPresentKey);
+  }
+
+  function closePresentation() {
+    if (overlay) { overlay.remove(); overlay = null; }
+    document.removeEventListener('keydown', onPresentKey);
+  }
+
+  function onPresentKey(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentSlide < slides.length - 1) showSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentSlide > 0) showSlide(currentSlide - 1);
+    } else if (e.key === 'Escape') {
+      closePresentation();
+    }
+  }
+
+  // Hide the button when the page has no H1 or H2 headings
+  if (!document.querySelector('.page-content h1, .page-content h2, .page-content h3')) {
+    presentBtn.style.display = 'none';
+  }
+
+  presentBtn.addEventListener('click', openPresentation);
+}());

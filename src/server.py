@@ -489,6 +489,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+B</kbd></td><td>Bold (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
+      <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
       <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
     </table>
@@ -714,6 +715,7 @@ def view_page(slug):
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
     {hist_link}
+    <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
 </header>
@@ -744,7 +746,7 @@ def edit_page(slug):
     can_delete = slug != "index" and not is_new
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete else ""
-    hist_btn = f'<a href="/history/{safe_slug}" class="hist-link">History</a>' if GIT_ENABLED and not is_new else ""
+    hist_btn = ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete else ""
     cancel_btn = '<a href="javascript:history.back()" class="btn">Cancel</a>' if is_new else f'<a href="/page/{safe_slug}" class="btn">Cancel</a>'
     rename_error = request.args.get("rename_error", "")

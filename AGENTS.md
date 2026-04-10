@@ -261,8 +261,22 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
 | **e** | page view | Navigate to edit mode |
+| **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
+
+---
+
+## Presentation Mode
+
+- A **"Present"** button appears in the page header actions whenever a page contains at least one `##` heading.
+- Clicking Present (or pressing **`p`**) opens a fullscreen dark overlay, splitting the article into slides at each `<h2>` boundary.
+- Content before the first `<h2>` (if any) becomes an intro slide.
+- Navigation: **← →** arrow keys, or click "← Prev" / "Next →" buttons. **Esc** exits.
+- The slide counter (`1 / N`) is shown in the centre of the control bar.
+- Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay. CSS custom properties are overridden to force dark colours.
+- Syntax highlighting is re-applied via `hljs.highlightElement` when each slide is shown.
+- The Present button is hidden (via JS) on pages with no `##` headings.
 
 ---
 
