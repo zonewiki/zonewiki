@@ -60,6 +60,103 @@
   bc.appendChild(clr);
 }());
 
+// ── Uncommitted changes ───────────────────────────────────────────────────────
+
+(function () {
+  const uncommittedBadge = document.getElementById('uncommitted-badge');
+  const uncommittedModal = document.getElementById('uncommitted-modal');
+  const uncommittedList = document.getElementById('uncommitted-list');
+  const uncommittedClose = document.getElementById('uncommitted-close');
+  const uncommittedCommitAll = document.getElementById('uncommitted-commit-all');
+  const uncommittedCount = document.getElementById('uncommitted-count');
+
+  if (!uncommittedBadge || !uncommittedModal) return;
+
+  let currentFiles = [];
+
+  async function checkUncommitted() {
+    try {
+      const res = await fetch('/api/uncommitted');
+      const files = await res.json();
+      currentFiles = files;
+      
+      if (files.length > 0) {
+        uncommittedCount.textContent = files.length;
+        uncommittedBadge.style.display = 'block';
+      } else {
+        uncommittedBadge.style.display = 'none';
+      }
+    } catch (e) {
+      // Silently ignore errors (git might not be enabled)
+    }
+  }
+
+  function renderUncommittedList() {
+    if (currentFiles.length === 0) {
+      uncommittedList.innerHTML = '<p style="color: var(--muted); text-align: center;">No uncommitted changes</p>';
+      return;
+    }
+
+    uncommittedList.innerHTML = currentFiles.map(f => {
+      const titleHtml = he(f.title);
+      const slugHtml = f.slug ? `<div class="uncommitted-item-slug">${he(f.slug)}</div>` : '';
+      const viewLink = f.slug ? `<a href="/page/${he(f.slug)}" class="btn">View</a>` : '';
+      
+      return `
+        <div class="uncommitted-item">
+          <div>
+            <div class="uncommitted-item-title">${titleHtml}</div>
+            ${slugHtml}
+          </div>
+          ${viewLink}
+        </div>
+      `;
+    }).join('');
+  }
+
+  uncommittedBadge.addEventListener('click', () => {
+    renderUncommittedList();
+    uncommittedModal.showModal();
+  });
+
+  uncommittedClose?.addEventListener('click', () => {
+    uncommittedModal.close();
+  });
+
+  uncommittedCommitAll?.addEventListener('click', async () => {
+    if (!confirm(`Commit ${currentFiles.length} file(s)? Each file will get its own commit.`)) {
+      return;
+    }
+
+    uncommittedCommitAll.disabled = true;
+    uncommittedCommitAll.textContent = 'Committing...';
+
+    try {
+      const res = await fetch('/api/commit-all', { method: 'POST' });
+      const result = await res.json();
+      
+      if (res.ok) {
+        alert(`Successfully committed ${result.committed} file(s)`);
+        uncommittedModal.close();
+        checkUncommitted(); // Refresh the badge
+      } else {
+        alert('Error committing files: ' + (result.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Error committing files: ' + e.message);
+    } finally {
+      uncommittedCommitAll.disabled = false;
+      uncommittedCommitAll.textContent = 'Commit All';
+    }
+  });
+
+  closeOnBackdropClick(uncommittedModal);
+
+  // Check on page load and every 30 seconds
+  checkUncommitted();
+  setInterval(checkUncommitted, 30000);
+}());
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function closeOnBackdropClick(dialog) {

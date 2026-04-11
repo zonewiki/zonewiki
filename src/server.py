@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -130,6 +131,31 @@ def git_show(sha: str, path: Path) -> str | None:
     rel = str(path.relative_to(WIKI_DIR))
     r = _git("git", "show", f"{sha}:{rel}")
     return r.stdout if r.returncode == 0 else None
+
+
+def git_uncommitted_files() -> list[str]:
+    """Return list of files with uncommitted changes (relative to WIKI_DIR)."""
+    if not GIT_ENABLED:
+        return []
+    r = _git("git", "status", "--porcelain")
+    files = []
+    for line in r.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        status = line[:2]
+        filepath = line[3:]
+        # Include modified (M), added (A), deleted (D) - skip untracked (??)
+        if status.strip() and not status.startswith('??'):
+            files.append(filepath)
+    return files
+
+
+def git_commit_file(filepath: str, message: str) -> None:
+    """Stage and commit a single file."""
+    if not GIT_ENABLED:
+        return
+    _git("git", "add", "--", filepath)
+    _git("git", "commit", "-m", message)
 
 
 def git_diff(sha: str, path: Path) -> str | None:
@@ -598,8 +624,23 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
     </div>
   </dialog>
+  <dialog id="uncommitted-modal" class="search-modal">
+    <div class="search-modal-controls">
+      <h3 style="margin: 0; flex: 1;">Uncommitted Changes</h3>
+    </div>
+    <div class="modal-results">
+      <div id="uncommitted-list" class="uncommitted-list"></div>
+    </div>
+    <div style="margin-top: 1rem; display: flex; gap: .5rem; justify-content: flex-end;">
+      <button type="button" class="btn" id="uncommitted-close">Close</button>
+      <button type="button" class="btn btn-primary" id="uncommitted-commit-all">Commit All</button>
+    </div>
+  </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
+  <button id="uncommitted-badge" class="uncommitted-badge" style="display: none;" title="Uncommitted changes">
+    <span id="uncommitted-count">0</span> uncommitted
+  </button>
   <main>
     {body}
   </main>
@@ -1379,6 +1420,54 @@ def api_upload():
 @app.get("/_assets/<filename>")
 def serve_upload(filename):
     return send_from_directory(UPLOADS_DIR, filename)
+
+
+# ── Uncommitted changes ───────────────────────────────────────────────────────
+
+@app.get("/api/uncommitted")
+def api_uncommitted():
+    """Return list of files with uncommitted changes."""
+    files = git_uncommitted_files()
+    result = []
+    for filepath in files:
+        # Convert filepath to slug (remove .md extension)
+        if filepath.endswith('.md') and not filepath.startswith('_assets'):
+            slug = filepath[:-3]
+            # Try to get title from file if it exists
+            path = WIKI_DIR / filepath
+            if path.exists():
+                content = path.read_text(encoding="utf-8")
+                title = page_title(content, slug)
+            else:
+                title = slug_display_name(slug)
+            result.append({"slug": slug, "title": title, "filepath": filepath})
+        else:
+            # Asset or other file
+            result.append({"slug": None, "title": filepath, "filepath": filepath})
+    return jsonify(result)
+
+
+@app.post("/api/commit-all")
+def api_commit_all():
+    """Commit all uncommitted files, one commit per file."""
+    if not GIT_ENABLED:
+        return jsonify({"error": "Git not enabled"}), 400
+    
+    files = git_uncommitted_files()
+    committed = []
+    
+    for filepath in files:
+        # Generate appropriate commit message
+        if filepath.endswith('.md'):
+            slug = filepath[:-3]
+            message = f"Save {slug}"
+        else:
+            message = f"Update {filepath}"
+        
+        git_commit_file(filepath, message)
+        committed.append(filepath)
+    
+    return jsonify({"committed": len(committed), "files": committed})
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

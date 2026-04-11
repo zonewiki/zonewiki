@@ -673,6 +673,52 @@ kbd {
   filter: sepia(1) saturate(8) hue-rotate(-10deg) brightness(1.1);
 }
 
+.uncommitted-badge {
+  position: fixed;
+  top: .6rem;
+  right: .6rem;
+  z-index: 200;
+  font-size: .75rem;
+  padding: .35rem .6rem;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.uncommitted-badge:hover {
+  background: var(--code-bg);
+}
+
+.uncommitted-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.uncommitted-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.uncommitted-item-title {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.uncommitted-item-slug {
+  font-size: .8125rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
 .login-wrap {
   display: flex;
   justify-content: center;
