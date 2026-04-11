@@ -666,6 +666,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
     <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
       <span id="uncommitted-count">0</span>
     </a>
   </div>
@@ -858,6 +859,7 @@ def view_page(slug):
   <button type="submit" class="btn btn-primary">Commit</button>
 </form>'''
         commit_script = '''<script>
+document.addEventListener('DOMContentLoaded', () => {
 document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -891,6 +893,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
     btn.textContent = 'Commit';
   }
 });
+});
 </script>'''
         # Only show commit-related buttons when viewing from uncommitted
         article_html = render_md(strip_h1(content))
@@ -898,8 +901,8 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
-    {back_link}
     {commit_btn}
+    {back_link}
   </div>
 </header>
 <article class="page-content">
@@ -927,6 +930,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
   <button type="submit" class="btn btn-primary btn-sm">Commit</button>
 </form>'''
                 meta_script = '''<script>
+document.addEventListener('DOMContentLoaded', () => {
 document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -960,6 +964,7 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
     btn.textContent = 'Commit';
   }
 });
+});
 </script>'''
             else:
                 # File is committed - use git log
@@ -969,6 +974,9 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
                     last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
         
         article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
+        page_meta_html = ""
+        if last_modified or meta_commit_btn:
+            page_meta_html = f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
         body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -977,8 +985,7 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
     <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
-  {last_modified}
-  {meta_commit_btn}
+  {page_meta_html}
 </header>
 <article class="page-content">
   {article_html}
@@ -1236,8 +1243,8 @@ def history_page_route(slug):
             f'<td class="hist-rel">{html.escape(e["rel"])}</td>'
             f'<td class="hist-msg">{html.escape(e["msg"])}</td>'
             f'<td style="white-space:nowrap">'
-            f'<a href="/revision/{slug}/{e["sha"]}" class="btn">View</a> '
-            f'<a href="/diff/{slug}/{e["sha"]}" class="btn">Diff</a></td>'
+            f'<a href="/diff/{slug}/{e["sha"]}" class="btn">Diff</a> '
+            f'<a href="/revision/{slug}/{e["sha"]}" class="btn">View</a></td>'
             f'</tr>'
             for e in entries
         )
@@ -1340,7 +1347,9 @@ def diff_view(slug, sha):
 <header class="page-header">
   <h1>Diff <code>{sha[:7]}</code> — {html.escape(title)}</h1>
   <div class="page-header-actions">
-    <a href="/revision/{slug}/{sha}" class="btn">View</a>
+    <form method="post" action="/restore/{slug}/{sha}" style="display:inline">
+      <button type="submit" class="btn btn-primary">Restore</button>
+    </form>
     {back_link}
   </div>
 </header>
@@ -1607,11 +1616,8 @@ def uncommitted_page():
             f'<td class="hist-rel">{html.escape(f["rel"])}</td>'
             f'<td class="hist-msg">{html.escape(f["title"])}</td>'
             f'<td style="white-space:nowrap">'
-            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
             + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
-            + f'<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(f["filepath"])}" data-title="{html.escape(f["title"])}">'
-            f'  <button type="submit" class="btn btn-primary">Commit</button>'
-            f'</form>'
+            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
             + '</td>'
             f'</tr>'
             for f in file_list
@@ -1626,74 +1632,36 @@ def uncommitted_page():
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>Uncommitted Changes</h1>
-  <a href="javascript:history.back()" class="btn">← Back</a>
 </header>
 {table}
 {commit_all_btn}"""
     
     extra_head = '''<script>
-document.addEventListener('DOMContentLoaded', () => {{
-  // Handle individual commit forms
-  document.querySelectorAll('.commit-one-form').forEach(form => {{
-    form.addEventListener('submit', async (e) => {{
-      e.preventDefault();
-      const filepath = form.dataset.filepath;
-      const title = form.dataset.title;
-      const btn = form.querySelector('button');
-      
-      if (!confirm(`Commit "${{title}}"?`)) return;
-      
-      btn.disabled = true;
-      btn.textContent = 'Committing...';
-      
-      try {{
-        const message = filepath.endsWith('.md') ? `Save ${{filepath.slice(0, -3)}}` : `Update ${{filepath}}`;
-        const res = await fetch('/api/commit-file', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ filepath, message }})
-        }});
-        
-        if (res.ok) {{
-          window.location.reload();
-        }} else {{
-          alert('Error committing file');
-          btn.disabled = false;
-          btn.textContent = 'Commit';
-        }}
-      }} catch (e) {{
-        alert('Error: ' + e.message);
-        btn.disabled = false;
-        btn.textContent = 'Commit';
-      }}
-    }});
-  }});
-  
+document.addEventListener('DOMContentLoaded', () => {
   // Handle commit all button
-  document.getElementById('commit-all-btn')?.addEventListener('click', async () => {{
-    const count = document.querySelectorAll('.commit-one-form').length;
-    if (!confirm(`Commit all ${{count}} file(s)? Each file will get its own commit.`)) return;
+  document.getElementById('commit-all-btn')?.addEventListener('click', async () => {
+    if (!confirm('Commit all uncommitted files? Each file will get its own commit.')) return;
     
     const btn = document.getElementById('commit-all-btn');
     btn.disabled = true;
     btn.textContent = 'Committing...';
     
-    try {{
-      const res = await fetch('/api/commit-all', {{ method: 'POST' }});
-      if (res.ok) {{
+    try {
+      const res = await fetch('/api/commit-all', { method: 'POST' });
+      if (res.ok) {
         window.location.reload();
-      }} else {{
+      } else {
         alert('Error committing files');
         btn.disabled = false;
         btn.textContent = 'Commit All';
-      }}
-    }} catch (e) {{
+      }
+    } catch (e) {
       alert('Error: ' + e.message);
       btn.disabled = false;
       btn.textContent = 'Commit All';
-    }}
-  }});
-}});
+    }
+  });
+});
 </script>'''
     
     return shell("Uncommitted Changes", body, extra_head=extra_head)
@@ -1741,6 +1709,7 @@ def diff_uncommitted(slug):
 </form>'''
     
     commit_script = '''<script>
+document.addEventListener('DOMContentLoaded', () => {
 document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -1774,6 +1743,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
     btn.textContent = 'Commit';
   }
 });
+});
 </script>'''
     
     body = f"""{breadcrumb}
@@ -1781,7 +1751,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
   <h1>Uncommitted Changes — {html.escape(title)}</h1>
   <div class="page-header-actions">
     {commit_btn}
-    <a href="/uncommitted" class="btn">← Back</a>
+    <a href="/uncommitted" class="btn">← Uncommitted</a>
   </div>
 </header>
 <div class="diff-view">{diff_html}</div>"""
@@ -1822,7 +1792,8 @@ def api_commit_all():
     files = git_uncommitted_files()
     committed = []
     
-    for filepath in files:
+    for f in files:
+        filepath = f["filepath"]
         # Generate appropriate commit message
         if filepath.endswith('.md'):
             slug = filepath[:-3]
@@ -1851,7 +1822,8 @@ def api_commit_file():
     
     # Verify file is in uncommitted list
     uncommitted = git_uncommitted_files()
-    if filepath not in uncommitted:
+    uncommitted_filepaths = [f["filepath"] for f in uncommitted]
+    if filepath not in uncommitted_filepaths:
         return jsonify({"error": "File is not uncommitted"}), 400
     
     git_commit_file(filepath, message or f"Update {filepath}")
