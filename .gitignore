@@ -5,3 +5,4 @@
 .copilot
 src/__pycache__
 /wiki
+src/data
