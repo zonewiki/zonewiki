@@ -373,16 +373,20 @@ def split_sections(content: str) -> list[str]:
     heading_lines = []
     in_fence = False
     fence_marker = ''
+    fence_len = 0
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not in_fence:
+            # Check for fence opener: 3+ consecutive backticks or tildes
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 in_fence = True
-                fence_marker = stripped[:3]
+                fence_marker = stripped[0]
+                fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
             elif line.startswith('## ') or line.startswith('### '):
                 heading_lines.append(i)
         else:
-            if stripped.startswith(fence_marker):
+            # Closing fence must use same char and be at least as long
+            if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
                 in_fence = False
     if not heading_lines:
         return [content]
@@ -889,6 +893,9 @@ def save_page(slug):
         if merged is None:
             abort(400)
         content = merged
+    # Skip write and commit if content is unchanged
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return redirect(f"/page/{slug}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, f"Update {slug}")
@@ -907,6 +914,9 @@ def api_save(slug):
         if merged is None:
             return "", 204
         content = merged
+    # Skip write if content is unchanged
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return "", 204
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "", 204
