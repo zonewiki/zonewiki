@@ -12,5 +12,6 @@ services:
       - LEAF_PASSWORD=${LEAF_PASSWORD:-}
       - SECRET_KEY=${SECRET_KEY:-}
       - GIT_REMOTE=${GIT_REMOTE:-}
+      - ALLOW_REMOTE=${ALLOW_REMOTE:-}
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"

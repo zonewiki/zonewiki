@@ -24,11 +24,12 @@ GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
 
+ALLOW_REMOTE  = os.environ.get("ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
 ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}
 
 @app.before_request
 def check_host():
-    if request.host not in ALLOWED_HOSTS:
+    if not ALLOW_REMOTE and request.host not in ALLOWED_HOSTS:
         abort(400)
 
 @app.before_request
@@ -586,6 +587,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
     </div>
   </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
+  {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
   <main>
     {body}
   </main>

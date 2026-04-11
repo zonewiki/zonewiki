@@ -662,6 +662,16 @@ kbd {
   z-index: 200;
 }
 
+.remote-badge {
+  position: fixed;
+  top: .6rem;
+  left: .6rem;
+  z-index: 200;
+  font-size: .9rem;
+  pointer-events: none;
+  filter: sepia(1) saturate(8) hue-rotate(-10deg) brightness(1.1);
+}
+
 .login-wrap {
   display: flex;
   justify-content: center;
@@ -836,6 +846,7 @@ body.editor-page main {
 /* ── Page header actions group ─────────────────────────────────────────────── */
 
 .page-header-actions { display: flex; gap: .5rem; align-items: center; flex-shrink: 0; }
+#present-btn { display: none; }
 
 /* ── History ───────────────────────────────────────────────────────────────── */
 

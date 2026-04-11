@@ -1177,10 +1177,13 @@ document.addEventListener('change', e => {
     }
   }
 
-  // Hide the button when the page has no H1 or H2 headings
-  if (!document.querySelector('.page-content h1, .page-content h2, .page-content h3')) {
-    presentBtn.style.display = 'none';
+  // Show the button only when the page has headings — hidden by default in CSS.
+  function syncPresentBtn() {
+    const has = document.querySelector('.page-content h1, .page-content h2, .page-content h3');
+    presentBtn.style.display = has ? 'inline-block' : 'none';
   }
+  requestAnimationFrame(syncPresentBtn);
+  window.addEventListener('pageshow', syncPresentBtn);
 
   presentBtn.addEventListener('click', openPresentation);
 }());
