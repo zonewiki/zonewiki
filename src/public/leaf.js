@@ -719,6 +719,7 @@ if (textarea && previewPane) {
   const saveDot = document.getElementById('save-dot');
   let autoSaveTimer = null;
   let lastSavedContent = textarea.value;
+  let formSubmitting = false;
 
   async function autoSave() {
     if (!autoSaveUrl) return;
@@ -733,6 +734,9 @@ if (textarea && previewPane) {
     } catch { /* ignore */ }
   }
 
+  // Flag form submission so pagehide beacon doesn't race with the POST
+  editorForm?.addEventListener('submit', () => { formSubmitting = true; });
+
   textarea.addEventListener('input', () => {
     saveDot.classList.add('unsaved');
     clearTimeout(autoSaveTimer);
@@ -741,6 +745,7 @@ if (textarea && previewPane) {
 
   // Save file on navigation away if content has changed (no git commit)
   window.addEventListener('pagehide', () => {
+    if (formSubmitting) return;
     if (!autoSaveUrl || textarea.value === lastSavedContent) return;
     const data = new FormData();
     data.append('content', textarea.value);

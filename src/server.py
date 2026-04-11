@@ -41,6 +41,12 @@ def check_auth():
         next_url = request.path
         return redirect(url_for("login", next=next_url))
 
+@app.after_request
+def set_cache_headers(response):
+    if response.content_type and "text/html" in response.content_type:
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
 PAGES_DIR = WIKI_DIR
 UPLOADS_DIR = WIKI_DIR / "_assets"
@@ -891,7 +897,9 @@ def save_page(slug):
     if section is not None:
         merged = _merge_section(path, section, content)
         if merged is None:
-            abort(400)
+            # Section index invalid — auto-save may have already merged it.
+            # Redirect to page view instead of failing.
+            return redirect(f"/page/{slug}")
         content = merged
     # Skip write and commit if content is unchanged
     if path.exists() and path.read_text(encoding="utf-8") == content:
