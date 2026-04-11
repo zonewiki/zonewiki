@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import subprocess
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -53,6 +52,12 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 GIT_ENABLED = shutil.which("git") is not None
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
+WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
+
+
+def slug_display_name(slug: str) -> str:
+    """Convert a slug to a human-readable title (e.g. 'my-page' → 'My Page')."""
+    return slug.split('/')[-1].replace("-", " ").title()
 
 
 def _git(*args: str) -> subprocess.CompletedProcess:
@@ -251,8 +256,7 @@ def list_deleted_pages() -> list[dict]:
                 continue
             seen.add(slug)
             r2 = _git("git", "show", f"{current_parent}:{line}")
-            title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug.replace('-', ' ').title()
-            deleted.append({"slug": slug, "title": title, "date": current_date, "sha": current_parent})
+            title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
     return deleted
 
 
@@ -284,7 +288,7 @@ def list_scratches() -> list[dict]:
 
 def page_title(content: str, slug: str) -> str:
     m = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
-    return m.group(1).strip() if m else slug.split('/')[-1].replace("-", " ").title()
+    return m.group(1).strip() if m else slug_display_name(slug)
 
 
 def process_wikilinks(text: str) -> str:
@@ -302,8 +306,7 @@ def process_wikilinks(text: str) -> str:
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
         return f'<a href="/page/{slug}" class="{css}">{label}</a>'
 
-    return re.sub(r"\[\[([^\[\]]+)\]\]", replace, text)
-
+    return WIKILINK_RE.sub(replace, text)
 
 _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
 _TOC_RE = re.compile(r'^\[\[toc\]\]\s*$', re.IGNORECASE | re.MULTILINE)
@@ -425,7 +428,7 @@ def all_backlink_counts() -> dict[str, int]:
     for md_file, file_slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
         seen: set[str] = set()
-        for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
+        for m in WIKILINK_RE.finditer(content):
             target = to_slug(m.group(1).split("|")[0].strip())
             if target != file_slug and target not in seen:
                 counts[target] = counts.get(target, 0) + 1
@@ -440,7 +443,7 @@ def find_backlinks(slug: str) -> list[dict]:
         if file_slug == slug:
             continue
         content = md_file.read_text(encoding="utf-8")
-        for m in re.finditer(r"\[\[([^\[\]]+)\]\]", content):
+        for m in WIKILINK_RE.finditer(content):
             page_name = m.group(1).split("|")[0].strip()
             if to_slug(page_name) == slug:
                 results.append({"slug": file_slug, "title": page_title(content, file_slug)})
@@ -467,7 +470,7 @@ def update_references(old_slug: str, new_slug: str) -> None:
                     return f"[[{new_slug}]]"
             return m.group(0)
 
-        new_content = re.sub(r"\[\[([^\[\]]+)\]\]", replace, content)
+        new_content = WIKILINK_RE.sub(replace, content)
         if new_content != content:
             md_file.write_text(new_content, encoding="utf-8")
 
@@ -728,7 +731,7 @@ def view_page(slug):
                 del_date = parts[2] if len(parts) > 2 else ''
                 if parent_sha:
                     r2 = _git("git", "show", f"{parent_sha}:{rel}")
-                    title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug.replace('-', ' ').title()
+                    title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
                     body = f"""{build_breadcrumb(slug, title)}
 <header class="page-header"><h1>{html.escape(title)}</h1></header>
 <article class="page-content">
@@ -796,7 +799,7 @@ def edit_page(slug):
         title = page_title(content, slug)
         is_new = False
     else:
-        title = slug.split('/')[-1].replace("-", " ").title()
+        title = slug_display_name(slug)
         content = f"# {title}\n\n"
         is_new = True
 
@@ -858,6 +861,23 @@ def edit_page(slug):
     return shell(f"Edit — {title}", body, editor=True)
 
 
+def _merge_section(path: Path, section: int, content: str) -> str | None:
+    """Merge edited section content back into the full file.
+
+    Returns the merged full content, or None if the section index is invalid.
+    """
+    if not path.exists():
+        return None
+    full = path.read_text(encoding="utf-8")
+    sections = split_sections(full)
+    if not (1 <= section <= len(sections) - 1):
+        return None
+    orig = sections[section]
+    orig_trailing = orig[len(orig.rstrip('\n')):]
+    sections[section] = content.rstrip('\n') + orig_trailing
+    return ''.join(sections)
+
+
 @app.post("/edit/<path:slug>")
 def save_page(slug):
     path = safe_path(slug)
@@ -866,17 +886,10 @@ def save_page(slug):
     content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
     section = request.args.get('section', type=int)
     if section is not None:
-        if not path.exists():
+        merged = _merge_section(path, section, content)
+        if merged is None:
             abort(400)
-        full = path.read_text(encoding="utf-8")
-        sections = split_sections(full)
-        if not (1 <= section <= len(sections) - 1):
-            abort(400)
-        orig = sections[section]
-        orig_trailing = orig[len(orig.rstrip('\n')):]
-        content = content.rstrip('\n') + orig_trailing
-        sections[section] = content
-        content = ''.join(sections)
+        content = merged
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, f"Update {slug}")
@@ -891,17 +904,10 @@ def api_save(slug):
     content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
     section = request.args.get('section', type=int)
     if section is not None:
-        if not path.exists():
+        merged = _merge_section(path, section, content)
+        if merged is None:
             return "", 204
-        full = path.read_text(encoding="utf-8")
-        sections = split_sections(full)
-        if not (1 <= section <= len(sections) - 1):
-            return "", 204
-        orig = sections[section]
-        orig_trailing = orig[len(orig.rstrip('\n')):]
-        content = content.rstrip('\n') + orig_trailing
-        sections[section] = content
-        content = ''.join(sections)
+        content = merged
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return "", 204
@@ -990,8 +996,7 @@ def history_page_route(slug):
         content = path.read_text(encoding="utf-8")
         title = page_title(content, slug)
     else:
-        title = slug.replace('-', ' ').title()
-    entries = git_log(path)
+        title = slug_display_name(slug)
     if not entries and not page_exists:
         abort(404)
 
@@ -1082,8 +1087,7 @@ def diff_view(slug, sha):
     diff = git_diff(sha, path)
     if diff is None:
         abort(404)
-    title = slug.replace('-', ' ').title()
-    lines = []
+    title = slug_display_name(slug)
     for line in diff.splitlines():
         if line.startswith('+') and not line.startswith('+++'):
             cls = 'diff-add'

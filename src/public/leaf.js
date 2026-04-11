@@ -60,6 +60,18 @@
   bc.appendChild(clr);
 }());
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function closeOnBackdropClick(dialog) {
+  dialog?.addEventListener('click', e => {
+    if (e.target === dialog) dialog.close();
+  });
+}
+
+function he(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── Search modal ──────────────────────────────────────────────────────────────
 
 const searchModal    = document.getElementById('search-modal');
@@ -74,11 +86,7 @@ let modalActiveIdx = -1;
 let modalCMTimer = null;
 
 document.getElementById('open-search')?.addEventListener('click', openSearchModal);
-
-// Close when clicking the backdrop (backdrop clicks have the dialog as target)
-searchModal?.addEventListener('click', e => {
-  if (e.target === searchModal) searchModal.close();
-});
+closeOnBackdropClick(searchModal);
 
 function openSearchModal() {
   if (!searchModal) return;
@@ -95,10 +103,6 @@ async function loadModalPages() {
     renderModalList(modalPages);
     applyModalControls();
   } catch (_) {}
-}
-
-function he(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function renderModalList(pages) {
@@ -249,9 +253,7 @@ const quickTaskInput  = document.getElementById('quick-task-input');
 const quickTaskCancel = document.getElementById('quick-task-cancel');
 
 quickTaskCancel?.addEventListener('click', () => quickTaskModal.close());
-quickTaskModal?.addEventListener('click', e => {
-  if (e.target === quickTaskModal) quickTaskModal.close();
-});
+closeOnBackdropClick(quickTaskModal);
 
 function openQuickTask() {
   if (!quickTaskModal) return;
@@ -295,10 +297,7 @@ const scratchCancel = document.getElementById('scratch-cancel');
 
 document.getElementById('open-scratch')?.addEventListener('click', openScratch);
 scratchCancel?.addEventListener('click', () => scratchModal.close());
-
-scratchModal?.addEventListener('click', e => {
-  if (e.target === scratchModal) scratchModal.close();
-});
+closeOnBackdropClick(scratchModal);
 
 function openScratch() {
   if (!scratchModal) return;
@@ -324,10 +323,7 @@ scratchForm?.addEventListener('submit', async e => {
 document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
   document.getElementById('page-delete-dialog').close();
 });
-document.getElementById('page-delete-dialog')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('page-delete-dialog'))
-    document.getElementById('page-delete-dialog').close();
-});
+closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 
 // ── New-page modal ─────────────────────────────────────────────────────────────
 
@@ -336,9 +332,7 @@ const newPageInput  = document.getElementById('new-page-input');
 const newPageCancel = document.getElementById('new-page-cancel');
 
 newPageCancel?.addEventListener('click', () => newPageModal.close());
-newPageModal?.addEventListener('click', e => {
-  if (e.target === newPageModal) newPageModal.close();
-});
+closeOnBackdropClick(newPageModal);
 
 function openNewPage() {
   if (!newPageModal) return;
@@ -350,7 +344,7 @@ function openNewPage() {
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 const shortcutsModal = document.getElementById('shortcuts-modal');
-shortcutsModal?.addEventListener('click', e => { if (e.target === shortcutsModal) shortcutsModal.close(); });
+closeOnBackdropClick(shortcutsModal);
 
 document.addEventListener('keydown', e => {
   // Ctrl/Cmd+P — open search modal
@@ -586,9 +580,7 @@ if (textarea && previewPane) {
       uploadConflictCancel.onclick = () => done(null);
     });
   }
-  uploadConflictModal?.addEventListener('click', e => {
-    if (e.target === uploadConflictModal) uploadConflictModal.close();
-  });
+  closeOnBackdropClick(uploadConflictModal);
 
   async function uploadFileAtCursor(file, filenameOverride, overwrite, unique) {
     const start = textarea.selectionStart, end = textarea.selectionEnd;
@@ -648,9 +640,7 @@ if (textarea && previewPane) {
       urlNameCancel.onclick  = () => done(false);
     });
   }
-  urlNameModal?.addEventListener('click', e => {
-    if (e.target === urlNameModal) urlNameModal.close();
-  });
+  closeOnBackdropClick(urlNameModal);
 
   textarea.addEventListener('paste', async (e) => {
     const fileItem = Array.from(e.clipboardData.items).find(i => i.kind === 'file');

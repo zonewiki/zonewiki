@@ -14,6 +14,7 @@
   --btn-primary:  #2563eb;
   --btn-primary-fg: #ffffff;
   --shadow:       0 1px 3px rgba(0,0,0,.08);
+  --mono:         "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -201,7 +202,7 @@ main {
 /* ── Code ──────────────────────────────────────────────────────────────────── */
 
 .page-content code {
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", monospace;
+  font-family: var(--mono);
   font-size: .8125em;
   background: var(--code-bg);
   padding: .15em .4em;
@@ -259,7 +260,7 @@ main {
 .search-result-card:hover { box-shadow: var(--shadow); }
 .search-result-card a { text-decoration: none; color: var(--link); font-weight: 600; font-size: 1rem; }
 .search-result-card p { margin: .3rem 0 0; font-size: .875rem; color: var(--muted); }
-.search-result-card mark { background: none; color: var(--link); font-weight: 600; font-style: normal; }
+.search-result-card mark,
 .page-list-item a mark { background: none; color: var(--link); font-weight: 600; font-style: normal; }
 
 /* ── New page form ─────────────────────────────────────────────────────────── */
@@ -347,6 +348,7 @@ main {
 }
 .search-modal::backdrop {
   background: rgba(0,0,0,.35);
+  -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
 
@@ -425,7 +427,7 @@ main {
 }
 
 .page-slug {
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-family: var(--mono);
   font-size: .775rem;
   color: var(--muted);
   white-space: nowrap;
@@ -440,7 +442,7 @@ main {
 .page-dates span {
   font-size: .7rem;
   color: var(--muted);
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-family: var(--mono);
   white-space: nowrap;
 }
 .page-dates span:first-child::before { content: '+ '; opacity: .5; }
@@ -567,7 +569,7 @@ main {
 }
 .scratch-modal[open] { display: flex; flex-direction: column; gap: .75rem; }
 .scratch-modal form { display: flex; flex-direction: column; gap: .75rem; }
-.scratch-modal::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
+.scratch-modal::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 
 .url-name-href {
   font-size: .75rem;
@@ -601,7 +603,6 @@ main {
   color: var(--fg);
   font-size: 1rem;
   outline: none;
-  box-sizing: border-box;
 }
 .scratch-modal input[type="text"]:focus { border-color: var(--link); }
 
@@ -621,7 +622,7 @@ main {
   margin: 20vh auto auto;
 }
 .shortcuts-modal[open] { display: flex; flex-direction: column; gap: .75rem; }
-.shortcuts-modal::backdrop { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
+.shortcuts-modal::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 
 .shortcuts-table { border-collapse: collapse; width: 100%; font-size: .9rem; }
 .shortcuts-table td { padding: .3rem .5rem; }
@@ -747,7 +748,7 @@ body.editor-page main {
 .slug-label {
   font-size: .8rem;
   color: var(--muted);
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-family: var(--mono);
   margin-right: auto;
 }
 
@@ -772,7 +773,7 @@ body.editor-page main {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1rem;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-family: var(--mono);
   font-size: .875rem;
   line-height: 1.65;
   background: var(--bg);
@@ -832,7 +833,7 @@ body.editor-page main {
   padding: .35rem .75rem;
   cursor: pointer;
   font-size: .875rem;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-family: var(--mono);
   color: var(--fg);
   white-space: nowrap;
 }
@@ -853,7 +854,7 @@ body.editor-page main {
 .hist-table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
 .hist-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: .875rem; }
 .hist-table tr:last-child td { border-bottom: none; }
-.hist-date { white-space: nowrap; font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; color: var(--fg); }
+.hist-date { white-space: nowrap; font-family: var(--mono); color: var(--fg); }
 .hist-rel  { white-space: nowrap; color: var(--muted); }
 .hist-msg  { color: var(--fg); width: 100%; }
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
