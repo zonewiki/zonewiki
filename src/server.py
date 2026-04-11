@@ -16,16 +16,20 @@ from mdit_py_plugins.deflist import deflist_plugin
 from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
-app = Flask(__name__, static_folder="public", static_url_path="/public")
+app = Flask(__name__, static_folder=None)
 APP_NAME = "Leaf"
 
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 ALLOW_REMOTE  = os.environ.get("ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
 ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}
+
+PUBLIC_DIR = Path(__file__).parent / "public"
 
 @app.before_request
 def check_host():
@@ -36,7 +40,7 @@ def check_host():
 def check_auth():
     if not LEAF_PASSWORD:
         return
-    if request.endpoint in ("login", "logout", "static"):
+    if request.endpoint in ("login", "logout", "serve_public"):
         return
     if not session.get("authenticated"):
         next_url = request.path
@@ -1574,6 +1578,11 @@ def api_upload():
     f.save(dest)
     git_commit(dest, f"Upload {filename}")
     return jsonify({"url": f"/_assets/{filename}"})
+
+
+@app.get("/public/<path:filename>")
+def serve_public(filename):
+    return send_from_directory(PUBLIC_DIR, filename)
 
 
 @app.get("/_assets/<filename>")
