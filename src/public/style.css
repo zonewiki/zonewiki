@@ -115,6 +115,7 @@ main {
   margin-bottom: 1.5rem;
   padding-bottom: .35rem;
   border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border));
+  position: relative;
 }
 
 .page-header h1 {
@@ -125,11 +126,24 @@ main {
 }
 
 .page-meta {
-  font-size: .8125rem;
+  position: absolute;
+  bottom: .35rem;
+  right: 0;
+  font-size: .75rem;
   color: var(--muted);
-  text-align: right;
-  margin-top: -.75rem;
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.meta-commit-form {
+  display: inline;
+}
+
+.btn-sm {
+  padding: .15rem .4rem;
+  font-size: .75rem;
+  line-height: 1;
 }
 
 /* ── Typography ────────────────────────────────────────────────────────────── */

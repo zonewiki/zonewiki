@@ -912,11 +912,61 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
         
         # Get last modified info
         last_modified = ""
+        meta_commit_btn = ""
+        meta_script = ""
         if GIT_ENABLED:
-            entries = git_log(path)
-            if entries:
-                last_entry = entries[0]
-                last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
+            # Check if file is uncommitted
+            uncommitted_files = git_uncommitted_files()
+            filepath = slug + '.md'
+            uncommitted_info = next((f for f in uncommitted_files if f["filepath"] == filepath), None)
+            
+            if uncommitted_info:
+                # File has uncommitted changes - use file mtime
+                last_modified = f'<div class="page-meta">Last changed {html.escape(uncommitted_info["mtime"])} ({html.escape(uncommitted_info["rel"])}) — uncommitted</div>'
+                meta_commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="meta-commit-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
+  <button type="submit" class="btn btn-primary btn-sm">Commit</button>
+</form>'''
+                meta_script = '''<script>
+document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const filepath = form.dataset.filepath;
+  const title = form.dataset.title;
+  const btn = form.querySelector('button');
+  
+  if (!confirm(`Commit "${title}"?`)) return;
+  
+  btn.disabled = true;
+  btn.textContent = 'Committing...';
+  
+  try {
+    const message = `Save ${filepath.slice(0, -3)}`;
+    const res = await fetch('/api/commit-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath, message })
+    });
+    
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      alert('Error committing file');
+      btn.disabled = false;
+      btn.textContent = 'Commit';
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Commit';
+  }
+});
+</script>'''
+            else:
+                # File is committed - use git log
+                entries = git_log(path)
+                if entries:
+                    last_entry = entries[0]
+                    last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
         
         article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
         body = f"""{breadcrumb}{delete_dialog}
@@ -927,13 +977,14 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
     <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
+  {last_modified}
+  {meta_commit_btn}
 </header>
-{last_modified}
 <article class="page-content">
   {article_html}
 </article>
 {bl_html}"""
-        commit_script = ''
+        commit_script = meta_script
     
     return shell(title, body, extra_head=commit_script if commit_script else None)
 
