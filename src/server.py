@@ -813,8 +813,10 @@ def edit_page(slug):
         is_new = True
 
     section = request.args.get('section', type=int)
+    section_count = None
     if section is not None and not is_new:
         sections = split_sections(content)
+        section_count = len(sections)
         if 1 <= section <= len(sections) - 1:
             content = sections[section].rstrip('\n')
         else:
@@ -841,7 +843,7 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
-    form_action = f'/edit/{safe_slug}' + (f'?section={section}' if section is not None else '')
+    form_action = f'/edit/{safe_slug}' + (f'?section={section}&section_count={section_count}' if section is not None else '')
     breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
     body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
@@ -870,8 +872,15 @@ def edit_page(slug):
     return shell(f"Edit — {title}", body, editor=True)
 
 
-def _merge_section(path: Path, section: int, content: str) -> str | None:
+def _merge_section(path: Path, section: int, content: str,
+                   section_count: int | None = None) -> str | None:
     """Merge edited section content back into the full file.
+
+    section_count is the number of sections the file had when the editor was
+    opened.  When the editor content introduces new headings, prior auto-saves
+    increase the section count on disk.  We use section_count to figure out how
+    many of the current sections belong to this editor and must be replaced as
+    a block.
 
     Returns the merged full content, or None if the section index is invalid.
     """
@@ -881,9 +890,18 @@ def _merge_section(path: Path, section: int, content: str) -> str | None:
     sections = split_sections(full)
     if not (1 <= section <= len(sections) - 1):
         return None
-    orig = sections[section]
-    orig_trailing = orig[len(orig.rstrip('\n')):]
-    sections[section] = content.rstrip('\n') + orig_trailing
+
+    # How many consecutive sections to replace (starting at `section`).
+    if section_count is not None and len(sections) > section_count:
+        span = 1 + (len(sections) - section_count)
+    else:
+        span = 1
+    end = min(section + span, len(sections))
+
+    # Preserve trailing newlines from the last section being replaced.
+    last_orig = sections[end - 1]
+    orig_trailing = last_orig[len(last_orig.rstrip('\n')):]
+    sections[section:end] = [content.rstrip('\n') + orig_trailing]
     return ''.join(sections)
 
 
@@ -894,8 +912,9 @@ def save_page(slug):
         abort(400)
     content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
     section = request.args.get('section', type=int)
+    section_count = request.args.get('section_count', type=int)
     if section is not None:
-        merged = _merge_section(path, section, content)
+        merged = _merge_section(path, section, content, section_count)
         if merged is None:
             # Section index invalid — auto-save may have already merged it.
             # Redirect to page view instead of failing.
@@ -917,8 +936,9 @@ def api_save(slug):
         abort(400)
     content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
     section = request.args.get('section', type=int)
+    section_count = request.args.get('section_count', type=int)
     if section is not None:
-        merged = _merge_section(path, section, content)
+        merged = _merge_section(path, section, content, section_count)
         if merged is None:
             return "", 204
         content = merged
