@@ -685,57 +685,30 @@ kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #dc2626;
+  background: #6b7280;
   color: #ffffff;
   border-radius: .5rem;
-  cursor: pointer;
-  transition: opacity .15s;
+  text-decoration: none;
+  transition: all .15s;
   font-weight: 700;
   line-height: 1;
-  box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
 }
 
 .uncommitted-badge:hover {
-  opacity: .85;
+  background: #4b5563;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 
-.uncommitted-list {
-  display: flex;
-  flex-direction: column;
-  gap: .5rem;
-}
-
-.uncommitted-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: .75rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  gap: 1rem;
-}
-
-.uncommitted-item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.uncommitted-item-title {
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.uncommitted-item-slug {
-  font-size: .8125rem;
-  color: var(--muted);
-  font-family: var(--mono);
-}
-
-.uncommitted-item-actions {
-  display: flex;
-  gap: .5rem;
-  flex-shrink: 0;
+@media (prefers-color-scheme: dark) {
+  .uncommitted-badge {
+    background: #9ca3af;
+    color: #1f2937;
+  }
+  
+  .uncommitted-badge:hover {
+    background: #d1d5db;
+  }
 }
 
 .login-wrap {

@@ -624,23 +624,11 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
     </div>
   </dialog>
-  <dialog id="uncommitted-modal" class="search-modal">
-    <div class="search-modal-controls">
-      <h3 style="margin: 0; flex: 1;">Uncommitted Changes</h3>
-    </div>
-    <div class="modal-results">
-      <div id="uncommitted-list" class="uncommitted-list"></div>
-    </div>
-    <div style="margin-top: 1rem; display: flex; gap: .5rem; justify-content: flex-end;">
-      <button type="button" class="btn" id="uncommitted-close">Close</button>
-      <button type="button" class="btn btn-primary" id="uncommitted-commit-all">Commit All</button>
-    </div>
-  </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-  <div id="uncommitted-badge" class="uncommitted-badge" style="display: none;" title="Uncommitted changes - click to manage">
+  <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
     <span id="uncommitted-count">0</span>
-  </div>
+  </a>
   <main>
     {body}
   </main>
@@ -1423,6 +1411,174 @@ def serve_upload(filename):
 
 
 # ── Uncommitted changes ───────────────────────────────────────────────────────
+
+@app.get("/uncommitted")
+def uncommitted_page():
+    """Show all files with uncommitted changes."""
+    if not GIT_ENABLED:
+        abort(404)
+    
+    files = git_uncommitted_files()
+    file_list = []
+    
+    for filepath in files:
+        if filepath.endswith('.md') and not filepath.startswith('_assets'):
+            slug = filepath[:-3]
+            path = WIKI_DIR / filepath
+            if path.exists():
+                content = path.read_text(encoding="utf-8")
+                title = page_title(content, slug)
+            else:
+                title = slug_display_name(slug)
+            file_list.append({"slug": slug, "title": title, "filepath": filepath})
+        else:
+            # Asset or other file
+            file_list.append({"slug": None, "title": filepath, "filepath": filepath})
+    
+    if file_list:
+        rows = "".join(
+            f'<tr>'
+            f'<td style="font-weight: 500;">{html.escape(f["title"])}</td>'
+            f'<td style="font-family: var(--mono); font-size: .8125rem; color: var(--muted);">{html.escape(f["filepath"])}</td>'
+            f'<td style="white-space:nowrap">'
+            f'<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(f["filepath"])}" data-title="{html.escape(f["title"])}">'
+            f'  <button type="submit" class="btn btn-primary">Commit</button>'
+            f'</form> '
+            + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
+            + (f'<a href="/page/{html.escape(f["slug"])}" class="btn">View</a>' if f["slug"] else '')
+            + '</td>'
+            f'</tr>'
+            for f in file_list
+        )
+        table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'
+        commit_all_btn = '<button type="button" class="btn btn-primary" id="commit-all-btn" style="margin-top: 1rem;">Commit All</button>'
+    else:
+        table = '<p class="hist-empty">No uncommitted changes</p>'
+        commit_all_btn = ''
+    
+    breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes')
+    body = f"""{breadcrumb}
+<header class="page-header">
+  <h1>Uncommitted Changes</h1>
+  <a href="javascript:history.back()" class="btn">← Back</a>
+</header>
+{table}
+{commit_all_btn}"""
+    
+    extra_head = '''<script>
+document.addEventListener('DOMContentLoaded', () => {{
+  // Handle individual commit forms
+  document.querySelectorAll('.commit-one-form').forEach(form => {{
+    form.addEventListener('submit', async (e) => {{
+      e.preventDefault();
+      const filepath = form.dataset.filepath;
+      const title = form.dataset.title;
+      const btn = form.querySelector('button');
+      
+      if (!confirm(`Commit "${{title}}"?`)) return;
+      
+      btn.disabled = true;
+      btn.textContent = 'Committing...';
+      
+      try {{
+        const message = filepath.endsWith('.md') ? `Save ${{filepath.slice(0, -3)}}` : `Update ${{filepath}}`;
+        const res = await fetch('/api/commit-file', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ filepath, message }})
+        }});
+        
+        if (res.ok) {{
+          window.location.reload();
+        }} else {{
+          alert('Error committing file');
+          btn.disabled = false;
+          btn.textContent = 'Commit';
+        }}
+      }} catch (e) {{
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = 'Commit';
+      }}
+    }});
+  }});
+  
+  // Handle commit all button
+  document.getElementById('commit-all-btn')?.addEventListener('click', async () => {{
+    const count = document.querySelectorAll('.commit-one-form').length;
+    if (!confirm(`Commit all ${{count}} file(s)? Each file will get its own commit.`)) return;
+    
+    const btn = document.getElementById('commit-all-btn');
+    btn.disabled = true;
+    btn.textContent = 'Committing...';
+    
+    try {{
+      const res = await fetch('/api/commit-all', {{ method: 'POST' }});
+      if (res.ok) {{
+        window.location.reload();
+      }} else {{
+        alert('Error committing files');
+        btn.disabled = false;
+        btn.textContent = 'Commit All';
+      }}
+    }} catch (e) {{
+      alert('Error: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Commit All';
+    }}
+  }});
+}});
+</script>'''
+    
+    return shell("Uncommitted Changes", body, extra_head=extra_head)
+
+
+@app.get("/diff-uncommitted/<path:slug>")
+def diff_uncommitted(slug):
+    """Show uncommitted changes for a file."""
+    if not GIT_ENABLED:
+        abort(404)
+    
+    path = safe_path(slug)
+    if path is None or not path.exists():
+        abort(404)
+    
+    rel = str(path.relative_to(WIKI_DIR))
+    r = _git("git", "diff", "--", rel)
+    diff = r.stdout
+    
+    if not diff:
+        diff = "(no changes)"
+    
+    content = path.read_text(encoding="utf-8")
+    title = page_title(content, slug)
+    
+    lines = []
+    for line in diff.splitlines():
+        if line.startswith('+') and not line.startswith('+++'):
+            cls = 'diff-add'
+        elif line.startswith('-') and not line.startswith('---'):
+            cls = 'diff-del'
+        elif line.startswith('@@'):
+            cls = 'diff-hunk'
+        else:
+            cls = 'diff-ctx'
+        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
+    
+    diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
+    
+    breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, f'/uncommitted'), ('Diff', None))
+    body = f"""{breadcrumb}
+<header class="page-header">
+  <h1>Uncommitted Changes — {html.escape(title)}</h1>
+  <div class="page-header-actions">
+    <a href="/uncommitted" class="btn">← Back</a>
+  </div>
+</header>
+<div class="diff-view">{diff_html}</div>"""
+    
+    return shell(f"Diff — {title}", body)
+
 
 @app.get("/api/uncommitted")
 def api_uncommitted():
