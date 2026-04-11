@@ -1014,6 +1014,7 @@ def history_page_route(slug):
         title = page_title(content, slug)
     else:
         title = slug_display_name(slug)
+    entries = git_log(path)
     if not entries and not page_exists:
         abort(404)
 
@@ -1105,6 +1106,7 @@ def diff_view(slug, sha):
     if diff is None:
         abort(404)
     title = slug_display_name(slug)
+    lines = []
     for line in diff.splitlines():
         if line.startswith('+') and not line.startswith('+++'):
             cls = 'diff-add'
