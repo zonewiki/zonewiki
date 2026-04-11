@@ -82,7 +82,7 @@
       
       if (files.length > 0) {
         uncommittedCount.textContent = files.length;
-        uncommittedBadge.style.display = 'block';
+        uncommittedBadge.style.display = 'inline-flex';
       } else {
         uncommittedBadge.style.display = 'none';
       }
