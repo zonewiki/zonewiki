@@ -133,10 +133,35 @@ def git_show(sha: str, path: Path) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
+def relative_time(dt: datetime) -> str:
+    """Return relative time string like '2 days ago'."""
+    now = datetime.now()
+    delta = now - dt
+    
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    elif seconds < 3600:
+        mins = seconds // 60
+        return f"{mins} minute{'s' if mins != 1 else ''} ago"
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    elif seconds < 2592000:  # 30 days
+        days = seconds // 86400
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    elif seconds < 31536000:  # 365 days
+        months = seconds // 2592000
+        return f"{months} month{'s' if months != 1 else ''} ago"
+    else:
+        years = seconds // 31536000
+        return f"{years} year{'s' if years != 1 else ''} ago"
+
+
 def git_uncommitted_files() -> list[dict]:
     """Return list of files with uncommitted changes (relative to WIKI_DIR).
     
-    Returns: List of dicts with 'filepath' and 'mtime' (ISO date string).
+    Returns: List of dicts with 'filepath', 'mtime' (ISO date string), and 'rel' (relative time).
     """
     if not GIT_ENABLED:
         return []
@@ -151,10 +176,14 @@ def git_uncommitted_files() -> list[dict]:
         if status.strip() and not status.startswith('??'):
             fpath = WIKI_DIR / filepath
             if fpath.exists():
-                mtime = datetime.fromtimestamp(fpath.stat().st_mtime).strftime("%Y-%m-%d")
+                mtime_ts = fpath.stat().st_mtime
+                mtime_dt = datetime.fromtimestamp(mtime_ts)
+                mtime = mtime_dt.strftime("%Y-%m-%d")
+                rel = relative_time(mtime_dt)
             else:
                 mtime = ""
-            files.append({"filepath": filepath, "mtime": mtime})
+                rel = ""
+            files.append({"filepath": filepath, "mtime": mtime, "rel": rel})
     return files
 
 
@@ -860,21 +889,29 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
   }
 });
 </script>'''
-    else:
-        breadcrumb = build_breadcrumb(slug, title)
-        back_link = ''
-        commit_btn = ''
-        commit_script = ''
-    
-    hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
-    article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
-    body = f"""{breadcrumb}{delete_dialog}
+        # Only show commit-related buttons when viewing from uncommitted
+        article_html = render_md(strip_h1(content))
+        body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
     {back_link}
-    {hist_link}
     {commit_btn}
+  </div>
+</header>
+<article class="page-content">
+  {article_html}
+</article>
+{bl_html}"""
+    else:
+        breadcrumb = build_breadcrumb(slug, title)
+        hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
+        article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
+        body = f"""{breadcrumb}{delete_dialog}
+<header class="page-header">
+  <h1>{html.escape(title)}</h1>
+  <div class="page-header-actions">
+    {hist_link}
     <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
@@ -883,6 +920,8 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
   {article_html}
 </article>
 {bl_html}"""
+        commit_script = ''
+    
     return shell(title, body, extra_head=commit_script if commit_script else None)
 
 
@@ -1483,6 +1522,7 @@ def uncommitted_page():
     for f in files:
         filepath = f["filepath"]
         mtime = f["mtime"]
+        rel = f["rel"]
         if filepath.endswith('.md') and not filepath.startswith('_assets'):
             slug = filepath[:-3]
             path = WIKI_DIR / filepath
@@ -1491,15 +1531,16 @@ def uncommitted_page():
                 title = page_title(content, slug)
             else:
                 title = slug_display_name(slug)
-            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": mtime})
+            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": mtime, "rel": rel})
         else:
             # Asset or other file
-            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": mtime})
+            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": mtime, "rel": rel})
     
     if file_list:
         rows = "".join(
             f'<tr>'
             f'<td class="hist-date">{html.escape(f["mtime"])}</td>'
+            f'<td class="hist-rel">{html.escape(f["rel"])}</td>'
             f'<td class="hist-msg">{html.escape(f["title"])}</td>'
             f'<td style="white-space:nowrap">'
             + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
