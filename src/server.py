@@ -133,8 +133,11 @@ def git_show(sha: str, path: Path) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
-def git_uncommitted_files() -> list[str]:
-    """Return list of files with uncommitted changes (relative to WIKI_DIR)."""
+def git_uncommitted_files() -> list[dict]:
+    """Return list of files with uncommitted changes (relative to WIKI_DIR).
+    
+    Returns: List of dicts with 'filepath' and 'mtime' (ISO date string).
+    """
     if not GIT_ENABLED:
         return []
     r = _git("git", "status", "--porcelain")
@@ -146,7 +149,12 @@ def git_uncommitted_files() -> list[str]:
         filepath = line[3:]
         # Include modified (M), added (A), deleted (D) - skip untracked (??)
         if status.strip() and not status.startswith('??'):
-            files.append(filepath)
+            fpath = WIKI_DIR / filepath
+            if fpath.exists():
+                mtime = datetime.fromtimestamp(fpath.stat().st_mtime).strftime("%Y-%m-%d")
+            else:
+                mtime = ""
+            files.append({"filepath": filepath, "mtime": mtime})
     return files
 
 
@@ -809,12 +817,21 @@ def view_page(slug):
             f'</div></form></dialog>'
         )
 
+    from_page = request.args.get('from', '')
+    if from_page == 'uncommitted' and GIT_ENABLED:
+        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None))
+        back_link = f'<a href="/uncommitted" class="btn">← Uncommitted</a>'
+    else:
+        breadcrumb = build_breadcrumb(slug, title)
+        back_link = ''
+    
     hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
     article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
     body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
+    {back_link}
     {hist_link}
     <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
@@ -1421,7 +1438,9 @@ def uncommitted_page():
     files = git_uncommitted_files()
     file_list = []
     
-    for filepath in files:
+    for f in files:
+        filepath = f["filepath"]
+        mtime = f["mtime"]
         if filepath.endswith('.md') and not filepath.startswith('_assets'):
             slug = filepath[:-3]
             path = WIKI_DIR / filepath
@@ -1430,22 +1449,22 @@ def uncommitted_page():
                 title = page_title(content, slug)
             else:
                 title = slug_display_name(slug)
-            file_list.append({"slug": slug, "title": title, "filepath": filepath})
+            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": mtime})
         else:
             # Asset or other file
-            file_list.append({"slug": None, "title": filepath, "filepath": filepath})
+            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": mtime})
     
     if file_list:
         rows = "".join(
             f'<tr>'
-            f'<td style="font-weight: 500;">{html.escape(f["title"])}</td>'
-            f'<td style="font-family: var(--mono); font-size: .8125rem; color: var(--muted);">{html.escape(f["filepath"])}</td>'
+            f'<td class="hist-date">{html.escape(f["mtime"])}</td>'
+            f'<td class="hist-msg">{html.escape(f["title"])}</td>'
             f'<td style="white-space:nowrap">'
             f'<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(f["filepath"])}" data-title="{html.escape(f["title"])}">'
             f'  <button type="submit" class="btn btn-primary">Commit</button>'
             f'</form> '
             + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
-            + (f'<a href="/page/{html.escape(f["slug"])}" class="btn">View</a>' if f["slug"] else '')
+            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a>' if f["slug"] else '')
             + '</td>'
             f'</tr>'
             for f in file_list
@@ -1585,7 +1604,8 @@ def api_uncommitted():
     """Return list of files with uncommitted changes."""
     files = git_uncommitted_files()
     result = []
-    for filepath in files:
+    for f in files:
+        filepath = f["filepath"]
         # Convert filepath to slug (remove .md extension)
         if filepath.endswith('.md') and not filepath.startswith('_assets'):
             slug = filepath[:-3]
