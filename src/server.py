@@ -547,10 +547,11 @@ def update_references(old_slug: str, new_slug: str) -> None:
             md_file.write_text(new_content, encoding="utf-8")
 
 
-def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_head: str = "") -> str:
+def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_head: str | None = None) -> str:
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     safe_title = html.escape(title)
+    extra_head_html = extra_head if extra_head else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -563,7 +564,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
   <script src="/public/leaf.js" defer></script>
-  {extra_head}
+  {extra_head_html}
 </head>
 <body{body_class}>
   <dialog id="search-modal" class="search-modal">
@@ -662,10 +663,12 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
     </div>
   </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
-  {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-  <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
-    <span id="uncommitted-count">0</span>
-  </a>
+  <div class="top-badges">
+    {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
+    <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
+      <span id="uncommitted-count">0</span>
+    </a>
+  </div>
   <main>
     {body}
   </main>
@@ -906,6 +909,15 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
     else:
         breadcrumb = build_breadcrumb(slug, title)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
+        
+        # Get last modified info
+        last_modified = ""
+        if GIT_ENABLED:
+            entries = git_log(path)
+            if entries:
+                last_entry = entries[0]
+                last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
+        
         article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
         body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
@@ -916,6 +928,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
 </header>
+{last_modified}
 <article class="page-content">
   {article_html}
 </article>

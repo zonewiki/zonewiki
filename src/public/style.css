@@ -124,6 +124,14 @@ main {
   letter-spacing: -.02em;
 }
 
+.page-meta {
+  font-size: .8125rem;
+  color: var(--muted);
+  text-align: right;
+  margin-top: -.75rem;
+  margin-bottom: 1rem;
+}
+
 /* ── Typography ────────────────────────────────────────────────────────────── */
 
 .page-content h1 { font-size: 1.875rem; font-weight: 700; margin: 2rem 0 .875rem; padding-bottom: .35rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border)); line-height: 1.25; letter-spacing: -.02em; }
@@ -663,21 +671,23 @@ kbd {
   z-index: 200;
 }
 
-.remote-badge {
+.top-badges {
   position: fixed;
   top: .6rem;
   left: .6rem;
   z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.remote-badge {
   font-size: .9rem;
   pointer-events: none;
   filter: sepia(1) saturate(8) hue-rotate(-10deg) brightness(1.1);
 }
 
 .uncommitted-badge {
-  position: fixed;
-  top: .6rem;
-  left: 2rem;
-  z-index: 200;
   font-size: .625rem;
   min-width: 1rem;
   height: 1rem;
