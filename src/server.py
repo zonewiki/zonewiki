@@ -638,9 +638,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   </dialog>
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-  <button id="uncommitted-badge" class="uncommitted-badge" style="display: none;" title="Uncommitted changes">
-    <span id="uncommitted-count">0</span> uncommitted
-  </button>
+  <div id="uncommitted-badge" class="uncommitted-badge" style="display: none;" title="Uncommitted changes - click to manage">
+    <span id="uncommitted-count">0</span>
+  </div>
   <main>
     {body}
   </main>
@@ -1468,6 +1468,28 @@ def api_commit_all():
         committed.append(filepath)
     
     return jsonify({"committed": len(committed), "files": committed})
+
+
+@app.post("/api/commit-file")
+def api_commit_file():
+    """Commit a single file."""
+    if not GIT_ENABLED:
+        return jsonify({"error": "Git not enabled"}), 400
+    
+    data = request.get_json()
+    filepath = data.get("filepath", "")
+    message = data.get("message", "")
+    
+    if not filepath:
+        return jsonify({"error": "No filepath provided"}), 400
+    
+    # Verify file is in uncommitted list
+    uncommitted = git_uncommitted_files()
+    if filepath not in uncommitted:
+        return jsonify({"error": "File is not uncommitted"}), 400
+    
+    git_commit_file(filepath, message or f"Update {filepath}")
+    return jsonify({"success": True})
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

@@ -97,21 +97,76 @@
       return;
     }
 
-    uncommittedList.innerHTML = currentFiles.map(f => {
+    uncommittedList.innerHTML = currentFiles.map((f, idx) => {
       const titleHtml = he(f.title);
       const slugHtml = f.slug ? `<div class="uncommitted-item-slug">${he(f.slug)}</div>` : '';
-      const viewLink = f.slug ? `<a href="/page/${he(f.slug)}" class="btn">View</a>` : '';
+      const viewLink = f.slug ? `<a href="/page/${he(f.slug)}" class="btn" target="_blank" rel="noopener">View</a>` : '';
       
       return `
-        <div class="uncommitted-item">
-          <div>
+        <div class="uncommitted-item" data-idx="${idx}">
+          <div class="uncommitted-item-info">
             <div class="uncommitted-item-title">${titleHtml}</div>
             ${slugHtml}
           </div>
-          ${viewLink}
+          <div class="uncommitted-item-actions">
+            ${viewLink}
+            <button class="btn btn-primary commit-one" data-idx="${idx}">Commit</button>
+          </div>
         </div>
       `;
     }).join('');
+
+    // Add click handlers for individual commit buttons
+    uncommittedList.querySelectorAll('.commit-one').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        const file = currentFiles[idx];
+        if (!file) return;
+
+        const confirmMsg = file.slug 
+          ? `Commit "${file.title}"?`
+          : `Commit "${file.filepath}"?`;
+        
+        if (!confirm(confirmMsg)) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Committing...';
+
+        try {
+          const message = file.slug ? `Save ${file.slug}` : `Update ${file.filepath}`;
+          const res = await fetch('/api/commit-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filepath: file.filepath, message })
+          });
+
+          if (res.ok) {
+            // Remove the item from the list
+            document.querySelector(`.uncommitted-item[data-idx="${idx}"]`).remove();
+            currentFiles.splice(idx, 1);
+            
+            // Update badge count
+            if (currentFiles.length === 0) {
+              uncommittedList.innerHTML = '<p style="color: var(--muted); text-align: center;">No uncommitted changes</p>';
+              uncommittedBadge.style.display = 'none';
+            } else {
+              uncommittedCount.textContent = currentFiles.length;
+              // Re-render to fix indices
+              renderUncommittedList();
+            }
+          } else {
+            const result = await res.json();
+            alert('Error committing file: ' + (result.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.textContent = 'Commit';
+          }
+        } catch (e) {
+          alert('Error committing file: ' + e.message);
+          btn.disabled = false;
+          btn.textContent = 'Commit';
+        }
+      });
+    });
   }
 
   uncommittedBadge.addEventListener('click', () => {
