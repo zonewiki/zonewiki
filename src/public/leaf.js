@@ -84,6 +84,7 @@ const modalCM        = document.getElementById('modal-content-matches');
 let modalPages = null;
 let modalActiveIdx = -1;
 let modalCMTimer = null;
+let modalCMSeq = 0;
 
 document.getElementById('open-search')?.addEventListener('click', openSearchModal);
 closeOnBackdropClick(searchModal);
@@ -231,13 +232,15 @@ function applyModalControls() {
 }
 
 async function fetchModalContentMatches(q) {
+  const seq = ++modalCMSeq;
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    if (seq !== modalCMSeq) return;  // stale response — discard
     const results = await res.json();
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
       results.map(r =>
-        `<a class="search-result-card" href="/page/${r.slug}"><span class="result-title">${r.title}</span><p>${r.excerpt}</p></a>`
+        `<a class="search-result-card" href="/page/${he(r.slug)}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
       ).join('');
     modalCM.classList.remove('hidden');
     // Re-clamp active index now that content cards are in the pool
@@ -1156,6 +1159,8 @@ document.addEventListener('change', e => {
   }
 
   function onPresentKey(e) {
+    // Suppress other keybindings during presentation
+    if (e.ctrlKey || e.metaKey || e.altKey) { e.stopPropagation(); return; }
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
       if (currentSlide < slides.length - 1) showSlide(currentSlide + 1);

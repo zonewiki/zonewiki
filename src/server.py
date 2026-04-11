@@ -100,9 +100,8 @@ def git_commit(path: Path, message: str) -> None:
 def git_commit_rename(old_path: Path, new_path: Path, message: str) -> None:
     if not GIT_ENABLED:
         return
-    _git("git", "add", "--",
-         str(old_path.relative_to(WIKI_DIR)),
-         str(new_path.relative_to(WIKI_DIR)))
+    # Stage renamed file and any reference updates in other pages
+    _git("git", "add", "-A")
     _git("git", "commit", "-m", message)
 
 
@@ -304,7 +303,7 @@ def process_wikilinks(text: str) -> str:
         slug = raw if raw in slugs else to_slug(page_name)
         label = html.escape(label.strip())
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
-        return f'<a href="/page/{slug}" class="{css}">{label}</a>'
+        return f'<a href="/page/{html.escape(slug)}" class="{css}">{label}</a>'
 
     return WIKILINK_RE.sub(replace, text)
 
