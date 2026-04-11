@@ -821,9 +821,50 @@ def view_page(slug):
     if from_page == 'uncommitted' and GIT_ENABLED:
         breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None))
         back_link = f'<a href="/uncommitted" class="btn">← Uncommitted</a>'
+        filepath = slug + '.md'
+        commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
+  <button type="submit" class="btn btn-primary">Commit</button>
+</form>'''
+        commit_script = '''<script>
+document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const filepath = form.dataset.filepath;
+  const title = form.dataset.title;
+  const btn = form.querySelector('button');
+  
+  if (!confirm(`Commit "${title}"?`)) return;
+  
+  btn.disabled = true;
+  btn.textContent = 'Committing...';
+  
+  try {
+    const message = `Save ${filepath.slice(0, -3)}`;
+    const res = await fetch('/api/commit-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath, message })
+    });
+    
+    if (res.ok) {
+      window.location.href = '/uncommitted';
+    } else {
+      alert('Error committing file');
+      btn.disabled = false;
+      btn.textContent = 'Commit';
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Commit';
+  }
+});
+</script>'''
     else:
         breadcrumb = build_breadcrumb(slug, title)
         back_link = ''
+        commit_btn = ''
+        commit_script = ''
     
     hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
     article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
@@ -833,6 +874,7 @@ def view_page(slug):
   <div class="page-header-actions">
     {back_link}
     {hist_link}
+    {commit_btn}
     <button id="present-btn" class="btn" title="Presentation mode">Present</button>
     <a href="/edit/{slug}" class="btn">Edit</a>
   </div>
@@ -841,7 +883,7 @@ def view_page(slug):
   {article_html}
 </article>
 {bl_html}"""
-    return shell(title, body)
+    return shell(title, body, extra_head=commit_script if commit_script else None)
 
 
 @app.get("/edit/<path:slug>")
@@ -1460,11 +1502,11 @@ def uncommitted_page():
             f'<td class="hist-date">{html.escape(f["mtime"])}</td>'
             f'<td class="hist-msg">{html.escape(f["title"])}</td>'
             f'<td style="white-space:nowrap">'
-            f'<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(f["filepath"])}" data-title="{html.escape(f["title"])}">'
-            f'  <button type="submit" class="btn btn-primary">Commit</button>'
-            f'</form> '
+            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
             + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
-            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a>' if f["slug"] else '')
+            + f'<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(f["filepath"])}" data-title="{html.escape(f["title"])}">'
+            f'  <button type="submit" class="btn btn-primary">Commit</button>'
+            f'</form>'
             + '</td>'
             f'</tr>'
             for f in file_list
@@ -1571,6 +1613,7 @@ def diff_uncommitted(slug):
     
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
+    filepath = rel
     
     lines = []
     for line in diff.splitlines():
@@ -1587,16 +1630,58 @@ def diff_uncommitted(slug):
     diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
     
     breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, f'/uncommitted'), ('Diff', None))
+    
+    commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
+  <button type="submit" class="btn btn-primary">Commit</button>
+</form>'''
+    
+    commit_script = '''<script>
+document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const filepath = form.dataset.filepath;
+  const title = form.dataset.title;
+  const btn = form.querySelector('button');
+  
+  if (!confirm(`Commit "${title}"?`)) return;
+  
+  btn.disabled = true;
+  btn.textContent = 'Committing...';
+  
+  try {
+    const message = filepath.endsWith('.md') ? `Save ${filepath.slice(0, -3)}` : `Update ${filepath}`;
+    const res = await fetch('/api/commit-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath, message })
+    });
+    
+    if (res.ok) {
+      window.location.href = '/uncommitted';
+    } else {
+      alert('Error committing file');
+      btn.disabled = false;
+      btn.textContent = 'Commit';
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Commit';
+  }
+});
+</script>'''
+    
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>Uncommitted Changes — {html.escape(title)}</h1>
   <div class="page-header-actions">
+    {commit_btn}
     <a href="/uncommitted" class="btn">← Back</a>
   </div>
 </header>
 <div class="diff-view">{diff_html}</div>"""
     
-    return shell(f"Diff — {title}", body)
+    return shell(f"Diff — {title}", body, extra_head=commit_script)
 
 
 @app.get("/api/uncommitted")
