@@ -1122,8 +1122,9 @@ def save_page(slug):
             # Redirect to page view instead of failing.
             return redirect(f"/page/{slug}")
         content = merged
-    # Skip write and commit if content is unchanged
+    # Skip write if content is unchanged, but still commit if file is dirty
     if path.exists() and path.read_text(encoding="utf-8") == content:
+        git_commit(path, f"Update {slug}")
         return redirect(f"/page/{slug}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
