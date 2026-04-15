@@ -1183,7 +1183,8 @@ document.addEventListener('change', e => {
 
     document.body.appendChild(overlay);
 
-    showSlide(0);
+    const resumeAt = Math.min(currentSlide, slides.length - 1);
+    showSlide(resumeAt);
     document.addEventListener('keydown', onPresentKey);
   }
 
