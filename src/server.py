@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import html
 import mimetypes
@@ -508,6 +509,26 @@ def split_sections(content: str) -> list[str]:
         end = heading_lines[j + 1] if j + 1 < len(heading_lines) else len(lines)
         sections.append(''.join(lines[pos:end]))
     return sections
+
+
+def content_hash(text: str) -> str:
+    """Return a short hex hash of *text* for change detection."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def section_char_range(full_content: str, section_idx: int) -> tuple[int, int] | None:
+    """Return (start_char, end_char) of section *section_idx* within *full_content*.
+
+    section_idx is 1-based (0 = preamble, which is not editable as a section).
+    Returns None if the index is invalid.
+    """
+    sections = split_sections(full_content)
+    if not (1 <= section_idx <= len(sections) - 1):
+        return None
+    # Character offset = sum of lengths of all prior sections
+    start = sum(len(s) for s in sections[:section_idx])
+    end = start + len(sections[section_idx])
+    return start, end
 
 
 def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
@@ -1055,14 +1076,20 @@ def edit_page(slug):
         is_new = True
 
     section = request.args.get('section', type=int)
-    section_count = None
+    file_hash_val = ""
+    start_char = 0
+    end_char = 0
     if section is not None and not is_new:
-        sections = split_sections(content)
-        section_count = len(sections)
-        if 1 <= section <= len(sections) - 1:
-            content = sections[section].rstrip('\n')
+        char_range = section_char_range(content, section)
+        if char_range is not None:
+            file_hash_val = content_hash(content)
+            start_char, end_char = char_range
+            content = content[start_char:end_char].rstrip('\n')
         else:
             section = None  # invalid index, fall back to full edit
+
+    conflict = request.args.get('conflict')
+    conflict_banner = '<div class="conflict-banner">⚠ File was modified while you were editing. Your section edit could not be saved. The full file is shown below — please re-apply your changes.</div>' if conflict else ''
 
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
@@ -1085,12 +1112,20 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
-    form_action = f'/edit/{safe_slug}' + (f'?section={section}&section_count={section_count}' if section is not None else '')
+    form_action = f'/edit/{safe_slug}'
+    section_hidden_fields = ""
+    if section is not None:
+        section_hidden_fields = (
+            f'<input type="hidden" name="file_hash" id="section-file-hash" value="{file_hash_val}">'
+            f'<input type="hidden" name="start_char" id="section-start-char" value="{start_char}">'
+            f'<input type="hidden" name="end_char" id="section-end-char" value="{end_char}">'
+        )
     breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
     body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
 <div class="editor-wrap">
   <div class="editor-pane">
     {build_breadcrumb(slug, title, breadcrumb_extra)}
+    {conflict_banner}
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
       <span id="save-dot" class="save-dot">●</span>
@@ -1102,6 +1137,7 @@ def edit_page(slug):
     {delete_form}
     {rename_bar}
     <form id="editor-form" method="post" action="{form_action}">
+      {section_hidden_fields}
       <textarea id="editor-textarea" name="content"
                 spellcheck="false" autocorrect="off" autocapitalize="off">{safe_content}</textarea>
     </form>
@@ -1114,37 +1150,27 @@ def edit_page(slug):
     return shell(f"Edit — {title}", body, editor=True)
 
 
-def _merge_section(path: Path, section: int, content: str,
-                   section_count: int | None = None) -> str | None:
-    """Merge edited section content back into the full file.
+def _splice_section(path: Path, file_hash: str, start_char: int,
+                    end_char: int, new_content: str) -> tuple[str, str, int, int] | None:
+    """Replace content[start_char:end_char] in the file, guarded by a hash check.
 
-    section_count is the number of sections the file had when the editor was
-    opened.  When the editor content introduces new headings, prior auto-saves
-    increase the section count on disk.  We use section_count to figure out how
-    many of the current sections belong to this editor and must be replaced as
-    a block.
-
-    Returns the merged full content, or None if the section index is invalid.
+    Returns (merged_full_content, new_file_hash, new_start_char, new_end_char)
+    or None if the file doesn't exist or the hash doesn't match.
     """
     if not path.exists():
         return None
     full = path.read_text(encoding="utf-8")
-    sections = split_sections(full)
-    if not (1 <= section <= len(sections) - 1):
+    if content_hash(full) != file_hash:
         return None
-
-    # How many consecutive sections to replace (starting at `section`).
-    if section_count is not None and len(sections) > section_count:
-        span = 1 + (len(sections) - section_count)
-    else:
-        span = 1
-    end = min(section + span, len(sections))
-
-    # Preserve trailing newlines from the last section being replaced.
-    last_orig = sections[end - 1]
-    orig_trailing = last_orig[len(last_orig.rstrip('\n')):]
-    sections[section:end] = [content.rstrip('\n') + orig_trailing]
-    return ''.join(sections)
+    if not (0 <= start_char <= end_char <= len(full)):
+        return None
+    # Preserve the trailing whitespace pattern from the original range
+    orig_slice = full[start_char:end_char]
+    orig_trailing = orig_slice[len(orig_slice.rstrip('\n')):]
+    replacement = new_content.rstrip('\n') + orig_trailing
+    merged = full[:start_char] + replacement + full[end_char:]
+    new_end = start_char + len(replacement)
+    return merged, content_hash(merged), start_char, new_end
 
 
 @app.post("/edit/<path:slug>")
@@ -1153,15 +1179,14 @@ def save_page(slug):
     if path is None:
         abort(400)
     content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
-    section = request.args.get('section', type=int)
-    section_count = request.args.get('section_count', type=int)
-    if section is not None:
-        merged = _merge_section(path, section, content, section_count)
-        if merged is None:
-            # Section index invalid — auto-save may have already merged it.
-            # Redirect to page view instead of failing.
-            return redirect(f"/page/{slug}")
-        content = merged
+    file_hash = request.form.get("file_hash", "")
+    start_char = request.form.get("start_char", type=int)
+    end_char = request.form.get("end_char", type=int)
+    if file_hash and start_char is not None and end_char is not None:
+        result = _splice_section(path, file_hash, start_char, end_char, content)
+        if result is None:
+            return redirect(f"/edit/{slug}?conflict=1")
+        content = result[0]
     # Skip write if content is unchanged, but still commit if file is dirty
     if path.exists() and path.read_text(encoding="utf-8") == content:
         git_commit(path, f"Update {slug}")
@@ -1177,19 +1202,27 @@ def api_save(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
-    section = request.args.get('section', type=int)
-    section_count = request.args.get('section_count', type=int)
-    if section is not None:
-        merged = _merge_section(path, section, content, section_count)
-        if merged is None:
-            return "", 204
-        content = merged
+    raw_content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+    file_hash = request.form.get("file_hash", "")
+    start_char = request.form.get("start_char", type=int)
+    end_char = request.form.get("end_char", type=int)
+    is_section_edit = bool(file_hash and start_char is not None and end_char is not None)
+    if is_section_edit:
+        result = _splice_section(path, file_hash, start_char, end_char, raw_content)
+        if result is None:
+            return jsonify({"error": "file_changed"}), 409
+        content, new_hash, new_start, new_end = result
+    else:
+        content = raw_content
     # Skip write if content is unchanged
     if path.exists() and path.read_text(encoding="utf-8") == content:
+        if is_section_edit:
+            return jsonify({"file_hash": file_hash, "start_char": start_char, "end_char": end_char})
         return "", 204
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    if is_section_edit:
+        return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
     return "", 204
 
 

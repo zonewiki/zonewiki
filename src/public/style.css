@@ -357,6 +357,32 @@ main {
   margin-left: .5rem;
 }
 
+.conflict-banner {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  padding: .75rem 1rem;
+  margin-bottom: .5rem;
+  font-size: .85rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.conflict-actions {
+  margin-left: auto;
+  display: flex;
+  gap: .4rem;
+}
+.conflict-actions .btn-small {
+  font-size: .78rem;
+  padding: .25rem .6rem;
+}
+@media (prefers-color-scheme: dark) {
+  .conflict-banner { background: #451a03; color: #fbbf24; border-color: #b45309; }
+}
+
 /* ── Search modal ────────────────────────────────────────────────────────────── */
 
 .search-modal {

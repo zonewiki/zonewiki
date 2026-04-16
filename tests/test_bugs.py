@@ -18,7 +18,7 @@ os.environ["ALLOW_REMOTE"] = "1"
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import server
-from server import split_sections, toggle_nth_checkbox
+from server import split_sections, toggle_nth_checkbox, content_hash, section_char_range
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -51,6 +51,14 @@ def write_page(wiki_dir, slug, content):
 
 
 HOST = {"Host": "localhost:5000"}
+
+
+def section_fields(full_content, section_idx):
+    """Return hidden-field dict for a section edit."""
+    rng = section_char_range(full_content, section_idx)
+    assert rng is not None
+    s, e = rng
+    return {"file_hash": content_hash(full_content), "start_char": str(s), "end_char": str(e)}
 
 
 # ===========================================================================
@@ -209,20 +217,16 @@ class TestSplitSectionsSetextHeadings:
         assert "beta body" not in html
 
     def test_setext_section_save_does_not_silently_drop(self, client, wiki_dir):
-        """If split_sections can't find the setext sections, _merge_section returns
-        None and the save is silently dropped — that's the data-loss bug."""
+        """Setext sections must save correctly with the new splice approach."""
         content = (
             "Preamble.\n\n"
             "Alpha\n-----\n\nalpha body\n\n"
             "Beta\n----\n\nbeta body\n"
         )
         page = write_page(wiki_dir, "setext_save", content)
-        # The route computes section_count = len(split_sections(content)) — must be 3
-        resp = client.post(
-            "/edit/setext_save?section=1&section_count=3",
-            data={"content": "Alpha\n-----\n\nUPDATED alpha body\n"},
-            headers=HOST,
-        )
+        fields = section_fields(content, 1)
+        fields["content"] = "Alpha\n-----\n\nUPDATED alpha body\n"
+        resp = client.post("/edit/setext_save", data=fields, headers=HOST)
         assert resp.status_code in (301, 302, 303)
         saved = page.read_text(encoding="utf-8")
         assert "UPDATED alpha body" in saved, "Edit was silently dropped (data loss bug)"
@@ -267,11 +271,9 @@ class TestSplitSectionsIndentedHeadings:
         """Indented ATX heading: edit must reach the correct section."""
         content = "preamble\n\n  ## Section A\n\nbody a\n\n  ## Section B\n\nbody b\n"
         page = write_page(wiki_dir, "indented_page", content)
-        resp = client.post(
-            "/edit/indented_page?section=1&section_count=3",
-            data={"content": "  ## Section A\n\nUPDATED body a\n"},
-            headers=HOST,
-        )
+        fields = section_fields(content, 1)
+        fields["content"] = "  ## Section A\n\nUPDATED body a\n"
+        resp = client.post("/edit/indented_page", data=fields, headers=HOST)
         assert resp.status_code in (301, 302, 303)
         saved = page.read_text(encoding="utf-8")
         assert "UPDATED body a" in saved, "Edit was silently dropped"

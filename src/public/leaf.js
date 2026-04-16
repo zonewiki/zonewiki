@@ -746,25 +746,105 @@ if (textarea && previewPane) {
   const editorForm = document.getElementById('editor-form');
   const autoSaveUrl = editorForm?.action.replace('/edit/', '/api/save/');
   const saveDot = document.getElementById('save-dot');
+  const sectionHashEl = document.getElementById('section-file-hash');
+  const sectionStartEl = document.getElementById('section-start-char');
+  const sectionEndEl = document.getElementById('section-end-char');
+  const isSectionEdit = !!sectionHashEl;
   let autoSaveTimer = null;
   let lastSavedContent = textarea.value;
   let formSubmitting = false;
+  let sectionConflict = false;
+
+  function appendSectionFields(data) {
+    if (isSectionEdit) {
+      data.append('file_hash', sectionHashEl.value);
+      data.append('start_char', sectionStartEl.value);
+      data.append('end_char', sectionEndEl.value);
+    }
+  }
 
   async function autoSave() {
-    if (!autoSaveUrl) return;
+    if (!autoSaveUrl || sectionConflict) return;
     const data = new FormData();
     data.append('content', textarea.value);
+    appendSectionFields(data);
     try {
       const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
       if (res.ok) {
         lastSavedContent = textarea.value;
         saveDot.classList.remove('unsaved');
+        if (isSectionEdit && res.headers.get('content-type')?.includes('json')) {
+          const json = await res.json();
+          sectionHashEl.value = json.file_hash;
+          sectionStartEl.value = json.start_char;
+          sectionEndEl.value = json.end_char;
+        }
+      } else if (res.status === 409 && isSectionEdit) {
+        showConflictBanner();
       }
     } catch { /* ignore */ }
   }
 
+  function showConflictBanner(fromDone) {
+    if (sectionConflict) return;
+    sectionConflict = true;
+    clearTimeout(autoSaveTimer);
+    const banner = document.createElement('div');
+    banner.className = 'conflict-banner';
+    banner.innerHTML = '\u26a0 File was modified on disk while you were editing this section.'
+      + '<span class="conflict-actions">'
+      + '<button class="btn btn-small" id="conflict-reload">Reload from disk</button>'
+      + '<button class="btn btn-small btn-primary" id="conflict-overwrite">Save my version</button>'
+      + '</span>';
+    editorForm.parentElement.insertBefore(banner, editorForm);
+    document.getElementById('conflict-reload').addEventListener('click', () => {
+      window.location.reload();
+    });
+    document.getElementById('conflict-overwrite').addEventListener('click', async () => {
+      // Save as full-file overwrite (no section fields)
+      const data = new FormData();
+      data.append('content', textarea.value);
+      try {
+        const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
+        if (res.ok) {
+          lastSavedContent = textarea.value;
+          saveDot.classList.remove('unsaved');
+          banner.remove();
+          sectionConflict = false;
+          // Clear section fields so further saves are full-file
+          sectionHashEl.value = '';
+          if (fromDone) {
+            // User wanted to commit — submit Done again (now without section fields)
+            editorForm.submit();
+          }
+        }
+      } catch { /* ignore */ }
+    });
+  }
+
   // Flag form submission so pagehide beacon doesn't race with the POST
-  editorForm?.addEventListener('submit', () => { formSubmitting = true; });
+  editorForm?.addEventListener('submit', (e) => {
+    if (isSectionEdit && sectionHashEl.value) {
+      // For section edits, submit via fetch so we can handle conflicts in-place
+      e.preventDefault();
+      formSubmitting = true;
+      const data = new FormData(editorForm);
+      fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
+        .then(res => {
+          if (res.redirected && res.url.includes('conflict=1')) {
+            formSubmitting = false;
+            showConflictBanner(true);
+          } else if (res.redirected) {
+            window.location.href = res.url;
+          } else {
+            window.location.href = res.url;
+          }
+        })
+        .catch(() => { editorForm.submit(); });
+    } else {
+      formSubmitting = true;
+    }
+  });
 
   textarea.addEventListener('input', () => {
     saveDot.classList.add('unsaved');
@@ -774,10 +854,11 @@ if (textarea && previewPane) {
 
   // Save file on navigation away if content has changed (no git commit)
   window.addEventListener('pagehide', () => {
-    if (formSubmitting) return;
+    if (formSubmitting || sectionConflict) return;
     if (!autoSaveUrl || textarea.value === lastSavedContent) return;
     const data = new FormData();
     data.append('content', textarea.value);
+    appendSectionFields(data);
     navigator.sendBeacon(autoSaveUrl, data);
   });
 }
