@@ -430,23 +430,47 @@ def render_md(text: str) -> str:
 
 
 def toggle_nth_checkbox(content: str, idx: int) -> str:
-    matches = list(re.finditer(r'\[([xX ])\]', content))
-    if idx >= len(matches):
+    """Toggle the Nth checkbox (0-based), skipping any inside fenced code blocks."""
+    lines = content.splitlines(keepends=True)
+    in_fence = False
+    fence_marker = ''
+    fence_len = 0
+    checkbox_offsets: list[int] = []   # absolute char offset of each real '[' char
+    pos = 0
+    for line in lines:
+        stripped = line.strip()
+        if not in_fence:
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                in_fence = True
+                fence_marker = stripped[0]
+                fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
+            else:
+                for m in re.finditer(r'\[([xX ])\]', line):
+                    checkbox_offsets.append(pos + m.start())
+        else:
+            if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
+                in_fence = False
+        pos += len(line)
+    if idx >= len(checkbox_offsets):
         return content
-    m = matches[idx]
-    new_char = 'x' if m.group(1) == ' ' else ' '
-    return content[:m.start()] + f'[{new_char}]' + content[m.end():]
+    start = checkbox_offsets[idx]
+    new_char = 'x' if content[start + 1] == ' ' else ' '
+    return content[:start + 1] + new_char + content[start + 2:]
 
 
 def split_sections(content: str) -> list[str]:
     """Split content at ## and ### headings not inside fenced code blocks.
+    Handles ATX headings with up to 3 leading spaces and setext h2 headings
+    (heading text followed by a line of dashes).
     Returns [preamble, section1, section2, ...]
     """
     lines = content.splitlines(keepends=True)
-    heading_lines = []
+    heading_lines: list[int] = []
     in_fence = False
     fence_marker = ''
     fence_len = 0
+    prev_text_line_idx: int | None = None   # for setext h2 detection
+
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not in_fence:
@@ -455,12 +479,28 @@ def split_sections(content: str) -> list[str]:
                 in_fence = True
                 fence_marker = stripped[0]
                 fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
-            elif line.startswith('## ') or line.startswith('### '):
+                prev_text_line_idx = None
+            elif re.match(r'^ {0,3}#{2,3} ', line):
+                # ATX heading: ## or ### with up to 3 optional leading spaces
                 heading_lines.append(i)
+                prev_text_line_idx = None
+            elif stripped and re.match(r'^[-=]+\s*$', stripped):
+                # Potential setext underline (--- for h2, === for h1) or thematic break.
+                # If preceded by a non-empty text line, it's a setext heading.
+                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None:
+                    heading_lines.append(prev_text_line_idx)
+                # The underline/thematic-break line itself is never a heading text line.
+                prev_text_line_idx = None
+            elif stripped:
+                prev_text_line_idx = i
+            else:
+                prev_text_line_idx = None
         else:
             # Closing fence must use same char and be at least as long
             if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
                 in_fence = False
+            prev_text_line_idx = None
+
     if not heading_lines:
         return [content]
     sections = [''.join(lines[:heading_lines[0]])]
@@ -1203,6 +1243,7 @@ def rename_page(slug):
         abort(400)
     if new_path.exists():
         return redirect(f"/edit/{slug}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
+    new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
     update_references(slug, new_slug)
     git_commit_rename(old_path, new_path, f"Rename {slug} to {new_slug}")

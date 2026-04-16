@@ -312,6 +312,22 @@ flask --app src/server.py run --debug                # Auto-reload during develo
 
 ---
 
+## Tests
+
+Tests live in `tests/` and use pytest.
+
+```bash
+pip install pytest                                   # Install pytest (once, into the venv)
+pytest tests/ -v                                     # Run all tests
+pytest tests/test_section_editing.py -v              # Run section-editing tests only
+```
+
+**Always run the full test suite before and after making changes to `src/server.py`.**
+
+The tests use an in-process Flask test client and a temporary directory — no running server or Docker needed.
+
+---
+
 ## Dependencies
 
 `src/requirements.txt`:
