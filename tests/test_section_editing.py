@@ -489,10 +489,11 @@ class TestEditPageGetSection:
         assert "rename-toggle" not in html
         assert "delete-btn" not in html
 
-    def test_conflict_banner_shown_with_query_param(self, client, wiki_dir):
+    def test_conflict_query_param_ignored(self, client, wiki_dir):
+        """?conflict=1 no longer renders a server-side banner (handled client-side)."""
         write_page(wiki_dir, "cf", "# Title\n\nbody\n")
         resp = client.get("/edit/cf?conflict=1", headers=HOST)
-        assert "conflict-banner" in resp.data.decode()
+        assert "conflict-banner" not in resp.data.decode()
 
 
 # ===========================================================================

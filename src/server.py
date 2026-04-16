@@ -1088,9 +1088,6 @@ def edit_page(slug):
         else:
             section = None  # invalid index, fall back to full edit
 
-    conflict = request.args.get('conflict')
-    conflict_banner = '<div class="conflict-banner">⚠ File was modified while you were editing. Your section edit could not be saved. The full file is shown below — please re-apply your changes.</div>' if conflict else ''
-
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
@@ -1130,7 +1127,6 @@ def edit_page(slug):
 <div class="editor-wrap">
   <div class="editor-pane">
     {build_breadcrumb(slug, title, breadcrumb_extra)}
-    {conflict_banner}
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
       <span id="save-dot" class="save-dot">●</span>
