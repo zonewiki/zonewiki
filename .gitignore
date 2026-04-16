@@ -6,3 +6,5 @@
 src/__pycache__
 /wiki
 src/data
+.venv
+tests/__pycache__

@@ -1017,6 +1017,7 @@ body.editor-page main {
 
 .presentation-controls {
   flex-shrink: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1053,6 +1054,21 @@ body.editor-page main {
 }
 
 .presentation-overlay .btn:disabled { opacity: .35; cursor: default; }
+
+.pres-edit-btn {
+  position: absolute;
+  bottom: .45rem;
+  right: .9rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  opacity: .2;
+  padding: .2rem .3rem;
+  border-radius: 4px;
+  transition: opacity .15s, background .15s;
+}
+.pres-edit-btn:hover { opacity: .85; background: var(--border); }
 
 /* ── Editor mobile message ─────────────────────────────────────────────────── */
 

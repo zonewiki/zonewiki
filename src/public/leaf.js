@@ -1125,9 +1125,10 @@ document.addEventListener('change', e => {
 
     const groups = [];
 
-    // Open first slide with the page H1
+    // Open first slide with the page H1 — intro slide has no specific section
     let current = document.createElement('div');
     current.className = 'slide-body page-content';
+    current.dataset.sectionN = '';
     const pageH1 = document.querySelector('.page-header h1');
     if (pageH1) {
       const h = document.createElement('h1');
@@ -1141,6 +1142,10 @@ document.addEventListener('change', e => {
         if (current.children.length) groups.push(current);
         current = document.createElement('div');
         current.className = 'slide-body page-content';
+        // Extract section number from the embedded section-edit-btn link
+        const editLink = node.querySelector('.section-edit-btn');
+        const m = editLink && editLink.getAttribute('href').match(/[?&]section=(\d+)/);
+        current.dataset.sectionN = m ? m[1] : '';
         current.appendChild(node.cloneNode(true));
       } else {
         current.appendChild(node.cloneNode(true));
@@ -1164,9 +1169,16 @@ document.addEventListener('change', e => {
       if (window.hljs) window.hljs.highlightElement(block);
     });
     body.scrollTop = 0;
+
+    // Update the edit button href for this slide's section
+    const slug = window.location.pathname.replace(/^\/page\//, '');
+    const sectionN = slides[n].dataset.sectionN;
+    const editHref = sectionN ? `/edit/${slug}?section=${sectionN}` : `/edit/${slug}`;
+    const presEditBtn = overlay.querySelector('.pres-edit-btn');
+    if (presEditBtn) presEditBtn.href = editHref;
   }
 
-  function openPresentation() {
+  function openPresentation(startAt) {
     slides = buildSlides();
     if (!slides.length) return;
 
@@ -1179,11 +1191,18 @@ document.addEventListener('change', e => {
       <div class="presentation-controls">
         <span class="slide-counter"></span>
         <div class="slide-progress"><div class="slide-progress-fill"></div></div>
-      </div>`;
+      </div>
+      <a class="pres-edit-btn" title="Edit section" href="#">✎</a>`;
+
+    overlay.querySelector('.pres-edit-btn').addEventListener('click', () => {
+      sessionStorage.setItem('leaf_pres_slide', String(currentSlide));
+    });
 
     document.body.appendChild(overlay);
 
-    const resumeAt = Math.min(currentSlide, slides.length - 1);
+    const resumeAt = (typeof startAt === 'number')
+      ? Math.min(startAt, slides.length - 1)
+      : Math.min(currentSlide, slides.length - 1);
     showSlide(resumeAt);
     document.addEventListener('keydown', onPresentKey);
   }
@@ -1216,4 +1235,11 @@ document.addEventListener('change', e => {
   window.addEventListener('pageshow', syncPresentBtn);
 
   presentBtn.addEventListener('click', openPresentation);
+
+  // Auto-reopen presentation when returning from section edit
+  const _returnSlide = sessionStorage.getItem('leaf_pres_slide');
+  if (_returnSlide !== null) {
+    sessionStorage.removeItem('leaf_pres_slide');
+    requestAnimationFrame(() => openPresentation(parseInt(_returnSlide, 10)));
+  }
 }());
