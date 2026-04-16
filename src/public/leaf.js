@@ -749,15 +749,15 @@ if (textarea && previewPane) {
   const sectionHashEl = document.getElementById('section-file-hash');
   const sectionStartEl = document.getElementById('section-start-char');
   const sectionEndEl = document.getElementById('section-end-char');
-  const isSectionEdit = !!sectionHashEl;
+  const isSectionEdit = !!sectionStartEl;
   let autoSaveTimer = null;
   let lastSavedContent = textarea.value;
   let formSubmitting = false;
   let sectionConflict = false;
 
-  function appendSectionFields(data) {
+  function appendSaveFields(data) {
+    if (sectionHashEl?.value) data.append('file_hash', sectionHashEl.value);
     if (isSectionEdit) {
-      data.append('file_hash', sectionHashEl.value);
       data.append('start_char', sectionStartEl.value);
       data.append('end_char', sectionEndEl.value);
     }
@@ -767,19 +767,21 @@ if (textarea && previewPane) {
     if (!autoSaveUrl || sectionConflict) return;
     const data = new FormData();
     data.append('content', textarea.value);
-    appendSectionFields(data);
+    appendSaveFields(data);
     try {
       const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
       if (res.ok) {
         lastSavedContent = textarea.value;
         saveDot.classList.remove('unsaved');
-        if (isSectionEdit && res.headers.get('content-type')?.includes('json')) {
+        if (res.headers.get('content-type')?.includes('json')) {
           const json = await res.json();
-          sectionHashEl.value = json.file_hash;
-          sectionStartEl.value = json.start_char;
-          sectionEndEl.value = json.end_char;
+          if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
+          if (isSectionEdit && json.start_char !== undefined) {
+            sectionStartEl.value = json.start_char;
+            sectionEndEl.value = json.end_char;
+          }
         }
-      } else if (res.status === 409 && isSectionEdit) {
+      } else if (res.status === 409) {
         showConflictBanner();
       }
     } catch { /* ignore */ }
@@ -791,7 +793,7 @@ if (textarea && previewPane) {
     clearTimeout(autoSaveTimer);
     const banner = document.createElement('div');
     banner.className = 'conflict-banner';
-    banner.innerHTML = '\u26a0 File was modified on disk while you were editing this section.'
+    banner.innerHTML = '\u26a0 File was modified on disk while you were editing.'
       + '<span class="conflict-actions">'
       + '<button class="btn btn-small" id="conflict-reload">Reload from disk</button>'
       + '<button class="btn btn-small btn-primary" id="conflict-overwrite">Save my version</button>'
@@ -801,11 +803,14 @@ if (textarea && previewPane) {
       window.location.reload();
     });
     document.getElementById('conflict-overwrite').addEventListener('click', async () => {
-      // Force-splice: re-read file on server, find section by index, splice in our content
       const sectionIdxEl = document.getElementById('section-idx');
       const data = new FormData();
       data.append('content', textarea.value);
-      if (sectionIdxEl) data.append('force_section', sectionIdxEl.value);
+      if (isSectionEdit && sectionIdxEl) {
+        // Section edit: force-splice into current file by section index
+        data.append('force_section', sectionIdxEl.value);
+      }
+      // Full-file edit: no file_hash, no section fields → plain overwrite
       try {
         const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
         if (res.ok) {
@@ -813,12 +818,13 @@ if (textarea && previewPane) {
           saveDot.classList.remove('unsaved');
           banner.remove();
           sectionConflict = false;
-          // Update section anchors from response
           if (res.headers.get('content-type')?.includes('json')) {
             const json = await res.json();
-            sectionHashEl.value = json.file_hash;
-            sectionStartEl.value = json.start_char;
-            sectionEndEl.value = json.end_char;
+            if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
+            if (isSectionEdit && json.start_char !== undefined) {
+              sectionStartEl.value = json.start_char;
+              sectionEndEl.value = json.end_char;
+            }
           }
           if (fromDone) {
             editorForm.submit();
@@ -830,8 +836,8 @@ if (textarea && previewPane) {
 
   // Flag form submission so pagehide beacon doesn't race with the POST
   editorForm?.addEventListener('submit', (e) => {
-    if (isSectionEdit && sectionHashEl.value) {
-      // For section edits, submit via fetch so we can handle conflicts in-place
+    if (sectionHashEl?.value) {
+      // Submit via fetch so we can handle conflicts in-place
       e.preventDefault();
       formSubmitting = true;
       const data = new FormData(editorForm);
@@ -864,7 +870,7 @@ if (textarea && previewPane) {
     if (!autoSaveUrl || textarea.value === lastSavedContent) return;
     const data = new FormData();
     data.append('content', textarea.value);
-    appendSectionFields(data);
+    appendSaveFields(data);
     navigator.sendBeacon(autoSaveUrl, data);
   });
 }

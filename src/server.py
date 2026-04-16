@@ -1113,10 +1113,14 @@ def edit_page(slug):
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
     form_action = f'/edit/{safe_slug}'
-    section_hidden_fields = ""
+    # Always embed file_hash for conflict detection (full-file and section edits)
+    if not is_new:
+        full_file_hash = content_hash(path.read_text(encoding="utf-8")) if section is None else file_hash_val
+    else:
+        full_file_hash = ""
+    section_hidden_fields = f'<input type="hidden" name="file_hash" id="section-file-hash" value="{full_file_hash}">'
     if section is not None:
-        section_hidden_fields = (
-            f'<input type="hidden" name="file_hash" id="section-file-hash" value="{file_hash_val}">'
+        section_hidden_fields += (
             f'<input type="hidden" name="start_char" id="section-start-char" value="{start_char}">'
             f'<input type="hidden" name="end_char" id="section-end-char" value="{end_char}">'
             f'<input type="hidden" name="section_idx" id="section-idx" value="{section}">'
@@ -1188,6 +1192,11 @@ def save_page(slug):
         if result is None:
             return redirect(f"/edit/{slug}?conflict=1")
         content = result[0]
+    elif file_hash and path.exists():
+        # Full-file edit with hash — check for conflict
+        current = path.read_text(encoding="utf-8")
+        if content_hash(current) != file_hash:
+            return redirect(f"/edit/{slug}?conflict=1")
     # Skip write if content is unchanged, but still commit if file is dirty
     if path.exists() and path.read_text(encoding="utf-8") == content:
         git_commit(path, f"Update {slug}")
@@ -1229,17 +1238,26 @@ def api_save(slug):
             return jsonify({"error": "file_changed"}), 409
         content, new_hash, new_start, new_end = result
     else:
+        # Full-file edit — check hash if provided (conflict detection)
+        if file_hash and path.exists():
+            current = path.read_text(encoding="utf-8")
+            if content_hash(current) != file_hash:
+                return jsonify({"error": "file_changed", "file_hash": content_hash(current)}), 409
         content = raw_content
     has_section_response = is_section_edit or is_force_section
     # Skip write if content is unchanged
     if path.exists() and path.read_text(encoding="utf-8") == content:
         if has_section_response:
             return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
+        if file_hash:
+            return jsonify({"file_hash": content_hash(content)})
         return "", 204
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     if has_section_response:
         return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
+    if file_hash:
+        return jsonify({"file_hash": content_hash(content)})
     return "", 204
 
 

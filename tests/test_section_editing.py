@@ -851,3 +851,89 @@ class TestForceSectionSave:
         saved = page.read_text(encoding="utf-8")
         assert "forced a v2" in saved
         assert "old b" in saved, "Section B was lost!"
+
+
+# ===========================================================================
+# Full-file conflict detection
+# ===========================================================================
+
+class TestFullFileConflict:
+    """Tests for hash-based conflict detection on full-file edits."""
+
+    def test_full_file_save_with_hash_succeeds(self, client, wiki_dir):
+        """Auto-save with correct hash writes and returns new hash."""
+        original = "hello world\n"
+        page = write_page(wiki_dir, "ffc1", original)
+        h = content_hash(original)
+        resp = client.post("/api/save/ffc1", data={
+            "content": "hello world updated\n",
+            "file_hash": h,
+        }, headers=HOST)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "file_hash" in data
+        assert data["file_hash"] != h
+        assert page.read_text(encoding="utf-8") == "hello world updated\n"
+
+    def test_full_file_save_hash_mismatch_returns_409(self, client, wiki_dir):
+        """When file changed on disk, auto-save gets 409."""
+        original = "original content\n"
+        page = write_page(wiki_dir, "ffc2", original)
+        h = content_hash(original)
+        # Simulate external edit
+        page.write_text("externally modified\n", encoding="utf-8")
+        resp = client.post("/api/save/ffc2", data={
+            "content": "my edit\n",
+            "file_hash": h,
+        }, headers=HOST)
+        assert resp.status_code == 409
+        assert resp.get_json()["error"] == "file_changed"
+        # Disk content must be preserved
+        assert page.read_text(encoding="utf-8") == "externally modified\n"
+
+    def test_full_file_save_returns_updated_hash_for_next_save(self, client, wiki_dir):
+        """Returned hash can be used for the next auto-save."""
+        original = "v1\n"
+        page = write_page(wiki_dir, "ffc3", original)
+        h = content_hash(original)
+        resp1 = client.post("/api/save/ffc3", data={
+            "content": "v2\n", "file_hash": h,
+        }, headers=HOST)
+        h2 = resp1.get_json()["file_hash"]
+        resp2 = client.post("/api/save/ffc3", data={
+            "content": "v3\n", "file_hash": h2,
+        }, headers=HOST)
+        assert resp2.status_code == 200
+        assert page.read_text(encoding="utf-8") == "v3\n"
+
+    def test_full_file_done_conflict_redirects(self, client, wiki_dir):
+        """Done POST with stale hash redirects to conflict page."""
+        original = "original\n"
+        page = write_page(wiki_dir, "ffc4", original)
+        h = content_hash(original)
+        page.write_text("changed on disk\n", encoding="utf-8")
+        resp = client.post("/edit/ffc4", data={
+            "content": "my edit\n", "file_hash": h,
+        }, headers=HOST)
+        assert resp.status_code == 302
+        assert "conflict=1" in resp.headers["Location"]
+        assert page.read_text(encoding="utf-8") == "changed on disk\n"
+
+    def test_full_file_done_matching_hash_saves(self, client, wiki_dir):
+        """Done POST with correct hash saves and redirects to page."""
+        original = "hello\n"
+        page = write_page(wiki_dir, "ffc5", original)
+        h = content_hash(original)
+        resp = client.post("/edit/ffc5", data={
+            "content": "updated\n", "file_hash": h,
+        }, headers=HOST, follow_redirects=False)
+        assert resp.status_code == 302
+        assert "/page/ffc5" in resp.headers["Location"]
+        assert page.read_text(encoding="utf-8") == "updated\n"
+
+    def test_full_file_save_without_hash_still_works(self, client, wiki_dir):
+        """Backwards compat: no file_hash → plain write, no conflict check."""
+        page = write_page(wiki_dir, "ffc6", "old\n")
+        resp = client.post("/api/save/ffc6", data={"content": "new\n"}, headers=HOST)
+        assert resp.status_code == 204
+        assert page.read_text(encoding="utf-8") == "new\n"
