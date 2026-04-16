@@ -750,3 +750,104 @@ class TestLostSectionRegression:
         assert "s1 final" in saved
         assert "s2" in saved, "S2 was lost!"
         assert "s3" in saved, "S3 was lost!"
+
+
+# ===========================================================================
+# Force-section save (conflict resolution "Save my version")
+# ===========================================================================
+
+class TestForceSectionSave:
+    """Tests for force_section parameter — used when user clicks 'Save my version'
+    after a conflict. Must splice content into the CURRENT file by section index,
+    not overwrite the entire file."""
+
+    def test_force_section_splices_into_current_file(self, client, wiki_dir):
+        """Force-save splices section content into the current file on disk."""
+        original = "pre\n\n## A\n\nold a\n\n## B\n\nold b\n"
+        page = write_page(wiki_dir, "fs1", original)
+        # Simulate: file changed on disk (some external edit to section B)
+        modified = "pre\n\n## A\n\nold a\n\n## B\n\nmodified b\n"
+        page.write_text(modified, encoding="utf-8")
+        # Force-save section 1 (## A) with new content
+        resp = client.post("/api/save/fs1", data={
+            "content": "## A\n\nnew a\n",
+            "force_section": "1",
+        }, headers=HOST)
+        assert resp.status_code == 200
+        saved = page.read_text(encoding="utf-8")
+        assert "new a" in saved, "Section A was not updated"
+        assert "modified b" in saved, "Section B was lost!"
+        assert "pre" in saved, "Preamble was lost!"
+
+    def test_force_section_returns_updated_anchors(self, client, wiki_dir):
+        original = "pre\n\n## A\n\nbody a\n\n## B\n\nbody b\n"
+        write_page(wiki_dir, "fs2", original)
+        resp = client.post("/api/save/fs2", data={
+            "content": "## A\n\nlonger body\n",
+            "force_section": "1",
+        }, headers=HOST)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "file_hash" in data
+        assert "start_char" in data
+        assert "end_char" in data
+
+    def test_force_section_does_not_lose_any_section(self, client, wiki_dir):
+        """With 4 sections, force-saving section 2 must keep all others intact."""
+        original = "pre\n\n## S1\n\ns1\n\n## S2\n\ns2\n\n## S3\n\ns3\n"
+        page = write_page(wiki_dir, "fs3", original)
+        # Change file on disk (add content to S3)
+        modified = "pre\n\n## S1\n\ns1\n\n## S2\n\ns2\n\n## S3\n\ns3 extended\n"
+        page.write_text(modified, encoding="utf-8")
+        resp = client.post("/api/save/fs3", data={
+            "content": "## S2\n\nnew s2\n",
+            "force_section": "2",
+        }, headers=HOST)
+        assert resp.status_code == 200
+        saved = page.read_text(encoding="utf-8")
+        assert "s1" in saved, "S1 lost!"
+        assert "new s2" in saved, "S2 not updated!"
+        assert "s3 extended" in saved, "S3 lost!"
+
+    def test_force_section_invalid_index_returns_400(self, client, wiki_dir):
+        write_page(wiki_dir, "fs4", "pre\n\n## A\n\na\n")
+        resp = client.post("/api/save/fs4", data={
+            "content": "## X\n\nx\n",
+            "force_section": "99",
+        }, headers=HOST)
+        assert resp.status_code == 400
+
+    def test_force_section_zero_does_full_file_write(self, client, wiki_dir):
+        """force_section=0 is below the valid range and falls through to a
+        regular full-file write (no splice)."""
+        page = write_page(wiki_dir, "fs5", "pre\n\n## A\n\na\n")
+        resp = client.post("/api/save/fs5", data={
+            "content": "replaced\n",
+            "force_section": "0",
+        }, headers=HOST)
+        assert resp.status_code == 204
+        assert page.read_text(encoding="utf-8") == "replaced\n"
+
+    def test_force_section_after_conflict_then_autosave_continues(self, client, wiki_dir):
+        """After force-save resolves a conflict, regular auto-saves can resume
+        using the returned anchors."""
+        original = "pre\n\n## A\n\nold a\n\n## B\n\nold b\n"
+        page = write_page(wiki_dir, "fs6", original)
+        # Force-save section 1
+        resp = client.post("/api/save/fs6", data={
+            "content": "## A\n\nforced a\n",
+            "force_section": "1",
+        }, headers=HOST)
+        assert resp.status_code == 200
+        anchors = resp.get_json()
+        # Now do a regular section auto-save with the returned anchors
+        resp2 = client.post("/api/save/fs6", data={
+            "content": "## A\n\nforced a v2\n",
+            "file_hash": anchors["file_hash"],
+            "start_char": str(anchors["start_char"]),
+            "end_char": str(anchors["end_char"]),
+        }, headers=HOST)
+        assert resp2.status_code == 200
+        saved = page.read_text(encoding="utf-8")
+        assert "forced a v2" in saved
+        assert "old b" in saved, "Section B was lost!"

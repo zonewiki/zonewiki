@@ -1119,6 +1119,7 @@ def edit_page(slug):
             f'<input type="hidden" name="file_hash" id="section-file-hash" value="{file_hash_val}">'
             f'<input type="hidden" name="start_char" id="section-start-char" value="{start_char}">'
             f'<input type="hidden" name="end_char" id="section-end-char" value="{end_char}">'
+            f'<input type="hidden" name="section_idx" id="section-idx" value="{section}">'
         )
     breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
     body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
@@ -1206,22 +1207,38 @@ def api_save(slug):
     file_hash = request.form.get("file_hash", "")
     start_char = request.form.get("start_char", type=int)
     end_char = request.form.get("end_char", type=int)
+    force_section = request.form.get("force_section", type=int)
     is_section_edit = bool(file_hash and start_char is not None and end_char is not None)
-    if is_section_edit:
+    is_force_section = force_section is not None and force_section >= 1
+    if is_force_section:
+        # Force-splice: re-read file, find section by index, splice content in
+        if not path.exists():
+            abort(404)
+        current = path.read_text(encoding="utf-8")
+        rng = section_char_range(current, force_section)
+        if rng is None:
+            abort(400)
+        fs_start, fs_end = rng
+        content = current[:fs_start] + raw_content + current[fs_end:]
+        new_hash = content_hash(content)
+        new_start = fs_start
+        new_end = fs_start + len(raw_content)
+    elif is_section_edit:
         result = _splice_section(path, file_hash, start_char, end_char, raw_content)
         if result is None:
             return jsonify({"error": "file_changed"}), 409
         content, new_hash, new_start, new_end = result
     else:
         content = raw_content
+    has_section_response = is_section_edit or is_force_section
     # Skip write if content is unchanged
     if path.exists() and path.read_text(encoding="utf-8") == content:
-        if is_section_edit:
-            return jsonify({"file_hash": file_hash, "start_char": start_char, "end_char": end_char})
+        if has_section_response:
+            return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
         return "", 204
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    if is_section_edit:
+    if has_section_response:
         return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
     return "", 204
 

@@ -801,9 +801,11 @@ if (textarea && previewPane) {
       window.location.reload();
     });
     document.getElementById('conflict-overwrite').addEventListener('click', async () => {
-      // Save as full-file overwrite (no section fields)
+      // Force-splice: re-read file on server, find section by index, splice in our content
+      const sectionIdxEl = document.getElementById('section-idx');
       const data = new FormData();
       data.append('content', textarea.value);
+      if (sectionIdxEl) data.append('force_section', sectionIdxEl.value);
       try {
         const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
         if (res.ok) {
@@ -811,10 +813,14 @@ if (textarea && previewPane) {
           saveDot.classList.remove('unsaved');
           banner.remove();
           sectionConflict = false;
-          // Clear section fields so further saves are full-file
-          sectionHashEl.value = '';
+          // Update section anchors from response
+          if (res.headers.get('content-type')?.includes('json')) {
+            const json = await res.json();
+            sectionHashEl.value = json.file_hash;
+            sectionStartEl.value = json.start_char;
+            sectionEndEl.value = json.end_char;
+          }
           if (fromDone) {
-            // User wanted to commit — submit Done again (now without section fields)
             editorForm.submit();
           }
         }
