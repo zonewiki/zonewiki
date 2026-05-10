@@ -1378,7 +1378,12 @@ def delete_page(slug):
         abort(404)
     path.unlink()
     git_commit(path, f"Delete {slug}")
-    return redirect("/page/index")
+    next_url = request.form.get("next", "")
+    if (not next_url.startswith("/")
+            or f"/page/{slug}" in next_url
+            or f"/edit/{slug}" in next_url):
+        next_url = "/page/index"
+    return redirect(next_url)
 
 
 # ── History routes ────────────────────────────────────────────────────────────

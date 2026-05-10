@@ -1136,13 +1136,37 @@ function expandSnippet() {
 
 // ── Delete confirmation ───────────────────────────────────────────────────────
 
+function getPrevPageUrl() {
+  const KEY = 'leafHistory';
+  const hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
+  const currentSlug = document.querySelector('.breadcrumb[data-slug]')?.dataset.slug;
+  for (let i = hist.length - 1; i >= 0; i--) {
+    if (hist[i].slug !== currentSlug) return '/page/' + hist[i].slug;
+  }
+  return '/page/index';
+}
+
+function injectNextField(form) {
+  const input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = 'next';
+  input.value = getPrevPageUrl();
+  form.appendChild(input);
+}
+
 document.getElementById('delete-btn')?.addEventListener('click', e => {
   const btn = e.currentTarget;
   const title = btn.dataset.title;
   const msg = btn.dataset.git
     ? `Delete "${title}"? It can be restored from history.`
     : `Delete "${title}"? This cannot be undone.`;
-  if (!confirm(msg)) e.preventDefault();
+  if (!confirm(msg)) { e.preventDefault(); return; }
+  const form = document.getElementById('delete-form');
+  if (form) injectNextField(form);
+});
+
+document.getElementById('page-delete-dialog')?.querySelector('form')?.addEventListener('submit', function () {
+  injectNextField(this);
 });
 
 // ── Rename bar toggle ─────────────────────────────────────────────────────────
