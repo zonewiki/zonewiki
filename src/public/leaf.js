@@ -557,8 +557,11 @@ if (textarea && previewPane) {
       if (wlText !== null) {
         e.preventDefault();
         const pageName = wlText.split('|')[0].trim();
-        const slug = pageName.toLowerCase().replace(/[^a-z0-9/]+/g, '-').replace(/^-+|-+$/g, '');
-        window.location.href = `/page/${slug}`;
+        const targetSlug = pageName.toLowerCase().replace(/[^a-z0-9/]+/g, '-').replace(/^-+|-+$/g, '');
+        formSubmitting = true;
+        const data = new FormData(editorForm);
+        fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
+          .finally(() => { window.location.href = `/page/${targetSlug}`; });
         return;
       }
       continueList(e);
