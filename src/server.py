@@ -331,6 +331,7 @@ def list_deleted_pages() -> list[dict]:
             seen.add(slug)
             r2 = _git("git", "show", f"{current_parent}:{line}")
             title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
+            deleted.append({"slug": slug, "title": title, "sha": current_sha, "date": current_date})
     return deleted
 
 
