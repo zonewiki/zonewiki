@@ -1122,3 +1122,37 @@ body.editor-page main {
     color: var(--muted);
   }
 }
+
+/* ── Raw page ──────────────────────────────────────────────────────────────── */
+
+.raw-hint {
+  margin-top: 2rem;
+  padding: .75rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: .875rem;
+  text-align: center;
+}
+
+.raw-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--nav-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .65rem 1rem;
+  box-shadow: var(--shadow);
+  font-size: .9rem;
+  z-index: 9999;
+  animation: raw-toast-in .2s ease;
+}
+
+.raw-toast a { color: var(--link); }
+.raw-toast-error { border-color: var(--link-missing); color: var(--link-missing); }
+
+@keyframes raw-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

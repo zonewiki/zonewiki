@@ -885,6 +885,90 @@ def deleted_pages_route():
     return shell("Deleted Pages", body)
 
 
+@app.get("/page/_raw")
+def raw_page():
+    path = safe_path("_raw")
+    if path is None:
+        abort(400)
+    if not path.exists():
+        path.write_text("# Raw\n\n", encoding="utf-8")
+        git_commit(path, "Create _raw")
+    content = path.read_text(encoding="utf-8")
+    title = page_title(content, "_raw")
+    raw_dir = PAGES_DIR / "_raw"
+    subpages = []
+    if raw_dir.is_dir():
+        for f in sorted(raw_dir.glob("*.md"), reverse=True):
+            sc = f.read_text(encoding="utf-8")
+            sub_slug = f"_raw/{f.stem}"
+            subpages.append({"slug": sub_slug, "title": page_title(sc, sub_slug)})
+    if subpages:
+        items = "".join(
+            f'<li><a href="/page/{p["slug"]}">{html.escape(p["title"])}</a></li>'
+            for p in subpages
+        )
+        sub_html = f'<section class="backlinks"><h3>Snippets</h3><ul>{items}</ul></section>'
+    else:
+        sub_html = ''
+    article_html = render_md(strip_h1(content))
+    body = f"""{build_breadcrumb('_raw', title)}
+<header class="page-header">
+  <h1>{html.escape(title)}</h1>
+  <div class="page-header-actions">
+    <a href="/edit/_raw" class="btn">Edit</a>
+  </div>
+</header>
+<article class="page-content">{article_html}</article>
+{sub_html}"""
+    return shell(title, body)
+
+
+@app.post("/api/raw/append-url")
+def api_raw_append_url():
+    url = request.form.get("url", "").strip()
+    title = request.form.get("title", "").strip() or url
+    if not url:
+        abort(400)
+    path = safe_path("_raw")
+    if path is None:
+        abort(400)
+    content = path.read_text(encoding="utf-8") if path.exists() else "# Raw\n\n"
+    if not content.endswith("\n"):
+        content += "\n"
+    content += f"- [{title}]({url})\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git_commit(path, f"Add URL to _raw: {title[:60]}")
+    return jsonify({"ok": True})
+
+
+@app.post("/api/raw/create-page")
+def api_raw_create_page():
+    text = request.form.get("text", "").strip()
+    title = request.form.get("title", "").strip()
+    if not text:
+        abort(400)
+    uid = uuid.uuid4().hex
+    if not title:
+        title = text.split("\n")[0].strip()[:80] or uid
+    slug = f"_raw/{uid}"
+    path = safe_path(slug)
+    if path is None:
+        abort(400)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
+    git_commit(path, f"Create raw snippet {uid[:8]}: {title[:60]}")
+    raw_path = safe_path("_raw")
+    if raw_path is not None:
+        raw_content = raw_path.read_text(encoding="utf-8") if raw_path.exists() else "# Raw\n\n"
+        if not raw_content.endswith("\n"):
+            raw_content += "\n"
+        raw_content += f"- [{title}](/page/{slug})\n"
+        raw_path.write_text(raw_content, encoding="utf-8")
+        git_commit(raw_path, f"Add snippet link to _raw: {title[:60]}")
+    return jsonify({"slug": slug, "title": title})
+
+
 @app.post("/api/daily")
 def api_daily():
     today = datetime.now().strftime("%Y-%m-%d")
