@@ -16,7 +16,7 @@
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
   // All entries before the current page (last) become breadcrumb links
-  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch');
+  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_inbox' && p.slug !== '_daily');
   if (!intermediates.length) return;
 
   const homeEl = bc.querySelector('.breadcrumb-home');
@@ -320,31 +320,31 @@ quickTaskForm?.addEventListener('submit', async e => {
   } catch (_) {}
 });
 
-// ── Scratch modal ─────────────────────────────────────────────────────────────
+// ── Inbox modal ───────────────────────────────────────────────────────────────
 
-const scratchModal  = document.getElementById('scratch-modal');
-const scratchForm   = document.getElementById('scratch-form');
-const scratchTitle  = document.getElementById('scratch-title');
-const scratchCancel = document.getElementById('scratch-cancel');
+const inboxModal  = document.getElementById('inbox-modal');
+const inboxForm   = document.getElementById('inbox-form');
+const inboxTitle  = document.getElementById('inbox-title');
+const inboxCancel = document.getElementById('inbox-cancel');
 
-document.getElementById('open-scratch')?.addEventListener('click', openScratch);
-scratchCancel?.addEventListener('click', () => scratchModal.close());
-closeOnBackdropClick(scratchModal);
+document.getElementById('open-inbox')?.addEventListener('click', openInbox);
+inboxCancel?.addEventListener('click', () => inboxModal.close());
+closeOnBackdropClick(inboxModal);
 
-function openScratch() {
-  if (!scratchModal) return;
-  scratchTitle.value = '';
-  scratchModal.showModal();
-  scratchTitle.focus();
+function openInbox() {
+  if (!inboxModal) return;
+  inboxTitle.value = '';
+  inboxModal.showModal();
+  inboxTitle.focus();
 }
 
-scratchForm?.addEventListener('submit', async e => {
+inboxForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  const title = scratchTitle.value.trim() || 'Untitled';
+  const title = inboxTitle.value.trim() || 'Untitled';
   const data = new FormData();
   data.append('title', title);
   try {
-    const res = await fetch('/api/scratch', { method: 'POST', body: data });
+    const res = await fetch('/api/inbox', { method: 'POST', body: data });
     const { slug } = await res.json();
     window.location.href = `/edit/${slug}`;
   } catch (_) {}
@@ -393,10 +393,10 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl/Cmd+1 — new scratch
+  // Ctrl/Cmd+1 — new inbox note
   if (e.key === '1' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
-    openScratch();
+    openInbox();
     return;
   }
 
@@ -419,7 +419,7 @@ document.addEventListener('keydown', e => {
 
   // Ctrl/Cmd+Alt+0–2 — navigate to pinned pages
   if (e.altKey && (e.ctrlKey || e.metaKey)) {
-    const pinned = { '0': '/page/index', '1': '/page/_scratch', '2': '/page/tasks' };
+    const pinned = { '0': '/page/index', '1': '/page/_inbox', '2': '/page/tasks', '3': '/page/_daily' };
     if (pinned[e.key]) { e.preventDefault(); window.location.href = pinned[e.key]; return; }
   }
 
@@ -728,9 +728,7 @@ if (textarea && previewPane) {
   textarea.focus();
   const _slug = window.location.pathname.replace(/^\/edit\//, '');
   if (_slug.endsWith('_daily')) {
-    const _marker = '## Notes\n- ';
-    const _idx = textarea.value.indexOf(_marker);
-    textarea.selectionStart = textarea.selectionEnd = _idx !== -1 ? _idx + _marker.length : textarea.value.length;
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
   } else {
     textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
   }

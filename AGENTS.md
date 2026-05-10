@@ -119,9 +119,10 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
-| POST   | `/api/scratch`  | Create a new scratch file (`<timestamp>_<slug>.md`); returns `{ slug }` |
+| POST   | `/api/inbox`    | Create a new inbox note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
-| GET    | `/page/_scratch`      | Auto-generated index of all scratches, newest first |
+| GET    | `/page/_inbox`        | Auto-generated index of all inbox notes, newest first |
+| GET    | `/page/_daily`        | Auto-generated index of all daily notes, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Flat list of all pages, filterable client-side  |
@@ -233,16 +234,17 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ---
 
-## Scratch
+## Inbox
 
 - There is no nav bar. All navigation is via keyboard shortcuts.
-- **Keybinding:** `Ctrl+1` opens the scratch modal.
-- User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- **Keybinding:** `Ctrl+1` opens the inbox modal.
+- User types a title and submits → `POST /api/inbox` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
-- **Scratch filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-scratch.md`. `is_scratch(slug)` identifies them.
-- **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratches newest-first with title and timestamp. Not editable.
+- **Inbox note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
+- **`/page/_inbox`** — special auto-generated page (no `.md` file on disk) listing all inbox notes newest-first with title and timestamp. Not editable.
+- **`/page/_daily`** — special auto-generated page (no `.md` file on disk) listing all daily notes newest-first with title and date. Not editable.
 - **`/page/_deleted`** — special auto-generated page listing all pages that exist in git history but not on disk (deleted pages), newest deletion first. Each entry shows title, slug, deletion date, and a one-click Restore button that calls `POST /restore/<slug>/<sha>`. Only available when `GIT_ENABLED`. Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
-- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only).
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Inbox" — matches searches for "inbox" or "_inbox". `_deleted` is similarly injected with title "Deleted Pages" (git only).
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
 ---
@@ -255,11 +257,12 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
-| **Ctrl/⌘+1** | anywhere | Open scratch modal |
+| **Ctrl/⌘+1** | anywhere | Open inbox modal |
 | **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
 | **Ctrl/⌘+3** | anywhere | Open today's daily note (create if absent) |
 | **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
-| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) |
+| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Inbox (`/page/_inbox`) |
+| **Ctrl/⌘+Alt+3** | anywhere | Navigate to Daily (`/page/_daily`) |
 | **Ctrl/⌘+Alt+2** | anywhere | Navigate to Tasks (`/page/tasks`) |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
