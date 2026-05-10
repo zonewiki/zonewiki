@@ -65,6 +65,7 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 GIT_ENABLED = shutil.which("git") is not None
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
+MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(([^)#?\s]+\.md)\)')
 
 
 def slug_display_name(slug: str) -> str:
@@ -559,32 +560,55 @@ def strip_h1(content: str) -> str:
     return "\n".join(lines)
 
 
+def _resolve_md_link(href: str, source_slug: str) -> str | None:
+    """Resolve a relative .md link href to a slug, or None if external."""
+    if href.startswith(('http://', 'https://', '//', '/')):
+        return None
+    target = href[:-3]  # strip .md
+    source_dir = source_slug.split('/')[:-1]
+    parts = source_dir + target.split('/')
+    normalized: list[str] = []
+    for part in parts:
+        if part == '..':
+            if normalized:
+                normalized.pop()
+        elif part and part != '.':
+            normalized.append(part)
+    return '/'.join(normalized) if normalized else None
+
+
+def _page_link_targets(content: str, file_slug: str) -> set[str]:
+    """Collect all slugs that a page links to (wikilinks + markdown links)."""
+    targets: set[str] = set()
+    for m in WIKILINK_RE.finditer(content):
+        targets.add(to_slug(m.group(1).split("|")[0].strip()))
+    for m in MD_LINK_RE.finditer(content):
+        resolved = _resolve_md_link(m.group(2), file_slug)
+        if resolved:
+            targets.add(resolved)
+    return targets
+
+
 def all_backlink_counts() -> dict[str, int]:
     """Return a mapping of slug → number of pages that link to it."""
     counts: dict[str, int] = {}
     for md_file, file_slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
-        seen: set[str] = set()
-        for m in WIKILINK_RE.finditer(content):
-            target = to_slug(m.group(1).split("|")[0].strip())
-            if target != file_slug and target not in seen:
+        for target in _page_link_targets(content, file_slug):
+            if target != file_slug:
                 counts[target] = counts.get(target, 0) + 1
-                seen.add(target)
     return counts
 
 
 def find_backlinks(slug: str) -> list[dict]:
-    """Return pages that contain a wikilink resolving to slug."""
+    """Return pages that contain a wikilink or markdown link resolving to slug."""
     results = []
     for md_file, file_slug in iter_pages():
         if file_slug == slug:
             continue
         content = md_file.read_text(encoding="utf-8")
-        for m in WIKILINK_RE.finditer(content):
-            page_name = m.group(1).split("|")[0].strip()
-            if to_slug(page_name) == slug:
-                results.append({"slug": file_slug, "title": page_title(content, file_slug)})
-                break
+        if slug in _page_link_targets(content, file_slug):
+            results.append({"slug": file_slug, "title": page_title(content, file_slug)})
     results.sort(key=lambda r: r["title"].lower())
     return results
 
