@@ -21,6 +21,7 @@
 
   const homeEl = bc.querySelector('.breadcrumb-home');
   if (!homeEl) return;
+  const rightEl = bc.querySelector('.breadcrumb-right');
 
   const mkSep = () => {
     const s = document.createElement('span');
@@ -55,9 +56,11 @@
     const s = document.createElement('span');
     s.textContent = title;
     bc.appendChild(s);
+    if (rightEl) bc.appendChild(rightEl);
     clr.remove();
   });
   bc.appendChild(clr);
+  if (rightEl) bc.appendChild(rightEl);
 }());
 
 // ── Uncommitted changes badge ────────────────────────────────────────────────
