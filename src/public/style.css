@@ -100,7 +100,7 @@ body {
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
 main {
-  max-width: 720px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 1.5rem 1.5rem 4rem;
 }
@@ -199,6 +199,7 @@ main {
 .page-content p { margin-bottom: .875rem; }
 .page-content ul, .page-content ol { margin: .375rem 0 .875rem 1.5rem; }
 .page-content li { margin-bottom: .2rem; }
+.page-content li > p { margin-bottom: 0; }
 .page-content li > ul, .page-content li > ol { margin-top: .2rem; margin-bottom: 0; }
 
 .page-content blockquote {
@@ -543,6 +544,16 @@ main {
 }
 .breadcrumb-clear:hover { opacity: 1; }
 
+.breadcrumb-right { margin-left: auto; }
+.bl-count {
+  font-size: .75rem;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: .55;
+  transition: opacity .15s;
+}
+.bl-count:hover { opacity: 1; text-decoration: none; }
+
 /* ── Task list checkboxes ────────────────────────────────────────────────────── */
 
 .task-list-item { list-style: none; margin-left: -1.25rem; }
@@ -834,7 +845,7 @@ body.editor-page main {
 
 .editor-pane {
   flex: 1;
-  max-width: 720px;
+  max-width: 800px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -893,7 +904,7 @@ body.editor-page main {
 
 .preview-pane {
   flex: 1;
-  max-width: 720px;
+  max-width: 800px;
   min-width: 0;
   display: none;
 }
@@ -964,6 +975,7 @@ body.editor-page main {
 .hist-date { white-space: nowrap; font-family: var(--mono); color: var(--fg); }
 .hist-rel  { white-space: nowrap; color: var(--muted); }
 .hist-msg  { color: var(--fg); width: 100%; }
+.hist-filepath { display: block; color: var(--muted); font-size: 0.85em; }
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
 
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
@@ -1013,7 +1025,7 @@ body.editor-page main {
 
 .slide-body-wrap {
   width: 100%;
-  max-width: 760px;
+  max-width: 840px;
 }
 
 .slide-body {

@@ -222,9 +222,10 @@ HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home"
   <span>{APP_NAME}</span>
 </a>"""
 
-def build_breadcrumb(slug: str, title: str, *extra: tuple) -> str:
+def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "") -> str:
     """Build a breadcrumb for a page slug.
     slug/title are the page; extra is zero or more (label, url_or_None) pairs appended after.
+    right_html is optional HTML appended inside the breadcrumb div with margin-left: auto.
     """
     sep = '<span class="breadcrumb-sep">›</span>'
     parts = slug.split('/')
@@ -243,7 +244,8 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple) -> str:
                 crumbs.append(f'<span>{html.escape(label)}</span>')
     else:
         crumbs.append(f'<span>{html.escape(title)}</span>')
-    return f'<div class="breadcrumb" data-slug="{html.escape(slug)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>'
+    right = f'<span class="breadcrumb-right">{right_html}</span>' if right_html else ""
+    return f'<div class="breadcrumb" data-slug="{html.escape(slug)}" data-title="{html.escape(title)}">{sep.join(crumbs)}{right}</div>'
 
 
 md = (
@@ -1066,11 +1068,13 @@ def view_page(slug):
             f'<li><a href="/page/{r["slug"]}">{html.escape(r["title"])}</a></li>'
             for r in backlinks
         )
-        bl_html = f'<section class="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
+        bl_html = f'<section class="backlinks" id="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
+        bl_chip = f'<a href="#backlinks" class="bl-count" title="Backlinks">← {len(backlinks)}</a>'
     else:
-        bl_html = '<section class="backlinks backlinks-empty"><h3>Backlinks</h3><p>No pages link here.</p></section>'
+        bl_html = '<section class="backlinks backlinks-empty" id="backlinks"><h3>Backlinks</h3><p>No pages link here.</p></section>'
+        bl_chip = ""
 
-    breadcrumb = build_breadcrumb(slug, title)
+    breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip)
 
     delete_dialog = ''
     if slug != 'index':
@@ -1088,7 +1092,7 @@ def view_page(slug):
 
     from_page = request.args.get('from', '')
     if from_page == 'uncommitted' and GIT_ENABLED:
-        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None))
+        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)
         back_link = f'<a href="/uncommitted" class="btn">← Uncommitted</a>'
         filepath = slug + '.md'
         commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
@@ -1146,7 +1150,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
 </article>
 {bl_html}"""
     else:
-        breadcrumb = build_breadcrumb(slug, title)
+        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
         
         # Get last modified info
