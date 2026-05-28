@@ -66,6 +66,8 @@ GIT_ENABLED = shutil.which("git") is not None
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
 MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(([^)#?\s]+\.md)\)')
+# Matches any markdown link href (bare slugs, .md, etc.) — used for backlink scanning
+_ANY_MD_LINK_RE = re.compile(r'\[(?:[^\]]*)\]\(([^)#?\s]+)\)')
 
 
 def slug_display_name(slug: str) -> str:
@@ -171,15 +173,18 @@ def git_uncommitted_files() -> list[dict]:
     """
     if not GIT_ENABLED:
         return []
-    r = _git("git", "status", "--porcelain")
+    r = _git("git", "status", "--porcelain", "--untracked-files=all")
     files = []
     for line in r.stdout.splitlines():
         if len(line) < 4:
             continue
         status = line[:2]
         filepath = line[3:]
-        # Include modified (M), added (A), deleted (D) - skip untracked (??)
-        if status.strip() and not status.startswith('??'):
+        # Skip directories (git reports untracked dirs with a trailing slash)
+        if filepath.endswith('/'):
+            continue
+        # Include modified (M), added (A), deleted (D), and untracked (??)
+        if status.strip():
             fpath = WIKI_DIR / filepath
             if fpath.exists():
                 mtime_ts = fpath.stat().st_mtime
@@ -502,7 +507,11 @@ def split_sections(content: str) -> list[str]:
             elif stripped and re.match(r'^[-=]+\s*$', stripped):
                 # Potential setext underline (--- for h2, === for h1) or thematic break.
                 # If preceded by a non-empty text line, it's a setext heading.
-                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None:
+                # Exclude lines that look like list items (e.g. "- " stripped to "-"):
+                # a list bullet is "[-*+] " so if the raw line starts with a list marker
+                # followed by a space, it's not a setext underline.
+                is_list_item = bool(re.match(r'^[-*+]\s', line))
+                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None and not is_list_item:
                     heading_lines.append(prev_text_line_idx)
                 # The underline/thematic-break line itself is never a heading text line.
                 prev_text_line_idx = None
@@ -590,14 +599,34 @@ def _resolve_md_link(href: str, source_slug: str) -> str | None:
     return '/'.join(normalized) if normalized else None
 
 
-def _page_link_targets(content: str, file_slug: str) -> set[str]:
+def _resolve_bare_link(href: str, source_slug: str) -> str | None:
+    """Resolve a bare relative slug link (no extension) to a slug, or None if external."""
+    if href.startswith(('http://', 'https://', '//', '/', '#')) or ':' in href:
+        return None
+    source_dir = source_slug.split('/')[:-1]
+    parts = source_dir + href.split('/')
+    normalized: list[str] = []
+    for part in parts:
+        if part == '..':
+            if normalized:
+                normalized.pop()
+        elif part and part != '.':
+            normalized.append(part)
+    return '/'.join(normalized) if normalized else None
+
+
+def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | None = None) -> set[str]:
     """Collect all slugs that a page links to (wikilinks + markdown links)."""
     targets: set[str] = set()
     for m in WIKILINK_RE.finditer(content):
         targets.add(to_slug(m.group(1).split("|")[0].strip()))
-    for m in MD_LINK_RE.finditer(content):
-        resolved = _resolve_md_link(m.group(2), file_slug)
-        if resolved:
+    for m in _ANY_MD_LINK_RE.finditer(content):
+        href = m.group(1)
+        if href.endswith('.md'):
+            resolved = _resolve_md_link(href, file_slug)
+        else:
+            resolved = _resolve_bare_link(href, file_slug)
+        if resolved and (known_slugs is None or resolved in known_slugs):
             targets.add(resolved)
     return targets
 
@@ -605,9 +634,10 @@ def _page_link_targets(content: str, file_slug: str) -> set[str]:
 def all_backlink_counts() -> dict[str, int]:
     """Return a mapping of slug → number of pages that link to it."""
     counts: dict[str, int] = {}
+    known = set(all_slugs())
     for md_file, file_slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
-        for target in _page_link_targets(content, file_slug):
+        for target in _page_link_targets(content, file_slug, known):
             if target != file_slug:
                 counts[target] = counts.get(target, 0) + 1
     return counts
@@ -616,11 +646,12 @@ def all_backlink_counts() -> dict[str, int]:
 def find_backlinks(slug: str) -> list[dict]:
     """Return pages that contain a wikilink or markdown link resolving to slug."""
     results = []
+    known = set(all_slugs())
     for md_file, file_slug in iter_pages():
         if file_slug == slug:
             continue
         content = md_file.read_text(encoding="utf-8")
-        if slug in _page_link_targets(content, file_slug):
+        if slug in _page_link_targets(content, file_slug, known):
             results.append({"slug": file_slug, "title": page_title(content, file_slug)})
     results.sort(key=lambda r: r["title"].lower())
     return results
@@ -1875,7 +1906,9 @@ def uncommitted_page():
             f'<tr>'
             f'<td class="hist-date">{html.escape(f["mtime"])}</td>'
             f'<td class="hist-rel">{html.escape(f["rel"])}</td>'
-            f'<td class="hist-msg">{html.escape(f["title"])}</td>'
+            f'<td class="hist-msg">{html.escape(f["title"])}'
+            + (f'<br><span class="hist-filepath">{html.escape(f["filepath"])}</span>' if f["title"] != f["filepath"] else '')
+            + '</td>'
             f'<td style="white-space:nowrap">'
             + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
             + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
@@ -1939,7 +1972,14 @@ def diff_uncommitted(slug):
         abort(404)
     
     rel = str(path.relative_to(WIKI_DIR))
-    r = _git("git", "diff", "--", rel)
+    # Check if file is untracked (not yet in git)
+    status_r = _git("git", "status", "--porcelain", "--", rel)
+    is_untracked = status_r.stdout.startswith("??")
+    if is_untracked:
+        # Show full file as a new-file diff
+        r = _git("git", "diff", "--no-index", "--", "/dev/null", rel)
+    else:
+        r = _git("git", "diff", "--", rel)
     diff = r.stdout
     
     if not diff:

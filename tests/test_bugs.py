@@ -18,7 +18,7 @@ os.environ["ALLOW_REMOTE"] = "1"
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import server
-from server import split_sections, toggle_nth_checkbox, content_hash, section_char_range
+from server import split_sections, toggle_nth_checkbox, content_hash, section_char_range, find_backlinks, _page_link_targets
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -342,3 +342,72 @@ class TestRenamePageMkdir:
         new_file = wiki_dir / "subdir" / "preserve.md"
         assert new_file.exists()
         assert "Unique content 12345." in new_file.read_text(encoding="utf-8")
+
+
+# ===========================================================================
+# Bug: backlinks not detected when link is a bare slug (no .md extension)
+# e.g. [Ivo](ivo-petrenko) — not a wikilink, not a .md link
+# ===========================================================================
+
+class TestBareSlugBacklinks:
+
+    def test_bare_slug_link_detected_as_target(self, wiki_dir):
+        """[Label](slug) with no extension must appear in _page_link_targets."""
+        targets = _page_link_targets(
+            "- [Ivo](ivo-petrenko)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" in targets
+
+    def test_bare_slug_backlink_shows_in_find_backlinks(self, wiki_dir):
+        """find_backlinks must return the source page when it contains [Label](slug)."""
+        write_page(wiki_dir, "ivo-petrenko", "# Ivo Petrenko\n")
+        write_page(wiki_dir, "state", "# State\n\n- [Ivo](ivo-petrenko)\n")
+
+        old_pages = server.PAGES_DIR
+        server.PAGES_DIR = wiki_dir
+        try:
+            backlinks = find_backlinks("ivo-petrenko")
+        finally:
+            server.PAGES_DIR = old_pages
+
+        slugs = [b["slug"] for b in backlinks]
+        assert "state" in slugs, f"Expected 'state' in backlinks, got {slugs}"
+
+    def test_bare_slug_in_list_item(self, wiki_dir):
+        """Bare slug inside a list item must be detected."""
+        targets = _page_link_targets(
+            "## Team\n\n- Kim\n  - [Ivo](ivo-petrenko)\n    - [ ] task\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" in targets
+
+    def test_external_url_not_counted_as_backlink(self, wiki_dir):
+        """External http links must never be treated as page targets."""
+        targets = _page_link_targets(
+            "[link](https://example.com/ivo-petrenko)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" not in targets
+
+    def test_bare_slug_not_in_known_slugs_is_ignored(self, wiki_dir):
+        """A bare link whose target page doesn't exist must not appear in targets."""
+        targets = _page_link_targets(
+            "[Ghost](nonexistent-page)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "nonexistent-page" not in targets
+
+    def test_wikilink_still_works_alongside_bare_link(self, wiki_dir):
+        """Both [[wikilink]] and bare slug links must be detected in the same page."""
+        targets = _page_link_targets(
+            "[[Signals]]\n[Ivo](ivo-petrenko)\n",
+            "state",
+            known_slugs={"signals", "ivo-petrenko"},
+        )
+        assert "signals" in targets
+        assert "ivo-petrenko" in targets
