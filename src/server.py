@@ -1069,7 +1069,8 @@ def view_page(slug):
             for r in backlinks
         )
         bl_html = f'<section class="backlinks" id="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
-        bl_chip = f'<a href="#backlinks" class="bl-count" title="Backlinks">← {len(backlinks)}</a>'
+        bl_titles = html.escape("\n".join(r["title"] for r in backlinks))
+        bl_chip = f'<a href="#backlinks" class="bl-count" data-bl="{bl_titles}">← {len(backlinks)}</a>'
     else:
         bl_html = '<section class="backlinks backlinks-empty" id="backlinks"><h3>Backlinks</h3><p>No pages link here.</p></section>'
         bl_chip = ""

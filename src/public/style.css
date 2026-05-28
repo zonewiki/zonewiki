@@ -551,8 +551,29 @@ main {
   text-decoration: none;
   opacity: .55;
   transition: opacity .15s;
+  position: relative;
 }
 .bl-count:hover { opacity: 1; text-decoration: none; }
+.bl-count::after {
+  content: attr(data-bl);
+  white-space: pre;
+  position: absolute;
+  right: 0;
+  top: calc(100% + .35rem);
+  background: var(--nav-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: .35rem;
+  padding: .35rem .55rem;
+  font-size: .75rem;
+  line-height: 1.5;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 100;
+}
+.bl-count:hover::after { opacity: 1; }
 
 /* ── Task list checkboxes ────────────────────────────────────────────────────── */
 
