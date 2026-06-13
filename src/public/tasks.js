@@ -382,6 +382,104 @@
   sortSelect.addEventListener('change', render);
   filterTag.addEventListener('input', render);
 
+  // ── Tag autocomplete ───────────────────────────────────────────────────────
+
+  let tagAcEl = null;
+  let tagAcIndex = -1;
+
+  function hideTagAc() {
+    tagAcEl?.remove();
+    tagAcEl = null;
+    tagAcIndex = -1;
+  }
+
+  function fuzzyScore(q, tag) {
+    const ql = q.toLowerCase(), tl = tag.toLowerCase();
+    if (tl.startsWith(ql)) return 2;
+    if (tl.includes(ql))   return 1;
+    let qi = 0;
+    for (let i = 0; i < tl.length && qi < ql.length; i++) {
+      if (tl[i] === ql[qi]) qi++;
+    }
+    return qi === ql.length ? 0 : -1;
+  }
+
+  function selectTagAcItem(text) {
+    const val = filterTag.value;
+    const commaIdx = val.lastIndexOf(',');
+    filterTag.value = (commaIdx >= 0 ? val.slice(0, commaIdx + 1) + ' ' : '') + text;
+    render();
+    filterTag.focus();
+  }
+
+  function showTagAc(matches) {
+    hideTagAc();
+    if (!matches.length) return;
+    tagAcEl = document.createElement('div');
+    tagAcEl.className = 'tag-ac-dropdown';
+    matches.forEach((tag, i) => {
+      const item = document.createElement('div');
+      item.className = 'tag-ac-item';
+      item.textContent = '#' + tag;
+      item.addEventListener('mousedown', e => { e.preventDefault(); selectTagAcItem(tag); hideTagAc(); });
+      tagAcEl.appendChild(item);
+    });
+    const rect = filterTag.getBoundingClientRect();
+    tagAcEl.style.top  = (rect.bottom + window.scrollY) + 'px';
+    tagAcEl.style.left = rect.left + 'px';
+    tagAcEl.style.width = rect.width + 'px';
+    document.body.appendChild(tagAcEl);
+  }
+
+  function updateTagAcHighlight() {
+    if (!tagAcEl) return;
+    tagAcEl.querySelectorAll('.tag-ac-item').forEach((el, i) => {
+      el.classList.toggle('selected', i === tagAcIndex);
+    });
+  }
+
+  filterTag.addEventListener('keydown', e => {
+    if (!tagAcEl) return;
+    const items = tagAcEl.querySelectorAll('.tag-ac-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      tagAcIndex = (tagAcIndex + 1) % items.length;
+      updateTagAcHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      tagAcIndex = tagAcIndex <= 0 ? items.length - 1 : tagAcIndex - 1;
+      updateTagAcHighlight();
+    } else if ((e.key === 'Enter' || e.key === 'Tab') && tagAcIndex >= 0) {
+      e.preventDefault();
+      selectTagAcItem(items[tagAcIndex].textContent.replace(/^#/, ''));
+      hideTagAc();
+    } else if (e.key === 'Escape') {
+      hideTagAc();
+    }
+  });
+
+  filterTag.addEventListener('input', () => {
+    const val = filterTag.value;
+    const commaIdx = val.lastIndexOf(',');
+    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
+    if (!partial) { hideTagAc(); return; }
+
+    // Collect all tags from current task list
+    const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
+    const done = val.slice(0, Math.max(0, commaIdx)).split(',').map(s => s.trim().toLowerCase());
+
+    const matches = allTags
+      .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+      .filter(({ tag, score }) => score >= 0 && !done.includes(tag.toLowerCase()))
+      .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
+      .map(({ tag }) => tag)
+      .slice(0, 8);
+
+    showTagAc(matches);
+  });
+
+  filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
+
   // ── Add task ───────────────────────────────────────────────────────────────
 
   addBtn.addEventListener('click', () => openEditModal(null));
