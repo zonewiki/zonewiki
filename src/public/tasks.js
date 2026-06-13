@@ -151,9 +151,22 @@
       );
     }
 
-    // Hide tasks whose start_date hasn't arrived yet (unless viewing completed or scheduled)
+    // Hide tasks that are deferred (absolute start_date or relative defer_days)
+    // Task is visible when: today >= start_date AND today >= due_date - defer_days
+    // Both conditions must pass (latest/most-restrictive wins)
     if (activeFilter !== 'completed' && activeFilter !== 'scheduled') {
-      filtered = filtered.filter(t => !t.start_date || t.start_date <= today || t.completed_at);
+      filtered = filtered.filter(t => {
+        if (t.completed_at) return true;
+        let visible = true;
+        if (t.start_date && t.start_date > today) visible = false;
+        if (t.defer_days && t.due_date) {
+          const due = new Date(t.due_date + 'T00:00:00');
+          const showFrom = new Date(due - t.defer_days * 86400000);
+          const showStr = showFrom.toISOString().slice(0, 10);
+          if (showStr > today) visible = false;
+        }
+        return visible;
+      });
     }
 
     // Tab filter
@@ -162,7 +175,16 @@
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else if (activeFilter === 'scheduled') {
-      filtered = filtered.filter(t => !t.completed_at && t.start_date && t.start_date > today);
+      filtered = filtered.filter(t => {
+        if (t.completed_at) return false;
+        if (t.start_date && t.start_date > today) return true;
+        if (t.defer_days && t.due_date) {
+          const due = new Date(t.due_date + 'T00:00:00');
+          const showFrom = new Date(due - t.defer_days * 86400000);
+          if (showFrom.toISOString().slice(0, 10) > today) return true;
+        }
+        return false;
+      });
     } else {
       // "all" shows non-completed by default
       filtered = filtered.filter(t => !t.completed_at);
@@ -342,9 +364,10 @@
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
       const dueDisplay = task.due_date ? `<span class="task-due ${dueClass}">due: ${formatDate(task.due_date)}</span>` : '';
       const startDisplay = task.start_date ? `<span class="task-date-info">defer: ${formatDate(task.start_date)}</span>` : '';
+      const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">${task.defer_days}d before due</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
-      const hasMeta = dueDisplay || startDisplay || completedDisplay || recIcon || tags;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}</div>` : '';
+      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags;
+      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}</div>` : '';
       const dragAttr = sortSelect.value === 'manual' ? 'draggable="true"' : '';
       return `
         <li class="task-item ${completedClass} ${urgClass}" data-id="${task.id}" ${dragAttr}>
@@ -577,6 +600,7 @@
     document.getElementById('task-edit-title').value = task ? task.title : '';
     document.getElementById('task-edit-desc').value = task ? task.description || '' : '';
     document.getElementById('task-edit-start').value = task ? task.start_date || '' : '';
+    document.getElementById('task-edit-defer-days').value = task?.defer_days || '';
     document.getElementById('task-edit-due').value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags').value = task ? (task.tags || []).join(', ') : '';
     const createdEl = document.getElementById('task-edit-created');
@@ -620,6 +644,7 @@
       description: document.getElementById('task-edit-desc').value.trim(),
       start_date: document.getElementById('task-edit-start').value || null,
       due_date: document.getElementById('task-edit-due').value || null,
+      defer_days: parseInt(document.getElementById('task-edit-defer-days').value) || null,
       tags: document.getElementById('task-edit-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval').value) || 1,

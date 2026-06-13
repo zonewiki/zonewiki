@@ -461,3 +461,55 @@ class TestTasksPage:
         assert "tasks-app" in html
         assert "task-add-btn" in html
         assert "tasks.js" in html
+
+
+# ── Defer Days (relative defer) ──────────────────────────────────────────────
+
+
+class TestDeferDays:
+    def test_create_with_defer_days(self, client):
+        resp = client.post("/api/tasks", json={"title": "Deferred", "defer_days": 3, "due_date": "2026-07-10"})
+        assert resp.status_code == 201
+        task = resp.get_json()
+        assert task["defer_days"] == 3
+        assert task["due_date"] == "2026-07-10"
+
+    def test_update_defer_days(self, client):
+        resp = client.post("/api/tasks", json={"title": "Task"})
+        task_id = resp.get_json()["id"]
+        resp = client.put(f"/api/tasks/{task_id}", json={"defer_days": 5})
+        assert resp.status_code == 200
+        assert resp.get_json()["defer_days"] == 5
+
+    def test_clear_defer_days(self, client):
+        resp = client.post("/api/tasks", json={"title": "Task", "defer_days": 3})
+        task_id = resp.get_json()["id"]
+        resp = client.put(f"/api/tasks/{task_id}", json={"defer_days": None})
+        assert resp.status_code == 200
+        assert resp.get_json()["defer_days"] is None
+
+    def test_defer_days_zero_treated_as_none(self, client):
+        resp = client.post("/api/tasks", json={"title": "Task", "defer_days": 0})
+        assert resp.status_code == 201
+        assert resp.get_json()["defer_days"] is None
+
+    def test_negative_defer_days_clamped_to_zero(self, client):
+        resp = client.post("/api/tasks", json={"title": "Task", "defer_days": -5})
+        assert resp.status_code == 201
+        assert resp.get_json()["defer_days"] is None
+
+    def test_recurring_spawn_preserves_defer_days(self, client):
+        resp = client.post("/api/tasks", json={
+            "title": "Recurring",
+            "due_date": "2026-06-10",
+            "defer_days": 3,
+            "rec_type": "daily",
+            "rec_interval": 1,
+        })
+        task_id = resp.get_json()["id"]
+        client.put(f"/api/tasks/{task_id}", json={"completed": True})
+        tasks = client.get("/api/tasks").get_json()
+        spawned = [t for t in tasks if t["id"] != task_id and not t["completed_at"]]
+        assert len(spawned) == 1
+        assert spawned[0]["defer_days"] == 3
+        assert spawned[0]["start_date"] is None

@@ -2406,6 +2406,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         "tags": task.get("tags", []),
         "start_date": None,
         "due_date": next_due.strftime("%Y-%m-%d"),
+        "defer_days": task.get("defer_days"),
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
         "sort_order": task.get("sort_order", 0),
@@ -2470,9 +2471,15 @@ def tasks_page():
             <input type="number" id="task-edit-rec-interval" name="rec_interval" min="1" value="1">
           </div>
         </div>
-        <div class="task-field">
-          <label for="task-edit-start">Defer until</label>
-          <input type="date" id="task-edit-start" name="start_date">
+        <div class="task-field-row">
+          <div class="task-field">
+            <label for="task-edit-start">Defer until</label>
+            <input type="date" id="task-edit-start" name="start_date">
+          </div>
+          <div class="task-field">
+            <label for="task-edit-defer-days">Show N days before due</label>
+            <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
+          </div>
         </div>
         <div class="task-field">
           <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
@@ -2520,6 +2527,9 @@ def api_create_task():
     if not title:
         abort(400)
     tasks = _read_tasks()
+    defer_days = data.get("defer_days")
+    if defer_days is not None:
+        defer_days = max(0, int(defer_days))
     task = {
         "id": str(uuid.uuid4()),
         "title": title,
@@ -2527,6 +2537,7 @@ def api_create_task():
         "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
         "start_date": _validate_date(data.get("start_date")),
         "due_date": _validate_date(data.get("due_date")),
+        "defer_days": defer_days or None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
         "sort_order": None,
@@ -2563,6 +2574,9 @@ def api_update_task(task_id):
         task["due_date"] = _validate_date(data["due_date"])
     if "start_date" in data:
         task["start_date"] = _validate_date(data["start_date"])
+    if "defer_days" in data:
+        dd = data["defer_days"]
+        task["defer_days"] = max(0, int(dd)) if dd is not None else None
     if "sort_order" in data:
         task["sort_order"] = data["sort_order"]
     if "rec_type" in data:
