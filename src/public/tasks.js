@@ -737,10 +737,25 @@
     if (selectedIds.size === 1) {
       const idx = ids.indexOf(selectedId);
       if (idx === -1) return;
-      if (direction === 'up' && idx === 0) return;
-      if (direction === 'down' && idx === ids.length - 1) return;
-      if (direction === 'up') [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-      else [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
+      const selTask = tasks.find(t => t.id === selectedId);
+
+      if (direction === 'down') {
+        if (idx === ids.length - 1) return;
+        if (selTask && selTask.sort_order == null) {
+          // Moving inbox item into ordered: place at top of ordered section
+          ids.splice(idx, 1);
+          const firstOrd = ids.findIndex(id => {
+            const t = tasks.find(tk => tk.id === id);
+            return t && t.sort_order != null;
+          });
+          ids.splice(firstOrd === -1 ? ids.length : firstOrd, 0, selectedId);
+        } else {
+          [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
+        }
+      } else {
+        if (idx === 0) return;
+        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+      }
     } else {
       const sel = selectedIds;
       const selIdx = ids.map((id, i) => sel.has(id) ? i : -1).filter(i => i >= 0);
