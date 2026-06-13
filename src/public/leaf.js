@@ -103,9 +103,13 @@
   async function checkDue() {
     try {
       const res = await fetch('/api/tasks/due-count');
-      const { count } = await res.json();
+      const { count, overdue, today } = await res.json();
       if (count > 0) {
         countEl.textContent = count;
+        const parts = [];
+        if (overdue > 0) parts.push(`${overdue} overdue`);
+        if (today > 0) parts.push(`${today} due today`);
+        badge.title = parts.join(' · ');
         badge.style.display = 'inline-flex';
       } else {
         badge.style.display = 'none';

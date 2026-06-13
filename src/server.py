@@ -2488,11 +2488,15 @@ def api_get_tasks():
 @app.get("/api/tasks/due-count")
 def api_tasks_due_count():
     today = date.today().isoformat()
-    count = sum(
-        1 for t in _read_tasks()
-        if not t.get("completed_at") and t.get("due_date") and t["due_date"] <= today
-    )
-    return jsonify({"count": count})
+    overdue = today_count = 0
+    for t in _read_tasks():
+        if t.get("completed_at") or not t.get("due_date"):
+            continue
+        if t["due_date"] < today:
+            overdue += 1
+        elif t["due_date"] == today:
+            today_count += 1
+    return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
 
 
 @app.post("/api/tasks")
