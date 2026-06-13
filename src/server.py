@@ -746,13 +746,13 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
     <table class="shortcuts-table">
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
-      <tr><td><kbd>Ctrl+1</kbd></td><td>New inbox note</td></tr>
-      <tr><td><kbd>Ctrl+3</kbd></td><td>Open today's daily note</td></tr>
-      <tr><td><kbd>Ctrl+2</kbd></td><td>Add task to Inbox</td></tr>
-      <tr><td><kbd>Ctrl+Alt+0</kbd></td><td>Go to Home</td></tr>
-      <tr><td><kbd>Ctrl+Alt+1</kbd></td><td>Go to Inbox</td></tr>
-      <tr><td><kbd>Ctrl+Alt+2</kbd></td><td>Go to Tasks</td></tr>
-      <tr><td><kbd>Ctrl+Alt+3</kbd></td><td>Go to Daily</td></tr>
+      <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
+      <tr><td><kbd>c t</kbd></td><td>Add task</td></tr>
+      <tr><td><kbd>c d</kbd></td><td>Open today's daily note</td></tr>
+      <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
+      <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
+      <tr><td><kbd>g t</kbd></td><td>Go to Tasks</td></tr>
+      <tr><td><kbd>g d</kbd></td><td>Go to Daily index</td></tr>
 
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>

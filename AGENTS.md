@@ -264,11 +264,11 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
-| **Ctrl/⌘+1** | anywhere | Open inbox modal |
+| **Ctrl/⌘+1** | anywhere | Open scratch modal |
 | **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
 | **Ctrl/⌘+3** | anywhere | Open today's daily note (create if absent) |
 | **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
-| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Inbox (`/page/_inbox`) |
+| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) 
 | **Ctrl/⌘+Alt+3** | anywhere | Navigate to Daily (`/page/_daily`) |
 | **Ctrl/⌘+Alt+2** | anywhere | Navigate to Tasks (`/page/tasks`) |
 | **F2** | editor | Toggle preview pane |

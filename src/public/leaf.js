@@ -392,6 +392,14 @@ function openNewPage() {
 const shortcutsModal = document.getElementById('shortcuts-modal');
 closeOnBackdropClick(shortcutsModal);
 
+let awaitingG = false;
+let gPrefixTimer = null;
+function resetG() { awaitingG = false; clearTimeout(gPrefixTimer); }
+
+let awaitingC = false;
+let cPrefixTimer = null;
+function resetC() { awaitingC = false; clearTimeout(cPrefixTimer); }
+
 document.addEventListener('keydown', e => {
   // Ctrl/Cmd+P — open search modal
   if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
@@ -407,35 +415,6 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Ctrl/Cmd+1 — new inbox note
-  if (e.key === '1' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-    e.preventDefault();
-    openInbox();
-    return;
-  }
-
-  // Ctrl/Cmd+3 — open today's daily note
-  if (e.key === '3' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-    e.preventDefault();
-    fetch('/api/daily', { method: 'POST' })
-      .then(r => r.json())
-      .then(({ slug }) => { window.location.href = `/edit/${slug}`; })
-      .catch(() => {});
-    return;
-  }
-
-  // Ctrl/Cmd+2 — quick add task
-  if (e.key === '2' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-    e.preventDefault();
-    openQuickTask();
-    return;
-  }
-
-  // Ctrl/Cmd+Alt+0–2 — navigate to pinned pages
-  if (e.altKey && (e.ctrlKey || e.metaKey)) {
-    const pinned = { '0': '/page/index', '1': '/page/_inbox', '2': '/page/tasks', '3': '/page/_daily' };
-    if (pinned[e.key]) { e.preventDefault(); window.location.href = pinned[e.key]; return; }
-  }
 
   // Ctrl/Cmd+/ — show keyboard shortcuts
   if (e.key === '/' && (e.ctrlKey || e.metaKey)) {
@@ -465,7 +444,45 @@ document.addEventListener('keydown', e => {
   }
 
   // Bare key shortcuts — skip when focus is in an input/textarea/select
-  if (e.target.matches('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.matches('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) {
+    resetG(); resetC();
+    return;
+  }
+
+  // g-prefix navigation: gh=home, gs=scratch, gt=tasks, gd=daily
+  if (awaitingG) {
+    resetG();
+    const dest = { h: '/page/index', s: '/page/_scratch', t: '/tasks', d: '/page/_daily' };
+    if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
+    return;
+  }
+  if (e.key === 'g') {
+    e.preventDefault();
+    awaitingG = true;
+    gPrefixTimer = setTimeout(resetG, 1000);
+    return;
+  }
+
+  // c-prefix create: cs=scratch note, ct=add task, cd=daily note
+  if (awaitingC) {
+    resetC();
+    if (e.key === 's') { e.preventDefault(); openScratch(); }
+    else if (e.key === 't') { e.preventDefault(); openQuickTask(); }
+    else if (e.key === 'd') {
+      e.preventDefault();
+      fetch('/api/daily', { method: 'POST' })
+        .then(r => r.json())
+        .then(({ slug }) => { window.location.href = `/edit/${slug}`; })
+        .catch(() => {});
+    }
+    return;
+  }
+  if (e.key === 'c') {
+    e.preventDefault();
+    awaitingC = true;
+    cPrefixTimer = setTimeout(resetC, 1000);
+    return;
+  }
 
   // E — go to edit
   if (e.key === 'e') {
@@ -489,6 +506,9 @@ const previewPane = document.getElementById('editor-preview');
 let previewTimer = null;
 
 if (textarea && previewPane) {
+  // Auto-show preview on wide screens
+  if (window.innerWidth >= 1000) togglePreview();
+
   // Pre-fetch all page slugs for wikilink autocomplete
   fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
 
@@ -499,7 +519,11 @@ if (textarea && previewPane) {
       if (e.key === 'ArrowUp')   { e.preventDefault(); acMove(-1); return; }
       if (e.key === 'Enter' || e.key === 'Tab') {
         const sel = acDropdown.querySelector('.selected');
-        if (sel) { e.preventDefault(); insertWikilink(sel.textContent); return; }
+        if (sel) {
+          e.preventDefault();
+          if (acMode === 'mdlink') insertMdLink(sel.textContent); else insertWikilink(sel.textContent);
+          return;
+        }
       }
       if (e.key === 'Escape') { hideAcDropdown(); return; }
     }
@@ -1033,6 +1057,7 @@ function wikilinkAtCursor() {
 let wikiPages = [];
 let acDropdown = null;
 let acIndex = 0;
+let acMode = 'wikilink'; // 'wikilink' | 'mdlink'
 
 function getWikilinkQuery() {
   const before = textarea.value.slice(0, textarea.selectionStart);
@@ -1040,13 +1065,37 @@ function getWikilinkQuery() {
   return m ? m[1] : null;
 }
 
+function getMdLinkQuery() {
+  const before = textarea.value.slice(0, textarea.selectionStart);
+  // Match [any desc]( followed by typed chars that look like a page path (no space, no closing paren)
+  const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
+  if (!m) return null;
+  const typed = m[1];
+  // Only trigger when it looks like an internal link (empty or starts with / or a slug char)
+  if (typed === '' || /^[/a-z0-9_-]/i.test(typed)) return typed;
+  return null;
+}
+
 function updateAcDropdown() {
-  const query = getWikilinkQuery();
-  if (query === null) { hideAcDropdown(); return; }
-  const q = query.toLowerCase();
-  const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
-  if (!matches.length) { hideAcDropdown(); return; }
-  showAcDropdown(matches);
+  const wikiQuery = getWikilinkQuery();
+  if (wikiQuery !== null) {
+    acMode = 'wikilink';
+    const q = wikiQuery.toLowerCase();
+    const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
+    if (!matches.length) { hideAcDropdown(); return; }
+    showAcDropdown(matches);
+    return;
+  }
+  const mdQuery = getMdLinkQuery();
+  if (mdQuery !== null) {
+    acMode = 'mdlink';
+    const q = mdQuery.replace(/^\/page\//, '').toLowerCase();
+    const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
+    if (!matches.length) { hideAcDropdown(); return; }
+    showAcDropdown(matches);
+    return;
+  }
+  hideAcDropdown();
 }
 
 // Measure approximate caret position inside textarea using a mirror div
@@ -1088,7 +1137,10 @@ function showAcDropdown(matches) {
     const item = document.createElement('div');
     item.className = 'wikilink-ac-item' + (i === acIndex ? ' selected' : '');
     item.textContent = page;
-    item.addEventListener('mousedown', ev => { ev.preventDefault(); insertWikilink(page); });
+    item.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      if (acMode === 'mdlink') insertMdLink(page); else insertWikilink(page);
+    });
     acDropdown.appendChild(item);
   });
   if (acIndex >= matches.length) acIndex = 0;
@@ -1123,6 +1175,18 @@ function insertWikilink(page) {
   const bracketPos = val.lastIndexOf('[[', pos);
   textarea.setSelectionRange(bracketPos, pos);
   document.execCommand('insertText', false, '[[' + page + ']]');
+  hideAcDropdown();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(fetchPreview, 300);
+}
+
+function insertMdLink(page) {
+  const pos = textarea.selectionStart;
+  const val = textarea.value;
+  // Find the opening '(' of the markdown link before the cursor
+  const parenPos = val.lastIndexOf('(', pos - 1);
+  textarea.setSelectionRange(parenPos + 1, pos);
+  document.execCommand('insertText', false, '/page/' + page);
   hideAcDropdown();
   clearTimeout(previewTimer);
   previewTimer = setTimeout(fetchPreview, 300);
