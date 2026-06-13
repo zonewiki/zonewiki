@@ -1441,6 +1441,18 @@ body.editor-page main {
   color: var(--link);
 }
 
+.task-date-shortcuts {
+  display: flex; gap: .25rem; margin-top: .25rem;
+}
+.task-date-shortcuts button {
+  font-size: .7rem; padding: .15rem .4rem; border-radius: 3px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  cursor: pointer; font-family: inherit; line-height: 1.3;
+}
+.task-date-shortcuts button:hover {
+  background: var(--code-bg); color: var(--fg); border-color: var(--link);
+}
+
 @media (max-width: 640px) {
   .tasks-toolbar { flex-direction: column; align-items: stretch; }
   .tasks-toolbar input { max-width: none; }

@@ -31,16 +31,19 @@
   let completedLimit = 50;
   let undoTimer  = null;
   let undoToastEl = null;
+  let pendingUndoFn = null;
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
   function dismissUndo() {
     if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
     if (undoToastEl) { undoToastEl.remove(); undoToastEl = null; }
+    pendingUndoFn = null;
   }
 
   function showUndo(msg, undoFn) {
     dismissUndo();
+    pendingUndoFn = undoFn;
     const el = document.createElement('div');
     el.className = 'raw-toast task-undo-toast';
     const span = document.createElement('span');
@@ -48,12 +51,19 @@
     const btn = document.createElement('button');
     btn.className = 'btn task-undo-btn';
     btn.textContent = 'Undo';
-    btn.addEventListener('click', () => { dismissUndo(); undoFn(); });
+    btn.addEventListener('click', () => { const fn = pendingUndoFn; dismissUndo(); fn?.(); });
     el.appendChild(span);
     el.appendChild(btn);
     document.body.appendChild(el);
     undoToastEl = el;
     undoTimer = setTimeout(dismissUndo, 6000);
+  }
+
+  function triggerUndo() {
+    if (!pendingUndoFn) return;
+    const fn = pendingUndoFn;
+    dismissUndo();
+    fn();
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
@@ -679,6 +689,31 @@
     recIntervalField.style.display = recTypeSelect.value ? '' : 'none';
   });
 
+  // Quick due-date shortcuts
+  function dateOffset(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+  function nextMonday() {
+    const d = new Date();
+    const day = d.getDay();
+    const add = day === 0 ? 1 : 8 - day;
+    d.setDate(d.getDate() + add);
+    return d.toISOString().slice(0, 10);
+  }
+  document.querySelectorAll('.task-date-shortcuts button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dueInput = document.getElementById('task-edit-due');
+      const v = btn.dataset.due;
+      if (v === 'today')         dueInput.value = dateOffset(0);
+      else if (v === 'tomorrow') dueInput.value = dateOffset(1);
+      else if (v === '+3')       dueInput.value = dateOffset(3);
+      else if (v === 'next-week') dueInput.value = nextMonday();
+      else if (v === 'clear')    dueInput.value = '';
+    });
+  });
+
   cancelBtn.addEventListener('click', () => modal.close());
   modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
 
@@ -832,6 +867,16 @@
   }
 
   document.addEventListener('keydown', async e => {
+    // Ctrl+Z undo — works everywhere except inside the edit modal
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
+      if (modal.open || deleteModal.open) return;
+      const focus = document.activeElement;
+      if (focus && focus.closest('textarea, [contenteditable]')) return;
+      e.preventDefault();
+      triggerUndo();
+      return;
+    }
+
     if (modal.open || deleteModal.open) return;
     const focus = document.activeElement;
     if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;

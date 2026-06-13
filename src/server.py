@@ -2456,6 +2456,13 @@ def tasks_page():
           <div class="task-field">
             <label for="task-edit-due">Due date</label>
             <input type="date" id="task-edit-due" name="due_date">
+            <div class="task-date-shortcuts">
+              <button type="button" data-due="today">Today</button>
+              <button type="button" data-due="tomorrow">Tmrw</button>
+              <button type="button" data-due="+3">+3d</button>
+              <button type="button" data-due="next-week">Mon</button>
+              <button type="button" data-due="clear">✕</button>
+            </div>
           </div>
           <div class="task-field">
             <label for="task-edit-rec-type">Repeat</label>
