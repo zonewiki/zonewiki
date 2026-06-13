@@ -1282,6 +1282,7 @@ body.editor-page main {
   background-position: right .5rem center;
 }
 .tasks-toolbar input { max-width: 150px; }
+.tasks-toolbar #task-filter-search { max-width: 220px; }
 
 .tasks-list {
   list-style: none; margin: 0; padding: 0;
@@ -1365,6 +1366,11 @@ body.editor-page main {
 }
 
 .tasks-empty { text-align: center; color: var(--muted); padding: 2rem; font-style: italic; }
+
+.tasks-show-more { text-align: center; padding: 1rem; }
+.tasks-show-more .btn { font-size: .8rem; }
+
+#task-edit-inbox-field label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
 
 /* Task edit modal */
 .task-edit-modal {

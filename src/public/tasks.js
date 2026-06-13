@@ -8,6 +8,7 @@
   const addBtn = document.getElementById('task-add-btn');
   const sortSelect = document.getElementById('task-sort');
   const filterTag = document.getElementById('task-filter-tag');
+  const filterSearch = document.getElementById('task-filter-search');
   const modal = document.getElementById('task-edit-modal');
   const form = document.getElementById('task-edit-form');
   const cancelBtn = document.getElementById('task-edit-cancel');
@@ -27,6 +28,7 @@
   let selectedId  = null;
   let selectedIds = new Set();
   let anchorId    = null;
+  let completedLimit = 50;
 
   // ── API ────────────────────────────────────────────────────────────────────
 
@@ -80,11 +82,17 @@
   }
 
   async function deleteTasks(ids) {
-    await Promise.all(ids.map(id => fetch(`/api/tasks/${id}`, { method: 'DELETE' })));
-    const idSet = new Set(ids);
-    tasks = tasks.filter(t => !idSet.has(t.id));
-    render();
-    window.refreshDueBadge?.();
+    const res = await fetch('/api/tasks/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (res.ok) {
+      const idSet = new Set(ids);
+      tasks = tasks.filter(t => !idSet.has(t.id));
+      render();
+      window.refreshDueBadge?.();
+    }
   }
 
   async function reorder(order) {
@@ -105,11 +113,14 @@
       if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
       deleteTitleEl.textContent = count > 1 ? '' : title;
       deleteModal.showModal();
+      let resolved = false;
       const finish = ok => {
-        deleteModal.close();
+        if (resolved) return;
+        resolved = true;
         deleteConfirmBtn.removeEventListener('click', onOk);
         deleteCancelBtn.removeEventListener('click', onCancel);
         deleteModal.removeEventListener('close', onClose);
+        deleteModal.close();
         resolve(ok);
       };
       const onOk     = () => finish(true);
@@ -130,6 +141,15 @@
   function filterTasks() {
     const today = todayStr();
     let filtered = tasks;
+
+    // Text search filter (title + description)
+    const searchTerm = (filterSearch?.value || '').trim().toLowerCase();
+    if (searchTerm) {
+      filtered = filtered.filter(t =>
+        t.title.toLowerCase().includes(searchTerm) ||
+        (t.description || '').toLowerCase().includes(searchTerm)
+      );
+    }
 
     // Hide tasks whose start_date hasn't arrived yet (unless viewing completed or scheduled)
     if (activeFilter !== 'completed' && activeFilter !== 'scheduled') {
@@ -343,13 +363,32 @@
     };
 
     let html = '';
+    let truncated = false;
     if (inboxTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Inbox</li>';
       html += inboxTasks.map(taskHTML).join('');
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
-    html += orderedTasks.map(taskHTML).join('');
+    // Limit completed tab display
+    let displayTasks = orderedTasks;
+    if (activeFilter === 'completed' && orderedTasks.length > completedLimit) {
+      displayTasks = orderedTasks.slice(0, completedLimit);
+      truncated = true;
+    }
+    html += displayTasks.map(taskHTML).join('');
+    if (truncated) {
+      html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
+    }
     listEl.innerHTML = html;
+
+    // "Show more" button
+    const showMoreBtn = document.getElementById('tasks-show-more-btn');
+    if (showMoreBtn) {
+      showMoreBtn.addEventListener('click', () => {
+        completedLimit += 50;
+        render();
+      });
+    }
 
     // Attach event listeners
     listEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
@@ -365,7 +404,7 @@
     });
 
     listEl.querySelectorAll('.task-title').forEach(el => {
-      el.addEventListener('click', e => {
+      el.addEventListener('dblclick', e => {
         startInlineEdit(e.currentTarget);
       });
     });
@@ -422,6 +461,7 @@
 
   sortSelect.addEventListener('change', render);
   filterTag.addEventListener('input', render);
+  if (filterSearch) filterSearch.addEventListener('input', render);
 
   // ── Tag autocomplete ───────────────────────────────────────────────────────
 
@@ -552,6 +592,16 @@
     recTypeSelect.value = recType;
     document.getElementById('task-edit-rec-interval').value = task?.recurrence?.interval || 1;
     recIntervalField.style.display = recType ? '' : 'none';
+    // Show "move to inbox" only for existing tasks with a sort_order
+    const inboxField = document.getElementById('task-edit-inbox-field');
+    const inboxCb = document.getElementById('task-edit-inbox');
+    if (task && task.sort_order != null) {
+      inboxField.style.display = '';
+      inboxCb.checked = false;
+    } else {
+      inboxField.style.display = 'none';
+      inboxCb.checked = false;
+    }
     deleteBtn.style.display = task ? '' : 'none';
     modal.showModal();
     document.getElementById('task-edit-title').focus();
@@ -577,6 +627,10 @@
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval').value) || 1,
     };
     if (!data.title) return;
+    // Move to inbox: reset sort_order to null
+    if (id && document.getElementById('task-edit-inbox').checked) {
+      data.sort_order = null;
+    }
     modal.close();
     if (id) {
       await updateTask(id, data);
@@ -629,12 +683,18 @@
         if (fromIdx === -1 || toIdx === -1) return;
         ids.splice(fromIdx, 1);
         ids.splice(toIdx, 0, draggedId);
-        // Update sort_order for all tasks based on new order
+        // Only assign sort_order to items that already had one, plus the dragged item
+        const draggedTask = tasks.find(tk => tk.id === draggedId);
         ids.forEach((tid, i) => {
           const t = tasks.find(tk => tk.id === tid);
-          if (t) t.sort_order = i;
+          if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
         });
-        reorder(ids);
+        // Send only the items that have a sort_order to the server
+        const orderedIds = ids.filter(tid => {
+          const t = tasks.find(tk => tk.id === tid);
+          return t && t.sort_order != null;
+        });
+        reorder(orderedIds);
         render();
       });
     });
@@ -671,8 +731,15 @@
       }
       ids.length = 0; ids.push(...rest);
     }
-    ids.forEach((tid, i) => { const t = tasks.find(tk => tk.id === tid); if (t) t.sort_order = i; });
-    reorder(ids);
+    ids.forEach((tid, i) => {
+      const t = tasks.find(tk => tk.id === tid);
+      if (t && (t.sort_order != null || selectedIds.has(tid))) t.sort_order = i;
+    });
+    const orderedIds = ids.filter(tid => {
+      const t = tasks.find(tk => tk.id === tid);
+      return t && t.sort_order != null;
+    });
+    reorder(orderedIds);
     render();
   }
 
@@ -684,15 +751,10 @@
     const items = visibleItems();
     const currentIdx = selectedId ? items.findIndex(el => el.dataset.id === selectedId) : -1;
 
-    // Tab cycles filter tabs
-    if (e.key === 'Tab') {
+    // 'n' opens new task modal
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      const tabs = Array.from(tabsEl.querySelectorAll('.tab'));
-      const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
-      const next = e.shiftKey
-        ? (activeIdx > 0 ? activeIdx - 1 : tabs.length - 1)
-        : (activeIdx < tabs.length - 1 ? activeIdx + 1 : 0);
-      tabs[next].click();
+      openEditModal(null);
       return;
     }
 

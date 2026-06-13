@@ -2359,6 +2359,17 @@ def _write_tasks_no_commit(tasks: list[dict]) -> None:
     TASKS_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _validate_date(val: str | None) -> str | None:
+    """Return val if it's a valid YYYY-MM-DD string or None, else raise 400."""
+    if not val:
+        return None
+    try:
+        datetime.strptime(val, "%Y-%m-%d")
+        return val
+    except ValueError:
+        abort(400, description="Invalid date format, expected YYYY-MM-DD")
+
+
 def _spawn_recurring(task: dict) -> dict | None:
     """If task has recurrence, create the next instance and return it."""
     rec = task.get("recurrence")
@@ -2393,7 +2404,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         "title": task["title"],
         "description": task.get("description", ""),
         "tags": task.get("tags", []),
-        "start_date": task.get("start_date"),
+        "start_date": None,
         "due_date": next_due.strftime("%Y-%m-%d"),
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
@@ -2419,6 +2430,7 @@ def tasks_page():
         <button class="tab" data-filter="completed">Completed</button>
       </div>
       <div class="tasks-toolbar">
+        <input type="text" id="task-filter-search" placeholder="Search tasks…" autocomplete="off">
         <select id="task-sort">
           <option value="manual">Manual order</option>
           <option value="created_at">Created</option>
@@ -2468,6 +2480,9 @@ def tasks_page():
           <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
         </div>
         <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
+        <div class="task-field" id="task-edit-inbox-field" style="display:none">
+          <label><input type="checkbox" id="task-edit-inbox"> Move to inbox (remove from manual order)</label>
+        </div>
         <div class="task-edit-actions">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="button" class="btn" id="task-edit-cancel">Cancel</button>
@@ -2506,14 +2521,13 @@ def api_create_task():
     if not title:
         abort(400)
     tasks = _read_tasks()
-    max_order = max((t.get("sort_order", 0) for t in tasks), default=0)
     task = {
         "id": str(uuid.uuid4()),
         "title": title,
         "description": data.get("description", "").strip(),
         "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
-        "start_date": data.get("start_date") or None,
-        "due_date": data.get("due_date") or None,
+        "start_date": _validate_date(data.get("start_date")),
+        "due_date": _validate_date(data.get("due_date")),
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
         "sort_order": None,
@@ -2538,15 +2552,18 @@ def api_update_task(task_id):
     if not task:
         abort(404)
     if "title" in data:
-        task["title"] = data["title"].strip()
+        title = data["title"].strip()
+        if not title:
+            abort(400, description="Title cannot be empty")
+        task["title"] = title
     if "description" in data:
         task["description"] = data["description"].strip()
     if "tags" in data:
         task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
     if "due_date" in data:
-        task["due_date"] = data["due_date"] or None
+        task["due_date"] = _validate_date(data["due_date"])
     if "start_date" in data:
-        task["start_date"] = data["start_date"] or None
+        task["start_date"] = _validate_date(data["start_date"])
     if "sort_order" in data:
         task["sort_order"] = data["sort_order"]
     if "rec_type" in data:
@@ -2565,7 +2582,17 @@ def api_update_task(task_id):
             spawned = _spawn_recurring(task)
             if spawned:
                 tasks.append(spawned)
-        elif not data["completed"]:
+        elif not data["completed"] and task.get("completed_at"):
+            # Remove spawned recurring instance if it exists
+            if task.get("recurrence"):
+                completed_at = task["completed_at"]
+                tasks = [t for t in tasks if not (
+                    t["id"] != task_id and
+                    t.get("title") == task["title"] and
+                    t.get("recurrence") == task.get("recurrence") and
+                    not t.get("completed_at") and
+                    t.get("created_at", "") >= completed_at
+                )]
             task["completed_at"] = None
     _write_tasks(tasks)
     return jsonify(task)
@@ -2575,6 +2602,19 @@ def api_update_task(task_id):
 def api_delete_task(task_id):
     tasks = _read_tasks()
     tasks = [t for t in tasks if t["id"] != task_id]
+    _write_tasks(tasks)
+    return "", 204
+
+
+@app.post("/api/tasks/batch-delete")
+def api_batch_delete_tasks():
+    data = request.get_json(force=True)
+    ids = data.get("ids", [])
+    if not ids or not isinstance(ids, list):
+        abort(400)
+    id_set = set(ids)
+    tasks = _read_tasks()
+    tasks = [t for t in tasks if t["id"] not in id_set]
     _write_tasks(tasks)
     return "", 204
 

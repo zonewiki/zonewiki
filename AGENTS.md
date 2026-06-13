@@ -125,6 +125,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/tasks`          | Create a task; returns JSON task object (201) |
 | PUT    | `/api/tasks/<id>`     | Update a task (title, priority, tags, due_date, completed, recurrence) |
 | DELETE | `/api/tasks/<id>`     | Delete a task; returns 204 |
+| POST   | `/api/tasks/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204 |
 | POST   | `/api/tasks/reorder`  | Update sort order; body `{ order: [id1, id2, …] }` |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
@@ -279,6 +280,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
+| **n** | tasks page | Open new task modal |
 
 ---
 
