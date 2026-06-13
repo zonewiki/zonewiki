@@ -2435,7 +2435,6 @@ def tasks_page():
         <select id="task-sort">
           <option value="manual">Manual order</option>
           <option value="created_at">Created</option>
-          <option value="title">Title</option>
         </select>
       </div>
       <ul class="tasks-list" id="tasks-list"></ul>

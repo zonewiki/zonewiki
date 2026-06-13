@@ -205,8 +205,6 @@
       });
     } else if (mode === 'created_at') {
       sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-    } else if (mode === 'title') {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
     }
     return sorted;
   }
