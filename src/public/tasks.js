@@ -46,6 +46,7 @@
       const task = await res.json();
       tasks.push(task);
       render();
+      window.refreshDueBadge?.();
     }
   }
 
@@ -65,6 +66,7 @@
       } else {
         render();
       }
+      window.refreshDueBadge?.();
     }
   }
 
@@ -73,6 +75,7 @@
     if (res.ok) {
       tasks = tasks.filter(t => t.id !== id);
       render();
+      window.refreshDueBadge?.();
     }
   }
 
@@ -81,6 +84,7 @@
     const idSet = new Set(ids);
     tasks = tasks.filter(t => !idSet.has(t.id));
     render();
+    window.refreshDueBadge?.();
   }
 
   async function reorder(order) {

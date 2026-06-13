@@ -117,6 +117,7 @@
     } catch (e) {}
   }
 
+  window.refreshDueBadge = checkDue;
   checkDue();
   setInterval(checkDue, 60000);
 }());
