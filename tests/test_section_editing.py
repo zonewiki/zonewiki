@@ -200,6 +200,22 @@ class TestSplitSections:
         assert parts[2].startswith("## B")
         assert parts[3].startswith("## C")
 
+    def test_empty_list_bullet_not_setext_heading(self):
+        # An empty list bullet "- " stripped to "-" must not be treated as a
+        # setext h2 underline, which would create a phantom section and shift
+        # all real section numbers by 1.
+        content = (
+            "# Title\n\n"
+            "- some item\n"
+            "- \n"
+            "\n"
+            "## Real Section\n\n"
+            "body\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 2, f"Expected 2 parts (preamble + 1 section), got {len(parts)}: {parts}"
+        assert parts[1].startswith("## Real Section")
+
 
 # ===========================================================================
 # content_hash / section_char_range — unit tests
