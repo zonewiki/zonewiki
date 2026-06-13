@@ -1385,8 +1385,8 @@ body.editor-page main {
   text-overflow: ellipsis;
 }
 .tag-ac-item:hover, .tag-ac-item.selected {
-  background: var(--accent);
-  color: #fff;
+  background: var(--code-bg);
+  color: var(--link);
 }
 
 @media (max-width: 640px) {
