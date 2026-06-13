@@ -52,6 +52,7 @@ No build step. No database. No auth (local use only).
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
+        ├── tasks.js        # Task app JS (dedicated task management UI)
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
@@ -119,9 +120,15 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
-| POST   | `/api/inbox`    | Create a new inbox note (`<timestamp>_<slug>.md`); returns `{ slug }` |
+| GET    | `/tasks`              | Dedicated task app page (list view with filters, sorting, drag-and-drop) |
+| GET    | `/api/tasks`          | JSON list of all tasks from `_tasks.json` |
+| POST   | `/api/tasks`          | Create a task; returns JSON task object (201) |
+| PUT    | `/api/tasks/<id>`     | Update a task (title, priority, tags, due_date, completed, recurrence) |
+| DELETE | `/api/tasks/<id>`     | Delete a task; returns 204 |
+| POST   | `/api/tasks/reorder`  | Update sort order; body `{ order: [id1, id2, …] }` |
+| POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
-| GET    | `/page/_inbox`        | Auto-generated index of all inbox notes, newest first |
+| GET    | `/page/_scratch`        | Auto-generated index of all scratch notes, newest first |
 | GET    | `/page/_daily`        | Auto-generated index of all daily notes, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
@@ -294,6 +301,45 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - Excerpt shows ~150 chars around the first match, with the match term bolded.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive, matches partial words.
+
+---
+
+## Task App
+
+A dedicated task management mini-app at `/tasks`, separate from the markdown-based wiki pages.
+
+### Storage
+
+Tasks are stored in `_tasks.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes (except reorder, which is silent).
+
+### Task fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID string | Auto-generated unique ID |
+| `title` | string | Task title (required) |
+| `description` | string | Optional notes/description |
+| `tags` | string[] | Comma-separated tags |
+| `due_date` | `"YYYY-MM-DD"` / `null` | Due date |
+| `created_at` | ISO datetime | Auto-set on creation |
+| `completed_at` | ISO datetime / `null` | Set when completed |
+| `sort_order` | integer | Manual sort position (priority = position) |
+| `recurrence` | `{ type, interval }` / `null` | Recurring schedule |
+
+### UI
+
+- **Filter tabs**: All (open) · Today · Upcoming · Overdue · Completed
+- **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
+- **Filters**: Tag text filter
+- **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
+- **Inline completion**: Checkbox toggles mark task complete instantly
+- **Edit modal**: Double-click or ✎ button opens a modal for full task editing
+- **Recurring tasks**: When a recurring task is completed, a new instance is automatically created with the next due date
+
+### Keyboard shortcut
+
+- **Ctrl+2** — Quick-add task (opens modal from any page, creates via `/api/tasks`)
+- **Ctrl+Alt+2** — Navigate to the Tasks app
 
 ---
 

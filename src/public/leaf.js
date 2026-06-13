@@ -282,72 +282,83 @@ async function fetchModalContentMatches(q) {
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-const quickTaskModal  = document.getElementById('quick-task-modal');
-const quickTaskForm   = document.getElementById('quick-task-form');
-const quickTaskInput  = document.getElementById('quick-task-input');
-const quickTaskCancel = document.getElementById('quick-task-cancel');
+const quickTaskModal       = document.getElementById('quick-task-modal');
+const quickTaskForm        = document.getElementById('quick-task-form');
+const quickTaskCancel      = document.getElementById('quick-task-cancel');
+const qtTitle              = document.getElementById('qt-title');
+const qtDesc               = document.getElementById('qt-desc');
+const qtStart              = document.getElementById('qt-start');
+const qtDue                = document.getElementById('qt-due');
+const qtTags               = document.getElementById('qt-tags');
+const qtRecType            = document.getElementById('qt-rec-type');
+const qtRecInterval        = document.getElementById('qt-rec-interval');
+const qtRecIntervalField   = document.getElementById('qt-rec-interval-field');
 
 quickTaskCancel?.addEventListener('click', () => quickTaskModal.close());
 closeOnBackdropClick(quickTaskModal);
+qtRecType?.addEventListener('change', () => {
+  qtRecIntervalField.style.display = qtRecType.value ? '' : 'none';
+});
 
 function openQuickTask() {
   if (!quickTaskModal) return;
-  quickTaskInput.value = '';
+  qtTitle.value = ''; qtDesc.value = ''; qtStart.value = ''; qtDue.value = '';
+  qtTags.value = ''; qtRecType.value = ''; qtRecInterval.value = '1';
+  qtRecIntervalField.style.display = 'none';
   quickTaskModal.showModal();
-  quickTaskInput.focus();
+  qtTitle.focus();
 }
 
 quickTaskForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  const description = quickTaskInput.value.trim();
-  if (!description) return;
+  const data = {
+    title: qtTitle.value.trim(),
+    description: qtDesc.value.trim(),
+    start_date: qtStart.value || null,
+    due_date: qtDue.value || null,
+    tags: qtTags.value.split(',').map(t => t.trim()).filter(Boolean),
+    rec_type: qtRecType.value || null,
+    rec_interval: parseInt(qtRecInterval.value) || 1,
+  };
+  if (!data.title) return;
   quickTaskModal.close();
-  const data = new FormData();
-  data.append('description', description);
   try {
-    await fetch('/api/add-task', { method: 'POST', body: data });
-    const path = window.location.pathname;
-    if (path === '/page/tasks') {
-      window.location.reload();
-    } else {
-      // If we're editing the tasks page, sync the textarea too
-      const editorTextarea = document.getElementById('editor-textarea');
-      if (editorTextarea && path === '/edit/tasks') {
-        const line = `- [ ] ${description}`;
-        if (editorTextarea.value && !editorTextarea.value.endsWith('\n'))
-          editorTextarea.value += '\n';
-        editorTextarea.value += line + '\n';
-        if (typeof fetchPreview === 'function') fetchPreview();
-      }
+    await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (window.location.pathname === '/tasks' && typeof window.refreshTasks === 'function') {
+      window.refreshTasks();
     }
   } catch (_) {}
 });
 
-// ── Inbox modal ───────────────────────────────────────────────────────────────
+// ── Scratch modal ───────────────────────────────────────────────────────────────
 
-const inboxModal  = document.getElementById('inbox-modal');
-const inboxForm   = document.getElementById('inbox-form');
-const inboxTitle  = document.getElementById('inbox-title');
-const inboxCancel = document.getElementById('inbox-cancel');
+const scratchModal  = document.getElementById('scratch-modal');
+const scratchForm   = document.getElementById('scratch-form');
+const scratchTitle  = document.getElementById('scratch-title');
+const scratchCancel = document.getElementById('scratch-cancel');
 
-document.getElementById('open-inbox')?.addEventListener('click', openInbox);
-inboxCancel?.addEventListener('click', () => inboxModal.close());
-closeOnBackdropClick(inboxModal);
+document.getElementById('open-scratch')?.addEventListener('click', openScratch);
+scratchCancel?.addEventListener('click', () => scratchModal.close());
+closeOnBackdropClick(scratchModal);
 
-function openInbox() {
-  if (!inboxModal) return;
-  inboxTitle.value = '';
-  inboxModal.showModal();
-  inboxTitle.focus();
+function openScratch() {
+  if (!scratchModal) return;
+  scratchTitle.value = '';
+  scratchModal.showModal();
+  scratchTitle.focus();
 }
 
-inboxForm?.addEventListener('submit', async e => {
+scratchForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  const title = inboxTitle.value.trim() || 'Untitled';
+  const title = scratchTitle.value.trim() || 'Untitled';
   const data = new FormData();
   data.append('title', title);
   try {
-    const res = await fetch('/api/inbox', { method: 'POST', body: data });
+    const res = await fetch('/api/scratch', { method: 'POST', body: data });
     const { slug } = await res.json();
     window.location.href = `/edit/${slug}`;
   } catch (_) {}
@@ -1198,6 +1209,17 @@ if (renameToggle && renameBar) {
 document.addEventListener('DOMContentLoaded', () => {
   if (!window.hljs) return;
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+});
+
+// ── Task sort buttons ─────────────────────────────────────────────────────────
+
+document.querySelectorAll('.task-sort-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const data = new FormData();
+    data.append('mode', btn.dataset.mode);
+    await fetch('/api/sort-tasks', { method: 'POST', body: data });
+    location.reload();
+  });
 });
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────

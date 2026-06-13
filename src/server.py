@@ -1,13 +1,14 @@
 import hashlib
 import hmac
 import html
+import json
 import mimetypes
 import os
 import re
 import shutil
 import subprocess
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
@@ -770,15 +771,56 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
   </dialog>
-  <dialog id="quick-task-modal" class="scratch-modal">
-    <p class="scratch-label">Add task to Inbox</p>
-    <form id="quick-task-form">
-      <input type="text" id="quick-task-input" placeholder="Task description…" autocomplete="off" spellcheck="false">
-      <div class="scratch-actions">
+  <dialog id="quick-task-modal" class="task-edit-modal">
+    <form id="quick-task-form" class="task-edit-form">
+      <div class="task-field">
+        <label for="qt-title">Title</label>
+        <input type="text" id="qt-title" required autocomplete="off">
+      </div>
+      <div class="task-field">
+        <label for="qt-desc">Notes</label>
+        <textarea id="qt-desc" rows="2"></textarea>
+      </div>
+      <div class="task-field-row">
+        <div class="task-field">
+          <label for="qt-due">Due date</label>
+          <input type="date" id="qt-due">
+        </div>
+        <div class="task-field">
+          <label for="qt-rec-type">Repeat</label>
+          <select id="qt-rec-type">
+            <option value="">—</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div class="task-field" id="qt-rec-interval-field" style="display:none">
+          <label for="qt-rec-interval">Every N</label>
+          <input type="number" id="qt-rec-interval" min="1" value="1">
+        </div>
+      </div>
+      <div class="task-field">
+        <label for="qt-start">Defer until</label>
+        <input type="date" id="qt-start">
+      </div>
+      <div class="task-field">
+        <label for="qt-tags">Tags <span class="field-hint">(comma-separated)</span></label>
+        <input type="text" id="qt-tags" autocomplete="off">
+      </div>
+      <div class="task-edit-actions">
         <button type="submit" class="btn btn-primary">Add</button>
         <button type="button" class="btn" id="quick-task-cancel">Cancel</button>
       </div>
     </form>
+  </dialog>
+  <dialog id="task-delete-modal" class="scratch-modal">
+    <p class="scratch-label">Delete task?</p>
+    <p id="task-delete-title" class="task-delete-title"></p>
+    <div class="scratch-actions">
+      <button type="button" class="btn btn-danger" id="task-delete-confirm">Delete</button>
+      <button type="button" class="btn" id="task-delete-cancel">Cancel</button>
+    </div>
   </dialog>
   <dialog id="url-name-modal" class="scratch-modal">
     <p class="scratch-label">Paste link</p>
@@ -2140,6 +2182,252 @@ def api_commit_file():
     
     git_commit_file(filepath, message or f"Update {filepath}")
     return jsonify({"success": True})
+
+
+# ── Task App ──────────────────────────────────────────────────────────────────
+
+TASKS_FILE = WIKI_DIR / "_tasks.json"
+
+
+def _read_tasks() -> list[dict]:
+    if not TASKS_FILE.exists():
+        return []
+    try:
+        data = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+
+def _write_tasks(tasks: list[dict]) -> None:
+    TASKS_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+    if GIT_ENABLED:
+        git_commit(TASKS_FILE, "Update tasks")
+
+
+def _write_tasks_no_commit(tasks: list[dict]) -> None:
+    TASKS_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _spawn_recurring(task: dict) -> dict | None:
+    """If task has recurrence, create the next instance and return it."""
+    rec = task.get("recurrence")
+    if not rec:
+        return None
+    rtype = rec.get("type", "daily")
+    interval = rec.get("interval", 1)
+    base_date = task.get("due_date")
+    if base_date:
+        try:
+            base = datetime.strptime(base_date, "%Y-%m-%d")
+        except ValueError:
+            base = datetime.now()
+    else:
+        base = datetime.now()
+
+    if rtype == "daily":
+        next_due = base + timedelta(days=interval)
+    elif rtype == "weekly":
+        next_due = base + timedelta(weeks=interval)
+    elif rtype == "monthly":
+        month = base.month + interval
+        year = base.year + (month - 1) // 12
+        month = (month - 1) % 12 + 1
+        day = min(base.day, 28)
+        next_due = base.replace(year=year, month=month, day=day)
+    else:
+        next_due = base + timedelta(days=interval)
+
+    new_task = {
+        "id": str(uuid.uuid4()),
+        "title": task["title"],
+        "description": task.get("description", ""),
+        "tags": task.get("tags", []),
+        "start_date": task.get("start_date"),
+        "due_date": next_due.strftime("%Y-%m-%d"),
+        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "completed_at": None,
+        "sort_order": task.get("sort_order", 0),
+        "recurrence": task.get("recurrence"),
+    }
+    return new_task
+
+
+@app.get("/tasks")
+def tasks_page():
+    breadcrumb = build_breadcrumb("tasks", "Tasks")
+    body = f"""{breadcrumb}
+    <header class="page-header"><h1>Tasks</h1>
+      <div class="page-actions"><button class="btn btn-primary" id="task-add-btn">+ New Task</button></div>
+    </header>
+    <article class="page-content">
+    <div class="tasks-app" id="tasks-app">
+      <div class="tasks-tabs" id="tasks-tabs">
+        <button class="tab active" data-filter="all">All</button>
+        <button class="tab" data-filter="due">Due</button>
+        <button class="tab" data-filter="scheduled">Deferred</button>
+        <button class="tab" data-filter="completed">Completed</button>
+      </div>
+      <div class="tasks-toolbar">
+        <select id="task-sort">
+          <option value="manual">Manual order</option>
+          <option value="created_at">Created</option>
+          <option value="title">Title</option>
+        </select>
+        <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
+      </div>
+      <ul class="tasks-list" id="tasks-list"></ul>
+    </div>
+    </article>
+    <dialog id="task-edit-modal" class="task-edit-modal">
+      <form id="task-edit-form" class="task-edit-form">
+        <input type="hidden" id="task-edit-id" name="id">
+        <div class="task-field">
+          <label for="task-edit-title">Title</label>
+          <input type="text" id="task-edit-title" name="title" required autocomplete="off">
+        </div>
+        <div class="task-field">
+          <label for="task-edit-desc">Notes</label>
+          <textarea id="task-edit-desc" name="description" rows="3"></textarea>
+        </div>
+        <div class="task-field-row">
+          <div class="task-field">
+            <label for="task-edit-due">Due date</label>
+            <input type="date" id="task-edit-due" name="due_date">
+          </div>
+          <div class="task-field">
+            <label for="task-edit-rec-type">Repeat</label>
+            <select id="task-edit-rec-type" name="rec_type">
+              <option value="">—</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="task-field" id="task-rec-interval-field" style="display:none">
+            <label for="task-edit-rec-interval">Every N</label>
+            <input type="number" id="task-edit-rec-interval" name="rec_interval" min="1" value="1">
+          </div>
+        </div>
+        <div class="task-field">
+          <label for="task-edit-start">Defer until</label>
+          <input type="date" id="task-edit-start" name="start_date">
+        </div>
+        <div class="task-field">
+          <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
+          <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
+        </div>
+        <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
+        <div class="task-edit-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn" id="task-edit-cancel">Cancel</button>
+          <button type="button" class="btn btn-danger" id="task-edit-delete" style="display:none">Delete</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="/public/tasks.js" defer></script>
+    """
+    return shell("Tasks", body, slug="tasks")
+
+
+@app.get("/api/tasks")
+def api_get_tasks():
+    return jsonify(_read_tasks())
+
+
+@app.post("/api/tasks")
+def api_create_task():
+    data = request.get_json(force=True)
+    title = data.get("title", "").strip()
+    if not title:
+        abort(400)
+    tasks = _read_tasks()
+    max_order = max((t.get("sort_order", 0) for t in tasks), default=0)
+    task = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "description": data.get("description", "").strip(),
+        "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
+        "start_date": data.get("start_date") or None,
+        "due_date": data.get("due_date") or None,
+        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "completed_at": None,
+        "sort_order": None,
+        "recurrence": None,
+    }
+    rec_type = data.get("rec_type")
+    if rec_type in ("daily", "weekly", "monthly"):
+        task["recurrence"] = {
+            "type": rec_type,
+            "interval": max(1, int(data.get("rec_interval", 1))),
+        }
+    tasks.append(task)
+    _write_tasks(tasks)
+    return jsonify(task), 201
+
+
+@app.put("/api/tasks/<task_id>")
+def api_update_task(task_id):
+    data = request.get_json(force=True)
+    tasks = _read_tasks()
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        abort(404)
+    if "title" in data:
+        task["title"] = data["title"].strip()
+    if "description" in data:
+        task["description"] = data["description"].strip()
+    if "tags" in data:
+        task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
+    if "due_date" in data:
+        task["due_date"] = data["due_date"] or None
+    if "start_date" in data:
+        task["start_date"] = data["start_date"] or None
+    if "sort_order" in data:
+        task["sort_order"] = data["sort_order"]
+    if "rec_type" in data:
+        rec_type = data["rec_type"]
+        if rec_type in ("daily", "weekly", "monthly"):
+            task["recurrence"] = {
+                "type": rec_type,
+                "interval": max(1, int(data.get("rec_interval", 1))),
+            }
+        else:
+            task["recurrence"] = None
+    # Handle completion toggle
+    if "completed" in data:
+        if data["completed"] and not task.get("completed_at"):
+            task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            spawned = _spawn_recurring(task)
+            if spawned:
+                tasks.append(spawned)
+        elif not data["completed"]:
+            task["completed_at"] = None
+    _write_tasks(tasks)
+    return jsonify(task)
+
+
+@app.delete("/api/tasks/<task_id>")
+def api_delete_task(task_id):
+    tasks = _read_tasks()
+    tasks = [t for t in tasks if t["id"] != task_id]
+    _write_tasks(tasks)
+    return "", 204
+
+
+@app.post("/api/tasks/reorder")
+def api_reorder_tasks():
+    data = request.get_json(force=True)
+    order = data.get("order", [])
+    if not order:
+        abort(400)
+    tasks = _read_tasks()
+    id_map = {t["id"]: t for t in tasks}
+    for i, task_id in enumerate(order):
+        if task_id in id_map:
+            id_map[task_id]["sort_order"] = i
+    _write_tasks_no_commit(tasks)
+    return "", 204
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────
