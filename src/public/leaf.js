@@ -16,7 +16,7 @@
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
   // All entries before the current page (last) become breadcrumb links
-  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_inbox' && p.slug !== '_daily');
+  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch' && p.slug !== '_daily');
   if (!intermediates.length) return;
 
   const homeEl = bc.querySelector('.breadcrumb-home');

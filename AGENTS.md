@@ -234,17 +234,17 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ---
 
-## Inbox
+## Scratch
 
 - There is no nav bar. All navigation is via keyboard shortcuts.
-- **Keybinding:** `Ctrl+1` opens the inbox modal.
-- User types a title and submits → `POST /api/inbox` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- **Keybinding:** `Ctrl+1` opens the scratch modal.
+- User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
-- **Inbox note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
-- **`/page/_inbox`** — special auto-generated page (no `.md` file on disk) listing all inbox notes newest-first with title and timestamp. Not editable.
+- **Scratch note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
+- **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratch notes newest-first with title and timestamp. Not editable.
 - **`/page/_daily`** — special auto-generated page (no `.md` file on disk) listing all daily notes newest-first with title and date. Not editable.
 - **`/page/_deleted`** — special auto-generated page listing all pages that exist in git history but not on disk (deleted pages), newest deletion first. Each entry shows title, slug, deletion date, and a one-click Restore button that calls `POST /restore/<slug>/<sha>`. Only available when `GIT_ENABLED`. Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
-- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Inbox" — matches searches for "inbox" or "_inbox". `_deleted` is similarly injected with title "Deleted Pages" (git only).
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only).
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
 ---

@@ -342,8 +342,8 @@ def list_deleted_pages() -> list[dict]:
     return deleted
 
 
-def list_inbox() -> list[dict]:
-    """Return all inbox (scratch) notes sorted newest first."""
+def list_scratch() -> list[dict]:
+    """Return all scratch notes sorted newest first."""
     entries = []
     for md_file in PAGES_DIR.glob("*.md"):
         m = SCRATCH_RE.match(md_file.stem)
@@ -720,13 +720,13 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <div id="modal-content-matches" class="content-matches hidden"></div>
     </div>
   </dialog>
-  <dialog id="inbox-modal" class="scratch-modal">
-    <p class="scratch-label">New inbox note</p>
-    <form id="inbox-form">
-      <input type="text" id="inbox-title" placeholder="Title…" autocomplete="off" spellcheck="false">
+  <dialog id="scratch-modal" class="scratch-modal">
+    <p class="scratch-label">New scratch note</p>
+    <form id="scratch-form">
+      <input type="text" id="scratch-title" placeholder="Title…" autocomplete="off" spellcheck="false">
       <div class="scratch-actions">
         <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="inbox-cancel">Cancel</button>
+        <button type="button" class="btn" id="scratch-cancel">Cancel</button>
       </div>
     </form>
   </dialog>
@@ -858,9 +858,9 @@ def index():
     return redirect("/page/index")
 
 
-@app.get("/page/_inbox")
-def inbox_page():
-    entries = list_inbox()
+@app.get("/page/_scratch")
+def scratch_page():
+    entries = list_scratch()
     if entries:
         items = "".join(
             f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
@@ -870,10 +870,10 @@ def inbox_page():
         body_inner = f"<ul class='notes-list'>{items}</ul>"
     else:
         body_inner = "<p>No entries yet.</p>"
-    body = f"""{build_breadcrumb('_inbox', 'Inbox')}
-<header class="page-header"><h1>Inbox</h1></header>
+    body = f"""{build_breadcrumb('_scratch', 'Scratch')}
+<header class="page-header"><h1>Scratch</h1></header>
 <article class="page-content">{body_inner}</article>"""
-    return shell("Inbox", body)
+    return shell("Scratch", body)
 
 
 @app.get("/page/_daily")
@@ -1016,8 +1016,8 @@ def api_daily():
     return jsonify({"slug": slug})
 
 
-@app.post("/api/inbox")
-def api_inbox():
+@app.post("/api/scratch")
+def api_scratch():
     title = request.form.get("title", "").strip() or "Untitled"
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     slug = f"{ts}_{to_slug(title)}"
@@ -1699,7 +1699,7 @@ def api_pages_list():
         })
     pages.sort(key=lambda p: p["title"].lower())
     # Inject virtual special pages
-    pages.insert(0, {"slug": "_inbox", "title": "Inbox", "links": counts.get("_inbox", 0), "mtime": 0})
+    pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
     pages.insert(0, {"slug": "_daily", "title": "Daily", "links": counts.get("_daily", 0), "mtime": 0})
     if GIT_ENABLED:
         pages.insert(0, {"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0})
