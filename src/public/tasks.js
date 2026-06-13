@@ -29,6 +29,32 @@
   let selectedIds = new Set();
   let anchorId    = null;
   let completedLimit = 50;
+  let undoTimer  = null;
+  let undoToastEl = null;
+
+  // ── Undo toast ────────────────────────────────────────────────────────────
+
+  function dismissUndo() {
+    if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+    if (undoToastEl) { undoToastEl.remove(); undoToastEl = null; }
+  }
+
+  function showUndo(msg, undoFn) {
+    dismissUndo();
+    const el = document.createElement('div');
+    el.className = 'raw-toast task-undo-toast';
+    const span = document.createElement('span');
+    span.textContent = msg;
+    const btn = document.createElement('button');
+    btn.className = 'btn task-undo-btn';
+    btn.textContent = 'Undo';
+    btn.addEventListener('click', () => { dismissUndo(); undoFn(); });
+    el.appendChild(span);
+    el.appendChild(btn);
+    document.body.appendChild(el);
+    undoToastEl = el;
+    undoTimer = setTimeout(dismissUndo, 6000);
+  }
 
   // ── API ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +117,19 @@
       const idSet = new Set(ids);
       tasks = tasks.filter(t => !idSet.has(t.id));
       render();
+      window.refreshDueBadge?.();
+    }
+  }
+
+  async function completeTasks(ids, completed) {
+    const res = await fetch('/api/tasks/batch-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, completed }),
+    });
+    if (res.ok) {
+      // Re-fetch to capture any spawned recurring tasks
+      await fetchTasks();
       window.refreshDueBadge?.();
     }
   }
@@ -414,7 +453,14 @@
     // Attach event listeners
     listEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
       cb.addEventListener('change', e => {
-        updateTask(e.target.dataset.id, { completed: e.target.checked });
+        const id = e.target.dataset.id;
+        const completed = e.target.checked;
+        const task = tasks.find(t => t.id === id);
+        updateTask(id, { completed });
+        if (task) {
+          const label = completed ? 'completed' : 'reopened';
+          showUndo(`Task ${label}`, () => completeTasks([id], !completed));
+        }
       });
     });
 
@@ -836,15 +882,30 @@
       setSelected(items[currentIdx > 0 ? currentIdx - 1 : items.length - 1].dataset.id);
     } else if (e.key === ' ' && selectedId) {
       e.preventDefault();
-      const task = tasks.find(t => t.id === selectedId);
-      if (!task) return;
-      const willDisappear = !task.completed_at && activeFilter !== 'completed';
-      if (willDisappear) {
+      if (selectedIds.size > 1) {
+        // Bulk complete/uncomplete
+        const ids = [...selectedIds];
+        const completing = ids.some(id => { const t = tasks.find(tk => tk.id === id); return t && !t.completed_at; });
         const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
                   || items.find(el => !selectedIds.has(el.dataset.id));
         setSelected(next?.dataset.id || null);
+        await completeTasks(ids, completing);
+        const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
+        showUndo(label, () => completeTasks(ids, !completing));
+      } else {
+        const task = tasks.find(t => t.id === selectedId);
+        if (!task) return;
+        const completing = !task.completed_at;
+        const willDisappear = completing && activeFilter !== 'completed';
+        if (willDisappear) {
+          const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
+                    || items.find(el => !selectedIds.has(el.dataset.id));
+          setSelected(next?.dataset.id || null);
+        }
+        updateTask(task.id, { completed: completing });
+        const label = completing ? 'Task completed' : 'Task reopened';
+        showUndo(label, () => completeTasks([task.id], !completing));
       }
-      updateTask(task.id, { completed: !task.completed_at });
     } else if (e.key === 'Enter' && selectedId) {
       e.preventDefault();
       openEditModal(selectedId);
@@ -854,6 +915,8 @@
       const count = ids.length;
       const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
       if (await confirmDelete(title, count)) {
+        // Snapshot deleted tasks for undo
+        const deleted = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
         const next = items.find(el => !selectedIds.has(el.dataset.id) &&
                        items.indexOf(el) > currentIdx)
                   || items.find(el => !selectedIds.has(el.dataset.id));
@@ -861,6 +924,17 @@
         selectedIds = new Set(selectedId ? [selectedId] : []);
         anchorId = selectedId;
         await deleteTasks(ids);
+        const label = count === 1 ? 'Task deleted' : `${count} tasks deleted`;
+        showUndo(label, async () => {
+          for (const t of deleted) {
+            await createTask({
+              title: t.title, description: t.description || '',
+              tags: t.tags || [], due_date: t.due_date, start_date: t.start_date,
+              defer_days: t.defer_days, rec_type: t.recurrence?.type,
+              rec_interval: t.recurrence?.interval,
+            });
+          }
+        });
       }
     } else if (e.key === 'Escape') {
       selectedId = null;

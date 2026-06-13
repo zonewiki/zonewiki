@@ -513,3 +513,75 @@ class TestDeferDays:
         assert len(spawned) == 1
         assert spawned[0]["defer_days"] == 3
         assert spawned[0]["start_date"] is None
+
+
+# ── Batch Complete ───────────────────────────────────────────────────────────
+
+
+class TestBatchComplete:
+    def test_batch_complete_multiple(self, client):
+        r1 = client.post("/api/tasks", json={"title": "A"})
+        r2 = client.post("/api/tasks", json={"title": "B"})
+        id1, id2 = r1.get_json()["id"], r2.get_json()["id"]
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [id1, id2], "completed": True})
+        assert resp.status_code == 200
+        updated = resp.get_json()
+        assert len(updated) == 2
+        assert all(t["completed_at"] is not None for t in updated)
+        # Verify via GET
+        tasks = client.get("/api/tasks").get_json()
+        for t in tasks:
+            if t["id"] in (id1, id2):
+                assert t["completed_at"] is not None
+
+    def test_batch_uncomplete(self, client):
+        r1 = client.post("/api/tasks", json={"title": "A"})
+        id1 = r1.get_json()["id"]
+        client.put(f"/api/tasks/{id1}", json={"completed": True})
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [id1], "completed": False})
+        assert resp.status_code == 200
+        task = client.get("/api/tasks").get_json()[0]
+        assert task["completed_at"] is None
+
+    def test_batch_complete_empty_ids(self, client):
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [], "completed": True})
+        assert resp.status_code == 400
+
+    def test_batch_complete_spawns_recurring(self, client):
+        r = client.post("/api/tasks", json={
+            "title": "Recurring", "due_date": "2026-06-10",
+            "rec_type": "daily", "rec_interval": 1,
+        })
+        task_id = r.get_json()["id"]
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [task_id], "completed": True})
+        assert resp.status_code == 200
+        tasks = client.get("/api/tasks").get_json()
+        assert len(tasks) == 2
+        spawned = [t for t in tasks if t["id"] != task_id]
+        assert spawned[0]["due_date"] == "2026-06-11"
+        assert spawned[0]["completed_at"] is None
+
+    def test_batch_uncomplete_removes_spawned(self, client):
+        r = client.post("/api/tasks", json={
+            "title": "Recurring", "due_date": "2026-06-10",
+            "rec_type": "daily", "rec_interval": 1,
+        })
+        task_id = r.get_json()["id"]
+        client.post("/api/tasks/batch-complete", json={"ids": [task_id], "completed": True})
+        tasks = client.get("/api/tasks").get_json()
+        assert len(tasks) == 2
+        # Now uncomplete
+        client.post("/api/tasks/batch-complete", json={"ids": [task_id], "completed": False})
+        tasks = client.get("/api/tasks").get_json()
+        assert len(tasks) == 1
+        assert tasks[0]["id"] == task_id
+        assert tasks[0]["completed_at"] is None
+
+    def test_batch_complete_idempotent(self, client):
+        r = client.post("/api/tasks", json={"title": "A"})
+        task_id = r.get_json()["id"]
+        client.put(f"/api/tasks/{task_id}", json={"completed": True})
+        # Complete again — should return empty updated list (already completed)
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [task_id], "completed": True})
+        assert resp.status_code == 200
+        assert len(resp.get_json()) == 0

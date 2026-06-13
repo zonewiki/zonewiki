@@ -126,6 +126,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | PUT    | `/api/tasks/<id>`     | Update a task (title, priority, tags, due_date, completed, recurrence) |
 | DELETE | `/api/tasks/<id>`     | Delete a task; returns 204 |
 | POST   | `/api/tasks/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204 |
+| POST   | `/api/tasks/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
 | POST   | `/api/tasks/reorder`  | Update sort order; body `{ order: [id1, id2, …] }` |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
