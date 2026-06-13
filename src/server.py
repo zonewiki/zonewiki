@@ -2431,12 +2431,12 @@ def tasks_page():
       </div>
       <div class="tasks-toolbar">
         <input type="text" id="task-filter-search" placeholder="Search tasks…" autocomplete="off">
+        <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
         <select id="task-sort">
           <option value="manual">Manual order</option>
           <option value="created_at">Created</option>
           <option value="title">Title</option>
         </select>
-        <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
       </div>
       <ul class="tasks-list" id="tasks-list"></ul>
     </div>
