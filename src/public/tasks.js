@@ -800,6 +800,18 @@
       return;
     }
 
+    // Tab/Shift+Tab cycles filter tabs
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const tabs = Array.from(tabsEl.querySelectorAll('.tab'));
+      const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
+      const next = e.shiftKey
+        ? (activeIdx > 0 ? activeIdx - 1 : tabs.length - 1)
+        : (activeIdx < tabs.length - 1 ? activeIdx + 1 : 0);
+      tabs[next].click();
+      return;
+    }
+
     if (!items.length) return;
 
     // Ctrl+Shift+j/k / Ctrl+Shift+↑↓ — reorder selected (manual sort mode)

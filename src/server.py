@@ -2427,7 +2427,7 @@ def tasks_page():
       <div class="tasks-tabs" id="tasks-tabs">
         <button class="tab active" data-filter="all">All</button>
         <button class="tab" data-filter="due">Due</button>
-        <button class="tab" data-filter="scheduled">Deferred</button>
+        <button class="tab" data-filter="scheduled">Hidden</button>
         <button class="tab" data-filter="completed">Completed</button>
       </div>
       <div class="tasks-toolbar">
@@ -2630,6 +2630,42 @@ def api_batch_delete_tasks():
     tasks = [t for t in tasks if t["id"] not in id_set]
     _write_tasks(tasks)
     return "", 204
+
+
+@app.post("/api/tasks/batch-complete")
+def api_batch_complete_tasks():
+    data = request.get_json(force=True)
+    ids = data.get("ids", [])
+    completed = data.get("completed", True)
+    if not ids or not isinstance(ids, list):
+        abort(400)
+    id_set = set(ids)
+    tasks = _read_tasks()
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    updated = []
+    for task in tasks:
+        if task["id"] not in id_set:
+            continue
+        if completed and not task.get("completed_at"):
+            task["completed_at"] = now
+            spawned = _spawn_recurring(task)
+            if spawned:
+                tasks.append(spawned)
+            updated.append(task)
+        elif not completed and task.get("completed_at"):
+            if task.get("recurrence"):
+                completed_at = task["completed_at"]
+                tasks = [t for t in tasks if not (
+                    t["id"] not in id_set and
+                    t.get("title") == task["title"] and
+                    t.get("recurrence") == task.get("recurrence") and
+                    not t.get("completed_at") and
+                    t.get("created_at", "") >= completed_at
+                )]
+            task["completed_at"] = None
+            updated.append(task)
+    _write_tasks(tasks)
+    return jsonify(updated)
 
 
 @app.post("/api/tasks/reorder")
