@@ -1250,7 +1250,10 @@ body.editor-page main {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.task-undo-toast { display: flex; align-items: center; gap: .75rem; }
+.task-undo-toast {
+  display: flex; align-items: center; gap: .75rem;
+  left: 50%; right: auto; transform: translateX(-50%);
+}
 .task-undo-btn {
   font-size: .8rem; padding: .2rem .6rem; font-weight: 600;
   color: var(--link); background: transparent; border: 1px solid var(--link);
