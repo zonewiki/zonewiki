@@ -11,7 +11,7 @@
   const KEY = 'leafHistory';
   let hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
   hist = hist.filter(p => p.slug !== slug);
-  hist.push({ slug, title });
+  hist.push({ slug, title, url: window.location.pathname });
   if (hist.length > 6) hist = hist.slice(-6);
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
@@ -35,7 +35,7 @@
   for (const p of intermediates) {
     bc.appendChild(mkSep());
     const a = document.createElement('a');
-    a.href = `/page/${p.slug}`;
+    a.href = p.url || `/page/${p.slug}`;
     a.textContent = p.title;
     bc.appendChild(a);
   }
@@ -1222,7 +1222,7 @@ function getPrevPageUrl() {
   const hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
   const currentSlug = document.querySelector('.breadcrumb[data-slug]')?.dataset.slug;
   for (let i = hist.length - 1; i >= 0; i--) {
-    if (hist[i].slug !== currentSlug) return '/page/' + hist[i].slug;
+    if (hist[i].slug !== currentSlug) return hist[i].url || '/page/' + hist[i].slug;
   }
   return '/page/index';
 }
