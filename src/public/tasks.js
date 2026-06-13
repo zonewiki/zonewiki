@@ -694,20 +694,20 @@
 
     if (!items.length) return;
 
+    // Ctrl+Shift+j/k / Ctrl+Shift+↑↓ — reorder selected (manual sort mode)
+    if (e.ctrlKey && e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
+      e.preventDefault();
+      reorderSelected('down');
+    } else if (e.ctrlKey && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'K')) {
+      e.preventDefault();
+      reorderSelected('up');
     // Shift+j/k / Shift+↑↓ — extend selection range
-    if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
+    } else if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
       e.preventDefault();
       if (currentIdx < items.length - 1) extendSelection(items[currentIdx + 1].dataset.id);
     } else if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'K')) {
       e.preventDefault();
       if (currentIdx > 0) extendSelection(items[currentIdx - 1].dataset.id);
-    // Ctrl+j/k / Ctrl+↑↓ — reorder selected (manual sort mode)
-    } else if (e.ctrlKey && (e.key === 'ArrowDown' || e.key === 'j')) {
-      e.preventDefault();
-      reorderSelected('down');
-    } else if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'k')) {
-      e.preventDefault();
-      reorderSelected('up');
     } else if (e.key === 'ArrowDown' || e.key === 'j') {
       e.preventDefault();
       setSelected(items[currentIdx < items.length - 1 ? currentIdx + 1 : 0].dataset.id);
