@@ -704,12 +704,14 @@
         const fromIdx = ids.indexOf(draggedId);
         const toIdx = ids.indexOf(item.dataset.id);
         if (fromIdx === -1 || toIdx === -1) return;
+        const draggedTask = tasks.find(tk => tk.id === draggedId);
+        const wasInbox = draggedTask && draggedTask.sort_order == null;
         ids.splice(fromIdx, 1);
-        // Adjust target index: removing from a lower position shifts later items down
-        const insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+        // When dragging from inbox into ordered, insert BEFORE target (adjust index).
+        // Within-section reorder uses standard behavior (no adjustment).
+        const insertIdx = (wasInbox && fromIdx < toIdx) ? toIdx - 1 : toIdx;
         ids.splice(insertIdx, 0, draggedId);
         // Only assign sort_order to items that already had one, plus the dragged item
-        const draggedTask = tasks.find(tk => tk.id === draggedId);
         ids.forEach((tid, i) => {
           const t = tasks.find(tk => tk.id === tid);
           if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
