@@ -24,7 +24,9 @@
   let tasks = [];
   let activeFilter = 'all';
   let draggedId = null;
-  let selectedId = null;
+  let selectedId  = null;
+  let selectedIds = new Set();
+  let anchorId    = null;
 
   // ── API ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +76,13 @@
     }
   }
 
+  async function deleteTasks(ids) {
+    await Promise.all(ids.map(id => fetch(`/api/tasks/${id}`, { method: 'DELETE' })));
+    const idSet = new Set(ids);
+    tasks = tasks.filter(t => !idSet.has(t.id));
+    render();
+  }
+
   async function reorder(order) {
     await fetch('/api/tasks/reorder', {
       method: 'POST',
@@ -86,9 +95,11 @@
 
   deleteCancelBtn?.addEventListener('click', () => deleteModal.close());
 
-  function confirmDelete(title) {
+  function confirmDelete(title, count = 1) {
     return new Promise(resolve => {
-      deleteTitleEl.textContent = title;
+      const labelEl = deleteModal.querySelector('.scratch-label');
+      if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
+      deleteTitleEl.textContent = count > 1 ? '' : title;
       deleteModal.showModal();
       const finish = ok => {
         deleteModal.close();
@@ -178,15 +189,35 @@
 
   // ── Keyboard selection ─────────────────────────────────────────────────────
 
+  function updateSelectionClasses() {
+    listEl.querySelectorAll('.task-item').forEach(el => {
+      el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
+    });
+  }
+
   function setSelected(id) {
     selectedId = id;
-    listEl.querySelectorAll('.task-item').forEach(el => {
-      el.classList.toggle('task-selected', el.dataset.id === id);
-    });
+    anchorId   = id;
+    selectedIds = new Set(id ? [id] : []);
+    updateSelectionClasses();
     if (id) {
       const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
       if (el) el.scrollIntoView({ block: 'nearest' });
     }
+  }
+
+  function extendSelection(id) {
+    if (!id) return;
+    selectedId = id;
+    const items = visibleItems();
+    const aIdx = anchorId ? items.findIndex(el => el.dataset.id === anchorId) : 0;
+    const bIdx = items.findIndex(el => el.dataset.id === id);
+    if (bIdx === -1) return;
+    const [lo, hi] = aIdx <= bIdx ? [aIdx, bIdx] : [bIdx, aIdx];
+    selectedIds = new Set(items.slice(lo, hi + 1).map(el => el.dataset.id));
+    updateSelectionClasses();
+    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest' });
   }
 
   function visibleItems() {
@@ -348,10 +379,16 @@
     }
 
     // Restore or clear selection after re-render
-    if (selectedId) {
-      const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(selectedId)}"]`);
-      if (el) el.classList.add('task-selected');
-      else selectedId = null;
+    if (selectedIds.size) {
+      const visSet = new Set(visibleItems().map(el => el.dataset.id));
+      selectedIds = new Set([...selectedIds].filter(id => visSet.has(id)));
+      if (!visSet.has(selectedId)) selectedId = selectedIds.size ? [...selectedIds][0] : null;
+      if (!visSet.has(anchorId))   anchorId = selectedId;
+      updateSelectionClasses();
+      if (selectedId) {
+        const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(selectedId)}"]`);
+        if (el) el.scrollIntoView({ block: 'nearest' });
+      }
     }
 
     // Click to select (clicks on checkbox/button are handled separately)
@@ -602,15 +639,34 @@
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
   function reorderSelected(direction) {
-    if (sortSelect.value !== 'manual' || !selectedId) return;
+    if (sortSelect.value !== 'manual' || !selectedIds.size) return;
     const items = visibleItems();
-    const idx = items.findIndex(el => el.dataset.id === selectedId);
-    if (idx === -1) return;
     const ids = items.map(el => el.dataset.id);
-    if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === ids.length - 1) return;
-    if (direction === 'up') [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-    else if (direction === 'down') [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
+
+    if (selectedIds.size === 1) {
+      const idx = ids.indexOf(selectedId);
+      if (idx === -1) return;
+      if (direction === 'up' && idx === 0) return;
+      if (direction === 'down' && idx === ids.length - 1) return;
+      if (direction === 'up') [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+      else [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
+    } else {
+      const sel = selectedIds;
+      const selIdx = ids.map((id, i) => sel.has(id) ? i : -1).filter(i => i >= 0);
+      const topIdx = selIdx[0], botIdx = selIdx[selIdx.length - 1];
+      const rest = ids.filter(id => !sel.has(id));
+      const group = selIdx.map(i => ids[i]);
+      if (direction === 'up') {
+        if (topIdx === 0) return;
+        const insertAt = rest.indexOf(ids[topIdx - 1]);
+        rest.splice(insertAt, 0, ...group);
+      } else {
+        if (botIdx === ids.length - 1) return;
+        const insertAt = rest.indexOf(ids[botIdx + 1]) + 1;
+        rest.splice(insertAt, 0, ...group);
+      }
+      ids.length = 0; ids.push(...rest);
+    }
     ids.forEach((tid, i) => { const t = tasks.find(tk => tk.id === tid); if (t) t.sort_order = i; });
     reorder(ids);
     render();
@@ -638,10 +694,18 @@
 
     if (!items.length) return;
 
+    // Shift+j/k / Shift+↑↓ — extend selection range
     if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
       e.preventDefault();
-      reorderSelected('down');
+      if (currentIdx < items.length - 1) extendSelection(items[currentIdx + 1].dataset.id);
     } else if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'K')) {
+      e.preventDefault();
+      if (currentIdx > 0) extendSelection(items[currentIdx - 1].dataset.id);
+    // Ctrl+j/k / Ctrl+↑↓ — reorder selected (manual sort mode)
+    } else if (e.ctrlKey && (e.key === 'ArrowDown' || e.key === 'j')) {
+      e.preventDefault();
+      reorderSelected('down');
+    } else if (e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'k')) {
       e.preventDefault();
       reorderSelected('up');
     } else if (e.key === 'ArrowDown' || e.key === 'j') {
@@ -654,29 +718,34 @@
       e.preventDefault();
       const task = tasks.find(t => t.id === selectedId);
       if (!task) return;
-      // If completing and will leave current view, advance selection first
       const willDisappear = !task.completed_at && activeFilter !== 'completed';
       if (willDisappear) {
-        if (currentIdx < items.length - 1) selectedId = items[currentIdx + 1].dataset.id;
-        else if (currentIdx > 0) selectedId = items[currentIdx - 1].dataset.id;
-        else selectedId = null;
+        const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
+                  || items.find(el => !selectedIds.has(el.dataset.id));
+        setSelected(next?.dataset.id || null);
       }
       updateTask(task.id, { completed: !task.completed_at });
     } else if (e.key === 'Enter' && selectedId) {
       e.preventDefault();
       openEditModal(selectedId);
-    } else if (e.key === 'Delete' && selectedId) {
+    } else if (e.key === 'Delete' && selectedIds.size) {
       e.preventDefault();
-      const task = tasks.find(t => t.id === selectedId);
-      if (task && await confirmDelete(task.title)) {
-        const idToDelete = selectedId;
-        if (currentIdx < items.length - 1) selectedId = items[currentIdx + 1].dataset.id;
-        else if (currentIdx > 0) selectedId = items[currentIdx - 1].dataset.id;
-        else selectedId = null;
-        deleteTask(idToDelete);
+      const ids = [...selectedIds];
+      const count = ids.length;
+      const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
+      if (await confirmDelete(title, count)) {
+        const next = items.find(el => !selectedIds.has(el.dataset.id) &&
+                       items.indexOf(el) > currentIdx)
+                  || items.find(el => !selectedIds.has(el.dataset.id));
+        selectedId = next?.dataset.id || null;
+        selectedIds = new Set(selectedId ? [selectedId] : []);
+        anchorId = selectedId;
+        await deleteTasks(ids);
       }
-    } else if (e.key === 'Escape' && selectedId) {
+    } else if (e.key === 'Escape') {
       selectedId = null;
+      selectedIds.clear();
+      anchorId = null;
       listEl.querySelectorAll('.task-selected').forEach(el => el.classList.remove('task-selected'));
     }
   });
