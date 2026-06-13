@@ -75,7 +75,7 @@
     try {
       const res = await fetch('/api/uncommitted');
       const files = await res.json();
-      
+
       if (files.length > 0) {
         uncommittedCount.textContent = files.length;
         uncommittedBadge.style.display = 'inline-flex';
@@ -90,6 +90,31 @@
   // Check on page load and every 30 seconds
   checkUncommitted();
   setInterval(checkUncommitted, 30000);
+}());
+
+// ── Tasks due badge ──────────────────────────────────────────────────────────
+
+(function () {
+  const badge = document.getElementById('tasks-due-badge');
+  const countEl = document.getElementById('tasks-due-count');
+
+  if (!badge) return;
+
+  async function checkDue() {
+    try {
+      const res = await fetch('/api/tasks/due-count');
+      const { count } = await res.json();
+      if (count > 0) {
+        countEl.textContent = count;
+        badge.style.display = 'inline-flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (e) {}
+  }
+
+  checkDue();
+  setInterval(checkDue, 60000);
 }());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

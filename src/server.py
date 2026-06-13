@@ -8,7 +8,7 @@ import re
 import shutil
 import subprocess
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
@@ -921,6 +921,10 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
+    <a id="tasks-due-badge" class="tasks-due-badge" href="/tasks" style="display: none;" title="Tasks due">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
+      <span id="tasks-due-count">0</span>
+    </a>
     <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
       <span id="uncommitted-count">0</span>
@@ -2479,6 +2483,16 @@ def tasks_page():
 @app.get("/api/tasks")
 def api_get_tasks():
     return jsonify(_read_tasks())
+
+
+@app.get("/api/tasks/due-count")
+def api_tasks_due_count():
+    today = date.today().isoformat()
+    count = sum(
+        1 for t in _read_tasks()
+        if not t.get("completed_at") and t.get("due_date") and t["due_date"] <= today
+    )
+    return jsonify({"count": count})
 
 
 @app.post("/api/tasks")

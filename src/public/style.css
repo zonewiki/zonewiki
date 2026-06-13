@@ -832,9 +832,43 @@ kbd {
   .uncommitted-badge {
     background: color-mix(in srgb, var(--muted) 20%, transparent);
   }
-  
+
   .uncommitted-badge:hover {
     background: color-mix(in srgb, var(--muted) 35%, transparent);
+  }
+}
+
+.tasks-due-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  height: 1.5rem;
+  padding: 0 .5rem 0 .35rem;
+  background: color-mix(in srgb, #f97316 18%, transparent);
+  color: #c2540a;
+  border-radius: 1rem;
+  text-decoration: none;
+  transition: all .15s;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tasks-due-badge svg { flex-shrink: 0; }
+
+.tasks-due-badge:hover {
+  background: color-mix(in srgb, #f97316 30%, transparent);
+  color: #9a3d06;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tasks-due-badge {
+    background: color-mix(in srgb, #f97316 22%, transparent);
+    color: #fb923c;
+  }
+  .tasks-due-badge:hover {
+    background: color-mix(in srgb, #f97316 35%, transparent);
+    color: #fdba74;
   }
 }
 
