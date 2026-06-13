@@ -705,7 +705,9 @@
         const toIdx = ids.indexOf(item.dataset.id);
         if (fromIdx === -1 || toIdx === -1) return;
         ids.splice(fromIdx, 1);
-        ids.splice(toIdx, 0, draggedId);
+        // Adjust target index: removing from a lower position shifts later items down
+        const insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+        ids.splice(insertIdx, 0, draggedId);
         // Only assign sort_order to items that already had one, plus the dragged item
         const draggedTask = tasks.find(tk => tk.id === draggedId);
         ids.forEach((tid, i) => {
