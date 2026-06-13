@@ -617,7 +617,7 @@
   }
 
   document.addEventListener('keydown', async e => {
-    if (modal.open) return;
+    if (modal.open || deleteModal.open) return;
     const focus = document.activeElement;
     if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;
 
