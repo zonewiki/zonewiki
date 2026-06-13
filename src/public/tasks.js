@@ -363,8 +363,8 @@
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
       const dueDisplay = task.due_date ? `<span class="task-due ${dueClass}">due: ${formatDate(task.due_date)}</span>` : '';
-      const startDisplay = task.start_date ? `<span class="task-date-info">defer: ${formatDate(task.start_date)}</span>` : '';
-      const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">${task.defer_days}d before due</span>` : '';
+      const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
+      const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">hidden until ${task.defer_days}d before due</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags;
       const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}</div>` : '';

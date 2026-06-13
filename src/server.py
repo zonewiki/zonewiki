@@ -2473,11 +2473,11 @@ def tasks_page():
         </div>
         <div class="task-field-row">
           <div class="task-field">
-            <label for="task-edit-start">Defer until</label>
+            <label for="task-edit-start">Hide until</label>
             <input type="date" id="task-edit-start" name="start_date">
           </div>
           <div class="task-field">
-            <label for="task-edit-defer-days">Show N days before due</label>
+            <label for="task-edit-defer-days">Hide until N days before due</label>
             <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
           </div>
         </div>
