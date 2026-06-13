@@ -219,15 +219,14 @@ main {
 
 .page-content a {
   color: var(--link);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
-  text-underline-offset: 3px;
-  transition: text-decoration-color .15s;
+  text-decoration: none;
 }
 .page-content a:hover {
+  text-decoration: underline;
   text-decoration-color: var(--link);
+  text-underline-offset: 3px;
 }
-.page-content a.wikilink-missing { color: var(--link-missing); text-decoration-style: dashed; }
+.page-content a.wikilink-missing { color: var(--link-missing); text-decoration: underline; text-decoration-style: dashed; }
 .page-content a[href^="http"]::after { content: "\00a0\2197"; font-size: .75em; opacity: .6; }
 
 /* ── Code ──────────────────────────────────────────────────────────────────── */
@@ -583,6 +582,29 @@ main {
 
 .task-list-item { list-style: none; margin-left: -1.25rem; }
 .task-list-item-checkbox { cursor: pointer; margin-right: .4rem; accent-color: var(--link); }
+
+.task-date {
+  display: inline-block;
+  margin-left: .5rem;
+  font-size: .7rem;
+  padding: .1em .45em;
+  border-radius: 3px;
+  vertical-align: middle;
+  opacity: .7;
+  font-family: var(--mono);
+}
+.task-date-created { background: var(--code-bg); color: var(--muted); }
+.task-date-done    { background: color-mix(in srgb, var(--link) 15%, var(--bg)); color: var(--link); }
+
+.task-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem var(--content-pad, 1rem);
+  border-bottom: 1px solid var(--border);
+  font-size: .8rem;
+}
+.task-sort-label { color: var(--muted); }
 
 /* ── Backlinks ───────────────────────────────────────────────────────────────── */
 

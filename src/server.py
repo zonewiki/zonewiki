@@ -258,7 +258,7 @@ md = (
     .use(tasklists_plugin)
     .use(footnote_plugin)
     .use(deflist_plugin)
-    .use(anchors_plugin)
+    .use(anchors_plugin, max_level=3)
 )
 
 
@@ -412,6 +412,30 @@ def _heading_id(text: str) -> str:
     return re.sub(r'[^\w\- ]+', '', text, flags=re.UNICODE).strip().lower().replace(' ', '-')
 
 
+def _plain_heading(text: str) -> str:
+    """Strip inline markdown and wikilinks from a heading to get plain text for anchor IDs."""
+    text = re.sub(r'\[\[([^\]|]+)\|([^\]]+)\]\]', r'\2', text)  # [[page|label]] → label
+    text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)              # [[page]] → page
+    text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)         # [label](url)
+    text = re.sub(r'\[([^\]]*)\]\[[^\]]*\]', r'\1', text)        # [label][ref]
+    text = re.sub(r'!?\[([^\]]*)\]', r'\1', text)                # bare [label]
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    text = re.sub(r'`[^`]*`', '', text)
+    return text.strip()
+
+
+def _strip_links(text: str) -> str:
+    """Replace wikilinks and markdown links with their label text, keeping other inline markup."""
+    text = re.sub(r'\[\[([^\]|]+)\|([^\]]+)\]\]', r'\2', text)  # [[page|label]] → label
+    text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)              # [[page]] → page
+    text = re.sub(r'!?\[([^\]]*)\]\([^)]*\)', r'\1', text)       # [label](url) / ![alt](url)
+    text = re.sub(r'\[([^\]]*)\]\[[^\]]*\]', r'\1', text)        # [label][ref]
+    return text
+
+
 def _build_toc(text: str) -> str:
     headings = re.findall(r'^(#{2,3})\s+(.+)', text, re.MULTILINE)
     if not headings:
@@ -419,13 +443,37 @@ def _build_toc(text: str) -> str:
     items = []
     for hashes, title in headings:
         level = len(hashes)
-        hid = _heading_id(title.strip())
+        plain = _plain_heading(title.strip())
+        hid = _heading_id(plain)
         cls = ' class="toc-h3"' if level == 3 else ''
-        items.append(f'<li{cls}><a href="#{hid}">{html.escape(title.strip())}</a></li>')
+        label = md.renderInline(_strip_links(title.strip()))
+        items.append(f'<li{cls}><a href="#{hid}">{label}</a></li>')
     return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
 
 
 _IMG_SIZE_RE = re.compile(r'<img\b[^>]*\balt="([^"]*)\|(\d+)"[^>]*>', re.IGNORECASE)
+
+# ── Task metadata ─────────────────────────────────────────────────────────────
+# Format stored in markdown: - [ ] task text <!--t:2026-06-12T18:35:00-->
+#                             - [x] task text <!--t:2026-06-12T18:35:00 d:2026-06-12T19:00:00-->
+_TASK_META_SRC_RE = re.compile(r'<!--t:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\s+d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?-->')
+_TASK_DONE_ONLY_RE = re.compile(r'<!--d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})-->')
+
+
+def _render_task_dates(html_str: str) -> str:
+    """Convert task metadata HTML comments to visible date chips."""
+    def replace_full(m: re.Match) -> str:
+        created, done = m.group(1), m.group(2)
+        chips = f'<span class="task-date task-date-created" title="Created {created}">{created[:10]}</span>'
+        if done:
+            chips += f'<span class="task-date task-date-done" title="Done {done}">{done[:10]}</span>'
+        return chips
+    def replace_done_only(m: re.Match) -> str:
+        done = m.group(1)
+        return f'<span class="task-date task-date-done" title="Done {done}">{done[:10]}</span>'
+    html_str = _TASK_META_SRC_RE.sub(replace_full, html_str)
+    html_str = _TASK_DONE_ONLY_RE.sub(replace_done_only, html_str)
+    return html_str
 
 
 def _apply_img_sizes(html_str: str) -> str:
@@ -447,6 +495,7 @@ def render_md(text: str) -> str:
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
     result = _apply_img_sizes(md.render(process_wikilinks(text)))
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
+    result = _render_task_dates(result)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     return result
@@ -458,27 +507,56 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
     in_fence = False
     fence_marker = ''
     fence_len = 0
-    checkbox_offsets: list[int] = []   # absolute char offset of each real '[' char
-    pos = 0
-    for line in lines:
+    checkbox_line_indices: list[int] = []
+    for i, line in enumerate(lines):
         stripped = line.strip()
         if not in_fence:
             if stripped.startswith('```') or stripped.startswith('~~~'):
                 in_fence = True
                 fence_marker = stripped[0]
                 fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
-            else:
-                for m in re.finditer(r'\[([xX ])\]', line):
-                    checkbox_offsets.append(pos + m.start())
+            elif re.search(r'\[([xX ])\]', line):
+                checkbox_line_indices.append(i)
         else:
             if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
                 in_fence = False
-        pos += len(line)
-    if idx >= len(checkbox_offsets):
+    if idx >= len(checkbox_line_indices):
         return content
-    start = checkbox_offsets[idx]
-    new_char = 'x' if content[start + 1] == ' ' else ' '
-    return content[:start + 1] + new_char + content[start + 2:]
+    li = checkbox_line_indices[idx]
+    line = lines[li]
+    eol = '\n' if line.endswith('\n') else ''
+    body = line.rstrip('\n')
+
+    # Toggle the [ ] / [x]
+    is_checking = bool(re.search(r'\[ \]', body))
+    body = re.sub(r'\[([xX ])\]', lambda m: '[x]' if m.group(1) == ' ' else '[ ]', body, count=1)
+
+    now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    meta_m = _TASK_META_SRC_RE.search(body)
+    if is_checking:
+        if meta_m:
+            # Splice done date into existing comment
+            body = (body[:meta_m.start()] +
+                    f'<!--t:{meta_m.group(1)} d:{now}-->' +
+                    body[meta_m.end():])
+        else:
+            done_m = _TASK_DONE_ONLY_RE.search(body)
+            if done_m:
+                body = body[:done_m.start()] + f'<!--d:{now}-->' + body[done_m.end():]
+            else:
+                body = body.rstrip() + f' <!--d:{now}-->'
+    else:
+        if meta_m:
+            # Strip done date, keep created
+            body = (body[:meta_m.start()] +
+                    f'<!--t:{meta_m.group(1)}-->' +
+                    body[meta_m.end():])
+        else:
+            # Remove standalone done comment
+            body = _TASK_DONE_ONLY_RE.sub('', body).rstrip()
+
+    lines[li] = body + eol
+    return ''.join(lines)
 
 
 def split_sections(content: str) -> list[str]:
@@ -1266,6 +1344,14 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
         page_meta_html = ""
         if last_modified or meta_commit_btn:
             page_meta_html = f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
+        task_sort_html = ""
+        if slug == "tasks":
+            task_sort_html = """<div class="task-sort-bar">
+  <span class="task-sort-label">Sort:</span>
+  <button class="btn btn-sm task-sort-btn" data-mode="done_last">Done last</button>
+  <button class="btn btn-sm task-sort-btn" data-mode="date_asc">Oldest first</button>
+  <button class="btn btn-sm task-sort-btn" data-mode="date_desc">Newest first</button>
+</div>"""
         body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -1276,6 +1362,7 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
   </div>
   {page_meta_html}
 </header>
+{task_sort_html}
 <article class="page-content">
   {article_html}
 </article>
@@ -1847,7 +1934,8 @@ def api_add_task():
     if path is None:
         abort(400)
     content = path.read_text(encoding="utf-8") if path.exists() else ""
-    task_line = f"- [ ] {description}\n"
+    now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    task_line = f"- [ ] {description} <!--t:{now}-->\n"
     lines = content.splitlines(keepends=True)
     todo_idx = next(
         (i for i, l in enumerate(lines) if re.match(r"^##\s+Todo\s*$", l, re.IGNORECASE)),
@@ -1870,6 +1958,64 @@ def api_add_task():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, f"Add task: {description[:60]}")
+    return "", 204
+
+
+@app.post("/api/sort-tasks")
+def api_sort_tasks():
+    mode = request.form.get("mode", "done_last")
+    path = safe_path("tasks")
+    if path is None or not path.exists():
+        abort(404)
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines(keepends=True)
+
+    # Find the ## Todo section
+    todo_idx = next(
+        (i for i, l in enumerate(lines) if re.match(r"^##\s+Todo\s*$", l, re.IGNORECASE)),
+        None,
+    )
+    if todo_idx is None:
+        return "", 204
+
+    # Find end of Todo section
+    end_idx = todo_idx + 1
+    while end_idx < len(lines) and not re.match(r"^##\s", lines[end_idx]):
+        end_idx += 1
+
+    section_lines = lines[todo_idx + 1:end_idx]
+
+    # Group: each task line (starts with - [ ] or - [x]) plus any immediately
+    # following non-task lines (blank lines between tasks are kept with the task above)
+    tasks: list[list[str]] = []
+    non_tasks: list[str] = []  # leading blank/non-task lines before first task
+    current: list[str] | None = None
+    for line in section_lines:
+        if re.match(r'^\s*[-*+]\s+\[[xX ]\]', line):
+            current = [line]
+            tasks.append(current)
+        elif current is not None:
+            current.append(line)
+        else:
+            non_tasks.append(line)
+
+    def task_created(t: list[str]) -> str:
+        m = _TASK_META_SRC_RE.search(t[0])
+        return m.group(1) if m else ''
+
+    def task_is_done(t: list[str]) -> bool:
+        return bool(re.search(r'\[[xX]\]', t[0]))
+
+    if mode == 'done_last':
+        tasks.sort(key=lambda t: (1 if task_is_done(t) else 0))
+    elif mode == 'date_asc':
+        tasks.sort(key=lambda t: task_created(t) or 'z')
+    elif mode == 'date_desc':
+        tasks.sort(key=lambda t: task_created(t), reverse=True)
+
+    new_section = non_tasks + [line for t in tasks for line in t]
+    lines[todo_idx + 1:end_idx] = new_section
+    path.write_text(''.join(lines), encoding="utf-8")
     return "", 204
 
 
