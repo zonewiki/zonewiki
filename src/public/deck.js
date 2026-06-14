@@ -833,8 +833,10 @@
     ta.addEventListener('blur', () => setTimeout(hideNoteAc, 150));
   }
 
-  // Attach autocomplete to notes textarea
+  // Attach autocomplete to title and notes fields
+  const titleInput = document.getElementById('task-edit-title');
   const descTextarea = document.getElementById('task-edit-desc');
+  if (titleInput) setupNoteAc(titleInput);
   if (descTextarea) setupNoteAc(descTextarea);
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
