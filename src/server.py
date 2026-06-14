@@ -1193,6 +1193,7 @@ def view_page(slug):
         bl_html = ''
         bl_chip = ""
 
+    _qs = ('?' + request.query_string.decode()) if request.query_string else ''
     # Task backlinks — tasks that link to this page via [[wikilink]]
     task_bls = find_task_backlinks(slug)
     if task_bls:
