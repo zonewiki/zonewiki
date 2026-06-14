@@ -242,7 +242,7 @@
         if (t.completed_at) return true;
         let visible = true;
         if (t.start_date && t.start_date > today) visible = false;
-        if (t.defer_days && t.due_date) {
+        if (t.defer_days != null && t.due_date) {
           const due = new Date(t.due_date + 'T00:00:00');
           const showFrom = new Date(due - t.defer_days * 86400000);
           const showStr = showFrom.toISOString().slice(0, 10);
@@ -261,7 +261,7 @@
       filtered = filtered.filter(t => {
         if (t.completed_at) return false;
         if (t.start_date && t.start_date > today) return true;
-        if (t.defer_days && t.due_date) {
+        if (t.defer_days != null && t.due_date) {
           const due = new Date(t.due_date + 'T00:00:00');
           const showFrom = new Date(due - t.defer_days * 86400000);
           if (showFrom.toISOString().slice(0, 10) > today) return true;
@@ -581,7 +581,7 @@
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
       const dueDisplay = task.due_date ? `<span class="task-due ${dueClass}">due: ${formatDate(task.due_date)}</span>` : '';
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
-      const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">hidden until ${task.defer_days}d before due</span>` : '';
+      const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
