@@ -1485,6 +1485,49 @@ body.editor-page main {
   color: var(--danger, #c33);
   white-space: nowrap;
 }
+.blocked-by-picker {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  align-items: center;
+}
+.blocked-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+}
+.blocked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  background: var(--tag-bg, #e8e8e8);
+  border-radius: 3px;
+  padding: .1rem .4rem;
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.blocked-chip .chip-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 .15rem;
+  font-size: .85rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.blocked-chip .chip-remove:hover { color: var(--danger, #c33); }
+.blocked-search {
+  border: none;
+  outline: none;
+  flex: 1;
+  min-width: 120px;
+  font-size: .85rem;
+  padding: .2rem;
+  background: transparent;
+}
 .task-edit-fullpage {
   max-width: 640px;
 }

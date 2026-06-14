@@ -229,8 +229,11 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field-row">
       <div class="task-field">
-        <label for="task-edit-blocked{sfx}">Blocked by <span class="field-hint">(task IDs, comma-sep)</span></label>
-        <input type="text" id="task-edit-blocked{sfx}" name="blocked_by" autocomplete="off" placeholder="task IDs…">
+        <label for="task-edit-blocked{sfx}">Blocked by</label>
+        <div class="blocked-by-picker" id="task-edit-blocked{sfx}">
+          <div class="blocked-chips" id="blocked-chips{sfx}"></div>
+          <input type="text" class="blocked-search" id="blocked-search{sfx}" placeholder="Type task title…" autocomplete="off">
+        </div>
       </div>
     </div>
     <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>

@@ -2276,7 +2276,13 @@ def edit_task_page(task_id):
     due_val = task.get("due_date", "") or ""
     start_val = task.get("start_date", "") or ""
     defer_val = task.get("defer_days") or ""
-    blocked_val = html.escape(", ".join(task.get("blocked_by", [])))
+    blocked_ids = task.get("blocked_by", [])
+    all_tasks = deck_module._read_deck()
+    blocked_labels = []
+    for bid in blocked_ids:
+        bt = next((t for t in all_tasks if t["id"] == bid), None)
+        blocked_labels.append(html.escape(bt["title"] if bt else bid[:8]))
+    blocked_display = ", ".join(blocked_labels) if blocked_labels else "<em>None</em>"
     rec = task.get("recurrence") or {}
     rec_type = rec.get("type", "")
     rec_interval = rec.get("interval", 1)
@@ -2330,8 +2336,9 @@ def edit_task_page(task_id):
           <input type="number" id="tef-rec-interval" name="rec_interval" value="{rec_interval}" min="1">
         </div>
         <div class="task-field">
-          <label for="tef-blocked">Blocked by <span class="field-hint">(task IDs)</span></label>
-          <input type="text" id="tef-blocked" name="blocked_by" value="{blocked_val}" autocomplete="off">
+          <label>Blocked by</label>
+          <div class="task-edit-created" style="margin:0">{blocked_display}</div>
+          <span class="field-hint">Use the task modal to add/remove blockers</span>
         </div>
       </div>
       <div class="task-edit-created" style="margin:0.5rem 0;color:var(--muted)">
@@ -2356,7 +2363,6 @@ def edit_task_page(task_id):
           defer_days: parseInt(form.querySelector('[name=defer_days]').value) || null,
           rec_type: form.querySelector('[name=rec_type]').value || null,
           rec_interval: parseInt(form.querySelector('[name=rec_interval]').value) || 1,
-          blocked_by: form.querySelector('[name=blocked_by]').value.split(',').map(b => b.trim()).filter(Boolean),
         }};
         if (!data.title) return;
         const resp = await fetch('/api/deck/' + form.dataset.taskId, {{
