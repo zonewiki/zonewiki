@@ -201,7 +201,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag |
-| `filter` | `all`, `due`, `completed`, `scheduled` | `all` | Pre-selects the active tab |
+| `filter` | `all`, `due`, `completed`, `hidden` | `all` | Pre-selects the active tab |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 
 **Examples:**

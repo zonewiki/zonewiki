@@ -211,7 +211,7 @@
     // Hide tasks that are deferred (absolute start_date or relative defer_days)
     // Task is visible when: today >= start_date AND today >= due_date - defer_days
     // Both conditions must pass (latest/most-restrictive wins)
-    if (activeFilter !== 'completed' && activeFilter !== 'scheduled') {
+    if (activeFilter !== 'completed' && activeFilter !== 'hidden') {
       filtered = filtered.filter(t => {
         if (t.completed_at) return true;
         let visible = true;
@@ -231,7 +231,7 @@
       filtered = filtered.filter(t => !t.completed_at && t.due_date);
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
-    } else if (activeFilter === 'scheduled') {
+    } else if (activeFilter === 'hidden') {
       filtered = filtered.filter(t => {
         if (t.completed_at) return false;
         if (t.start_date && t.start_date > today) return true;
@@ -269,7 +269,7 @@
   const TAB_SORT = {
     due:       (a, b) => (a.due_date || '').localeCompare(b.due_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
-    scheduled: (a, b) => (a.start_date || '').localeCompare(b.start_date || ''),
+    hidden: (a, b) => (a.start_date || '').localeCompare(b.start_date || ''),
   };
 
   function sortTasks(tasksArr) {

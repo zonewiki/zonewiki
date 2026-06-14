@@ -518,15 +518,14 @@ def _build_deck_embed(params: dict, page_slug: str = "") -> str:
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
-    # Map user-facing "hidden" to internal filter value "scheduled"
-    init_filter = html.escape("scheduled" if filt == "hidden" else filt)
+    init_filter = html.escape(filt)
 
     return f"""<div class="tasks-app" id="tasks-app" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="">
   <div class="deck-header">
     <div class="tasks-tabs" id="tasks-tabs">
       <button class="tab active" data-filter="all">All</button>
       <button class="tab" data-filter="due">Due</button>
-      <button class="tab" data-filter="scheduled">Hidden</button>
+      <button class="tab" data-filter="hidden">Hidden</button>
       <button class="tab" data-filter="completed">Completed</button>
     </div>
     <button class="btn btn-primary" id="task-add-btn">+ New Task</button>
