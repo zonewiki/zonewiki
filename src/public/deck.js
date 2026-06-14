@@ -930,30 +930,38 @@
     }
   });
 
-  filterTag.addEventListener('input', () => {
+  function computeTagMatches() {
     const val = filterTag.value;
     const commaIdx = val.lastIndexOf(',');
     const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
-    if (!partial) { hideTagAc(); return; }
 
     // Collect tags only from tasks visible under the current tab + committed tag filters.
-    // Temporarily swap filterTag.value so filterTasks() sees only committed terms.
     const committedVal = commaIdx >= 0 ? val.slice(0, commaIdx) : '';
+    const origVal = filterTag.value;
     filterTag.value = committedVal;
     const visibleTasks = filterTasks();
-    filterTag.value = val;
+    filterTag.value = origVal;
 
     const committed = committedVal.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     const available = [...new Set(visibleTasks.flatMap(t => t.tags || []))].sort();
 
-    const matches = available
+    if (!partial) {
+      return available.filter(tag => !committed.includes(tag.toLowerCase())).slice(0, 12);
+    }
+    return available
       .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
       .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .map(({ tag }) => tag)
       .slice(0, 8);
+  }
 
-    showTagAc(matches);
+  filterTag.addEventListener('input', () => {
+    showTagAc(computeTagMatches());
+  });
+
+  filterTag.addEventListener('focus', () => {
+    showTagAc(computeTagMatches());
   });
 
   filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
