@@ -1530,10 +1530,13 @@ body.editor-page main {
   opacity: .6;
   font-style: italic;
 }
-.link-chip-id {
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  font-weight: 600;
-  cursor: default;
+.link-chip-title {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+}
+.link-chip-title:hover {
+  text-decoration: underline;
 }
 .link-chip .chip-remove {
   border: none;

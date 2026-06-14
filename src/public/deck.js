@@ -1136,7 +1136,12 @@
     chip.dataset.id = taskId;
     chip.dataset.type = type;
     const typeLabel = type === 'blocked_by' ? 'blocked by' : 'blocking';
-    chip.innerHTML = `<span class="link-chip-type">${typeLabel}</span><span class="link-chip-id" title="${esc(title)}">${taskId.slice(0, 6)}</span><button type="button" class="chip-remove">×</button>`;
+    chip.innerHTML = `<span class="link-chip-type">${typeLabel}</span><a href="#" class="link-chip-title" data-id="${taskId}">${esc(title)}</a><button type="button" class="chip-remove">×</button>`;
+    chip.querySelector('.link-chip-title').addEventListener('click', e => {
+      e.preventDefault();
+      modal.close();
+      openEditModal(taskId);
+    });
     chip.querySelector('.chip-remove').addEventListener('click', () => {
       currentLinks = currentLinks.filter(l => !(l.type === type && l.taskId === taskId));
       chip.remove();
