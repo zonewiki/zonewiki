@@ -1492,12 +1492,16 @@ body.editor-page main {
 }
 .dep-link {
   color: inherit;
-  text-decoration: underline;
-  text-decoration-style: dotted;
+  text-decoration: none;
   cursor: pointer;
+  font-family: var(--mono, monospace);
+  font-size: .7rem;
+  background: var(--tag-bg, #e8e8e8);
+  border-radius: 3px;
+  padding: .1rem .3rem;
 }
 .dep-link:hover {
-  text-decoration-style: solid;
+  text-decoration: underline;
 }
 .blocked-by-picker {
   border: 1px solid var(--border);

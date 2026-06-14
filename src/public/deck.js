@@ -581,24 +581,26 @@
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
-      // Blocked by: show links to blocking tasks
+      // Blocked by: show short IDs with title on hover
       let blockedDisplay = '';
       if (task.blocked_by && task.blocked_by.length) {
         const links = task.blocked_by.map(bid => {
           const blocker = tasks.find(t => t.id === bid);
-          const label = blocker ? esc(blocker.title) : bid.slice(0, 8);
-          return `<a href="#" class="dep-link" data-id="${bid}" title="${label}">${label}</a>`;
-        }).join(', ');
+          const title = blocker ? esc(blocker.title) : 'unknown';
+          const shortId = bid.slice(0, 6);
+          return `<a href="#" class="dep-link" data-id="${bid}" title="${title}">${shortId}</a>`;
+        }).join(' ');
         blockedDisplay = `<span class="task-blocked">🚫 blocked by ${links}</span>`;
       }
 
-      // Blocking: show what this task blocks
+      // Blocking: show short IDs with title on hover
       let blockingDisplay = '';
       const blocking = tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id) && !t.completed_at);
       if (blocking.length) {
-        const links = blocking.map(t =>
-          `<a href="#" class="dep-link" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</a>`
-        ).join(', ');
+        const links = blocking.map(t => {
+          const shortId = t.id.slice(0, 6);
+          return `<a href="#" class="dep-link" data-id="${t.id}" title="${esc(t.title)}">${shortId}</a>`;
+        }).join(' ');
         blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
       }
 
