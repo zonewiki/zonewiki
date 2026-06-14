@@ -1315,7 +1315,7 @@ def view_page(slug):
     task_bls = find_task_backlinks(slug)
     if task_bls:
         tbl_items = "".join(
-            f'<li>{html.escape(t["title"])}</li>'
+            f'<li><a href="/page/deck">{html.escape(t["title"])}</a></li>'
             for t in task_bls
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
