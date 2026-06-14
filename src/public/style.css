@@ -1542,11 +1542,3 @@ body.editor-page main {
   padding: .2rem;
   background: transparent;
 }
-.task-edit-fullpage {
-  max-width: 640px;
-}
-.task-edit-fullpage textarea {
-  min-height: 200px;
-  font-family: var(--mono);
-  resize: vertical;
-}

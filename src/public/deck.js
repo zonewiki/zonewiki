@@ -1222,11 +1222,6 @@
         addBlockerChip(bid, blocker ? blocker.title : bid.slice(0, 8));
       });
     }
-    const expandLink = document.getElementById('task-edit-expand' + sfx);
-    if (expandLink) {
-      expandLink.style.display = task ? '' : 'none';
-      expandLink.href = task ? '/edit-task/' + task.id : '#';
-    }
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
