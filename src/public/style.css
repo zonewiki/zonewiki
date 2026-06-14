@@ -1258,8 +1258,9 @@ body.editor-page main {
 .deck-header {
   display: flex; align-items: center; gap: 1rem;
   margin-bottom: 1rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); padding-bottom: .5rem;
 }
-.deck-header .tasks-tabs { margin-bottom: 0; flex: 1; }
+.deck-header .tasks-tabs { margin-bottom: 0; flex: 1; border-bottom: none; padding-bottom: 0; }
 
 .tasks-tabs {
   display: flex; gap: .25rem; margin-bottom: 1rem;
