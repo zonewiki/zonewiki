@@ -1393,7 +1393,8 @@ body.editor-page main {
 .tasks-show-more .btn { font-size: .8rem; }
 
 #task-edit-inbox-field label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
-.defer-due-label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .3rem; margin-top: .3rem; cursor: pointer; }
+.defer-due-label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .3rem; cursor: pointer; white-space: nowrap; }
+.defer-days-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 
 /* Task edit modal */
 .task-edit-modal {
