@@ -637,6 +637,14 @@ main {
 
 .backlinks-empty p { font-size: .8rem; color: var(--muted); }
 
+.task-backlink-goto {
+  font-size: .75rem;
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: .25rem;
+}
+.task-backlink-goto:hover { color: var(--link); }
+
 /* ── Content matches (pages list search) ────────────────────────────────────── */
 
 .content-matches {

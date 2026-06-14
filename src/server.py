@@ -873,17 +873,27 @@ def find_backlinks(slug: str) -> list[dict]:
 def find_task_backlinks(slug: str) -> list[dict]:
     """Return deck tasks whose title or description contain a wikilink to slug."""
     results = []
+    _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
     for task in _read_deck():
         if task.get("completed_at"):
             continue
         text = (task.get("title") or "") + "\n" + (task.get("description") or "")
+        found = False
         # Check wikilinks: [[slug]] or [[Name]] where to_slug(Name) == slug
         for m in WIKILINK_RE.finditer(text):
             inner = m.group(1)
             page_name = inner.split("|", 1)[0].strip() if "|" in inner else inner.strip()
             if page_name == slug or to_slug(page_name) == slug:
-                results.append({"id": task["id"], "title": task.get("title", "")})
+                found = True
                 break
+        # Check markdown links: [label](/page/slug)
+        if not found:
+            for m in _MD_LINK_RE.finditer(text):
+                if m.group(2) == slug:
+                    found = True
+                    break
+        if found:
+            results.append({"id": task["id"], "title": task.get("title", "")})
     return results
 
 
@@ -1315,8 +1325,30 @@ def view_page(slug):
     task_bls = find_task_backlinks(slug)
     if task_bls:
         from urllib.parse import urlencode
+
+        def _render_task_title(title: str) -> str:
+            """Render wikilinks and markdown links in task title as HTML links."""
+            escaped = html.escape(title)
+            # Render wikilinks
+            def _wl_repl(m):
+                inner = m.group(1)
+                if "|" in inner:
+                    page_name, label = inner.split("|", 1)
+                    s = to_slug(page_name)
+                    return f'<a href="/page/{s}">{html.escape(label.strip())}</a>'
+                s = to_slug(inner)
+                return f'<a href="/page/{s}">{html.escape(inner.strip())}</a>'
+            escaped = re.sub(r'\[\[([^\[\]]+)\]\]', _wl_repl, escaped)
+            # Render markdown links [label](/page/slug)
+            escaped = re.sub(
+                r'\[([^\]]*)\]\((/page/[^)]+)\)',
+                r'<a href="\2">\1</a>',
+                escaped
+            )
+            return escaped
+
         tbl_items = "".join(
-            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">{html.escape(t["title"])}</a></li>'
+            f'<li>{_render_task_title(t["title"])} <a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}" class="task-backlink-goto" title="Show in Deck">↗</a></li>'
             for t in task_bls
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
