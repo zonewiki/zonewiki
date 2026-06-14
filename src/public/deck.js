@@ -7,13 +7,21 @@
   const allApps = document.querySelectorAll('.tasks-app');
   if (!allApps.length) return;
 
+  // Track which instance owns keyboard focus (only one at a time)
+  let activeDeckInstance = null;
+
   allApps.forEach(function(appEl) {
     initDeckInstance(appEl);
   });
+  // Default: first instance is active
+  if (!activeDeckInstance && allApps.length === 1) {
+    activeDeckInstance = allApps[0].dataset.instance || '0';
+  }
 
   function initDeckInstance(appEl) {
   const sfx = appEl.dataset.instance && appEl.dataset.instance !== '0'
     ? '-' + appEl.dataset.instance : '';
+  const instanceId = appEl.dataset.instance || '0';
 
   const listEl = document.getElementById('tasks-list' + sfx);
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
@@ -44,6 +52,10 @@
   let undoTimer  = null;
   let undoToastEl = null;
   let pendingUndoFn = null;
+
+  // Claim keyboard focus when user interacts with this instance
+  appEl.addEventListener('pointerdown', () => { activeDeckInstance = instanceId; });
+  appEl.addEventListener('focusin', () => { activeDeckInstance = instanceId; });
 
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
@@ -1294,6 +1306,9 @@
   }
 
   document.addEventListener('keydown', async e => {
+    // Only the active instance handles keyboard events (multi-embed safety)
+    if (allApps.length > 1 && activeDeckInstance !== instanceId) return;
+
     // Ctrl+Z undo — works everywhere except inside the edit modal
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
       if (modal.open || deleteModal.open) return;
