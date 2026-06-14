@@ -870,6 +870,23 @@ def find_backlinks(slug: str) -> list[dict]:
     return results
 
 
+def find_task_backlinks(slug: str) -> list[dict]:
+    """Return deck tasks whose title or description contain a wikilink to slug."""
+    results = []
+    for task in _read_deck():
+        if task.get("completed_at"):
+            continue
+        text = (task.get("title") or "") + "\n" + (task.get("description") or "")
+        # Check wikilinks: [[slug]] or [[Name]] where to_slug(Name) == slug
+        for m in WIKILINK_RE.finditer(text):
+            inner = m.group(1)
+            page_name = inner.split("|", 1)[0].strip() if "|" in inner else inner.strip()
+            if page_name == slug or to_slug(page_name) == slug:
+                results.append({"id": task["id"], "title": task.get("title", "")})
+                break
+    return results
+
+
 def update_references(old_slug: str, new_slug: str) -> None:
     """Rewrite [[wikilinks]] across all pages after a rename."""
     for md_file, _ in iter_pages():
@@ -1293,6 +1310,15 @@ def view_page(slug):
     else:
         bl_html = '<section class="backlinks backlinks-empty" id="backlinks"><h3>Backlinks</h3><p>No pages link here.</p></section>'
         bl_chip = ""
+
+    # Task backlinks — tasks that link to this page via [[wikilink]]
+    task_bls = find_task_backlinks(slug)
+    if task_bls:
+        tbl_items = "".join(
+            f'<li>{html.escape(t["title"])}</li>'
+            for t in task_bls
+        )
+        bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
 
     breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip)
 
