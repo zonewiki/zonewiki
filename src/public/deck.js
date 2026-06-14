@@ -218,7 +218,11 @@
   // ── Filtering ──────────────────────────────────────────────────────────────
 
   function todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function dateToStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
   function filterTasks() {
@@ -245,7 +249,7 @@
         if (t.defer_days != null && t.due_date) {
           const due = new Date(t.due_date + 'T00:00:00');
           const showFrom = new Date(due - t.defer_days * 86400000);
-          const showStr = showFrom.toISOString().slice(0, 10);
+          const showStr = dateToStr(showFrom);
           if (showStr > today) visible = false;
         }
         return visible;
@@ -264,7 +268,7 @@
         if (t.defer_days != null && t.due_date) {
           const due = new Date(t.due_date + 'T00:00:00');
           const showFrom = new Date(due - t.defer_days * 86400000);
-          if (showFrom.toISOString().slice(0, 10) > today) return true;
+          if (dateToStr(showFrom) > today) return true;
         }
         return false;
       });
@@ -1303,14 +1307,14 @@
   function dateOffset(days) {
     const d = new Date();
     d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    return dateToStr(d);
   }
   function nextMonday() {
     const d = new Date();
     const day = d.getDay();
     const add = day === 0 ? 1 : 8 - day;
     d.setDate(d.getDate() + add);
-    return d.toISOString().slice(0, 10);
+    return dateToStr(d);
   }
   document.querySelectorAll('#task-edit-modal' + sfx + ' .task-date-shortcuts button').forEach(btn => {
     btn.addEventListener('click', () => {
