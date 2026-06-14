@@ -2276,7 +2276,6 @@ def edit_task_page(task_id):
     due_val = task.get("due_date", "") or ""
     start_val = task.get("start_date", "") or ""
     defer_val = task.get("defer_days") or ""
-    page_val = html.escape(task.get("page", "") or "")
     blocked_val = html.escape(", ".join(task.get("blocked_by", [])))
     rec = task.get("recurrence") or {}
     rec_type = rec.get("type", "")
@@ -2305,10 +2304,6 @@ def edit_task_page(task_id):
         <div class="task-field">
           <label for="tef-tags">Tags <span class="field-hint">(comma-separated)</span></label>
           <input type="text" id="tef-tags" name="tags" value="{tags_val}" autocomplete="off">
-        </div>
-        <div class="task-field">
-          <label for="tef-page">Linked page</label>
-          <input type="text" id="tef-page" name="page" value="{page_val}" autocomplete="off" placeholder="slug">
         </div>
       </div>
       <div class="task-field-row">
@@ -2356,7 +2351,6 @@ def edit_task_page(task_id):
           title: form.querySelector('[name=title]').value.trim(),
           description: form.querySelector('[name=description]').value.trim(),
           tags: form.querySelector('[name=tags]').value.split(',').map(t => t.trim()).filter(Boolean),
-          page: form.querySelector('[name=page]').value.trim() || null,
           due_date: form.querySelector('[name=due_date]').value || null,
           start_date: form.querySelector('[name=start_date]').value || null,
           defer_days: parseInt(form.querySelector('[name=defer_days]').value) || null,
