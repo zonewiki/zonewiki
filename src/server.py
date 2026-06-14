@@ -230,21 +230,23 @@ HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home"
   <span>{APP_NAME}</span>
 </a>"""
 
-def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "") -> str:
+def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "", query_string: str = "") -> str:
     """Build a breadcrumb for a page slug.
     slug/title are the page; extra is zero or more (label, url_or_None) pairs appended after.
     right_html is optional HTML appended inside the breadcrumb div with margin-left: auto.
+    query_string is appended to the page's own link (e.g. '?tag=task').
     """
     sep = '<span class="breadcrumb-sep">›</span>'
     parts = slug.split('/')
     crumbs = [HOME_LINK]
+    page_href = f'/page/{html.escape(slug)}{html.escape(query_string)}'
     for i, part in enumerate(parts[:-1]):
         ancestor = '/'.join(parts[:i + 1])
         label = part.replace('-', ' ').title()
         crumbs.append(f'<a href="/page/{ancestor}">{html.escape(label)}</a>')
     # Page itself — link if extra crumbs follow, plain span if it's the last
     if extra:
-        crumbs.append(f'<a href="/page/{html.escape(slug)}">{html.escape(title)}</a>')
+        crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
         for label, url in extra:
             if url:
                 crumbs.append(f'<a href="{html.escape(url)}">{html.escape(label)}</a>')
@@ -1299,7 +1301,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
 </article>
 {bl_html}"""
     else:
-        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip)
+        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
         
         # Get last modified info
