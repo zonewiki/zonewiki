@@ -1405,6 +1405,8 @@
 
   // Apply URL-param pre-filtering
   if (initTag && filterTag) filterTag.value = initTag;
+  const initSearch = urlParams.get('search') || '';
+  if (initSearch && filterSearch) filterSearch.value = initSearch;
   if (initFilter) {
     const tab = tabsEl?.querySelector(`[data-filter="${initFilter}"]`);
     if (tab) {

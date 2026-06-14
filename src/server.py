@@ -1314,8 +1314,9 @@ def view_page(slug):
     # Task backlinks — tasks that link to this page via [[wikilink]]
     task_bls = find_task_backlinks(slug)
     if task_bls:
+        from urllib.parse import urlencode
         tbl_items = "".join(
-            f'<li><a href="/page/deck">{html.escape(t["title"])}</a></li>'
+            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">{html.escape(t["title"])}</a></li>'
             for t in task_bls
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
