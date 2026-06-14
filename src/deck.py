@@ -229,10 +229,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field-row">
       <div class="task-field">
-        <label for="task-edit-page{sfx}">Linked page</label>
-        <input type="text" id="task-edit-page{sfx}" name="page" autocomplete="off" placeholder="slug">
-      </div>
-      <div class="task-field">
         <label for="task-edit-blocked{sfx}">Blocked by <span class="field-hint">(task IDs, comma-sep)</span></label>
         <input type="text" id="task-edit-blocked{sfx}" name="blocked_by" autocomplete="off" placeholder="task IDs…">
       </div>
@@ -243,6 +239,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
+      <a href="#" class="btn" id="task-edit-expand{sfx}" style="display:none" title="Full-page editor">Expand ↗</a>
       <button type="button" class="btn" id="task-edit-cancel{sfx}">Cancel</button>
       <button type="button" class="btn btn-danger" id="task-edit-delete{sfx}" style="display:none">Delete</button>
     </div>

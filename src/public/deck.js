@@ -1092,10 +1092,13 @@
     document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days || '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
-    const pageEl = document.getElementById('task-edit-page' + sfx);
-    if (pageEl) pageEl.value = task ? task.page || '' : (initPage || '');
     const blockedEl = document.getElementById('task-edit-blocked' + sfx);
     if (blockedEl) blockedEl.value = task ? (task.blocked_by || []).join(', ') : '';
+    const expandLink = document.getElementById('task-edit-expand' + sfx);
+    if (expandLink) {
+      expandLink.style.display = task ? '' : 'none';
+      expandLink.href = task ? '/edit-task/' + task.id : '#';
+    }
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -1166,7 +1169,6 @@
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
-      page: document.getElementById('task-edit-page' + sfx)?.value.trim() || null,
       blocked_by: (document.getElementById('task-edit-blocked' + sfx)?.value || '').split(',').map(b => b.trim()).filter(Boolean),
     };
     if (!data.title) return;
