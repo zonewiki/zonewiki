@@ -11,7 +11,7 @@
   const KEY = 'leafHistory';
   let hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
   hist = hist.filter(p => p.slug !== slug);
-  hist.push({ slug, title, url: window.location.pathname });
+  hist.push({ slug, title, url: window.location.pathname + window.location.search });
   if (hist.length > 6) hist = hist.slice(-6);
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
@@ -40,9 +40,16 @@
     bc.appendChild(a);
   }
   bc.appendChild(mkSep());
-  const cur = document.createElement('span');
-  cur.textContent = title;
-  bc.appendChild(cur);
+  if (window.location.search) {
+    const cur = document.createElement('a');
+    cur.href = window.location.pathname + window.location.search;
+    cur.textContent = title;
+    bc.appendChild(cur);
+  } else {
+    const cur = document.createElement('span');
+    cur.textContent = title;
+    bc.appendChild(cur);
+  }
 
   const clr = document.createElement('button');
   clr.className = 'breadcrumb-clear';
