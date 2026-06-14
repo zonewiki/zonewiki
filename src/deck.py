@@ -203,9 +203,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <button type="button" data-due="clear">✕</button>
         </div>
       </div>
-      <div class="task-field task-field-center">
-        <label class="defer-due-label"><input type="checkbox" id="task-edit-defer-due{sfx}"> on due date</label>
-      </div>
       <div class="task-field">
         <label for="task-edit-rec-type{sfx}">Repeat</label>
         <select id="task-edit-rec-type{sfx}" name="rec_type">
@@ -224,6 +221,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <div class="task-field">
         <label for="task-edit-start{sfx}">Hide until</label>
         <input type="date" id="task-edit-start{sfx}" name="start_date">
+      </div>
+      <div class="task-field task-field-center">
+        <label class="defer-due-label"><input type="checkbox" id="task-edit-defer-due{sfx}"> Hide until due date</label>
       </div>
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">N days before due</label>
