@@ -33,6 +33,13 @@
   let undoToastEl = null;
   let pendingUndoFn = null;
 
+  // URL-param pre-filtering (from [[tasks]] links in wiki pages)
+  const appEl = document.getElementById('tasks-app');
+  const initTag = appEl?.dataset.initTag || '';
+  const initPage = appEl?.dataset.initPage || '';
+  const initFilter = appEl?.dataset.initFilter || '';
+  const initNew = appEl?.dataset.initNew === '1';
+
   // ── Undo toast ────────────────────────────────────────────────────────────
 
   function dismissUndo() {
@@ -68,14 +75,14 @@
 
   // ── API ────────────────────────────────────────────────────────────────────
 
-  async function fetchTasks() {
-    const res = await fetch('/api/tasks');
+  async function fetchDeck() {
+    const res = await fetch('/api/deck');
     tasks = await res.json();
     render();
   }
 
   async function createTask(data) {
-    const res = await fetch('/api/tasks', {
+    const res = await fetch('/api/deck', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -89,7 +96,7 @@
   }
 
   async function updateTask(id, data) {
-    const res = await fetch(`/api/tasks/${id}`, {
+    const res = await fetch(`/api/deck/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -100,7 +107,7 @@
       if (idx !== -1) tasks[idx] = updated;
       // If recurring spawned a new task, re-fetch
       if (data.completed && tasks[idx]?.recurrence) {
-        await fetchTasks();
+        await fetchDeck();
       } else {
         render();
       }
@@ -109,7 +116,7 @@
   }
 
   async function deleteTask(id) {
-    const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/deck/${id}`, { method: 'DELETE' });
     if (res.ok) {
       tasks = tasks.filter(t => t.id !== id);
       render();
@@ -118,7 +125,7 @@
   }
 
   async function deleteTasks(ids) {
-    const res = await fetch('/api/tasks/batch-delete', {
+    const res = await fetch('/api/deck/batch-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
@@ -132,20 +139,20 @@
   }
 
   async function completeTasks(ids, completed) {
-    const res = await fetch('/api/tasks/batch-complete', {
+    const res = await fetch('/api/deck/batch-complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids, completed }),
     });
     if (res.ok) {
       // Re-fetch to capture any spawned recurring tasks
-      await fetchTasks();
+      await fetchDeck();
       window.refreshDueBadge?.();
     }
   }
 
   async function reorder(order) {
-    await fetch('/api/tasks/reorder', {
+    await fetch('/api/deck/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order }),
@@ -247,6 +254,11 @@
       );
     }
 
+    // Page filter (set via URL param, stored in initPage)
+    if (initPage) {
+      filtered = filtered.filter(t => t.page === initPage);
+    }
+
     return filtered;
   }
 
@@ -278,6 +290,135 @@
       sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     }
     return sorted;
+  }
+
+  // ── Bulk tag modal ──────────────────────────────────────────────────────────
+
+  function openBulkTagModal(ids, removing) {
+    const count = ids.length;
+    const label = removing
+      ? `Remove tag from ${count} item${count > 1 ? 's' : ''}`
+      : `Add tag to ${count} item${count > 1 ? 's' : ''}`;
+
+    // Create a minimal inline dialog
+    const dlg = document.createElement('dialog');
+    dlg.className = 'scratch-modal';
+    dlg.innerHTML = `
+      <p class="scratch-label">${label}</p>
+      <div class="task-field" style="position:relative">
+        <input type="text" id="bulk-tag-input" autocomplete="off" spellcheck="false" placeholder="tag name…">
+      </div>
+      <div class="scratch-actions">
+        <button type="button" class="btn btn-primary" id="bulk-tag-ok">${removing ? 'Remove' : 'Add'}</button>
+        <button type="button" class="btn" id="bulk-tag-cancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(dlg);
+
+    const input = dlg.querySelector('#bulk-tag-input');
+    const okBtn = dlg.querySelector('#bulk-tag-ok');
+    const cancelBtn = dlg.querySelector('#bulk-tag-cancel');
+    let acEl = null;
+    let acIndex = -1;
+
+    function hideAc() { acEl?.remove(); acEl = null; acIndex = -1; }
+
+    function showAc(matches) {
+      hideAc();
+      if (!matches.length) return;
+      acEl = document.createElement('div');
+      acEl.className = 'tag-ac-dropdown';
+      acEl.style.position = 'absolute';
+      acEl.style.top = input.offsetTop + input.offsetHeight + 'px';
+      acEl.style.left = '0';
+      acEl.style.width = input.offsetWidth + 'px';
+      matches.forEach(tag => {
+        const item = document.createElement('div');
+        item.className = 'tag-ac-item';
+        item.textContent = '#' + tag;
+        item.addEventListener('mousedown', e => {
+          e.preventDefault();
+          input.value = tag;
+          hideAc();
+        });
+        acEl.appendChild(item);
+      });
+      input.parentElement.appendChild(acEl);
+    }
+
+    input.addEventListener('input', () => {
+      const partial = input.value.trim();
+      if (!partial) { hideAc(); return; }
+      const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
+      const matches = allTags
+        .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+        .filter(({ score }) => score >= 0)
+        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
+        .map(({ tag }) => tag)
+        .slice(0, 8);
+      showAc(matches);
+    });
+
+    input.addEventListener('keydown', ev => {
+      if (acEl) {
+        const items = acEl.querySelectorAll('.tag-ac-item');
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          acIndex = (acIndex + 1) % items.length;
+          items.forEach((el, i) => el.classList.toggle('selected', i === acIndex));
+          return;
+        } else if (ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          acIndex = acIndex <= 0 ? items.length - 1 : acIndex - 1;
+          items.forEach((el, i) => el.classList.toggle('selected', i === acIndex));
+          return;
+        } else if ((ev.key === 'Tab') && acIndex >= 0) {
+          ev.preventDefault();
+          input.value = items[acIndex].textContent.replace(/^#/, '');
+          hideAc();
+          return;
+        } else if (ev.key === 'Escape') {
+          hideAc();
+          return;
+        }
+      }
+      if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); submit(); }
+      if (ev.key === 'Escape') { ev.stopPropagation(); close(); }
+    });
+
+    async function submit() {
+      const tag = input.value.trim();
+      if (!tag) return;
+      close();
+      try {
+        const body = removing ? { ids, remove: [tag] } : { ids, add: [tag] };
+        const res = await fetch('/api/deck/batch-tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          for (const u of updated) {
+            const idx = tasks.findIndex(t => t.id === u.id);
+            if (idx !== -1) tasks[idx] = u;
+          }
+          render();
+        }
+      } catch (_) {}
+    }
+
+    function close() {
+      hideAc();
+      dlg.close();
+      dlg.remove();
+    }
+
+    okBtn.addEventListener('click', submit);
+    cancelBtn.addEventListener('click', close);
+    dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
+
+    dlg.showModal();
+    input.focus();
   }
 
   // ── Keyboard selection ─────────────────────────────────────────────────────
@@ -388,18 +529,18 @@
 
     const filtered = filterTasks();
 
-    // In "all" view split into ordered (sort_order set) and inbox (sort_order null)
-    let orderedTasks, inboxTasks;
+    // In "all" view split into ordered (sort_order set) and new (sort_order null)
+    let orderedTasks, newTasks;
     if (activeFilter === 'all') {
       orderedTasks = sortTasks(filtered.filter(t => t.sort_order != null));
-      inboxTasks   = filtered.filter(t => t.sort_order == null)
+      newTasks   = filtered.filter(t => t.sort_order == null)
                              .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else {
       orderedTasks = sortTasks(filtered);
-      inboxTasks   = [];
+      newTasks   = [];
     }
 
-    if (orderedTasks.length === 0 && inboxTasks.length === 0) {
+    if (orderedTasks.length === 0 && newTasks.length === 0) {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
       return;
     }
@@ -415,8 +556,9 @@
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
       const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">hidden until ${task.defer_days}d before due</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
-      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}</div>` : '';
+      const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
+      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay;
+      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}</div>` : '';
       const dragAttr = sortSelect.value === 'manual' ? 'draggable="true"' : '';
       return `
         <li class="task-item ${completedClass} ${urgClass}" data-id="${task.id}" ${dragAttr}>
@@ -434,9 +576,9 @@
 
     let html = '';
     let truncated = false;
-    if (inboxTasks.length > 0) {
-      html += '<li class="task-inbox-divider task-inbox-divider--only">Inbox</li>';
-      html += inboxTasks.map(taskHTML).join('');
+    if (newTasks.length > 0) {
+      html += '<li class="task-inbox-divider task-inbox-divider--only">New</li>';
+      html += newTasks.map(taskHTML).join('');
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     // Limit completed tab display
@@ -644,21 +786,107 @@
 
   filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
 
+  // ── Edit modal tag autocomplete ─────────────────────────────────────────────
+
+  const editTagsInput = document.getElementById('task-edit-tags');
+  let editTagAcEl = null;
+  let editTagAcIndex = -1;
+
+  function hideEditTagAc() {
+    editTagAcEl?.remove();
+    editTagAcEl = null;
+    editTagAcIndex = -1;
+  }
+
+  function selectEditTagAcItem(text) {
+    const val = editTagsInput.value;
+    const commaIdx = val.lastIndexOf(',');
+    editTagsInput.value = (commaIdx >= 0 ? val.slice(0, commaIdx + 1) + ' ' : '') + text;
+    editTagsInput.focus();
+  }
+
+  function showEditTagAc(matches) {
+    hideEditTagAc();
+    if (!matches.length) return;
+    editTagAcEl = document.createElement('div');
+    editTagAcEl.className = 'tag-ac-dropdown';
+    matches.forEach((tag) => {
+      const item = document.createElement('div');
+      item.className = 'tag-ac-item';
+      item.textContent = '#' + tag;
+      item.addEventListener('mousedown', e => { e.preventDefault(); selectEditTagAcItem(tag); hideEditTagAc(); });
+      editTagAcEl.appendChild(item);
+    });
+    // Position relative to the input's parent (inside the dialog)
+    const parent = editTagsInput.parentElement;
+    parent.style.position = 'relative';
+    editTagAcEl.style.top = editTagsInput.offsetTop + editTagsInput.offsetHeight + 'px';
+    editTagAcEl.style.left = '0';
+    editTagAcEl.style.width = editTagsInput.offsetWidth + 'px';
+    parent.appendChild(editTagAcEl);
+  }
+
+  if (editTagsInput) {
+    editTagsInput.addEventListener('keydown', e => {
+      if (!editTagAcEl) return;
+      const items = editTagAcEl.querySelectorAll('.tag-ac-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        editTagAcIndex = (editTagAcIndex + 1) % items.length;
+        items.forEach((el, i) => el.classList.toggle('selected', i === editTagAcIndex));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        editTagAcIndex = editTagAcIndex <= 0 ? items.length - 1 : editTagAcIndex - 1;
+        items.forEach((el, i) => el.classList.toggle('selected', i === editTagAcIndex));
+      } else if ((e.key === 'Enter' || e.key === 'Tab') && editTagAcIndex >= 0) {
+        e.preventDefault();
+        selectEditTagAcItem(items[editTagAcIndex].textContent.replace(/^#/, ''));
+        hideEditTagAc();
+      } else if (e.key === 'Escape') {
+        hideEditTagAc();
+      }
+    });
+
+    editTagsInput.addEventListener('input', () => {
+      const val = editTagsInput.value;
+      const commaIdx = val.lastIndexOf(',');
+      const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
+      if (!partial) { hideEditTagAc(); return; }
+
+      // Collect all known tags from all tasks
+      const committed = val.slice(0, commaIdx >= 0 ? commaIdx : 0)
+        .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
+      const matches = allTags
+        .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+        .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
+        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
+        .map(({ tag }) => tag)
+        .slice(0, 8);
+
+      showEditTagAc(matches);
+    });
+
+    editTagsInput.addEventListener('blur', () => setTimeout(hideEditTagAc, 150));
+  }
+
   // ── Add task ───────────────────────────────────────────────────────────────
 
   addBtn.addEventListener('click', () => openEditModal(null));
 
   // ── Edit modal ─────────────────────────────────────────────────────────────
 
-  function openEditModal(taskId) {
+  function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
+    const defaultTags = opts?.tags || '';
     document.getElementById('task-edit-id').value = task ? task.id : '';
     document.getElementById('task-edit-title').value = task ? task.title : '';
     document.getElementById('task-edit-desc').value = task ? task.description || '' : '';
     document.getElementById('task-edit-start').value = task ? task.start_date || '' : '';
     document.getElementById('task-edit-defer-days').value = task?.defer_days || '';
     document.getElementById('task-edit-due').value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-tags').value = task ? (task.tags || []).join(', ') : '';
+    document.getElementById('task-edit-tags').value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
+    document.getElementById('task-edit-page').value = task ? task.page || '' : (initPage || '');
     const createdEl = document.getElementById('task-edit-created');
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -670,15 +898,15 @@
     recTypeSelect.value = recType;
     document.getElementById('task-edit-rec-interval').value = task?.recurrence?.interval || 1;
     recIntervalField.style.display = recType ? '' : 'none';
-    // Show "move to inbox" only for existing tasks with a sort_order
-    const inboxField = document.getElementById('task-edit-inbox-field');
-    const inboxCb = document.getElementById('task-edit-inbox');
+    // Show "move to new" only for existing tasks with a sort_order
+    const newField = document.getElementById('task-edit-inbox-field');
+    const newCb = document.getElementById('task-edit-inbox');
     if (task && task.sort_order != null) {
-      inboxField.style.display = '';
-      inboxCb.checked = false;
+      newField.style.display = '';
+      newCb.checked = false;
     } else {
-      inboxField.style.display = 'none';
-      inboxCb.checked = false;
+      newField.style.display = 'none';
+      newCb.checked = false;
     }
     deleteBtn.style.display = task ? '' : 'none';
     modal.showModal();
@@ -714,8 +942,8 @@
     });
   });
 
-  cancelBtn.addEventListener('click', () => modal.close());
-  modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+  cancelBtn.addEventListener('click', () => { hideEditTagAc(); modal.close(); });
+  modal.addEventListener('click', e => { if (e.target === modal) { hideEditTagAc(); modal.close(); } });
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -729,9 +957,10 @@
       tags: document.getElementById('task-edit-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval').value) || 1,
+      page: document.getElementById('task-edit-page').value.trim() || null,
     };
     if (!data.title) return;
-    // Move to inbox: reset sort_order to null
+    // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox').checked) {
       data.sort_order = null;
     }
@@ -786,11 +1015,11 @@
         const toIdx = ids.indexOf(item.dataset.id);
         if (fromIdx === -1 || toIdx === -1) return;
         const draggedTask = tasks.find(tk => tk.id === draggedId);
-        const wasInbox = draggedTask && draggedTask.sort_order == null;
+        const wasNew = draggedTask && draggedTask.sort_order == null;
         ids.splice(fromIdx, 1);
-        // When dragging from inbox into ordered, insert BEFORE target (adjust index).
+        // When dragging from new into ordered, insert BEFORE target (adjust index).
         // Within-section reorder uses standard behavior (no adjustment).
-        const insertIdx = (wasInbox && fromIdx < toIdx) ? toIdx - 1 : toIdx;
+        const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
         ids.splice(insertIdx, 0, draggedId);
         // Only assign sort_order to items that already had one, plus the dragged item
         ids.forEach((tid, i) => {
@@ -823,7 +1052,7 @@
       if (direction === 'down') {
         if (idx === ids.length - 1) return;
         if (selTask && selTask.sort_order == null) {
-          // Moving inbox item into ordered: place at top of ordered section
+          // Moving new item into ordered: place at top of ordered section
           ids.splice(idx, 1);
           const firstOrd = ids.findIndex(id => {
             const t = tasks.find(tk => tk.id === id);
@@ -877,7 +1106,7 @@
       return;
     }
 
-    if (modal.open || deleteModal.open) return;
+    if (modal.open || deleteModal.open || document.querySelector('dialog[open].scratch-modal')) return;
     const focus = document.activeElement;
     if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;
 
@@ -981,6 +1210,11 @@
           }
         });
       }
+    } else if ((e.key === 't' || e.key === 'T') && selectedIds.size) {
+      e.preventDefault();
+      const ids = [...selectedIds];
+      const removing = e.key === 'T';
+      openBulkTagModal(ids, removing);
     } else if (e.key === 'Escape') {
       selectedId = null;
       selectedIds.clear();
@@ -991,10 +1225,31 @@
 
   // ── Expose refresh and modal for quick-add ────────────────────────────────
 
-  window.refreshTasks = fetchTasks;
+  window.refreshDeck = fetchDeck;
+  window.openDeckEdit = openEditModal;
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
-  fetchTasks();
+  // Apply URL-param pre-filtering
+  if (initTag && filterTag) filterTag.value = initTag;
+  if (initFilter) {
+    const tab = tabsEl?.querySelector(`[data-filter="${initFilter}"]`);
+    if (tab) {
+      tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = initFilter;
+    }
+  }
+
+  fetchDeck();
+
+  // Auto-open new item modal if ?new=1 in URL
+  if (initNew) {
+    openEditModal(null);
+    // Clean up URL
+    const url = new URL(window.location);
+    url.searchParams.delete('new');
+    history.replaceState(null, '', url);
+  }
 
 }());

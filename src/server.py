@@ -406,6 +406,11 @@ def process_wikilinks(text: str) -> str:
 _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
 _TOC_RE = re.compile(r'^\[\[toc\]\]\s*$', re.IGNORECASE | re.MULTILINE)
 
+# ── [[deck …]] directive ─────────────────────────────────────────────────────────
+_DECK_RE = re.compile(
+    r'\[\[deck(?:\s+([^\]]*))?\]\]', re.IGNORECASE
+)
+
 
 def _heading_id(text: str) -> str:
     """Match mdit-py-plugins anchors_plugin default slugify."""
@@ -488,11 +493,104 @@ def _apply_img_sizes(html_str: str) -> str:
     return _IMG_SIZE_RE.sub(fix, html_str)
 
 
-def render_md(text: str) -> str:
+def _parse_tasks_params(raw: str) -> dict:
+    """Parse key=value pairs from [[deck key=val ...]]."""
+    params: dict = {}
+    if not raw:
+        return params
+    for token in raw.split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            params[k.strip().lower()] = v.strip()
+    return params
+
+
+def _build_deck_link(params: dict, page_slug: str = "") -> str:
+    """Render a [[deck]] directive as a link to /deck with query params."""
+    query_parts: list[str] = []
+    label_parts: list[str] = []
+
+    tag_val = params.get("tag", "")
+    if tag_val:
+        query_parts.append(f"tag={html.escape(tag_val)}")
+        label_parts.append(f"#{tag_val}")
+
+    page_val = params.get("page", "")
+    if page_val == "self" and page_slug:
+        page_val = page_slug
+    if page_val:
+        query_parts.append(f"page={html.escape(page_val)}")
+        label_parts.append(f"📄 {slug_display_name(page_val)}")
+
+    filt = params.get("filter", "")
+    if filt and filt != "all":
+        query_parts.append(f"filter={html.escape(filt)}")
+        label_parts.append(filt)
+
+    href = "/deck"
+    if query_parts:
+        href += "?" + "&amp;".join(query_parts)
+
+    label = "Deck"
+    if label_parts:
+        label += ": " + ", ".join(label_parts)
+
+    # Count matching items for a badge
+    count = _count_deck_for_link(params, page_slug)
+    badge = f' <span class="deck-link-count">{count}</span>' if count > 0 else ""
+
+    return (
+        f'<a href="{href}" class="deck-link">'
+        f'<span class="deck-link-icon">☑</span> {html.escape(label)}{badge}'
+        f'</a>'
+    )
+
+
+def _count_deck_for_link(params: dict, page_slug: str = "") -> int:
+    """Count open tasks matching the given filter params."""
+    tasks = _read_deck()
+
+    page_val = params.get("page", "")
+    if page_val == "self" and page_slug:
+        page_val = page_slug
+    if page_val:
+        tasks = [t for t in tasks if t.get("page") == page_val]
+
+    tag_val = params.get("tag", "")
+    if tag_val:
+        tag_terms = [t.strip().lower() for t in tag_val.split(",") if t.strip()]
+        if tag_terms:
+            tasks = [
+                t for t in tasks
+                if all(
+                    any(tg.lower() == term for tg in (t.get("tags") or []))
+                    for term in tag_terms
+                )
+            ]
+
+    filt = params.get("filter", "all")
+    if filt == "completed":
+        tasks = [t for t in tasks if t.get("completed_at")]
+    elif filt == "due":
+        tasks = [t for t in tasks if not t.get("completed_at") and t.get("due_date")]
+    else:
+        tasks = [t for t in tasks if not t.get("completed_at")]
+
+    return len(tasks)
+
+
+def render_md(text: str, *, slug: str = "") -> str:
     toc_html = ''
     if _TOC_RE.search(text):
         toc_html = _build_toc(text)
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
+
+    # Replace [[deck …]] directives with HTML links before wikilink processing
+    def _deck_repl(m):
+        params = _parse_tasks_params(m.group(1) or "")
+        return _build_deck_link(params, page_slug=slug)
+    text = _DECK_RE.sub(_deck_repl, text)
+
     result = _apply_img_sizes(md.render(process_wikilinks(text)))
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
     result = _render_task_dates(result)
@@ -825,12 +923,12 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
-      <tr><td><kbd>c t</kbd></td><td>Add task</td></tr>
+      <tr><td><kbd>c t</kbd></td><td>Add to Deck</td></tr>
       <tr><td><kbd>c d</kbd></td><td>Open today's daily note</td></tr>
       <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
-      <tr><td><kbd>g t</kbd></td><td>Go to Tasks</td></tr>
-      <tr><td><kbd>g d</kbd></td><td>Go to Daily index</td></tr>
+      <tr><td><kbd>g d</kbd></td><td>Go to Deck</td></tr>
+      <tr><td><kbd>g y</kbd></td><td>Go to Daily index</td></tr>
 
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
@@ -848,49 +946,6 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
-  </dialog>
-  <dialog id="quick-task-modal" class="task-edit-modal">
-    <form id="quick-task-form" class="task-edit-form">
-      <div class="task-field">
-        <label for="qt-title">Title</label>
-        <input type="text" id="qt-title" required autocomplete="off">
-      </div>
-      <div class="task-field">
-        <label for="qt-desc">Notes</label>
-        <textarea id="qt-desc" rows="2"></textarea>
-      </div>
-      <div class="task-field-row">
-        <div class="task-field">
-          <label for="qt-due">Due date</label>
-          <input type="date" id="qt-due">
-        </div>
-        <div class="task-field">
-          <label for="qt-rec-type">Repeat</label>
-          <select id="qt-rec-type">
-            <option value="">—</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-        <div class="task-field" id="qt-rec-interval-field" style="display:none">
-          <label for="qt-rec-interval">Every N</label>
-          <input type="number" id="qt-rec-interval" min="1" value="1">
-        </div>
-      </div>
-      <div class="task-field">
-        <label for="qt-start">Defer until</label>
-        <input type="date" id="qt-start">
-      </div>
-      <div class="task-field">
-        <label for="qt-tags">Tags <span class="field-hint">(comma-separated)</span></label>
-        <input type="text" id="qt-tags" autocomplete="off">
-      </div>
-      <div class="task-edit-actions">
-        <button type="submit" class="btn btn-primary">Add</button>
-        <button type="button" class="btn" id="quick-task-cancel">Cancel</button>
-      </div>
-    </form>
   </dialog>
   <dialog id="task-delete-modal" class="scratch-modal">
     <p class="scratch-label">Delete task?</p>
@@ -921,9 +976,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="tasks-due-badge" class="tasks-due-badge" href="/tasks" style="display: none;" title="Tasks due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/deck" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
-      <span id="tasks-due-count">0</span>
+      <span id="deck-due-count">0</span>
     </a>
     <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
@@ -1068,7 +1123,7 @@ def raw_page():
         sub_html = f'<section class="backlinks"><h3>Snippets</h3><ul>{items}</ul></section>'
     else:
         sub_html = ''
-    article_html = render_md(strip_h1(content))
+    article_html = render_md(strip_h1(content), slug="_raw")
     body = f"""{build_breadcrumb('_raw', title)}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -1267,7 +1322,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
 });
 </script>'''
         # Only show commit-related buttons when viewing from uncommitted
-        article_html = render_md(strip_h1(content))
+        article_html = render_md(strip_h1(content), slug=slug)
         body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -1344,18 +1399,10 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
                     last_entry = entries[0]
                     last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
         
-        article_html = _inject_section_edit_buttons(render_md(strip_h1(content)), slug)
+        article_html = _inject_section_edit_buttons(render_md(strip_h1(content), slug=slug), slug)
         page_meta_html = ""
         if last_modified or meta_commit_btn:
             page_meta_html = f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
-        task_sort_html = ""
-        if slug == "tasks":
-            task_sort_html = """<div class="task-sort-bar">
-  <span class="task-sort-label">Sort:</span>
-  <button class="btn btn-sm task-sort-btn" data-mode="done_last">Done last</button>
-  <button class="btn btn-sm task-sort-btn" data-mode="date_asc">Oldest first</button>
-  <button class="btn btn-sm task-sort-btn" data-mode="date_desc">Newest first</button>
-</div>"""
         body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -1366,7 +1413,6 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
   </div>
   {page_meta_html}
 </header>
-{task_sort_html}
 <article class="page-content">
   {article_html}
 </article>
@@ -1736,7 +1782,7 @@ def revision_view(slug, sha):
 </header>
 <div class="revision-banner">Revision <code>{sha[:7]}</code> — restoring will create a new commit.</div>
 <article class="page-content">
-  {render_md(strip_h1(content))}
+  {render_md(strip_h1(content), slug=slug)}
 </article>"""
     return shell(f"Revision {sha[:7]} — {title}", body)
 
@@ -1929,104 +1975,11 @@ def api_toggle_checkbox(slug):
     return "", 204
 
 
-@app.post("/api/add-task")
-def api_add_task():
-    description = request.form.get("description", "").strip()
-    if not description:
-        abort(400)
-    path = safe_path("tasks")
-    if path is None:
-        abort(400)
-    content = path.read_text(encoding="utf-8") if path.exists() else ""
-    now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    task_line = f"- [ ] {description} <!--t:{now}-->\n"
-    lines = content.splitlines(keepends=True)
-    todo_idx = next(
-        (i for i, l in enumerate(lines) if re.match(r"^##\s+Todo\s*$", l, re.IGNORECASE)),
-        None,
-    )
-    if todo_idx is None:
-        if content and not content.endswith("\n"):
-            content += "\n"
-        content += f"\n## Todo\n\n{task_line}"
-    else:
-        # Insert at end of the ## Todo section (before next ## or EOF)
-        insert_idx = todo_idx + 1
-        while insert_idx < len(lines) and not re.match(r"^##", lines[insert_idx]):
-            insert_idx += 1
-        if insert_idx == todo_idx + 1:
-            lines.insert(insert_idx, "\n")
-            insert_idx += 1
-        lines.insert(insert_idx, task_line)
-        content = "".join(lines)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    git_commit(path, f"Add task: {description[:60]}")
-    return "", 204
-
-
-@app.post("/api/sort-tasks")
-def api_sort_tasks():
-    mode = request.form.get("mode", "done_last")
-    path = safe_path("tasks")
-    if path is None or not path.exists():
-        abort(404)
-    content = path.read_text(encoding="utf-8")
-    lines = content.splitlines(keepends=True)
-
-    # Find the ## Todo section
-    todo_idx = next(
-        (i for i, l in enumerate(lines) if re.match(r"^##\s+Todo\s*$", l, re.IGNORECASE)),
-        None,
-    )
-    if todo_idx is None:
-        return "", 204
-
-    # Find end of Todo section
-    end_idx = todo_idx + 1
-    while end_idx < len(lines) and not re.match(r"^##\s", lines[end_idx]):
-        end_idx += 1
-
-    section_lines = lines[todo_idx + 1:end_idx]
-
-    # Group: each task line (starts with - [ ] or - [x]) plus any immediately
-    # following non-task lines (blank lines between tasks are kept with the task above)
-    tasks: list[list[str]] = []
-    non_tasks: list[str] = []  # leading blank/non-task lines before first task
-    current: list[str] | None = None
-    for line in section_lines:
-        if re.match(r'^\s*[-*+]\s+\[[xX ]\]', line):
-            current = [line]
-            tasks.append(current)
-        elif current is not None:
-            current.append(line)
-        else:
-            non_tasks.append(line)
-
-    def task_created(t: list[str]) -> str:
-        m = _TASK_META_SRC_RE.search(t[0])
-        return m.group(1) if m else ''
-
-    def task_is_done(t: list[str]) -> bool:
-        return bool(re.search(r'\[[xX]\]', t[0]))
-
-    if mode == 'done_last':
-        tasks.sort(key=lambda t: (1 if task_is_done(t) else 0))
-    elif mode == 'date_asc':
-        tasks.sort(key=lambda t: task_created(t) or 'z')
-    elif mode == 'date_desc':
-        tasks.sort(key=lambda t: task_created(t), reverse=True)
-
-    new_section = non_tasks + [line for t in tasks for line in t]
-    lines[todo_idx + 1:end_idx] = new_section
-    path.write_text(''.join(lines), encoding="utf-8")
-    return "", 204
-
-
 @app.post("/api/preview")
 def api_preview():
     text = request.get_data(as_text=True)
-    return render_md(text)
+    preview_slug = request.args.get("slug", "")
+    return render_md(text, slug=preview_slug)
 
 
 @app.get("/api/pages")
@@ -2336,27 +2289,27 @@ def api_commit_file():
 
 # ── Task App ──────────────────────────────────────────────────────────────────
 
-TASKS_FILE = WIKI_DIR / "_tasks.json"
+DECK_FILE = WIKI_DIR / "_deck.json"
 
 
-def _read_tasks() -> list[dict]:
-    if not TASKS_FILE.exists():
+def _read_deck() -> list[dict]:
+    if not DECK_FILE.exists():
         return []
     try:
-        data = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
+        data = json.loads(DECK_FILE.read_text(encoding="utf-8"))
         return data if isinstance(data, list) else []
     except (json.JSONDecodeError, ValueError):
         return []
 
 
-def _write_tasks(tasks: list[dict]) -> None:
-    TASKS_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+def _write_deck(tasks: list[dict]) -> None:
+    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
     if GIT_ENABLED:
-        git_commit(TASKS_FILE, "Update tasks")
+        git_commit(DECK_FILE, "Update deck")
 
 
-def _write_tasks_no_commit(tasks: list[dict]) -> None:
-    TASKS_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+def _write_deck_no_commit(tasks: list[dict]) -> None:
+    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _validate_date(val: str | None) -> str | None:
@@ -2411,19 +2364,26 @@ def _spawn_recurring(task: dict) -> dict | None:
         "completed_at": None,
         "sort_order": task.get("sort_order", 0),
         "recurrence": task.get("recurrence"),
+        "page": task.get("page"),
     }
     return new_task
 
 
-@app.get("/tasks")
-def tasks_page():
-    breadcrumb = build_breadcrumb("tasks", "Tasks")
+@app.get("/deck")
+def deck_page():
+    # URL params for pre-filtering (used by [[deck]] links from wiki pages)
+    init_tag = html.escape(request.args.get("tag", ""))
+    init_page = html.escape(request.args.get("page", ""))
+    init_filter = html.escape(request.args.get("filter", ""))
+    init_new = "1" if request.args.get("new") else ""
+
+    breadcrumb = build_breadcrumb("deck", "Deck")
     body = f"""{breadcrumb}
-    <header class="page-header"><h1>Tasks</h1>
+    <header class="page-header"><h1>Deck</h1>
       <div class="page-actions"><button class="btn btn-primary" id="task-add-btn">+ New Task</button></div>
     </header>
     <article class="page-content">
-    <div class="tasks-app" id="tasks-app">
+    <div class="tasks-app" id="tasks-app" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="{init_new}">
       <div class="tasks-tabs" id="tasks-tabs">
         <button class="tab active" data-filter="all">All</button>
         <button class="tab" data-filter="due">Due</button>
@@ -2492,9 +2452,13 @@ def tasks_page():
           <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
           <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
         </div>
+        <div class="task-field">
+          <label for="task-edit-page">Linked page <span class="field-hint">(slug)</span></label>
+          <input type="text" id="task-edit-page" name="page" autocomplete="off" placeholder="e.g. my-project">
+        </div>
         <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
         <div class="task-field" id="task-edit-inbox-field" style="display:none">
-          <label><input type="checkbox" id="task-edit-inbox"> Move to inbox (remove from manual order)</label>
+          <label><input type="checkbox" id="task-edit-inbox"> Move to New (remove from manual order)</label>
         </div>
         <div class="task-edit-actions">
           <button type="submit" class="btn btn-primary">Save</button>
@@ -2503,21 +2467,21 @@ def tasks_page():
         </div>
       </form>
     </dialog>
-    <script src="/public/tasks.js" defer></script>
+    <script src="/public/deck.js" defer></script>
     """
-    return shell("Tasks", body, slug="tasks")
+    return shell("Deck", body, slug="deck")
 
 
-@app.get("/api/tasks")
-def api_get_tasks():
-    return jsonify(_read_tasks())
+@app.get("/api/deck")
+def api_get_deck():
+    return jsonify(_read_deck())
 
 
-@app.get("/api/tasks/due-count")
+@app.get("/api/deck/due-count")
 def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
-    for t in _read_tasks():
+    for t in _read_deck():
         if t.get("completed_at") or not t.get("due_date"):
             continue
         if t["due_date"] < today:
@@ -2527,13 +2491,13 @@ def api_tasks_due_count():
     return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
 
 
-@app.post("/api/tasks")
-def api_create_task():
+@app.post("/api/deck")
+def api_create_deck_item():
     data = request.get_json(force=True)
     title = data.get("title", "").strip()
     if not title:
         abort(400)
-    tasks = _read_tasks()
+    tasks = _read_deck()
     defer_days = data.get("defer_days")
     if defer_days is not None:
         defer_days = max(0, int(defer_days))
@@ -2549,6 +2513,7 @@ def api_create_task():
         "completed_at": None,
         "sort_order": None,
         "recurrence": None,
+        "page": (data.get("page") or "").strip() or None,
     }
     rec_type = data.get("rec_type")
     if rec_type in ("daily", "weekly", "monthly"):
@@ -2557,14 +2522,14 @@ def api_create_task():
             "interval": max(1, int(data.get("rec_interval", 1))),
         }
     tasks.append(task)
-    _write_tasks(tasks)
+    _write_deck(tasks)
     return jsonify(task), 201
 
 
-@app.put("/api/tasks/<task_id>")
-def api_update_task(task_id):
+@app.put("/api/deck/<task_id>")
+def api_update_deck_item(task_id):
     data = request.get_json(force=True)
-    tasks = _read_tasks()
+    tasks = _read_deck()
     task = next((t for t in tasks if t["id"] == task_id), None)
     if not task:
         abort(404)
@@ -2586,6 +2551,8 @@ def api_update_task(task_id):
         task["defer_days"] = max(0, int(dd)) if dd is not None else None
     if "sort_order" in data:
         task["sort_order"] = data["sort_order"]
+    if "page" in data:
+        task["page"] = (data["page"] or "").strip() or None
     if "rec_type" in data:
         rec_type = data["rec_type"]
         if rec_type in ("daily", "weekly", "monthly"):
@@ -2614,40 +2581,40 @@ def api_update_task(task_id):
                     t.get("created_at", "") >= completed_at
                 )]
             task["completed_at"] = None
-    _write_tasks(tasks)
+    _write_deck(tasks)
     return jsonify(task)
 
 
-@app.delete("/api/tasks/<task_id>")
-def api_delete_task(task_id):
-    tasks = _read_tasks()
+@app.delete("/api/deck/<task_id>")
+def api_delete_deck_item(task_id):
+    tasks = _read_deck()
     tasks = [t for t in tasks if t["id"] != task_id]
-    _write_tasks(tasks)
+    _write_deck(tasks)
     return "", 204
 
 
-@app.post("/api/tasks/batch-delete")
-def api_batch_delete_tasks():
+@app.post("/api/deck/batch-delete")
+def api_batch_delete_deck():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    tasks = _read_tasks()
+    tasks = _read_deck()
     tasks = [t for t in tasks if t["id"] not in id_set]
-    _write_tasks(tasks)
+    _write_deck(tasks)
     return "", 204
 
 
-@app.post("/api/tasks/batch-complete")
-def api_batch_complete_tasks():
+@app.post("/api/deck/batch-complete")
+def api_batch_complete_deck():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
     completed = data.get("completed", True)
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    tasks = _read_tasks()
+    tasks = _read_deck()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     updated = []
     for task in tasks:
@@ -2671,23 +2638,55 @@ def api_batch_complete_tasks():
                 )]
             task["completed_at"] = None
             updated.append(task)
-    _write_tasks(tasks)
+    _write_deck(tasks)
     return jsonify(updated)
 
 
-@app.post("/api/tasks/reorder")
-def api_reorder_tasks():
+@app.post("/api/deck/reorder")
+def api_reorder_deck():
     data = request.get_json(force=True)
     order = data.get("order", [])
     if not order:
         abort(400)
-    tasks = _read_tasks()
+    tasks = _read_deck()
     id_map = {t["id"]: t for t in tasks}
     for i, task_id in enumerate(order):
         if task_id in id_map:
             id_map[task_id]["sort_order"] = i
-    _write_tasks_no_commit(tasks)
+    _write_deck_no_commit(tasks)
     return "", 204
+
+
+@app.post("/api/deck/batch-tag")
+def api_batch_tag_deck():
+    """Add or remove tags from multiple deck items."""
+    data = request.get_json(force=True)
+    ids = data.get("ids", [])
+    add_tags = [t.strip() for t in data.get("add", []) if t.strip()]
+    remove_tags = [t.strip().lower() for t in data.get("remove", []) if t.strip()]
+    if not ids or not isinstance(ids, list):
+        abort(400)
+    if not add_tags and not remove_tags:
+        abort(400)
+    id_set = set(ids)
+    tasks = _read_deck()
+    updated = []
+    for task in tasks:
+        if task["id"] not in id_set:
+            continue
+        current = task.get("tags") or []
+        if add_tags:
+            existing_lower = {t.lower() for t in current}
+            for tag in add_tags:
+                if tag.lower() not in existing_lower:
+                    current.append(tag)
+                    existing_lower.add(tag.lower())
+        if remove_tags:
+            current = [t for t in current if t.lower() not in remove_tags]
+        task["tags"] = current
+        updated.append(task)
+    _write_deck(tasks)
+    return jsonify(updated)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

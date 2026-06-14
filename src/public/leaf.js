@@ -92,17 +92,17 @@
   setInterval(checkUncommitted, 30000);
 }());
 
-// ── Tasks due badge ──────────────────────────────────────────────────────────
+// ── Deck due badge ──────────────────────────────────────────────────────────
 
 (function () {
-  const badge = document.getElementById('tasks-due-badge');
-  const countEl = document.getElementById('tasks-due-count');
+  const badge = document.getElementById('deck-due-badge');
+  const countEl = document.getElementById('deck-due-count');
 
   if (!badge) return;
 
   async function checkDue() {
     try {
-      const res = await fetch('/api/tasks/due-count');
+      const res = await fetch('/api/deck/due-count');
       const { count, overdue, today } = await res.json();
       if (count > 0) {
         countEl.textContent = count;
@@ -312,57 +312,16 @@ async function fetchModalContentMatches(q) {
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-const quickTaskModal       = document.getElementById('quick-task-modal');
-const quickTaskForm        = document.getElementById('quick-task-form');
-const quickTaskCancel      = document.getElementById('quick-task-cancel');
-const qtTitle              = document.getElementById('qt-title');
-const qtDesc               = document.getElementById('qt-desc');
-const qtStart              = document.getElementById('qt-start');
-const qtDue                = document.getElementById('qt-due');
-const qtTags               = document.getElementById('qt-tags');
-const qtRecType            = document.getElementById('qt-rec-type');
-const qtRecInterval        = document.getElementById('qt-rec-interval');
-const qtRecIntervalField   = document.getElementById('qt-rec-interval-field');
-
-quickTaskCancel?.addEventListener('click', () => quickTaskModal.close());
-closeOnBackdropClick(quickTaskModal);
-qtRecType?.addEventListener('change', () => {
-  qtRecIntervalField.style.display = qtRecType.value ? '' : 'none';
-});
-
-function openQuickTask() {
-  if (!quickTaskModal) return;
-  qtTitle.value = ''; qtDesc.value = ''; qtStart.value = ''; qtDue.value = '';
-  qtTags.value = ''; qtRecType.value = ''; qtRecInterval.value = '1';
-  qtRecIntervalField.style.display = 'none';
-  quickTaskModal.showModal();
-  qtTitle.focus();
+function openQuickTask(defaultTag) {
+  // Always use the full deck edit modal — navigate to /deck with new param
+  if (typeof window.openDeckEdit === 'function') {
+    window.openDeckEdit(null, { tags: defaultTag || '' });
+  } else {
+    const params = new URLSearchParams({ new: '1' });
+    if (defaultTag) params.set('tag', defaultTag);
+    window.location.href = '/deck?' + params.toString();
+  }
 }
-
-quickTaskForm?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const data = {
-    title: qtTitle.value.trim(),
-    description: qtDesc.value.trim(),
-    start_date: qtStart.value || null,
-    due_date: qtDue.value || null,
-    tags: qtTags.value.split(',').map(t => t.trim()).filter(Boolean),
-    rec_type: qtRecType.value || null,
-    rec_interval: parseInt(qtRecInterval.value) || 1,
-  };
-  if (!data.title) return;
-  quickTaskModal.close();
-  try {
-    await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (window.location.pathname === '/tasks' && typeof window.refreshTasks === 'function') {
-      window.refreshTasks();
-    }
-  } catch (_) {}
-});
 
 // ── Scratch modal ───────────────────────────────────────────────────────────────
 
@@ -479,10 +438,10 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gs=scratch, gt=tasks, gd=daily
+  // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task), gy=daily
   if (awaitingG) {
     resetG();
-    const dest = { h: '/page/index', s: '/page/_scratch', t: '/tasks', d: '/page/_daily' };
+    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: '/deck?tag=task', y: '/page/_daily' };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }
@@ -493,11 +452,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cs=scratch note, ct=add task, cd=daily note
+  // c-prefix create: cs=scratch note, ct=task-tagged deck item, cd=daily note
   if (awaitingC) {
     resetC();
     if (e.key === 's') { e.preventDefault(); openScratch(); }
-    else if (e.key === 't') { e.preventDefault(); openQuickTask(); }
+    else if (e.key === 't') { e.preventDefault(); openQuickTask('task'); }
     else if (e.key === 'd') {
       e.preventDefault();
       fetch('/api/daily', { method: 'POST' })
@@ -534,6 +493,7 @@ document.addEventListener('keydown', e => {
 const textarea = document.getElementById('editor-textarea');
 const previewPane = document.getElementById('editor-preview');
 let previewTimer = null;
+const editorSlug = document.querySelector('.breadcrumb[data-slug]')?.dataset.slug || '';
 
 if (textarea && previewPane) {
   // Auto-show preview on wide screens
@@ -953,7 +913,7 @@ function togglePreview() {
 async function fetchPreview() {
   if (!previewPane?.parentElement.classList.contains('visible')) return;
   try {
-    const res = await fetch('/api/preview', {
+    const res = await fetch('/api/preview' + (editorSlug ? '?slug=' + encodeURIComponent(editorSlug) : ''), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: textarea.value,
@@ -1303,17 +1263,6 @@ if (renameToggle && renameBar) {
 document.addEventListener('DOMContentLoaded', () => {
   if (!window.hljs) return;
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-});
-
-// ── Task sort buttons ─────────────────────────────────────────────────────────
-
-document.querySelectorAll('.task-sort-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const data = new FormData();
-    data.append('mode', btn.dataset.mode);
-    await fetch('/api/sort-tasks', { method: 'POST', body: data });
-    location.reload();
-  });
 });
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────
