@@ -580,9 +580,30 @@
       const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">hidden until ${task.defer_days}d before due</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
-      const blockedDisplay = (task.blocked_by && task.blocked_by.length) ? `<span class="task-blocked">🚫 blocked</span>` : '';
-      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}</div>` : '';
+
+      // Blocked by: show links to blocking tasks
+      let blockedDisplay = '';
+      if (task.blocked_by && task.blocked_by.length) {
+        const links = task.blocked_by.map(bid => {
+          const blocker = tasks.find(t => t.id === bid);
+          const label = blocker ? esc(blocker.title) : bid.slice(0, 8);
+          return `<a href="#" class="dep-link" data-id="${bid}" title="${label}">${label}</a>`;
+        }).join(', ');
+        blockedDisplay = `<span class="task-blocked">🚫 blocked by ${links}</span>`;
+      }
+
+      // Blocking: show what this task blocks
+      let blockingDisplay = '';
+      const blocking = tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id) && !t.completed_at);
+      if (blocking.length) {
+        const links = blocking.map(t =>
+          `<a href="#" class="dep-link" data-id="${t.id}" title="${esc(t.title)}">${esc(t.title)}</a>`
+        ).join(', ');
+        blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
+      }
+
+      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay || blockingDisplay;
+      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}${blockingDisplay}</div>` : '';
       const dragAttr = sortSelect.value === 'manual' ? 'draggable="true"' : '';
       return `
         <li class="task-item ${completedClass} ${urgClass}" data-id="${task.id}" ${dragAttr}>
@@ -643,6 +664,15 @@
     listEl.querySelectorAll('.task-edit-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         openEditModal(e.currentTarget.dataset.id);
+      });
+    });
+
+    // Dependency links open the linked task's edit modal
+    listEl.querySelectorAll('.dep-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        openEditModal(link.dataset.id);
       });
     });
 

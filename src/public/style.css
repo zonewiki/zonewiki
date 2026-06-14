@@ -1485,6 +1485,20 @@ body.editor-page main {
   color: var(--danger, #c33);
   white-space: nowrap;
 }
+.task-blocking {
+  font-size: .75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dep-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.dep-link:hover {
+  text-decoration-style: solid;
+}
 .blocked-by-picker {
   border: 1px solid var(--border);
   border-radius: 4px;
