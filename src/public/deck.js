@@ -1233,9 +1233,10 @@
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : '';
     const deferDaysInput = document.getElementById('task-edit-defer-days' + sfx);
     const deferDueCheck = document.getElementById('task-edit-defer-due' + sfx);
+    const deferDaysField = deferDaysInput?.closest('.task-field');
     const isDeferDue = task?.defer_days === 0;
     deferDaysInput.value = isDeferDue ? '' : (task?.defer_days ?? '');
-    deferDaysInput.style.display = isDeferDue ? 'none' : '';
+    if (deferDaysField) deferDaysField.style.visibility = isDeferDue ? 'hidden' : '';
     if (deferDueCheck) deferDueCheck.checked = isDeferDue;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
@@ -1288,11 +1289,12 @@
   if (deferDueCheckEl) {
     deferDueCheckEl.addEventListener('change', () => {
       const ddi = document.getElementById('task-edit-defer-days' + sfx);
+      const ddf = ddi?.closest('.task-field');
       if (deferDueCheckEl.checked) {
         ddi.value = '';
-        ddi.style.display = 'none';
+        if (ddf) ddf.style.visibility = 'hidden';
       } else {
-        ddi.style.display = '';
+        if (ddf) ddf.style.visibility = '';
       }
     });
   }
