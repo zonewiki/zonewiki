@@ -441,7 +441,7 @@ document.addEventListener('keydown', e => {
   // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task), gy=daily
   if (awaitingG) {
     resetG();
-    const dest = { h: '/page/index', s: '/page/_scratch', d: '/page/deck', t: '/page/deck', y: '/page/_daily' };
+    const dest = { h: '/page/index', s: '/page/_scratch', d: '/page/deck', t: '/page/deck?tag=task', y: '/page/_daily' };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }
