@@ -222,12 +222,12 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-start{sfx}">Hide until</label>
         <input type="date" id="task-edit-start{sfx}" name="start_date">
       </div>
+      <div class="task-field task-field-center">
+        <label class="defer-due-label"><input type="checkbox" id="task-edit-defer-due{sfx}"> on due date</label>
+      </div>
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">N days before due</label>
-        <div class="defer-days-row">
-          <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="1" placeholder="e.g. 3" style="width:5rem">
-          <label class="defer-due-label"><input type="checkbox" id="task-edit-defer-due{sfx}"> on due date</label>
-        </div>
+        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="1" placeholder="e.g. 3">
       </div>
     </div>
     <div class="task-field-row">

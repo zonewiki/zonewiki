@@ -1395,6 +1395,7 @@ body.editor-page main {
 #task-edit-inbox-field label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
 .defer-due-label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .3rem; cursor: pointer; white-space: nowrap; }
 .defer-days-row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.task-field-center { display: flex; align-items: flex-end; padding-bottom: .1rem; }
 
 /* Task edit modal */
 .task-edit-modal {
