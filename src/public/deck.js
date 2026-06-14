@@ -281,7 +281,7 @@
     const tagTerms = filterTag.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     if (tagTerms.length) {
       filtered = filtered.filter(t =>
-        tagTerms.every(term => t.tags && t.tags.some(tg => tg.toLowerCase().includes(term)))
+        tagTerms.every(term => t.tags && t.tags.some(tg => tg.toLowerCase() === term))
       );
     }
 
