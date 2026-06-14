@@ -585,25 +585,23 @@
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
-      // Blocked by: show short IDs with title on hover
+      // Blocked by: show full title, click to open modal
       let blockedDisplay = '';
       if (task.blocked_by && task.blocked_by.length) {
         const links = task.blocked_by.map(bid => {
           const blocker = tasks.find(t => t.id === bid);
-          const title = blocker ? esc(blocker.title) : 'unknown';
-          const shortId = bid.slice(0, 6);
-          return `<a href="#" class="dep-link" data-id="${bid}" title="${title}">${shortId}</a>`;
+          const title = blocker ? esc(blocker.title) : bid.slice(0, 6);
+          return `<a href="#" class="dep-link" data-id="${bid}">${title}</a>`;
         }).join(' ');
         blockedDisplay = `<span class="task-blocked">🚫 blocked by ${links}</span>`;
       }
 
-      // Blocking: show short IDs with title on hover
+      // Blocking: show full title, click to open modal
       let blockingDisplay = '';
       const blocking = tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id) && !t.completed_at);
       if (blocking.length) {
         const links = blocking.map(t => {
-          const shortId = t.id.slice(0, 6);
-          return `<a href="#" class="dep-link" data-id="${t.id}" title="${esc(t.title)}">${shortId}</a>`;
+          return `<a href="#" class="dep-link" data-id="${t.id}">${esc(t.title)}</a>`;
         }).join(' ');
         blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
       }
@@ -1190,7 +1188,7 @@
       const matches = tasks
         .filter(t => !t.completed_at && t.id !== editingId)
         .filter(t => !currentLinks.some(l => l.type === currentType && l.taskId === t.id))
-        .filter(t => t.title.toLowerCase().includes(q))
+        .filter(t => t.title.toLowerCase().includes(q) || t.id.slice(0, 6).startsWith(q))
         .slice(0, 8);
       showLinkAc(matches);
     });
