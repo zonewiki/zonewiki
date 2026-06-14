@@ -912,7 +912,14 @@
   });
 
   sortSelect.addEventListener('change', render);
-  filterTag.addEventListener('input', render);
+  // Tag filter: only apply on Enter, blur, or autocomplete selection (not every keystroke)
+  filterTag.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !tagAcEl) {
+      e.preventDefault();
+      render();
+    }
+  });
+  filterTag.addEventListener('blur', () => { setTimeout(() => { render(); }, 160); });
   if (filterSearch) filterSearch.addEventListener('input', render);
 
   // ── Tag autocomplete ───────────────────────────────────────────────────────
