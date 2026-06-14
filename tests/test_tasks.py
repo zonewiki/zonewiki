@@ -497,15 +497,15 @@ class TestDeferDays:
         assert resp.status_code == 200
         assert resp.get_json()["defer_days"] is None
 
-    def test_defer_days_zero_treated_as_none(self, client):
+    def test_defer_days_zero_means_hide_until_due(self, client):
         resp = client.post("/api/deck", json={"title": "Task", "defer_days": 0})
         assert resp.status_code == 201
-        assert resp.get_json()["defer_days"] is None
+        assert resp.get_json()["defer_days"] == 0
 
     def test_negative_defer_days_clamped_to_zero(self, client):
         resp = client.post("/api/deck", json={"title": "Task", "defer_days": -5})
         assert resp.status_code == 201
-        assert resp.get_json()["defer_days"] is None
+        assert resp.get_json()["defer_days"] == 0
 
     def test_recurring_spawn_preserves_defer_days(self, client):
         resp = client.post("/api/deck", json={
