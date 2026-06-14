@@ -271,7 +271,7 @@ def to_slug(name: str) -> str:
     slugged = []
     for part in parts:
         s = part.strip().lower()
-        s = re.sub(r"[^a-z0-9]+", "-", s)
+        s = re.sub(r"[^a-z0-9_]+", "-", s)
         s = s.strip("-")
         if s:
             slugged.append(s)
