@@ -1308,7 +1308,7 @@ def view_page(slug):
             f'<div class="bl-tooltip">{bl_popup_items}</div>'
         )
     else:
-        bl_html = '<section class="backlinks backlinks-empty" id="backlinks"><h3>Backlinks</h3><p>No pages link here.</p></section>'
+        bl_html = ''
         bl_chip = ""
 
     # Task backlinks — tasks that link to this page via [[wikilink]]
