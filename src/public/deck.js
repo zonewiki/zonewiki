@@ -569,7 +569,7 @@
           <div class="task-content" data-id="${task.id}">
             <span class="task-title" data-id="${task.id}">${esc(task.title)}</span>
             ${metaHtml}
-            ${task.description ? `<p class="task-desc">${esc(task.description)}</p>` : ''}
+            ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
           <button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>
         </li>`;
@@ -667,6 +667,175 @@
     d.textContent = str;
     return d.innerHTML;
   }
+
+  // ── Inline markdown rendering for descriptions ─────────────────────────────
+
+  function renderDesc(text) {
+    if (!text) return '';
+    let h = esc(text);
+    // Wikilinks: [[page|label]] and [[page]]
+    h = h.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_, page, label) => {
+      const slug = page.trim().toLowerCase().replace(/\s+/g, '-');
+      return `<a href="/page/${slug}">${label}</a>`;
+    });
+    h = h.replace(/\[\[([^\]]+)\]\]/g, (_, page) => {
+      const slug = page.trim().toLowerCase().replace(/\s+/g, '-');
+      const label = page.trim();
+      return `<a href="/page/${slug}">${esc(label)}</a>`;
+    });
+    // Markdown links: [label](url)
+    h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    // Bold
+    h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Inline code
+    h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Line breaks
+    h = h.replace(/\n/g, '<br>');
+    return h;
+  }
+
+  // ── Wikilink autocomplete for notes textarea ───────────────────────────────
+
+  let wikiPages = [];
+  let noteAcEl = null;
+  let noteAcIndex = 0;
+
+  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
+
+  function getNoteWikilinkQuery(ta) {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const m = before.match(/\[\[([^\][\n]*)$/);
+    return m ? m[1] : null;
+  }
+
+  function getNoteMdLinkQuery(ta) {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
+    if (!m) return null;
+    const typed = m[1];
+    if (typed === '' || /^[/a-z0-9_-]/i.test(typed)) return typed;
+    return null;
+  }
+
+  function showNoteAc(ta, matches, mode) {
+    if (!noteAcEl) {
+      noteAcEl = document.createElement('div');
+      noteAcEl.className = 'wikilink-ac';
+      document.body.appendChild(noteAcEl);
+      noteAcIndex = 0;
+    }
+    noteAcEl.innerHTML = '';
+    matches.forEach((page, i) => {
+      const item = document.createElement('div');
+      item.className = 'wikilink-ac-item' + (i === noteAcIndex ? ' selected' : '');
+      item.textContent = page;
+      item.addEventListener('mousedown', ev => {
+        ev.preventDefault();
+        insertNoteLink(ta, page, mode);
+      });
+      noteAcEl.appendChild(item);
+    });
+    if (noteAcIndex >= matches.length) noteAcIndex = 0;
+    // Position near caret
+    const rect = ta.getBoundingClientRect();
+    const coords = getNoteCaretCoords(ta);
+    const lineH = parseFloat(window.getComputedStyle(ta).lineHeight) || 20;
+    let top = rect.top + coords.top - ta.scrollTop + lineH;
+    let left = rect.left + coords.left;
+    top = Math.min(top, window.innerHeight - 220);
+    left = Math.min(left, window.innerWidth - 200);
+    noteAcEl.style.top = top + 'px';
+    noteAcEl.style.left = left + 'px';
+  }
+
+  function hideNoteAc() {
+    if (noteAcEl) { noteAcEl.remove(); noteAcEl = null; }
+  }
+
+  function noteAcMove(dir) {
+    if (!noteAcEl) return;
+    const items = noteAcEl.querySelectorAll('.wikilink-ac-item');
+    items[noteAcIndex]?.classList.remove('selected');
+    noteAcIndex = (noteAcIndex + dir + items.length) % items.length;
+    items[noteAcIndex]?.classList.add('selected');
+  }
+
+  function insertNoteLink(ta, page, mode) {
+    const pos = ta.selectionStart;
+    const val = ta.value;
+    if (mode === 'wikilink') {
+      const bracketPos = val.lastIndexOf('[[', pos);
+      ta.setSelectionRange(bracketPos, pos);
+      document.execCommand('insertText', false, '[[' + page + ']]');
+    } else {
+      const parenPos = val.lastIndexOf('](', pos);
+      ta.setSelectionRange(parenPos + 2, pos);
+      document.execCommand('insertText', false, '/page/' + page + ')');
+    }
+    hideNoteAc();
+  }
+
+  function getNoteCaretCoords(el) {
+    const computed = window.getComputedStyle(el);
+    const mirror = document.createElement('div');
+    Object.assign(mirror.style, {
+      position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap',
+      wordWrap: 'break-word', overflow: 'hidden',
+      boxSizing: computed.boxSizing, width: computed.width,
+      paddingTop: computed.paddingTop, paddingRight: computed.paddingRight,
+      paddingBottom: computed.paddingBottom, paddingLeft: computed.paddingLeft,
+      borderTopWidth: computed.borderTopWidth, borderLeftWidth: computed.borderLeftWidth,
+      fontFamily: computed.fontFamily, fontSize: computed.fontSize,
+      fontWeight: computed.fontWeight, lineHeight: computed.lineHeight,
+      letterSpacing: computed.letterSpacing,
+    });
+    document.body.appendChild(mirror);
+    mirror.textContent = el.value.slice(0, el.selectionStart);
+    const span = document.createElement('span');
+    span.textContent = '\u200b';
+    mirror.appendChild(span);
+    const coords = { top: span.offsetTop, left: span.offsetLeft };
+    document.body.removeChild(mirror);
+    return coords;
+  }
+
+  function setupNoteAc(ta) {
+    ta.addEventListener('input', () => {
+      const wq = getNoteWikilinkQuery(ta);
+      if (wq !== null) {
+        const q = wq.toLowerCase();
+        const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
+        if (matches.length) { showNoteAc(ta, matches, 'wikilink'); return; }
+      }
+      const mq = getNoteMdLinkQuery(ta);
+      if (mq !== null) {
+        const q = mq.replace(/^\/page\//, '').toLowerCase();
+        const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
+        if (matches.length) { showNoteAc(ta, matches, 'mdlink'); return; }
+      }
+      hideNoteAc();
+    });
+    ta.addEventListener('keydown', e => {
+      if (!noteAcEl) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); noteAcMove(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); noteAcMove(-1); }
+      else if (e.key === 'Enter' || e.key === 'Tab') {
+        const sel = noteAcEl.querySelector('.selected');
+        if (sel) {
+          e.preventDefault();
+          const mode = getNoteWikilinkQuery(ta) !== null ? 'wikilink' : 'mdlink';
+          insertNoteLink(ta, sel.textContent, mode);
+        }
+      } else if (e.key === 'Escape') { hideNoteAc(); }
+    });
+    ta.addEventListener('blur', () => setTimeout(hideNoteAc, 150));
+  }
+
+  // Attach autocomplete to notes textarea
+  const descTextarea = document.getElementById('task-edit-desc');
+  if (descTextarea) setupNoteAc(descTextarea);
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
