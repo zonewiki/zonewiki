@@ -567,7 +567,7 @@
             <input type="checkbox" ${checked} data-id="${task.id}">
           </label>
           <div class="task-content" data-id="${task.id}">
-            <span class="task-title" data-id="${task.id}">${esc(task.title)}</span>
+            <span class="task-title" data-id="${task.id}">${renderDesc(task.title)}</span>
             ${metaHtml}
             ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
