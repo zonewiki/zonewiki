@@ -923,7 +923,12 @@
     }
   });
   filterTag.addEventListener('blur', () => { setTimeout(() => { render(); }, 160); });
-  if (filterSearch) filterSearch.addEventListener('input', render);
+  if (filterSearch) {
+    filterSearch.addEventListener('input', render);
+    filterSearch.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
+    });
+  }
 
   // ── Tag autocomplete ───────────────────────────────────────────────────────
 
