@@ -551,6 +551,10 @@ def _build_deck_embed(params: dict, page_slug: str = "") -> str:
       <label for="task-edit-desc">Notes</label>
       <textarea id="task-edit-desc" name="description" rows="3"></textarea>
     </div>
+    <div class="task-field">
+      <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
+      <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
+    </div>
     <div class="task-field-row">
       <div class="task-field">
         <label for="task-edit-due">Due date</label>
@@ -586,10 +590,6 @@ def _build_deck_embed(params: dict, page_slug: str = "") -> str:
         <label for="task-edit-defer-days">Hide until N days before due</label>
         <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
       </div>
-    </div>
-    <div class="task-field">
-      <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
-      <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
     </div>
     <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
     <div class="task-field" id="task-edit-inbox-field" style="display:none">
