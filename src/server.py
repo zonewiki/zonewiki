@@ -505,78 +505,108 @@ def _parse_tasks_params(raw: str) -> dict:
     return params
 
 
-def _build_deck_link(params: dict, page_slug: str = "") -> str:
-    """Render a [[deck]] directive as a link to /deck with query params."""
-    query_parts: list[str] = []
-    label_parts: list[str] = []
+_DECK_PLACEHOLDER = "LEAFDECKPLACEHOLDER"
 
+
+def _build_deck_embed(params: dict, page_slug: str = "") -> str:
+    """Render the full interactive deck app HTML for embedding in a wiki page."""
     tag_val = params.get("tag", "")
-    if tag_val:
-        query_parts.append(f"tag={html.escape(tag_val)}")
-        label_parts.append(f"#{tag_val}")
-
     page_val = params.get("page", "")
     if page_val == "self" and page_slug:
         page_val = page_slug
-    if page_val:
-        query_parts.append(f"page={html.escape(page_val)}")
-        label_parts.append(f"📄 {slug_display_name(page_val)}")
-
     filt = params.get("filter", "")
-    if filt and filt != "all":
-        query_parts.append(f"filter={html.escape(filt)}")
-        label_parts.append(filt)
 
-    href = "/deck"
-    if query_parts:
-        href += "?" + "&amp;".join(query_parts)
+    init_tag = html.escape(tag_val)
+    init_page = html.escape(page_val)
+    init_filter = html.escape(filt)
 
-    label = "Deck"
-    if label_parts:
-        label += ": " + ", ".join(label_parts)
-
-    # Count matching items for a badge
-    count = _count_deck_for_link(params, page_slug)
-    badge = f' <span class="deck-link-count">{count}</span>' if count > 0 else ""
-
-    return (
-        f'<a href="{href}" class="deck-link">'
-        f'<span class="deck-link-icon">☑</span> {html.escape(label)}{badge}'
-        f'</a>'
-    )
-
-
-def _count_deck_for_link(params: dict, page_slug: str = "") -> int:
-    """Count open tasks matching the given filter params."""
-    tasks = _read_deck()
-
-    page_val = params.get("page", "")
-    if page_val == "self" and page_slug:
-        page_val = page_slug
-    if page_val:
-        tasks = [t for t in tasks if t.get("page") == page_val]
-
-    tag_val = params.get("tag", "")
-    if tag_val:
-        tag_terms = [t.strip().lower() for t in tag_val.split(",") if t.strip()]
-        if tag_terms:
-            tasks = [
-                t for t in tasks
-                if all(
-                    any(tg.lower() == term for tg in (t.get("tags") or []))
-                    for term in tag_terms
-                )
-            ]
-
-    filt = params.get("filter", "all")
-    if filt == "completed":
-        tasks = [t for t in tasks if t.get("completed_at")]
-    elif filt == "due":
-        tasks = [t for t in tasks if not t.get("completed_at") and t.get("due_date")]
-    else:
-        tasks = [t for t in tasks if not t.get("completed_at")]
-
-    return len(tasks)
+    return f"""<div class="tasks-app" id="tasks-app" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="">
+  <div class="deck-header">
+    <div class="tasks-tabs" id="tasks-tabs">
+      <button class="tab active" data-filter="all">All</button>
+      <button class="tab" data-filter="due">Due</button>
+      <button class="tab" data-filter="scheduled">Hidden</button>
+      <button class="tab" data-filter="completed">Completed</button>
+    </div>
+    <button class="btn btn-primary" id="task-add-btn">+ New Task</button>
+  </div>
+  <div class="tasks-toolbar">
+    <input type="text" id="task-filter-search" placeholder="Search tasks…" autocomplete="off">
+    <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
+    <select id="task-sort">
+      <option value="manual">Manual order</option>
+      <option value="created_at">Created</option>
+    </select>
+  </div>
+  <ul class="tasks-list" id="tasks-list"></ul>
+</div>
+<dialog id="task-edit-modal" class="task-edit-modal">
+  <form id="task-edit-form" class="task-edit-form">
+    <input type="hidden" id="task-edit-id" name="id">
+    <div class="task-field">
+      <label for="task-edit-title">Title</label>
+      <input type="text" id="task-edit-title" name="title" required autocomplete="off">
+    </div>
+    <div class="task-field">
+      <label for="task-edit-desc">Notes</label>
+      <textarea id="task-edit-desc" name="description" rows="3"></textarea>
+    </div>
+    <div class="task-field-row">
+      <div class="task-field">
+        <label for="task-edit-due">Due date</label>
+        <input type="date" id="task-edit-due" name="due_date">
+        <div class="task-date-shortcuts">
+          <button type="button" data-due="today">Today</button>
+          <button type="button" data-due="tomorrow">Tmrw</button>
+          <button type="button" data-due="+3">+3d</button>
+          <button type="button" data-due="next-week">Mon</button>
+          <button type="button" data-due="clear">✕</button>
+        </div>
+      </div>
+      <div class="task-field">
+        <label for="task-edit-rec-type">Repeat</label>
+        <select id="task-edit-rec-type" name="rec_type">
+          <option value="">—</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+      <div class="task-field" id="task-rec-interval-field" style="display:none">
+        <label for="task-edit-rec-interval">Every N</label>
+        <input type="number" id="task-edit-rec-interval" name="rec_interval" min="1" value="1">
+      </div>
+    </div>
+    <div class="task-field-row">
+      <div class="task-field">
+        <label for="task-edit-start">Hide until</label>
+        <input type="date" id="task-edit-start" name="start_date">
+      </div>
+      <div class="task-field">
+        <label for="task-edit-defer-days">Hide until N days before due</label>
+        <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
+      </div>
+    </div>
+    <div class="task-field">
+      <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
+      <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
+    </div>
+    <div class="task-field">
+      <label for="task-edit-page">Linked page <span class="field-hint">(slug)</span></label>
+      <input type="text" id="task-edit-page" name="page" autocomplete="off" placeholder="e.g. my-project">
+    </div>
+    <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
+    <div class="task-field" id="task-edit-inbox-field" style="display:none">
+      <label><input type="checkbox" id="task-edit-inbox"> Move to New (remove from manual order)</label>
+    </div>
+    <div class="task-edit-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn" id="task-edit-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="task-edit-delete" style="display:none">Delete</button>
+    </div>
+  </form>
+</dialog>
+<script src="/public/deck.js" defer></script>"""
 
 
 def render_md(text: str, *, slug: str = "") -> str:
@@ -585,17 +615,25 @@ def render_md(text: str, *, slug: str = "") -> str:
         toc_html = _build_toc(text)
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
-    # Replace [[deck …]] directives with HTML links before wikilink processing
-    def _deck_repl(m):
+    # Replace [[deck …]] directives with a placeholder before markdown processing
+    deck_embed_html = ''
+    if _DECK_RE.search(text):
+        m = _DECK_RE.search(text)
         params = _parse_tasks_params(m.group(1) or "")
-        return _build_deck_link(params, page_slug=slug)
-    text = _DECK_RE.sub(_deck_repl, text)
+        deck_embed_html = _build_deck_embed(params, page_slug=slug)
+        text = _DECK_RE.sub(_DECK_PLACEHOLDER, text, count=1)
+        # Remove any additional [[deck]] directives (only one embed per page)
+        text = _DECK_RE.sub('', text)
 
     result = _apply_img_sizes(md.render(process_wikilinks(text)))
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
     result = _render_task_dates(result)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
+    if deck_embed_html:
+        # Replace paragraph-wrapped or bare placeholder
+        result = result.replace(f'<p>{_DECK_PLACEHOLDER}</p>', deck_embed_html)
+        result = result.replace(_DECK_PLACEHOLDER, deck_embed_html)
     return result
 
 
@@ -976,7 +1014,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/deck" style="display: none;" title="Deck due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/page/deck" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
       <span id="deck-due-count">0</span>
     </a>
@@ -2367,109 +2405,6 @@ def _spawn_recurring(task: dict) -> dict | None:
         "page": task.get("page"),
     }
     return new_task
-
-
-@app.get("/deck")
-def deck_page():
-    # URL params for pre-filtering (used by [[deck]] links from wiki pages)
-    init_tag = html.escape(request.args.get("tag", ""))
-    init_page = html.escape(request.args.get("page", ""))
-    init_filter = html.escape(request.args.get("filter", ""))
-    init_new = "1" if request.args.get("new") else ""
-
-    breadcrumb = build_breadcrumb("deck", "Deck")
-    body = f"""{breadcrumb}
-    <header class="page-header"><h1>Deck</h1>
-      <div class="page-actions"><button class="btn btn-primary" id="task-add-btn">+ New Task</button></div>
-    </header>
-    <article class="page-content">
-    <div class="tasks-app" id="tasks-app" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="{init_new}">
-      <div class="tasks-tabs" id="tasks-tabs">
-        <button class="tab active" data-filter="all">All</button>
-        <button class="tab" data-filter="due">Due</button>
-        <button class="tab" data-filter="scheduled">Hidden</button>
-        <button class="tab" data-filter="completed">Completed</button>
-      </div>
-      <div class="tasks-toolbar">
-        <input type="text" id="task-filter-search" placeholder="Search tasks…" autocomplete="off">
-        <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
-        <select id="task-sort">
-          <option value="manual">Manual order</option>
-          <option value="created_at">Created</option>
-        </select>
-      </div>
-      <ul class="tasks-list" id="tasks-list"></ul>
-    </div>
-    </article>
-    <dialog id="task-edit-modal" class="task-edit-modal">
-      <form id="task-edit-form" class="task-edit-form">
-        <input type="hidden" id="task-edit-id" name="id">
-        <div class="task-field">
-          <label for="task-edit-title">Title</label>
-          <input type="text" id="task-edit-title" name="title" required autocomplete="off">
-        </div>
-        <div class="task-field">
-          <label for="task-edit-desc">Notes</label>
-          <textarea id="task-edit-desc" name="description" rows="3"></textarea>
-        </div>
-        <div class="task-field-row">
-          <div class="task-field">
-            <label for="task-edit-due">Due date</label>
-            <input type="date" id="task-edit-due" name="due_date">
-            <div class="task-date-shortcuts">
-              <button type="button" data-due="today">Today</button>
-              <button type="button" data-due="tomorrow">Tmrw</button>
-              <button type="button" data-due="+3">+3d</button>
-              <button type="button" data-due="next-week">Mon</button>
-              <button type="button" data-due="clear">✕</button>
-            </div>
-          </div>
-          <div class="task-field">
-            <label for="task-edit-rec-type">Repeat</label>
-            <select id="task-edit-rec-type" name="rec_type">
-              <option value="">—</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-          <div class="task-field" id="task-rec-interval-field" style="display:none">
-            <label for="task-edit-rec-interval">Every N</label>
-            <input type="number" id="task-edit-rec-interval" name="rec_interval" min="1" value="1">
-          </div>
-        </div>
-        <div class="task-field-row">
-          <div class="task-field">
-            <label for="task-edit-start">Hide until</label>
-            <input type="date" id="task-edit-start" name="start_date">
-          </div>
-          <div class="task-field">
-            <label for="task-edit-defer-days">Hide until N days before due</label>
-            <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
-          </div>
-        </div>
-        <div class="task-field">
-          <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
-          <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
-        </div>
-        <div class="task-field">
-          <label for="task-edit-page">Linked page <span class="field-hint">(slug)</span></label>
-          <input type="text" id="task-edit-page" name="page" autocomplete="off" placeholder="e.g. my-project">
-        </div>
-        <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
-        <div class="task-field" id="task-edit-inbox-field" style="display:none">
-          <label><input type="checkbox" id="task-edit-inbox"> Move to New (remove from manual order)</label>
-        </div>
-        <div class="task-edit-actions">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn" id="task-edit-cancel">Cancel</button>
-          <button type="button" class="btn btn-danger" id="task-edit-delete" style="display:none">Delete</button>
-        </div>
-      </form>
-    </dialog>
-    <script src="/public/deck.js" defer></script>
-    """
-    return shell("Deck", body, slug="deck")
 
 
 @app.get("/api/deck")

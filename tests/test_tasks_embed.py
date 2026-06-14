@@ -71,95 +71,72 @@ class TestParseParams:
 
 
 class TestTasksLinkRender:
-    def test_basic_link_no_tasks(self, wiki_dir):
-        """[[deck]] with no tasks renders a link with no badge."""
+    def test_basic_embed_no_tasks(self, wiki_dir):
+        """[[deck]] renders the full deck app embed."""
         html = server.render_md("[[deck]]\n")
-        assert "deck-link" in html
-        assert 'href="/deck"' in html
-        assert "deck-link-count" not in html
+        assert "tasks-app" in html
+        assert "tasks-list" in html
+        assert "deck.js" in html
 
-    def test_link_with_count_badge(self, client, wiki_dir):
-        """[[deck]] shows a count badge when tasks exist."""
-        create_task(client, title="Buy milk")
-        create_task(client, title="Write code")
-        html = server.render_md("[[deck]]\n")
-        assert "deck-link-count" in html
-        assert ">2<" in html
-
-    def test_link_tag_filter(self, client, wiki_dir):
-        """[[deck tag=work]] generates href with tag param and correct count."""
-        create_task(client, title="Buy milk", tags=["shopping"])
+    def test_embed_with_tag_filter(self, client, wiki_dir):
+        """[[deck tag=work]] passes tag as data attribute."""
         create_task(client, title="Write code", tags=["work"])
         html = server.render_md("[[deck tag=work]]\n")
-        assert "tag=work" in html
-        assert "#work" in html
-        assert ">1<" in html  # only 1 task matches
+        assert 'data-init-tag="work"' in html
+        assert "tasks-app" in html
 
-    def test_link_filter_completed(self, client, wiki_dir):
-        """[[deck filter=completed]] generates correct href."""
-        resp = create_task(client, title="Done task")
-        task_id = resp.get_json()["id"]
-        client.put(f"/api/deck/{task_id}", json={"completed": True})
+    def test_embed_filter_param(self, client, wiki_dir):
+        """[[deck filter=due]] passes filter as data attribute."""
+        html = server.render_md("[[deck filter=due]]\n")
+        assert 'data-init-filter="due"' in html
+
+    def test_embed_filter_completed(self, client, wiki_dir):
+        """[[deck filter=completed]] passes filter as data attribute."""
         html = server.render_md("[[deck filter=completed]]\n")
-        assert "filter=completed" in html
-        assert ">1<" in html
+        assert 'data-init-filter="completed"' in html
 
-    def test_link_completed_excluded_from_default_count(self, client, wiki_dir):
-        """Default filter=all count excludes completed tasks."""
-        resp = create_task(client, title="Done")
-        task_id = resp.get_json()["id"]
-        client.put(f"/api/deck/{task_id}", json={"completed": True})
-        create_task(client, title="Open")
-        html = server.render_md("[[deck]]\n")
-        assert ">1<" in html  # only the open task
-
-    def test_multiple_links(self, client, wiki_dir):
-        """Multiple [[deck]] blocks on one page each render independently."""
+    def test_multiple_embeds_only_first(self, client, wiki_dir):
+        """Multiple [[deck]] on one page: only first renders, rest removed."""
         create_task(client, title="A", tags=["alpha"])
-        create_task(client, title="B", tags=["beta"])
         md = "## Alpha\n\n[[deck tag=alpha]]\n\n## Beta\n\n[[deck tag=beta]]\n"
         html = server.render_md(md)
-        assert html.count('class="deck-link"') == 2
-        assert "tag=alpha" in html
-        assert "tag=beta" in html
+        assert html.count('id="tasks-app"') == 1
+        assert 'data-init-tag="alpha"' in html
+        assert 'data-init-tag="beta"' not in html
 
-    def test_link_not_inside_paragraph_when_standalone(self, client, wiki_dir):
+    def test_embed_not_inside_paragraph(self, client, wiki_dir):
         """[[deck]] on its own line should NOT be wrapped in <p>."""
         create_task(client, title="T1")
         html = server.render_md("[[deck]]\n")
-        # Standalone: the link is inside a <p> from markdown but that's fine
-        assert '<a href="/deck"' in html
+        assert "<p>" not in html.split('id="tasks-app"')[0].split('\n')[-1]
 
-    def test_link_case_insensitive(self, client, wiki_dir):
+    def test_embed_case_insensitive(self, client, wiki_dir):
         """[[Deck]] and [[DECK]] work too."""
-        create_task(client, title="Case test")
         for variant in ["[[Deck]]\n", "[[DECK]]\n", "[[deck]]\n"]:
             html = server.render_md(variant)
-            assert "deck-link" in html
+            assert "tasks-app" in html
 
-    def test_link_works_inline(self):
-        """[[deck]] inline is also replaced (works in lists, paragraphs, etc)."""
+    def test_embed_works_inline(self):
+        """[[deck]] inline is also replaced (renders embed)."""
         html = server.render_md("Here are the [[deck]] for today.\n")
-        assert "deck-link" in html
+        assert "tasks-app" in html
 
-    def test_link_works_in_list(self):
-        """[[deck]] inside a list item works."""
+    def test_embed_works_in_list(self):
+        """[[deck]] inside a list item renders embed."""
         html = server.render_md("- [[deck tag=work]]\n")
-        assert "deck-link" in html
-        assert "tag=work" in html
+        assert "tasks-app" in html
+        assert 'data-init-tag="work"' in html
 
-    def test_link_page_param(self, wiki_dir):
-        """[[deck page=my-project]] includes page in href."""
+    def test_embed_page_param(self, wiki_dir):
+        """[[deck page=my-project]] passes page as data attribute."""
         html = server.render_md("[[deck page=my-project]]\n")
-        assert "page=my-project" in html
-        assert "My Project" in html
+        assert 'data-init-page="my-project"' in html
 
-    def test_link_page_self(self, client, wiki_dir):
-        """[[deck page=self]] resolves to current slug in href."""
+    def test_embed_page_self(self, client, wiki_dir):
+        """[[deck page=self]] resolves to current slug."""
         create_task(client, title="T", page="my-page")
         html = server.render_md("[[deck page=self]]\n", slug="my-page")
-        assert "page=my-page" in html
-        assert ">1<" in html
+        assert 'data-init-page="my-page"' in html
 
 
 # ── Page field ──────────────────────────────────────────────────────────────────
@@ -190,21 +167,19 @@ class TestPageField:
         assert resp2.get_json()["page"] is None
 
     def test_page_self_filter(self, client, wiki_dir):
-        """[[deck page=self]] on slug 'my-project' links with page param and counts correctly."""
+        """[[deck page=self]] on slug 'my-project' passes page as data attribute."""
         create_task(client, title="Linked", page="my-project")
         create_task(client, title="Other", page="other-page")
         create_task(client, title="No page")
         html = server.render_md("[[deck page=self]]\n", slug="my-project")
-        assert "page=my-project" in html
-        assert ">1<" in html  # only "Linked" matches
+        assert 'data-init-page="my-project"' in html
 
     def test_page_explicit_filter(self, client, wiki_dir):
-        """[[deck page=my-project]] generates link with page param."""
+        """[[deck page=my-project]] passes page as data attribute."""
         create_task(client, title="Linked", page="my-project")
         create_task(client, title="Unlinked")
         html = server.render_md("[[deck page=my-project]]\n")
-        assert "page=my-project" in html
-        assert ">1<" in html
+        assert 'data-init-page="my-project"' in html
 
     def test_recurring_preserves_page(self, client, wiki_dir):
         """Spawned recurring task inherits page field."""
@@ -224,8 +199,8 @@ class TestPageField:
 
 
 class TestPageViewLink:
-    def test_page_with_tasks_link(self, client, wiki_dir):
-        """A wiki page with [[deck]] renders a link."""
+    def test_page_with_deck_embed(self, client, wiki_dir):
+        """A wiki page with [[deck]] renders the full deck app."""
         create_task(client, title="Page task", tags=["test"])
         (wiki_dir / "my-page.md").write_text(
             "# My Page\n\nSome text.\n\n[[deck tag=test]]\n", encoding="utf-8"
@@ -233,11 +208,12 @@ class TestPageViewLink:
         resp = client.get("/page/my-page")
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
-        assert "deck-link" in body
-        assert "tag=test" in body
+        assert "tasks-app" in body
+        assert 'data-init-tag="test"' in body
+        assert "deck.js" in body
 
-    def test_preview_with_tasks_link(self, client, wiki_dir):
-        """Preview endpoint renders [[deck]] as a link."""
+    def test_preview_with_deck_embed(self, client, wiki_dir):
+        """Preview endpoint renders [[deck]] as the full embed."""
         create_task(client, title="Preview task")
         resp = client.post(
             "/api/preview?slug=test-page",
@@ -245,12 +221,15 @@ class TestPageViewLink:
             content_type="text/plain"
         )
         body = resp.get_data(as_text=True)
-        assert "deck-link" in body
-        assert "/deck" in body
+        assert "tasks-app" in body
+        assert "deck.js" in body
 
-    def test_tasks_page_url_params(self, client, wiki_dir):
-        """/deck?tag=work&page=proj passes data attrs to the app."""
-        resp = client.get("/deck?tag=work&page=proj&filter=due")
+    def test_deck_embed_with_params(self, client, wiki_dir):
+        """[[deck tag=work page=proj filter=due]] passes all data attrs."""
+        (wiki_dir / "my-page.md").write_text(
+            "# My Page\n\n[[deck tag=work page=proj filter=due]]\n", encoding="utf-8"
+        )
+        resp = client.get("/page/my-page")
         body = resp.get_data(as_text=True)
         assert 'data-init-tag="work"' in body
         assert 'data-init-page="proj"' in body

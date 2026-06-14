@@ -313,13 +313,13 @@ async function fetchModalContentMatches(q) {
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
 function openQuickTask(defaultTag) {
-  // Always use the full deck edit modal — navigate to /deck with new param
+  // Always use the full deck edit modal — navigate to /page/deck with new param
   if (typeof window.openDeckEdit === 'function') {
     window.openDeckEdit(null, { tags: defaultTag || '' });
   } else {
     const params = new URLSearchParams({ new: '1' });
     if (defaultTag) params.set('tag', defaultTag);
-    window.location.href = '/deck?' + params.toString();
+    window.location.href = '/page/deck?' + params.toString();
   }
 }
 
@@ -441,7 +441,7 @@ document.addEventListener('keydown', e => {
   // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task), gy=daily
   if (awaitingG) {
     resetG();
-    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: '/deck?tag=task', y: '/page/_daily' };
+    const dest = { h: '/page/index', s: '/page/_scratch', d: '/page/deck', t: '/page/deck', y: '/page/_daily' };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }

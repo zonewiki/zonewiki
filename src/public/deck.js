@@ -35,10 +35,11 @@
 
   // URL-param pre-filtering (from [[tasks]] links in wiki pages)
   const appEl = document.getElementById('tasks-app');
-  const initTag = appEl?.dataset.initTag || '';
-  const initPage = appEl?.dataset.initPage || '';
-  const initFilter = appEl?.dataset.initFilter || '';
-  const initNew = appEl?.dataset.initNew === '1';
+  const urlParams = new URLSearchParams(window.location.search);
+  const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
+  const initPage = appEl?.dataset.initPage || urlParams.get('page') || '';
+  const initFilter = appEl?.dataset.initFilter || urlParams.get('filter') || '';
+  const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 

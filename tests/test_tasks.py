@@ -453,14 +453,20 @@ class TestDueCount:
 
 
 class TestDeckPage:
-    def test_deck_page_renders(self, client):
+    def test_deck_route_removed(self, client):
+        """The standalone /deck route no longer exists."""
         resp = client.get("/deck")
+        assert resp.status_code == 404
+
+    def test_deck_embed_in_wiki_page(self, client, wiki_dir):
+        """A wiki page with [[deck]] renders the full deck app."""
+        (wiki_dir / "deck.md").write_text("# Deck\n\n[[deck]]\n", encoding="utf-8")
+        resp = client.get("/page/deck")
         assert resp.status_code == 200
-        html = resp.get_data(as_text=True)
-        assert "Deck" in html
-        assert "tasks-app" in html
-        assert "task-add-btn" in html
-        assert "deck.js" in html
+        body = resp.get_data(as_text=True)
+        assert "tasks-app" in body
+        assert "task-add-btn" in body
+        assert "deck.js" in body
 
 
 # ── Defer Days (relative defer) ──────────────────────────────────────────────
