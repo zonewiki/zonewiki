@@ -1535,6 +1535,19 @@
 
     if (modal.open || deleteModal.open || document.querySelector('dialog[open].scratch-modal')) return;
     const focus = document.activeElement;
+
+    // '/' focuses search, '#' focuses tag filter — even from non-input context
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
+      e.preventDefault();
+      filterSearch?.focus();
+      return;
+    }
+    if (e.key === '#' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
+      e.preventDefault();
+      if (filterTag) { filterTag.focus(); filterTag.value = '#'; filterTag.dispatchEvent(new Event('input')); }
+      return;
+    }
+
     if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;
 
     const items = visibleItems();
