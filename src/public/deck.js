@@ -1146,7 +1146,8 @@
     matches.forEach(t => {
       const item = document.createElement('div');
       item.className = 'tag-ac-item';
-      item.textContent = t.title;
+      const tagStr = (t.tags && t.tags.length) ? t.tags.join(', ') + ' · ' : '';
+      item.innerHTML = `${esc(t.title)} <span class="blocker-ac-meta">${esc(tagStr)}${t.id.slice(0, 6)}</span>`;
       item.addEventListener('mousedown', e => {
         e.preventDefault();
         addBlockerChip(t.id, t.title);
