@@ -1348,7 +1348,7 @@ def view_page(slug):
             return escaped
 
         tbl_items = "".join(
-            f'<li>{_render_task_title(t["title"])} <a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}" class="task-backlink-goto" title="Show in Deck">↗</a></li>'
+            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">{_render_task_title(t["title"])}</a></li>'
             for t in task_bls
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
