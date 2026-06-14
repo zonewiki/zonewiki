@@ -917,6 +917,9 @@
     if (e.key === 'Enter' && !tagAcEl) {
       e.preventDefault();
       render();
+    } else if (e.key === 'Escape' && !tagAcEl) {
+      e.preventDefault();
+      filterTag.blur();
     }
   });
   filterTag.addEventListener('blur', () => { setTimeout(() => { render(); }, 160); });
@@ -995,6 +998,7 @@
       hideTagAc();
     } else if (e.key === 'Escape') {
       hideTagAc();
+      filterTag.blur();
     }
   });
 
