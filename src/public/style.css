@@ -603,6 +603,11 @@ main {
   padding-top: 1rem;
   border-top: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border));
 }
+.backlinks + .backlinks {
+  margin-top: .5rem;
+  border-top: none;
+  padding-top: 0;
+}
 
 .backlinks h3 {
   font-size: .7rem;
