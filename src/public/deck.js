@@ -933,7 +933,7 @@
   function computeTagMatches() {
     const val = filterTag.value;
     const commaIdx = val.lastIndexOf(',');
-    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
+    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim().replace(/^#/, '');
 
     // Collect tags only from tasks visible under the current tab + committed tag filters.
     const committedVal = commaIdx >= 0 ? val.slice(0, commaIdx) : '';
@@ -957,11 +957,14 @@
   }
 
   filterTag.addEventListener('input', () => {
-    showTagAc(computeTagMatches());
-  });
-
-  filterTag.addEventListener('focus', () => {
-    showTagAc(computeTagMatches());
+    const val = filterTag.value;
+    const commaIdx = val.lastIndexOf(',');
+    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
+    if (partial.startsWith('#')) {
+      showTagAc(computeTagMatches());
+    } else {
+      hideTagAc();
+    }
   });
 
   filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
