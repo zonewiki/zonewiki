@@ -115,7 +115,9 @@
       tasks.push(task);
       render();
       window.refreshDueBadge?.();
+      return task;
     }
+    return null;
   }
 
   async function updateTask(id, data) {
@@ -135,7 +137,9 @@
         render();
       }
       window.refreshDueBadge?.();
+      return updated;
     }
+    return null;
   }
 
   async function deleteTask(id) {
@@ -1108,41 +1112,49 @@
     editTagsInput.addEventListener('blur', () => setTimeout(hideEditTagAc, 150));
   }
 
-  // ── Blocked-by picker ─────────────────────────────────────────────────────
+  // ── Links picker ──────────────────────────────────────────────────────────
 
-  const blockedChipsEl = document.getElementById('blocked-chips' + sfx);
-  const blockedSearchEl = document.getElementById('blocked-search' + sfx);
-  let blockedAcEl = null;
-  let blockedAcIndex = -1;
+  const linkChipsEl = document.getElementById('link-chips' + sfx);
+  const linkSearchEl = document.getElementById('link-search' + sfx);
+  const linkTypeEl = document.getElementById('link-type' + sfx);
+  let linkAcEl = null;
+  let linkAcIndex = -1;
+  // [{type: 'blocked_by'|'blocking', taskId: string}]
+  let currentLinks = [];
+  let originalBlockingIds = [];
 
-  function getBlockerIds() {
-    if (!blockedChipsEl) return [];
-    return Array.from(blockedChipsEl.querySelectorAll('.blocked-chip')).map(c => c.dataset.id);
+  function getLinkIds(type) {
+    return currentLinks.filter(l => l.type === type).map(l => l.taskId);
   }
 
-  function addBlockerChip(taskId, label) {
-    if (!blockedChipsEl) return;
-    // Don't add duplicate
-    if (blockedChipsEl.querySelector(`[data-id="${taskId}"]`)) return;
+  function addLinkChip(type, taskId, title) {
+    if (!linkChipsEl) return;
+    if (currentLinks.some(l => l.type === type && l.taskId === taskId)) return;
+    currentLinks.push({ type, taskId });
     const chip = document.createElement('span');
-    chip.className = 'blocked-chip';
+    chip.className = 'link-chip';
     chip.dataset.id = taskId;
-    chip.innerHTML = `${esc(label)} <button type="button" class="chip-remove">×</button>`;
-    chip.querySelector('.chip-remove').addEventListener('click', () => chip.remove());
-    blockedChipsEl.appendChild(chip);
+    chip.dataset.type = type;
+    const typeLabel = type === 'blocked_by' ? 'blocked by' : 'blocking';
+    chip.innerHTML = `<span class="link-chip-type">${typeLabel}</span><span class="link-chip-id" title="${esc(title)}">${taskId.slice(0, 6)}</span><button type="button" class="chip-remove">×</button>`;
+    chip.querySelector('.chip-remove').addEventListener('click', () => {
+      currentLinks = currentLinks.filter(l => !(l.type === type && l.taskId === taskId));
+      chip.remove();
+    });
+    linkChipsEl.appendChild(chip);
   }
 
-  function hideBlockedAc() {
-    blockedAcEl?.remove();
-    blockedAcEl = null;
-    blockedAcIndex = -1;
+  function hideLinkAc() {
+    linkAcEl?.remove();
+    linkAcEl = null;
+    linkAcIndex = -1;
   }
 
-  function showBlockedAc(matches) {
-    hideBlockedAc();
+  function showLinkAc(matches) {
+    hideLinkAc();
     if (!matches.length) return;
-    blockedAcEl = document.createElement('div');
-    blockedAcEl.className = 'tag-ac-dropdown';
+    linkAcEl = document.createElement('div');
+    linkAcEl.className = 'tag-ac-dropdown';
     matches.forEach(t => {
       const item = document.createElement('div');
       item.className = 'tag-ac-item';
@@ -1150,53 +1162,57 @@
       item.innerHTML = `${esc(t.title)} <span class="blocker-ac-meta">${esc(tagStr)}${t.id.slice(0, 6)}</span>`;
       item.addEventListener('mousedown', e => {
         e.preventDefault();
-        addBlockerChip(t.id, t.title);
-        blockedSearchEl.value = '';
-        hideBlockedAc();
+        addLinkChip(linkTypeEl.value, t.id, t.title);
+        linkSearchEl.value = '';
+        hideLinkAc();
       });
-      blockedAcEl.appendChild(item);
+      linkAcEl.appendChild(item);
     });
-    const parent = blockedSearchEl.parentElement;
+    const parent = linkSearchEl.parentElement;
     parent.style.position = 'relative';
-    blockedAcEl.style.top = blockedSearchEl.offsetTop + blockedSearchEl.offsetHeight + 'px';
-    blockedAcEl.style.left = '0';
-    blockedAcEl.style.width = '100%';
-    parent.appendChild(blockedAcEl);
+    linkAcEl.style.top = linkSearchEl.offsetTop + linkSearchEl.offsetHeight + 'px';
+    linkAcEl.style.left = '0';
+    linkAcEl.style.width = '100%';
+    parent.appendChild(linkAcEl);
   }
 
-  if (blockedSearchEl) {
-    blockedSearchEl.addEventListener('input', () => {
-      const q = blockedSearchEl.value.trim().toLowerCase();
-      if (!q) { hideBlockedAc(); return; }
-      const currentIds = new Set(getBlockerIds());
+  if (linkSearchEl) {
+    linkSearchEl.addEventListener('input', () => {
+      const q = linkSearchEl.value.trim().toLowerCase();
+      if (!q) { hideLinkAc(); return; }
+      const currentType = linkTypeEl?.value || 'blocked_by';
       const editingId = document.getElementById('task-edit-id' + sfx)?.value || '';
       const matches = tasks
-        .filter(t => !t.completed_at && t.id !== editingId && !currentIds.has(t.id))
+        .filter(t => !t.completed_at && t.id !== editingId)
+        .filter(t => !currentLinks.some(l => l.type === currentType && l.taskId === t.id))
         .filter(t => t.title.toLowerCase().includes(q))
         .slice(0, 8);
-      showBlockedAc(matches);
+      showLinkAc(matches);
     });
 
-    blockedSearchEl.addEventListener('keydown', e => {
-      if (!blockedAcEl) return;
-      const items = blockedAcEl.querySelectorAll('.tag-ac-item');
+    // Re-filter when type changes (stale dropdown would show wrong exclusions)
+    linkTypeEl?.addEventListener('change', () => { hideLinkAc(); linkSearchEl.value = ''; });
+
+    linkSearchEl.addEventListener('keydown', e => {
+      if (!linkAcEl) return;
+      const items = linkAcEl.querySelectorAll('.tag-ac-item');
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        blockedAcIndex = (blockedAcIndex + 1) % items.length;
-        items.forEach((el, i) => el.classList.toggle('selected', i === blockedAcIndex));
+        linkAcIndex = (linkAcIndex + 1) % items.length;
+        items.forEach((el, i) => el.classList.toggle('selected', i === linkAcIndex));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        blockedAcIndex = blockedAcIndex <= 0 ? items.length - 1 : blockedAcIndex - 1;
-        items.forEach((el, i) => el.classList.toggle('selected', i === blockedAcIndex));
-      } else if ((e.key === 'Enter' || e.key === 'Tab') && blockedAcIndex >= 0) {
+        linkAcIndex = linkAcIndex <= 0 ? items.length - 1 : linkAcIndex - 1;
+        items.forEach((el, i) => el.classList.toggle('selected', i === linkAcIndex));
+      } else if ((e.key === 'Enter' || e.key === 'Tab') && linkAcIndex >= 0) {
         e.preventDefault();
-        items[blockedAcIndex].dispatchEvent(new MouseEvent('mousedown'));
+        items[linkAcIndex].dispatchEvent(new MouseEvent('mousedown'));
       } else if (e.key === 'Escape') {
-        hideBlockedAc();
+        hideLinkAc();
       }
     });
 
-    blockedSearchEl.addEventListener('blur', () => setTimeout(hideBlockedAc, 150));
+    linkSearchEl.addEventListener('blur', () => setTimeout(hideLinkAc, 150));
   }
 
   // ── Add task ───────────────────────────────────────────────────────────────
@@ -1215,15 +1231,19 @@
     document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days || '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
-    const blockedChipsEl = document.getElementById('blocked-chips' + sfx);
-    const blockedSearchEl = document.getElementById('blocked-search' + sfx);
-    if (blockedChipsEl) {
-      blockedChipsEl.innerHTML = '';
-      const blockerIds = task ? (task.blocked_by || []) : [];
-      blockerIds.forEach(bid => {
-        const blocker = tasks.find(t => t.id === bid);
-        addBlockerChip(bid, blocker ? blocker.title : bid.slice(0, 8));
-      });
+    if (linkChipsEl) {
+      linkChipsEl.innerHTML = '';
+      currentLinks = [];
+      if (task) {
+        (task.blocked_by || []).forEach(bid => {
+          const blocker = tasks.find(t => t.id === bid);
+          addLinkChip('blocked_by', bid, blocker ? blocker.title : bid.slice(0, 8));
+        });
+        tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id)).forEach(t => {
+          addLinkChip('blocking', t.id, t.title);
+        });
+      }
+      originalBlockingIds = getLinkIds('blocking');
     }
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
@@ -1295,18 +1315,38 @@
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
-      blocked_by: getBlockerIds(),
+      blocked_by: getLinkIds('blocked_by'),
     };
     if (!data.title) return;
     // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
       data.sort_order = null;
     }
+    const newBlockingIds = getLinkIds('blocking');
     modal.close();
+    let savedId = id;
     if (id) {
       await updateTask(id, data);
     } else {
-      await createTask(data);
+      const created = await createTask(data);
+      if (created) savedId = created.id;
+    }
+    // Reconcile "blocking" links — update other tasks' blocked_by
+    if (savedId) {
+      const addedBlocking = newBlockingIds.filter(tid => !originalBlockingIds.includes(tid));
+      const removedBlocking = originalBlockingIds.filter(tid => !newBlockingIds.includes(tid));
+      for (const tid of addedBlocking) {
+        const t = tasks.find(x => x.id === tid);
+        if (t && !(t.blocked_by || []).includes(savedId)) {
+          await updateTask(tid, { blocked_by: [...(t.blocked_by || []), savedId] });
+        }
+      }
+      for (const tid of removedBlocking) {
+        const t = tasks.find(x => x.id === tid);
+        if (t) {
+          await updateTask(tid, { blocked_by: (t.blocked_by || []).filter(bid => bid !== savedId) });
+        }
+      }
     }
   });
 

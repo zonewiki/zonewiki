@@ -1503,31 +1503,39 @@ body.editor-page main {
 .dep-link:hover {
   text-decoration: underline;
 }
-.blocked-by-picker {
+.links-picker {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: .25rem;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: .25rem;
-  align-items: center;
 }
-.blocked-chips {
+.link-chips {
   display: flex;
   flex-wrap: wrap;
   gap: .25rem;
 }
-.blocked-chip {
+.link-chip {
   display: inline-flex;
   align-items: center;
-  gap: .2rem;
+  gap: .25rem;
   background: var(--tag-bg, #e8e8e8);
   border-radius: 3px;
   padding: .1rem .4rem;
   font-size: .75rem;
   white-space: nowrap;
 }
-.blocked-chip .chip-remove {
+.link-chip-type {
+  opacity: .6;
+  font-style: italic;
+}
+.link-chip-id {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-weight: 600;
+  cursor: default;
+}
+.link-chip .chip-remove {
   border: none;
   background: none;
   cursor: pointer;
@@ -1536,14 +1544,22 @@ body.editor-page main {
   line-height: 1;
   color: var(--muted);
 }
-.blocked-chip .chip-remove:hover { color: var(--danger, #c33); }
-.blocker-ac-meta {
-  font-size: .75rem;
-  opacity: .6;
-  margin-left: .4rem;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+.link-chip .chip-remove:hover { color: var(--danger, #c33); }
+.link-add-row {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
 }
-.blocked-search {
+.link-type-select {
+  font-size: .8rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: .1rem .25rem;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.link-search {
   border: none;
   outline: none;
   flex: 1;
@@ -1551,4 +1567,10 @@ body.editor-page main {
   font-size: .85rem;
   padding: .2rem;
   background: transparent;
+}
+.blocker-ac-meta {
+  font-size: .75rem;
+  opacity: .6;
+  margin-left: .4rem;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
 }
