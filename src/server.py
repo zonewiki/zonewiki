@@ -244,7 +244,7 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "",
         ancestor = '/'.join(parts[:i + 1])
         label = part.replace('-', ' ').title()
         crumbs.append(f'<a href="/page/{ancestor}">{html.escape(label)}</a>')
-    # Page itself — link if extra crumbs follow, plain span if it's the last
+    # Page itself — link if extra crumbs follow or query_string present, plain span otherwise
     if extra:
         crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
         for label, url in extra:
@@ -252,6 +252,8 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "",
                 crumbs.append(f'<a href="{html.escape(url)}">{html.escape(label)}</a>')
             else:
                 crumbs.append(f'<span>{html.escape(label)}</span>')
+    elif query_string:
+        crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
     else:
         crumbs.append(f'<span>{html.escape(title)}</span>')
     right = f'<span class="breadcrumb-right">{right_html}</span>' if right_html else ""
