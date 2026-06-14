@@ -1235,7 +1235,7 @@
     const deferDueCheck = document.getElementById('task-edit-defer-due' + sfx);
     const isDeferDue = task?.defer_days === 0;
     deferDaysInput.value = isDeferDue ? '' : (task?.defer_days ?? '');
-    deferDaysInput.disabled = isDeferDue;
+    deferDaysInput.style.display = isDeferDue ? 'none' : '';
     if (deferDueCheck) deferDueCheck.checked = isDeferDue;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
@@ -1290,9 +1290,9 @@
       const ddi = document.getElementById('task-edit-defer-days' + sfx);
       if (deferDueCheckEl.checked) {
         ddi.value = '';
-        ddi.disabled = true;
+        ddi.style.display = 'none';
       } else {
-        ddi.disabled = false;
+        ddi.style.display = '';
       }
     });
   }
