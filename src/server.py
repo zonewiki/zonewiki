@@ -591,10 +591,6 @@ def _build_deck_embed(params: dict, page_slug: str = "") -> str:
       <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
       <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
     </div>
-    <div class="task-field">
-      <label for="task-edit-page">Linked page <span class="field-hint">(slug)</span></label>
-      <input type="text" id="task-edit-page" name="page" autocomplete="off" placeholder="e.g. my-project">
-    </div>
     <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
     <div class="task-field" id="task-edit-inbox-field" style="display:none">
       <label><input type="checkbox" id="task-edit-inbox"> Move to New (remove from manual order)</label>

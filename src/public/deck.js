@@ -887,7 +887,8 @@
     document.getElementById('task-edit-defer-days').value = task?.defer_days || '';
     document.getElementById('task-edit-due').value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags').value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
-    document.getElementById('task-edit-page').value = task ? task.page || '' : (initPage || '');
+    const pageEl = document.getElementById('task-edit-page');
+    if (pageEl) pageEl.value = task ? task.page || '' : (initPage || '');
     const createdEl = document.getElementById('task-edit-created');
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -958,7 +959,7 @@
       tags: document.getElementById('task-edit-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval').value) || 1,
-      page: document.getElementById('task-edit-page').value.trim() || null,
+      page: document.getElementById('task-edit-page')?.value.trim() || null,
     };
     if (!data.title) return;
     // Move to new: reset sort_order to null
