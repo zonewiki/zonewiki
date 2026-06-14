@@ -14,20 +14,23 @@ os.environ["ALLOW_REMOTE"] = "1"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import server
+import deck as deck_module
 
 
 @pytest.fixture()
 def wiki_dir(tmp_path):
     orig_wiki = server.WIKI_DIR
     orig_pages = server.PAGES_DIR
-    orig_deck = server.DECK_FILE
+    orig_deck = deck_module.DECK_FILE
     server.WIKI_DIR = tmp_path
     server.PAGES_DIR = tmp_path
+    deck_module.DECK_FILE = tmp_path / "_deck.json"
     server.DECK_FILE = tmp_path / "_deck.json"
     (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
     yield tmp_path
     server.WIKI_DIR = orig_wiki
     server.PAGES_DIR = orig_pages
+    deck_module.DECK_FILE = orig_deck
     server.DECK_FILE = orig_deck
 
 

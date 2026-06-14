@@ -3,22 +3,34 @@
 (function () {
   'use strict';
 
-  const listEl = document.getElementById('tasks-list');
-  const tabsEl = document.getElementById('tasks-tabs');
-  const addBtn = document.getElementById('task-add-btn');
-  const sortSelect = document.getElementById('task-sort');
-  const filterTag = document.getElementById('task-filter-tag');
-  const filterSearch = document.getElementById('task-filter-search');
-  const modal = document.getElementById('task-edit-modal');
-  const form = document.getElementById('task-edit-form');
-  const cancelBtn = document.getElementById('task-edit-cancel');
-  const deleteBtn = document.getElementById('task-edit-delete');
-  const recTypeSelect = document.getElementById('task-edit-rec-type');
-  const recIntervalField = document.getElementById('task-rec-interval-field');
-  const deleteModal = document.getElementById('task-delete-modal');
-  const deleteConfirmBtn = document.getElementById('task-delete-confirm');
-  const deleteCancelBtn = document.getElementById('task-delete-cancel');
-  const deleteTitleEl = document.getElementById('task-delete-title');
+  // Find all deck app instances on the page and initialize each
+  const allApps = document.querySelectorAll('.tasks-app');
+  if (!allApps.length) return;
+
+  allApps.forEach(function(appEl) {
+    initDeckInstance(appEl);
+  });
+
+  function initDeckInstance(appEl) {
+  const sfx = appEl.dataset.instance && appEl.dataset.instance !== '0'
+    ? '-' + appEl.dataset.instance : '';
+
+  const listEl = document.getElementById('tasks-list' + sfx);
+  const tabsEl = document.getElementById('tasks-tabs' + sfx);
+  const addBtn = document.getElementById('task-add-btn' + sfx);
+  const sortSelect = document.getElementById('task-sort' + sfx);
+  const filterTag = document.getElementById('task-filter-tag' + sfx);
+  const filterSearch = document.getElementById('task-filter-search' + sfx);
+  const modal = document.getElementById('task-edit-modal' + sfx);
+  const form = document.getElementById('task-edit-form' + sfx);
+  const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
+  const deleteBtn = document.getElementById('task-edit-delete' + sfx);
+  const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
+  const recIntervalField = document.getElementById('task-rec-interval-field' + sfx);
+  const deleteModal = document.getElementById('task-delete-modal' + sfx);
+  const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
+  const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
+  const deleteTitleEl = document.getElementById('task-delete-title' + sfx);
 
   if (!listEl) return;
 
@@ -33,8 +45,6 @@
   let undoToastEl = null;
   let pendingUndoFn = null;
 
-  // URL-param pre-filtering (from [[tasks]] links in wiki pages)
-  const appEl = document.getElementById('tasks-app');
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
   const initPage = appEl?.dataset.initPage || urlParams.get('page') || '';
@@ -558,8 +568,9 @@
       const deferDaysDisplay = task.defer_days ? `<span class="task-date-info">hidden until ${task.defer_days}d before due</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
-      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}</div>` : '';
+      const blockedDisplay = (task.blocked_by && task.blocked_by.length) ? `<span class="task-blocked">🚫 blocked</span>` : '';
+      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay;
+      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}</div>` : '';
       const dragAttr = sortSelect.value === 'manual' ? 'draggable="true"' : '';
       return `
         <li class="task-item ${completedClass} ${urgClass}" data-id="${task.id}" ${dragAttr}>
@@ -595,7 +606,7 @@
     listEl.innerHTML = html;
 
     // "Show more" button
-    const showMoreBtn = document.getElementById('tasks-show-more-btn');
+    const showMoreBtn = listEl.querySelector('#tasks-show-more-btn');
     if (showMoreBtn) {
       showMoreBtn.addEventListener('click', () => {
         completedLimit += 50;
@@ -834,8 +845,8 @@
   }
 
   // Attach autocomplete to title and notes fields
-  const titleInput = document.getElementById('task-edit-title');
-  const descTextarea = document.getElementById('task-edit-desc');
+  const titleInput = document.getElementById('task-edit-title' + sfx);
+  const descTextarea = document.getElementById('task-edit-desc' + sfx);
   if (titleInput) setupNoteAc(titleInput);
   if (descTextarea) setupNoteAc(descTextarea);
 
@@ -971,7 +982,7 @@
 
   // ── Edit modal tag autocomplete ─────────────────────────────────────────────
 
-  const editTagsInput = document.getElementById('task-edit-tags');
+  const editTagsInput = document.getElementById('task-edit-tags' + sfx);
   let editTagAcEl = null;
   let editTagAcIndex = -1;
 
@@ -1062,16 +1073,18 @@
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
-    document.getElementById('task-edit-id').value = task ? task.id : '';
-    document.getElementById('task-edit-title').value = task ? task.title : '';
-    document.getElementById('task-edit-desc').value = task ? task.description || '' : '';
-    document.getElementById('task-edit-start').value = task ? task.start_date || '' : '';
-    document.getElementById('task-edit-defer-days').value = task?.defer_days || '';
-    document.getElementById('task-edit-due').value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-tags').value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
-    const pageEl = document.getElementById('task-edit-page');
+    document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
+    document.getElementById('task-edit-title' + sfx).value = task ? task.title : '';
+    document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
+    document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : '';
+    document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days || '';
+    document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
+    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
+    const pageEl = document.getElementById('task-edit-page' + sfx);
     if (pageEl) pageEl.value = task ? task.page || '' : (initPage || '');
-    const createdEl = document.getElementById('task-edit-created');
+    const blockedEl = document.getElementById('task-edit-blocked' + sfx);
+    if (blockedEl) blockedEl.value = task ? (task.blocked_by || []).join(', ') : '';
+    const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
       createdEl.style.display = '';
@@ -1080,11 +1093,11 @@
     }
     const recType = task?.recurrence?.type || '';
     recTypeSelect.value = recType;
-    document.getElementById('task-edit-rec-interval').value = task?.recurrence?.interval || 1;
+    document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
     recIntervalField.style.display = recType ? '' : 'none';
     // Show "move to new" only for existing tasks with a sort_order
-    const newField = document.getElementById('task-edit-inbox-field');
-    const newCb = document.getElementById('task-edit-inbox');
+    const newField = document.getElementById('task-edit-inbox-field' + sfx);
+    const newCb = document.getElementById('task-edit-inbox' + sfx);
     if (task && task.sort_order != null) {
       newField.style.display = '';
       newCb.checked = false;
@@ -1094,7 +1107,7 @@
     }
     deleteBtn.style.display = task ? '' : 'none';
     modal.showModal();
-    document.getElementById('task-edit-title').focus();
+    document.getElementById('task-edit-title' + sfx).focus();
   }
 
   recTypeSelect.addEventListener('change', () => {
@@ -1114,9 +1127,9 @@
     d.setDate(d.getDate() + add);
     return d.toISOString().slice(0, 10);
   }
-  document.querySelectorAll('.task-date-shortcuts button').forEach(btn => {
+  document.querySelectorAll('#task-edit-modal' + sfx + ' .task-date-shortcuts button').forEach(btn => {
     btn.addEventListener('click', () => {
-      const dueInput = document.getElementById('task-edit-due');
+      const dueInput = document.getElementById('task-edit-due' + sfx);
       const v = btn.dataset.due;
       if (v === 'today')         dueInput.value = dateOffset(0);
       else if (v === 'tomorrow') dueInput.value = dateOffset(1);
@@ -1131,21 +1144,22 @@
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    const id = document.getElementById('task-edit-id').value;
+    const id = document.getElementById('task-edit-id' + sfx).value;
     const data = {
-      title: document.getElementById('task-edit-title').value.trim(),
-      description: document.getElementById('task-edit-desc').value.trim(),
-      start_date: document.getElementById('task-edit-start').value || null,
-      due_date: document.getElementById('task-edit-due').value || null,
-      defer_days: parseInt(document.getElementById('task-edit-defer-days').value) || null,
-      tags: document.getElementById('task-edit-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+      title: document.getElementById('task-edit-title' + sfx).value.trim(),
+      description: document.getElementById('task-edit-desc' + sfx).value.trim(),
+      start_date: document.getElementById('task-edit-start' + sfx).value || null,
+      due_date: document.getElementById('task-edit-due' + sfx).value || null,
+      defer_days: parseInt(document.getElementById('task-edit-defer-days' + sfx).value) || null,
+      tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
-      rec_interval: parseInt(document.getElementById('task-edit-rec-interval').value) || 1,
-      page: document.getElementById('task-edit-page')?.value.trim() || null,
+      rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
+      page: document.getElementById('task-edit-page' + sfx)?.value.trim() || null,
+      blocked_by: (document.getElementById('task-edit-blocked' + sfx)?.value || '').split(',').map(b => b.trim()).filter(Boolean),
     };
     if (!data.title) return;
     // Move to new: reset sort_order to null
-    if (id && document.getElementById('task-edit-inbox').checked) {
+    if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
       data.sort_order = null;
     }
     modal.close();
@@ -1157,7 +1171,7 @@
   });
 
   deleteBtn.addEventListener('click', async () => {
-    const id = document.getElementById('task-edit-id').value;
+    const id = document.getElementById('task-edit-id' + sfx).value;
     if (!id) return;
     const task = tasks.find(t => t.id === id);
     modal.close();
@@ -1437,5 +1451,7 @@
     url.searchParams.delete('new');
     history.replaceState(null, '', url);
   }
+
+  } // end initDeckInstance
 
 }());

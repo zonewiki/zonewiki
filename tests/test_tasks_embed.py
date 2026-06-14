@@ -14,20 +14,23 @@ os.environ["ALLOW_REMOTE"] = "1"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import server
+import deck as deck_module
 
 
 @pytest.fixture()
 def wiki_dir(tmp_path):
     orig_wiki = server.WIKI_DIR
     orig_pages = server.PAGES_DIR
-    orig_deck = server.DECK_FILE
+    orig_deck = deck_module.DECK_FILE
     server.WIKI_DIR = tmp_path
     server.PAGES_DIR = tmp_path
+    deck_module.DECK_FILE = tmp_path / "_deck.json"
     server.DECK_FILE = tmp_path / "_deck.json"
     (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
     yield tmp_path
     server.WIKI_DIR = orig_wiki
     server.PAGES_DIR = orig_pages
+    deck_module.DECK_FILE = orig_deck
     server.DECK_FILE = orig_deck
 
 
@@ -96,13 +99,15 @@ class TestTasksLinkRender:
         assert 'data-init-filter="completed"' in html
 
     def test_multiple_embeds_only_first(self, client, wiki_dir):
-        """Multiple [[deck]] on one page: only first renders, rest removed."""
+        """Multiple [[deck]] on one page: all render with unique instance IDs."""
         create_task(client, title="A", tags=["alpha"])
         md = "## Alpha\n\n[[deck tag=alpha]]\n\n## Beta\n\n[[deck tag=beta]]\n"
         html = server.render_md(md)
-        assert html.count('id="tasks-app"') == 1
+        # Both embeds should be present with unique IDs
+        assert 'id="tasks-app"' in html
+        assert 'id="tasks-app-1"' in html
         assert 'data-init-tag="alpha"' in html
-        assert 'data-init-tag="beta"' not in html
+        assert 'data-init-tag="beta"' in html
 
     def test_embed_not_inside_paragraph(self, client, wiki_dir):
         """[[deck]] on its own line should NOT be wrapped in <p>."""

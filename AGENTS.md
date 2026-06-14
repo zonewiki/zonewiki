@@ -48,7 +48,8 @@ No build step. No database. No auth (local use only).
 ├── .env                    # Host data path configuration
 └── src/
     ├── requirements.txt
-    ├── server.py           # Flask server — all routes live here
+    ├── server.py           # Flask server — wiki routes, rendering, shell
+    ├── deck.py             # Deck module — task API, [[deck]] embed, storage
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
@@ -122,7 +123,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201) |
-| PUT    | `/api/deck/<id>`      | Update a task (title, priority, tags, due_date, completed, recurrence, page) |
+| PUT    | `/api/deck/<id>`      | Update a task (title, priority, tags, due_date, completed, recurrence, page, blocked_by) |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204 |
 | POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204 |
 | POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
@@ -140,6 +141,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
+| GET    | `/edit-task/<id>`     | Full-page task editor (more space than the modal for long descriptions) |
 
 Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
@@ -341,16 +343,27 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 
 ## Search
 
-- `GET /api/search?q=...` reads every `.md` file in `pages/`, scores matches by frequency and title match, returns JSON: `[{ slug, title, excerpt }]`.
-- Excerpt shows ~150 chars around the first match, with the match term bolded.
+- `GET /api/search?q=...` reads every `.md` file in `pages/` **and** searches deck task titles/descriptions. Results are merged by relevance score, returning JSON: `[{ slug, title, excerpt, type? }]`. Task results have `type: "task"` and `task_id` fields.
+- Excerpt shows ~150 chars around the first match, with the match term bolded via `<mark>`.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive, matches partial words.
+- Returns up to 15 results (pages + tasks combined).
 
 ---
 
 ## Deck (Task App)
 
 A task management app embedded into wiki pages via the `[[deck]]` directive. There is no standalone route — the deck app lives inside any wiki page that contains `[[deck]]`. The typical setup is a `deck.md` page with `[[deck]]` as its content, accessible at `/page/deck`.
+
+Multiple `[[deck]]` embeds per page are supported (each with different filter params). They receive unique instance IDs to avoid DOM conflicts.
+
+### Architecture
+
+The deck logic is in `src/deck.py` (Flask Blueprint), registered by `server.py` on startup. This module handles:
+- Task CRUD API routes (`/api/deck/*`)
+- `[[deck]]` embed HTML generation
+- Task search integration (tasks appear in `/api/search` results)
+- Task backlinks (pages show linked tasks)
 
 ### Storage
 
@@ -370,6 +383,7 @@ Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown 
 | `sort_order` | integer | Manual sort position (priority = position) |
 | `recurrence` | `{ type, interval }` / `null` | Recurring schedule |
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
+| `blocked_by` | string[] | Array of task IDs that block this task |
 
 ### UI
 

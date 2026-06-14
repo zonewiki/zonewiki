@@ -1480,3 +1480,16 @@ body.editor-page main {
   white-space: nowrap;
 }
 .task-page-link:hover { text-decoration: underline; }
+.task-blocked {
+  font-size: .75rem;
+  color: var(--danger, #c33);
+  white-space: nowrap;
+}
+.task-edit-fullpage {
+  max-width: 640px;
+}
+.task-edit-fullpage textarea {
+  min-height: 200px;
+  font-family: var(--mono);
+  resize: vertical;
+}

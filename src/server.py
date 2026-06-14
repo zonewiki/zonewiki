@@ -18,6 +18,8 @@ from mdit_py_plugins.deflist import deflist_plugin
 from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
+import deck as deck_module
+
 app = Flask(__name__, static_folder=None)
 APP_NAME = "Leaf"
 
@@ -215,6 +217,11 @@ def git_diff(sha: str, path: Path) -> str | None:
 
 git_setup()
 
+# Initialize deck module and register its blueprint
+deck_module.init_deck(WIKI_DIR, GIT_ENABLED, git_commit)
+app.register_blueprint(deck_module.bp)
+DECK_FILE = deck_module.DECK_FILE
+
 HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
   <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
@@ -407,9 +414,8 @@ _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
 _TOC_RE = re.compile(r'^\[\[toc\]\]\s*$', re.IGNORECASE | re.MULTILINE)
 
 # ── [[deck …]] directive ─────────────────────────────────────────────────────────
-_DECK_RE = re.compile(
-    r'\[\[deck(?:\s+([^\]]*))?\]\]', re.IGNORECASE
-)
+# Moved to deck.py module — use deck_module functions
+_DECK_RE = deck_module._DECK_RE
 
 
 def _heading_id(text: str) -> str:
@@ -494,115 +500,10 @@ def _apply_img_sizes(html_str: str) -> str:
 
 
 def _parse_tasks_params(raw: str) -> dict:
-    """Parse key=value pairs from [[deck key=val ...]]."""
-    params: dict = {}
-    if not raw:
-        return params
-    for token in raw.split():
-        if "=" in token:
-            k, v = token.split("=", 1)
-            params[k.strip().lower()] = v.strip()
-    return params
+    return deck_module._parse_tasks_params(raw)
 
 
-_DECK_PLACEHOLDER = "LEAFDECKPLACEHOLDER"
-
-
-def _build_deck_embed(params: dict, page_slug: str = "") -> str:
-    """Render the full interactive deck app HTML for embedding in a wiki page."""
-    tag_val = params.get("tag", "")
-    page_val = params.get("page", "")
-    if page_val == "self" and page_slug:
-        page_val = page_slug
-    filt = params.get("filter", "")
-
-    init_tag = html.escape(tag_val)
-    init_page = html.escape(page_val)
-    init_filter = html.escape(filt)
-
-    return f"""<div class="tasks-app" id="tasks-app" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="">
-  <div class="deck-header">
-    <div class="tasks-tabs" id="tasks-tabs">
-      <button class="tab active" data-filter="all">All</button>
-      <button class="tab" data-filter="due">Due</button>
-      <button class="tab" data-filter="hidden">Hidden</button>
-      <button class="tab" data-filter="completed">Completed</button>
-    </div>
-    <button class="btn btn-primary" id="task-add-btn">+ New Task</button>
-  </div>
-  <div class="tasks-toolbar">
-    <input type="text" id="task-filter-search" placeholder="Search tasks…" autocomplete="off">
-    <input type="text" id="task-filter-tag" placeholder="tag, tag…" autocomplete="off">
-    <select id="task-sort">
-      <option value="manual">Manual order</option>
-      <option value="created_at">Created</option>
-    </select>
-  </div>
-  <ul class="tasks-list" id="tasks-list"></ul>
-</div>
-<dialog id="task-edit-modal" class="task-edit-modal">
-  <form id="task-edit-form" class="task-edit-form">
-    <input type="hidden" id="task-edit-id" name="id">
-    <div class="task-field">
-      <label for="task-edit-title">Title</label>
-      <input type="text" id="task-edit-title" name="title" required autocomplete="off">
-    </div>
-    <div class="task-field">
-      <label for="task-edit-desc">Notes</label>
-      <textarea id="task-edit-desc" name="description" rows="3"></textarea>
-    </div>
-    <div class="task-field">
-      <label for="task-edit-tags">Tags <span class="field-hint">(comma-separated)</span></label>
-      <input type="text" id="task-edit-tags" name="tags" autocomplete="off">
-    </div>
-    <div class="task-field-row">
-      <div class="task-field">
-        <label for="task-edit-due">Due date</label>
-        <input type="date" id="task-edit-due" name="due_date">
-        <div class="task-date-shortcuts">
-          <button type="button" data-due="today">Today</button>
-          <button type="button" data-due="tomorrow">Tmrw</button>
-          <button type="button" data-due="+3">+3d</button>
-          <button type="button" data-due="next-week">Mon</button>
-          <button type="button" data-due="clear">✕</button>
-        </div>
-      </div>
-      <div class="task-field">
-        <label for="task-edit-rec-type">Repeat</label>
-        <select id="task-edit-rec-type" name="rec_type">
-          <option value="">—</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-      </div>
-      <div class="task-field" id="task-rec-interval-field" style="display:none">
-        <label for="task-edit-rec-interval">Every N</label>
-        <input type="number" id="task-edit-rec-interval" name="rec_interval" min="1" value="1">
-      </div>
-    </div>
-    <div class="task-field-row">
-      <div class="task-field">
-        <label for="task-edit-start">Hide until</label>
-        <input type="date" id="task-edit-start" name="start_date">
-      </div>
-      <div class="task-field">
-        <label for="task-edit-defer-days">Hide until N days before due</label>
-        <input type="number" id="task-edit-defer-days" name="defer_days" min="0" placeholder="e.g. 3">
-      </div>
-    </div>
-    <div class="task-edit-created" id="task-edit-created" style="display:none"></div>
-    <div class="task-field" id="task-edit-inbox-field" style="display:none">
-      <label><input type="checkbox" id="task-edit-inbox"> Move to New (remove from manual order)</label>
-    </div>
-    <div class="task-edit-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn" id="task-edit-cancel">Cancel</button>
-      <button type="button" class="btn btn-danger" id="task-edit-delete" style="display:none">Delete</button>
-    </div>
-  </form>
-</dialog>
-<script src="/public/deck.js" defer></script>"""
+_DECK_PLACEHOLDER = deck_module._DECK_PLACEHOLDER_BASE
 
 
 def render_md(text: str, *, slug: str = "") -> str:
@@ -611,25 +512,16 @@ def render_md(text: str, *, slug: str = "") -> str:
         toc_html = _build_toc(text)
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
-    # Replace [[deck …]] directives with a placeholder before markdown processing
-    deck_embed_html = ''
-    if _DECK_RE.search(text):
-        m = _DECK_RE.search(text)
-        params = _parse_tasks_params(m.group(1) or "")
-        deck_embed_html = _build_deck_embed(params, page_slug=slug)
-        text = _DECK_RE.sub(_DECK_PLACEHOLDER, text, count=1)
-        # Remove any additional [[deck]] directives (only one embed per page)
-        text = _DECK_RE.sub('', text)
+    # Replace [[deck …]] directives with placeholders (supports multiple per page)
+    text, deck_embeds = deck_module.process_deck_embeds(text, slug=slug)
 
     result = _apply_img_sizes(md.render(process_wikilinks(text)))
     result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
     result = _render_task_dates(result)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
-    if deck_embed_html:
-        # Replace paragraph-wrapped or bare placeholder
-        result = result.replace(f'<p>{_DECK_PLACEHOLDER}</p>', deck_embed_html)
-        result = result.replace(_DECK_PLACEHOLDER, deck_embed_html)
+    if deck_embeds:
+        result = deck_module.inject_deck_embeds(result, deck_embeds)
     return result
 
 
@@ -872,29 +764,7 @@ def find_backlinks(slug: str) -> list[dict]:
 
 def find_task_backlinks(slug: str) -> list[dict]:
     """Return deck tasks whose title or description contain a wikilink to slug."""
-    results = []
-    _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
-    for task in _read_deck():
-        if task.get("completed_at"):
-            continue
-        text = (task.get("title") or "") + "\n" + (task.get("description") or "")
-        found = False
-        # Check wikilinks: [[slug]] or [[Name]] where to_slug(Name) == slug
-        for m in WIKILINK_RE.finditer(text):
-            inner = m.group(1)
-            page_name = inner.split("|", 1)[0].strip() if "|" in inner else inner.strip()
-            if page_name == slug or to_slug(page_name) == slug:
-                found = True
-                break
-        # Check markdown links: [label](/page/slug)
-        if not found:
-            for m in _MD_LINK_RE.finditer(text):
-                if m.group(2) == slug:
-                    found = True
-                    break
-        if found:
-            results.append({"id": task["id"], "title": task.get("title", "")})
-    return results
+    return deck_module.find_task_backlinks(slug, to_slug)
 
 
 def update_references(old_slug: str, new_slug: str) -> None:
@@ -2015,10 +1885,15 @@ def do_search(q: str) -> list[dict]:
 
         results.append({"slug": slug, "title": title, "excerpt": excerpt, "score": score})
 
+    # Include task results from deck
+    task_results = deck_module.search_tasks(q)
+    for tr in task_results:
+        results.append(tr)
+
     results.sort(key=lambda r: -r["score"])
     for r in results:
         del r["score"]
-    return results[:10]
+    return results[:15]
 
 
 @app.get("/api/search")
@@ -2381,302 +2256,127 @@ def api_commit_file():
 
 
 # ── Task App ──────────────────────────────────────────────────────────────────
+# All task/deck logic has been moved to deck.py module.
+# Routes are registered via the deck blueprint above.
 
-DECK_FILE = WIKI_DIR / "_deck.json"
-
-
-def _read_deck() -> list[dict]:
-    if not DECK_FILE.exists():
-        return []
-    try:
-        data = json.loads(DECK_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, ValueError):
-        return []
+# Backward-compatibility alias for tests
+_read_deck = deck_module._read_deck
 
 
-def _write_deck(tasks: list[dict]) -> None:
-    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
-    if GIT_ENABLED:
-        git_commit(DECK_FILE, "Update deck")
-
-
-def _write_deck_no_commit(tasks: list[dict]) -> None:
-    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _validate_date(val: str | None) -> str | None:
-    """Return val if it's a valid YYYY-MM-DD string or None, else raise 400."""
-    if not val:
-        return None
-    try:
-        datetime.strptime(val, "%Y-%m-%d")
-        return val
-    except ValueError:
-        abort(400, description="Invalid date format, expected YYYY-MM-DD")
-
-
-def _spawn_recurring(task: dict) -> dict | None:
-    """If task has recurrence, create the next instance and return it."""
-    rec = task.get("recurrence")
-    if not rec:
-        return None
-    rtype = rec.get("type", "daily")
-    interval = rec.get("interval", 1)
-    base_date = task.get("due_date")
-    if base_date:
-        try:
-            base = datetime.strptime(base_date, "%Y-%m-%d")
-        except ValueError:
-            base = datetime.now()
-    else:
-        base = datetime.now()
-
-    if rtype == "daily":
-        next_due = base + timedelta(days=interval)
-    elif rtype == "weekly":
-        next_due = base + timedelta(weeks=interval)
-    elif rtype == "monthly":
-        month = base.month + interval
-        year = base.year + (month - 1) // 12
-        month = (month - 1) % 12 + 1
-        day = min(base.day, 28)
-        next_due = base.replace(year=year, month=month, day=day)
-    else:
-        next_due = base + timedelta(days=interval)
-
-    new_task = {
-        "id": str(uuid.uuid4()),
-        "title": task["title"],
-        "description": task.get("description", ""),
-        "tags": task.get("tags", []),
-        "start_date": None,
-        "due_date": next_due.strftime("%Y-%m-%d"),
-        "defer_days": task.get("defer_days"),
-        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "completed_at": None,
-        "sort_order": task.get("sort_order", 0),
-        "recurrence": task.get("recurrence"),
-        "page": task.get("page"),
-    }
-    return new_task
-
-
-@app.get("/api/deck")
-def api_get_deck():
-    return jsonify(_read_deck())
-
-
-@app.get("/api/deck/due-count")
-def api_tasks_due_count():
-    today = date.today().isoformat()
-    overdue = today_count = 0
-    for t in _read_deck():
-        if t.get("completed_at") or not t.get("due_date"):
-            continue
-        if t["due_date"] < today:
-            overdue += 1
-        elif t["due_date"] == today:
-            today_count += 1
-    return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
-
-
-@app.post("/api/deck")
-def api_create_deck_item():
-    data = request.get_json(force=True)
-    title = data.get("title", "").strip()
-    if not title:
-        abort(400)
-    tasks = _read_deck()
-    defer_days = data.get("defer_days")
-    if defer_days is not None:
-        defer_days = max(0, int(defer_days))
-    task = {
-        "id": str(uuid.uuid4()),
-        "title": title,
-        "description": data.get("description", "").strip(),
-        "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
-        "start_date": _validate_date(data.get("start_date")),
-        "due_date": _validate_date(data.get("due_date")),
-        "defer_days": defer_days or None,
-        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "completed_at": None,
-        "sort_order": None,
-        "recurrence": None,
-        "page": (data.get("page") or "").strip() or None,
-    }
-    rec_type = data.get("rec_type")
-    if rec_type in ("daily", "weekly", "monthly"):
-        task["recurrence"] = {
-            "type": rec_type,
-            "interval": max(1, int(data.get("rec_interval", 1))),
-        }
-    tasks.append(task)
-    _write_deck(tasks)
-    return jsonify(task), 201
-
-
-@app.put("/api/deck/<task_id>")
-def api_update_deck_item(task_id):
-    data = request.get_json(force=True)
-    tasks = _read_deck()
+@app.get("/edit-task/<task_id>")
+def edit_task_page(task_id):
+    """Full-page task editor — more space than the modal for long descriptions."""
+    tasks = deck_module._read_deck()
     task = next((t for t in tasks if t["id"] == task_id), None)
     if not task:
         abort(404)
-    if "title" in data:
-        title = data["title"].strip()
-        if not title:
-            abort(400, description="Title cannot be empty")
-        task["title"] = title
-    if "description" in data:
-        task["description"] = data["description"].strip()
-    if "tags" in data:
-        task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
-    if "due_date" in data:
-        task["due_date"] = _validate_date(data["due_date"])
-    if "start_date" in data:
-        task["start_date"] = _validate_date(data["start_date"])
-    if "defer_days" in data:
-        dd = data["defer_days"]
-        task["defer_days"] = max(0, int(dd)) if dd is not None else None
-    if "sort_order" in data:
-        task["sort_order"] = data["sort_order"]
-    if "page" in data:
-        task["page"] = (data["page"] or "").strip() or None
-    if "rec_type" in data:
-        rec_type = data["rec_type"]
-        if rec_type in ("daily", "weekly", "monthly"):
-            task["recurrence"] = {
-                "type": rec_type,
-                "interval": max(1, int(data.get("rec_interval", 1))),
-            }
-        else:
-            task["recurrence"] = None
-    # Handle completion toggle
-    if "completed" in data:
-        if data["completed"] and not task.get("completed_at"):
-            task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-            spawned = _spawn_recurring(task)
-            if spawned:
-                tasks.append(spawned)
-        elif not data["completed"] and task.get("completed_at"):
-            # Remove spawned recurring instance if it exists
-            if task.get("recurrence"):
-                completed_at = task["completed_at"]
-                tasks = [t for t in tasks if not (
-                    t["id"] != task_id and
-                    t.get("title") == task["title"] and
-                    t.get("recurrence") == task.get("recurrence") and
-                    not t.get("completed_at") and
-                    t.get("created_at", "") >= completed_at
-                )]
-            task["completed_at"] = None
-    _write_deck(tasks)
-    return jsonify(task)
+    title_val = html.escape(task.get("title", ""))
+    desc_val = html.escape(task.get("description", ""))
+    tags_val = html.escape(", ".join(task.get("tags", [])))
+    due_val = task.get("due_date", "") or ""
+    start_val = task.get("start_date", "") or ""
+    defer_val = task.get("defer_days") or ""
+    page_val = html.escape(task.get("page", "") or "")
+    blocked_val = html.escape(", ".join(task.get("blocked_by", [])))
+    rec = task.get("recurrence") or {}
+    rec_type = rec.get("type", "")
+    rec_interval = rec.get("interval", 1)
+    created = task.get("created_at", "")
 
+    rec_options = "".join(
+        f'<option value="{v}"{" selected" if v == rec_type else ""}>{l}</option>'
+        for v, l in [("", "—"), ("daily", "Daily"), ("weekly", "Weekly"), ("monthly", "Monthly")]
+    )
 
-@app.delete("/api/deck/<task_id>")
-def api_delete_deck_item(task_id):
-    tasks = _read_deck()
-    tasks = [t for t in tasks if t["id"] != task_id]
-    _write_deck(tasks)
-    return "", 204
+    body = f"""
+    <header class="page-header">
+      <h1>Edit Task</h1>
+    </header>
+    <form class="task-edit-fullpage" id="task-edit-fullpage" data-task-id="{task_id}">
+      <div class="task-field">
+        <label for="tef-title">Title</label>
+        <input type="text" id="tef-title" name="title" value="{title_val}" required autocomplete="off">
+      </div>
+      <div class="task-field">
+        <label for="tef-desc">Notes</label>
+        <textarea id="tef-desc" name="description" rows="10">{desc_val}</textarea>
+      </div>
+      <div class="task-field-row">
+        <div class="task-field">
+          <label for="tef-tags">Tags <span class="field-hint">(comma-separated)</span></label>
+          <input type="text" id="tef-tags" name="tags" value="{tags_val}" autocomplete="off">
+        </div>
+        <div class="task-field">
+          <label for="tef-page">Linked page</label>
+          <input type="text" id="tef-page" name="page" value="{page_val}" autocomplete="off" placeholder="slug">
+        </div>
+      </div>
+      <div class="task-field-row">
+        <div class="task-field">
+          <label for="tef-due">Due date</label>
+          <input type="date" id="tef-due" name="due_date" value="{due_val}">
+        </div>
+        <div class="task-field">
+          <label for="tef-start">Hide until</label>
+          <input type="date" id="tef-start" name="start_date" value="{start_val}">
+        </div>
+        <div class="task-field">
+          <label for="tef-defer">Defer days</label>
+          <input type="number" id="tef-defer" name="defer_days" value="{defer_val}" min="0">
+        </div>
+      </div>
+      <div class="task-field-row">
+        <div class="task-field">
+          <label for="tef-rec-type">Repeat</label>
+          <select id="tef-rec-type" name="rec_type">{rec_options}</select>
+        </div>
+        <div class="task-field">
+          <label for="tef-rec-interval">Every N</label>
+          <input type="number" id="tef-rec-interval" name="rec_interval" value="{rec_interval}" min="1">
+        </div>
+        <div class="task-field">
+          <label for="tef-blocked">Blocked by <span class="field-hint">(task IDs)</span></label>
+          <input type="text" id="tef-blocked" name="blocked_by" value="{blocked_val}" autocomplete="off">
+        </div>
+      </div>
+      <div class="task-edit-created" style="margin:0.5rem 0;color:var(--muted)">
+        {"Created: " + created[:16].replace("T", " ") if created else ""}
+      </div>
+      <div class="task-edit-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="javascript:history.back()" class="btn">Cancel</a>
+      </div>
+    </form>
+    <script>
+    (function() {{
+      const form = document.getElementById('task-edit-fullpage');
+      form.addEventListener('submit', async e => {{
+        e.preventDefault();
+        const data = {{
+          title: form.querySelector('[name=title]').value.trim(),
+          description: form.querySelector('[name=description]').value.trim(),
+          tags: form.querySelector('[name=tags]').value.split(',').map(t => t.trim()).filter(Boolean),
+          page: form.querySelector('[name=page]').value.trim() || null,
+          due_date: form.querySelector('[name=due_date]').value || null,
+          start_date: form.querySelector('[name=start_date]').value || null,
+          defer_days: parseInt(form.querySelector('[name=defer_days]').value) || null,
+          rec_type: form.querySelector('[name=rec_type]').value || null,
+          rec_interval: parseInt(form.querySelector('[name=rec_interval]').value) || 1,
+          blocked_by: form.querySelector('[name=blocked_by]').value.split(',').map(b => b.trim()).filter(Boolean),
+        }};
+        if (!data.title) return;
+        const resp = await fetch('/api/deck/' + form.dataset.taskId, {{
+          method: 'PUT',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify(data)
+        }});
+        if (resp.ok) history.back();
+      }});
+    }})();
+    </script>"""
 
-
-@app.post("/api/deck/batch-delete")
-def api_batch_delete_deck():
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        abort(400)
-    id_set = set(ids)
-    tasks = _read_deck()
-    tasks = [t for t in tasks if t["id"] not in id_set]
-    _write_deck(tasks)
-    return "", 204
-
-
-@app.post("/api/deck/batch-complete")
-def api_batch_complete_deck():
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
-    completed = data.get("completed", True)
-    if not ids or not isinstance(ids, list):
-        abort(400)
-    id_set = set(ids)
-    tasks = _read_deck()
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    updated = []
-    for task in tasks:
-        if task["id"] not in id_set:
-            continue
-        if completed and not task.get("completed_at"):
-            task["completed_at"] = now
-            spawned = _spawn_recurring(task)
-            if spawned:
-                tasks.append(spawned)
-            updated.append(task)
-        elif not completed and task.get("completed_at"):
-            if task.get("recurrence"):
-                completed_at = task["completed_at"]
-                tasks = [t for t in tasks if not (
-                    t["id"] not in id_set and
-                    t.get("title") == task["title"] and
-                    t.get("recurrence") == task.get("recurrence") and
-                    not t.get("completed_at") and
-                    t.get("created_at", "") >= completed_at
-                )]
-            task["completed_at"] = None
-            updated.append(task)
-    _write_deck(tasks)
-    return jsonify(updated)
-
-
-@app.post("/api/deck/reorder")
-def api_reorder_deck():
-    data = request.get_json(force=True)
-    order = data.get("order", [])
-    if not order:
-        abort(400)
-    tasks = _read_deck()
-    id_map = {t["id"]: t for t in tasks}
-    for i, task_id in enumerate(order):
-        if task_id in id_map:
-            id_map[task_id]["sort_order"] = i
-    _write_deck_no_commit(tasks)
-    return "", 204
-
-
-@app.post("/api/deck/batch-tag")
-def api_batch_tag_deck():
-    """Add or remove tags from multiple deck items."""
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
-    add_tags = [t.strip() for t in data.get("add", []) if t.strip()]
-    remove_tags = [t.strip().lower() for t in data.get("remove", []) if t.strip()]
-    if not ids or not isinstance(ids, list):
-        abort(400)
-    if not add_tags and not remove_tags:
-        abort(400)
-    id_set = set(ids)
-    tasks = _read_deck()
-    updated = []
-    for task in tasks:
-        if task["id"] not in id_set:
-            continue
-        current = task.get("tags") or []
-        if add_tags:
-            existing_lower = {t.lower() for t in current}
-            for tag in add_tags:
-                if tag.lower() not in existing_lower:
-                    current.append(tag)
-                    existing_lower.add(tag.lower())
-        if remove_tags:
-            current = [t for t in current if t.lower() not in remove_tags]
-        task["tags"] = current
-        updated.append(task)
-    _write_deck(tasks)
-    return jsonify(updated)
+    bc = build_breadcrumb("deck", "Deck", ("Edit Task", None))
+    return shell("Edit Task", bc + body, slug="")
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────
