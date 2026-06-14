@@ -185,7 +185,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field">
       <label for="task-edit-desc{sfx}">Notes</label>
-      <textarea id="task-edit-desc{sfx}" name="description" rows="3"></textarea>
+      <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>
     </div>
     <div class="task-field">
       <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated)</span></label>
