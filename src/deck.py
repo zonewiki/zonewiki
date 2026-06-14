@@ -225,6 +225,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">Hide until N days before due</label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="e.g. 3">
+        <label class="defer-due-label"><input type="checkbox" id="task-edit-defer-due{sfx}"> hide until due date</label>
       </div>
     </div>
     <div class="task-field-row">
@@ -415,7 +416,7 @@ def api_create_deck_item():
         "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
         "start_date": _validate_date(data.get("start_date")),
         "due_date": _validate_date(data.get("due_date")),
-        "defer_days": defer_days or None,
+        "defer_days": defer_days if defer_days is not None else None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
         "sort_order": None,

@@ -1231,7 +1231,12 @@
     document.getElementById('task-edit-title' + sfx).value = task ? task.title : '';
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : '';
-    document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days || '';
+    const deferDaysInput = document.getElementById('task-edit-defer-days' + sfx);
+    const deferDueCheck = document.getElementById('task-edit-defer-due' + sfx);
+    const isDeferDue = task?.defer_days === 0;
+    deferDaysInput.value = isDeferDue ? '' : (task?.defer_days ?? '');
+    deferDaysInput.disabled = isDeferDue;
+    if (deferDueCheck) deferDueCheck.checked = isDeferDue;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
     if (linkChipsEl) {
@@ -1278,6 +1283,20 @@
     recIntervalField.style.display = recTypeSelect.value ? '' : 'none';
   });
 
+  // Hide-until-due checkbox
+  const deferDueCheckEl = document.getElementById('task-edit-defer-due' + sfx);
+  if (deferDueCheckEl) {
+    deferDueCheckEl.addEventListener('change', () => {
+      const ddi = document.getElementById('task-edit-defer-days' + sfx);
+      if (deferDueCheckEl.checked) {
+        ddi.value = '';
+        ddi.disabled = true;
+      } else {
+        ddi.disabled = false;
+      }
+    });
+  }
+
   // Quick due-date shortcuts
   function dateOffset(days) {
     const d = new Date();
@@ -1314,7 +1333,9 @@
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
       start_date: document.getElementById('task-edit-start' + sfx).value || null,
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
-      defer_days: parseInt(document.getElementById('task-edit-defer-days' + sfx).value) || null,
+      defer_days: document.getElementById('task-edit-defer-due' + sfx)?.checked
+        ? 0
+        : (parseInt(document.getElementById('task-edit-defer-days' + sfx).value) ?? null) || null,
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
