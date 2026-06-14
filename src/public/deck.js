@@ -720,10 +720,11 @@
   }
 
   function showNoteAc(ta, matches, mode) {
+    const container = ta.closest('dialog') || document.body;
     if (!noteAcEl) {
       noteAcEl = document.createElement('div');
       noteAcEl.className = 'wikilink-ac';
-      document.body.appendChild(noteAcEl);
+      container.appendChild(noteAcEl);
       noteAcIndex = 0;
     }
     noteAcEl.innerHTML = '';
@@ -738,14 +739,13 @@
       noteAcEl.appendChild(item);
     });
     if (noteAcIndex >= matches.length) noteAcIndex = 0;
-    // Position near caret
-    const rect = ta.getBoundingClientRect();
+    // Position relative to textarea within the dialog
+    const taRect = ta.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
     const coords = getNoteCaretCoords(ta);
     const lineH = parseFloat(window.getComputedStyle(ta).lineHeight) || 20;
-    let top = rect.top + coords.top - ta.scrollTop + lineH;
-    let left = rect.left + coords.left;
-    top = Math.min(top, window.innerHeight - 220);
-    left = Math.min(left, window.innerWidth - 200);
+    let top = taRect.top - containerRect.top + coords.top - ta.scrollTop + lineH;
+    let left = taRect.left - containerRect.left + coords.left;
     noteAcEl.style.top = top + 'px';
     noteAcEl.style.left = left + 'px';
   }
