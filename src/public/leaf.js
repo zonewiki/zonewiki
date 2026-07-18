@@ -1354,6 +1354,12 @@ document.addEventListener('change', e => {
     const body = overlay.querySelector('.slide-body-wrap');
     body.innerHTML = '';
     body.appendChild(slides[n].cloneNode(true));
+    // Clones don't inherit event listeners - wire lightbox directly
+    if (window._leafImgLightboxOpen) {
+      body.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', () => window._leafImgLightboxOpen(img.src));
+      });
+    }
     overlay.querySelector('.slide-counter').textContent = `${n + 1} / ${slides.length}`;
     overlay.querySelector('.slide-progress-fill').style.width =
       `${((n + 1) / slides.length) * 100}%`;
@@ -1369,6 +1375,9 @@ document.addEventListener('change', e => {
     const editHref = sectionN ? `/edit/${slug}?section=${sectionN}` : `/edit/${slug}`;
     const presEditBtn = overlay.querySelector('.pres-edit-btn');
     if (presEditBtn) presEditBtn.href = editHref;
+
+    // Persist slide position so F5/session-restore reopens the presentation
+    localStorage.setItem('leaf_pres', JSON.stringify({ slug, slide: n }));
   }
 
   function openPresentation(startAt) {
@@ -1391,6 +1400,20 @@ document.addEventListener('change', e => {
       sessionStorage.setItem('leaf_pres_slide', String(currentSlide));
     });
 
+    // Block wheel events from reaching the page behind; navigate slides on scroll
+    let _wheelCooldown = false;
+    overlay.addEventListener('wheel', e => {
+      e.preventDefault();
+      if (_wheelCooldown) return;
+      _wheelCooldown = true;
+      setTimeout(() => { _wheelCooldown = false; }, 400);
+      if (e.deltaY > 0 || e.deltaX > 0) {
+        if (currentSlide < slides.length - 1) showSlide(currentSlide + 1);
+      } else {
+        if (currentSlide > 0) showSlide(currentSlide - 1);
+      }
+    }, { passive: false });
+
     document.body.appendChild(overlay);
 
     const resumeAt = (typeof startAt === 'number')
@@ -1403,19 +1426,25 @@ document.addEventListener('change', e => {
   function closePresentation() {
     if (overlay) { overlay.remove(); overlay = null; }
     document.removeEventListener('keydown', onPresentKey);
+    sessionStorage.removeItem('leaf_pres_slide');
+    localStorage.removeItem('leaf_pres');
   }
 
   function onPresentKey(e) {
     // Suppress other keybindings during presentation
     if (e.ctrlKey || e.metaKey || e.altKey) { e.stopPropagation(); return; }
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
       e.preventDefault();
       if (currentSlide < slides.length - 1) showSlide(currentSlide + 1);
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
       e.preventDefault();
       if (currentSlide > 0) showSlide(currentSlide - 1);
     } else if (e.key === 'Escape') {
       closePresentation();
+    } else if (e.key === 'e') {
+      e.preventDefault();
+      const editBtn = overlay && overlay.querySelector('.pres-edit-btn');
+      if (editBtn) editBtn.click();
     }
   }
 
@@ -1429,9 +1458,21 @@ document.addEventListener('change', e => {
 
   presentBtn.addEventListener('click', openPresentation);
 
-  // Auto-reopen presentation when returning from section edit
+  // Auto-reopen presentation after F5 or after returning from section edit
+  const _currentSlug = window.location.pathname.replace(/^\/page\//, '');
+  const _presState = localStorage.getItem('leaf_pres');
   const _returnSlide = sessionStorage.getItem('leaf_pres_slide');
-  if (_returnSlide !== null) {
+
+  if (_presState) {
+    try {
+      const { slug, slide } = JSON.parse(_presState);
+      if (slug === _currentSlug) {
+        requestAnimationFrame(() => openPresentation(slide));
+      } else {
+        localStorage.removeItem('leaf_pres');
+      }
+    } catch (_) { localStorage.removeItem('leaf_pres'); }
+  } else if (_returnSlide !== null) {
     sessionStorage.removeItem('leaf_pres_slide');
     requestAnimationFrame(() => openPresentation(parseInt(_returnSlide, 10)));
   }
@@ -1527,3 +1568,107 @@ document.addEventListener('change', e => {
     }
   });
 }());
+
+// ── Commit file actions ───────────────────────────────────────────────────────
+// Handles .commit-file-form submit and #commit-all-btn click.
+// Forms use data-filepath, data-title, and data-on-success attributes.
+// data-on-success: "reload" (default) or a URL path to redirect to.
+
+document.addEventListener('submit', async (e) => {
+  const form = e.target.closest('.commit-file-form');
+  if (!form) return;
+  e.preventDefault();
+  const filepath = form.dataset.filepath;
+  const title    = form.dataset.title;
+  const onSuccess = form.dataset.onSuccess || 'reload';
+  const btn = form.querySelector('button');
+
+  if (!confirm(`Commit "${title}"?`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Committing…';
+
+  try {
+    const message = filepath.endsWith('.md')
+      ? `Save ${filepath.slice(0, -3)}`
+      : `Update ${filepath}`;
+    const res = await fetch('/api/commit-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath, message }),
+    });
+    if (res.ok) {
+      if (onSuccess === 'reload') window.location.reload();
+      else window.location.href = onSuccess;
+    } else {
+      alert('Error committing file');
+      btn.disabled = false;
+      btn.textContent = 'Commit';
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Commit';
+  }
+});
+
+// ── Image lightbox ────────────────────────────────────────────────────────────
+
+(function () {
+  const lb = document.createElement('div');
+  lb.id = 'img-lightbox';
+  const lbImg = document.createElement('img');
+  lb.appendChild(lbImg);
+  document.body.appendChild(lb);
+
+  function open(src) {
+    lbImg.src = src;
+    lb.classList.add('open');
+  }
+  function close() {
+    lb.classList.remove('open');
+    lbImg.src = '';
+  }
+
+  // Click backdrop to close; clicking the image itself does nothing (cursor: default)
+  lb.addEventListener('click', e => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && lb.classList.contains('open')) {
+      e.stopImmediatePropagation();
+      close();
+    }
+  });
+
+  // Attach to all page-content images (both on load and after dynamic content)
+  function attachLightbox(root) {
+    root.querySelectorAll('.page-content img').forEach(img => {
+      if (img.dataset.lightbox) return;
+      img.dataset.lightbox = '1';
+      img.addEventListener('click', () => open(img.src));
+    });
+  }
+  attachLightbox(document);
+
+  // Expose open() so presentation mode can wire cloned slides
+  window._leafImgLightboxOpen = open;
+}());
+
+document.getElementById('commit-all-btn')?.addEventListener('click', async () => {
+  if (!confirm('Commit all uncommitted files? Each file will get its own commit.')) return;
+  const btn = document.getElementById('commit-all-btn');
+  btn.disabled = true;
+  btn.textContent = 'Committing…';
+  try {
+    const res = await fetch('/api/commit-all', { method: 'POST' });
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      alert('Error committing files');
+      btn.disabled = false;
+      btn.textContent = 'Commit All';
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Commit All';
+  }
+});
