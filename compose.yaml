@@ -2,8 +2,7 @@ services:
   leaf:
     build: .
     ports:
-      - "0.0.0.0:5000:5000"
-      # - "127.0.0.1:5000:5000"
+      - "${BIND_ADDR:-127.0.0.1}:5000:5000"
     volumes:
       - ${WIKI_DATA:-./wiki-data}:/wiki-data
     environment:

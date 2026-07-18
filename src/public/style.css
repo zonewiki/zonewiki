@@ -260,16 +260,48 @@ main {
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: .75rem 1rem;
-  margin: 1.5rem 0;
-  display: inline-block;
-  min-width: 200px;
+  padding: .6rem .85rem;
+  float: right;
+  clear: right;
+  margin: 1.2rem 0 1rem 1.5rem;
+  max-width: 220px;
+  min-width: 140px;
 }
 .toc ul { margin: 0; padding: 0; list-style: none; }
-.toc li { padding: .15rem 0; }
-.toc li.toc-h3 { padding-left: 1rem; }
-.toc a { color: var(--muted); font-size: .875rem; text-decoration: none; }
+.toc li { padding: .1rem 0; }
+.toc li.toc-h3 { padding-left: .85rem; }
+.toc a { color: var(--muted); font-size: .8rem; text-decoration: none; }
 .toc a:hover { color: var(--link); }
+
+/* Images never overflow, are always shrunk to fit */
+.page-content img { max-width: 100%; height: auto; cursor: zoom-in; }
+
+/* clear float after article content */
+.page-content::after { content: ''; display: table; clear: both; }
+
+/* ── Image lightbox ────────────────────────────────────────────────────────── */
+
+#img-lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,.85);
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+#img-lightbox.open { display: flex; }
+#img-lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  box-shadow: 0 4px 32px rgba(0,0,0,.6);
+  border-radius: 2px;
+  cursor: default;
+}
 
 /* ── 404 ───────────────────────────────────────────────────────────────────── */
 
@@ -1206,8 +1238,8 @@ body.editor-page main {
   /* Tables scroll horizontally instead of overflowing */
   .page-content table { display: block; overflow-x: auto; }
 
-  /* Images stay within bounds */
-  .page-content img { max-width: 100%; height: auto; }
+  /* TOC: no float on small screens */
+  .toc { float: none; max-width: 100%; margin: 0 0 1rem 0; }
 
   /* Editor — show message, hide editor */
   .editor-wrap { display: none; }

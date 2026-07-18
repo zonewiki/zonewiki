@@ -203,7 +203,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag |
-| `filter` | `all`, `due`, `completed`, `hidden` | `all` | Pre-selects the active tab |
+| `filter` | `open`, `due`, `completed`, `hidden` | `open` | Pre-selects the active tab |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 
 **Examples:**
@@ -387,7 +387,7 @@ Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown 
 
 ### UI
 
-- **Filter tabs**: All (open) · Today · Upcoming · Overdue · Completed
+- **Filter tabs**: Open · Today · Upcoming · Overdue · Completed
 - **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
 - **Filters**: Tag text filter
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
@@ -460,7 +460,7 @@ mdit-py-plugins>=0.4
 - Do not use a database. Files are the only storage.
 - Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the top-right corner when auth is enabled.
 - Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
-- The server binds to `127.0.0.1` only (not `0.0.0.0`) to prevent LAN exposure. `compose.yaml` mirrors this with `127.0.0.1:5000:5000`.
+- `ALLOW_REMOTE` is the single knob for network access. When unset, `run.sh` sets `BIND_ADDR=127.0.0.1` so Docker only exposes port 5000 on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` sets `BIND_ADDR=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. `compose.yaml` uses `${BIND_ADDR:-127.0.0.1}:5000:5000`.
 - A `before_request` hook in `server.py` validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks. Set `ALLOW_REMOTE=1` in `.env` to skip this check and allow access from any host.
 - Do not add a build step or bundler.
 - Slugs are derived from file paths relative to `PAGES_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).

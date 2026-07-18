@@ -159,12 +159,12 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="tasks-tabs" id="tasks-tabs{sfx}">
-      <button class="tab active" data-filter="all">All</button>
+      <button class="tab active" data-filter="all">Open</button>
       <button class="tab" data-filter="due">Due</button>
       <button class="tab" data-filter="hidden">Hidden</button>
       <button class="tab" data-filter="completed">Completed</button>
     </div>
-    <button class="btn btn-primary" id="task-add-btn{sfx}">+ New Task</button>
+    <button class="btn btn-primary" id="task-add-btn{sfx}">+ New Item</button>
   </div>
   <div class="tasks-toolbar">
     <input type="text" id="task-filter-search{sfx}" placeholder="Search tasks…" autocomplete="off">

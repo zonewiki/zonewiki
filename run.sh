@@ -22,6 +22,16 @@ mkdir -p "$WIKI_DATA" "$WIKI_DATA/_uploads"
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 
+# Derive the Docker port-binding address from ALLOW_REMOTE.
+# ALLOW_REMOTE=1 → bind on all interfaces (LAN accessible).
+# Unset/empty   → bind on loopback only (localhost only, more secure).
+ALLOW_REMOTE=$(grep '^ALLOW_REMOTE=' .env 2>/dev/null | cut -d= -f2-)
+if [[ "${ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
+  BIND_ADDR="0.0.0.0"
+else
+  BIND_ADDR="127.0.0.1"
+fi
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD=(docker compose)
   LEGACY_DOCKER_COMPOSE=0
@@ -40,17 +50,17 @@ case "${1:-up}" in
   up)
     if [[ "$LEGACY_DOCKER_COMPOSE" -eq 1 ]]; then
       # docker-compose v1 can crash while recreating containers on newer Docker releases.
-      env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" "${COMPOSE_CMD[@]}" down --remove-orphans >/dev/null 2>&1 || true
+      env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" down --remove-orphans >/dev/null 2>&1 || true
     fi
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" "${COMPOSE_CMD[@]}" up --build -d
+    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" up --build -d
     echo "Leaf running at http://localhost:5000"
     echo "Leaf data: $WIKI_DATA"
     ;;
   down)
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" "${COMPOSE_CMD[@]}" down
+    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" down
     ;;
   logs)
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" "${COMPOSE_CMD[@]}" logs -f
+    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" logs -f
     ;;
   *)
     echo "Usage: $0 [build|up|down|logs]"

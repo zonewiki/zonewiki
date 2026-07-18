@@ -115,11 +115,15 @@ def git_commit(path: Path, message: str) -> None:
     _git("git", "commit", "-m", message)
 
 
-def git_commit_rename(old_path: Path, new_path: Path, message: str) -> None:
+def git_commit_rename(old_path: Path, new_path: Path, modified_refs: list[Path], message: str) -> None:
     if not GIT_ENABLED:
         return
-    # Stage renamed file and any reference updates in other pages
-    _git("git", "add", "-A")
+    # Stage the renamed file and only the pages whose wikilinks were updated
+    old_rel = str(old_path.relative_to(WIKI_DIR))
+    new_rel = str(new_path.relative_to(WIKI_DIR))
+    _git("git", "add", "--", old_rel, new_rel)
+    for ref_path in modified_refs:
+        _git("git", "add", "--", str(ref_path.relative_to(WIKI_DIR)))
     _git("git", "commit", "-m", message)
 
 
@@ -415,7 +419,7 @@ def process_wikilinks(text: str) -> str:
     return WIKILINK_RE.sub(replace, text)
 
 _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
-_TOC_RE = re.compile(r'^\[\[toc\]\]\s*$', re.IGNORECASE | re.MULTILINE)
+_TOC_RE = re.compile(r'^\[\[toc\]\][^\S\n]*$', re.IGNORECASE | re.MULTILINE)
 
 # ── [[deck …]] directive ─────────────────────────────────────────────────────────
 # Moved to deck.py module — use deck_module functions
@@ -620,7 +624,10 @@ def split_sections(content: str) -> list[str]:
                 # a list bullet is "[-*+] " so if the raw line starts with a list marker
                 # followed by a space, it's not a setext underline.
                 is_list_item = bool(re.match(r'^[-*+]\s', line))
-                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None and not is_list_item:
+                prev_is_list = prev_text_line_idx is not None and bool(
+                    re.match(r'^[ \t]{0,3}[-*+]\s', lines[prev_text_line_idx])
+                )
+                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None and not is_list_item and not prev_is_list:
                     heading_lines.append(prev_text_line_idx)
                 # The underline/thematic-break line itself is never a heading text line.
                 prev_text_line_idx = None
@@ -771,8 +778,12 @@ def find_task_backlinks(slug: str) -> list[dict]:
     return deck_module.find_task_backlinks(slug, to_slug)
 
 
-def update_references(old_slug: str, new_slug: str) -> None:
-    """Rewrite [[wikilinks]] across all pages after a rename."""
+def update_references(old_slug: str, new_slug: str) -> list[Path]:
+    """Rewrite [[wikilinks]] across all pages after a rename.
+
+    Returns a list of files that were modified.
+    """
+    modified: list[Path] = []
     for md_file, _ in iter_pages():
         content = md_file.read_text(encoding="utf-8")
 
@@ -792,6 +803,105 @@ def update_references(old_slug: str, new_slug: str) -> None:
         new_content = WIKILINK_RE.sub(replace, content)
         if new_content != content:
             md_file.write_text(new_content, encoding="utf-8")
+            modified.append(md_file)
+    return modified
+
+
+def _render_task_title(title: str) -> str:
+    """Render wikilinks and markdown links in a task title as safe HTML."""
+    def _wl_repl(m: re.Match) -> str:
+        inner = m.group(1)
+        if "|" in inner:
+            page_name, label = inner.split("|", 1)
+            s = to_slug(page_name)
+            return f'<a href="/page/{html.escape(s)}">{html.escape(label.strip())}</a>'
+        s = to_slug(inner)
+        return f'<a href="/page/{html.escape(s)}">{html.escape(inner.strip())}</a>'
+    result = re.sub(r'\[\[([^\[\]]+)\]\]', _wl_repl, title)
+    def _md_repl(m: re.Match) -> str:
+        return f'<a href="{html.escape(m.group(2))}">{html.escape(m.group(1))}</a>'
+    result = re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', _md_repl, result)
+    # Escape non-link text segments; link tags were inserted above and are safe
+    parts = re.split(r'(<a\b[^>]*>.*?</a>)', result, flags=re.DOTALL)
+    return ''.join(part if i % 2 == 1 else html.escape(part) for i, part in enumerate(parts))
+
+
+def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict]) -> tuple[str, str]:
+    """Return (bl_html, bl_chip) for the backlinks sections and the header chip."""
+    from urllib.parse import urlencode
+    bl_html = ""
+    bl_chip = ""
+    if backlinks:
+        bl_items = "".join(
+            f'<li><a href="/page/{r["slug"]}">{html.escape(r["title"])}</a></li>'
+            for r in backlinks
+        )
+        bl_html = f'<section class="backlinks" id="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
+        bl_popup_items = "".join(
+            f'<a href="/page/{r["slug"]}">{html.escape(r["title"])}</a>'
+            for r in backlinks
+        )
+        bl_chip = (
+            f'<a href="#backlinks" class="bl-count">← {len(backlinks)}</a>'
+            f'<div class="bl-tooltip">{bl_popup_items}</div>'
+        )
+    if task_backlinks:
+        tbl_items = "".join(
+            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">'
+            f'{_render_task_title(t["title"])}</a></li>'
+            for t in task_backlinks
+        )
+        bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
+    return bl_html, bl_chip
+
+
+def _build_delete_dialog(slug: str, title: str) -> str:
+    """Return delete-confirmation dialog HTML, or empty string for the index page."""
+    if slug == "index":
+        return ""
+    return (
+        f'<dialog id="page-delete-dialog" class="scratch-modal">'
+        f'<p class="scratch-label">Delete page</p>'
+        f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;?'
+        f'{" It can be restored from history." if GIT_ENABLED else " This cannot be undone."}</p>'
+        f'<form method="post" action="/delete/{html.escape(slug)}">'
+        f'<div class="scratch-actions">'
+        f'<button type="button" class="btn" id="page-delete-cancel">Cancel</button>'
+        f'<button type="submit" class="btn btn-danger">Delete</button>'
+        f'</div></form></dialog>'
+    )
+
+
+def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
+    """Return (last_modified_html, commit_btn_html) for the page meta bar.
+
+    If git is disabled or the file has no history yet, both strings are empty.
+    When the file has uncommitted changes the commit button is included.
+    """
+    if not GIT_ENABLED:
+        return "", ""
+    filepath = slug + ".md"
+    uncommitted_files = git_uncommitted_files()
+    info = next((f for f in uncommitted_files if f["filepath"] == filepath), None)
+    if info:
+        last_modified = (
+            f'<div class="page-meta">Last changed {html.escape(info["mtime"])} '
+            f'({html.escape(info["rel"])}) — uncommitted</div>'
+        )
+        commit_btn = (
+            f'<form class="commit-file-form" style="display:inline"'
+            f' data-filepath="{html.escape(filepath)}"'
+            f' data-title="{html.escape(title)}"'
+            f' data-on-success="reload">'
+            f'<button type="submit" class="btn btn-primary btn-sm">Commit</button>'
+            f'</form>'
+        )
+        return last_modified, commit_btn
+    entries = git_log(path)
+    if entries:
+        e = entries[0]
+        return f'<div class="page-meta">Last changed {html.escape(e["date"])} ({html.escape(e["rel"])})</div>', ""
+    return "", ""
 
 
 def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_head: str | None = None) -> str:
@@ -911,7 +1021,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/page/deck" style="display: none;" title="Deck due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/page/deck?filter=due" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
       <span id="deck-due-count">0</span>
     </a>
@@ -1151,13 +1261,14 @@ def view_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
+
     if not path.exists():
+        # Show a restore prompt if the page was deleted from git history
         if GIT_ENABLED:
             rel = slug + ".md"
             r = _git("git", "log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
             if r.returncode == 0 and r.stdout.strip():
                 parts = r.stdout.strip().split('\t', 2)
-                del_sha = parts[0]
                 parent_sha = parts[1].split()[0] if len(parts) > 1 and parts[1].strip() else None
                 del_date = parts[2] if len(parts) > 2 else ''
                 if parent_sha:
@@ -1176,202 +1287,42 @@ def view_page(slug):
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    backlinks = find_backlinks(slug)
-    if backlinks:
-        bl_items = "".join(
-            f'<li><a href="/page/{r["slug"]}">{html.escape(r["title"])}</a></li>'
-            for r in backlinks
-        )
-        bl_html = f'<section class="backlinks" id="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
-        bl_popup_items = "".join(
-            f'<a href="/page/{r["slug"]}">{html.escape(r["title"])}</a>'
-            for r in backlinks
-        )
-        bl_chip = (
-            f'<a href="#backlinks" class="bl-count">← {len(backlinks)}</a>'
-            f'<div class="bl-tooltip">{bl_popup_items}</div>'
-        )
-    else:
-        bl_html = ''
-        bl_chip = ""
-
+    bl_html, bl_chip = _build_backlinks_html(slug, find_backlinks(slug), find_task_backlinks(slug))
+    delete_dialog = _build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
-    # Task backlinks — tasks that link to this page via [[wikilink]]
-    task_bls = find_task_backlinks(slug)
-    if task_bls:
-        from urllib.parse import urlencode
 
-        def _render_task_title(title: str) -> str:
-            """Render wikilinks and markdown links in task title as HTML links."""
-            escaped = html.escape(title)
-            # Render wikilinks
-            def _wl_repl(m):
-                inner = m.group(1)
-                if "|" in inner:
-                    page_name, label = inner.split("|", 1)
-                    s = to_slug(page_name)
-                    return f'<a href="/page/{s}">{html.escape(label.strip())}</a>'
-                s = to_slug(inner)
-                return f'<a href="/page/{s}">{html.escape(inner.strip())}</a>'
-            escaped = re.sub(r'\[\[([^\[\]]+)\]\]', _wl_repl, escaped)
-            # Render markdown links [label](/page/slug)
-            escaped = re.sub(
-                r'\[([^\]]*)\]\((/page/[^)]+)\)',
-                r'<a href="\2">\1</a>',
-                escaped
-            )
-            return escaped
-
-        tbl_items = "".join(
-            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">{_render_task_title(t["title"])}</a></li>'
-            for t in task_bls
-        )
-        bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
-
-    breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip)
-
-    delete_dialog = ''
-    if slug != 'index':
-        delete_dialog = (
-            f'<dialog id="page-delete-dialog" class="scratch-modal">'
-            f'<p class="scratch-label">Delete page</p>'
-            f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;?'
-            f'{" It can be restored from history." if GIT_ENABLED else " This cannot be undone."}</p>'
-            f'<form method="post" action="/delete/{html.escape(slug)}">'
-            f'<div class="scratch-actions">'
-            f'<button type="button" class="btn" id="page-delete-cancel">Cancel</button>'
-            f'<button type="submit" class="btn btn-danger">Delete</button>'
-            f'</div></form></dialog>'
-        )
-
-    from_page = request.args.get('from', '')
-    if from_page == 'uncommitted' and GIT_ENABLED:
-        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)
-        back_link = f'<a href="/uncommitted" class="btn">← Uncommitted</a>'
+    if request.args.get('from') == 'uncommitted' and GIT_ENABLED:
+        # Viewing a page from the uncommitted-changes list: show commit button
         filepath = slug + '.md'
-        commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
-  <button type="submit" class="btn btn-primary">Commit</button>
-</form>'''
-        commit_script = '''<script>
-document.addEventListener('DOMContentLoaded', () => {
-document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const filepath = form.dataset.filepath;
-  const title = form.dataset.title;
-  const btn = form.querySelector('button');
-  
-  if (!confirm(`Commit "${title}"?`)) return;
-  
-  btn.disabled = true;
-  btn.textContent = 'Committing...';
-  
-  try {
-    const message = `Save ${filepath.slice(0, -3)}`;
-    const res = await fetch('/api/commit-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath, message })
-    });
-    
-    if (res.ok) {
-      window.location.href = '/uncommitted';
-    } else {
-      alert('Error committing file');
-      btn.disabled = false;
-      btn.textContent = 'Commit';
-    }
-  } catch (e) {
-    alert('Error: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'Commit';
-  }
-});
-});
-</script>'''
-        # Only show commit-related buttons when viewing from uncommitted
-        article_html = render_md(strip_h1(content), slug=slug)
-        body = f"""{breadcrumb}{delete_dialog}
+        commit_btn = (
+            f'<form class="commit-file-form" style="display:inline"'
+            f' data-filepath="{html.escape(filepath)}"'
+            f' data-title="{html.escape(title)}"'
+            f' data-on-success="/uncommitted">'
+            f'<button type="submit" class="btn btn-primary">Commit</button>'
+            f'</form>'
+        )
+        body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
     {commit_btn}
-    {back_link}
+    <a href="/uncommitted" class="btn">← Uncommitted</a>
   </div>
 </header>
 <article class="page-content">
-  {article_html}
+  {render_md(strip_h1(content), slug=slug)}
 </article>
 {bl_html}"""
     else:
-        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
-        
-        # Get last modified info
-        last_modified = ""
-        meta_commit_btn = ""
-        meta_script = ""
-        if GIT_ENABLED:
-            # Check if file is uncommitted
-            uncommitted_files = git_uncommitted_files()
-            filepath = slug + '.md'
-            uncommitted_info = next((f for f in uncommitted_files if f["filepath"] == filepath), None)
-            
-            if uncommitted_info:
-                # File has uncommitted changes - use file mtime
-                last_modified = f'<div class="page-meta">Last changed {html.escape(uncommitted_info["mtime"])} ({html.escape(uncommitted_info["rel"])}) — uncommitted</div>'
-                meta_commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="meta-commit-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
-  <button type="submit" class="btn btn-primary btn-sm">Commit</button>
-</form>'''
-                meta_script = '''<script>
-document.addEventListener('DOMContentLoaded', () => {
-document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const filepath = form.dataset.filepath;
-  const title = form.dataset.title;
-  const btn = form.querySelector('button');
-  
-  if (!confirm(`Commit "${title}"?`)) return;
-  
-  btn.disabled = true;
-  btn.textContent = 'Committing...';
-  
-  try {
-    const message = `Save ${filepath.slice(0, -3)}`;
-    const res = await fetch('/api/commit-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath, message })
-    });
-    
-    if (res.ok) {
-      window.location.reload();
-    } else {
-      alert('Error committing file');
-      btn.disabled = false;
-      btn.textContent = 'Commit';
-    }
-  } catch (e) {
-    alert('Error: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'Commit';
-  }
-});
-});
-</script>'''
-            else:
-                # File is committed - use git log
-                entries = git_log(path)
-                if entries:
-                    last_entry = entries[0]
-                    last_modified = f'<div class="page-meta">Last changed {html.escape(last_entry["date"])} ({html.escape(last_entry["rel"])})</div>'
-        
+        last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
+        page_meta_html = (
+            f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
+            if last_modified or meta_commit_btn else ""
+        )
         article_html = _inject_section_edit_buttons(render_md(strip_h1(content), slug=slug), slug)
-        page_meta_html = ""
-        if last_modified or meta_commit_btn:
-            page_meta_html = f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
-        body = f"""{breadcrumb}{delete_dialog}
+        body = f"""{build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
@@ -1385,9 +1336,8 @@ document.querySelector('.meta-commit-form')?.addEventListener('submit', async (e
   {article_html}
 </article>
 {bl_html}"""
-        commit_script = meta_script
-    
-    return shell(title, body, extra_head=commit_script if commit_script else None)
+
+    return shell(title, body)
 
 
 @app.get("/edit/<path:slug>")
@@ -1424,9 +1374,7 @@ def edit_page(slug):
     can_delete = slug != "index" and not is_new
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new and section is None else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete and section is None else ""
-    hist_btn = ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete and section is None else ""
-    cancel_btn = '<a href="javascript:history.back()" class="btn">Cancel</a>' if is_new else f'<a href="/page/{safe_slug}" class="btn">Cancel</a>'
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
     rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
@@ -1461,7 +1409,6 @@ def edit_page(slug):
       <span id="save-dot" class="save-dot">●</span>
       <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
       {rename_btn}
-      {hist_btn}
       {delete_btn}
     </div>
     {delete_form}
@@ -1638,8 +1585,8 @@ def rename_page(slug):
         return redirect(f"/edit/{slug}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
-    update_references(slug, new_slug)
-    git_commit_rename(old_path, new_path, f"Rename {slug} to {new_slug}")
+    modified_refs = update_references(slug, new_slug)
+    git_commit_rename(old_path, new_path, modified_refs, f"Rename {slug} to {new_slug}")
     return redirect(f"/page/{new_slug}")
 
 
@@ -2009,27 +1956,19 @@ def uncommitted_page():
     """Show all files with uncommitted changes."""
     if not GIT_ENABLED:
         abort(404)
-    
+
     files = git_uncommitted_files()
     file_list = []
-    
     for f in files:
         filepath = f["filepath"]
-        mtime = f["mtime"]
-        rel = f["rel"]
         if filepath.endswith('.md') and not filepath.startswith('_assets'):
             slug = filepath[:-3]
-            path = WIKI_DIR / filepath
-            if path.exists():
-                content = path.read_text(encoding="utf-8")
-                title = page_title(content, slug)
-            else:
-                title = slug_display_name(slug)
-            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": mtime, "rel": rel})
+            fpath = WIKI_DIR / filepath
+            title = page_title(fpath.read_text(encoding="utf-8"), slug) if fpath.exists() else slug_display_name(slug)
+            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": f["mtime"], "rel": f["rel"]})
         else:
-            # Asset or other file
-            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": mtime, "rel": rel})
-    
+            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": f["mtime"], "rel": f["rel"]})
+
     if file_list:
         rows = "".join(
             f'<tr>'
@@ -2050,44 +1989,14 @@ def uncommitted_page():
     else:
         table = '<p class="hist-empty">No uncommitted changes</p>'
         commit_all_btn = ''
-    
-    breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes')
-    body = f"""{breadcrumb}
+
+    body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes')}
 <header class="page-header">
   <h1>Uncommitted Changes</h1>
 </header>
 {table}
 {commit_all_btn}"""
-    
-    extra_head = '''<script>
-document.addEventListener('DOMContentLoaded', () => {
-  // Handle commit all button
-  document.getElementById('commit-all-btn')?.addEventListener('click', async () => {
-    if (!confirm('Commit all uncommitted files? Each file will get its own commit.')) return;
-    
-    const btn = document.getElementById('commit-all-btn');
-    btn.disabled = true;
-    btn.textContent = 'Committing...';
-    
-    try {
-      const res = await fetch('/api/commit-all', { method: 'POST' });
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        alert('Error committing files');
-        btn.disabled = false;
-        btn.textContent = 'Commit All';
-      }
-    } catch (e) {
-      alert('Error: ' + e.message);
-      btn.disabled = false;
-      btn.textContent = 'Commit All';
-    }
-  });
-});
-</script>'''
-    
-    return shell("Uncommitted Changes", body, extra_head=extra_head)
+    return shell("Uncommitted Changes", body)
 
 
 @app.get("/diff-uncommitted/<path:slug>")
@@ -2095,29 +2004,22 @@ def diff_uncommitted(slug):
     """Show uncommitted changes for a file."""
     if not GIT_ENABLED:
         abort(404)
-    
+
     path = safe_path(slug)
     if path is None or not path.exists():
         abort(404)
-    
+
     rel = str(path.relative_to(WIKI_DIR))
-    # Check if file is untracked (not yet in git)
     status_r = _git("git", "status", "--porcelain", "--", rel)
-    is_untracked = status_r.stdout.startswith("??")
-    if is_untracked:
-        # Show full file as a new-file diff
+    if status_r.stdout.startswith("??"):
         r = _git("git", "diff", "--no-index", "--", "/dev/null", rel)
     else:
         r = _git("git", "diff", "--", rel)
-    diff = r.stdout
-    
-    if not diff:
-        diff = "(no changes)"
-    
+    diff = r.stdout or "(no changes)"
+
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    filepath = rel
-    
+
     lines = []
     for line in diff.splitlines():
         if line.startswith('+') and not line.startswith('+++'):
@@ -2129,54 +2031,17 @@ def diff_uncommitted(slug):
         else:
             cls = 'diff-ctx'
         lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
-    
     diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
-    
-    breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, f'/uncommitted'), ('Diff', None))
-    
-    commit_btn = f'''<form method="post" action="/api/commit-file" style="display:inline" class="commit-one-form" data-filepath="{html.escape(filepath)}" data-title="{html.escape(title)}">
-  <button type="submit" class="btn btn-primary">Commit</button>
-</form>'''
-    
-    commit_script = '''<script>
-document.addEventListener('DOMContentLoaded', () => {
-document.querySelector('.commit-one-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const filepath = form.dataset.filepath;
-  const title = form.dataset.title;
-  const btn = form.querySelector('button');
-  
-  if (!confirm(`Commit "${title}"?`)) return;
-  
-  btn.disabled = true;
-  btn.textContent = 'Committing...';
-  
-  try {
-    const message = filepath.endsWith('.md') ? `Save ${filepath.slice(0, -3)}` : `Update ${filepath}`;
-    const res = await fetch('/api/commit-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath, message })
-    });
-    
-    if (res.ok) {
-      window.location.href = '/uncommitted';
-    } else {
-      alert('Error committing file');
-      btn.disabled = false;
-      btn.textContent = 'Commit';
-    }
-  } catch (e) {
-    alert('Error: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'Commit';
-  }
-});
-});
-</script>'''
-    
-    body = f"""{breadcrumb}
+
+    commit_btn = (
+        f'<form class="commit-file-form" style="display:inline"'
+        f' data-filepath="{html.escape(rel)}"'
+        f' data-title="{html.escape(title)}"'
+        f' data-on-success="/uncommitted">'
+        f'<button type="submit" class="btn btn-primary">Commit</button>'
+        f'</form>'
+    )
+    body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, '/uncommitted'), ('Diff', None))}
 <header class="page-header">
   <h1>Uncommitted Changes — {html.escape(title)}</h1>
   <div class="page-header-actions">
@@ -2185,8 +2050,7 @@ document.querySelector('.commit-one-form')?.addEventListener('submit', async (e)
   </div>
 </header>
 <div class="diff-view">{diff_html}</div>"""
-    
-    return shell(f"Diff — {title}", body, extra_head=commit_script)
+    return shell(f"Diff — {title}", body)
 
 
 @app.get("/api/uncommitted")
@@ -2271,4 +2135,8 @@ _read_deck = deck_module._read_deck
 # ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Always bind to all interfaces so Docker's network bridge can forward
+    # connections. LAN exposure is controlled by compose.yaml's port mapping
+    # (127.0.0.1:5000:5000 = localhost only, 0.0.0.0:5000:5000 = LAN).
+    # The host-header check (ALLOWED_HOSTS) is the DNS-rebinding defence.
     app.run(host="0.0.0.0", port=5000)

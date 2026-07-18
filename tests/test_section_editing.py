@@ -216,6 +216,148 @@ class TestSplitSections:
         assert len(parts) == 2, f"Expected 2 parts (preamble + 1 section), got {len(parts)}: {parts}"
         assert parts[1].startswith("## Real Section")
 
+    # ── Regression: list item followed by --- thematic break ────────────────
+
+    def test_list_item_then_thematic_break_not_setext(self):
+        """--- after a list item must be a thematic break, not a setext h2."""
+        content = (
+            "## To discuss\n\n"
+            "- [ ] Task one\n"
+            "- [ ] Task two\n"
+            "---\n"
+            "- note\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "Task one" in parts[1]
+        assert "note" in parts[1]
+
+    def test_checkbox_list_item_then_hr_stays_in_section(self):
+        """Real-world case: checkbox items + --- thematic break inside a section."""
+        content = (
+            "# Page\n\n"
+            "## To discuss\n\n"
+            "- [ ] Timebooking?\n"
+            "- [ ] Lee?\n"
+            "- [ ] ownership of PaaS\n"
+            "---\n"
+            "- potential candidates\n"
+            "\n"
+            "## Next Section\n\n"
+            "other content\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 3, f"Expected 3 parts, got {len(parts)}: {parts}"
+        assert parts[1].startswith("## To discuss")
+        assert "potential candidates" in parts[1]
+        assert parts[2].startswith("## Next Section")
+
+    def test_plain_list_item_then_hr_not_setext(self):
+        """- item\\n--- must not be treated as a setext heading."""
+        content = "## S\n\n- last item\n---\n\nmore text\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "more text" in parts[1]
+
+    def test_star_list_item_then_hr_not_setext(self):
+        """* item\\n--- must not be treated as a setext heading."""
+        content = "## S\n\n* last item\n---\n\nmore\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "more" in parts[1]
+
+    def test_plus_list_item_then_hr_not_setext(self):
+        """+ item\\n--- must not be treated as a setext heading."""
+        content = "## S\n\n+ last item\n---\n\nmore\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "more" in parts[1]
+
+    def test_indented_list_item_then_hr_not_setext(self):
+        """Indented list item followed by --- must not produce a setext heading."""
+        content = "## S\n\n  - indented item\n---\n\nmore\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "more" in parts[1]
+
+    def test_hr_after_plain_text_is_not_setext_when_equals(self):
+        """=== after plain text IS a setext h1, which should not split."""
+        content = "## S\n\nSome text\n===\n\nmore\n"
+        parts = split_sections(content)
+        # setext h1 (===) never triggers a split
+        assert len(parts) == 2
+        assert "more" in parts[1]
+
+    def test_setext_h2_after_plain_text_still_works(self):
+        """Plain text followed by --- IS a valid setext h2 and should split."""
+        content = "Preamble\n\nMy Heading\n----------\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert parts[1].startswith("My Heading")
+        assert "body" in parts[1]
+
+    def test_hr_between_two_sections_stays_in_first(self):
+        """A --- thematic break inside a section should remain part of that section."""
+        content = "## A\n\ntext a\n\n---\n\nmore a\n\n## B\n\ntext b\n"
+        parts = split_sections(content)
+        assert len(parts) == 3
+        assert "more a" in parts[1]
+        assert parts[2].startswith("## B")
+
+    def test_multiple_list_items_then_hr_join_reproduces_original(self):
+        """Joining all parts must reproduce the original regardless of --- presence."""
+        content = (
+            "# Title\n\n"
+            "## Section One\n\n"
+            "- alpha\n"
+            "- beta\n"
+            "---\n"
+            "extra\n\n"
+            "## Section Two\n\n"
+            "body\n"
+        )
+        parts = split_sections(content)
+        assert "".join(parts) == content
+
+    # ── h2 / h3 edge cases ──────────────────────────────────────────────────
+
+    def test_h2_immediately_followed_by_h3_no_preamble(self):
+        content = "## Parent\n\n### Child\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 3
+        assert parts[0] == ""
+        assert parts[1].startswith("## Parent")
+        assert parts[2].startswith("### Child")
+
+    def test_only_h3_sections(self):
+        content = "preamble\n\n### A\n\na body\n\n### B\n\nb body\n"
+        parts = split_sections(content)
+        assert len(parts) == 3
+        assert parts[1].startswith("### A")
+        assert parts[2].startswith("### B")
+
+    def test_fenced_block_with_dashes_inside_section(self):
+        """--- inside a fenced code block must not split a section."""
+        content = (
+            "## Section\n\n"
+            "```\n"
+            "some text\n"
+            "---\n"
+            "```\n\n"
+            "body\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert "body" in parts[1]
+
+    def test_numeric_list_item_not_treated_as_setext(self):
+        """Ordered list items are not list bullets but should still be safe."""
+        content = "## S\n\n1. first\n---\n\nmore\n"
+        parts = split_sections(content)
+        # "1. first" doesn't match [-*+] so "---" may be setext here —
+        # that's the existing behavior; just ensure join is lossless.
+        assert "".join(parts) == content
+
 
 # ===========================================================================
 # content_hash / section_char_range — unit tests

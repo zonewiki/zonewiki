@@ -43,7 +43,7 @@
   if (!listEl) return;
 
   let tasks = [];
-  let activeFilter = 'all';
+  let activeFilter = 'open';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -273,7 +273,7 @@
         return false;
       });
     } else {
-      // "all" shows non-completed by default
+      // "open" shows non-completed by default
       filtered = filtered.filter(t => !t.completed_at);
     }
 
@@ -560,9 +560,9 @@
 
     const filtered = filterTasks();
 
-    // In "all" view split into ordered (sort_order set) and new (sort_order null)
+    // In "open" view split into ordered (sort_order set) and new (sort_order null)
     let orderedTasks, newTasks;
-    if (activeFilter === 'all') {
+    if (activeFilter === 'open') {
       orderedTasks = sortTasks(filtered.filter(t => t.sort_order != null));
       newTasks   = filtered.filter(t => t.sort_order == null)
                              .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -619,7 +619,7 @@
             <input type="checkbox" ${checked} data-id="${task.id}">
           </label>
           <div class="task-content" data-id="${task.id}">
-            <span class="task-title" data-id="${task.id}">${esc(task.title)}</span>
+            <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
             ${metaHtml}
             ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
@@ -686,6 +686,7 @@
 
     listEl.querySelectorAll('.task-title').forEach(el => {
       el.addEventListener('dblclick', e => {
+        if (e.target.closest('a')) return;
         startInlineEdit(e.currentTarget);
       });
     });
@@ -715,10 +716,10 @@
       }
     }
 
-    // Click to select (clicks on checkbox/button are handled separately)
+    // Click to select (clicks on checkbox/button/link are handled separately)
     listEl.querySelectorAll('.task-item').forEach(el => {
       el.addEventListener('mousedown', e => {
-        if (!e.target.closest('input, button')) setSelected(el.dataset.id);
+        if (!e.target.closest('input, button, a')) setSelected(el.dataset.id);
       });
     });
   }
@@ -727,6 +728,11 @@
     const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
+  }
+
+  function linkifyTitle(text) {
+    const escaped = esc(text);
+    return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" class="task-link">$1</a>');
   }
 
   // ── Inline markdown rendering for descriptions ─────────────────────────────
@@ -746,6 +752,8 @@
     });
     // Markdown links: [label](url)
     h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    // Bare URLs (skip those already inside href="..." or anchor text)
+    h = h.replace(/(?<![">])(https?:\/\/[^\s<]+)/g, '<a href="$1" class="task-link">$1</a>');
     // Bold
     h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     // Italic
@@ -899,6 +907,64 @@
   const descTextarea = document.getElementById('task-edit-desc' + sfx);
   if (titleInput) setupNoteAc(titleInput);
   if (descTextarea) setupNoteAc(descTextarea);
+
+  // ── URL paste handling for description textarea ────────────────────────────
+
+  function askUrlName(url) {
+    const dlg = document.getElementById('url-name-modal');
+    const hrefEl = document.getElementById('url-name-href');
+    const input = document.getElementById('url-name-input');
+    const confirmBtn = document.getElementById('url-name-confirm');
+    const cancelBtn2 = document.getElementById('url-name-cancel');
+    if (!dlg) return Promise.resolve(null);
+    return new Promise(resolve => {
+      hrefEl.textContent = url;
+      input.value = '';
+      dlg.showModal();
+      input.focus();
+      function done(result) {
+        dlg.close();
+        confirmBtn.onclick = null;
+        cancelBtn2.onclick = null;
+        input.onkeydown = null;
+        resolve(result);
+      }
+      confirmBtn.onclick = () => done(input.value.trim() || null);
+      cancelBtn2.onclick = () => done(false);
+      input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); done(input.value.trim() || null); } };
+    });
+  }
+
+  if (descTextarea) {
+    descTextarea.addEventListener('paste', async (e) => {
+      const text = (e.clipboardData.getData('text/plain') || '').trim();
+      if (!/^https?:\/\/\S+$/.test(text)) return;
+      e.preventDefault();
+      const start = descTextarea.selectionStart;
+      const end = descTextarea.selectionEnd;
+      if (start !== end) {
+        // Text selected — wrap as [selection](url)
+        const selected = descTextarea.value.slice(start, end);
+        const md = `[${selected}](${text})`;
+        descTextarea.value = descTextarea.value.slice(0, start) + md + descTextarea.value.slice(end);
+        descTextarea.selectionStart = descTextarea.selectionEnd = start + md.length;
+        return;
+      }
+      // No selection — ask for display name
+      const name = await askUrlName(text);
+      if (name === false) {
+        // Cancelled — insert raw URL
+        const pos = descTextarea.selectionStart;
+        descTextarea.value = descTextarea.value.slice(0, pos) + text + descTextarea.value.slice(pos);
+        descTextarea.selectionStart = descTextarea.selectionEnd = pos + text.length;
+        return;
+      }
+      const md = name ? `[${name}](${text})` : text;
+      const pos = descTextarea.selectionStart;
+      descTextarea.value = descTextarea.value.slice(0, pos) + md + descTextarea.value.slice(pos);
+      descTextarea.selectionStart = descTextarea.selectionEnd = pos + md.length;
+    });
+  }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -1345,7 +1411,8 @@
   });
 
   cancelBtn.addEventListener('click', () => { hideEditTagAc(); modal.close(); });
-  modal.addEventListener('click', e => { if (e.target === modal) { hideEditTagAc(); modal.close(); } });
+
+  modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1363,7 +1430,7 @@
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       blocked_by: getLinkIds('blocked_by'),
     };
-    if (!data.title) return;
+    if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
       data.sort_order = null;
