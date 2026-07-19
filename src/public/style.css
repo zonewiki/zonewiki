@@ -173,6 +173,19 @@ main {
   padding-bottom: .2rem;
   border-bottom: 1px solid color-mix(in srgb, var(--muted) 30%, var(--border));
 }
+/* Separator line only between sections (not before the very first one) */
+/* page view: sections are wrapped in .section-header-h2 divs */
+.section-header-h2 ~ .section-header-h2 {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+/* preview pane: plain h2 tags, no wrapper */
+.page-content h2 ~ h2 {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
 .section-header-h2 h2 { margin: 0; padding: 0; border: none; }
 .section-header-h3 {
   margin: 1.5rem 0 .5rem;
@@ -1358,8 +1371,10 @@ body.editor-page main {
 .task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--bg)); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
 .task-item.task-selected { border-color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 6%, var(--bg)); outline: none; }
 .task-item.task-selected .task-edit-btn { opacity: 1; }
-.task-item[draggable] { cursor: grab; }
+.task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
 .task-item[draggable]:active { cursor: grabbing; }
+.task-item[draggable] .task-title,
+.task-item[draggable] .task-content { cursor: grab; }
 
 .task-checkbox { flex-shrink: 0; padding-top: .1rem; }
 .task-checkbox input { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--btn-primary); }
@@ -1380,6 +1395,17 @@ body.editor-page main {
 .task-due.task-overdue { color: #dc2626; font-weight: 600; }
 .task-due.task-due-today { color: var(--btn-primary); font-weight: 600; }
 
+.task-snooze-btns {
+  display: none; gap: .2rem; align-items: center;
+}
+.task-item:hover .task-snooze-btns { display: inline-flex; }
+.task-snooze-btn {
+  font-size: .65rem; padding: .1rem .3rem; border-radius: 3px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  cursor: pointer; font-family: inherit; line-height: 1.3;
+}
+.task-snooze-btn:hover { background: var(--code-bg); color: var(--fg); border-color: var(--link); }
+
 .task-recurring { font-size: .85rem; color: var(--muted); }
 
 .task-tag {
@@ -1394,12 +1420,41 @@ body.editor-page main {
 }
 
 .task-edit-btn {
-  flex-shrink: 0; background: none; border: none;
+  background: none; border: none;
   color: var(--muted); cursor: pointer; font-size: .9rem;
   padding: .2rem .4rem; border-radius: 3px; opacity: 0; transition: opacity .15s;
 }
 .task-item:hover .task-edit-btn { opacity: 1; }
 .task-edit-btn:hover { background: var(--btn-bg); color: var(--fg); }
+
+.task-actions {
+  flex-shrink: 0; display: flex; align-items: center; gap: 0;
+}
+.task-focus-btns {
+  display: flex; border-radius: 4px;
+  opacity: 0; transition: opacity .15s, box-shadow .15s;
+}
+.task-item:hover .task-focus-btns {
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.task-focus-btn {
+  background: none; border: none; border-radius: 0;
+  color: var(--muted); cursor: pointer; font-size: .85rem;
+  padding: .2rem .3rem; font-family: inherit; line-height: 1;
+}
+.task-focus-btn + .task-focus-btn { border-left: 1px solid var(--border); }
+.task-focus-btn[data-focus="today"].is-focused { color: #f59e0b; }
+.task-focus-btn[data-focus="tmrw"].is-focused  { color: #60a5fa; }
+.task-focus-btn[data-focus="mon"].is-focused   { color: #a78bfa; }
+.task-focus-btn:hover { background: var(--btn-bg); color: var(--fg); }
+.task-item.task-marked-today:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #f59e0b; }
+.task-item.task-marked-tmrw:not(.task-urg-overdue):not(.task-urg-today)  { border-left: 3px solid #60a5fa; }
+.task-item.task-marked-mon:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #a78bfa; }
+
+.task-focus-info.focus-today { color: #f59e0b !important; }
+.task-focus-info.focus-tmrw  { color: #60a5fa !important; }
+.task-focus-info.focus-mon   { color: #a78bfa !important; }
 
 .task-inbox-divider {
   list-style: none;
@@ -1414,9 +1469,17 @@ body.editor-page main {
   border-top: 2px solid var(--border);
 }
 .task-inbox-divider--only {
-  height: auto; padding: 0 0 .4rem;
-  font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--muted);
+  height: auto; padding: .1rem .5rem .35rem;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); background: var(--code-bg);
+  border: 1px solid var(--border); border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.task-inbox-divider.task-drag-over::before { border-top-color: var(--link); }
+
+.task-item.task-inbox {
+  background: var(--code-bg);
+  border-style: dashed;
 }
 
 .tasks-empty { text-align: center; color: var(--muted); padding: 2rem; font-style: italic; }

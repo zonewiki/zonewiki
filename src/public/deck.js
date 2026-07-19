@@ -224,6 +224,15 @@
   function dateToStr(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
+  function isMarkedToday(task) {
+    return !!task.today_date && task.today_date === todayStr();
+  }
+  function hasFocusDate(task) {
+    return !!task.focus_date;
+  }
+  function isFocusedToday(task) {
+    return !!task.focus_date && task.focus_date <= todayStr();
+  }
 
   function filterTasks() {
     const today = todayStr();
@@ -257,7 +266,12 @@
     }
 
     // Tab filter
-    if (activeFilter === 'due') {
+    if (activeFilter === 'today') {
+      const today = todayStr();
+      filtered = filtered.filter(t => !t.completed_at && (
+        (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
+      ));
+    } else if (activeFilter === 'due') {
       filtered = filtered.filter(t => !t.completed_at && t.due_date);
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
@@ -297,6 +311,21 @@
 
   // Per-tab fixed sort comparators; null = use the user's sort select
   const TAB_SORT = {
+    today: (a, b) => {
+      const today = todayStr();
+      const group = t => {
+        if (t.due_date && t.due_date < today) return 0;  // overdue by deadline
+        if (t.due_date && t.due_date === today) return 1; // due today
+        return 2; // focused only (focus_date <= today, no/future due)
+      };
+      const ga = group(a), gb = group(b);
+      if (ga !== gb) return ga - gb;
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+      if (a.due_date) return -1;
+      if (b.due_date) return 1;
+      if (a.focus_date && b.focus_date) return a.focus_date.localeCompare(b.focus_date);
+      return (a.sort_order ?? 999) - (b.sort_order ?? 999);
+    },
     due:       (a, b) => (a.due_date || '').localeCompare(b.due_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
     hidden: (a, b) => (a.start_date || '').localeCompare(b.start_date || ''),
@@ -560,30 +589,46 @@
 
     const filtered = filterTasks();
 
-    // In "open" view split into ordered (sort_order set) and new (sort_order null)
-    let orderedTasks, newTasks;
+    // In "open" view split into: due now (pinned top), ordered, new (inbox)
+    let dueTasks, orderedTasks, newTasks;
     if (activeFilter === 'open') {
-      orderedTasks = sortTasks(filtered.filter(t => t.sort_order != null));
-      newTasks   = filtered.filter(t => t.sort_order == null)
-                             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      const today = todayStr();
+      const isDueNow = t => t.due_date && t.due_date <= today;
+      dueTasks = filtered.filter(isDueNow)
+                         .sort((a, b) => a.due_date.localeCompare(b.due_date));
+      const rest = filtered.filter(t => !isDueNow(t));
+      orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
+      newTasks   = rest.filter(t => t.sort_order == null)
+                       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else {
+      dueTasks     = [];
       orderedTasks = sortTasks(filtered);
-      newTasks   = [];
+      newTasks     = [];
     }
 
-    if (orderedTasks.length === 0 && newTasks.length === 0) {
+    if (dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0) {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
       return;
     }
 
-    const taskHTML = task => {
+    const taskHTML = (task, draggable = (sortSelect.value === 'manual'), extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
       const completedClass = task.completed_at ? 'task-completed' : '';
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
+      const focusToday = task.focus_date === dateOffset(0);
+      const focusTmrw  = task.focus_date === dateOffset(1);
+      const focusMon   = task.focus_date === nextMonday();
+      const showMon    = [5, 6].includes(new Date().getDay()); // Fri=5, Sat=6
+      const todayMarked = hasFocusDate(task);
+      const focusClass = focusToday ? ' task-marked-today' : focusTmrw ? ' task-marked-tmrw' : focusMon ? ' task-marked-mon' : '';
+      const focusMetaClass = focusToday ? 'focus-today' : focusTmrw ? 'focus-tmrw' : 'focus-mon';
       const dueDisplay = task.due_date ? `<span class="task-due ${dueClass}">due: ${formatDate(task.due_date)}</span>` : '';
+      const focusDisplay = (task.focus_date && !task.completed_at)
+        ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📌 ${formatDate(task.focus_date)}</span>`
+        : '';
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
@@ -610,11 +655,26 @@
         blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
       }
 
-      const hasMeta = dueDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay || blockingDisplay;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}${blockingDisplay}</div>` : '';
-      const dragAttr = sortSelect.value === 'manual' ? 'draggable="true"' : '';
+      const dueSnooze = (task.due_date && !task.completed_at)
+        ? `<span class="task-snooze-btns">` +
+          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="+1" title="Postpone to tomorrow">Tmrw</button>` +
+          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="+3" title="Postpone 3 days">+3d</button>` +
+          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="mon" title="Postpone to next Monday">Mon</button>` +
+          `</span>`
+        : '';
+      const hasMeta = dueDisplay || focusDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay || blockingDisplay;
+      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${dueSnooze}${focusDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}${blockingDisplay}</div>` : '';
+      const focusBtnsHtml = !task.completed_at
+        ? `<span class="task-focus-btns">` +
+          `<button class="task-focus-btn${focusToday ? ' is-focused' : ''}" data-id="${task.id}" data-focus="today" title="${focusToday ? 'Clear today plan' : 'Plan for today'}">☀</button>` +
+          `<button class="task-focus-btn${focusTmrw  ? ' is-focused' : ''}" data-id="${task.id}" data-focus="tmrw"  title="${focusTmrw  ? 'Clear tomorrow plan' : 'Plan for tomorrow'}">☾</button>` +
+          (showMon ? `<button class="task-focus-btn${focusMon ? ' is-focused' : ''}" data-id="${task.id}" data-focus="mon" title="${focusMon ? 'Clear Monday plan' : 'Plan for Monday'}">Mon</button>` : '') +
+          `</span>`
+        : '';
+      const dragAttr = draggable ? 'draggable="true"' : '';
+      const duePinnedAttr = draggable ? '' : 'data-due-pinned="true"';
       return `
-        <li class="task-item ${completedClass} ${urgClass}" data-id="${task.id}" ${dragAttr}>
+        <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}" data-id="${task.id}" ${dragAttr} ${duePinnedAttr}>
           <label class="task-checkbox">
             <input type="checkbox" ${checked} data-id="${task.id}">
           </label>
@@ -623,15 +683,23 @@
             ${metaHtml}
             ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
-          <button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>
+          <div class="task-actions">
+            ${focusBtnsHtml}<button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>
+          </div>
         </li>`;
     };
 
     let html = '';
     let truncated = false;
+    // Due now section (overdue + due today) pinned at top of Open tab
+    if (dueTasks.length > 0) {
+      html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
+      html += dueTasks.map(t => taskHTML(t, false)).join('');
+      if (orderedTasks.length > 0 || newTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
+    }
     if (newTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">New</li>';
-      html += newTasks.map(taskHTML).join('');
+      html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     // Limit completed tab display
@@ -640,7 +708,7 @@
       displayTasks = orderedTasks.slice(0, completedLimit);
       truncated = true;
     }
-    html += displayTasks.map(taskHTML).join('');
+    html += displayTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
@@ -672,6 +740,33 @@
     listEl.querySelectorAll('.task-edit-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         openEditModal(e.currentTarget.dataset.id);
+      });
+    });
+
+    listEl.querySelectorAll('.task-focus-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+        const target = btn.dataset.focus === 'today' ? dateOffset(0)
+                     : btn.dataset.focus === 'tmrw'  ? dateOffset(1)
+                     : nextMonday();
+        // clicking the active button clears; clicking the other one switches
+        updateTask(id, { focus_date: task.focus_date === target ? null : target });
+      });
+    });
+
+    listEl.querySelectorAll('.task-snooze-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const snooze = btn.dataset.snooze;
+        let newDate;
+        if (snooze === '+1')  newDate = dateOffset(1);
+        else if (snooze === '+3')  newDate = dateOffset(3);
+        else if (snooze === 'mon') newDate = nextMonday();
+        if (newDate) updateTask(id, { due_date: newDate });
       });
     });
 
@@ -1474,6 +1569,34 @@
   // ── Drag and Drop ──────────────────────────────────────────────────────────
 
   function setupDragAndDrop() {
+    function executeDrop(targetId) {
+      if (!draggedId || targetId === draggedId) return;
+      const ids = Array.from(listEl.querySelectorAll('.task-item:not([data-due-pinned])'))
+                       .map(el => el.dataset.id);
+      const fromIdx = ids.indexOf(draggedId);
+      const toIdx = ids.indexOf(targetId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const draggedTask = tasks.find(tk => tk.id === draggedId);
+      const wasNew = draggedTask && draggedTask.sort_order == null;
+      ids.splice(fromIdx, 1);
+      // When dragging from new into ordered, insert BEFORE target (adjust index).
+      // Within-section reorder uses standard behavior (no adjustment).
+      const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
+      ids.splice(insertIdx, 0, draggedId);
+      // Only assign sort_order to items that already had one, plus the dragged item
+      ids.forEach((tid, i) => {
+        const t = tasks.find(tk => tk.id === tid);
+        if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
+      });
+      // Send only the items that have a sort_order to the server
+      const orderedIds = ids.filter(tid => {
+        const t = tasks.find(tk => tk.id === tid);
+        return t && t.sort_order != null;
+      });
+      reorder(orderedIds);
+      render();
+    }
+
     const items = listEl.querySelectorAll('.task-item[draggable]');
     items.forEach(item => {
       item.addEventListener('dragstart', e => {
@@ -1499,31 +1622,25 @@
       item.addEventListener('drop', e => {
         e.preventDefault();
         item.classList.remove('task-drag-over');
-        if (!draggedId || item.dataset.id === draggedId) return;
-        // Reorder in the filtered+sorted view
-        const ids = Array.from(listEl.querySelectorAll('.task-item')).map(el => el.dataset.id);
-        const fromIdx = ids.indexOf(draggedId);
-        const toIdx = ids.indexOf(item.dataset.id);
-        if (fromIdx === -1 || toIdx === -1) return;
-        const draggedTask = tasks.find(tk => tk.id === draggedId);
-        const wasNew = draggedTask && draggedTask.sort_order == null;
-        ids.splice(fromIdx, 1);
-        // When dragging from new into ordered, insert BEFORE target (adjust index).
-        // Within-section reorder uses standard behavior (no adjustment).
-        const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
-        ids.splice(insertIdx, 0, draggedId);
-        // Only assign sort_order to items that already had one, plus the dragged item
-        ids.forEach((tid, i) => {
-          const t = tasks.find(tk => tk.id === tid);
-          if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
-        });
-        // Send only the items that have a sort_order to the server
-        const orderedIds = ids.filter(tid => {
-          const t = tasks.find(tk => tk.id === tid);
-          return t && t.sort_order != null;
-        });
-        reorder(orderedIds);
-        render();
+        executeDrop(item.dataset.id);
+      });
+    });
+
+    // Section dividers are also drop targets — dropping on one inserts the
+    // dragged task before the first task-item that follows the divider.
+    listEl.querySelectorAll('.task-inbox-divider:not(.task-inbox-divider--only)').forEach(div => {
+      div.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        div.classList.add('task-drag-over');
+      });
+      div.addEventListener('dragleave', () => div.classList.remove('task-drag-over'));
+      div.addEventListener('drop', e => {
+        e.preventDefault();
+        div.classList.remove('task-drag-over');
+        let next = div.nextElementSibling;
+        while (next && !next.matches('.task-item:not([data-due-pinned])')) next = next.nextElementSibling;
+        if (next) executeDrop(next.dataset.id);
       });
     });
   }
@@ -1624,6 +1741,17 @@
     if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       openEditModal(null);
+      return;
+    }
+
+    // 'f' / 'F' — plan selected task for today / tomorrow
+    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && selectedId) {
+      e.preventDefault();
+      const task = tasks.find(t => t.id === selectedId);
+      if (task && !task.completed_at) {
+        const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
+        updateTask(task.id, { focus_date: task.focus_date === target ? null : target });
+      }
       return;
     }
 

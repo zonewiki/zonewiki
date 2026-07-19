@@ -109,6 +109,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         "defer_days": task.get("defer_days"),
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
+        "focus_date": None,
         "sort_order": task.get("sort_order", 0),
         "recurrence": task.get("recurrence"),
         "page": task.get("page"),
@@ -159,7 +160,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="tasks-tabs" id="tasks-tabs{sfx}">
-      <button class="tab active" data-filter="all">Open</button>
+      <button class="tab active" data-filter="open">Open</button>
+      <button class="tab" data-filter="today">Today</button>
       <button class="tab" data-filter="due">Due</button>
       <button class="tab" data-filter="hidden">Hidden</button>
       <button class="tab" data-filter="completed">Completed</button>
@@ -422,6 +424,7 @@ def api_create_deck_item():
         "defer_days": defer_days if defer_days is not None else None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
+        "focus_date": _validate_date(data.get("focus_date")),
         "sort_order": None,
         "recurrence": None,
         "page": (data.get("page") or "").strip() or None,
@@ -465,6 +468,8 @@ def api_update_deck_item(task_id):
         task["sort_order"] = data["sort_order"]
     if "page" in data:
         task["page"] = (data["page"] or "").strip() or None
+    if "focus_date" in data:
+        task["focus_date"] = _validate_date(data["focus_date"])
     if "blocked_by" in data:
         blocked = data["blocked_by"]
         if isinstance(blocked, str):

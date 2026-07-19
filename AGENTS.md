@@ -384,10 +384,13 @@ Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown 
 | `recurrence` | `{ type, interval }` / `null` | Recurring schedule |
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
 | `blocked_by` | string[] | Array of task IDs that block this task |
+| `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Today tab shows tasks with `focus_date <= today` |
 
 ### UI
 
-- **Filter tabs**: Open · Today · Upcoming · Overdue · Completed
+- **Filter tabs**: Open · Today · Due · Upcoming · Overdue · Completed
+- **Today tab**: shows tasks flagged for today (`today_date == today`) plus overdue/due-today tasks. Sorted: overdue first, due today, then today-marked without due date.
+- **Today flag**: each task card has a ☀ button (hover-only when not set, amber when set). Clicking opens a small popover: `Today · Tomorrow · Clear`. Clicking an already-selected option clears it. Keyboard shortcut: **f** on a selected task.
 - **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
 - **Filters**: Tag text filter
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
