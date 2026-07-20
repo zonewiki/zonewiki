@@ -1477,6 +1477,19 @@ body.editor-page main {
 }
 .task-inbox-divider.task-drag-over::before { border-top-color: var(--link); }
 
+.task-missed-divider { color: var(--muted) !important; }
+
+.task-item.task-missed { opacity: .55; }
+.task-item.task-missed:hover { opacity: .85; }
+.task-item.task-missed .task-focus-btns { opacity: 1; box-shadow: 0 0 0 1px var(--border); }
+
+.task-focus-clear-btn {
+  font-size: .75rem; padding: .1rem .3rem; border-radius: 3px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  line-height: 1;
+}
+.task-focus-clear-btn:hover { background: color-mix(in srgb, #dc2626 15%, var(--bg)); color: #dc2626; border-color: #dc2626; }
+
 .task-item.task-inbox {
   background: var(--code-bg);
   border-style: dashed;

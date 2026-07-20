@@ -43,7 +43,8 @@
   if (!listEl) return;
 
   let tasks = [];
-  let activeFilter = 'open';
+  let completedLoaded = false;
+  let activeFilter = 'today';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -101,6 +102,18 @@
   async function fetchDeck() {
     const res = await fetch('/api/deck');
     tasks = await res.json();
+    render();
+  }
+
+  async function fetchCompleted() {
+    if (completedLoaded) return;
+    const res = await fetch('/api/deck/completed');
+    const completed = await res.json();
+    const existingIds = new Set(tasks.map(t => t.id));
+    for (const t of completed) {
+      if (!existingIds.has(t.id)) tasks.push(t);
+    }
+    completedLoaded = true;
     render();
   }
 
@@ -590,7 +603,7 @@
     const filtered = filterTasks();
 
     // In "open" view split into: due now (pinned top), ordered, new (inbox)
-    let dueTasks, orderedTasks, newTasks;
+    let dueTasks, orderedTasks, newTasks, missedTasks;
     if (activeFilter === 'open') {
       const today = todayStr();
       const isDueNow = t => t.due_date && t.due_date <= today;
@@ -600,18 +613,28 @@
       orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
       newTasks   = rest.filter(t => t.sort_order == null)
                        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      missedTasks  = [];
+    } else if (activeFilter === 'today') {
+      // Split: "missed" = past focus_date with no overdue deadline; "today" = everything else
+      const today = todayStr();
+      const isMissed = t => t.focus_date && t.focus_date < today && t.focus_date >= dateOffset(-7) && (!t.due_date || t.due_date > today);
+      missedTasks  = sortTasks(filtered.filter(isMissed));
+      orderedTasks = sortTasks(filtered.filter(t => !isMissed(t)));
+      dueTasks     = [];
+      newTasks     = [];
     } else {
       dueTasks     = [];
       orderedTasks = sortTasks(filtered);
       newTasks     = [];
+      missedTasks  = [];
     }
 
-    if (dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0) {
+    if (dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 && missedTasks.length === 0) {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
       return;
     }
 
-    const taskHTML = (task, draggable = (sortSelect.value === 'manual'), extraClass = '') => {
+    const taskHTML = (task, draggable = (sortSelect.value === 'manual'), extraClass = '', isMissed = false) => {
       const checked = task.completed_at ? 'checked' : '';
       const completedClass = task.completed_at ? 'task-completed' : '';
       const dueClass = dueDateClass(task);
@@ -666,6 +689,7 @@
       const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${dueSnooze}${focusDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}${blockingDisplay}</div>` : '';
       const focusBtnsHtml = !task.completed_at
         ? `<span class="task-focus-btns">` +
+          (isMissed ? `<button class="task-focus-clear-btn" data-id="${task.id}" title="Remove from plan">✕</button>` : '') +
           `<button class="task-focus-btn${focusToday ? ' is-focused' : ''}" data-id="${task.id}" data-focus="today" title="${focusToday ? 'Clear today plan' : 'Plan for today'}">☀</button>` +
           `<button class="task-focus-btn${focusTmrw  ? ' is-focused' : ''}" data-id="${task.id}" data-focus="tmrw"  title="${focusTmrw  ? 'Clear tomorrow plan' : 'Plan for tomorrow'}">☾</button>` +
           (showMon ? `<button class="task-focus-btn${focusMon ? ' is-focused' : ''}" data-id="${task.id}" data-focus="mon" title="${focusMon ? 'Clear Monday plan' : 'Plan for Monday'}">Mon</button>` : '') +
@@ -712,6 +736,12 @@
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
+    // Missed section (Today tab only) — past-scheduled tasks, not overdue by deadline
+    if (missedTasks.length > 0) {
+      if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
+      html += '<li class="task-inbox-divider task-inbox-divider--only task-missed-divider">Missed</li>';
+      html += missedTasks.map(t => taskHTML(t, false, 'task-missed', true)).join('');
+    }
     listEl.innerHTML = html;
 
     // "Show more" button
@@ -754,6 +784,13 @@
                      : nextMonday();
         // clicking the active button clears; clicking the other one switches
         updateTask(id, { focus_date: task.focus_date === target ? null : target });
+      });
+    });
+
+    listEl.querySelectorAll('.task-focus-clear-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        updateTask(btn.dataset.id, { focus_date: null });
       });
     });
 
@@ -1069,6 +1106,7 @@
     tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
+    if (activeFilter === 'completed') fetchCompleted();
     render();
   });
 

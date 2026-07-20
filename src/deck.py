@@ -1,7 +1,7 @@
 """Deck — task management module for Leaf wiki.
 
 Provides:
-- Task CRUD operations and storage (_deck.json)
+- Task CRUD operations and storage (_deck.json for active, _deck_completed.json for completed)
 - [[deck]] embed HTML generation
 - Task backlink resolution
 - API route registration via Blueprint
@@ -10,6 +10,7 @@ Provides:
 import html
 import json
 import re
+import subprocess
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -27,6 +28,11 @@ GIT_ENABLED: bool = False
 _git_commit_fn = None  # type: ignore
 
 
+def _completed_path() -> Path:
+    """Derive the completed-tasks file path from DECK_FILE (same directory)."""
+    return DECK_FILE.parent / "_deck_completed.json"
+
+
 def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     """Initialize module-level state from the main server."""
     global WIKI_DIR, DECK_FILE, GIT_ENABLED, _git_commit_fn
@@ -34,12 +40,34 @@ def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     DECK_FILE = wiki_dir / "_deck.json"
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
+    _migrate_completed_split()
+
+
+def _migrate_completed_split() -> None:
+    """One-time migration: move completed tasks from _deck.json into _deck_completed.json."""
+    completed_file = _completed_path()
+    if completed_file.exists() or not DECK_FILE.exists():
+        return
+    try:
+        data = json.loads(DECK_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return
+    except (json.JSONDecodeError, ValueError):
+        return
+    completed = [t for t in data if t.get("completed_at")]
+    active = [t for t in data if not t.get("completed_at")]
+    if not completed:
+        completed_file.write_text("[]", encoding="utf-8")
+        return
+    DECK_FILE.write_text(json.dumps(active, indent=2, ensure_ascii=False), encoding="utf-8")
+    completed_file.write_text(json.dumps(completed, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 
 
 def _read_deck() -> list[dict]:
+    """Read active (non-completed) tasks."""
     if not DECK_FILE.exists():
         return []
     try:
@@ -47,6 +75,23 @@ def _read_deck() -> list[dict]:
         return data if isinstance(data, list) else []
     except (json.JSONDecodeError, ValueError):
         return []
+
+
+def _read_completed() -> list[dict]:
+    """Read completed tasks."""
+    p = _completed_path()
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+
+def _read_all() -> list[dict]:
+    """Read all tasks (active + completed) — for search and backlinks."""
+    return _read_deck() + _read_completed()
 
 
 def _write_deck(tasks: list[dict]) -> None:
@@ -57,6 +102,22 @@ def _write_deck(tasks: list[dict]) -> None:
 
 def _write_deck_no_commit(tasks: list[dict]) -> None:
     DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
+    """Write both files and commit them together in a single git commit."""
+    completed_file = _completed_path()
+    DECK_FILE.write_text(json.dumps(active, indent=2, ensure_ascii=False), encoding="utf-8")
+    completed_file.write_text(json.dumps(completed, indent=2, ensure_ascii=False), encoding="utf-8")
+    if GIT_ENABLED:
+        subprocess.run(
+            ["git", "add", "--", str(DECK_FILE), str(completed_file)],
+            cwd=DECK_FILE.parent, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=DECK_FILE.parent, capture_output=True,
+        )
 
 
 def _validate_date(val: str | None) -> str | None:
@@ -160,10 +221,10 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="tasks-tabs" id="tasks-tabs{sfx}">
-      <button class="tab active" data-filter="open">Open</button>
-      <button class="tab" data-filter="today">Today</button>
-      <button class="tab" data-filter="due">Due</button>
-      <button class="tab" data-filter="hidden">Hidden</button>
+      <button class="tab active" data-filter="today">Today</button>
+      <button class="tab" data-filter="open">Backlog</button>
+      <button class="tab" data-filter="due">Upcoming</button>
+      <button class="tab" data-filter="hidden">Deferred</button>
       <button class="tab" data-filter="completed">Completed</button>
     </div>
     <button class="btn btn-primary" id="task-add-btn{sfx}">+ New Item</button>
@@ -308,7 +369,7 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
     """Return deck tasks whose title or description contain a wikilink to slug."""
     results = []
     _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
-    for task in _read_deck():
+    for task in _read_all():
         if task.get("completed_at"):
             continue
         text = (task.get("title") or "") + "\n" + (task.get("description") or "")
@@ -336,7 +397,7 @@ def search_tasks(q: str) -> list[dict]:
     """Search task titles and descriptions; return matches formatted for search results."""
     q_lower = q.lower()
     results = []
-    for task in _read_deck():
+    for task in _read_all():
         title = task.get("title", "")
         desc = task.get("description", "")
         text = title + " " + desc
@@ -387,12 +448,17 @@ def api_get_deck():
     return jsonify(_read_deck())
 
 
+@bp.get("/api/deck/completed")
+def api_get_deck_completed():
+    return jsonify(_read_completed())
+
+
 @bp.get("/api/deck/due-count")
 def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
     for t in _read_deck():
-        if t.get("completed_at") or not t.get("due_date"):
+        if not t.get("due_date"):
             continue
         if t["due_date"] < today:
             overdue += 1
@@ -407,7 +473,7 @@ def api_create_deck_item():
     title = data.get("title", "").strip()
     if not title:
         abort(400)
-    tasks = _read_deck()
+    active = _read_deck()
     defer_days = data.get("defer_days")
     if defer_days is not None:
         defer_days = max(0, int(defer_days))
@@ -436,18 +502,13 @@ def api_create_deck_item():
             "type": rec_type,
             "interval": max(1, int(data.get("rec_interval", 1))),
         }
-    tasks.append(task)
-    _write_deck(tasks)
+    active.append(task)
+    _write_deck(active)
     return jsonify(task), 201
 
 
-@bp.put("/api/deck/<task_id>")
-def api_update_deck_item(task_id):
-    data = request.get_json(force=True)
-    tasks = _read_deck()
-    task = next((t for t in tasks if t["id"] == task_id), None)
-    if not task:
-        abort(404)
+def _apply_task_fields(task: dict, data: dict) -> None:
+    """Apply non-completion field updates from request data onto task in place."""
     if "title" in data:
         title = data["title"].strip()
         if not title:
@@ -484,33 +545,61 @@ def api_update_deck_item(task_id):
             }
         else:
             task["recurrence"] = None
-    # Handle completion toggle
+
+
+@bp.put("/api/deck/<task_id>")
+def api_update_deck_item(task_id):
+    data = request.get_json(force=True)
+    active = _read_deck()
+    completed_list = _read_completed()
+
+    task = next((t for t in active if t["id"] == task_id), None)
+    in_completed = task is None
+    if in_completed:
+        task = next((t for t in completed_list if t["id"] == task_id), None)
+    if not task:
+        abort(404)
+
+    _apply_task_fields(task, data)
+
     if "completed" in data:
         if data["completed"] and not task.get("completed_at"):
+            # Complete: move active → completed
             task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             spawned = _spawn_recurring(task)
+            active = [t for t in active if t["id"] != task_id]
+            completed_list.append(task)
             if spawned:
-                tasks.append(spawned)
+                active.append(spawned)
         elif not data["completed"] and task.get("completed_at"):
+            # Uncomplete: move completed → active
             if task.get("recurrence"):
                 completed_at = task["completed_at"]
-                tasks = [t for t in tasks if not (
-                    t["id"] != task_id and
+                active = [t for t in active if not (
                     t.get("title") == task["title"] and
                     t.get("recurrence") == task.get("recurrence") and
                     not t.get("completed_at") and
                     t.get("created_at", "") >= completed_at
                 )]
             task["completed_at"] = None
-    _write_deck(tasks)
+            completed_list = [t for t in completed_list if t["id"] != task_id]
+            active.append(task)
+    elif in_completed:
+        # Non-completion update on a completed task — save in place
+        pass  # task is already mutated in completed_list
+
+    _write_both(active, completed_list)
     return jsonify(task)
 
 
 @bp.delete("/api/deck/<task_id>")
 def api_delete_deck_item(task_id):
-    tasks = _read_deck()
-    tasks = [t for t in tasks if t["id"] != task_id]
-    _write_deck(tasks)
+    active = _read_deck()
+    completed_list = _read_completed()
+    _write_both(
+        [t for t in active if t["id"] != task_id],
+        [t for t in completed_list if t["id"] != task_id],
+    )
     return "", 204
 
 
@@ -521,9 +610,12 @@ def api_batch_delete_deck():
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    tasks = _read_deck()
-    tasks = [t for t in tasks if t["id"] not in id_set]
-    _write_deck(tasks)
+    active = _read_deck()
+    completed_list = _read_completed()
+    _write_both(
+        [t for t in active if t["id"] not in id_set],
+        [t for t in completed_list if t["id"] not in id_set],
+    )
     return "", 204
 
 
@@ -531,26 +623,33 @@ def api_batch_delete_deck():
 def api_batch_complete_deck():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
-    completed = data.get("completed", True)
+    mark_completed = data.get("completed", True)
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    tasks = _read_deck()
+    active = _read_deck()
+    completed_list = _read_completed()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     updated = []
-    for task in tasks:
-        if task["id"] not in id_set:
-            continue
-        if completed and not task.get("completed_at"):
+
+    if mark_completed:
+        moving = [t for t in active if t["id"] in id_set and not t.get("completed_at")]
+        for task in moving:
             task["completed_at"] = now
             spawned = _spawn_recurring(task)
             if spawned:
-                tasks.append(spawned)
+                active.append(spawned)
             updated.append(task)
-        elif not completed and task.get("completed_at"):
+        active = [t for t in active if t["id"] not in id_set or t.get("completed_at") is None and False]
+        # Rebuild: keep active tasks not being moved
+        active = [t for t in active if t["id"] not in {t2["id"] for t2 in moving}]
+        completed_list = completed_list + moving
+    else:
+        moving = [t for t in completed_list if t["id"] in id_set and t.get("completed_at")]
+        for task in moving:
             if task.get("recurrence"):
                 completed_at = task["completed_at"]
-                tasks = [t for t in tasks if not (
+                active = [t for t in active if not (
                     t["id"] not in id_set and
                     t.get("title") == task["title"] and
                     t.get("recurrence") == task.get("recurrence") and
@@ -559,7 +658,10 @@ def api_batch_complete_deck():
                 )]
             task["completed_at"] = None
             updated.append(task)
-    _write_deck(tasks)
+        completed_list = [t for t in completed_list if t["id"] not in {t2["id"] for t2 in moving}]
+        active = active + moving
+
+    _write_both(active, completed_list)
     return jsonify(updated)
 
 
@@ -569,12 +671,12 @@ def api_reorder_deck():
     order = data.get("order", [])
     if not order:
         abort(400)
-    tasks = _read_deck()
-    id_map = {t["id"]: t for t in tasks}
+    active = _read_deck()
+    id_map = {t["id"]: t for t in active}
     for i, task_id in enumerate(order):
         if task_id in id_map:
             id_map[task_id]["sort_order"] = i
-    _write_deck_no_commit(tasks)
+    _write_deck_no_commit(active)
     return "", 204
 
 
@@ -590,9 +692,10 @@ def api_batch_tag_deck():
     if not add_tags and not remove_tags:
         abort(400)
     id_set = set(ids)
-    tasks = _read_deck()
+    active = _read_deck()
+    completed_list = _read_completed()
     updated = []
-    for task in tasks:
+    for task in active + completed_list:
         if task["id"] not in id_set:
             continue
         current = task.get("tags") or []
@@ -606,5 +709,5 @@ def api_batch_tag_deck():
             current = [t for t in current if t.lower() not in remove_tags]
         task["tags"] = current
         updated.append(task)
-    _write_deck(tasks)
+    _write_both(active, completed_list)
     return jsonify(updated)

@@ -229,7 +229,7 @@ class TestRecurring:
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
-        assert len(tasks) == 2
+        assert len(tasks) == 1
         spawned = next(t for t in tasks if t["id"] != task["id"])
         assert spawned["title"] == "Daily standup"
         assert spawned["due_date"] == "2025-03-02"
@@ -314,7 +314,7 @@ class TestRecurring:
         task = create_task(client, title="One-off").get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
-        assert len(tasks) == 1
+        assert len(tasks) == 0
 
 
 # ---------- Undo Recurring ----------
@@ -327,7 +327,7 @@ class TestUndoRecurring:
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
-        assert len(tasks) == 2
+        assert len(tasks) == 1
 
         # Uncomplete the original
         client.put(f"/api/deck/{task['id']}", json={"completed": False})
@@ -565,7 +565,7 @@ class TestBatchComplete:
         resp = client.post("/api/deck/batch-complete", json={"ids": [task_id], "completed": True})
         assert resp.status_code == 200
         tasks = client.get("/api/deck").get_json()
-        assert len(tasks) == 2
+        assert len(tasks) == 1
         spawned = [t for t in tasks if t["id"] != task_id]
         assert spawned[0]["due_date"] == "2026-06-11"
         assert spawned[0]["completed_at"] is None
@@ -578,7 +578,7 @@ class TestBatchComplete:
         task_id = r.get_json()["id"]
         client.post("/api/deck/batch-complete", json={"ids": [task_id], "completed": True})
         tasks = client.get("/api/deck").get_json()
-        assert len(tasks) == 2
+        assert len(tasks) == 1
         # Now uncomplete
         client.post("/api/deck/batch-complete", json={"ids": [task_id], "completed": False})
         tasks = client.get("/api/deck").get_json()
