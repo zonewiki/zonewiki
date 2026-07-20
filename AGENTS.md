@@ -441,6 +441,8 @@ pytest tests/test_section_editing.py -v              # Run section-editing tests
 
 **Always run the full test suite before and after making changes to `src/server.py`.**
 
+**Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix). A feature or fix is not complete until it has test coverage.
+
 The tests use an in-process Flask test client and a temporary directory — no running server or Docker needed.
 
 ---
