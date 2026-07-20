@@ -594,3 +594,292 @@ class TestBatchComplete:
         resp = client.post("/api/deck/batch-complete", json={"ids": [task_id], "completed": True})
         assert resp.status_code == 200
         assert len(resp.get_json()) == 0
+
+
+# ── Split completed storage (_deck.json / _deck_completed.json) ────────────────
+
+
+class TestCompletedStorage:
+    """Coverage for the active/completed file split introduced in 4c79e31."""
+
+    def test_completed_endpoint_empty_initially(self, client):
+        resp = client.get("/api/deck/completed")
+        assert resp.status_code == 200
+        assert resp.get_json() == []
+
+    def test_complete_moves_task_to_completed_file(self, client):
+        task = create_task(client, title="Finish me").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        # Gone from active
+        active = client.get("/api/deck").get_json()
+        assert all(t["id"] != task["id"] for t in active)
+        # Present in completed
+        completed = client.get("/api/deck/completed").get_json()
+        assert len(completed) == 1
+        assert completed[0]["id"] == task["id"]
+        assert completed[0]["completed_at"] is not None
+
+    def test_uncomplete_moves_task_back_to_active(self, client):
+        task = create_task(client, title="Round trip").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        client.put(f"/api/deck/{task['id']}", json={"completed": False})
+        active = client.get("/api/deck").get_json()
+        completed = client.get("/api/deck/completed").get_json()
+        assert [t["id"] for t in active] == [task["id"]]
+        assert completed == []
+
+    def test_batch_complete_moves_to_completed_file(self, client):
+        t1 = create_task(client, title="A").get_json()
+        t2 = create_task(client, title="B").get_json()
+        client.post("/api/deck/batch-complete", json={"ids": [t1["id"], t2["id"]], "completed": True})
+        assert client.get("/api/deck").get_json() == []
+        completed_ids = {t["id"] for t in client.get("/api/deck/completed").get_json()}
+        assert completed_ids == {t1["id"], t2["id"]}
+
+    def test_update_completed_task_in_place(self, client):
+        """Editing a completed task's fields persists without un-completing it."""
+        task = create_task(client, title="Old", description="orig").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        resp = client.put(f"/api/deck/{task['id']}", json={
+            "title": "Edited", "description": "new notes",
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["title"] == "Edited"
+        assert data["description"] == "new notes"
+        assert data["completed_at"] is not None  # still completed
+        # Still only in the completed file, not active
+        assert client.get("/api/deck").get_json() == []
+        completed = client.get("/api/deck/completed").get_json()
+        assert completed[0]["title"] == "Edited"
+
+    def test_delete_completed_task(self, client):
+        task = create_task(client, title="Del me").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        resp = client.delete(f"/api/deck/{task['id']}")
+        assert resp.status_code == 204
+        assert client.get("/api/deck/completed").get_json() == []
+
+    def test_batch_delete_removes_completed_tasks(self, client):
+        active_task = create_task(client, title="Active").get_json()
+        done_task = create_task(client, title="Done").get_json()
+        client.put(f"/api/deck/{done_task['id']}", json={"completed": True})
+        resp = client.post("/api/deck/batch-delete", json={
+            "ids": [active_task["id"], done_task["id"]],
+        })
+        assert resp.status_code == 204
+        assert client.get("/api/deck").get_json() == []
+        assert client.get("/api/deck/completed").get_json() == []
+
+    def test_search_includes_completed_task(self, client):
+        task = create_task(client, title="findable_completed_token").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        resp = client.get("/api/search?q=findable_completed_token",
+                           headers={"Host": "localhost:5000"})
+        results = resp.get_json()
+        task_results = [r for r in results if r.get("type") == "task"]
+        assert task_results
+        assert task_results[0]["status"] == "done"
+
+
+# ── Migration: legacy single-file → split files ────────────────────────────────
+
+
+class TestCompletedMigration:
+    """Coverage for _migrate_completed_split() (one-time startup migration)."""
+
+    def _completed_file(self):
+        return deck_module.DECK_FILE.parent / "_deck_completed.json"
+
+    def test_migration_splits_mixed_file(self, wiki_dir):
+        import json
+        deck_module.DECK_FILE.write_text(json.dumps([
+            {"id": "1", "title": "active", "completed_at": None},
+            {"id": "2", "title": "done", "completed_at": "2026-01-01T00:00:00"},
+        ]), encoding="utf-8")
+        deck_module._migrate_completed_split()
+        active = json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))
+        completed = json.loads(self._completed_file().read_text(encoding="utf-8"))
+        assert [t["id"] for t in active] == ["1"]
+        assert [t["id"] for t in completed] == ["2"]
+
+    def test_migration_no_completed_writes_empty_file(self, wiki_dir):
+        import json
+        deck_module.DECK_FILE.write_text(json.dumps([
+            {"id": "1", "title": "active", "completed_at": None},
+        ]), encoding="utf-8")
+        deck_module._migrate_completed_split()
+        # Active file untouched, completed file created empty
+        assert len(json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))) == 1
+        assert json.loads(self._completed_file().read_text(encoding="utf-8")) == []
+
+    def test_migration_skipped_when_completed_exists(self, wiki_dir):
+        import json
+        deck_module.DECK_FILE.write_text(json.dumps([
+            {"id": "2", "title": "done", "completed_at": "2026-01-01T00:00:00"},
+        ]), encoding="utf-8")
+        self._completed_file().write_text("[]", encoding="utf-8")
+        deck_module._migrate_completed_split()
+        # Already-migrated: deck.json is left alone, completed stays empty
+        assert len(json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))) == 1
+        assert json.loads(self._completed_file().read_text(encoding="utf-8")) == []
+
+    def test_migration_noop_when_deck_absent(self, wiki_dir):
+        # No _deck.json on disk (fixture doesn't create one)
+        assert not deck_module.DECK_FILE.exists()
+        deck_module._migrate_completed_split()
+        assert not self._completed_file().exists()
+
+    def test_migration_handles_invalid_json(self, wiki_dir):
+        deck_module.DECK_FILE.write_text("{ not valid json", encoding="utf-8")
+        deck_module._migrate_completed_split()  # must not raise
+        assert not self._completed_file().exists()
+
+
+# ── Focus date (Today planning) ────────────────────────────────────────────────
+
+
+class TestFocusDate:
+    def test_create_with_focus_date(self, client):
+        resp = create_task(client, title="Planned", focus_date="2026-07-20")
+        assert resp.status_code == 201
+        assert resp.get_json()["focus_date"] == "2026-07-20"
+
+    def test_create_default_focus_date_none(self, client):
+        assert create_task(client, title="No plan").get_json()["focus_date"] is None
+
+    def test_create_invalid_focus_date(self, client):
+        resp = create_task(client, title="Bad", focus_date="20-07-2026")
+        assert resp.status_code == 400
+
+    def test_update_focus_date(self, client):
+        task = create_task(client, title="Task").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": "2026-07-21"})
+        assert resp.get_json()["focus_date"] == "2026-07-21"
+
+    def test_clear_focus_date(self, client):
+        task = create_task(client, title="Task", focus_date="2026-07-20").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": None})
+        assert resp.get_json()["focus_date"] is None
+
+    def test_update_invalid_focus_date(self, client):
+        task = create_task(client, title="Task").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": "not-a-date"})
+        assert resp.status_code == 400
+
+    def test_recurring_spawn_resets_focus_date(self, client):
+        task = create_task(client, title="Recurring",
+                           due_date="2026-06-10", focus_date="2026-06-10",
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        tasks = client.get("/api/deck").get_json()
+        spawned = next(t for t in tasks if t["id"] != task["id"])
+        assert spawned["focus_date"] is None
+
+
+# ── blocked_by dependencies ────────────────────────────────────────────────────
+
+
+class TestBlockedBy:
+    def test_create_default_empty(self, client):
+        assert create_task(client, title="Free").get_json()["blocked_by"] == []
+
+    def test_create_with_list(self, client):
+        resp = create_task(client, title="Blocked", blocked_by=["a", "b"])
+        assert resp.get_json()["blocked_by"] == ["a", "b"]
+
+    def test_create_with_comma_string(self, client):
+        resp = create_task(client, title="Blocked", blocked_by="a, b ,c")
+        assert resp.get_json()["blocked_by"] == ["a", "b", "c"]
+
+    def test_update_blocked_by_list(self, client):
+        task = create_task(client, title="Task").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": ["x", "y"]})
+        assert resp.get_json()["blocked_by"] == ["x", "y"]
+
+    def test_update_blocked_by_string(self, client):
+        task = create_task(client, title="Task").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": "x, y"})
+        assert resp.get_json()["blocked_by"] == ["x", "y"]
+
+    def test_clear_blocked_by(self, client):
+        task = create_task(client, title="Task", blocked_by=["x"]).get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": []})
+        assert resp.get_json()["blocked_by"] == []
+
+
+# ── Page field (task ↔ page linking) ──────────────────────────────────────────
+
+
+class TestPageField:
+    def test_create_with_page(self, client):
+        assert create_task(client, title="T", page="my-proj").get_json()["page"] == "my-proj"
+
+    def test_create_default_page_none(self, client):
+        assert create_task(client, title="T").get_json()["page"] is None
+
+    def test_update_page(self, client):
+        task = create_task(client, title="T").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"page": "linked"})
+        assert resp.get_json()["page"] == "linked"
+
+    def test_clear_page(self, client):
+        task = create_task(client, title="T", page="linked").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"page": ""})
+        assert resp.get_json()["page"] is None
+
+
+# ── Batch tag ──────────────────────────────────────────────────────────────────
+
+
+class TestBatchTag:
+    def test_add_tags_to_multiple(self, client):
+        t1 = create_task(client, title="A").get_json()
+        t2 = create_task(client, title="B").get_json()
+        resp = client.post("/api/deck/batch-tag", json={
+            "ids": [t1["id"], t2["id"]], "add": ["work"],
+        })
+        assert resp.status_code == 200
+        tasks = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert "work" in tasks[t1["id"]]["tags"]
+        assert "work" in tasks[t2["id"]]["tags"]
+
+    def test_remove_tags(self, client):
+        task = create_task(client, title="A").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"tags": ["work", "urgent"]})
+        client.post("/api/deck/batch-tag", json={"ids": [task["id"]], "remove": ["urgent"]})
+        tags = client.get("/api/deck").get_json()[0]["tags"]
+        assert tags == ["work"]
+
+    def test_add_and_remove_combined(self, client):
+        task = create_task(client, title="A").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"tags": ["old"]})
+        client.post("/api/deck/batch-tag", json={
+            "ids": [task["id"]], "add": ["new"], "remove": ["old"],
+        })
+        assert client.get("/api/deck").get_json()[0]["tags"] == ["new"]
+
+    def test_add_dedupes_case_insensitive(self, client):
+        task = create_task(client, title="A").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"tags": ["Work"]})
+        client.post("/api/deck/batch-tag", json={"ids": [task["id"]], "add": ["work"]})
+        assert client.get("/api/deck").get_json()[0]["tags"] == ["Work"]
+
+    def test_empty_ids_400(self, client):
+        resp = client.post("/api/deck/batch-tag", json={"ids": [], "add": ["x"]})
+        assert resp.status_code == 400
+
+    def test_no_add_or_remove_400(self, client):
+        task = create_task(client, title="A").get_json()
+        resp = client.post("/api/deck/batch-tag", json={"ids": [task["id"]]})
+        assert resp.status_code == 400
+
+    def test_batch_tag_applies_to_completed_task(self, client):
+        task = create_task(client, title="A").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        resp = client.post("/api/deck/batch-tag", json={
+            "ids": [task["id"]], "add": ["archived"],
+        })
+        assert resp.status_code == 200
+        completed = client.get("/api/deck/completed").get_json()
+        assert "archived" in completed[0]["tags"]
