@@ -317,6 +317,61 @@ class TestRecurring:
         assert len(tasks) == 0
 
 
+# ---------- Won't Do ----------
+
+
+class TestWontDo:
+    def test_create_default_wont_do_false(self, client):
+        assert create_task(client, title="T").get_json()["wont_do"] is False
+
+    def test_mark_wont_do_sets_flag_and_timestamp(self, client):
+        task = create_task(client, title="Drop me").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        data = resp.get_json()
+        assert data["wont_do"] is True
+        assert data["completed_at"] is not None
+
+    def test_mark_wont_do_removes_from_active(self, client):
+        task = create_task(client, title="Drop me").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        assert client.get("/api/deck").get_json() == []
+
+    def test_wont_do_appears_in_completed(self, client):
+        task = create_task(client, title="Drop me").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        completed = client.get("/api/deck/completed").get_json()
+        assert len(completed) == 1
+        assert completed[0]["id"] == task["id"]
+        assert completed[0]["wont_do"] is True
+
+    def test_wont_do_does_not_spawn_recurring(self, client):
+        task = create_task(client, title="Repeating",
+                           due_date="2025-03-01",
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        # No next instance should be created (unlike completion)
+        assert client.get("/api/deck").get_json() == []
+
+    def test_reopen_wont_do_restores_to_active(self, client):
+        task = create_task(client, title="Bring back").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        resp = client.put(f"/api/deck/{task['id']}", json={"wont_do": False})
+        data = resp.get_json()
+        assert data["wont_do"] is False
+        assert data["completed_at"] is None
+        active = client.get("/api/deck").get_json()
+        assert len(active) == 1
+        assert active[0]["id"] == task["id"]
+
+    def test_completing_clears_wont_do_flag(self, client):
+        """Uncompleting then completing normally leaves wont_do false."""
+        task = create_task(client, title="Mixed").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": True})
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": False})
+        resp = client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        assert resp.get_json()["wont_do"] is False
+
+
 # ---------- Undo Recurring ----------
 
 

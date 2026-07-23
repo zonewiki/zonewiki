@@ -124,7 +124,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201) |
-| PUT    | `/api/deck/<id>`      | Update a task (title, priority, tags, due_date, completed, recurrence, page, blocked_by) |
+| PUT    | `/api/deck/<id>`      | Update a task (title, priority, tags, due_date, completed, recurrence, page, blocked_by, focus_date, wont_do). `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it. |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204 |
 | POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204 |
 | POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
@@ -204,7 +204,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag |
-| `filter` | `open`, `due`, `completed`, `hidden` | `open` | Pre-selects the active tab |
+| `filter` | tab name: `today`, `backlog`, `upcoming`, `deferred`, `completed` (internal aliases `open`/`due`/`hidden`/`done` also accepted) | `today` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 
 **Examples:**
@@ -212,7 +212,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 [[deck]]
 [[deck tag=work]]
 [[deck page=self]]
-[[deck tag=urgent filter=due]]
+[[deck filter=backlog]]
+[[deck tag=urgent filter=upcoming]]
 [[deck page=self tag=sprint-1]]
 ```
 
@@ -392,16 +393,18 @@ Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown 
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
 | `blocked_by` | string[] | Array of task IDs that block this task |
 | `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Today tab shows tasks with `focus_date <= today` |
+| `wont_do` | bool | `true` marks the task abandoned ("won't do"). Archived like a completed task (moves to `_deck_completed.json` with `completed_at` set) but shown with a "✗ won't do" badge; marking won't-do never spawns a recurring instance. |
 
 ### UI
 
-- **Filter tabs**: Open · Today · Due · Upcoming · Overdue · Completed
+- **Filter tabs**: Open · Today · Due · Upcoming · Overdue · Completed. Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `today`. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on `today`.
 - **Today tab**: shows tasks flagged for today (`today_date == today`) plus overdue/due-today tasks. Sorted: overdue first, due today, then today-marked without due date.
 - **Today flag**: each task card has a ☀ button (hover-only when not set, amber when set). Clicking opens a small popover: `Today · Tomorrow · Clear`. Clicking an already-selected option clears it. Keyboard shortcut: **f** on a selected task.
 - **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
 - **Filters**: Tag text filter
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
 - **Inline completion**: Checkbox toggles mark task complete instantly
+- **Won't do**: each active task card has a ✗ button (hover-reveal) that archives the task as abandoned. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
 - **Edit modal**: Double-click or ✎ button opens a modal for full task editing
 - **Recurring tasks**: When a recurring task is completed, a new instance is automatically created with the next due date
 

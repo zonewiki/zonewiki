@@ -172,6 +172,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         "defer_days": task.get("defer_days"),
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
+        "wont_do": False,
         "focus_date": None,
         "sort_order": task.get("sort_order", 0),
         "recurrence": task.get("recurrence"),
@@ -202,6 +203,18 @@ def _parse_tasks_params(raw: str) -> dict:
     return params
 
 
+# Maps friendly tab-label names (and the internal names) to the data-filter
+# value the client uses to activate a tab. Lets `[[deck filter=backlog]]` work
+# using the labels the user actually sees, not just internal names.
+_FILTER_ALIASES = {
+    "today": "today",
+    "backlog": "open", "open": "open",
+    "upcoming": "due", "due": "due",
+    "deferred": "hidden", "hidden": "hidden",
+    "completed": "completed", "done": "completed",
+}
+
+
 def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -> str:
     """Render the full interactive deck app HTML for embedding in a wiki page.
 
@@ -211,7 +224,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     page_val = params.get("page", "")
     if page_val == "self" and page_slug:
         page_val = page_slug
-    filt = params.get("filter", "")
+    raw_filter = params.get("filter", "").strip().lower()
+    filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
@@ -223,8 +237,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="tasks-tabs" id="tasks-tabs{sfx}">
-      <button class="tab active" data-filter="today">Today</button>
-      <button class="tab" data-filter="open">Backlog</button>
+      <button class="tab active" data-filter="open">Backlog</button>
+      <button class="tab" data-filter="today">Today</button>
       <button class="tab" data-filter="due">Upcoming</button>
       <button class="tab" data-filter="hidden">Deferred</button>
       <button class="tab" data-filter="completed">Completed</button>
@@ -280,6 +294,16 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <div class="task-field" id="task-rec-interval-field{sfx}" style="display:none">
         <label for="task-edit-rec-interval{sfx}">Every N</label>
         <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
+      </div>
+      <div class="task-field">
+        <label for="task-edit-focus{sfx}">Plan for</label>
+        <input type="date" id="task-edit-focus{sfx}" name="focus_date">
+        <div class="task-date-shortcuts">
+          <button type="button" data-focus="today">Today</button>
+          <button type="button" data-focus="tmrw">Tmrw</button>
+          <button type="button" data-focus="mon">Mon</button>
+          <button type="button" data-focus="clear">✕</button>
+        </div>
       </div>
     </div>
     <div class="task-field-row hide-until-row">
@@ -469,6 +493,7 @@ def api_create_deck_item():
         "defer_days": defer_days if defer_days is not None else None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
+        "wont_do": False,
         "focus_date": _validate_date(data.get("focus_date")),
         "sort_order": None,
         "recurrence": None,
@@ -541,10 +566,26 @@ def api_update_deck_item(task_id):
 
     _apply_task_fields(task, data)
 
-    if "completed" in data:
+    if "wont_do" in data:
+        if data["wont_do"] and not task.get("completed_at"):
+            # Won't do: move active → completed, marked as abandoned.
+            # Deliberately does NOT spawn a recurring instance — skipping an
+            # occurrence should not perpetuate the series.
+            task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            task["wont_do"] = True
+            active = [t for t in active if t["id"] != task_id]
+            completed_list.append(task)
+        elif not data["wont_do"] and task.get("completed_at"):
+            # Reopen a won't-do task: move completed → active
+            task["completed_at"] = None
+            task["wont_do"] = False
+            completed_list = [t for t in completed_list if t["id"] != task_id]
+            active.append(task)
+    elif "completed" in data:
         if data["completed"] and not task.get("completed_at"):
             # Complete: move active → completed
             task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            task["wont_do"] = False
             spawned = _spawn_recurring(task)
             active = [t for t in active if t["id"] != task_id]
             completed_list.append(task)
@@ -561,6 +602,7 @@ def api_update_deck_item(task_id):
                     t.get("created_at", "") >= completed_at
                 )]
             task["completed_at"] = None
+            task["wont_do"] = False
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
     elif in_completed:

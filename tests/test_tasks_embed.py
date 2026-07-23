@@ -98,6 +98,35 @@ class TestTasksLinkRender:
         html = server.render_md("[[deck filter=completed]]\n")
         assert 'data-init-filter="completed"' in html
 
+    def test_embed_filter_label_aliases(self, wiki_dir):
+        """Friendly tab-label names map to the client data-filter values."""
+        cases = {
+            "today": "today",
+            "backlog": "open",
+            "upcoming": "due",
+            "deferred": "hidden",
+            "completed": "completed",
+        }
+        for label, expected in cases.items():
+            html = server.render_md(f"[[deck filter={label}]]\n")
+            assert f'data-init-filter="{expected}"' in html, label
+
+    def test_embed_filter_alias_case_insensitive(self, wiki_dir):
+        """Filter label matching is case-insensitive."""
+        html = server.render_md("[[deck filter=Backlog]]\n")
+        assert 'data-init-filter="open"' in html
+
+    def test_embed_filter_internal_names_still_work(self, wiki_dir):
+        """Internal names (open/due/hidden) remain accepted for back-compat."""
+        for name in ("open", "due", "hidden"):
+            html = server.render_md(f"[[deck filter={name}]]\n")
+            assert f'data-init-filter="{name}"' in html
+
+    def test_embed_filter_unknown_passthrough(self, wiki_dir):
+        """An unrecognized filter value passes through unchanged (client ignores it)."""
+        html = server.render_md("[[deck filter=bogus]]\n")
+        assert 'data-init-filter="bogus"' in html
+
     def test_multiple_embeds_only_first(self, client, wiki_dir):
         """Multiple [[deck]] on one page: all render with unique instance IDs."""
         create_task(client, title="A", tags=["alpha"])
@@ -239,3 +268,13 @@ class TestPageViewLink:
         assert 'data-init-tag="work"' in body
         assert 'data-init-page="proj"' in body
         assert 'data-init-filter="due"' in body
+
+    def test_embed_contains_focus_date_field(self, wiki_dir):
+        """Edit modal includes a Plan for (focus_date) date input and shortcuts."""
+        html = server.render_md("[[deck]]\n")
+        assert 'id="task-edit-focus"' in html
+        assert 'name="focus_date"' in html
+        assert 'data-focus="today"' in html
+        assert 'data-focus="tmrw"' in html
+        assert 'data-focus="mon"' in html
+        assert 'data-focus="clear"' in html

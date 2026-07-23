@@ -44,7 +44,7 @@
 
   let tasks = [];
   let completedLoaded = false;
-  let activeFilter = 'today';
+  let activeFilter = 'open';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -61,8 +61,16 @@
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
   const initPage = appEl?.dataset.initPage || urlParams.get('page') || '';
-  const initFilter = appEl?.dataset.initFilter || urlParams.get('filter') || '';
+  const urlFilter = urlParams.get('filter') || '';       // explicit per-navigation override
+  const embedFilter = appEl?.dataset.initFilter || '';   // [[deck filter=…]] — always wins when specified
   const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
+
+  // Remember the active tab per page + embed instance for the current tab only
+  // (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
+  // in a new tab / next day starts empty so the embed's configured filter loads.
+  const tabStorageKey = `leaf-deck-tab:${location.pathname}#${instanceId}`;
+  function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
+  function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -636,7 +644,7 @@
 
     const taskHTML = (task, draggable = (sortSelect.value === 'manual'), extraClass = '', isMissed = false) => {
       const checked = task.completed_at ? 'checked' : '';
-      const completedClass = task.completed_at ? 'task-completed' : '';
+      const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
@@ -654,7 +662,11 @@
         : '';
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
-      const completedDisplay = task.completed_at ? `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>` : '';
+      const completedDisplay = task.completed_at
+        ? (task.wont_do
+            ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
+            : `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>`)
+        : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
       // Blocked by: show full title, click to open modal
@@ -695,6 +707,9 @@
           (showMon ? `<button class="task-focus-btn${focusMon ? ' is-focused' : ''}" data-id="${task.id}" data-focus="mon" title="${focusMon ? 'Clear Monday plan' : 'Plan for Monday'}">Mon</button>` : '') +
           `</span>`
         : '';
+      const wontDoBtnHtml = !task.completed_at
+        ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
+        : '';
       const dragAttr = draggable ? 'draggable="true"' : '';
       const duePinnedAttr = draggable ? '' : 'data-due-pinned="true"';
       return `
@@ -708,7 +723,7 @@
             ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
           <div class="task-actions">
-            ${focusBtnsHtml}<button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>
+            ${focusBtnsHtml}<button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>${wontDoBtnHtml}
           </div>
         </li>`;
     };
@@ -784,6 +799,15 @@
                      : nextMonday();
         // clicking the active button clears; clicking the other one switches
         updateTask(id, { focus_date: task.focus_date === target ? null : target });
+      });
+    });
+
+    listEl.querySelectorAll('.task-wontdo-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        updateTask(id, { wont_do: true });
+        showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
       });
     });
 
@@ -1106,6 +1130,7 @@
     tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
+    saveActiveTab(activeFilter);
     if (activeFilter === 'completed') fetchCompleted();
     render();
   });
@@ -1458,7 +1483,8 @@
     if (deferDaysField) deferDaysField.style.visibility = isDeferDue ? 'hidden' : '';
     if (deferDueCheck) deferDueCheck.checked = isDeferDue;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || initTag || '');
+    document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : '';
+    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
     if (linkChipsEl) {
       linkChipsEl.innerHTML = '';
       currentLinks = [];
@@ -1540,6 +1566,14 @@
       else if (v === '+3')       dueInput.value = dateOffset(3);
       else if (v === 'next-week') dueInput.value = nextMonday();
       else if (v === 'clear')    dueInput.value = '';
+      const fv = btn.dataset.focus;
+      if (fv) {
+        const focusInput = document.getElementById('task-edit-focus' + sfx);
+        if (fv === 'today')      focusInput.value = dateOffset(0);
+        else if (fv === 'tmrw')  focusInput.value = dateOffset(1);
+        else if (fv === 'mon')   focusInput.value = nextMonday();
+        else if (fv === 'clear') focusInput.value = '';
+      }
     });
   });
 
@@ -1555,6 +1589,7 @@
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
       start_date: document.getElementById('task-edit-start' + sfx).value || null,
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
+      focus_date: document.getElementById('task-edit-focus' + sfx).value || null,
       defer_days: document.getElementById('task-edit-defer-due' + sfx)?.checked
         ? 0
         : (parseInt(document.getElementById('task-edit-defer-days' + sfx).value) ?? null) || null,
@@ -1907,16 +1942,23 @@
   if (initTag && filterTag) filterTag.value = initTag;
   const initSearch = urlParams.get('search') || '';
   if (initSearch && filterSearch) filterSearch.value = initSearch;
-  if (initFilter) {
-    const tab = tabsEl?.querySelector(`[data-filter="${initFilter}"]`);
+  // Precedence: URL ?filter= > embed filter (always wins when specified) >
+  // tab remembered this session > today default. So a [[deck filter=…]] embed
+  // always opens on its configured tab; a plain [[deck]] remembers the tab the
+  // user last clicked across refreshes within the same browser tab.
+  const restoreFilter = urlFilter || embedFilter || loadActiveTab() || '';
+  if (restoreFilter) {
+    const tab = tabsEl?.querySelector(`[data-filter="${restoreFilter}"]`);
     if (tab) {
       tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      activeFilter = initFilter;
+      activeFilter = restoreFilter;
     }
   }
 
-  fetchDeck();
+  fetchDeck().then(() => {
+    if (activeFilter === 'completed') fetchCompleted();
+  });
 
   // Auto-open new item modal if ?new=1 in URL
   if (initNew) {

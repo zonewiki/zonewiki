@@ -1370,7 +1370,9 @@ body.editor-page main {
 .task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--bg)); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
 .task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--bg)); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
 .task-item.task-selected { border-color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 6%, var(--bg)); outline: none; }
-.task-item.task-selected .task-edit-btn { opacity: 1; }
+.task-item.task-selected .task-edit-btn,
+.task-item.task-selected .task-wontdo-btn,
+.task-item.task-selected .task-focus-btns { opacity: 1; }
 .task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
 .task-item[draggable]:active { cursor: grabbing; }
 .task-item[draggable] .task-title,
@@ -1419,13 +1421,22 @@ body.editor-page main {
   padding: 0; margin: 0;
 }
 
-.task-edit-btn {
+.task-edit-btn,
+.task-wontdo-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; padding: 0;
   background: none; border: none;
-  color: var(--muted); cursor: pointer; font-size: .9rem;
-  padding: .2rem .4rem; border-radius: 3px; opacity: 0; transition: opacity .15s;
+  color: var(--muted); cursor: pointer; font-size: .9rem; line-height: 1;
+  border-radius: 3px; opacity: 0; transition: opacity .15s;
 }
-.task-item:hover .task-edit-btn { opacity: 1; }
+/* space between the plan (focus) buttons and the edit button */
+.task-edit-btn { margin-left: .35rem; }
+.task-item:hover .task-edit-btn,
+.task-item:hover .task-wontdo-btn { opacity: 1; }
 .task-edit-btn:hover { background: var(--btn-bg); color: var(--fg); }
+.task-wontdo-btn:hover { background: color-mix(in srgb, #dc2626 15%, var(--bg)); color: #dc2626; }
+
+.task-wontdo-badge { color: #dc2626 !important; }
 
 .task-actions {
   flex-shrink: 0; display: flex; align-items: center; gap: 0;
