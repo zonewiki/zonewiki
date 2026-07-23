@@ -50,6 +50,7 @@ No build step. No database. No auth (local use only).
     ├── requirements.txt
     ├── server.py           # Flask server — wiki routes, rendering, shell
     ├── deck.py             # Deck module — task API, [[deck]] embed, storage
+    ├── search.py           # BM25 search ranking (stemming, fuzzy, excerpts)
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
@@ -343,11 +344,16 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 
 ## Search
 
-- `GET /api/search?q=...` reads every `.md` file in `pages/` **and** searches deck task titles/descriptions. Results are merged by relevance score, returning JSON: `[{ slug, title, excerpt, type? }]`. Task results have `type: "task"` and `task_id` fields.
-- Excerpt shows ~150 chars around the first match, with the match term bolded via `<mark>`.
+- **Ranking is BM25**, implemented in pure Python (`src/search.py`, stdlib only — no database, no external deps). Pages and deck tasks are scored in **one combined index** so their relevance scores are directly comparable.
+- `GET /api/search?q=...` collects every `.md` file in `pages/` **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, type? }]`. Task results have `type: "task"` and `task_id` fields.
+- **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
+- **Stemming** (`search.stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
+- **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
+- **Title boost**: title tokens are folded into the document token bag `TITLE_WEIGHT` (3) extra times, so title matches rank higher.
+- Excerpt (`search.make_excerpt`) shows a window around the first match — the full query phrase if present, else the earliest query word — bolded via `<mark>`, HTML-escaped.
+- **Performance**: page documents are tokenized once and cached in `server._search_doc_cache` keyed by slug, invalidated per-file on `mtime` change (so on-disk edits stay reflected). Deck task docs come from `deck.task_search_docs()`.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
-- Search is case-insensitive, matches partial words.
-- Returns up to 15 results (pages + tasks combined).
+- Search is case-insensitive. Returns up to 15 results (pages + tasks combined).
 
 ---
 

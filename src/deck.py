@@ -17,6 +17,8 @@ from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
 
+import search
+
 # ── Blueprint ─────────────────────────────────────────────────────────────────
 
 bp = Blueprint("deck", __name__)
@@ -393,51 +395,28 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
 # ── Search integration ────────────────────────────────────────────────────────
 
 
-def search_tasks(q: str) -> list[dict]:
-    """Search task titles and descriptions; return matches formatted for search results."""
-    q_lower = q.lower()
-    results = []
+def task_search_docs() -> list[dict]:
+    """Return all tasks as search documents for the shared BM25 index.
+
+    Documents carry pre-tokenized ``tokens`` (title boosted by TITLE_WEIGHT) plus
+    passthrough fields (type/task_id/status) that server.do_search formats into
+    results. Ranking and excerpting happen in the unified index, not here."""
+    docs = []
     for task in _read_all():
         title = task.get("title", "")
         desc = task.get("description", "")
-        text = title + " " + desc
-        text_lower = text.lower()
-
-        score = (10 if q_lower in title.lower() else 0) + text_lower.count(q_lower)
-        if score == 0:
-            continue
-
-        # Build excerpt
-        idx = text_lower.find(q_lower)
-        if idx != -1:
-            start = max(0, idx - 40)
-            end = min(len(text), idx + 60)
-            snippet = text[start:end].replace("\n", " ")
-            snip_lower = snippet.lower()
-            mi = snip_lower.find(q_lower)
-            if mi != -1:
-                pre = html.escape(snippet[:mi])
-                match_text = html.escape(snippet[mi: mi + len(q)])
-                post = html.escape(snippet[mi + len(q):])
-                excerpt = ("…" if start > 0 else "") + f"{pre}<mark>{match_text}</mark>{post}" + ("…" if end < len(text) else "")
-            else:
-                excerpt = html.escape(snippet)
-        else:
-            excerpt = html.escape(text[:100].replace("\n", " "))
-
-        status = "done" if task.get("completed_at") else "open"
-        results.append({
+        text = f"{title} {desc}".strip()
+        docs.append({
             "slug": "_deck",
             "title": f"[Task] {title}",
-            "excerpt": excerpt,
-            "score": score,
+            "excerpt_text": text,
+            "tokens": search.tokenize(text)
+            + search.tokenize(title) * search.TITLE_WEIGHT,
             "type": "task",
             "task_id": task["id"],
-            "status": status,
+            "status": "done" if task.get("completed_at") else "open",
         })
-
-    results.sort(key=lambda r: -r["score"])
-    return results[:5]
+    return docs
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────

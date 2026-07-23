@@ -19,6 +19,7 @@ from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 import deck as deck_module
+import search
 
 app = Flask(__name__, static_folder=None)
 APP_NAME = "Leaf"
@@ -1803,49 +1804,59 @@ def api_pages_list():
 # ── Search ────────────────────────────────────────────────────────────────────
 
 
-def do_search(q: str) -> list[dict]:
-    q_lower = q.lower()
-    results = []
+# Cache of tokenized page documents, keyed by slug -> (mtime, doc). Avoids
+# re-reading and re-tokenizing every file on each search; invalidated per-file
+# when the on-disk mtime changes so edits made outside the app stay reflected.
+_search_doc_cache: dict[str, tuple[float, dict]] = {}
 
+
+def _page_search_docs() -> list[dict]:
+    docs = []
+    seen = set()
     for md_file, slug in iter_pages():
-        content = md_file.read_text(encoding="utf-8")
-        content_lower = content.lower()
-        title = page_title(content, slug)
-
-        score = (10 if q_lower in title.lower() else 0) + content_lower.count(q_lower)
-        if score == 0:
+        seen.add(slug)
+        try:
+            mtime = md_file.stat().st_mtime
+        except OSError:
             continue
+        cached = _search_doc_cache.get(slug)
+        if cached and cached[0] == mtime:
+            docs.append(cached[1])
+            continue
+        content = md_file.read_text(encoding="utf-8")
+        title = page_title(content, slug)
+        doc = {
+            "slug": slug,
+            "title": title,
+            "excerpt_text": content,
+            "tokens": search.tokenize(content)
+            + search.tokenize(title) * search.TITLE_WEIGHT,
+        }
+        _search_doc_cache[slug] = (mtime, doc)
+        docs.append(doc)
+    # Drop cache entries for deleted/renamed pages.
+    for stale in [s for s in _search_doc_cache if s not in seen]:
+        del _search_doc_cache[stale]
+    return docs
 
-        # Build excerpt around first match
-        idx = content_lower.find(q_lower)
-        if idx == -1:
-            excerpt = html.escape(content[:150].replace("\n", " ")) + "…"
-        else:
-            start = max(0, idx - 60)
-            end = min(len(content), idx + 90)
-            snippet = content[start:end].replace("\n", " ")
-            # Find match inside snippet and bold it
-            snip_lower = snippet.lower()
-            mi = snip_lower.find(q_lower)
-            if mi != -1:
-                pre = html.escape(snippet[:mi])
-                match = html.escape(snippet[mi : mi + len(q)])
-                post = html.escape(snippet[mi + len(q) :])
-                excerpt = ("…" if start > 0 else "") + f"{pre}<mark>{match}</mark>{post}" + ("…" if end < len(content) else "")
-            else:
-                excerpt = html.escape(snippet)
 
-        results.append({"slug": slug, "title": title, "excerpt": excerpt, "score": score})
-
-    # Include task results from deck
-    task_results = deck_module.search_tasks(q)
-    for tr in task_results:
-        results.append(tr)
-
-    results.sort(key=lambda r: -r["score"])
-    for r in results:
-        del r["score"]
-    return results[:15]
+def do_search(q: str) -> list[dict]:
+    if not q.strip():
+        return []
+    docs = _page_search_docs() + deck_module.task_search_docs()
+    index = search.SearchIndex(docs)
+    results = []
+    for _score, d in index.search(q, limit=15):
+        r = {
+            "slug": d["slug"],
+            "title": d["title"],
+            "excerpt": search.make_excerpt(d["excerpt_text"], q),
+        }
+        for k in ("type", "task_id", "status"):
+            if d.get(k) is not None:
+                r[k] = d[k]
+        results.append(r)
+    return results
 
 
 @app.get("/api/search")

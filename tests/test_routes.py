@@ -40,6 +40,7 @@ def wiki_dir(tmp_path):
     server.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     deck_module.DECK_FILE = tmp_path / "_deck.json"
     server.DECK_FILE = tmp_path / "_deck.json"
+    server._search_doc_cache.clear()
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
     yield tmp_path
     server.PAGES_DIR = old_pages
@@ -501,6 +502,35 @@ class TestSearch:
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)
         results = resp.get_json()
         assert any(r.get("type") == "task" for r in results)
+
+    def test_multi_word_query_matches_scattered_terms(self, client, wiki_dir):
+        # Both words present but not as a phrase — old substring search scored 0.
+        write_page(wiki_dir, "scattered",
+                   "# Scattered\n\nthe vector lives here, database is elsewhere\n")
+        resp = client.get("/api/search?q=vector+database", headers=HOST)
+        results = resp.get_json()
+        assert any(r["slug"] == "scattered" for r in results)
+
+    def test_typo_still_finds_page(self, client, wiki_dir):
+        write_page(wiki_dir, "dbnotes", "# Database notes\n\nabout the database engine\n")
+        resp = client.get("/api/search?q=databse", headers=HOST)  # transposed typo
+        results = resp.get_json()
+        assert any(r["slug"] == "dbnotes" for r in results)
+
+    def test_word_variation_matches_via_stem(self, client, wiki_dir):
+        write_page(wiki_dir, "runlog", "# Run log\n\nI was running in the park today\n")
+        resp = client.get("/api/search?q=run", headers=HOST)
+        results = resp.get_json()
+        assert any(r["slug"] == "runlog" for r in results)
+
+    def test_rarer_term_ranked_higher(self, client, wiki_dir):
+        # "notes" is common across pages; "quasar" is rare — the quasar page wins.
+        for i in range(4):
+            write_page(wiki_dir, f"common{i}", f"# Notes {i}\n\nordinary notes about notes\n")
+        write_page(wiki_dir, "rare", "# Notes rare\n\nnotes about the quasar phenomenon\n")
+        resp = client.get("/api/search?q=notes+quasar", headers=HOST)
+        results = resp.get_json()
+        assert results[0]["slug"] == "rare"
 
 
 # ===========================================================================
