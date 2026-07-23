@@ -1867,6 +1867,18 @@ def api_search():
     return jsonify(do_search(q))
 
 
+def _result_href(r: dict) -> str:
+    """Destination URL for a search result. Task results open the deck page with
+    the task title prefilled into the deck search filter (so only that task
+    shows) and the tab set to match its state, rather than the bare _deck slug."""
+    if r.get("type") == "task":
+        from urllib.parse import urlencode
+        term = re.sub(r"^\[Task\]\s*", "", r["title"])
+        tab = "completed" if r.get("status") == "done" else "open"
+        return "/page/deck?" + urlencode({"search": term, "filter": tab})
+    return f"/page/{r['slug']}"
+
+
 @app.get("/search")
 def search_page():
     q = request.args.get("q", "").strip()
@@ -1875,7 +1887,7 @@ def search_page():
     if results:
         cards = "".join(
             f"""<div class="search-result-card">
-  <a href="/page/{r['slug']}">{html.escape(r['title'])}</a>
+  <a href="{html.escape(_result_href(r))}">{html.escape(r['title'])}</a>
   <p>{r['excerpt']}</p>
 </div>"""
             for r in results

@@ -532,6 +532,25 @@ class TestSearch:
         results = resp.get_json()
         assert results[0]["slug"] == "rare"
 
+    def test_search_page_task_links_to_filtered_deck(self, client, wiki_dir):
+        # A task result must open /page/deck with the title prefilled into the
+        # deck search filter — not the bare _deck storage slug.
+        client.post("/api/deck", json={"title": "buymilk urgent chore"})
+        resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
+        body = resp.get_data(as_text=True)
+        assert "/page/_deck" not in body
+        assert "/page/deck?search=buymilk+urgent+chore" in body
+        assert "filter=open" in body
+
+    def test_search_page_completed_task_links_to_completed_tab(self, client, wiki_dir):
+        r = client.post("/api/deck", json={"title": "finishreport tuvwxyz"})
+        tid = r.get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
+        body = resp.get_data(as_text=True)
+        assert "/page/deck?search=finishreport+tuvwxyz" in body
+        assert "filter=completed" in body
+
 
 # ===========================================================================
 # api_toggle_checkbox

@@ -354,6 +354,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - **Performance**: page documents are tokenized once and cached in `server._search_doc_cache` keyed by slug, invalidated per-file on `mtime` change (so on-disk edits stay reflected). Deck task docs come from `deck.task_search_docs()`.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive. Returns up to 15 results (pages + tasks combined).
+- **Selecting a task result** (search modal or `/search` page) opens `/page/deck?search=<title>&filter=<open|completed>` — the deck page with the task's title prefilled into the deck search filter (so only that task shows) and the tab set to match its state — rather than the bare `_deck` storage slug. Built by `resultHref()` in `leaf.js` and `_result_href()` in `server.py`.
 
 ---
 

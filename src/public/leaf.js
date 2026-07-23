@@ -141,6 +141,18 @@ function he(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Destination URL for a search result. Task results open the deck page with the
+// task title prefilled into the deck's search filter (so only that task shows)
+// and the tab set to match the task's state, rather than the bare _deck slug.
+function resultHref(r) {
+  if (r.type === 'task') {
+    const term = r.title.replace(/^\[Task\]\s*/, '');
+    const tab = r.status === 'done' ? 'completed' : 'open';
+    return `/page/deck?search=${encodeURIComponent(term)}&filter=${tab}`;
+  }
+  return `/page/${r.slug}`;
+}
+
 // ── Search modal ──────────────────────────────────────────────────────────────
 
 const searchModal    = document.getElementById('search-modal');
@@ -309,7 +321,7 @@ async function fetchModalContentMatches(q) {
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
       results.map(r =>
-        `<a class="search-result-card" href="/page/${he(r.slug)}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
+        `<a class="search-result-card" href="${he(resultHref(r))}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
       ).join('');
     modalCM.classList.remove('hidden');
     // Re-clamp active index now that content cards are in the pool
