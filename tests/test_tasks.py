@@ -2,7 +2,9 @@
 
 import sys
 import os
+import json
 import tempfile
+import threading
 from pathlib import Path
 from datetime import date, timedelta
 
@@ -938,3 +940,92 @@ class TestBatchTag:
         assert resp.status_code == 200
         completed = client.get("/api/deck/completed").get_json()
         assert "archived" in completed[0]["tags"]
+
+
+# ---------- Concurrent-write safety (regression for commit 079930f) ----------
+#
+# The Flask dev server is threaded, so two task mutations can run at once. The
+# original storage layer did an unguarded read-modify-write on _deck.json with a
+# truncate-in-place write, and _read_deck() swallowed a torn/empty read as an
+# empty list. A create landing in that window read [], appended its one task,
+# and overwrote every other task — exactly what wiped the deck in production.
+
+
+class TestConcurrentWriteSafety:
+    def test_empty_deck_file_is_not_overwritten(self, client, wiki_dir):
+        """A zero-length _deck.json (a torn write) must not be treated as an
+        empty list and clobbered — the create is refused with 503."""
+        create_task(client, title="Keeper")
+        deck_file = wiki_dir / "_deck.json"
+        deck_file.write_text("", encoding="utf-8")  # simulate a torn write
+        resp = create_task(client, title="Would clobber")
+        assert resp.status_code == 503
+        # The file was left untouched, not overwritten with just the new task.
+        assert deck_file.read_text(encoding="utf-8") == ""
+
+    def test_corrupt_deck_file_is_not_overwritten(self, client, wiki_dir):
+        create_task(client, title="Keeper")
+        deck_file = wiki_dir / "_deck.json"
+        deck_file.write_text("{ this is not json", encoding="utf-8")
+        resp = create_task(client, title="Would clobber")
+        assert resp.status_code == 503
+        assert deck_file.read_text(encoding="utf-8") == "{ this is not json"
+
+    def test_genuinely_empty_deck_still_creates(self, client, wiki_dir):
+        """An empty deck is stored as '[]', which must still accept new tasks."""
+        deck_file = wiki_dir / "_deck.json"
+        deck_file.write_text("[]", encoding="utf-8")
+        resp = create_task(client, title="First")
+        assert resp.status_code == 201
+        assert [t["title"] for t in client.get("/api/deck").get_json()] == ["First"]
+
+    def test_concurrent_creates_lose_no_tasks(self, wiki_dir):
+        """Many creates from many threads must all survive — no lost updates."""
+        threads_n, per_thread = 8, 20
+
+        def worker(tid):
+            with server.app.test_client() as c:
+                for i in range(per_thread):
+                    r = c.post("/api/deck", json={"title": f"t{tid}-{i}"})
+                    assert r.status_code == 201
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(threads_n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        titles = [t["title"] for t in json.loads((wiki_dir / "_deck.json").read_text())]
+        assert len(titles) == threads_n * per_thread
+        assert len(set(titles)) == threads_n * per_thread
+
+    def test_deck_file_always_valid_json_during_concurrent_writes(self, wiki_dir):
+        """A reader hammering the file while writers run never sees a torn/empty
+        file — atomic replace guarantees a complete document every time."""
+        stop = threading.Event()
+        errors = []
+
+        def reader():
+            while not stop.is_set():
+                try:
+                    raw = (wiki_dir / "_deck.json").read_text(encoding="utf-8")
+                except FileNotFoundError:
+                    continue  # not created yet, before the first write
+                if raw == "":
+                    continue  # os.replace window: file simply not swapped yet
+                try:
+                    if not isinstance(json.loads(raw), list):
+                        errors.append("not a list")
+                except json.JSONDecodeError:
+                    errors.append("torn read")
+
+        def writer():
+            with server.app.test_client() as c:
+                for i in range(40):
+                    c.post("/api/deck", json={"title": f"w{i}"})
+
+        r = threading.Thread(target=reader)
+        w = threading.Thread(target=writer)
+        r.start(); w.start()
+        w.join(); stop.set(); r.join()
+        assert errors == []

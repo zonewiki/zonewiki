@@ -7,10 +7,13 @@ Provides:
 - API route registration via Blueprint
 """
 
+import functools
 import html
 import json
+import os
 import re
 import subprocess
+import threading
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -22,6 +25,23 @@ import search
 # ── Blueprint ─────────────────────────────────────────────────────────────────
 
 bp = Blueprint("deck", __name__)
+
+# Serializes every read-modify-write on the deck JSON files. The Flask dev
+# server is threaded, so without this two concurrent task mutations can
+# interleave their read → modify → write and lose each other's changes (or, if
+# one reads while the other has truncated the file mid-write, silently wipe the
+# whole list). All mutating endpoints hold this lock for the full
+# read-modify-write-commit sequence. RLock so nested helpers can re-acquire.
+_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    """Serialize a view's whole read-modify-write-commit under _LOCK."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _LOCK:
+            return fn(*args, **kwargs)
+    return wrapper
 
 # These are set by init_deck() from server.py
 WIKI_DIR: Path = Path(".")
@@ -59,13 +79,58 @@ def _migrate_completed_split() -> None:
     completed = [t for t in data if t.get("completed_at")]
     active = [t for t in data if not t.get("completed_at")]
     if not completed:
-        completed_file.write_text("[]", encoding="utf-8")
+        _atomic_write(completed_file, "[]")
         return
-    DECK_FILE.write_text(json.dumps(active, indent=2, ensure_ascii=False), encoding="utf-8")
-    completed_file.write_text(json.dumps(completed, indent=2, ensure_ascii=False), encoding="utf-8")
+    _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
+    _atomic_write(completed_file, json.dumps(completed, indent=2, ensure_ascii=False))
 
 
 # ── Storage ───────────────────────────────────────────────────────────────────
+
+
+class _DeckCorrupt(Exception):
+    """Existing deck file is present but unreadable — refuse to overwrite it."""
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write text by writing a temp file then os.replace-ing it into place.
+
+    os.replace is atomic on the same filesystem, so a concurrent reader always
+    sees either the complete old file or the complete new file — never the
+    zero-length window that ``open('w')`` exposes between truncate and write.
+    """
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}-{threading.get_ident()}")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_list_strict(path: Path) -> list[dict]:
+    """Read a JSON list, raising _DeckCorrupt if the file exists but is unusable.
+
+    Used on the write path (under _LOCK) so a corrupt or torn file aborts the
+    request instead of being silently treated as an empty list and overwritten,
+    which would destroy every task. A genuinely empty deck is stored as ``[]``,
+    so a zero-length file only ever means a torn/failed write."""
+    if not path.exists():
+        return []
+    raw = path.read_text(encoding="utf-8")
+    if not raw.strip():
+        raise _DeckCorrupt(str(path))
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        raise _DeckCorrupt(str(path))
+    if not isinstance(data, list):
+        raise _DeckCorrupt(str(path))
+    return data
+
+
+def _read_deck_strict() -> list[dict]:
+    return _read_list_strict(DECK_FILE)
+
+
+def _read_completed_strict() -> list[dict]:
+    return _read_list_strict(_completed_path())
 
 
 def _read_deck() -> list[dict]:
@@ -92,25 +157,31 @@ def _read_completed() -> list[dict]:
 
 
 def _read_all() -> list[dict]:
-    """Read all tasks (active + completed) — for search and backlinks."""
-    return _read_deck() + _read_completed()
+    """Read all tasks (active + completed) — for search and backlinks.
+
+    Holds _LOCK so the active/completed pair is a consistent snapshot rather
+    than reading one file before and the other after a concurrent write that
+    moves a task between them.
+    """
+    with _LOCK:
+        return _read_deck() + _read_completed()
 
 
 def _write_deck(tasks: list[dict]) -> None:
-    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+    _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
     if GIT_ENABLED and _git_commit_fn:
         _git_commit_fn(DECK_FILE, "Update deck")
 
 
 def _write_deck_no_commit(tasks: list[dict]) -> None:
-    DECK_FILE.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+    _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
 
 
 def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
     """Write both files and commit them together in a single git commit."""
     completed_file = _completed_path()
-    DECK_FILE.write_text(json.dumps(active, indent=2, ensure_ascii=False), encoding="utf-8")
-    completed_file.write_text(json.dumps(completed, indent=2, ensure_ascii=False), encoding="utf-8")
+    _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
+    _atomic_write(completed_file, json.dumps(completed, indent=2, ensure_ascii=False))
     if GIT_ENABLED:
         subprocess.run(
             ["git", "add", "--", str(DECK_FILE), str(completed_file)],
@@ -446,6 +517,13 @@ def task_search_docs() -> list[dict]:
 # ── API Routes ────────────────────────────────────────────────────────────────
 
 
+@bp.errorhandler(_DeckCorrupt)
+def _handle_deck_corrupt(exc):
+    # The existing deck file could not be read. Refuse the write (rather than
+    # silently overwriting it with a partial list) and tell the client to retry.
+    return jsonify({"error": "deck storage temporarily unavailable, please retry"}), 503
+
+
 @bp.get("/api/deck")
 def api_get_deck():
     return jsonify(_read_deck())
@@ -471,12 +549,12 @@ def api_tasks_due_count():
 
 
 @bp.post("/api/deck")
+@_locked
 def api_create_deck_item():
     data = request.get_json(force=True)
     title = data.get("title", "").strip()
     if not title:
         abort(400)
-    active = _read_deck()
     defer_days = data.get("defer_days")
     if defer_days is not None:
         defer_days = max(0, int(defer_days))
@@ -506,6 +584,7 @@ def api_create_deck_item():
             "type": rec_type,
             "interval": max(1, int(data.get("rec_interval", 1))),
         }
+    active = _read_deck_strict()
     active.append(task)
     _write_deck(active)
     return jsonify(task), 201
@@ -552,10 +631,11 @@ def _apply_task_fields(task: dict, data: dict) -> None:
 
 
 @bp.put("/api/deck/<task_id>")
+@_locked
 def api_update_deck_item(task_id):
     data = request.get_json(force=True)
-    active = _read_deck()
-    completed_list = _read_completed()
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
 
     task = next((t for t in active if t["id"] == task_id), None)
     in_completed = task is None
@@ -614,9 +694,10 @@ def api_update_deck_item(task_id):
 
 
 @bp.delete("/api/deck/<task_id>")
+@_locked
 def api_delete_deck_item(task_id):
-    active = _read_deck()
-    completed_list = _read_completed()
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
     _write_both(
         [t for t in active if t["id"] != task_id],
         [t for t in completed_list if t["id"] != task_id],
@@ -625,14 +706,15 @@ def api_delete_deck_item(task_id):
 
 
 @bp.post("/api/deck/batch-delete")
+@_locked
 def api_batch_delete_deck():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    active = _read_deck()
-    completed_list = _read_completed()
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
     _write_both(
         [t for t in active if t["id"] not in id_set],
         [t for t in completed_list if t["id"] not in id_set],
@@ -641,6 +723,7 @@ def api_batch_delete_deck():
 
 
 @bp.post("/api/deck/batch-complete")
+@_locked
 def api_batch_complete_deck():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
@@ -648,8 +731,8 @@ def api_batch_complete_deck():
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
-    active = _read_deck()
-    completed_list = _read_completed()
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     updated = []
 
@@ -687,12 +770,13 @@ def api_batch_complete_deck():
 
 
 @bp.post("/api/deck/reorder")
+@_locked
 def api_reorder_deck():
     data = request.get_json(force=True)
     order = data.get("order", [])
     if not order:
         abort(400)
-    active = _read_deck()
+    active = _read_deck_strict()
     id_map = {t["id"]: t for t in active}
     for i, task_id in enumerate(order):
         if task_id in id_map:
@@ -702,6 +786,7 @@ def api_reorder_deck():
 
 
 @bp.post("/api/deck/batch-tag")
+@_locked
 def api_batch_tag_deck():
     """Add or remove tags from multiple deck items."""
     data = request.get_json(force=True)
@@ -713,8 +798,8 @@ def api_batch_tag_deck():
     if not add_tags and not remove_tags:
         abort(400)
     id_set = set(ids)
-    active = _read_deck()
-    completed_list = _read_completed()
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
     updated = []
     for task in active + completed_list:
         if task["id"] not in id_set:
