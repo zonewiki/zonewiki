@@ -11,7 +11,7 @@
   --link-missing: #dc2626;
   --btn-bg:       #f3f4f6;
   --btn-fg:       #374151;
-  --btn-primary:  #15803d;
+  --btn-primary:  #3a8f5f;
   --btn-primary-fg: #ffffff;
   --shadow:       0 1px 3px rgba(0,0,0,.08);
   --mono:         "JetBrains Mono", "Fira Code", ui-monospace, monospace;
@@ -29,7 +29,7 @@
     --link-missing: #f85149;
     --btn-bg:       #21262d;
     --btn-fg:       #c9d1d9;
-    --btn-primary:  #238636;
+    --btn-primary:  #347a52;
     --btn-primary-fg: #ffffff;
     --shadow:       0 1px 3px rgba(0,0,0,.3);
   }
@@ -1333,6 +1333,12 @@ body.editor-page main {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right .55rem center;
 }
+/* The open option list is a native menu that ignores the green fill; give the
+   options the theme surface colour so the dropdown matches the rest of the UI
+   instead of the browser's default (near-black in dark mode). */
+.tab-select option, .tasks-toolbar select option {
+  background: var(--nav-bg); color: var(--fg); font-weight: 400;
+}
 .tab-select:hover { opacity: .9; }
 
 /* Filters/sort/New sit inline at the right end of the header band. */
@@ -1351,8 +1357,8 @@ body.editor-page main {
   background-repeat: no-repeat;
   background-position: right .5rem center;
 }
-.tasks-toolbar input { max-width: 130px; }
-.tasks-toolbar #task-filter-search { flex: 1 1 120px; min-width: 90px; max-width: 200px; }
+/* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
+.tasks-toolbar input { flex: 1 1 0; min-width: 80px; }
 
 /* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
    which would otherwise force a 1.5rem left margin and indent the list + its
