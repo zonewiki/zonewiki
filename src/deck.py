@@ -280,7 +280,7 @@ def _parse_tasks_params(raw: str) -> dict:
 _FILTER_ALIASES = {
     "today": "today",
     "backlog": "open", "open": "open",
-    "upcoming": "due", "due": "due",
+    "plan": "due", "upcoming": "due", "due": "due",
     "deferred": "hidden", "hidden": "hidden",
     "completed": "completed", "done": "completed",
 }
@@ -310,7 +310,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
       <option value="open">Backlog</option>
       <option value="today">Today</option>
-      <option value="due">Upcoming</option>
+      <option value="due">Plan</option>
       <option value="hidden">Deferred</option>
       <option value="completed">Completed</option>
     </select>

@@ -108,7 +108,8 @@ class TestTasksLinkRender:
         cases = {
             "today": "today",
             "backlog": "open",
-            "upcoming": "due",
+            "plan": "due",
+            "upcoming": "due",  # legacy alias for the renamed Plan tab
             "deferred": "hidden",
             "completed": "completed",
         }
