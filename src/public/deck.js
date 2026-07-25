@@ -338,12 +338,21 @@
       filtered = filtered.filter(t => !t.completed_at);
     }
 
-    // Tag filter — comma-separated, any specified tag must match (OR)
-    const tagTerms = filterTag.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    if (tagTerms.length) {
-      filtered = filtered.filter(t =>
-        tagTerms.some(term => t.tags && t.tags.some(tg => tg.toLowerCase() === term))
-      );
+    // Tag filter. Comma-separated = AND (all must match) — the narrowing
+    // default; pipe-separated = OR (any match). e.g. "a,b" needs both tags,
+    // "a|b" needs either.
+    const rawTag = filterTag.value.trim().toLowerCase();
+    if (rawTag) {
+      const orMode = rawTag.includes('|');
+      const terms = rawTag.split(orMode ? '|' : ',').map(s => s.trim()).filter(Boolean);
+      if (terms.length) {
+        filtered = filtered.filter(t => {
+          const tags = (t.tags || []).map(tg => tg.toLowerCase());
+          return orMode
+            ? terms.some(term => tags.includes(term))
+            : terms.every(term => tags.includes(term));
+        });
+      }
     }
 
     // Page filter (set via URL param, stored in initPage)

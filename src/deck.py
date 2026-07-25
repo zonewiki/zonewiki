@@ -318,7 +318,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
   </div>
   <div class="tasks-toolbar">
     <input type="text" id="task-filter-search{sfx}" placeholder="Search tasks…" autocomplete="off">
-    <input type="text" id="task-filter-tag{sfx}" placeholder="tag, tag…" autocomplete="off">
+    <input type="text" id="task-filter-tag{sfx}" placeholder="tag, tag…" title="Comma = all tags (AND) · pipe a|b = any tag (OR)" autocomplete="off">
     <select id="task-sort{sfx}">
       <option value="manual">Manual order</option>
       <option value="created_at">Created</option>

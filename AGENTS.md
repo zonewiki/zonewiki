@@ -203,7 +203,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `tag` | comma-separated tags | — | Pre-filters tasks by tag |
+| `tag` | comma-separated tags | — | Pre-filters tasks by tag. Comma = AND (all tags must match, the narrowing default); pipe `a\|b` = OR (any tag matches). |
 | `filter` | tab name: `today`, `backlog`, `upcoming`, `deferred`, `completed` (internal aliases `open`/`due`/`hidden`/`done` also accepted) | `today` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 
@@ -403,7 +403,7 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 - **Today tab**: shows tasks flagged for today (`today_date == today`) plus overdue/due-today tasks. Sorted: overdue first, due today, then today-marked without due date.
 - **Today flag**: each task card has a ☀ button (hover-only when not set, amber when set). Clicking opens a small popover: `Today · Tomorrow · Clear`. Clicking an already-selected option clears it. Keyboard shortcut: **f** on a selected task.
 - **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
-- **Filters**: Tag text filter
+- **Filters**: Tag text filter — comma-separated tags require all (AND); pipe-separated (`a|b`) match any (OR)
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
 - **Inline completion**: Checkbox toggles mark task complete instantly
 - **Won't do**: each active task card has a ✗ button (hover-reveal) that archives the task as abandoned. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
