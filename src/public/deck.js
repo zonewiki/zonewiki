@@ -1160,12 +1160,8 @@
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
-  tabsEl.addEventListener('click', e => {
-    const btn = e.target.closest('.tab');
-    if (!btn) return;
-    tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    activeFilter = btn.dataset.filter;
+  tabsEl.addEventListener('change', () => {
+    activeFilter = tabsEl.value;
     saveActiveTab(activeFilter);
     if (activeFilter === 'completed') fetchCompleted();
     render();
@@ -1864,15 +1860,15 @@
       return;
     }
 
-    // Tab/Shift+Tab cycles filter tabs
+    // Tab/Shift+Tab cycles the view selector
     if (e.key === 'Tab') {
       e.preventDefault();
-      const tabs = Array.from(tabsEl.querySelectorAll('.tab'));
-      const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
-      const next = e.shiftKey
-        ? (activeIdx > 0 ? activeIdx - 1 : tabs.length - 1)
-        : (activeIdx < tabs.length - 1 ? activeIdx + 1 : 0);
-      tabs[next].click();
+      const count = tabsEl.options.length;
+      const activeIdx = tabsEl.selectedIndex;
+      tabsEl.selectedIndex = e.shiftKey
+        ? (activeIdx > 0 ? activeIdx - 1 : count - 1)
+        : (activeIdx < count - 1 ? activeIdx + 1 : 0);
+      tabsEl.dispatchEvent(new Event('change'));
       return;
     }
 
@@ -1989,11 +1985,10 @@
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
   const restoreFilter = urlFilter || embedFilter || loadActiveTab() || '';
-  if (restoreFilter) {
-    const tab = tabsEl?.querySelector(`[data-filter="${restoreFilter}"]`);
-    if (tab) {
-      tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
+  if (restoreFilter && tabsEl) {
+    const hasOption = Array.from(tabsEl.options).some(o => o.value === restoreFilter);
+    if (hasOption) {
+      tabsEl.value = restoreFilter;
       activeFilter = restoreFilter;
     }
   }

@@ -307,22 +307,22 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
 
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
-    <div class="tasks-tabs" id="tasks-tabs{sfx}">
-      <button class="tab active" data-filter="open">Backlog</button>
-      <button class="tab" data-filter="today">Today</button>
-      <button class="tab" data-filter="due">Upcoming</button>
-      <button class="tab" data-filter="hidden">Deferred</button>
-      <button class="tab" data-filter="completed">Completed</button>
-    </div>
-    <button class="btn btn-primary" id="task-add-btn{sfx}">+ New Item</button>
-  </div>
-  <div class="tasks-toolbar">
-    <input type="text" id="task-filter-search{sfx}" placeholder="Search tasks…" autocomplete="off">
-    <input type="text" id="task-filter-tag{sfx}" placeholder="tag, tag…" title="Comma = all tags (AND) · pipe a|b = any tag (OR)" autocomplete="off">
-    <select id="task-sort{sfx}">
-      <option value="manual">Manual order</option>
-      <option value="created_at">Created</option>
+    <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
+      <option value="open">Backlog</option>
+      <option value="today">Today</option>
+      <option value="due">Upcoming</option>
+      <option value="hidden">Deferred</option>
+      <option value="completed">Completed</option>
     </select>
+    <div class="tasks-toolbar">
+      <input type="text" id="task-filter-search{sfx}" placeholder="Search…" autocomplete="off">
+      <input type="text" id="task-filter-tag{sfx}" placeholder="tag…" title="Comma = all tags (AND) · pipe a|b = any tag (OR)" autocomplete="off">
+      <select id="task-sort{sfx}">
+        <option value="manual">Manual order</option>
+        <option value="created_at">Created</option>
+      </select>
+      <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>
+    </div>
   </div>
   <ul class="tasks-list" id="tasks-list{sfx}"></ul>
 </div>

@@ -1311,33 +1311,37 @@ body.editor-page main {
 
 /* ── Task App ────────────────────────────────────────────────────────────── */
 
-.tasks-app { margin: 0 auto; }
+.tasks-app { margin: 1.25rem auto; }
 
+/* Single compact header band: tabs on the left, filters + sort + New on the
+   right. Wraps to a second line only when the viewport can't fit both. */
 .deck-header {
-  display: flex; align-items: center; gap: 1rem;
-  margin-bottom: 1rem; flex-wrap: wrap;
-  border-bottom: 1px solid var(--border); padding-bottom: .5rem;
+  display: flex; align-items: center; gap: .4rem .6rem;
+  margin-bottom: .6rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); padding-bottom: .35rem;
 }
-.deck-header .tasks-tabs { margin-bottom: 0; flex: 1; border-bottom: none; padding-bottom: 0; }
+.deck-header .btn { padding: .25rem .7rem; }
 
-.tasks-tabs {
-  display: flex; gap: .25rem; margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border); padding-bottom: .5rem;
-  flex-wrap: wrap;
+/* View selector — a compact dropdown replacing the row of tab buttons.
+   Filled with the primary colour so the current view reads as active. */
+.tab-select {
+  appearance: none; -webkit-appearance: none;
+  padding: .3rem 1.7rem .3rem .7rem;
+  border: 1px solid var(--btn-primary); border-radius: 4px;
+  background-color: var(--btn-primary); color: var(--btn-primary-fg);
+  font-size: .85rem; font-weight: 600; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .55rem center;
 }
-.tasks-tabs .tab {
-  background: none; border: none; padding: .4rem .75rem;
-  border-radius: 4px; cursor: pointer; font-size: .85rem;
-  color: var(--muted); font-weight: 500;
-}
-.tasks-tabs .tab:hover { background: var(--btn-bg); color: var(--fg); }
-.tasks-tabs .tab.active { background: var(--btn-primary); color: var(--btn-primary-fg); }
+.tab-select:hover { opacity: .9; }
 
+/* Filters/sort/New sit inline at the right end of the header band. */
 .tasks-toolbar {
-  display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center;
+  display: flex; gap: .4rem; flex: 1 1 auto; flex-wrap: wrap;
+  align-items: center; justify-content: flex-end;
 }
 .tasks-toolbar select, .tasks-toolbar input {
-  padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 4px;
+  padding: .25rem .5rem; border: 1px solid var(--border); border-radius: 4px;
   background: var(--bg); color: var(--fg); font-size: .8rem;
 }
 .tasks-toolbar select {
@@ -1346,13 +1350,16 @@ body.editor-page main {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right .5rem center;
-  margin-left: auto;
 }
-.tasks-toolbar input { max-width: 150px; }
-.tasks-toolbar #task-filter-search { max-width: 220px; }
+.tasks-toolbar input { max-width: 130px; }
+.tasks-toolbar #task-filter-search { flex: 1 1 120px; min-width: 90px; max-width: 200px; }
 
-.tasks-list {
-  list-style: none; margin: 0; padding: 0;
+/* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
+   which would otherwise force a 1.5rem left margin and indent the list + its
+   bottom border. */
+.tasks-app .tasks-list {
+  list-style: none; margin: 0; padding: 0 0 .35rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .task-item {
@@ -1506,7 +1513,7 @@ body.editor-page main {
   border-style: dashed;
 }
 
-.tasks-empty { text-align: center; color: var(--muted); padding: 2rem; font-style: italic; }
+.tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
 
 .tasks-show-more { text-align: center; padding: 1rem; }
 .tasks-show-more .btn { font-size: .8rem; }
@@ -1591,8 +1598,8 @@ body.editor-page main {
 }
 
 @media (max-width: 640px) {
-  .tasks-toolbar { flex-direction: column; align-items: stretch; }
-  .tasks-toolbar input { max-width: none; }
+  .tasks-toolbar { flex-direction: column; align-items: stretch; justify-content: stretch; }
+  .tasks-toolbar input, .tasks-toolbar #task-filter-search { max-width: none; flex: none; }
   .task-field-row { flex-direction: column; gap: .5rem; }
 }
 
