@@ -338,11 +338,11 @@
       filtered = filtered.filter(t => !t.completed_at);
     }
 
-    // Tag filter — comma-separated, all specified tags must match (AND)
+    // Tag filter — comma-separated, any specified tag must match (OR)
     const tagTerms = filterTag.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     if (tagTerms.length) {
       filtered = filtered.filter(t =>
-        tagTerms.every(term => t.tags && t.tags.some(tg => tg.toLowerCase() === term))
+        tagTerms.some(term => t.tags && t.tags.some(tg => tg.toLowerCase() === term))
       );
     }
 

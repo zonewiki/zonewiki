@@ -88,6 +88,11 @@ class TestTasksLinkRender:
         assert 'data-init-tag="work"' in html
         assert "tasks-app" in html
 
+    def test_embed_with_multi_tag_filter(self, client, wiki_dir):
+        """[[deck tag=a,b]] passes comma-separated tags as data attribute."""
+        html = server.render_md("[[deck tag=q3-launch,BUG-10002]]\n")
+        assert 'data-init-tag="q3-launch,BUG-10002"' in html
+
     def test_embed_filter_param(self, client, wiki_dir):
         """[[deck filter=due]] passes filter as data attribute."""
         html = server.render_md("[[deck filter=due]]\n")
