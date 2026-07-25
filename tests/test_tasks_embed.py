@@ -138,6 +138,21 @@ class TestTasksLinkRender:
         assert 'data-init-tag="alpha"' in html
         assert 'data-init-tag="beta"' in html
 
+    def test_multiple_embeds_have_independent_element_ids(self, client, wiki_dir):
+        """Each embed must expose its own suffixed list/tabs/modal IDs so the
+        deck.js instance registry can address and refresh each independently
+        (cross-instance refresh relies on this)."""
+        create_task(client, title="A", tags=["alpha"])
+        md = "[[deck tag=alpha]]\n\n[[deck tag=beta]]\n"
+        html = server.render_md(md)
+        # Instance 0 uses no suffix; instance 1 uses "-1".
+        for base in ("tasks-list", "tasks-tabs", "task-edit-modal"):
+            assert f'id="{base}"' in html, f"missing {base} for instance 0"
+            assert f'id="{base}-1"' in html, f"missing {base}-1 for instance 1"
+        # Distinct instance markers the registry keys on.
+        assert 'data-instance="0"' in html
+        assert 'data-instance="1"' in html
+
     def test_embed_not_inside_paragraph(self, client, wiki_dir):
         """[[deck]] on its own line should NOT be wrapped in <p>."""
         create_task(client, title="T1")

@@ -10,6 +10,18 @@
   // Track which instance owns keyboard focus (only one at a time)
   let activeDeckInstance = null;
 
+  // Registry of initialized instances. Each embed on the page holds its own
+  // task array, so after a write in one embed the others would show stale data
+  // until reload. Every instance registers a `refresh` callback here; a write
+  // in one instance refreshes the rest.
+  const deckInstances = [];
+  function refreshOtherInstances(exceptId) {
+    deckInstances.forEach(inst => { if (inst.id !== exceptId) inst.refresh(); });
+  }
+  function refreshAllInstances() {
+    deckInstances.forEach(inst => inst.refresh());
+  }
+
   allApps.forEach(function(appEl) {
     initDeckInstance(appEl);
   });
@@ -113,6 +125,14 @@
     render();
   }
 
+  // Reload this instance from the server, honoring its current tab. Used to
+  // pull in changes made by another embed on the same page.
+  async function refresh() {
+    completedLoaded = false;
+    await fetchDeck();
+    if (activeFilter === 'completed') await fetchCompleted();
+  }
+
   async function fetchCompleted() {
     if (completedLoaded) return;
     const res = await fetch('/api/deck/completed');
@@ -136,6 +156,7 @@
       tasks.push(task);
       render();
       window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
       return task;
     }
     return null;
@@ -158,6 +179,7 @@
         render();
       }
       window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
       return updated;
     }
     return null;
@@ -169,6 +191,7 @@
       tasks = tasks.filter(t => t.id !== id);
       render();
       window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
     }
   }
 
@@ -183,6 +206,7 @@
       tasks = tasks.filter(t => !idSet.has(t.id));
       render();
       window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
     }
   }
 
@@ -196,6 +220,7 @@
       // Re-fetch to capture any spawned recurring tasks
       await fetchDeck();
       window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
     }
   }
 
@@ -205,6 +230,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order }),
     });
+    refreshOtherInstances(instanceId);
   }
 
   // ── Delete confirmation dialog ─────────────────────────────────────────────
@@ -484,6 +510,7 @@
             if (idx !== -1) tasks[idx] = u;
           }
           render();
+          refreshOtherInstances(instanceId);
         }
       } catch (_) {}
     }
@@ -1933,7 +1960,13 @@
 
   // ── Expose refresh and modal for quick-add ────────────────────────────────
 
-  window.refreshDeck = fetchDeck;
+  // Register this instance so writes in sibling embeds can refresh it.
+  deckInstances.push({ id: instanceId, refresh, openEdit: openEditModal });
+
+  // Quick-add (from any page) refreshes every embed on this page, not just the
+  // last-initialized one. Both hooks reference the shared registry, so the fact
+  // that each instance reassigns them is harmless.
+  window.refreshDeck = refreshAllInstances;
   window.openDeckEdit = openEditModal;
 
   // ── Init ───────────────────────────────────────────────────────────────────

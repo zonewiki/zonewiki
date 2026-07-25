@@ -363,7 +363,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 
 A task management app embedded into wiki pages via the `[[deck]]` directive. There is no standalone route — the deck app lives inside any wiki page that contains `[[deck]]`. The typical setup is a `deck.md` page with `[[deck]]` as its content, accessible at `/page/deck`.
 
-Multiple `[[deck]]` embeds per page are supported (each with different filter params). They receive unique instance IDs to avoid DOM conflicts.
+Multiple `[[deck]]` embeds per page are supported (each with different filter params). They receive unique instance IDs to avoid DOM conflicts. `deck.js` keeps a registry of every instance on the page; each holds its own task array, and after a successful write in one embed the others are refreshed (`refreshOtherInstances`) so all panes stay in sync without a reload. `window.refreshDeck` refreshes every instance, not just the last-initialized one.
 
 ### Architecture
 
