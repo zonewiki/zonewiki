@@ -65,6 +65,22 @@
   let undoTimer  = null;
   let undoToastEl = null;
   let pendingUndoFn = null;
+  let dueDayFilter = null;  // Upcoming week-strip: selected day bucket, or null
+
+  // Week strip (Upcoming view): a per-day count bar for planning at a glance.
+  // Inserted between the header and the list; populated by render().
+  const CAPACITY = 5;  // days with >= this many planned tasks are flagged
+  const weekStripEl = document.createElement('div');
+  weekStripEl.className = 'deck-week-strip';
+  weekStripEl.style.display = 'none';
+  listEl.parentNode.insertBefore(weekStripEl, listEl);
+  weekStripEl.addEventListener('click', e => {
+    const chip = e.target.closest('.week-chip');
+    if (!chip) return;
+    const key = chip.dataset.day;
+    dueDayFilter = dueDayFilter === key ? null : key;
+    render();
+  });
 
   // Claim keyboard focus when user interacts with this instance
   appEl.addEventListener('pointerdown', () => { activeDeckInstance = instanceId; });
@@ -643,6 +659,61 @@
     return '';
   }
 
+  // Effective planning date of a task: its deadline, else its planned date.
+  function effDate(t) { return t.due_date || t.focus_date || ''; }
+
+  // Which week-strip bucket a date falls in: 'overdue', an exact YYYY-MM-DD for
+  // today..+6, or 'later'.
+  function dayBucketKey(d) {
+    if (!d) return 'later';
+    const today = todayStr();
+    if (d < today) return 'overdue';
+    if (d > dateOffset(6)) return 'later';
+    return d;
+  }
+
+  function shortWeekday(d) {
+    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' });
+  }
+
+  // Build the Upcoming per-day count bar from the given task list.
+  function renderWeekStrip(list) {
+    const counts = {};
+    list.forEach(t => { const k = dayBucketKey(effDate(t)); counts[k] = (counts[k] || 0) + 1; });
+    const chips = [];
+    if (counts['overdue']) chips.push({ key: 'overdue', label: 'Overdue', count: counts['overdue'] });
+    for (let i = 0; i < 7; i++) {
+      const d = dateOffset(i);
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : shortWeekday(d);
+      chips.push({ key: d, label, count: counts[d] || 0 });
+    }
+    if (counts['later']) chips.push({ key: 'later', label: 'Later', count: counts['later'] });
+    weekStripEl.innerHTML = chips.map(c => {
+      const active = dueDayFilter === c.key;
+      const over = c.count >= CAPACITY && c.key !== 'overdue';
+      const cls = ['week-chip', active && 'active', over && 'over', c.count === 0 && 'empty']
+        .filter(Boolean).join(' ');
+      return `<button class="${cls}" data-day="${c.key}">${c.label}<span class="wc-count">${c.count}</span></button>`;
+    }).join('');
+    weekStripEl.style.display = '';
+  }
+
+  // Open a native date picker (anchored at `anchor` so showPicker is reliable)
+  // and call cb with the chosen YYYY-MM-DD (or null).
+  function openDatePicker(current, cb, anchor) {
+    const inp = document.createElement('input');
+    inp.type = 'date';
+    if (current) inp.value = current;
+    const r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20 };
+    inp.style.cssText = `position:fixed;left:${r.left}px;top:${r.bottom}px;width:1px;height:1px;opacity:0;border:none;padding:0;`;
+    document.body.appendChild(inp);
+    const cleanup = () => inp.remove();
+    inp.addEventListener('change', () => { cb(inp.value || null); cleanup(); });
+    inp.addEventListener('blur', () => setTimeout(cleanup, 200));
+    if (inp.showPicker) { try { inp.showPicker(); } catch (_) { inp.focus(); } }
+    else inp.focus();
+  }
+
   function render() {
     sortSelect.style.display = TAB_SORT[activeFilter] ? 'none' : '';
 
@@ -673,6 +744,17 @@
       orderedTasks = sortTasks(filtered);
       newTasks     = [];
       missedTasks  = [];
+    }
+
+    // Upcoming: show the week strip (counts from all upcoming tasks) and, when a
+    // day chip is selected, narrow the list to that bucket.
+    if (activeFilter === 'due') {
+      renderWeekStrip(filtered);
+      if (dueDayFilter) {
+        orderedTasks = orderedTasks.filter(t => dayBucketKey(effDate(t)) === dueDayFilter);
+      }
+    } else {
+      weekStripEl.style.display = 'none';
     }
 
     if (dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 && missedTasks.length === 0) {
@@ -743,6 +825,7 @@
           `<button class="task-focus-btn${focusToday ? ' is-focused' : ''}" data-id="${task.id}" data-focus="today" title="${focusToday ? 'Clear today plan' : 'Plan for today'}">☀</button>` +
           `<button class="task-focus-btn${focusTmrw  ? ' is-focused' : ''}" data-id="${task.id}" data-focus="tmrw"  title="${focusTmrw  ? 'Clear tomorrow plan' : 'Plan for tomorrow'}">☾</button>` +
           (showMon ? `<button class="task-focus-btn${focusMon ? ' is-focused' : ''}" data-id="${task.id}" data-focus="mon" title="${focusMon ? 'Clear Monday plan' : 'Plan for Monday'}">Mon</button>` : '') +
+          `<button class="task-focus-btn" data-id="${task.id}" data-focus="pick" title="Plan for a date…">📅</button>` +
           `</span>`
         : '';
       const wontDoBtnHtml = !task.completed_at
@@ -832,6 +915,10 @@
         const id = btn.dataset.id;
         const task = tasks.find(t => t.id === id);
         if (!task) return;
+        if (btn.dataset.focus === 'pick') {
+          openDatePicker(task.focus_date || '', d => updateTask(id, { focus_date: d }), btn);
+          return;
+        }
         const target = btn.dataset.focus === 'today' ? dateOffset(0)
                      : btn.dataset.focus === 'tmrw'  ? dateOffset(1)
                      : nextMonday();
@@ -1164,6 +1251,7 @@
 
   tabsEl.addEventListener('change', () => {
     activeFilter = tabsEl.value;
+    dueDayFilter = null;  // drop any week-strip day selection when changing views
     saveActiveTab(activeFilter);
     if (activeFilter === 'completed') fetchCompleted();
     render();
