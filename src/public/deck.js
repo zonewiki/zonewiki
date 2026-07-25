@@ -869,7 +869,12 @@
         const header = `<li class="board-day-divider${overCls}"${dropAttr}>` +
           `<span class="board-day-label">${esc(s.label)}</span>` +
           `<span class="board-day-count">${s.tasks.length}</span></li>`;
-        return header + s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
+        // Empty droppable days need a real drop area — a bare divider is too
+        // thin to hit. Give them a placeholder that acts as the drop target.
+        const body = s.tasks.length
+          ? s.tasks.map(t => taskHTML(t, true, 'board-item')).join('')
+          : (s.droppable ? `<li class="board-day-empty"${dropAttr}></li>` : '');
+        return header + body;
       }).join('');
       listEl.innerHTML = html;
       wireListHandlers();

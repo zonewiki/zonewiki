@@ -1386,6 +1386,15 @@ body.editor-page main {
   color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
 }
 .board-item[draggable] { cursor: grab; }
+/* Empty droppable day: a real drop target (a bare divider is too thin to hit). */
+.board-day-empty {
+  list-style: none; margin: 0 0 .3rem; min-height: 1.4rem;
+  border: 1px dashed var(--border); border-radius: 6px; opacity: .45;
+}
+.board-day-divider.board-drop-over + .board-day-empty {
+  opacity: 1; border-color: var(--btn-primary);
+  background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
+}
 
 .task-item {
   display: flex; align-items: flex-start; gap: .5rem;
