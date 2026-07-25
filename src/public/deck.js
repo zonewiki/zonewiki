@@ -319,7 +319,9 @@
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
       ));
     } else if (activeFilter === 'due') {
-      filtered = filtered.filter(t => !t.completed_at && t.due_date);
+      // Upcoming = anything scheduled: has a due date OR is planned (focus_date).
+      // Future-planned tasks with no due date would otherwise only live in Backlog.
+      filtered = filtered.filter(t => !t.completed_at && (t.due_date || t.focus_date));
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else if (activeFilter === 'hidden') {
@@ -382,7 +384,7 @@
       if (a.focus_date && b.focus_date) return a.focus_date.localeCompare(b.focus_date);
       return (a.sort_order ?? 999) - (b.sort_order ?? 999);
     },
-    due:       (a, b) => (a.due_date || '').localeCompare(b.due_date || ''),
+    due:       (a, b) => (a.due_date || a.focus_date || '').localeCompare(b.due_date || b.focus_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
     hidden: (a, b) => (a.start_date || '').localeCompare(b.start_date || ''),
   };
