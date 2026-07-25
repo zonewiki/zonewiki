@@ -1368,25 +1368,24 @@ body.editor-page main {
   border-bottom: 1px solid var(--border);
 }
 
-/* Upcoming week strip — per-day planning counts. */
-.deck-week-strip {
-  display: flex; gap: .3rem; flex-wrap: wrap; align-items: stretch;
-  margin: 0 0 .6rem;
+/* Upcoming day board — one section per day; dividers are drag-to-plan targets. */
+.board-day-divider {
+  display: flex; align-items: center; gap: .5rem;
+  list-style: none; margin: .7rem 0 .35rem; padding: 0 .1rem .2rem;
+  border-bottom: 1px solid var(--border);
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em; color: var(--muted);
 }
-.week-chip {
-  display: flex; flex-direction: column; align-items: center; gap: .05rem;
-  min-width: 3.1rem; padding: .22rem .4rem;
-  border: 1px solid var(--border); border-radius: 5px;
-  background: var(--btn-bg); color: var(--fg);
-  font-size: .7rem; font-weight: 600; line-height: 1.15; cursor: pointer;
+.board-day-divider:first-child { margin-top: 0; }
+.board-day-label { flex: 1; }
+.board-day-count { font-weight: 700; color: var(--muted); }
+.board-day--over .board-day-count { color: #d97706; }  /* over capacity */
+/* Highlight the whole section while dragging a card over it. */
+.board-day-divider.board-drop-over {
+  border-bottom-color: var(--btn-primary);
+  color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
 }
-.week-chip .wc-count { font-size: .78rem; font-weight: 700; color: var(--muted); }
-.week-chip:hover { border-color: var(--btn-primary); }
-.week-chip.active { background: var(--btn-primary); color: var(--btn-primary-fg); border-color: var(--btn-primary); }
-.week-chip.active .wc-count { color: var(--btn-primary-fg); }
-.week-chip.empty { opacity: .5; }
-.week-chip.over .wc-count { color: #d97706; }
-.week-chip.over.active .wc-count { color: #fde68a; }
+.board-item[draggable] { cursor: grab; }
 
 .task-item {
   display: flex; align-items: flex-start; gap: .5rem;

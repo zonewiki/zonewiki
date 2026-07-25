@@ -65,21 +65,36 @@
   let undoTimer  = null;
   let undoToastEl = null;
   let pendingUndoFn = null;
-  let dueDayFilter = null;  // Upcoming week-strip: selected day bucket, or null
+  const CAPACITY = 5;  // day sections with >= this many tasks are flagged
 
-  // Week strip (Upcoming view): a per-day count bar for planning at a glance.
-  // Inserted between the header and the list; populated by render().
-  const CAPACITY = 5;  // days with >= this many planned tasks are flagged
-  const weekStripEl = document.createElement('div');
-  weekStripEl.className = 'deck-week-strip';
-  weekStripEl.style.display = 'none';
-  listEl.parentNode.insertBefore(weekStripEl, listEl);
-  weekStripEl.addEventListener('click', e => {
-    const chip = e.target.closest('.week-chip');
-    if (!chip) return;
-    const key = chip.dataset.day;
-    dueDayFilter = dueDayFilter === key ? null : key;
-    render();
+  // Upcoming day board: dragging a task onto a day section re-plans it (sets
+  // focus_date); dropping on "Someday" clears the plan. These list-level
+  // listeners are attached once and no-op outside the board view. Per-item
+  // dragstart is (re)wired each render by setupBoardDragAndDrop().
+  function boardDivider(el) {
+    let li = el.closest && el.closest('li');
+    while (li && !li.classList.contains('board-day-divider')) li = li.previousElementSibling;
+    return li;
+  }
+  function clearBoardDropOver() {
+    listEl.querySelectorAll('.board-drop-over').forEach(el => el.classList.remove('board-drop-over'));
+  }
+  listEl.addEventListener('dragover', e => {
+    if (activeFilter !== 'due' || !draggedId) return;
+    const div = boardDivider(e.target);
+    if (!div || !div.dataset.dropBucket) return;  // non-droppable section
+    e.preventDefault();
+    if (!div.classList.contains('board-drop-over')) { clearBoardDropOver(); div.classList.add('board-drop-over'); }
+  });
+  listEl.addEventListener('drop', e => {
+    if (activeFilter !== 'due' || !draggedId) return;
+    const div = boardDivider(e.target);
+    if (!div || !div.dataset.dropBucket) return;
+    e.preventDefault();
+    const id = draggedId;
+    clearBoardDropOver();
+    if (div.dataset.dropBucket === 'someday') updateTask(id, { focus_date: null });
+    else if (div.dataset.dropDay) updateTask(id, { focus_date: div.dataset.dropDay });
   });
 
   // Claim keyboard focus when user interacts with this instance
@@ -335,9 +350,10 @@
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
       ));
     } else if (activeFilter === 'due') {
-      // Upcoming = anything scheduled: has a due date OR is planned (focus_date).
-      // Future-planned tasks with no due date would otherwise only live in Backlog.
-      filtered = filtered.filter(t => !t.completed_at && (t.due_date || t.focus_date));
+      // Upcoming is a day board: show all open tasks grouped by day. Scheduled
+      // tasks (due_date/focus_date) land on their day; unplanned ones go to the
+      // Someday section so they can be dragged into the week.
+      filtered = filtered.filter(t => !t.completed_at);
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else if (activeFilter === 'hidden') {
@@ -659,11 +675,8 @@
     return '';
   }
 
-  // Effective planning date of a task: its deadline, else its planned date.
-  function effDate(t) { return t.due_date || t.focus_date || ''; }
-
-  // Which week-strip bucket a date falls in: 'overdue', an exact YYYY-MM-DD for
-  // today..+6, or 'later'.
+  // Which bucket a date falls in: 'overdue', an exact YYYY-MM-DD for today..+6,
+  // or 'later'.
   function dayBucketKey(d) {
     if (!d) return 'later';
     const today = todayStr();
@@ -672,30 +685,36 @@
     return d;
   }
 
-  function shortWeekday(d) {
-    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' });
+  function fullDayLabel(d) {
+    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
   }
 
-  // Build the Upcoming per-day count bar from the given task list.
-  function renderWeekStrip(list) {
-    const counts = {};
-    list.forEach(t => { const k = dayBucketKey(effDate(t)); counts[k] = (counts[k] || 0) + 1; });
-    const chips = [];
-    if (counts['overdue']) chips.push({ key: 'overdue', label: 'Overdue', count: counts['overdue'] });
+  // Board grouping is plan-first: a task's planned date (focus_date) wins over
+  // its deadline, so dragging a due-dated task to another day visibly moves it.
+  function planDate(t) { return t.focus_date || t.due_date || ''; }
+
+  // Group Upcoming tasks into ordered day sections for the board. Date sections
+  // (today..+6) and Someday are droppable (re-plan targets); Overdue and Later
+  // are display-only.
+  function boardBuckets(list) {
+    const groups = {};
+    list.forEach(t => {
+      const key = (!t.due_date && !t.focus_date) ? 'someday' : dayBucketKey(planDate(t));
+      (groups[key] = groups[key] || []).push(t);
+    });
+    // Within a day, deadlines first (soonest due), then undated, then by title.
+    const byDate = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.title || '').localeCompare(b.title || '');
+    const byNewest = (a, b) => (b.created_at || '').localeCompare(a.created_at || '');
+    const sections = [];
+    if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
     for (let i = 0; i < 7; i++) {
       const d = dateOffset(i);
-      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : shortWeekday(d);
-      chips.push({ key: d, label, count: counts[d] || 0 });
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
+      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byDate) });
     }
-    if (counts['later']) chips.push({ key: 'later', label: 'Later', count: counts['later'] });
-    weekStripEl.innerHTML = chips.map(c => {
-      const active = dueDayFilter === c.key;
-      const over = c.count >= CAPACITY && c.key !== 'overdue';
-      const cls = ['week-chip', active && 'active', over && 'over', c.count === 0 && 'empty']
-        .filter(Boolean).join(' ');
-      return `<button class="${cls}" data-day="${c.key}">${c.label}<span class="wc-count">${c.count}</span></button>`;
-    }).join('');
-    weekStripEl.style.display = '';
+    if (groups['later']) sections.push({ key: 'later', label: 'Later', date: null, droppable: false, tasks: groups['later'].sort(byDate) });
+    if (groups['someday']) sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: groups['someday'].sort(byNewest) });
+    return sections;
   }
 
   // Open a native date picker (anchored at `anchor` so showPicker is reliable)
@@ -746,18 +765,8 @@
       missedTasks  = [];
     }
 
-    // Upcoming: show the week strip (counts from all upcoming tasks) and, when a
-    // day chip is selected, narrow the list to that bucket.
-    if (activeFilter === 'due') {
-      renderWeekStrip(filtered);
-      if (dueDayFilter) {
-        orderedTasks = orderedTasks.filter(t => dayBucketKey(effDate(t)) === dueDayFilter);
-      }
-    } else {
-      weekStripEl.style.display = 'none';
-    }
-
-    if (dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 && missedTasks.length === 0) {
+    if (activeFilter !== 'due' &&
+        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 && missedTasks.length === 0) {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
       return;
     }
@@ -851,6 +860,22 @@
 
     let html = '';
     let truncated = false;
+
+    // Upcoming day board: one section per day, dividers double as drop targets.
+    if (activeFilter === 'due') {
+      html = boardBuckets(filtered).map(s => {
+        const overCls = (s.date && s.tasks.length >= CAPACITY) ? ' board-day--over' : '';
+        const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
+        const header = `<li class="board-day-divider${overCls}"${dropAttr}>` +
+          `<span class="board-day-label">${esc(s.label)}</span>` +
+          `<span class="board-day-count">${s.tasks.length}</span></li>`;
+        return header + s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
+      }).join('');
+      listEl.innerHTML = html;
+      wireListHandlers();
+      return;
+    }
+
     // Due now section (overdue + due today) pinned at top of Open tab
     if (dueTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
@@ -879,7 +904,9 @@
       html += missedTasks.map(t => taskHTML(t, false, 'task-missed', true)).join('');
     }
     listEl.innerHTML = html;
+    wireListHandlers();
 
+    function wireListHandlers() {
     // "Show more" button
     const showMoreBtn = listEl.querySelector('#tasks-show-more-btn');
     if (showMoreBtn) {
@@ -980,7 +1007,9 @@
     });
 
     // Drag and drop
-    if (sortSelect.value === 'manual') {
+    if (activeFilter === 'due') {
+      setupBoardDragAndDrop();
+    } else if (sortSelect.value === 'manual') {
       setupDragAndDrop();
     }
 
@@ -1003,6 +1032,7 @@
         if (!e.target.closest('input, button, a')) setSelected(el.dataset.id);
       });
     });
+    }  // end wireListHandlers
   }
 
   function esc(str) {
@@ -1251,7 +1281,6 @@
 
   tabsEl.addEventListener('change', () => {
     activeFilter = tabsEl.value;
-    dueDayFilter = null;  // drop any week-strip day selection when changing views
     saveActiveTab(activeFilter);
     if (activeFilter === 'completed') fetchCompleted();
     render();
@@ -1762,6 +1791,23 @@
   });
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
+
+  // Upcoming board: make cards draggable; the list-level dragover/drop handlers
+  // (attached once at init) re-plan the task to the day section it's dropped on.
+  function setupBoardDragAndDrop() {
+    listEl.querySelectorAll('.task-item[draggable]').forEach(item => {
+      item.addEventListener('dragstart', e => {
+        draggedId = item.dataset.id;
+        item.classList.add('task-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('task-dragging');
+        draggedId = null;
+        clearBoardDropOver();
+      });
+    });
+  }
 
   function setupDragAndDrop() {
     function executeDrop(targetId) {
