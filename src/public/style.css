@@ -11,7 +11,7 @@
   --link-missing: #dc2626;
   --btn-bg:       #f3f4f6;
   --btn-fg:       #374151;
-  --btn-primary:  #2563eb;
+  --btn-primary:  #15803d;
   --btn-primary-fg: #ffffff;
   --shadow:       0 1px 3px rgba(0,0,0,.08);
   --mono:         "JetBrains Mono", "Fira Code", ui-monospace, monospace;
@@ -29,7 +29,7 @@
     --link-missing: #f85149;
     --btn-bg:       #21262d;
     --btn-fg:       #c9d1d9;
-    --btn-primary:  #1f6feb;
+    --btn-primary:  #238636;
     --btn-primary-fg: #ffffff;
     --shadow:       0 1px 3px rgba(0,0,0,.3);
   }
