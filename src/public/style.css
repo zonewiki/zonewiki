@@ -1325,7 +1325,10 @@ body.editor-page main {
 .task-meta {
   grid-area: meta;
   display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .2rem; align-items: center;
-  padding-top: .2rem; border-top: 1px solid var(--border); opacity: .85;
+  padding-top: .2rem; opacity: .85;
+  /* Slightly stronger than --border: these lines divide areas inside a card,
+     not cards from each other, so they need to hold up against the card fill. */
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, var(--border));
 }
 .task-meta--hover-only {
   overflow: hidden; max-height: 0; margin-top: 0; padding-top: 0;
@@ -1334,12 +1337,14 @@ body.editor-page main {
 }
 .task-item:hover .task-meta--hover-only {
   max-height: 2rem; margin-top: .2rem; padding-top: .2rem;
-  border-top-color: var(--border); opacity: .85; pointer-events: auto;
+  border-top-color: color-mix(in srgb, var(--fg) 10%, var(--border));
+  opacity: .85; pointer-events: auto;
 }
 .task-desc {
   grid-area: desc;
   margin: .25rem 0 0; font-size: .85rem; color: var(--fg);
-  white-space: pre-line; padding-top: .2rem; border-top: 1px dashed var(--border);
+  white-space: pre-line; padding-top: .2rem;
+  border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
 
 .task-due { font-size: .75rem; color: var(--muted); }
