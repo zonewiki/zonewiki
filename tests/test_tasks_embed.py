@@ -51,22 +51,22 @@ def create_task(client, **kwargs):
 
 class TestParseParams:
     def test_empty(self):
-        assert server._parse_tasks_params("") == {}
+        assert deck_module._parse_tasks_params("") == {}
 
     def test_single(self):
-        result = server._parse_tasks_params("tag=work")
+        result = deck_module._parse_tasks_params("tag=work")
         assert result == {"tag": "work"}
 
     def test_multiple(self):
-        result = server._parse_tasks_params("tag=work filter=due limit=5 sort=due_date")
+        result = deck_module._parse_tasks_params("tag=work filter=due limit=5 sort=due_date")
         assert result == {"tag": "work", "filter": "due", "limit": "5", "sort": "due_date"}
 
     def test_page_self(self):
-        result = server._parse_tasks_params("page=self")
+        result = deck_module._parse_tasks_params("page=self")
         assert result == {"page": "self"}
 
     def test_case_insensitive_keys(self):
-        result = server._parse_tasks_params("Tag=work FILTER=due")
+        result = deck_module._parse_tasks_params("Tag=work FILTER=due")
         assert result == {"tag": "work", "filter": "due"}
 
 

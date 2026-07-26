@@ -56,7 +56,7 @@
 
   let tasks = [];
   let completedLoaded = false;
-  let activeFilter = 'backlog';
+  let activeFilter = 'open';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -320,21 +320,24 @@
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
-  function todayStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
   function dateToStr(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
-  function isMarkedToday(task) {
-    return !!task.today_date && task.today_date === todayStr();
+  function todayStr() {
+    return dateToStr(new Date());
   }
-  function hasFocusDate(task) {
-    return !!task.focus_date;
-  }
-  function isFocusedToday(task) {
-    return !!task.focus_date && task.focus_date <= todayStr();
+
+  // A task is deferred (hidden from Backlog/Focus/Plan) until its start_date,
+  // or until defer_days before its due_date — the most restrictive wins.
+  function isDeferred(t, today) {
+    if (t.completed_at) return false;
+    if (t.start_date && t.start_date > today) return true;
+    if (t.defer_days != null && t.due_date) {
+      const due = new Date(t.due_date + 'T00:00:00');
+      const showFrom = dateToStr(new Date(due - t.defer_days * 86400000));
+      if (showFrom > today) return true;
+    }
+    return false;
   }
 
   function filterTasks() {
@@ -351,21 +354,8 @@
     }
 
     // Hide tasks that are deferred (absolute start_date or relative defer_days)
-    // Task is visible when: today >= start_date AND today >= due_date - defer_days
-    // Both conditions must pass (latest/most-restrictive wins)
     if (activeFilter !== 'completed' && activeFilter !== 'hidden') {
-      filtered = filtered.filter(t => {
-        if (t.completed_at) return true;
-        let visible = true;
-        if (t.start_date && t.start_date > today) visible = false;
-        if (t.defer_days != null && t.due_date) {
-          const due = new Date(t.due_date + 'T00:00:00');
-          const showFrom = new Date(due - t.defer_days * 86400000);
-          const showStr = dateToStr(showFrom);
-          if (showStr > today) visible = false;
-        }
-        return visible;
-      });
+      filtered = filtered.filter(t => !isDeferred(t, today));
     }
 
     // Tab filter
@@ -382,18 +372,9 @@
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else if (activeFilter === 'hidden') {
-      filtered = filtered.filter(t => {
-        if (t.completed_at) return false;
-        if (t.start_date && t.start_date > today) return true;
-        if (t.defer_days != null && t.due_date) {
-          const due = new Date(t.due_date + 'T00:00:00');
-          const showFrom = new Date(due - t.defer_days * 86400000);
-          if (dateToStr(showFrom) > today) return true;
-        }
-        return false;
-      });
+      filtered = filtered.filter(t => isDeferred(t, today));
     } else {
-      // "backlog" shows non-completed by default
+      // "open" (Backlog) shows non-completed by default
       filtered = filtered.filter(t => !t.completed_at);
     }
 
@@ -454,13 +435,6 @@
     const sorted = [...tasksArr];
     if (mode === 'manual') {
       sorted.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    } else if (mode === 'due_date') {
-      sorted.sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return a.due_date.localeCompare(b.due_date);
-      });
     } else if (mode === 'created_at') {
       sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     }
@@ -525,7 +499,7 @@
       if (!partial) { hideAc(); return; }
       const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
       const matches = allTags
-        .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+        .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
         .filter(({ score }) => score >= 0)
         .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
         .map(({ tag }) => tag)
@@ -763,9 +737,21 @@
 
     const filtered = filterTasks();
 
-    // In "backlog" view split into: due now (pinned top), ordered, new (inbox)
+    // Index tasks once per render — taskHTML runs per card and would otherwise
+    // scan the whole task array for every blocked-by/blocking lookup.
+    const byId = new Map(tasks.map(t => [t.id, t]));
+    const blockingIndex = new Map(); // blocker id → open tasks it blocks
+    for (const t of tasks) {
+      if (t.completed_at || !t.blocked_by) continue;
+      for (const bid of t.blocked_by) {
+        if (!blockingIndex.has(bid)) blockingIndex.set(bid, []);
+        blockingIndex.get(bid).push(t);
+      }
+    }
+
+    // In "open" (Backlog) view split into: due now (pinned top), ordered, new (inbox)
     let dueTasks, orderedTasks, newTasks;
-    if (activeFilter === 'backlog') {
+    if (activeFilter === 'open') {
       const today = todayStr();
       const isDueNow = t => t.due_date && t.due_date <= today;
       dueTasks = filtered.filter(isDueNow)
@@ -822,7 +808,7 @@
       let blockedDisplay = '';
       if (task.blocked_by && task.blocked_by.length) {
         const links = task.blocked_by.map(bid => {
-          const blocker = tasks.find(t => t.id === bid);
+          const blocker = byId.get(bid);
           const title = blocker ? esc(blocker.title) : bid.slice(0, 6);
           return `<a href="#" class="dep-link" data-id="${bid}">${title}</a>`;
         }).join(' ');
@@ -831,7 +817,7 @@
 
       // Blocking: show full title, click to open modal
       let blockingDisplay = '';
-      const blocking = tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id) && !t.completed_at);
+      const blocking = blockingIndex.get(task.id) || [];
       if (blocking.length) {
         const links = blocking.map(t => {
           return `<a href="#" class="dep-link" data-id="${t.id}">${esc(t.title)}</a>`;
@@ -1011,10 +997,13 @@
     }  // end wireListHandlers
   }
 
+  // String-based escape (mirrors leaf.js he()); also escapes quotes, since esc
+  // output lands in attribute values. No DOM allocation — this runs many times
+  // per task per render.
   function esc(str) {
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function linkifyTitle(text) {
@@ -1027,15 +1016,13 @@
   function renderDesc(text) {
     if (!text) return '';
     let h = esc(text);
-    // Wikilinks: [[page|label]] and [[page]]
+    // Wikilinks: [[page|label]] and [[page]] — slugified with the shared
+    // toSlug from leaf.js so links resolve exactly like the server's.
     h = h.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_, page, label) => {
-      const slug = page.trim().toLowerCase().replace(/\s+/g, '-');
-      return `<a href="/page/${slug}">${label}</a>`;
+      return `<a href="/page/${window.toSlug(page)}">${label}</a>`;
     });
     h = h.replace(/\[\[([^\]]+)\]\]/g, (_, page) => {
-      const slug = page.trim().toLowerCase().replace(/\s+/g, '-');
-      const label = page.trim();
-      return `<a href="/page/${slug}">${esc(label)}</a>`;
+      return `<a href="/page/${window.toSlug(page)}">${esc(page.trim())}</a>`;
     });
     // Markdown links: [label](url)
     h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
@@ -1098,7 +1085,7 @@
     // Position relative to textarea within the dialog
     const taRect = ta.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const coords = getNoteCaretCoords(ta);
+    const coords = window.getCaretCoords(ta);  // shared caret-mirror from leaf.js
     const lineH = parseFloat(window.getComputedStyle(ta).lineHeight) || 20;
     let top = taRect.top - containerRect.top + coords.top - ta.scrollTop + lineH;
     let left = taRect.left - containerRect.left + coords.left;
@@ -1131,30 +1118,6 @@
       document.execCommand('insertText', false, '/page/' + page + ')');
     }
     hideNoteAc();
-  }
-
-  function getNoteCaretCoords(el) {
-    const computed = window.getComputedStyle(el);
-    const mirror = document.createElement('div');
-    Object.assign(mirror.style, {
-      position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap',
-      wordWrap: 'break-word', overflow: 'hidden',
-      boxSizing: computed.boxSizing, width: computed.width,
-      paddingTop: computed.paddingTop, paddingRight: computed.paddingRight,
-      paddingBottom: computed.paddingBottom, paddingLeft: computed.paddingLeft,
-      borderTopWidth: computed.borderTopWidth, borderLeftWidth: computed.borderLeftWidth,
-      fontFamily: computed.fontFamily, fontSize: computed.fontSize,
-      fontWeight: computed.fontWeight, lineHeight: computed.lineHeight,
-      letterSpacing: computed.letterSpacing,
-    });
-    document.body.appendChild(mirror);
-    mirror.textContent = el.value.slice(0, el.selectionStart);
-    const span = document.createElement('span');
-    span.textContent = '\u200b';
-    mirror.appendChild(span);
-    const coords = { top: span.offsetTop, left: span.offsetLeft };
-    document.body.removeChild(mirror);
-    return coords;
   }
 
   function setupNoteAc(ta) {
@@ -1196,31 +1159,7 @@
   if (descTextarea) setupNoteAc(descTextarea);
 
   // ── URL paste handling for description textarea ────────────────────────────
-
-  function askUrlName(url) {
-    const dlg = document.getElementById('url-name-modal');
-    const hrefEl = document.getElementById('url-name-href');
-    const input = document.getElementById('url-name-input');
-    const confirmBtn = document.getElementById('url-name-confirm');
-    const cancelBtn2 = document.getElementById('url-name-cancel');
-    if (!dlg) return Promise.resolve(null);
-    return new Promise(resolve => {
-      hrefEl.textContent = url;
-      input.value = '';
-      dlg.showModal();
-      input.focus();
-      function done(result) {
-        dlg.close();
-        confirmBtn.onclick = null;
-        cancelBtn2.onclick = null;
-        input.onkeydown = null;
-        resolve(result);
-      }
-      confirmBtn.onclick = () => done(input.value.trim() || null);
-      cancelBtn2.onclick = () => done(false);
-      input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); done(input.value.trim() || null); } };
-    });
-  }
+  // askUrlName (the paste-link modal) is shared from leaf.js.
 
   if (descTextarea) {
     descTextarea.addEventListener('paste', async (e) => {
@@ -1238,7 +1177,7 @@
         return;
       }
       // No selection — ask for display name
-      const name = await askUrlName(text);
+      const name = await window.askUrlName(text);
       if (name === false) {
         // Cancelled — insert raw URL
         const pos = descTextarea.selectionStart;
@@ -1275,7 +1214,12 @@
   });
   filterTag.addEventListener('blur', () => { setTimeout(() => { render(); }, 160); });
   if (filterSearch) {
-    filterSearch.addEventListener('input', render);
+    // Debounced — render() rebuilds the whole list, too heavy per keystroke.
+    let searchTimer = null;
+    filterSearch.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(render, 150);
+    });
     filterSearch.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
     });
@@ -1292,7 +1236,7 @@
     tagAcIndex = -1;
   }
 
-  function fuzzyScore(q, tag) {
+  function tagMatchScore(q, tag) {
     const ql = q.toLowerCase(), tl = tag.toLowerCase();
     if (tl.startsWith(ql)) return 2;
     if (tl.includes(ql))   return 1;
@@ -1377,7 +1321,7 @@
       return available.filter(tag => !committed.includes(tag.toLowerCase())).slice(0, 12);
     }
     return available
-      .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+      .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
       .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .map(({ tag }) => tag)
@@ -1469,7 +1413,7 @@
         .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
       const matches = allTags
-        .map(tag => ({ tag, score: fuzzyScore(partial, tag) }))
+        .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
         .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
         .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
         .map(({ tag }) => tag)
@@ -1739,22 +1683,25 @@
       const created = await createTask(data);
       if (created) savedId = created.id;
     }
-    // Reconcile "blocking" links — update other tasks' blocked_by
+    // Reconcile "blocking" links — update other tasks' blocked_by. The updates
+    // are independent, so run them in parallel.
     if (savedId) {
       const addedBlocking = newBlockingIds.filter(tid => !originalBlockingIds.includes(tid));
       const removedBlocking = originalBlockingIds.filter(tid => !newBlockingIds.includes(tid));
+      const writes = [];
       for (const tid of addedBlocking) {
         const t = tasks.find(x => x.id === tid);
         if (t && !(t.blocked_by || []).includes(savedId)) {
-          await updateTask(tid, { blocked_by: [...(t.blocked_by || []), savedId] });
+          writes.push(updateTask(tid, { blocked_by: [...(t.blocked_by || []), savedId] }));
         }
       }
       for (const tid of removedBlocking) {
         const t = tasks.find(x => x.id === tid);
         if (t) {
-          await updateTask(tid, { blocked_by: (t.blocked_by || []).filter(bid => bid !== savedId) });
+          writes.push(updateTask(tid, { blocked_by: (t.blocked_by || []).filter(bid => bid !== savedId) }));
         }
       }
+      await Promise.all(writes);
     }
   });
 
@@ -1793,7 +1740,8 @@
       const fromIdx = ids.indexOf(draggedId);
       const toIdx = ids.indexOf(targetId);
       if (fromIdx === -1 || toIdx === -1) return;
-      const draggedTask = tasks.find(tk => tk.id === draggedId);
+      const byId = new Map(tasks.map(tk => [tk.id, tk]));
+      const draggedTask = byId.get(draggedId);
       const wasNew = draggedTask && draggedTask.sort_order == null;
       ids.splice(fromIdx, 1);
       // When dragging from new into ordered, insert BEFORE target (adjust index).
@@ -1802,14 +1750,11 @@
       ids.splice(insertIdx, 0, draggedId);
       // Only assign sort_order to items that already had one, plus the dragged item
       ids.forEach((tid, i) => {
-        const t = tasks.find(tk => tk.id === tid);
+        const t = byId.get(tid);
         if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
       });
       // Send only the items that have a sort_order to the server
-      const orderedIds = ids.filter(tid => {
-        const t = tasks.find(tk => tk.id === tid);
-        return t && t.sort_order != null;
-      });
+      const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
       reorder(orderedIds);
       render();
     }
@@ -1868,21 +1813,19 @@
     if (sortSelect.value !== 'manual' || !selectedIds.size) return;
     const items = visibleItems();
     const ids = items.map(el => el.dataset.id);
+    const byId = new Map(tasks.map(tk => [tk.id, tk]));
 
     if (selectedIds.size === 1) {
       const idx = ids.indexOf(selectedId);
       if (idx === -1) return;
-      const selTask = tasks.find(t => t.id === selectedId);
+      const selTask = byId.get(selectedId);
 
       if (direction === 'down') {
         if (idx === ids.length - 1) return;
         if (selTask && selTask.sort_order == null) {
           // Moving new item into ordered: place at top of ordered section
           ids.splice(idx, 1);
-          const firstOrd = ids.findIndex(id => {
-            const t = tasks.find(tk => tk.id === id);
-            return t && t.sort_order != null;
-          });
+          const firstOrd = ids.findIndex(id => byId.get(id)?.sort_order != null);
           ids.splice(firstOrd === -1 ? ids.length : firstOrd, 0, selectedId);
         } else {
           [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
@@ -1909,13 +1852,10 @@
       ids.length = 0; ids.push(...rest);
     }
     ids.forEach((tid, i) => {
-      const t = tasks.find(tk => tk.id === tid);
+      const t = byId.get(tid);
       if (t && (t.sort_order != null || selectedIds.has(tid))) t.sort_order = i;
     });
-    const orderedIds = ids.filter(tid => {
-      const t = tasks.find(tk => tk.id === tid);
-      return t && t.sort_order != null;
-    });
+    const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
     reorder(orderedIds);
     render();
   }
@@ -2053,16 +1993,12 @@
         anchorId = selectedId;
         await deleteTasks(ids);
         const label = count === 1 ? 'Task deleted' : `${count} tasks deleted`;
-        showUndo(label, async () => {
-          for (const t of deleted) {
-            await createTask({
-              title: t.title, description: t.description || '',
-              tags: t.tags || [], due_date: t.due_date, start_date: t.start_date,
-              defer_days: t.defer_days, rec_type: t.recurrence?.type,
-              rec_interval: t.recurrence?.interval,
-            });
-          }
-        });
+        showUndo(label, () => Promise.all(deleted.map(t => createTask({
+          title: t.title, description: t.description || '',
+          tags: t.tags || [], due_date: t.due_date, start_date: t.start_date,
+          defer_days: t.defer_days, rec_type: t.recurrence?.type,
+          rec_interval: t.recurrence?.interval,
+        }))));
       }
     } else if ((e.key === 't' || e.key === 'T') && selectedIds.size) {
       e.preventDefault();
@@ -2098,8 +2034,17 @@
   // tab remembered this session > Backlog default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
-  const FILTER_ALIASES = { focus: 'focus', today: 'focus', plan: 'due', upcoming: 'due', open: 'backlog', backlog: 'backlog', done: 'completed', hidden: 'hidden' };
-  const restoreFilter = FILTER_ALIASES[urlFilter] || urlFilter || FILTER_ALIASES[embedFilter] || embedFilter || loadActiveTab() || 'backlog';
+  // The canonical tab names are the <option> values (focus/due/open/hidden/
+  // completed); this map mirrors deck.py's _FILTER_ALIASES for friendly names
+  // in ?filter= URLs. The embed filter arrives already normalized by the server.
+  const FILTER_ALIASES = {
+    focus: 'focus', today: 'focus',
+    backlog: 'open', open: 'open',
+    plan: 'due', upcoming: 'due', due: 'due',
+    deferred: 'hidden', hidden: 'hidden',
+    completed: 'completed', done: 'completed',
+  };
+  const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'open';
   if (restoreFilter && tabsEl) {
     const hasOption = Array.from(tabsEl.options).some(o => o.value === restoreFilter);
     if (hasOption) {

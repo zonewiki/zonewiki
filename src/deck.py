@@ -12,7 +12,6 @@ import html
 import json
 import os
 import re
-import subprocess
 import threading
 import uuid
 from datetime import date, datetime, timedelta
@@ -133,27 +132,25 @@ def _read_completed_strict() -> list[dict]:
     return _read_list_strict(_completed_path())
 
 
+def _read_list_lenient(path: Path) -> list[dict]:
+    """Read a JSON list, treating a missing or unreadable file as empty.
+
+    Used on read-only paths; write paths use _read_list_strict instead."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError, ValueError):
+        return []
+
+
 def _read_deck() -> list[dict]:
     """Read active (non-completed) tasks."""
-    if not DECK_FILE.exists():
-        return []
-    try:
-        data = json.loads(DECK_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, ValueError):
-        return []
+    return _read_list_lenient(DECK_FILE)
 
 
 def _read_completed() -> list[dict]:
     """Read completed tasks."""
-    p = _completed_path()
-    if not p.exists():
-        return []
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, ValueError):
-        return []
+    return _read_list_lenient(_completed_path())
 
 
 def _read_all() -> list[dict]:
@@ -170,7 +167,7 @@ def _read_all() -> list[dict]:
 def _write_deck(tasks: list[dict]) -> None:
     _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
     if GIT_ENABLED and _git_commit_fn:
-        _git_commit_fn(DECK_FILE, "Update deck")
+        _git_commit_fn([DECK_FILE], "Update deck")
 
 
 def _write_deck_no_commit(tasks: list[dict]) -> None:
@@ -182,15 +179,8 @@ def _write_both(active: list[dict], completed: list[dict], message: str = "Updat
     completed_file = _completed_path()
     _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
     _atomic_write(completed_file, json.dumps(completed, indent=2, ensure_ascii=False))
-    if GIT_ENABLED:
-        subprocess.run(
-            ["git", "add", "--", str(DECK_FILE), str(completed_file)],
-            cwd=DECK_FILE.parent, capture_output=True,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", message],
-            cwd=DECK_FILE.parent, capture_output=True,
-        )
+    if GIT_ENABLED and _git_commit_fn:
+        _git_commit_fn([DECK_FILE, completed_file], message)
 
 
 def _validate_date(val: str | None) -> str | None:
@@ -202,6 +192,32 @@ def _validate_date(val: str | None) -> str | None:
         return val
     except ValueError:
         abort(400, description="Invalid date format, expected YYYY-MM-DD")
+
+
+def _new_task(**overrides) -> dict:
+    """Return a task dict with every field at its default, plus overrides.
+
+    Single source of truth for the task schema — create, recurring spawn, and
+    field updates all build on this skeleton."""
+    task = {
+        "id": str(uuid.uuid4()),
+        "title": "",
+        "description": "",
+        "tags": [],
+        "start_date": None,
+        "due_date": None,
+        "defer_days": None,
+        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "completed_at": None,
+        "wont_do": False,
+        "focus_date": None,
+        "sort_order": None,
+        "recurrence": None,
+        "page": None,
+        "blocked_by": [],
+    }
+    task.update(overrides)
+    return task
 
 
 def _spawn_recurring(task: dict) -> dict | None:
@@ -220,9 +236,7 @@ def _spawn_recurring(task: dict) -> dict | None:
     else:
         base = datetime.now()
 
-    if rtype == "daily":
-        next_due = base + timedelta(days=interval)
-    elif rtype == "weekly":
+    if rtype == "weekly":
         next_due = base + timedelta(weeks=interval)
     elif rtype == "monthly":
         month = base.month + interval
@@ -230,27 +244,44 @@ def _spawn_recurring(task: dict) -> dict | None:
         month = (month - 1) % 12 + 1
         day = min(base.day, 28)
         next_due = base.replace(year=year, month=month, day=day)
-    else:
+    else:  # daily (and any unknown type)
         next_due = base + timedelta(days=interval)
 
-    new_task = {
-        "id": str(uuid.uuid4()),
-        "title": task["title"],
-        "description": task.get("description", ""),
-        "tags": task.get("tags", []),
-        "start_date": None,
-        "due_date": next_due.strftime("%Y-%m-%d"),
-        "defer_days": task.get("defer_days"),
-        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "completed_at": None,
-        "wont_do": False,
-        "focus_date": None,
-        "sort_order": task.get("sort_order", 0),
-        "recurrence": task.get("recurrence"),
-        "page": task.get("page"),
-        "blocked_by": [],
-    }
-    return new_task
+    return _new_task(
+        title=task["title"],
+        description=task.get("description", ""),
+        tags=task.get("tags", []),
+        due_date=next_due.strftime("%Y-%m-%d"),
+        defer_days=task.get("defer_days"),
+        sort_order=task.get("sort_order", 0),
+        recurrence=task.get("recurrence"),
+        page=task.get("page"),
+    )
+
+
+def _complete_task(task: dict, now: str | None = None) -> dict | None:
+    """Stamp task as completed; return the spawned recurring instance, if any."""
+    task["completed_at"] = now or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    task["wont_do"] = False
+    return _spawn_recurring(task)
+
+
+def _uncomplete_task(task: dict, active: list[dict],
+                     protect_ids: frozenset = frozenset()) -> list[dict]:
+    """Clear task's completion state and return active with the open recurring
+    instance that was spawned at completion time removed (matched by title,
+    recurrence, and creation after completion). protect_ids are never removed."""
+    if task.get("recurrence"):
+        completed_at = task["completed_at"]
+        active = [t for t in active if t["id"] in protect_ids or not (
+            t.get("title") == task["title"] and
+            t.get("recurrence") == task.get("recurrence") and
+            not t.get("completed_at") and
+            t.get("created_at", "") >= completed_at
+        )]
+    task["completed_at"] = None
+    task["wont_do"] = False
+    return active
 
 
 # ── [[deck]] embed ────────────────────────────────────────────────────────────
@@ -460,12 +491,12 @@ def inject_deck_embeds(html_str: str, embeds: list[tuple[str, str]]) -> str:
 # ── Task backlinks ────────────────────────────────────────────────────────────
 
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
+_MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
 
 
 def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
     """Return deck tasks whose title or description contain a wikilink to slug."""
     results = []
-    _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
     for task in _read_all():
         if task.get("completed_at"):
             continue
@@ -490,12 +521,32 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
 # ── Search integration ────────────────────────────────────────────────────────
 
 
+_task_docs_cache: dict = {"key": None, "docs": []}
+
+
+def _deck_mtimes() -> tuple:
+    """Cache key: mtimes of both deck files (None when a file is absent)."""
+    def mt(p: Path):
+        try:
+            return p.stat().st_mtime_ns
+        except OSError:
+            return None
+    return (mt(DECK_FILE), mt(_completed_path()))
+
+
 def task_search_docs() -> list[dict]:
     """Return all tasks as search documents for the shared BM25 index.
 
     Documents carry pre-tokenized ``tokens`` (title boosted by TITLE_WEIGHT) plus
     passthrough fields (type/task_id/status) that server.do_search formats into
-    results. Ranking and excerpting happen in the unified index, not here."""
+    results. Ranking and excerpting happen in the unified index, not here.
+
+    Tokenizing every task on each search request is wasted work, so results are
+    cached against the deck files' mtimes (same pattern as the page-token cache
+    in server.py)."""
+    key = _deck_mtimes()
+    if _task_docs_cache["key"] == key:
+        return _task_docs_cache["docs"]
     docs = []
     for task in _read_all():
         title = task.get("title", "")
@@ -511,6 +562,8 @@ def task_search_docs() -> list[dict]:
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",
         })
+    _task_docs_cache["key"] = key
+    _task_docs_cache["docs"] = docs
     return docs
 
 
@@ -560,38 +613,10 @@ def api_tasks_due_count():
 @_locked
 def api_create_deck_item():
     data = request.get_json(force=True)
-    title = data.get("title", "").strip()
-    if not title:
+    if not data.get("title", "").strip():
         abort(400)
-    defer_days = data.get("defer_days")
-    if defer_days is not None:
-        defer_days = max(0, int(defer_days))
-    blocked_by = data.get("blocked_by", [])
-    if isinstance(blocked_by, str):
-        blocked_by = [b.strip() for b in blocked_by.split(",") if b.strip()]
-    task = {
-        "id": str(uuid.uuid4()),
-        "title": title,
-        "description": data.get("description", "").strip(),
-        "tags": [t.strip() for t in data.get("tags", []) if t.strip()],
-        "start_date": _validate_date(data.get("start_date")),
-        "due_date": _validate_date(data.get("due_date")),
-        "defer_days": defer_days if defer_days is not None else None,
-        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "completed_at": None,
-        "wont_do": False,
-        "focus_date": _validate_date(data.get("focus_date")),
-        "sort_order": None,
-        "recurrence": None,
-        "page": (data.get("page") or "").strip() or None,
-        "blocked_by": blocked_by,
-    }
-    rec_type = data.get("rec_type")
-    if rec_type in ("daily", "weekly", "monthly"):
-        task["recurrence"] = {
-            "type": rec_type,
-            "interval": max(1, int(data.get("rec_interval", 1))),
-        }
+    task = _new_task()
+    _apply_task_fields(task, data)
     active = _read_deck_strict()
     active.append(task)
     _write_deck(active)
@@ -672,30 +697,16 @@ def api_update_deck_item(task_id):
     elif "completed" in data:
         if data["completed"] and not task.get("completed_at"):
             # Complete: move active → completed
-            task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-            task["wont_do"] = False
-            spawned = _spawn_recurring(task)
+            spawned = _complete_task(task)
             active = [t for t in active if t["id"] != task_id]
             completed_list.append(task)
             if spawned:
                 active.append(spawned)
         elif not data["completed"] and task.get("completed_at"):
             # Uncomplete: move completed → active
-            if task.get("recurrence"):
-                completed_at = task["completed_at"]
-                active = [t for t in active if not (
-                    t.get("title") == task["title"] and
-                    t.get("recurrence") == task.get("recurrence") and
-                    not t.get("completed_at") and
-                    t.get("created_at", "") >= completed_at
-                )]
-            task["completed_at"] = None
-            task["wont_do"] = False
+            active = _uncomplete_task(task, active)
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
-    elif in_completed:
-        # Non-completion update on a completed task — save in place
-        pass  # task is already mutated in completed_list
 
     _write_both(active, completed_list)
     return jsonify(task)
@@ -746,31 +757,21 @@ def api_batch_complete_deck():
 
     if mark_completed:
         moving = [t for t in active if t["id"] in id_set and not t.get("completed_at")]
+        spawned_tasks = []
         for task in moving:
-            task["completed_at"] = now
-            spawned = _spawn_recurring(task)
+            spawned = _complete_task(task, now)
             if spawned:
-                active.append(spawned)
+                spawned_tasks.append(spawned)
             updated.append(task)
-        active = [t for t in active if t["id"] not in id_set or t.get("completed_at") is None and False]
-        # Rebuild: keep active tasks not being moved
-        active = [t for t in active if t["id"] not in {t2["id"] for t2 in moving}]
+        active = [t for t in active if t["id"] not in id_set] + spawned_tasks
         completed_list = completed_list + moving
     else:
         moving = [t for t in completed_list if t["id"] in id_set and t.get("completed_at")]
+        moving_ids = {t["id"] for t in moving}
         for task in moving:
-            if task.get("recurrence"):
-                completed_at = task["completed_at"]
-                active = [t for t in active if not (
-                    t["id"] not in id_set and
-                    t.get("title") == task["title"] and
-                    t.get("recurrence") == task.get("recurrence") and
-                    not t.get("completed_at") and
-                    t.get("created_at", "") >= completed_at
-                )]
-            task["completed_at"] = None
+            active = _uncomplete_task(task, active, protect_ids=id_set)
             updated.append(task)
-        completed_list = [t for t in completed_list if t["id"] not in {t2["id"] for t2 in moving}]
+        completed_list = [t for t in completed_list if t["id"] not in moving_ids]
         active = active + moving
 
     _write_both(active, completed_list)

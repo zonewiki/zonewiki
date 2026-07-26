@@ -94,9 +94,11 @@
     }
   }
 
-  // Check on page load and every 30 seconds
+  // Check on page load and every 30 seconds (skipped while the tab is hidden;
+  // refreshed immediately when it becomes visible again)
   checkUncommitted();
-  setInterval(checkUncommitted, 30000);
+  setInterval(() => { if (!document.hidden) checkUncommitted(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUncommitted(); });
 }());
 
 // ── Deck due badge ──────────────────────────────────────────────────────────
@@ -126,7 +128,8 @@
 
   window.refreshDueBadge = checkDue;
   checkDue();
-  setInterval(checkDue, 60000);
+  setInterval(() => { if (!document.hidden) checkDue(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDue(); });
 }());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -140,18 +143,48 @@ function closeOnBackdropClick(dialog) {
 function he(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+window.he = he;
 
-// Destination URL for a search result. Task results open the deck page with the
-// task title prefilled into the deck's search filter (so only that task shows)
-// and the tab set to match the task's state, rather than the bare _deck slug.
-function resultHref(r) {
-  if (r.type === 'task') {
-    const term = r.title.replace(/^\[Task\]\s*/, '');
-    const tab = r.status === 'done' ? 'completed' : 'open';
-    return `/page/deck?search=${encodeURIComponent(term)}&filter=${tab}`;
-  }
-  return `/page/${r.slug}`;
+// Prompt for a display name when pasting a bare URL. Resolves with the name,
+// null (no name — insert plain URL), or false (cancelled). Shared with deck.js.
+function askUrlName(url) {
+  const urlNameModal   = document.getElementById('url-name-modal');
+  const urlNameHref    = document.getElementById('url-name-href');
+  const urlNameInput   = document.getElementById('url-name-input');
+  const urlNameConfirm = document.getElementById('url-name-confirm');
+  const urlNameCancel  = document.getElementById('url-name-cancel');
+  return new Promise(resolve => {
+    urlNameHref.textContent = url;
+    urlNameInput.value = '';
+    urlNameModal.showModal();
+    urlNameInput.focus();
+
+    function done(result) {
+      urlNameModal.close();
+      urlNameConfirm.onclick = null;
+      urlNameCancel.onclick = null;
+      urlNameInput.onkeydown = null;
+      resolve(result);
+    }
+    urlNameConfirm.onclick = () => done(urlNameInput.value.trim() || null);
+    urlNameCancel.onclick  = () => done(false);
+    urlNameInput.onkeydown = e => {
+      if (e.key === 'Enter') { e.preventDefault(); done(urlNameInput.value.trim() || null); }
+    };
+  });
 }
+window.askUrlName = askUrlName;
+closeOnBackdropClick(document.getElementById('url-name-modal'));
+
+// Mirror of server-side to_slug(): lowercase, non [a-z0-9_] runs → '-',
+// '/' preserved as a path separator. Keep the two in sync.
+function toSlug(name) {
+  return name.trim().split('/')
+    .map(p => p.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/^-+|-+$/g, ''))
+    .filter(Boolean)
+    .join('/');
+}
+window.toSlug = toSlug;
 
 // ── Search modal ──────────────────────────────────────────────────────────────
 
@@ -167,7 +200,6 @@ let modalActiveIdx = -1;
 let modalCMTimer = null;
 let modalCMSeq = 0;
 
-document.getElementById('open-search')?.addEventListener('click', openSearchModal);
 closeOnBackdropClick(searchModal);
 
 function openSearchModal() {
@@ -288,17 +320,17 @@ function applyModalControls() {
         `<span class="page-item-right"><span class="page-slug">${slugHtml}</span></span></li>`;
     }).join('');
   } else {
-    // No query: static list, sort by dropdown, filter by unlinked checkbox
-    renderModalList(modalPages.slice(0, 200));
-    let items = Array.from(modalPageList.querySelectorAll('.page-list-item'));
-    items.sort((a, b) => {
-      if (sort === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
-      if (sort === 'mtime-desc') return parseInt(b.dataset.mtime) - parseInt(a.dataset.mtime);
-      if (sort === 'links-desc') return parseInt(b.dataset.links) - parseInt(a.dataset.links);
-      return a.dataset.title.localeCompare(b.dataset.title);
-    });
-    items.forEach(i => modalPageList.appendChild(i));
-    items.forEach(i => i.classList.toggle('hidden', unlinked && parseInt(i.dataset.links) > 0));
+    // No query: static list, sort by dropdown, filter by unlinked checkbox.
+    // Sort the data first and render once (no post-render DOM shuffling).
+    const sorted = modalPages
+      .filter(p => !(unlinked && p.links > 0))
+      .sort((a, b) => {
+        if (sort === 'title-desc') return b.title.toLowerCase().localeCompare(a.title.toLowerCase());
+        if (sort === 'mtime-desc') return b.mtime - a.mtime;
+        if (sort === 'links-desc') return b.links - a.links;
+        return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+      });
+    renderModalList(sorted.slice(0, 200));
   }
 
   setModalActive(q ? 0 : -1);
@@ -321,7 +353,7 @@ async function fetchModalContentMatches(q) {
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
       results.map(r =>
-        `<a class="search-result-card" href="${he(resultHref(r))}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
+        `<a class="search-result-card" href="${he(r.href)}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
       ).join('');
     modalCM.classList.remove('hidden');
     // Re-clamp active index now that content cards are in the pool
@@ -349,7 +381,6 @@ const scratchForm   = document.getElementById('scratch-form');
 const scratchTitle  = document.getElementById('scratch-title');
 const scratchCancel = document.getElementById('scratch-cancel');
 
-document.getElementById('open-scratch')?.addEventListener('click', openScratch);
 scratchCancel?.addEventListener('click', () => scratchModal.close());
 closeOnBackdropClick(scratchModal);
 
@@ -604,7 +635,7 @@ if (textarea && previewPane) {
       if (wlText !== null) {
         e.preventDefault();
         const pageName = wlText.split('|')[0].trim();
-        const targetSlug = pageName.toLowerCase().replace(/[^a-z0-9/]+/g, '-').replace(/^-+|-+$/g, '');
+        const targetSlug = toSlug(pageName);
         formSubmitting = true;
         const data = new FormData(editorForm);
         fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
@@ -699,31 +730,6 @@ if (textarea && previewPane) {
     fetchPreview();
   }
 
-  const urlNameModal   = document.getElementById('url-name-modal');
-  const urlNameHref    = document.getElementById('url-name-href');
-  const urlNameInput   = document.getElementById('url-name-input');
-  const urlNameConfirm = document.getElementById('url-name-confirm');
-  const urlNameCancel  = document.getElementById('url-name-cancel');
-
-  function askUrlName(url) {
-    return new Promise(resolve => {
-      urlNameHref.textContent = url;
-      urlNameInput.value = '';
-      urlNameModal.showModal();
-      urlNameInput.focus();
-
-      function done(result) {
-        urlNameModal.close();
-        urlNameConfirm.onclick = null;
-        urlNameCancel.onclick = null;
-        resolve(result);
-      }
-      urlNameConfirm.onclick = () => done(urlNameInput.value.trim() || null);
-      urlNameCancel.onclick  = () => done(false);
-    });
-  }
-  closeOnBackdropClick(urlNameModal);
-
   textarea.addEventListener('paste', async (e) => {
     const fileItem = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
     if (fileItem) {
@@ -776,12 +782,7 @@ if (textarea && previewPane) {
   });
 
   textarea.focus();
-  const _slug = window.location.pathname.replace(/^\/edit\//, '');
-  if (_slug.endsWith('_daily')) {
-    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  } else {
-    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  }
+  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
 
   // Sync preview scroll position with editor
   const previewScroller = previewPane.parentElement;
@@ -894,8 +895,6 @@ if (textarea && previewPane) {
           if (res.redirected && res.url.includes('conflict=1')) {
             formSubmitting = false;
             showConflictBanner(true);
-          } else if (res.redirected) {
-            window.location.href = res.url;
           } else {
             window.location.href = res.url;
           }
@@ -939,15 +938,21 @@ async function fetchPreview() {
     });
     previewPane.innerHTML = await res.text();
     if (window.hljs) previewPane.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-    highlightPreviewBlock();
+    highlightPreviewBlock(true);
   } catch (_) { /* ignore */ }
 }
 
-function highlightPreviewBlock() {
+let _lastHlLine = -1;
+
+function highlightPreviewBlock(force) {
   if (!textarea || !previewPane) return;
   const pos = textarea.selectionStart;
   const text = textarea.value;
   const cursorLine = text.slice(0, pos).split('\n').length - 1;
+  // selectionchange fires on every caret move — skip the (expensive) block
+  // walk when the cursor is still on the same line and the preview is unchanged.
+  if (!force && cursorLine === _lastHlLine) return;
+  _lastHlLine = cursorLine;
   const lines = text.split('\n');
 
   // Walk lines up to cursor, counting rendered block elements.
@@ -1132,6 +1137,7 @@ function getCaretCoords(el) {
   document.body.removeChild(mirror);
   return coords;
 }
+window.getCaretCoords = getCaretCoords;
 
 function showAcDropdown(matches) {
   if (!acDropdown) {
@@ -1600,13 +1606,11 @@ document.addEventListener('submit', async (e) => {
   btn.textContent = 'Committing…';
 
   try {
-    const message = filepath.endsWith('.md')
-      ? `Save ${filepath.slice(0, -3)}`
-      : `Update ${filepath}`;
+    // The commit message is derived server-side from the filepath.
     const res = await fetch('/api/commit-file', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath, message }),
+      body: JSON.stringify({ filepath }),
     });
     if (res.ok) {
       if (onSuccess === 'reload') window.location.reload();

@@ -422,29 +422,30 @@ class TestSpliceSection:
 
     def _splice(self, path, section_idx, new_content, full_content=None):
         """Helper: compute hash + range and call _splice_section."""
+        disk_content = path.read_text(encoding="utf-8") if path.exists() else None
         if full_content is None:
-            full_content = path.read_text(encoding="utf-8")
+            full_content = disk_content
         fh = content_hash(full_content)
         rng = section_char_range(full_content, section_idx)
         assert rng is not None
         s, e = rng
-        return _splice_section(path, fh, s, e, new_content)
+        return _splice_section(disk_content, fh, s, e, new_content)
 
     # ---- validity guards ----
 
     def test_returns_none_for_missing_file(self, tmp_path):
-        path = tmp_path / "nonexistent.md"
-        assert _splice_section(path, "abc", 0, 10, "content") is None
+        assert _splice_section(None, "abc", 0, 10, "content") is None
 
     def test_returns_none_for_wrong_hash(self, tmp_path):
-        p = self._write(tmp_path, "pre\n\n## A\n\nbody\n")
-        assert _splice_section(p, "wrong_hash", 5, 18, "new") is None
+        content = "pre\n\n## A\n\nbody\n"
+        self._write(tmp_path, content)
+        assert _splice_section(content, "wrong_hash", 5, 18, "new") is None
 
     def test_returns_none_for_out_of_bounds_range(self, tmp_path):
         content = "pre\n\n## A\n\nbody\n"
-        p = self._write(tmp_path, content)
+        self._write(tmp_path, content)
         fh = content_hash(content)
-        assert _splice_section(p, fh, 0, len(content) + 10, "new") is None
+        assert _splice_section(content, fh, 0, len(content) + 10, "new") is None
 
     # ---- basic correctness ----
 
@@ -562,8 +563,9 @@ class TestSpliceSection:
         rng = section_char_range(original, 1)
         s, e = rng
         # Simulate another edit changing the file
-        p.write_text("pre\n\n## A\n\nSOMEONE ELSE EDITED\n", encoding="utf-8")
-        assert _splice_section(p, fh, s, e, "## A\n\nmy edit\n") is None
+        changed = "pre\n\n## A\n\nSOMEONE ELSE EDITED\n"
+        p.write_text(changed, encoding="utf-8")
+        assert _splice_section(changed, fh, s, e, "## A\n\nmy edit\n") is None
 
     # ---- updated anchors returned ----
 
@@ -585,7 +587,7 @@ class TestSpliceSection:
         merged1, h1, s1, e1 = result1
         p.write_text(merged1, encoding="utf-8")
         # Second splice using returned anchors
-        result2 = _splice_section(p, h1, s1, e1, "## A\n\nsecond edit\n")
+        result2 = _splice_section(merged1, h1, s1, e1, "## A\n\nsecond edit\n")
         assert result2 is not None
         merged2 = result2[0]
         assert "second edit" in merged2

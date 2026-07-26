@@ -69,7 +69,6 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 GIT_ENABLED = shutil.which("git") is not None
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
-MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(([^)#?\s]+\.md)\)')
 # Matches any markdown link href (bare slugs, .md, etc.) — used for backlink scanning
 _ANY_MD_LINK_RE = re.compile(r'\[(?:[^\]]*)\]\(([^)#?\s]+)\)')
 
@@ -108,31 +107,28 @@ def git_setup() -> None:
             _git("git", "remote", "add", "origin", GIT_REMOTE)
 
 
-def git_commit(path: Path, message: str) -> None:
+def git_commit(paths: Path | list[Path], message: str) -> None:
+    """Stage one path (or a list of paths) and commit them together."""
     if not GIT_ENABLED:
         return
-    rel = str(path.relative_to(WIKI_DIR))
-    _git("git", "add", "--", rel)
+    if isinstance(paths, Path):
+        paths = [paths]
+    rels = [str(p.relative_to(WIKI_DIR)) for p in paths]
+    _git("git", "add", "--", *rels)
     _git("git", "commit", "-m", message)
 
 
 def git_commit_rename(old_path: Path, new_path: Path, modified_refs: list[Path], message: str) -> None:
-    if not GIT_ENABLED:
-        return
     # Stage the renamed file and only the pages whose wikilinks were updated
-    old_rel = str(old_path.relative_to(WIKI_DIR))
-    new_rel = str(new_path.relative_to(WIKI_DIR))
-    _git("git", "add", "--", old_rel, new_rel)
-    for ref_path in modified_refs:
-        _git("git", "add", "--", str(ref_path.relative_to(WIKI_DIR)))
-    _git("git", "commit", "-m", message)
+    git_commit([old_path, new_path, *modified_refs], message)
 
 
-def git_log(path: Path) -> list[dict]:
+def git_log(path: Path, max_count: int | None = None) -> list[dict]:
     if not GIT_ENABLED:
         return []
     rel = str(path.relative_to(WIKI_DIR))
-    r = _git("git", "log", "--follow",
+    count_args = ["-n", str(max_count)] if max_count else []
+    r = _git("git", "log", "--follow", *count_args,
              "--format=%H\x1f%as\x1f%ar\x1f%s", "--", rel)
     entries = []
     for line in r.stdout.splitlines():
@@ -207,17 +203,66 @@ def git_uncommitted_files() -> list[dict]:
 
 
 def git_commit_file(filepath: str, message: str) -> None:
-    """Stage and commit a single file."""
-    if not GIT_ENABLED:
-        return
-    _git("git", "add", "--", filepath)
-    _git("git", "commit", "-m", message)
+    """Stage and commit a single file given as a WIKI_DIR-relative string."""
+    git_commit(WIKI_DIR / filepath, message)
+
+
+def _commit_message(filepath: str) -> str:
+    """Default commit message for committing a file from the uncommitted list."""
+    return f"Save {filepath[:-3]}" if filepath.endswith('.md') else f"Update {filepath}"
 
 
 def git_diff(sha: str, path: Path) -> str | None:
     rel = str(path.relative_to(WIKI_DIR))
     r = _git("git", "show", "--format=", "--patch", sha, "--", rel)
     return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _diff_to_html(diff: str) -> str:
+    """Render a unified diff as classed <span> lines for the diff view."""
+    lines = []
+    for line in diff.splitlines():
+        if line.startswith('+') and not line.startswith('+++'):
+            cls = 'diff-add'
+        elif line.startswith('-') and not line.startswith('---'):
+            cls = 'diff-del'
+        elif line.startswith('@@'):
+            cls = 'diff-hunk'
+        else:
+            cls = 'diff-ctx'
+        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
+    return ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
+
+
+def _commit_form_html(filepath: str, title: str, on_success: str, *, small: bool = False) -> str:
+    """Commit button form wired up by leaf.js (posts to /api/commit-file)."""
+    btn_cls = "btn btn-primary btn-sm" if small else "btn btn-primary"
+    return (
+        f'<form class="commit-file-form" style="display:inline"'
+        f' data-filepath="{html.escape(filepath)}"'
+        f' data-title="{html.escape(title)}"'
+        f' data-on-success="{html.escape(on_success)}">'
+        f'<button type="submit" class="{btn_cls}">Commit</button>'
+        f'</form>'
+    )
+
+
+def _uncommitted_entries() -> list[dict]:
+    """Uncommitted files as {slug, title, filepath, mtime, rel} dicts (slug/title
+    resolved for wiki pages; slug is None for assets and other files)."""
+    entries = []
+    for f in git_uncommitted_files():
+        filepath = f["filepath"]
+        if filepath.endswith('.md') and not filepath.startswith('_assets'):
+            slug = filepath[:-3]
+            fpath = WIKI_DIR / filepath
+            title = page_title(fpath.read_text(encoding="utf-8"), slug) if fpath.exists() else slug_display_name(slug)
+            entries.append({"slug": slug, "title": title, "filepath": filepath,
+                            "mtime": f["mtime"], "rel": f["rel"]})
+        else:
+            entries.append({"slug": None, "title": filepath, "filepath": filepath,
+                            "mtime": f["mtime"], "rel": f["rel"]})
+    return entries
 
 
 git_setup()
@@ -294,6 +339,11 @@ def to_slug(name: str) -> str:
     return "/".join(slugged)
 
 
+def is_protected(slug: str) -> bool:
+    """Pages that must never be renamed or deleted via the UI."""
+    return slug == "index"
+
+
 def safe_path(slug: str) -> Path | None:
     """Return resolved path only if it's safely inside PAGES_DIR."""
     pages_root = PAGES_DIR.resolve()
@@ -359,42 +409,33 @@ def list_deleted_pages() -> list[dict]:
     return deleted
 
 
-def list_scratch() -> list[dict]:
-    """Return all scratch notes sorted newest first."""
+def _list_dated_notes(pattern: re.Pattern, ts_format: str, date_format: str) -> list[dict]:
+    """Return pages whose stem matches pattern (group 1 = timestamp), newest first."""
     entries = []
     for md_file in PAGES_DIR.glob("*.md"):
-        m = SCRATCH_RE.match(md_file.stem)
+        m = pattern.match(md_file.stem)
         if not m:
             continue
-        ts = datetime.strptime(m.group(1), "%Y-%m-%d_%H-%M-%S")
+        ts = datetime.strptime(m.group(1), ts_format)
         content = md_file.read_text(encoding="utf-8")
         entries.append({
             "slug": md_file.stem,
             "title": page_title(content, md_file.stem),
             "ts": ts,
-            "date": ts.strftime("%Y-%m-%d %H:%M"),
+            "date": ts.strftime(date_format),
         })
     entries.sort(key=lambda n: n["ts"], reverse=True)
     return entries
+
+
+def list_scratch() -> list[dict]:
+    """Return all scratch notes sorted newest first."""
+    return _list_dated_notes(SCRATCH_RE, "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d %H:%M")
 
 
 def list_daily() -> list[dict]:
     """Return all daily notes sorted newest first."""
-    entries = []
-    for md_file in PAGES_DIR.glob("*.md"):
-        d = DAILY_RE.match(md_file.stem)
-        if not d:
-            continue
-        ts = datetime.strptime(d.group(1), "%Y-%m-%d")
-        content = md_file.read_text(encoding="utf-8")
-        entries.append({
-            "slug": md_file.stem,
-            "title": page_title(content, md_file.stem),
-            "ts": ts,
-            "date": ts.strftime("%Y-%m-%d"),
-        })
-    entries.sort(key=lambda n: n["ts"], reverse=True)
-    return entries
+    return _list_dated_notes(DAILY_RE, "%Y-%m-%d", "%Y-%m-%d")
 
 
 def page_title(content: str, slug: str) -> str:
@@ -422,10 +463,6 @@ def process_wikilinks(text: str) -> str:
 _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
 _TOC_RE = re.compile(r'^\[\[toc\]\][^\S\n]*$', re.IGNORECASE | re.MULTILINE)
 
-# ── [[deck …]] directive ─────────────────────────────────────────────────────────
-# Moved to deck.py module — use deck_module functions
-_DECK_RE = deck_module._DECK_RE
-
 
 def _heading_id(text: str) -> str:
     """Match mdit-py-plugins anchors_plugin default slugify."""
@@ -434,10 +471,7 @@ def _heading_id(text: str) -> str:
 
 def _plain_heading(text: str) -> str:
     """Strip inline markdown and wikilinks from a heading to get plain text for anchor IDs."""
-    text = re.sub(r'\[\[([^\]|]+)\|([^\]]+)\]\]', r'\2', text)  # [[page|label]] → label
-    text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)              # [[page]] → page
-    text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)         # [label](url)
-    text = re.sub(r'\[([^\]]*)\]\[[^\]]*\]', r'\1', text)        # [label][ref]
+    text = _strip_links(text)
     text = re.sub(r'!?\[([^\]]*)\]', r'\1', text)                # bare [label]
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'\*(.+?)\*', r'\1', text)
@@ -508,13 +542,6 @@ def _apply_img_sizes(html_str: str) -> str:
     return _IMG_SIZE_RE.sub(fix, html_str)
 
 
-def _parse_tasks_params(raw: str) -> dict:
-    return deck_module._parse_tasks_params(raw)
-
-
-_DECK_PLACEHOLDER = deck_module._DECK_PLACEHOLDER_BASE
-
-
 def render_md(text: str, *, slug: str = "") -> str:
     toc_html = ''
     if _TOC_RE.search(text):
@@ -534,13 +561,12 @@ def render_md(text: str, *, slug: str = "") -> str:
     return result
 
 
-def toggle_nth_checkbox(content: str, idx: int) -> str:
-    """Toggle the Nth checkbox (0-based), skipping any inside fenced code blocks."""
-    lines = content.splitlines(keepends=True)
+def _iter_fenced_lines(lines: list[str]):
+    """Yield (index, line, in_fence) for each line, where in_fence is True for
+    fence delimiter lines (``` / ~~~) and everything between them."""
     in_fence = False
     fence_marker = ''
     fence_len = 0
-    checkbox_line_indices: list[int] = []
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not in_fence:
@@ -548,11 +574,23 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
                 in_fence = True
                 fence_marker = stripped[0]
                 fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
-            elif re.search(r'\[([xX ])\]', line):
-                checkbox_line_indices.append(i)
+                yield i, line, True
+            else:
+                yield i, line, False
         else:
+            # Closing fence must use same char and be at least as long
             if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
                 in_fence = False
+            yield i, line, True
+
+
+def toggle_nth_checkbox(content: str, idx: int) -> str:
+    """Toggle the Nth checkbox (0-based), skipping any inside fenced code blocks."""
+    lines = content.splitlines(keepends=True)
+    checkbox_line_indices = [
+        i for i, line, in_fence in _iter_fenced_lines(lines)
+        if not in_fence and re.search(r'\[([xX ])\]', line)
+    ]
     if idx >= len(checkbox_line_indices):
         return content
     li = checkbox_line_indices[idx]
@@ -600,46 +638,33 @@ def split_sections(content: str) -> list[str]:
     """
     lines = content.splitlines(keepends=True)
     heading_lines: list[int] = []
-    in_fence = False
-    fence_marker = ''
-    fence_len = 0
     prev_text_line_idx: int | None = None   # for setext h2 detection
 
-    for i, line in enumerate(lines):
+    for i, line, in_fence in _iter_fenced_lines(lines):
         stripped = line.strip()
-        if not in_fence:
-            # Check for fence opener: 3+ consecutive backticks or tildes
-            if stripped.startswith('```') or stripped.startswith('~~~'):
-                in_fence = True
-                fence_marker = stripped[0]
-                fence_len = len(stripped) - len(stripped.lstrip(fence_marker))
-                prev_text_line_idx = None
-            elif re.match(r'^ {0,3}#{2,3} ', line):
-                # ATX heading: ## or ### with up to 3 optional leading spaces
-                heading_lines.append(i)
-                prev_text_line_idx = None
-            elif stripped and re.match(r'^[-=]+\s*$', stripped):
-                # Potential setext underline (--- for h2, === for h1) or thematic break.
-                # If preceded by a non-empty text line, it's a setext heading.
-                # Exclude lines that look like list items (e.g. "- " stripped to "-"):
-                # a list bullet is "[-*+] " so if the raw line starts with a list marker
-                # followed by a space, it's not a setext underline.
-                is_list_item = bool(re.match(r'^[-*+]\s', line))
-                prev_is_list = prev_text_line_idx is not None and bool(
-                    re.match(r'^[ \t]{0,3}[-*+]\s', lines[prev_text_line_idx])
-                )
-                if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None and not is_list_item and not prev_is_list:
-                    heading_lines.append(prev_text_line_idx)
-                # The underline/thematic-break line itself is never a heading text line.
-                prev_text_line_idx = None
-            elif stripped:
-                prev_text_line_idx = i
-            else:
-                prev_text_line_idx = None
+        if in_fence:
+            prev_text_line_idx = None
+        elif re.match(r'^ {0,3}#{2,3} ', line):
+            # ATX heading: ## or ### with up to 3 optional leading spaces
+            heading_lines.append(i)
+            prev_text_line_idx = None
+        elif stripped and re.match(r'^[-=]+\s*$', stripped):
+            # Potential setext underline (--- for h2, === for h1) or thematic break.
+            # If preceded by a non-empty text line, it's a setext heading.
+            # Exclude lines that look like list items (e.g. "- " stripped to "-"):
+            # a list bullet is "[-*+] " so if the raw line starts with a list marker
+            # followed by a space, it's not a setext underline.
+            is_list_item = bool(re.match(r'^[-*+]\s', line))
+            prev_is_list = prev_text_line_idx is not None and bool(
+                re.match(r'^[ \t]{0,3}[-*+]\s', lines[prev_text_line_idx])
+            )
+            if re.match(r'^-+\s*$', stripped) and prev_text_line_idx is not None and not is_list_item and not prev_is_list:
+                heading_lines.append(prev_text_line_idx)
+            # The underline/thematic-break line itself is never a heading text line.
+            prev_text_line_idx = None
+        elif stripped:
+            prev_text_line_idx = i
         else:
-            # Closing fence must use same char and be at least as long
-            if stripped.startswith(fence_marker * fence_len) and stripped.rstrip(fence_marker) == '':
-                in_fence = False
             prev_text_line_idx = None
 
     if not heading_lines:
@@ -699,37 +724,32 @@ def strip_h1(content: str) -> str:
     return "\n".join(lines)
 
 
-def _resolve_md_link(href: str, source_slug: str) -> str | None:
-    """Resolve a relative .md link href to a slug, or None if external."""
-    if href.startswith(('http://', 'https://', '//', '/')):
-        return None
-    target = href[:-3]  # strip .md
+def _resolve_relative_link(href: str, source_slug: str) -> str | None:
+    """Resolve a relative link target (already stripped of .md) against the
+    source page's directory, normalizing ../ and ./ segments."""
     source_dir = source_slug.split('/')[:-1]
-    parts = source_dir + target.split('/')
     normalized: list[str] = []
-    for part in parts:
+    for part in source_dir + href.split('/'):
         if part == '..':
             if normalized:
                 normalized.pop()
         elif part and part != '.':
             normalized.append(part)
     return '/'.join(normalized) if normalized else None
+
+
+def _resolve_md_link(href: str, source_slug: str) -> str | None:
+    """Resolve a relative .md link href to a slug, or None if external."""
+    if href.startswith(('http://', 'https://', '//', '/')):
+        return None
+    return _resolve_relative_link(href[:-3], source_slug)
 
 
 def _resolve_bare_link(href: str, source_slug: str) -> str | None:
     """Resolve a bare relative slug link (no extension) to a slug, or None if external."""
     if href.startswith(('http://', 'https://', '//', '/', '#')) or ':' in href:
         return None
-    source_dir = source_slug.split('/')[:-1]
-    parts = source_dir + href.split('/')
-    normalized: list[str] = []
-    for part in parts:
-        if part == '..':
-            if normalized:
-                normalized.pop()
-        elif part and part != '.':
-            normalized.append(part)
-    return '/'.join(normalized) if normalized else None
+    return _resolve_relative_link(href, source_slug)
 
 
 def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | None = None) -> set[str]:
@@ -748,13 +768,36 @@ def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | Non
     return targets
 
 
+# Cache of per-page derived data, keyed by slug -> (mtime, title, link targets).
+# Same invalidation model as _search_doc_cache: re-derived when the on-disk
+# mtime changes, so edits made outside the app stay reflected. Link targets are
+# cached unfiltered; both consumers only ever look up slugs that exist, so
+# filtering against the known-slug set is unnecessary.
+_page_meta_cache: dict[str, tuple[float, str, set[str]]] = {}
+
+
+def _page_meta(md_file: Path, slug: str) -> tuple[str, set[str]]:
+    """Return (title, outgoing link targets) for a page, cached by mtime."""
+    try:
+        mtime = md_file.stat().st_mtime
+    except OSError:
+        return slug_display_name(slug), set()
+    cached = _page_meta_cache.get(slug)
+    if cached and cached[0] == mtime:
+        return cached[1], cached[2]
+    content = md_file.read_text(encoding="utf-8")
+    title = page_title(content, slug)
+    targets = _page_link_targets(content, slug)
+    _page_meta_cache[slug] = (mtime, title, targets)
+    return title, targets
+
+
 def all_backlink_counts() -> dict[str, int]:
     """Return a mapping of slug → number of pages that link to it."""
     counts: dict[str, int] = {}
-    known = set(all_slugs())
     for md_file, file_slug in iter_pages():
-        content = md_file.read_text(encoding="utf-8")
-        for target in _page_link_targets(content, file_slug, known):
+        _, targets = _page_meta(md_file, file_slug)
+        for target in targets:
             if target != file_slug:
                 counts[target] = counts.get(target, 0) + 1
     return counts
@@ -763,13 +806,12 @@ def all_backlink_counts() -> dict[str, int]:
 def find_backlinks(slug: str) -> list[dict]:
     """Return pages that contain a wikilink or markdown link resolving to slug."""
     results = []
-    known = set(all_slugs())
     for md_file, file_slug in iter_pages():
         if file_slug == slug:
             continue
-        content = md_file.read_text(encoding="utf-8")
-        if slug in _page_link_targets(content, file_slug, known):
-            results.append({"slug": file_slug, "title": page_title(content, file_slug)})
+        title, targets = _page_meta(md_file, file_slug)
+        if slug in targets:
+            results.append({"slug": file_slug, "title": title})
     results.sort(key=lambda r: r["title"].lower())
     return results
 
@@ -858,7 +900,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
 
 def _build_delete_dialog(slug: str, title: str) -> str:
     """Return delete-confirmation dialog HTML, or empty string for the index page."""
-    if slug == "index":
+    if is_protected(slug):
         return ""
     return (
         f'<dialog id="page-delete-dialog" class="scratch-modal">'
@@ -882,23 +924,16 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
     if not GIT_ENABLED:
         return "", ""
     filepath = slug + ".md"
-    uncommitted_files = git_uncommitted_files()
-    info = next((f for f in uncommitted_files if f["filepath"] == filepath), None)
-    if info:
+    # Single-file status check — much cheaper than scanning the whole tree.
+    r = _git("git", "status", "--porcelain", "--untracked-files=all", "--", filepath)
+    if r.stdout.strip() and path.exists():
+        mtime_dt = datetime.fromtimestamp(path.stat().st_mtime)
         last_modified = (
-            f'<div class="page-meta">Last changed {html.escape(info["mtime"])} '
-            f'({html.escape(info["rel"])}) — uncommitted</div>'
+            f'<div class="page-meta">Last changed {html.escape(mtime_dt.strftime("%Y-%m-%d"))} '
+            f'({html.escape(relative_time(mtime_dt))}) — uncommitted</div>'
         )
-        commit_btn = (
-            f'<form class="commit-file-form" style="display:inline"'
-            f' data-filepath="{html.escape(filepath)}"'
-            f' data-title="{html.escape(title)}"'
-            f' data-on-success="reload">'
-            f'<button type="submit" class="btn btn-primary btn-sm">Commit</button>'
-            f'</form>'
-        )
-        return last_modified, commit_btn
-    entries = git_log(path)
+        return last_modified, _commit_form_html(filepath, title, "reload", small=True)
+    entries = git_log(path, max_count=1)
     if entries:
         e = entries[0]
         return f'<div class="page-meta">Last changed {html.escape(e["date"])} ({html.escape(e["rel"])})</div>', ""
@@ -993,14 +1028,6 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
   </dialog>
-  <dialog id="task-delete-modal" class="scratch-modal">
-    <p class="scratch-label">Delete task?</p>
-    <p id="task-delete-title" class="task-delete-title"></p>
-    <div class="scratch-actions">
-      <button type="button" class="btn btn-danger" id="task-delete-confirm">Delete</button>
-      <button type="button" class="btn" id="task-delete-cancel">Cancel</button>
-    </div>
-  </dialog>
   <dialog id="url-name-modal" class="scratch-modal">
     <p class="scratch-label">Paste link</p>
     <code id="url-name-href" class="url-name-href"></code>
@@ -1083,40 +1110,33 @@ def index():
     return redirect("/page/index")
 
 
+def _index_page(slug: str, title: str, body_inner: str) -> str:
+    """Shared shell for the auto-generated index pages (_scratch, _daily, _deleted)."""
+    body = f"""{build_breadcrumb(slug, title)}
+<header class="page-header"><h1>{title}</h1></header>
+<article class="page-content">{body_inner}</article>"""
+    return shell(title, body)
+
+
+def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
+    if not entries:
+        return f"<p>{empty_msg}</p>"
+    items = "".join(
+        f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
+        f'<span class="note-date">{n["date"]}</span></li>'
+        for n in entries
+    )
+    return f"<ul class='notes-list'>{items}</ul>"
+
+
 @app.get("/page/_scratch")
 def scratch_page():
-    entries = list_scratch()
-    if entries:
-        items = "".join(
-            f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
-            f'<span class="note-date">{n["date"]}</span></li>'
-            for n in entries
-        )
-        body_inner = f"<ul class='notes-list'>{items}</ul>"
-    else:
-        body_inner = "<p>No entries yet.</p>"
-    body = f"""{build_breadcrumb('_scratch', 'Scratch')}
-<header class="page-header"><h1>Scratch</h1></header>
-<article class="page-content">{body_inner}</article>"""
-    return shell("Scratch", body)
+    return _index_page('_scratch', 'Scratch', _notes_list_html(list_scratch(), 'No entries yet.'))
 
 
 @app.get("/page/_daily")
 def daily_index_page():
-    entries = list_daily()
-    if entries:
-        items = "".join(
-            f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
-            f'<span class="note-date">{n["date"]}</span></li>'
-            for n in entries
-        )
-        body_inner = f"<ul class='notes-list'>{items}</ul>"
-    else:
-        body_inner = "<p>No daily notes yet.</p>"
-    body = f"""{build_breadcrumb('_daily', 'Daily')}
-<header class="page-header"><h1>Daily</h1></header>
-<article class="page-content">{body_inner}</article>"""
-    return shell("Daily", body)
+    return _index_page('_daily', 'Daily', _notes_list_html(list_daily(), 'No daily notes yet.'))
 
 
 @app.get("/page/_deleted")
@@ -1138,10 +1158,7 @@ def deleted_pages_route():
         body_inner = f"<ul class='notes-list'>{items}</ul>"
     else:
         body_inner = "<p>No deleted pages in history.</p>"
-    body = f"""{build_breadcrumb('_deleted', 'Deleted Pages')}
-<header class="page-header"><h1>Deleted Pages</h1></header>
-<article class="page-content">{body_inner}</article>"""
-    return shell("Deleted Pages", body)
+    return _index_page('_deleted', 'Deleted Pages', body_inner)
 
 
 @app.get("/page/_raw")
@@ -1292,44 +1309,36 @@ def view_page(slug):
     delete_dialog = _build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
 
-    if request.args.get('from') == 'uncommitted' and GIT_ENABLED:
+    from_uncommitted = request.args.get('from') == 'uncommitted' and GIT_ENABLED
+    if from_uncommitted:
         # Viewing a page from the uncommitted-changes list: show commit button
-        filepath = slug + '.md'
-        commit_btn = (
-            f'<form class="commit-file-form" style="display:inline"'
-            f' data-filepath="{html.escape(filepath)}"'
-            f' data-title="{html.escape(title)}"'
-            f' data-on-success="/uncommitted">'
-            f'<button type="submit" class="btn btn-primary">Commit</button>'
-            f'</form>'
+        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)
+        actions = (
+            f'{_commit_form_html(slug + ".md", title, "/uncommitted")}\n'
+            f'    <a href="/uncommitted" class="btn">← Uncommitted</a>'
         )
-        body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)}{delete_dialog}
-<header class="page-header">
-  <h1>{html.escape(title)}</h1>
-  <div class="page-header-actions">
-    {commit_btn}
-    <a href="/uncommitted" class="btn">← Uncommitted</a>
-  </div>
-</header>
-<article class="page-content">
-  {render_md(strip_h1(content), slug=slug)}
-</article>
-{bl_html}"""
+        page_meta_html = ""
+        article_html = render_md(strip_h1(content), slug=slug)
     else:
+        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
+        actions = (
+            f'{hist_link}\n'
+            f'    <button id="present-btn" class="btn" title="Presentation mode">Present</button>\n'
+            f'    <a href="/edit/{slug}" class="btn">Edit</a>'
+        )
         last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
         page_meta_html = (
             f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
             if last_modified or meta_commit_btn else ""
         )
         article_html = _inject_section_edit_buttons(render_md(strip_h1(content), slug=slug), slug)
-        body = f"""{build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)}{delete_dialog}
+
+    body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
-    {hist_link}
-    <button id="present-btn" class="btn" title="Presentation mode">Present</button>
-    <a href="/edit/{slug}" class="btn">Edit</a>
+    {actions}
   </div>
   {page_meta_html}
 </header>
@@ -1337,7 +1346,6 @@ def view_page(slug):
   {article_html}
 </article>
 {bl_html}"""
-
     return shell(title, body)
 
 
@@ -1371,8 +1379,8 @@ def edit_page(slug):
     safe_content = html.escape(content)
     safe_slug = html.escape(slug)
     safe_title = html.escape(title)
-    can_rename = slug != "index"
-    can_delete = slug != "index" and not is_new
+    can_rename = not is_protected(slug)
+    can_delete = not is_protected(slug) and not is_new
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new and section is None else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete and section is None else ""
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete and section is None else ""
@@ -1388,9 +1396,10 @@ def edit_page(slug):
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
     form_action = f'/edit/{safe_slug}'
-    # Always embed file_hash for conflict detection (full-file and section edits)
+    # Always embed file_hash for conflict detection (full-file and section edits).
+    # For a full-file edit, `content` still holds the full file text.
     if not is_new:
-        full_file_hash = content_hash(path.read_text(encoding="utf-8")) if section is None else file_hash_val
+        full_file_hash = content_hash(content) if section is None else file_hash_val
     else:
         full_file_hash = ""
     section_hidden_fields = f'<input type="hidden" name="file_hash" id="section-file-hash" value="{full_file_hash}">'
@@ -1428,16 +1437,16 @@ def edit_page(slug):
     return shell(f"Edit — {title}", body, editor=True)
 
 
-def _splice_section(path: Path, file_hash: str, start_char: int,
+def _splice_section(full: str | None, file_hash: str, start_char: int,
                     end_char: int, new_content: str) -> tuple[str, str, int, int] | None:
-    """Replace content[start_char:end_char] in the file, guarded by a hash check.
+    """Replace full[start_char:end_char], guarded by a hash check.
 
+    full is the file's current content (None if the file doesn't exist).
     Returns (merged_full_content, new_file_hash, new_start_char, new_end_char)
     or None if the file doesn't exist or the hash doesn't match.
     """
-    if not path.exists():
+    if full is None:
         return None
-    full = path.read_text(encoding="utf-8")
     if content_hash(full) != file_hash:
         return None
     if not (0 <= start_char <= end_char <= len(full)):
@@ -1460,22 +1469,20 @@ def save_page(slug):
     file_hash = request.form.get("file_hash", "")
     start_char = request.form.get("start_char", type=int)
     end_char = request.form.get("end_char", type=int)
+    current = path.read_text(encoding="utf-8") if path.exists() else None
     if file_hash and start_char is not None and end_char is not None:
-        result = _splice_section(path, file_hash, start_char, end_char, content)
+        result = _splice_section(current, file_hash, start_char, end_char, content)
         if result is None:
             return redirect(f"/edit/{slug}?conflict=1")
         content = result[0]
-    elif file_hash and path.exists():
+    elif file_hash and current is not None:
         # Full-file edit with hash — check for conflict
-        current = path.read_text(encoding="utf-8")
         if content_hash(current) != file_hash:
             return redirect(f"/edit/{slug}?conflict=1")
     # Skip write if content is unchanged, but still commit if file is dirty
-    if path.exists() and path.read_text(encoding="utf-8") == content:
-        git_commit(path, f"Update {slug}")
-        return redirect(f"/page/{slug}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    if current != content:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
     git_commit(path, f"Update {slug}")
     return redirect(f"/page/{slug}")
 
@@ -1492,11 +1499,11 @@ def api_save(slug):
     force_section = request.form.get("force_section", type=int)
     is_section_edit = bool(file_hash and start_char is not None and end_char is not None)
     is_force_section = force_section is not None and force_section >= 1
+    current = path.read_text(encoding="utf-8") if path.exists() else None
     if is_force_section:
-        # Force-splice: re-read file, find section by index, splice content in
-        if not path.exists():
+        # Force-splice: find section by index in the current file, splice content in
+        if current is None:
             abort(404)
-        current = path.read_text(encoding="utf-8")
         rng = section_char_range(current, force_section)
         if rng is None:
             abort(400)
@@ -1506,27 +1513,20 @@ def api_save(slug):
         new_start = fs_start
         new_end = fs_start + len(raw_content)
     elif is_section_edit:
-        result = _splice_section(path, file_hash, start_char, end_char, raw_content)
+        result = _splice_section(current, file_hash, start_char, end_char, raw_content)
         if result is None:
             return jsonify({"error": "file_changed"}), 409
         content, new_hash, new_start, new_end = result
     else:
         # Full-file edit — check hash if provided (conflict detection)
-        if file_hash and path.exists():
-            current = path.read_text(encoding="utf-8")
-            if content_hash(current) != file_hash:
-                return jsonify({"error": "file_changed", "file_hash": content_hash(current)}), 409
+        if file_hash and current is not None and content_hash(current) != file_hash:
+            return jsonify({"error": "file_changed", "file_hash": content_hash(current)}), 409
         content = raw_content
     has_section_response = is_section_edit or is_force_section
     # Skip write if content is unchanged
-    if path.exists() and path.read_text(encoding="utf-8") == content:
-        if has_section_response:
-            return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
-        if file_hash:
-            return jsonify({"file_hash": content_hash(content)})
-        return "", 204
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    if current != content:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
     if has_section_response:
         return jsonify({"file_hash": new_hash, "start_char": new_start, "end_char": new_end})
     if file_hash:
@@ -1565,18 +1565,14 @@ def create_page():
 
 @app.post("/rename/<path:slug>")
 def rename_page(slug):
-    if slug == "index":
+    if is_protected(slug):
         abort(400)
     old_path = safe_path(slug)
     if old_path is None or not old_path.exists():
         abort(404)
     raw = request.form.get("new_name", "").strip()
-    # Slugify but preserve underscores so scratch timestamps survive a rename
-    new_slug = "/".join(
-        re.sub(r"[^a-z0-9_]+", "-", p.strip().lower()).strip("-")
-        for p in raw.split("/")
-        if re.sub(r"[^a-z0-9_]+", "-", p.strip().lower()).strip("-")
-    )
+    # to_slug preserves underscores, so scratch timestamps survive a rename
+    new_slug = to_slug(raw)
     if not new_slug or new_slug == slug:
         return redirect(f"/edit/{slug}")
     new_path = safe_path(new_slug)
@@ -1593,7 +1589,7 @@ def rename_page(slug):
 
 @app.post("/delete/<path:slug>")
 def delete_page(slug):
-    if slug == "index":
+    if is_protected(slug):
         abort(400)
     path = safe_path(slug)
     if path is None or not path.exists():
@@ -1716,18 +1712,7 @@ def diff_view(slug, sha):
     if diff is None:
         abort(404)
     title = slug_display_name(slug)
-    lines = []
-    for line in diff.splitlines():
-        if line.startswith('+') and not line.startswith('+++'):
-            cls = 'diff-add'
-        elif line.startswith('-') and not line.startswith('---'):
-            cls = 'diff-del'
-        elif line.startswith('@@'):
-            cls = 'diff-hunk'
-        else:
-            cls = 'diff-ctx'
-        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
-    diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
+    diff_html = _diff_to_html(diff)
     page_exists = path.exists()
     if page_exists:
         back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
@@ -1781,12 +1766,12 @@ def api_pages_list():
     counts = all_backlink_counts()
     pages = []
     for md_file, slug in iter_pages():
-        content = md_file.read_text(encoding="utf-8")
+        title, _ = _page_meta(md_file, slug)
         stat = md_file.stat()
         mtime = stat.st_mtime
         pages.append({
             "slug": slug,
-            "title": page_title(content, slug),
+            "title": title,
             "links": counts.get(slug, 0),
             "mtime": int(mtime),
             "created": fmt_date(getattr(stat, "st_birthtime", stat.st_ctime)),
@@ -1855,6 +1840,7 @@ def do_search(q: str) -> list[dict]:
         for k in ("type", "task_id", "status"):
             if d.get(k) is not None:
                 r[k] = d[k]
+        r["href"] = _result_href(r)
         results.append(r)
     return results
 
@@ -1887,7 +1873,7 @@ def search_page():
     if results:
         cards = "".join(
             f"""<div class="search-result-card">
-  <a href="{html.escape(_result_href(r))}">{html.escape(r['title'])}</a>
+  <a href="{html.escape(r['href'])}">{html.escape(r['title'])}</a>
   <p>{r['excerpt']}</p>
 </div>"""
             for r in results
@@ -1980,18 +1966,7 @@ def uncommitted_page():
     if not GIT_ENABLED:
         abort(404)
 
-    files = git_uncommitted_files()
-    file_list = []
-    for f in files:
-        filepath = f["filepath"]
-        if filepath.endswith('.md') and not filepath.startswith('_assets'):
-            slug = filepath[:-3]
-            fpath = WIKI_DIR / filepath
-            title = page_title(fpath.read_text(encoding="utf-8"), slug) if fpath.exists() else slug_display_name(slug)
-            file_list.append({"slug": slug, "title": title, "filepath": filepath, "mtime": f["mtime"], "rel": f["rel"]})
-        else:
-            file_list.append({"slug": None, "title": filepath, "filepath": filepath, "mtime": f["mtime"], "rel": f["rel"]})
-
+    file_list = _uncommitted_entries()
     if file_list:
         rows = "".join(
             f'<tr>'
@@ -2042,28 +2017,8 @@ def diff_uncommitted(slug):
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-
-    lines = []
-    for line in diff.splitlines():
-        if line.startswith('+') and not line.startswith('+++'):
-            cls = 'diff-add'
-        elif line.startswith('-') and not line.startswith('---'):
-            cls = 'diff-del'
-        elif line.startswith('@@'):
-            cls = 'diff-hunk'
-        else:
-            cls = 'diff-ctx'
-        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
-    diff_html = ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
-
-    commit_btn = (
-        f'<form class="commit-file-form" style="display:inline"'
-        f' data-filepath="{html.escape(rel)}"'
-        f' data-title="{html.escape(title)}"'
-        f' data-on-success="/uncommitted">'
-        f'<button type="submit" class="btn btn-primary">Commit</button>'
-        f'</form>'
-    )
+    diff_html = _diff_to_html(diff)
+    commit_btn = _commit_form_html(rel, title, "/uncommitted")
     body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, '/uncommitted'), ('Diff', None))}
 <header class="page-header">
   <h1>Uncommitted Changes — {html.escape(title)}</h1>
@@ -2079,25 +2034,10 @@ def diff_uncommitted(slug):
 @app.get("/api/uncommitted")
 def api_uncommitted():
     """Return list of files with uncommitted changes."""
-    files = git_uncommitted_files()
-    result = []
-    for f in files:
-        filepath = f["filepath"]
-        # Convert filepath to slug (remove .md extension)
-        if filepath.endswith('.md') and not filepath.startswith('_assets'):
-            slug = filepath[:-3]
-            # Try to get title from file if it exists
-            path = WIKI_DIR / filepath
-            if path.exists():
-                content = path.read_text(encoding="utf-8")
-                title = page_title(content, slug)
-            else:
-                title = slug_display_name(slug)
-            result.append({"slug": slug, "title": title, "filepath": filepath})
-        else:
-            # Asset or other file
-            result.append({"slug": None, "title": filepath, "filepath": filepath})
-    return jsonify(result)
+    return jsonify([
+        {"slug": e["slug"], "title": e["title"], "filepath": e["filepath"]}
+        for e in _uncommitted_entries()
+    ])
 
 
 @app.post("/api/commit-all")
@@ -2106,21 +2046,11 @@ def api_commit_all():
     if not GIT_ENABLED:
         return jsonify({"error": "Git not enabled"}), 400
     
-    files = git_uncommitted_files()
     committed = []
-    
-    for f in files:
+    for f in git_uncommitted_files():
         filepath = f["filepath"]
-        # Generate appropriate commit message
-        if filepath.endswith('.md'):
-            slug = filepath[:-3]
-            message = f"Save {slug}"
-        else:
-            message = f"Update {filepath}"
-        
-        git_commit_file(filepath, message)
+        git_commit_file(filepath, _commit_message(filepath))
         committed.append(filepath)
-    
     return jsonify({"committed": len(committed), "files": committed})
 
 
@@ -2132,27 +2062,16 @@ def api_commit_file():
     
     data = request.get_json()
     filepath = data.get("filepath", "")
-    message = data.get("message", "")
-    
     if not filepath:
         return jsonify({"error": "No filepath provided"}), 400
-    
+
     # Verify file is in uncommitted list
-    uncommitted = git_uncommitted_files()
-    uncommitted_filepaths = [f["filepath"] for f in uncommitted]
-    if filepath not in uncommitted_filepaths:
+    if filepath not in [f["filepath"] for f in git_uncommitted_files()]:
         return jsonify({"error": "File is not uncommitted"}), 400
-    
-    git_commit_file(filepath, message or f"Update {filepath}")
+
+    # Message policy lives server-side; the client only sends the filepath.
+    git_commit_file(filepath, _commit_message(filepath))
     return jsonify({"success": True})
-
-
-# ── Task App ──────────────────────────────────────────────────────────────────
-# All task/deck logic has been moved to deck.py module.
-# Routes are registered via the deck blueprint above.
-
-# Backward-compatibility alias for tests
-_read_deck = deck_module._read_deck
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

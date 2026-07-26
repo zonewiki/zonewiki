@@ -142,7 +142,6 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
-| GET    | `/edit-task/<id>`     | Full-page task editor (more space than the modal for long descriptions) |
 
 Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
@@ -346,7 +345,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 ## Search
 
 - **Ranking is BM25**, implemented in pure Python (`src/search.py`, stdlib only — no database, no external deps). Pages and deck tasks are scored in **one combined index** so their relevance scores are directly comparable.
-- `GET /api/search?q=...` collects every `.md` file in `pages/` **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, type? }]`. Task results have `type: "task"` and `task_id` fields.
+- `GET /api/search?q=...` collects every `.md` file in `pages/` **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, type? }]`. `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
 - **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
 - **Stemming** (`search.stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
 - **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
@@ -403,7 +402,7 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 - **Focus tab**: shows tasks with `focus_date <= today`, overdue/due-today tasks, and pinned tasks. Past focus dates are not penalised — tasks stay in Focus as a working set. Sorted: overdue first, due today, then pinned, then focused tasks.
 - **Plan (`due`) tab — day board**: shows **all** open (non-deferred) tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`). `Overdue`/`Later` are display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Plan-for date buttons**: each task card has inline plan buttons — ☀ (today), ☾ (tomorrow), `Mon` (next Monday, shown Fri/Sat), and **📅** which opens a native date picker to plan for an arbitrary date without opening the edit modal. Clicking an already-set option clears it. Keyboard shortcut: **f** on a selected task.
-- **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title
+- **Sort options**: Manual order (drag-and-drop) · Created
 - **Filters**: Tag text filter — comma-separated tags require all (AND); pipe-separated (`a|b`) match any (OR)
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
 - **Inline completion**: Checkbox toggles mark task complete instantly

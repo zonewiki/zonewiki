@@ -41,6 +41,9 @@ def wiki_dir(tmp_path):
     deck_module.DECK_FILE = tmp_path / "_deck.json"
     server.DECK_FILE = tmp_path / "_deck.json"
     server._search_doc_cache.clear()
+    server._page_meta_cache.clear()
+    deck_module._task_docs_cache["key"] = None
+    deck_module._task_docs_cache["docs"] = []
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
     yield tmp_path
     server.PAGES_DIR = old_pages
@@ -767,3 +770,41 @@ class TestHostHeader:
             assert resp.status_code != 400
         finally:
             server.ALLOW_REMOTE = old
+
+
+# ===========================================================================
+# Search result hrefs (server-computed destination URLs)
+# ===========================================================================
+
+class TestSearchResultHref:
+
+    def test_page_result_has_href(self, client, wiki_dir):
+        write_page(wiki_dir, "gardening", "# Gardening\n\nTomatoes and peppers.\n")
+        results = client.get("/api/search?q=tomatoes", headers=HOST).get_json()
+        assert results, "expected a search hit"
+        assert results[0]["href"] == f"/page/{results[0]['slug']}"
+
+    def test_task_result_href_opens_deck_prefiltered(self, client, wiki_dir):
+        client.post("/api/deck", json={"title": "Water the ferns"}, headers=HOST)
+        results = client.get("/api/search?q=ferns", headers=HOST).get_json()
+        task_hits = [r for r in results if r.get("type") == "task"]
+        assert task_hits, "expected a task hit"
+        href = task_hits[0]["href"]
+        assert href.startswith("/page/deck?")
+        assert "search=Water+the+ferns" in href
+        assert "filter=open" in href
+
+
+class TestBacklinkCacheInvalidation:
+
+    def test_backlinks_reflect_on_disk_edits(self, client, wiki_dir):
+        write_page(wiki_dir, "target", "# Target\n\nbody\n")
+        write_page(wiki_dir, "source", "# Source\n\nno links yet\n")
+        resp = client.get("/page/target", headers=HOST)
+        assert "No pages link here" in resp.data.decode() or "Source" not in resp.data.decode()
+        # Edit on disk (new mtime) — the cached link targets must be re-derived
+        import time
+        time.sleep(0.01)
+        write_page(wiki_dir, "source", "# Source\n\nSee [[Target]].\n")
+        resp = client.get("/page/target", headers=HOST)
+        assert "Source" in resp.data.decode()

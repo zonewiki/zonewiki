@@ -28,6 +28,9 @@ def wiki_dir(tmp_path):
     server.PAGES_DIR = tmp_path
     deck_module.DECK_FILE = tmp_path / "_deck.json"
     server.DECK_FILE = tmp_path / "_deck.json"
+    server._page_meta_cache.clear()
+    deck_module._task_docs_cache["key"] = None
+    deck_module._task_docs_cache["docs"] = []
     (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
     yield tmp_path
     server.WIKI_DIR = orig_wiki
@@ -1029,3 +1032,52 @@ class TestConcurrentWriteSafety:
         r.start(); w.start()
         w.join(); stop.set(); r.join()
         assert errors == []
+
+
+# ---------- Refactor regression tests ----------
+
+
+class TestUncompleteClearsWontDo:
+    def test_batch_uncomplete_clears_wont_do(self, client):
+        """Reopening a won't-do task via batch-complete must clear the flag."""
+        task_id = create_task(client, title="Abandoned").get_json()["id"]
+        client.put(f"/api/deck/{task_id}", json={"wont_do": True})
+        client.post("/api/deck/batch-complete", json={"ids": [task_id], "completed": False})
+        active = client.get("/api/deck").get_json()
+        task = next(t for t in active if t["id"] == task_id)
+        assert task["completed_at"] is None
+        assert task["wont_do"] is False
+
+
+class TestCreateFieldParity:
+    def test_create_applies_all_fields(self, client):
+        """Create route goes through _apply_task_fields — every field lands."""
+        resp = create_task(
+            client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
+            due_date="2026-08-01", start_date="2026-07-30", defer_days=-2,
+            focus_date="2026-08-01", page="  some-page ", blocked_by="x, y",
+            rec_type="weekly", rec_interval=3,
+        )
+        assert resp.status_code == 201
+        t = resp.get_json()
+        assert t["title"] == "Full"
+        assert t["description"] == "notes"
+        assert t["tags"] == ["a", "b"]
+        assert t["due_date"] == "2026-08-01"
+        assert t["start_date"] == "2026-07-30"
+        assert t["defer_days"] == 0          # clamped to >= 0
+        assert t["focus_date"] == "2026-08-01"
+        assert t["page"] == "some-page"
+        assert t["blocked_by"] == ["x", "y"]
+        assert t["recurrence"] == {"type": "weekly", "interval": 3}
+        assert t["sort_order"] is None
+        assert t["completed_at"] is None
+        assert t["wont_do"] is False
+
+    def test_create_defaults(self, client):
+        t = create_task(client, title="Bare").get_json()
+        assert t["recurrence"] is None
+        assert t["blocked_by"] == []
+        assert t["tags"] == []
+        assert t["due_date"] is None
+        assert t["defer_days"] is None
