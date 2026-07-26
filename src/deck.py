@@ -7,6 +7,7 @@ Provides:
 - API route registration via Blueprint
 """
 
+import calendar
 import functools
 import html
 import json
@@ -215,37 +216,55 @@ def _new_task(**overrides) -> dict:
         "recurrence": None,
         "page": None,
         "blocked_by": [],
+        "spawned_from": None,
     }
     task.update(overrides)
     return task
 
 
+def _add_months(base: date, months: int) -> date:
+    """Add months to a date, clamping the day to the target month's last day
+    (Jan 31 + 1 month = Feb 28/29, not an invalid date and not always the 28th)."""
+    month = base.month + months
+    year = base.year + (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    day = min(base.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _rec_step(base: date, rtype: str, interval: int) -> date:
+    if rtype == "weekly":
+        return base + timedelta(weeks=interval)
+    if rtype == "monthly":
+        return _add_months(base, interval)
+    return base + timedelta(days=interval)  # daily (and any unknown type)
+
+
 def _spawn_recurring(task: dict) -> dict | None:
-    """If task has recurrence, create the next instance and return it."""
+    """If task has recurrence, create the next instance and return it.
+
+    ``recurrence.from`` picks the schedule anchor: ``"due"`` (default) steps
+    from the previous due date, keeping the series calendar-aligned;
+    ``"completion"`` steps from today, for interval habits. In both modes the
+    next due date is caught up until it is >= today, so completing a
+    long-overdue task never spawns an instance that is already overdue."""
     rec = task.get("recurrence")
     if not rec:
         return None
     rtype = rec.get("type", "daily")
     interval = rec.get("interval", 1)
-    base_date = task.get("due_date")
-    if base_date:
-        try:
-            base = datetime.strptime(base_date, "%Y-%m-%d")
-        except ValueError:
-            base = datetime.now()
-    else:
-        base = datetime.now()
+    today = date.today()
 
-    if rtype == "weekly":
-        next_due = base + timedelta(weeks=interval)
-    elif rtype == "monthly":
-        month = base.month + interval
-        year = base.year + (month - 1) // 12
-        month = (month - 1) % 12 + 1
-        day = min(base.day, 28)
-        next_due = base.replace(year=year, month=month, day=day)
-    else:  # daily (and any unknown type)
-        next_due = base + timedelta(days=interval)
+    base = today
+    if rec.get("from") != "completion" and task.get("due_date"):
+        try:
+            base = datetime.strptime(task["due_date"], "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    next_due = _rec_step(base, rtype, interval)
+    while next_due < today:
+        next_due = _rec_step(next_due, rtype, interval)
 
     return _new_task(
         title=task["title"],
@@ -256,6 +275,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         sort_order=task.get("sort_order", 0),
         recurrence=task.get("recurrence"),
         page=task.get("page"),
+        spawned_from=task["id"],
     )
 
 
@@ -269,16 +289,24 @@ def _complete_task(task: dict, now: str | None = None) -> dict | None:
 def _uncomplete_task(task: dict, active: list[dict],
                      protect_ids: frozenset = frozenset()) -> list[dict]:
     """Clear task's completion state and return active with the open recurring
-    instance that was spawned at completion time removed (matched by title,
-    recurrence, and creation after completion). protect_ids are never removed."""
+    instance that was spawned at completion time removed. Instances carry
+    spawned_from (the completed task's id) for an exact match; instances from
+    before that field existed fall back to the old heuristic (title, recurrence,
+    creation after completion). protect_ids are never removed."""
     if task.get("recurrence"):
-        completed_at = task["completed_at"]
-        active = [t for t in active if t["id"] in protect_ids or not (
-            t.get("title") == task["title"] and
-            t.get("recurrence") == task.get("recurrence") and
-            not t.get("completed_at") and
-            t.get("created_at", "") >= completed_at
-        )]
+        exact = [t for t in active
+                 if t.get("spawned_from") == task["id"] and not t.get("completed_at")]
+        if exact:
+            drop = {t["id"] for t in exact} - set(protect_ids)
+            active = [t for t in active if t["id"] not in drop]
+        else:
+            completed_at = task["completed_at"]
+            active = [t for t in active if t["id"] in protect_ids or not (
+                t.get("title") == task["title"] and
+                t.get("recurrence") == task.get("recurrence") and
+                not t.get("completed_at") and
+                t.get("created_at", "") >= completed_at
+            )]
     task["completed_at"] = None
     task["wont_do"] = False
     return active
@@ -396,6 +424,10 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <div class="task-field" id="task-rec-interval-field{sfx}" style="display:none">
         <label for="task-edit-rec-interval{sfx}">Every N</label>
         <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
+      </div>
+      <div class="task-field task-field-center" id="task-rec-from-field{sfx}" style="display:none" title="Repeat from the completion date instead of the due date">
+        <label for="task-edit-rec-from{sfx}">From done</label>
+        <input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from">
       </div>
       <div class="task-field">
         <label for="task-edit-focus{sfx}">Plan for</label>
@@ -587,26 +619,50 @@ def api_get_deck_completed():
     return jsonify(_read_completed())
 
 
+def _is_deferred(task: dict, today: str) -> bool:
+    """True when the task is hidden until a later date — either an absolute
+    start_date or defer_days before its due_date (most restrictive wins).
+    Mirror of isDeferred() in deck.js; keep the two in sync."""
+    if task.get("completed_at"):
+        return False
+    if task.get("start_date") and task["start_date"] > today:
+        return True
+    if task.get("defer_days") is not None and task.get("due_date"):
+        due_dt = datetime.fromisoformat(task["due_date"] + "T00:00:00")
+        show_from = (due_dt - timedelta(days=task["defer_days"])).date().isoformat()
+        if show_from > today:
+            return True
+    return False
+
+
 @bp.get("/api/deck/due-count")
 def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
     for t in _read_deck():
-        if not t.get("due_date"):
-            continue
         # Skip deferred tasks — they are not visible in Backlog/Focus/Plan
-        if t.get("start_date") and t["start_date"] > today:
+        if not t.get("due_date") or _is_deferred(t, today):
             continue
-        if t.get("defer_days") is not None:
-            due_dt = datetime.fromisoformat(t["due_date"] + "T00:00:00")
-            show_from = (due_dt - timedelta(days=t["defer_days"])).date().isoformat()
-            if show_from > today:
-                continue
         if t["due_date"] < today:
             overdue += 1
         elif t["due_date"] == today:
             today_count += 1
     return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
+
+
+def _reconcile_blocking(task_id: str, blocking_ids: list, active: list[dict]) -> None:
+    """Make task_id block exactly blocking_ids: add it to those tasks'
+    blocked_by and remove it everywhere else. Server-side so the whole
+    edit lands in one write instead of one request per affected task."""
+    wanted = {b for b in blocking_ids if isinstance(b, str)}
+    for t in active:
+        if t["id"] == task_id:
+            continue
+        blocked = t.get("blocked_by") or []
+        if t["id"] in wanted and task_id not in blocked:
+            t["blocked_by"] = blocked + [task_id]
+        elif t["id"] not in wanted and task_id in blocked:
+            t["blocked_by"] = [b for b in blocked if b != task_id]
 
 
 @bp.post("/api/deck")
@@ -619,6 +675,8 @@ def api_create_deck_item():
     _apply_task_fields(task, data)
     active = _read_deck_strict()
     active.append(task)
+    if isinstance(data.get("blocking"), list):
+        _reconcile_blocking(task["id"], data["blocking"], active)
     _write_deck(active)
     return jsonify(task), 201
 
@@ -658,6 +716,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
             task["recurrence"] = {
                 "type": rec_type,
                 "interval": max(1, int(data.get("rec_interval", 1))),
+                "from": "completion" if data.get("rec_from") == "completion" else "due",
             }
         else:
             task["recurrence"] = None
@@ -678,6 +737,8 @@ def api_update_deck_item(task_id):
         abort(404)
 
     _apply_task_fields(task, data)
+    if isinstance(data.get("blocking"), list):
+        _reconcile_blocking(task_id, data["blocking"], active)
 
     if "wont_do" in data:
         if data["wont_do"] and not task.get("completed_at"):
@@ -712,15 +773,24 @@ def api_update_deck_item(task_id):
     return jsonify(task)
 
 
+def _strip_blocked_refs(dead_ids: set, *task_lists: list[dict]) -> None:
+    """Remove deleted task ids from every remaining task's blocked_by, so
+    deletion never leaves dangling dependency references."""
+    for tasks in task_lists:
+        for t in tasks:
+            if t.get("blocked_by") and any(b in dead_ids for b in t["blocked_by"]):
+                t["blocked_by"] = [b for b in t["blocked_by"] if b not in dead_ids]
+
+
 @bp.delete("/api/deck/<task_id>")
 @_locked
 def api_delete_deck_item(task_id):
     active = _read_deck_strict()
     completed_list = _read_completed_strict()
-    _write_both(
-        [t for t in active if t["id"] != task_id],
-        [t for t in completed_list if t["id"] != task_id],
-    )
+    active = [t for t in active if t["id"] != task_id]
+    completed_list = [t for t in completed_list if t["id"] != task_id]
+    _strip_blocked_refs({task_id}, active, completed_list)
+    _write_both(active, completed_list)
     return "", 204
 
 
@@ -734,11 +804,84 @@ def api_batch_delete_deck():
     id_set = set(ids)
     active = _read_deck_strict()
     completed_list = _read_completed_strict()
-    _write_both(
-        [t for t in active if t["id"] not in id_set],
-        [t for t in completed_list if t["id"] not in id_set],
-    )
+    active = [t for t in active if t["id"] not in id_set]
+    completed_list = [t for t in completed_list if t["id"] not in id_set]
+    _strip_blocked_refs(id_set, active, completed_list)
+    _write_both(active, completed_list)
     return "", 204
+
+
+def _sanitize_snapshot(snap: dict) -> dict | None:
+    """Rebuild a task from an untrusted snapshot, keeping only known fields.
+
+    Returns None for snapshots without a usable title. Dates are validated;
+    invalid optional values degrade to their defaults rather than aborting,
+    so one bad field doesn't lose the rest of an undo."""
+    title = str(snap.get("title") or "").strip()
+    if not title:
+        return None
+    task = _new_task(title=title)
+    task["description"] = str(snap.get("description") or "")
+    task["tags"] = [str(t).strip() for t in snap.get("tags") or [] if str(t).strip()]
+    for field in ("start_date", "due_date", "focus_date"):
+        val = snap.get(field)
+        if isinstance(val, str):
+            try:
+                datetime.strptime(val, "%Y-%m-%d")
+                task[field] = val
+            except ValueError:
+                pass
+    if isinstance(snap.get("defer_days"), int):
+        task["defer_days"] = max(0, snap["defer_days"])
+    if isinstance(snap.get("id"), str) and snap["id"]:
+        task["id"] = snap["id"]
+    for field in ("created_at", "completed_at", "spawned_from", "page"):
+        if isinstance(snap.get(field), str) and snap[field]:
+            task[field] = snap[field]
+    if isinstance(snap.get("sort_order"), int):
+        task["sort_order"] = snap["sort_order"]
+    task["wont_do"] = bool(snap.get("wont_do"))
+    rec = snap.get("recurrence")
+    if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly"):
+        task["recurrence"] = {
+            "type": rec["type"],
+            "interval": max(1, int(rec.get("interval") or 1)),
+            "from": "completion" if rec.get("from") == "completion" else "due",
+        }
+    blocked = snap.get("blocked_by")
+    if isinstance(blocked, list):
+        task["blocked_by"] = [b for b in blocked if isinstance(b, str)]
+    return task
+
+
+@bp.post("/api/deck/restore")
+@_locked
+def api_restore_deck_items():
+    """Re-insert full task snapshots (undo after delete). Snapshots keep their
+    original id/created_at/etc.; ids that already exist are skipped."""
+    data = request.get_json(force=True)
+    snaps = data.get("tasks", [])
+    if not snaps or not isinstance(snaps, list):
+        abort(400)
+    active = _read_deck_strict()
+    completed_list = _read_completed_strict()
+    existing = {t["id"] for t in active} | {t["id"] for t in completed_list}
+    restored = []
+    for snap in snaps:
+        if not isinstance(snap, dict):
+            continue
+        task = _sanitize_snapshot(snap)
+        if task is None or task["id"] in existing:
+            continue
+        existing.add(task["id"])
+        (completed_list if task["completed_at"] else active).append(task)
+        # Re-add reverse dependency edges stripped when the task was deleted.
+        if isinstance(snap.get("blocking"), list):
+            _reconcile_blocking(task["id"], snap["blocking"], active)
+        restored.append(task)
+    if restored:
+        _write_both(active, completed_list, "Restore deck tasks")
+    return jsonify(restored), 201
 
 
 @bp.post("/api/deck/batch-complete")

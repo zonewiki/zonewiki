@@ -67,6 +67,7 @@
   let pendingUndoFn = null;
   const pendingCompletions = new Map(); // taskId → timeoutId
   const CAPACITY = 5;  // day sections with >= this many tasks are flagged
+  const STALE_DAYS = 3;  // focus plans older than this are styled stale
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
   // focus_date); dropping on "Someday" clears the plan. These list-level
@@ -280,6 +281,33 @@
     }
   }
 
+  // Bare PUT without the per-call render of updateTask — for batched writes
+  // that end with a single fetchDeck().
+  function putTask(id, data) {
+    return fetch(`/api/deck/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Clear focus_date on the stale plans the Focus bar counts (same filtered
+  // view, so tag/page filters are respected), with undo restoring the dates.
+  async function clearStalePlans() {
+    const cutoff = dateOffset(-STALE_DAYS);
+    const stale = filterTasks().filter(t => t.focus_date && t.focus_date <= cutoff);
+    if (!stale.length) return;
+    const snapshot = stale.map(t => ({ id: t.id, focus_date: t.focus_date }));
+    await Promise.all(stale.map(t => putTask(t.id, { focus_date: null })));
+    await fetchDeck();
+    refreshOtherInstances(instanceId);
+    showUndo(`${stale.length} stale plan${stale.length > 1 ? 's' : ''} cleared`, async () => {
+      await Promise.all(snapshot.map(s => putTask(s.id, { focus_date: s.focus_date })));
+      await fetchDeck();
+      refreshOtherInstances(instanceId);
+    });
+  }
+
   async function reorder(order) {
     await fetch('/api/deck/reorder', {
       method: 'POST',
@@ -327,6 +355,16 @@
     return dateToStr(new Date());
   }
 
+  // A task with an open (non-completed) blocker is not actionable: it is
+  // excluded from Focus and dimmed elsewhere. Completing the blocker
+  // surfaces it again automatically.
+  function isBlocked(t, byId) {
+    return (t.blocked_by || []).some(bid => {
+      const blocker = byId.get(bid);
+      return blocker && !blocker.completed_at;
+    });
+  }
+
   // A task is deferred (hidden from Backlog/Focus/Plan) until its start_date,
   // or until defer_days before its due_date — the most restrictive wins.
   function isDeferred(t, today) {
@@ -361,7 +399,8 @@
     // Tab filter
     if (activeFilter === 'focus') {
       const today = todayStr();
-      filtered = filtered.filter(t => !t.completed_at && (
+      const byId = new Map(tasks.map(t => [t.id, t]));
+      filtered = filtered.filter(t => !t.completed_at && !isBlocked(t, byId) && (
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
       ));
     } else if (activeFilter === 'due') {
@@ -778,7 +817,8 @@
 
     const taskHTML = (task, draggable = (!TAB_SORT[activeFilter] && sortSelect.value === 'manual'), extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
-      const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
+      const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '')
+        + (!task.completed_at && isBlocked(task, byId) ? ' task-blocked-item' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
@@ -792,8 +832,16 @@
       const dueDisplay = !task.completed_at
         ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
         : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
+      // Past plans show their age instead of a date, so a stale Focus working
+      // set is visible at a glance (stale styling from STALE_DAYS on).
+      const focusAge = (!task.completed_at && task.focus_date && task.focus_date < todayStr())
+        ? Math.round((new Date(todayStr() + 'T00:00:00') - new Date(task.focus_date + 'T00:00:00')) / 86400000)
+        : 0;
+      const focusLabel = task.focus_date
+        ? (focusAge > 0 ? `planned ${focusAge}d ago` : formatDate(task.focus_date)) : '';
+      const staleClass = focusAge >= STALE_DAYS ? ' task-focus-stale' : '';
       const focusDisplay = !task.completed_at
-        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${task.focus_date ? ' ' + formatDate(task.focus_date) : ''}</span>`
+        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${staleClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
         : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
@@ -887,6 +935,14 @@
       html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
+    // Focus: surface stale plans (planned >= STALE_DAYS ago) with one-click clear
+    if (activeFilter === 'focus') {
+      const staleCount = filtered.filter(t => t.focus_date && t.focus_date <= dateOffset(-STALE_DAYS)).length;
+      if (staleCount) {
+        html += `<li class="focus-stale-bar">${staleCount} stale plan${staleCount > 1 ? 's' : ''}` +
+          `<button class="btn btn-sm" id="focus-clear-stale">Clear</button></li>`;
+      }
+    }
     // Limit completed tab display
     let displayTasks = orderedTasks;
     if (activeFilter === 'completed' && orderedTasks.length > completedLimit) {
@@ -901,6 +957,8 @@
     wireListHandlers();
 
     function wireListHandlers() {
+    listEl.querySelector('#focus-clear-stale')?.addEventListener('click', clearStalePlans);
+
     // "Show more" button
     const showMoreBtn = listEl.querySelector('#tasks-show-more-btn');
     if (showMoreBtn) {
@@ -1581,6 +1639,11 @@
     recTypeSelect.value = recType;
     document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
     recIntervalField.style.display = recType ? '' : 'none';
+    const recFromCb = document.getElementById('task-edit-rec-from' + sfx);
+    if (recFromCb) {
+      recFromCb.checked = task?.recurrence?.from === 'completion';
+      recFromCb.closest('.task-field').style.display = recType ? '' : 'none';
+    }
     // Show "move to new" only for existing tasks with a sort_order
     const newField = document.getElementById('task-edit-inbox-field' + sfx);
     const newCb = document.getElementById('task-edit-inbox' + sfx);
@@ -1598,6 +1661,8 @@
 
   recTypeSelect.addEventListener('change', () => {
     recIntervalField.style.display = recTypeSelect.value ? '' : 'none';
+    const recFromField = document.getElementById('task-rec-from-field' + sfx);
+    if (recFromField) recFromField.style.display = recTypeSelect.value ? '' : 'none';
   });
 
   // Hide-until-due checkbox
@@ -1667,42 +1732,26 @@
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
+      rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
       blocked_by: getLinkIds('blocked_by'),
+      // The server reconciles other tasks' blocked_by from this in one write.
+      blocking: getLinkIds('blocking'),
     };
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
       data.sort_order = null;
     }
-    const newBlockingIds = getLinkIds('blocking');
+    const blockingChanged = data.blocking.length !== originalBlockingIds.length ||
+      data.blocking.some(tid => !originalBlockingIds.includes(tid));
     modal.close();
-    let savedId = id;
     if (id) {
       await updateTask(id, data);
     } else {
-      const created = await createTask(data);
-      if (created) savedId = created.id;
+      await createTask(data);
     }
-    // Reconcile "blocking" links — update other tasks' blocked_by. The updates
-    // are independent, so run them in parallel.
-    if (savedId) {
-      const addedBlocking = newBlockingIds.filter(tid => !originalBlockingIds.includes(tid));
-      const removedBlocking = originalBlockingIds.filter(tid => !newBlockingIds.includes(tid));
-      const writes = [];
-      for (const tid of addedBlocking) {
-        const t = tasks.find(x => x.id === tid);
-        if (t && !(t.blocked_by || []).includes(savedId)) {
-          writes.push(updateTask(tid, { blocked_by: [...(t.blocked_by || []), savedId] }));
-        }
-      }
-      for (const tid of removedBlocking) {
-        const t = tasks.find(x => x.id === tid);
-        if (t) {
-          writes.push(updateTask(tid, { blocked_by: (t.blocked_by || []).filter(bid => bid !== savedId) }));
-        }
-      }
-      await Promise.all(writes);
-    }
+    // Blocking reconciliation mutates other tasks server-side — re-fetch them.
+    if (blockingChanged) await fetchDeck();
   });
 
   deleteBtn.addEventListener('click', async () => {
@@ -1983,8 +2032,10 @@
       const count = ids.length;
       const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
       if (await confirmDelete(title, count)) {
-        // Snapshot deleted tasks for undo
-        const deleted = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
+        // Snapshot deleted tasks for undo, including reverse dependency edges
+        // (deletion strips this id from other tasks' blocked_by).
+        const deleted = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean)
+          .map(t => ({ ...t, blocking: tasks.filter(x => (x.blocked_by || []).includes(t.id)).map(x => x.id) }));
         const next = items.find(el => !selectedIds.has(el.dataset.id) &&
                        items.indexOf(el) > currentIdx)
                   || items.find(el => !selectedIds.has(el.dataset.id));
@@ -1993,12 +2044,17 @@
         anchorId = selectedId;
         await deleteTasks(ids);
         const label = count === 1 ? 'Task deleted' : `${count} tasks deleted`;
-        showUndo(label, () => Promise.all(deleted.map(t => createTask({
-          title: t.title, description: t.description || '',
-          tags: t.tags || [], due_date: t.due_date, start_date: t.start_date,
-          defer_days: t.defer_days, rec_type: t.recurrence?.type,
-          rec_interval: t.recurrence?.interval,
-        }))));
+        // Undo restores the full snapshots server-side (same ids, all fields).
+        showUndo(label, async () => {
+          await fetch('/api/deck/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tasks: deleted }),
+          });
+          await fetchDeck();
+          window.refreshDueBadge?.();
+          refreshOtherInstances(instanceId);
+        });
       }
     } else if ((e.key === 't' || e.key === 'T') && selectedIds.size) {
       e.preventDefault();

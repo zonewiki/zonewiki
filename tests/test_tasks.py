@@ -227,69 +227,94 @@ class TestCompletion:
 # ---------- Recurring Tasks ----------
 
 
+def _future(days):
+    """Future date string — recurrence tests use future due dates so the
+    catch-up rule (next due >= today) does not shift expectations."""
+    return (date.today() + timedelta(days=days)).isoformat()
+
+
 class TestRecurring:
     def test_complete_recurring_spawns_new(self, client):
         task = create_task(client, title="Daily standup",
-                           due_date="2025-03-01",
+                           due_date=_future(10),
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         assert len(tasks) == 1
         spawned = next(t for t in tasks if t["id"] != task["id"])
         assert spawned["title"] == "Daily standup"
-        assert spawned["due_date"] == "2025-03-02"
+        assert spawned["due_date"] == _future(11)
         assert spawned["completed_at"] is None
 
     def test_daily_recurrence_interval(self, client):
         task = create_task(client, title="Every 3 days",
-                           due_date="2025-01-10",
+                           due_date=_future(10),
                            rec_type="daily", rec_interval=3).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["due_date"] == "2025-01-13"
+        assert spawned["due_date"] == _future(13)
 
     def test_weekly_recurrence(self, client):
         task = create_task(client, title="Weekly review",
-                           due_date="2025-03-03",
+                           due_date=_future(3),
                            rec_type="weekly", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["due_date"] == "2025-03-10"
+        assert spawned["due_date"] == _future(10)
 
     def test_weekly_recurrence_interval(self, client):
         task = create_task(client, title="Biweekly",
-                           due_date="2025-03-03",
+                           due_date=_future(3),
                            rec_type="weekly", rec_interval=2).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["due_date"] == "2025-03-17"
+        assert spawned["due_date"] == _future(17)
 
     def test_monthly_recurrence(self, client):
         task = create_task(client, title="Monthly report",
-                           due_date="2025-01-15",
+                           due_date="2099-01-15",
                            rec_type="monthly", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["due_date"] == "2025-02-15"
+        assert spawned["due_date"] == "2099-02-15"
 
     def test_monthly_recurrence_day_clamped(self, client):
-        # Day 31 clamped to 28 to avoid overflow
+        # Jan 31 clamps to the real end of February
         task = create_task(client, title="End of month",
-                           due_date="2025-01-31",
+                           due_date="2099-01-31",
                            rec_type="monthly", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["due_date"] == "2025-02-28"
+        assert spawned["due_date"] == "2099-02-28"
+
+    def test_monthly_recurrence_leap_year(self, client):
+        task = create_task(client, title="End of month",
+                           due_date="2096-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        tasks = client.get("/api/deck").get_json()
+        spawned = next(t for t in tasks if t["id"] != task["id"])
+        assert spawned["due_date"] == "2096-02-29"
+
+    def test_monthly_recurrence_keeps_month_end_day(self, client):
+        # The clamp is per-step, not sticky-forward: Mar 31 → Apr 30
+        task = create_task(client, title="End of month",
+                           due_date="2099-03-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        tasks = client.get("/api/deck").get_json()
+        spawned = next(t for t in tasks if t["id"] != task["id"])
+        assert spawned["due_date"] == "2099-04-30"
 
     def test_spawned_task_start_date_is_none(self, client):
         task = create_task(client, title="Recurring deferred",
-                           due_date="2025-03-01",
-                           start_date="2025-02-28",
+                           due_date=_future(10),
+                           start_date=_future(8),
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
@@ -298,7 +323,7 @@ class TestRecurring:
 
     def test_spawned_task_preserves_tags(self, client):
         task = create_task(client, title="Tagged recurring",
-                           due_date="2025-03-01",
+                           due_date=_future(10),
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"tags": ["work", "standup"]})
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
@@ -308,12 +333,12 @@ class TestRecurring:
 
     def test_spawned_task_preserves_recurrence(self, client):
         task = create_task(client, title="Recurring",
-                           due_date="2025-03-01",
+                           due_date=_future(10),
                            rec_type="weekly", rec_interval=2).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["recurrence"] == {"type": "weekly", "interval": 2}
+        assert spawned["recurrence"] == {"type": "weekly", "interval": 2, "from": "due"}
 
     def test_complete_non_recurring_no_spawn(self, client):
         task = create_task(client, title="One-off").get_json()
@@ -618,7 +643,7 @@ class TestBatchComplete:
 
     def test_batch_complete_spawns_recurring(self, client):
         r = client.post("/api/deck", json={
-            "title": "Recurring", "due_date": "2026-06-10",
+            "title": "Recurring", "due_date": _future(10),
             "rec_type": "daily", "rec_interval": 1,
         })
         task_id = r.get_json()["id"]
@@ -627,7 +652,7 @@ class TestBatchComplete:
         tasks = client.get("/api/deck").get_json()
         assert len(tasks) == 1
         spawned = [t for t in tasks if t["id"] != task_id]
-        assert spawned[0]["due_date"] == "2026-06-11"
+        assert spawned[0]["due_date"] == _future(11)
         assert spawned[0]["completed_at"] is None
 
     def test_batch_uncomplete_removes_spawned(self, client):
@@ -1069,7 +1094,7 @@ class TestCreateFieldParity:
         assert t["focus_date"] == "2026-08-01"
         assert t["page"] == "some-page"
         assert t["blocked_by"] == ["x", "y"]
-        assert t["recurrence"] == {"type": "weekly", "interval": 3}
+        assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
         assert t["wont_do"] is False
@@ -1081,3 +1106,255 @@ class TestCreateFieldParity:
         assert t["tags"] == []
         assert t["due_date"] is None
         assert t["defer_days"] is None
+
+
+# ── Recurrence catch-up and from-completion mode ──────────────────────────────
+
+
+class TestRecurrenceCatchUp:
+    def test_overdue_daily_catches_up_to_today(self, client):
+        """Completing a long-overdue daily task never spawns an overdue instance."""
+        past = (date.today() - timedelta(days=30)).isoformat()
+        task = create_task(client, title="Overdue daily", due_date=past,
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == date.today().isoformat()
+
+    def test_overdue_weekly_stays_calendar_aligned(self, client):
+        """Catch-up advances in whole intervals from the original due date."""
+        base = date.today() - timedelta(days=30)
+        task = create_task(client, title="Overdue weekly", due_date=base.isoformat(),
+                           rec_type="weekly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        next_due = date.fromisoformat(spawned["due_date"])
+        assert next_due >= date.today()
+        assert (next_due - base).days % 7 == 0
+        assert (next_due - date.today()).days < 7
+
+    def test_from_completion_steps_from_today(self, client):
+        """recurrence.from == completion anchors the next due date on today."""
+        past = (date.today() - timedelta(days=10)).isoformat()
+        task = create_task(client, title="Water plants", due_date=past,
+                           rec_type="daily", rec_interval=3,
+                           rec_from="completion").get_json()
+        assert task["recurrence"]["from"] == "completion"
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == (date.today() + timedelta(days=3)).isoformat()
+
+    def test_from_completion_without_due_date(self, client):
+        task = create_task(client, title="Habit", rec_type="weekly",
+                           rec_interval=1, rec_from="completion").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == (date.today() + timedelta(days=7)).isoformat()
+
+    def test_rec_from_defaults_to_due(self, client):
+        task = create_task(client, title="Rent", rec_type="monthly").get_json()
+        assert task["recurrence"]["from"] == "due"
+
+
+# ── spawned_from tracking ─────────────────────────────────────────────────────
+
+
+class TestSpawnedFrom:
+    def test_spawned_instance_carries_spawned_from(self, client):
+        task = create_task(client, title="Recurring", due_date=_future(5),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["spawned_from"] == task["id"]
+
+    def test_uncomplete_removes_only_exact_spawned_instance(self, client):
+        """A same-titled recurring sibling created after completion survives —
+        the old title/time heuristic would have removed it too."""
+        task = create_task(client, title="Standup", due_date=_future(5),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        sibling = create_task(client, title="Standup", due_date=_future(6),
+                              rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": False})
+        active_ids = {t["id"] for t in client.get("/api/deck").get_json()}
+        assert task["id"] in active_ids
+        assert sibling["id"] in active_ids
+        spawned_left = [t for t in client.get("/api/deck").get_json()
+                        if t.get("spawned_from") == task["id"]]
+        assert spawned_left == []
+
+    def test_uncomplete_legacy_instance_uses_heuristic(self, client, wiki_dir):
+        """Spawned instances from before spawned_from existed are still removed."""
+        task = create_task(client, title="Legacy", due_date=_future(5),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        deck_file = wiki_dir / "_deck.json"
+        data = json.loads(deck_file.read_text(encoding="utf-8"))
+        for t in data:
+            t.pop("spawned_from", None)
+        deck_file.write_text(json.dumps(data), encoding="utf-8")
+        client.put(f"/api/deck/{task['id']}", json={"completed": False})
+        tasks = client.get("/api/deck").get_json()
+        assert [t["id"] for t in tasks] == [task["id"]]
+
+
+# ── blocked_by cleanup on delete ──────────────────────────────────────────────
+
+
+class TestBlockedRefCleanup:
+    def test_delete_strips_blocked_by_references(self, client):
+        blocker = create_task(client, title="Blocker").get_json()
+        blocked = create_task(client, title="Blocked",
+                              blocked_by=[blocker["id"]]).get_json()
+        client.delete(f"/api/deck/{blocker['id']}")
+        remaining = client.get("/api/deck").get_json()
+        assert [t["id"] for t in remaining] == [blocked["id"]]
+        assert remaining[0]["blocked_by"] == []
+
+    def test_batch_delete_strips_blocked_by_references(self, client):
+        b1 = create_task(client, title="B1").get_json()
+        b2 = create_task(client, title="B2").get_json()
+        blocked = create_task(client, title="Blocked",
+                              blocked_by=[b1["id"], b2["id"]]).get_json()
+        client.post("/api/deck/batch-delete", json={"ids": [b1["id"], b2["id"]]})
+        remaining = client.get("/api/deck").get_json()
+        assert remaining[0]["blocked_by"] == []
+
+    def test_delete_strips_references_in_completed(self, client):
+        blocker = create_task(client, title="Blocker").get_json()
+        blocked = create_task(client, title="Blocked",
+                              blocked_by=[blocker["id"]]).get_json()
+        client.put(f"/api/deck/{blocked['id']}", json={"completed": True})
+        client.delete(f"/api/deck/{blocker['id']}")
+        completed = client.get("/api/deck/completed").get_json()
+        assert completed[0]["blocked_by"] == []
+
+
+# ── Server-side blocking reconciliation ───────────────────────────────────────
+
+
+class TestBlockingReconcile:
+    def test_put_blocking_adds_reverse_edge(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B").get_json()
+        client.put(f"/api/deck/{a['id']}", json={"blocking": [b["id"]]})
+        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
+        assert b_now["blocked_by"] == [a["id"]]
+
+    def test_put_empty_blocking_removes_reverse_edge(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
+        client.put(f"/api/deck/{a['id']}", json={"blocking": []})
+        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
+        assert b_now["blocked_by"] == []
+
+    def test_create_with_blocking(self, client):
+        b = create_task(client, title="B").get_json()
+        a = create_task(client, title="A", blocking=[b["id"]]).get_json()
+        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
+        assert b_now["blocked_by"] == [a["id"]]
+
+    def test_blocking_unknown_ids_are_harmless(self, client):
+        a = create_task(client, title="A").get_json()
+        resp = client.put(f"/api/deck/{a['id']}", json={"blocking": ["nope", a["id"]]})
+        assert resp.status_code == 200
+        a_now = client.get("/api/deck").get_json()[0]
+        assert a_now["blocked_by"] == []  # no self-block
+
+    def test_blocking_preserves_other_blockers(self, client):
+        other = create_task(client, title="Other").get_json()
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[other["id"]]).get_json()
+        client.put(f"/api/deck/{a['id']}", json={"blocking": [b["id"]]})
+        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
+        assert sorted(b_now["blocked_by"]) == sorted([other["id"], a["id"]])
+
+
+# ── Restore (faithful delete-undo) ────────────────────────────────────────────
+
+
+class TestRestore:
+    def test_restore_roundtrips_all_fields(self, client):
+        task = create_task(client, title="Full", description="notes",
+                           tags=["a"], due_date="2026-09-01",
+                           focus_date="2026-08-30", page="some-page",
+                           rec_type="weekly", rec_interval=2).get_json()
+        client.delete(f"/api/deck/{task['id']}")
+        assert client.get("/api/deck").get_json() == []
+        resp = client.post("/api/deck/restore", json={"tasks": [task]})
+        assert resp.status_code == 201
+        restored = client.get("/api/deck").get_json()[0]
+        assert restored["id"] == task["id"]
+        assert restored["created_at"] == task["created_at"]
+        for field in ("title", "description", "tags", "due_date",
+                      "focus_date", "page", "recurrence"):
+            assert restored[field] == task[field]
+
+    def test_restore_completed_snapshot_lands_in_completed(self, client):
+        task = create_task(client, title="Done one").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        snap = client.get("/api/deck/completed").get_json()[0]
+        client.delete(f"/api/deck/{task['id']}")
+        client.post("/api/deck/restore", json={"tasks": [snap]})
+        assert client.get("/api/deck").get_json() == []
+        completed = client.get("/api/deck/completed").get_json()
+        assert completed[0]["id"] == task["id"]
+        assert completed[0]["completed_at"] == snap["completed_at"]
+
+    def test_restore_skips_existing_ids(self, client):
+        task = create_task(client, title="Still here").get_json()
+        resp = client.post("/api/deck/restore", json={"tasks": [task]})
+        assert resp.status_code == 201
+        assert resp.get_json() == []
+        assert len(client.get("/api/deck").get_json()) == 1
+
+    def test_restore_drops_unknown_fields(self, client):
+        snap = create_task(client, title="T").get_json()
+        client.delete(f"/api/deck/{snap['id']}")
+        snap["evil"] = "payload"
+        client.post("/api/deck/restore", json={"tasks": [snap]})
+        restored = client.get("/api/deck").get_json()[0]
+        assert "evil" not in restored
+
+    def test_restore_requires_tasks(self, client):
+        assert client.post("/api/deck/restore", json={"tasks": []}).status_code == 400
+
+    def test_restore_skips_titleless_snapshots(self, client):
+        resp = client.post("/api/deck/restore", json={"tasks": [{"title": "  "}]})
+        assert resp.status_code == 201
+        assert resp.get_json() == []
+
+    def test_restore_reapplies_reverse_blocking_edges(self, client):
+        blocker = create_task(client, title="Blocker").get_json()
+        blocked = create_task(client, title="Blocked",
+                              blocked_by=[blocker["id"]]).get_json()
+        client.delete(f"/api/deck/{blocker['id']}")
+        snap = dict(blocker, blocking=[blocked["id"]])
+        client.post("/api/deck/restore", json={"tasks": [snap]})
+        blocked_now = next(t for t in client.get("/api/deck").get_json()
+                           if t["id"] == blocked["id"])
+        assert blocked_now["blocked_by"] == [blocker["id"]]
+
+
+# ── due-count deferral (shared _is_deferred helper) ───────────────────────────
+
+
+class TestDueCountDeferral:
+    def test_deferred_overdue_task_not_counted(self, client):
+        past = (date.today() - timedelta(days=2)).isoformat()
+        future = (date.today() + timedelta(days=5)).isoformat()
+        create_task(client, title="Hidden overdue", due_date=past, start_date=future)
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["count"] == 0
+
+    def test_visible_overdue_task_counted(self, client):
+        past = (date.today() - timedelta(days=2)).isoformat()
+        create_task(client, title="Visible overdue", due_date=past)
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["overdue"] == 1
+
+    def test_defer_days_hides_far_future_due(self, client):
+        future = (date.today() + timedelta(days=10)).isoformat()
+        create_task(client, title="Far due", due_date=future, defer_days=3)
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["count"] == 0

@@ -13,7 +13,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in `pages/` are the wiki content
+- **Markdown is the source of truth** — `.md` files in `pages/` are the wiki content. Deliberate exception: Deck tasks live in `_deck.json`/`_deck_completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -121,13 +121,13 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
-| POST   | `/api/add-task`               | Append `- [ ] description` under `## Todo` in `tasks.md`; creates the file/section if absent. Returns 204. |
 | GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
-| POST   | `/api/deck`           | Create a task; returns JSON task object (201) |
-| PUT    | `/api/deck/<id>`      | Update a task (title, priority, tags, due_date, completed, recurrence, page, blocked_by, focus_date, wont_do). `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it. |
-| DELETE | `/api/deck/<id>`      | Delete a task; returns 204 |
-| POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204 |
+| POST   | `/api/deck`           | Create a task; returns JSON task object (201). Accepts a `blocking` id list — reconciled into other tasks' `blocked_by` server-side. |
+| PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, page, blocked_by, blocking, focus_date, wont_do). `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it. A `blocking` id list is reconciled into other tasks' `blocked_by` in the same write. |
+| DELETE | `/api/deck/<id>`      | Delete a task; returns 204. Strips the deleted id from every remaining task's `blocked_by`. |
+| POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204. Also strips dangling `blocked_by` references. |
 | POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
+| POST   | `/api/deck/restore`   | Re-insert full task snapshots (undo after delete); body `{ tasks: [...] }`. Snapshots keep their original id/created_at/completion state; unknown fields are dropped, existing ids skipped. A `blocking` list per snapshot restores reverse dependency edges. Returns restored tasks (201). |
 | POST   | `/api/deck/reorder`   | Update sort order; body `{ order: [id1, id2, …] }` |
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
 | GET    | `/api/deck/due-count` | Count tasks due today + overdue |
@@ -310,13 +310,8 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
-| **Ctrl/⌘+1** | anywhere | Open scratch modal |
-| **Ctrl/⌘+2** | anywhere | Quick-add todo under `## Todo` on `tasks` page |
-| **Ctrl/⌘+3** | anywhere | Open today's daily note (create if absent) |
-| **Ctrl/⌘+Alt+0** | anywhere | Navigate to Home (`/page/index`) |
-| **Ctrl/⌘+Alt+1** | anywhere | Navigate to Scratch (`/page/_scratch`) 
-| **Ctrl/⌘+Alt+3** | anywhere | Navigate to Daily (`/page/_daily`) |
-| **Ctrl/⌘+Alt+2** | anywhere | Navigate to Deck (`/page/deck`) |
+| **g** then **h/s/d/t/y** | anywhere | Navigate: Home / Scratch / Deck / Deck (tag=task) / Daily |
+| **c** then **s/t/d** | anywhere | Create: scratch note / task-tagged deck item / daily note |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
@@ -325,7 +320,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
-| **n** | tasks page | Open new task modal |
+| **n** | deck page | Open new task modal |
 
 ---
 
@@ -390,31 +385,33 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 | `created_at` | ISO datetime | Auto-set on creation |
 | `completed_at` | ISO datetime / `null` | Set when completed |
 | `sort_order` | integer | Manual sort position (priority = position) |
-| `recurrence` | `{ type, interval }` / `null` | Recurring schedule |
+| `recurrence` | `{ type, interval, from }` / `null` | Recurring schedule. `from` is `"due"` (default — next due date steps from the previous due date, calendar-aligned) or `"completion"` (steps from the completion day, for interval habits). |
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
-| `blocked_by` | string[] | Array of task IDs that block this task |
-| `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Focus tab shows tasks with `focus_date <= today`. Past focus dates are not penalised — tasks stay in Focus until completed or the focus date is cleared. |
+| `blocked_by` | string[] | Array of task IDs that block this task. Tasks with an open blocker are excluded from Focus and dimmed elsewhere; deleting a task strips it from all `blocked_by` lists. |
+| `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Focus tab shows tasks with `focus_date <= today`. Past focus dates are not removed — tasks stay in Focus as a working set — but cards show "planned Nd ago" and plans ≥3 days old are styled stale; a Focus-tab bar offers one-click "clear stale plans" (with undo). |
+| `spawned_from` | string / `null` | For instances spawned by completing a recurring task: the id of the completed task. Used to remove exactly the spawned instance when the completion is undone. |
 | `wont_do` | bool | `true` marks the task abandoned ("won't do"). Archived like a completed task (moves to `_deck_completed.json` with `completed_at` set) but shown with a "✗ won't do" badge; marking won't-do never spawns a recurring instance. |
 
 ### UI
 
 - **Filter tabs** (labels): Focus · Plan · Backlog · Deferred · Completed (internal `data-filter` values `focus`/`due`/`open`/`hidden`/`completed`). Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (Backlog) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on Backlog.
-- **Focus tab**: shows tasks with `focus_date <= today`, overdue/due-today tasks, and pinned tasks. Past focus dates are not penalised — tasks stay in Focus as a working set. Sorted: overdue first, due today, then pinned, then focused tasks.
+- **Focus tab**: shows tasks with `focus_date <= today` and overdue/due-today tasks, excluding tasks with an open blocker (they return automatically when the blocker completes). Past focus dates are not removed — tasks stay in Focus as a working set — but a bar at the top counts plans ≥3 days old (`STALE_DAYS`) and clears them in one click, with undo. Sorted: overdue first, due today, then focused tasks.
 - **Plan (`due`) tab — day board**: shows **all** open (non-deferred) tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`). `Overdue`/`Later` are display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
-- **Plan-for date buttons**: each task card has inline plan buttons — ☀ (today), ☾ (tomorrow), `Mon` (next Monday, shown Fri/Sat), and **📅** which opens a native date picker to plan for an arbitrary date without opening the edit modal. Clicking an already-set option clears it. Keyboard shortcut: **f** on a selected task.
+- **Inline date editing**: the ⏰ (due) and 📅 (plan) spans in each card's meta row open a native date picker on click — no modal needed. Keyboard: **f** plans the selected task for today, **F** for tomorrow (pressing again clears).
 - **Sort options**: Manual order (drag-and-drop) · Created
 - **Filters**: Tag text filter — comma-separated tags require all (AND); pipe-separated (`a|b`) match any (OR)
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
-- **Inline completion**: Checkbox toggles mark task complete instantly
+- **Inline completion**: Checkbox toggles mark task complete after a short grace period (cancellable)
 - **Won't do**: each active task card has a ✗ button (hover-reveal) that archives the task as abandoned. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
-- **Edit modal**: Double-click or ✎ button opens a modal for full task editing
-- **Recurring tasks**: When a recurring task is completed, a new instance is automatically created with the next due date
+- **Edit modal**: Double-click a card (or Enter on the selected task) opens a modal for full task editing, including a "From done" checkbox on recurring tasks (repeat from completion date) and a Links picker for blocked-by/blocking edges.
+- **Blocked tasks**: cards whose `blocked_by` contains an open task are dimmed (`task-blocked-item`) and left out of Focus; they stay visible in Backlog/Plan so they can still be re-planned.
+- **Recurring tasks**: completing one spawns the next instance (`spawned_from` links it to the completed task). The next due date steps from the previous due date (or from today when `recurrence.from` is `"completion"`) and is always advanced until ≥ today, so completing a long-overdue task never spawns an already-overdue instance. Monthly recurrence clamps to the real last day of the target month (Jan 31 → Feb 28/29). Un-completing removes exactly the spawned instance.
+- **Delete undo**: deleting via keyboard shows an undo toast; undo POSTs the full snapshots to `/api/deck/restore`, preserving every field including ids, completion state, and dependency edges.
 
 ### Keyboard shortcut
 
-- **Ctrl+2** — Quick-add task (opens modal from any page, creates via `/api/deck`)
 - **g d** — Navigate to Deck (`/page/deck`)
-- **c t** — Quick-add to deck with `tag=task`
+- **c t** — Quick-add to deck with `tag=task` (works from any page)
 
 ---
 
