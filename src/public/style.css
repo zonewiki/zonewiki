@@ -1310,7 +1310,7 @@ body.editor-page main {
 .task-item.task-selected .task-meta:not(.task-meta--hover-only),
 .task-item.task-selected .task-desc,
 .task-item.task-selected:hover .task-meta--hover-only {
-  border-top-color: color-mix(in srgb, var(--fg) 22%, var(--border));
+  border-top-color: color-mix(in srgb, var(--fg) 16%, var(--border));
 }
 .task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
 .task-item[draggable]:active { cursor: grabbing; }
