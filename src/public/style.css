@@ -1304,6 +1304,14 @@ body.editor-page main {
     0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent);
 }
 .task-item.task-selected .task-wontdo-btn { opacity: 1; }
+/* The darker selected background washes out the light separator lines inside
+   the card — strengthen them by the same amount. The collapsed hover-only
+   meta keeps its transparent border; it only darkens while revealed. */
+.task-item.task-selected .task-meta:not(.task-meta--hover-only),
+.task-item.task-selected .task-desc,
+.task-item.task-selected:hover .task-meta--hover-only {
+  border-top-color: color-mix(in srgb, var(--fg) 22%, var(--border));
+}
 .task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
 .task-item[draggable]:active { cursor: grabbing; }
 .task-item[draggable] .task-title,
