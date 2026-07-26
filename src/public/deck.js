@@ -56,7 +56,7 @@
 
   let tasks = [];
   let completedLoaded = false;
-  let activeFilter = 'open';
+  let activeFilter = 'backlog';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -65,6 +65,7 @@
   let undoTimer  = null;
   let undoToastEl = null;
   let pendingUndoFn = null;
+  const pendingCompletions = new Map(); // taskId → timeoutId
   const CAPACITY = 5;  // day sections with >= this many tasks are flagged
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
@@ -241,6 +242,30 @@
     }
   }
 
+  function beginComplete(id, li) {
+    const cb = li?.querySelector('input[type=checkbox]');
+    if (cb) cb.checked = true;
+    if (li) li.classList.add('task-completing');
+    if (pendingCompletions.has(id)) clearTimeout(pendingCompletions.get(id));
+    const tid = setTimeout(() => {
+      pendingCompletions.delete(id);
+      if (li) li.classList.add('task-completing-out');
+      setTimeout(() => updateTask(id, { completed: true }), 400);
+    }, 4600);
+    pendingCompletions.set(id, tid);
+  }
+
+  function cancelPendingComplete(id) {
+    if (!pendingCompletions.has(id)) return false;
+    clearTimeout(pendingCompletions.get(id));
+    pendingCompletions.delete(id);
+    const li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+    if (li) li.classList.remove('task-completing', 'task-completing-out');
+    const cb = li?.querySelector('input[type=checkbox]');
+    if (cb) cb.checked = false;
+    return true;
+  }
+
   async function completeTasks(ids, completed) {
     const res = await fetch('/api/deck/batch-complete', {
       method: 'POST',
@@ -344,7 +369,7 @@
     }
 
     // Tab filter
-    if (activeFilter === 'today') {
+    if (activeFilter === 'focus') {
       const today = todayStr();
       filtered = filtered.filter(t => !t.completed_at && (
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
@@ -368,7 +393,7 @@
         return false;
       });
     } else {
-      // "open" shows non-completed by default
+      // "backlog" shows non-completed by default
       filtered = filtered.filter(t => !t.completed_at);
     }
 
@@ -401,7 +426,7 @@
 
   // Per-tab fixed sort comparators; null = use the user's sort select
   const TAB_SORT = {
-    today: (a, b) => {
+    focus: (a, b) => {
       const today = todayStr();
       const group = t => {
         if (t.due_date && t.due_date < today) return 0;  // overdue by deadline
@@ -738,9 +763,9 @@
 
     const filtered = filterTasks();
 
-    // In "open" view split into: due now (pinned top), ordered, new (inbox)
-    let dueTasks, orderedTasks, newTasks, missedTasks;
-    if (activeFilter === 'open') {
+    // In "backlog" view split into: due now (pinned top), ordered, new (inbox)
+    let dueTasks, orderedTasks, newTasks;
+    if (activeFilter === 'backlog') {
       const today = todayStr();
       const isDueNow = t => t.due_date && t.due_date <= today;
       dueTasks = filtered.filter(isDueNow)
@@ -749,46 +774,41 @@
       orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
       newTasks   = rest.filter(t => t.sort_order == null)
                        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-      missedTasks  = [];
-    } else if (activeFilter === 'today') {
-      // Split: "missed" = past focus_date with no overdue deadline; "today" = everything else
-      const today = todayStr();
-      const isMissed = t => t.focus_date && t.focus_date < today && t.focus_date >= dateOffset(-7) && (!t.due_date || t.due_date > today);
-      missedTasks  = sortTasks(filtered.filter(isMissed));
-      orderedTasks = sortTasks(filtered.filter(t => !isMissed(t)));
+    } else if (activeFilter === 'focus') {
+      orderedTasks = sortTasks(filtered);
       dueTasks     = [];
       newTasks     = [];
     } else {
       dueTasks     = [];
       orderedTasks = sortTasks(filtered);
       newTasks     = [];
-      missedTasks  = [];
     }
 
     if (activeFilter !== 'due' &&
-        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 && missedTasks.length === 0) {
+        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0) {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
       return;
     }
 
-    const taskHTML = (task, draggable = (sortSelect.value === 'manual'), extraClass = '', isMissed = false) => {
+    const taskHTML = (task, draggable = (!TAB_SORT[activeFilter] && sortSelect.value === 'manual'), extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
       const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
+      const tagsHtml = tags ? `<div class="task-tags-right">${tags}</div>` : '';
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
       const focusToday = task.focus_date === dateOffset(0);
       const focusTmrw  = task.focus_date === dateOffset(1);
       const focusMon   = task.focus_date === nextMonday();
-      const showMon    = [5, 6].includes(new Date().getDay()); // Fri=5, Sat=6
-      const todayMarked = hasFocusDate(task);
       const focusClass = focusToday ? ' task-marked-today' : focusTmrw ? ' task-marked-tmrw' : focusMon ? ' task-marked-mon' : '';
-      const focusMetaClass = focusToday ? 'focus-today' : focusTmrw ? 'focus-tmrw' : 'focus-mon';
-      const dueDisplay = task.due_date ? `<span class="task-due ${dueClass}">due: ${formatDate(task.due_date)}</span>` : '';
-      const focusDisplay = (task.focus_date && !task.completed_at)
-        ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📌 ${formatDate(task.focus_date)}</span>`
-        : '';
+      const focusMetaClass = focusToday ? 'focus-today' : focusTmrw ? 'focus-tmrw' : focusMon ? 'focus-mon' : '';
+      const dueDisplay = !task.completed_at
+        ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
+        : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
+      const focusDisplay = !task.completed_at
+        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${task.focus_date ? ' ' + formatDate(task.focus_date) : ''}</span>`
+        : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at
@@ -819,24 +839,14 @@
         blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
       }
 
-      const dueSnooze = (task.due_date && !task.completed_at)
-        ? `<span class="task-snooze-btns">` +
-          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="+1" title="Postpone to tomorrow">Tmrw</button>` +
-          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="+3" title="Postpone 3 days">+3d</button>` +
-          `<button class="task-snooze-btn" data-id="${task.id}" data-snooze="mon" title="Postpone to next Monday">Mon</button>` +
-          `</span>`
-        : '';
-      const hasMeta = dueDisplay || focusDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || tags || pageDisplay || blockedDisplay || blockingDisplay;
-      const metaHtml = hasMeta ? `<div class="task-meta">${startDisplay}${deferDaysDisplay}${dueDisplay}${dueSnooze}${focusDisplay}${completedDisplay}${recIcon}${tags}${pageDisplay}${blockedDisplay}${blockingDisplay}</div>` : '';
-      const focusBtnsHtml = !task.completed_at
-        ? `<span class="task-focus-btns">` +
-          (isMissed ? `<button class="task-focus-clear-btn" data-id="${task.id}" title="Remove from plan">✕</button>` : '') +
-          `<button class="task-focus-btn${focusToday ? ' is-focused' : ''}" data-id="${task.id}" data-focus="today" title="${focusToday ? 'Clear today plan' : 'Plan for today'}">☀</button>` +
-          `<button class="task-focus-btn${focusTmrw  ? ' is-focused' : ''}" data-id="${task.id}" data-focus="tmrw"  title="${focusTmrw  ? 'Clear tomorrow plan' : 'Plan for tomorrow'}">☾</button>` +
-          (showMon ? `<button class="task-focus-btn${focusMon ? ' is-focused' : ''}" data-id="${task.id}" data-focus="mon" title="${focusMon ? 'Clear Monday plan' : 'Plan for Monday'}">Mon</button>` : '') +
-          `<button class="task-focus-btn" data-id="${task.id}" data-focus="pick" title="Plan for a date…">📅</button>` +
-          `</span>`
-        : '';
+      const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
+      const hasRealMeta = !!(tags || task.due_date || task.focus_date || task.recurrence ||
+        task.page || (task.blocked_by && task.blocked_by.length) || blocking.length ||
+        task.start_date || task.defer_days != null || task.completed_at);
+      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || blockedDisplay || blockingDisplay || tagsRight;
+      const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${startDisplay}${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}${blockedDisplay}${blockingDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const wontDoBtnHtml = !task.completed_at
         ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
         : '';
@@ -849,12 +859,11 @@
           </label>
           <div class="task-content" data-id="${task.id}">
             <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
-            ${metaHtml}
-            ${task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : ''}
           </div>
           <div class="task-actions">
-            ${focusBtnsHtml}<button class="task-edit-btn" data-id="${task.id}" title="Edit">✎</button>${wontDoBtnHtml}
+            ${wontDoBtnHtml}
           </div>
+          ${metaHtml}${descHtml}
         </li>`;
     };
 
@@ -902,12 +911,6 @@
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
-    // Missed section (Today tab only) — past-scheduled tasks, not overdue by deadline
-    if (missedTasks.length > 0) {
-      if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
-      html += '<li class="task-inbox-divider task-inbox-divider--only task-missed-divider">Missed</li>';
-      html += missedTasks.map(t => taskHTML(t, false, 'task-missed', true)).join('');
-    }
     listEl.innerHTML = html;
     wireListHandlers();
 
@@ -927,35 +930,23 @@
         const id = e.target.dataset.id;
         const completed = e.target.checked;
         const task = tasks.find(t => t.id === id);
-        updateTask(id, { completed });
-        if (task) {
-          const label = completed ? 'completed' : 'reopened';
-          showUndo(`Task ${label}`, () => completeTasks([id], !completed));
+        if (completed) {
+          beginComplete(id, e.target.closest('.task-item'));
+        } else if (!cancelPendingComplete(id)) {
+          updateTask(id, { completed: false });
+          if (task) showUndo('Task reopened', () => completeTasks([id], true));
         }
       });
     });
 
-    listEl.querySelectorAll('.task-edit-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        openEditModal(e.currentTarget.dataset.id);
-      });
-    });
-
-    listEl.querySelectorAll('.task-focus-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
+    listEl.querySelectorAll('.task-clickable-date').forEach(el => {
+      el.addEventListener('click', e => {
         e.stopPropagation();
-        const id = btn.dataset.id;
+        const id = el.dataset.id;
+        const field = el.dataset.field;
         const task = tasks.find(t => t.id === id);
         if (!task) return;
-        if (btn.dataset.focus === 'pick') {
-          openDatePicker(task.focus_date || '', d => updateTask(id, { focus_date: d }), btn);
-          return;
-        }
-        const target = btn.dataset.focus === 'today' ? dateOffset(0)
-                     : btn.dataset.focus === 'tmrw'  ? dateOffset(1)
-                     : nextMonday();
-        // clicking the active button clears; clicking the other one switches
-        updateTask(id, { focus_date: task.focus_date === target ? null : target });
+        openDatePicker(task[field] || '', d => updateTask(id, { [field]: d }), el);
       });
     });
 
@@ -965,26 +956,6 @@
         const id = btn.dataset.id;
         updateTask(id, { wont_do: true });
         showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
-      });
-    });
-
-    listEl.querySelectorAll('.task-focus-clear-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        updateTask(btn.dataset.id, { focus_date: null });
-      });
-    });
-
-    listEl.querySelectorAll('.task-snooze-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        const snooze = btn.dataset.snooze;
-        let newDate;
-        if (snooze === '+1')  newDate = dateOffset(1);
-        else if (snooze === '+3')  newDate = dateOffset(3);
-        else if (snooze === 'mon') newDate = nextMonday();
-        if (newDate) updateTask(id, { due_date: newDate });
       });
     });
 
@@ -1014,7 +985,7 @@
     // Drag and drop
     if (activeFilter === 'due') {
       setupBoardDragAndDrop();
-    } else if (sortSelect.value === 'manual') {
+    } else if (!TAB_SORT[activeFilter] && sortSelect.value === 'manual') {
       setupDragAndDrop();
     }
 
@@ -2051,15 +2022,17 @@
         const task = tasks.find(t => t.id === selectedId);
         if (!task) return;
         const completing = !task.completed_at;
-        const willDisappear = completing && activeFilter !== 'completed';
-        if (willDisappear) {
-          const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
-                    || items.find(el => !selectedIds.has(el.dataset.id));
-          setSelected(next?.dataset.id || null);
+        if (completing) {
+          if (pendingCompletions.has(task.id)) {
+            cancelPendingComplete(task.id);
+          } else {
+            const li = listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
+            beginComplete(task.id, li);
+          }
+        } else {
+          updateTask(task.id, { completed: false });
+          showUndo('Task reopened', () => completeTasks([task.id], true));
         }
-        updateTask(task.id, { completed: completing });
-        const label = completing ? 'Task completed' : 'Task reopened';
-        showUndo(label, () => completeTasks([task.id], !completing));
       }
     } else if (e.key === 'Enter' && selectedId) {
       e.preventDefault();
@@ -2122,10 +2095,11 @@
   const initSearch = urlParams.get('search') || '';
   if (initSearch && filterSearch) filterSearch.value = initSearch;
   // Precedence: URL ?filter= > embed filter (always wins when specified) >
-  // tab remembered this session > today default. So a [[deck filter=…]] embed
+  // tab remembered this session > Backlog default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
-  const restoreFilter = urlFilter || embedFilter || loadActiveTab() || '';
+  const FILTER_ALIASES = { focus: 'focus', today: 'focus', plan: 'due', upcoming: 'due', open: 'backlog', backlog: 'backlog', done: 'completed', hidden: 'hidden' };
+  const restoreFilter = FILTER_ALIASES[urlFilter] || urlFilter || FILTER_ALIASES[embedFilter] || embedFilter || loadActiveTab() || 'backlog';
   if (restoreFilter && tabsEl) {
     const hasOption = Array.from(tabsEl.options).some(o => o.value === restoreFilter);
     if (hasOption) {

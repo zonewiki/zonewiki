@@ -204,7 +204,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag. Comma = AND (all tags must match, the narrowing default); pipe `a\|b` = OR (any tag matches). |
-| `filter` | tab name: `today`, `backlog`, `plan` (aka `upcoming`), `deferred`, `completed` (internal aliases `open`/`due`/`hidden`/`done` also accepted) | `today` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
+| `filter` | tab name: `focus`, `backlog`, `plan` (aka `upcoming`), `deferred`, `completed` (internal aliases `open`/`due`/`hidden`/`done` also accepted) | `focus` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 
 **Examples:**
@@ -394,13 +394,13 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 | `recurrence` | `{ type, interval }` / `null` | Recurring schedule |
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
 | `blocked_by` | string[] | Array of task IDs that block this task |
-| `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Today tab shows tasks with `focus_date <= today` |
+| `focus_date` | `"YYYY-MM-DD"` / `null` | Date the task is planned for; Focus tab shows tasks with `focus_date <= today`. Past focus dates are not penalised — tasks stay in Focus until completed or the focus date is cleared. |
 | `wont_do` | bool | `true` marks the task abandoned ("won't do"). Archived like a completed task (moves to `_deck_completed.json` with `completed_at` set) but shown with a "✗ won't do" badge; marking won't-do never spawns a recurring instance. |
 
 ### UI
 
-- **Filter tabs** (labels): Backlog · Today · Plan · Deferred · Completed (internal `data-filter` values `open`/`today`/`due`/`hidden`/`completed`). Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `today`. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on `today`.
-- **Today tab**: shows tasks flagged for today (`today_date == today`) plus overdue/due-today tasks. Sorted: overdue first, due today, then today-marked without due date.
+- **Filter tabs** (labels): Focus · Plan · Backlog · Deferred · Completed (internal `data-filter` values `focus`/`due`/`open`/`hidden`/`completed`). Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (Backlog) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on Backlog.
+- **Focus tab**: shows tasks with `focus_date <= today`, overdue/due-today tasks, and pinned tasks. Past focus dates are not penalised — tasks stay in Focus as a working set. Sorted: overdue first, due today, then pinned, then focused tasks.
 - **Plan (`due`) tab — day board**: shows **all** open (non-deferred) tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`). `Overdue`/`Later` are display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Plan-for date buttons**: each task card has inline plan buttons — ☀ (today), ☾ (tomorrow), `Mon` (next Monday, shown Fri/Sat), and **📅** which opens a native date picker to plan for an arbitrary date without opening the edit modal. Clicking an already-set option clears it. Keyboard shortcut: **f** on a selected task.
 - **Sort options**: Manual order (drag-and-drop) · Due date · Created · Title

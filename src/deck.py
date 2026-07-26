@@ -278,7 +278,7 @@ def _parse_tasks_params(raw: str) -> dict:
 # value the client uses to activate a tab. Lets `[[deck filter=backlog]]` work
 # using the labels the user actually sees, not just internal names.
 _FILTER_ALIASES = {
-    "today": "today",
+    "focus": "focus", "today": "focus",
     "backlog": "open", "open": "open",
     "plan": "due", "upcoming": "due", "due": "due",
     "deferred": "hidden", "hidden": "hidden",
@@ -308,9 +308,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
-      <option value="open">Backlog</option>
-      <option value="today">Today</option>
+      <option value="focus">Focus</option>
       <option value="due">Plan</option>
+      <option value="open">Backlog</option>
       <option value="hidden">Deferred</option>
       <option value="completed">Completed</option>
     </select>
@@ -541,6 +541,14 @@ def api_tasks_due_count():
     for t in _read_deck():
         if not t.get("due_date"):
             continue
+        # Skip deferred tasks — they are not visible in Backlog/Focus/Plan
+        if t.get("start_date") and t["start_date"] > today:
+            continue
+        if t.get("defer_days") is not None:
+            due_dt = datetime.fromisoformat(t["due_date"] + "T00:00:00")
+            show_from = (due_dt - timedelta(days=t["defer_days"])).date().isoformat()
+            if show_from > today:
+                continue
         if t["due_date"] < today:
             overdue += 1
         elif t["due_date"] == today:

@@ -106,7 +106,8 @@ class TestTasksLinkRender:
     def test_embed_filter_label_aliases(self, wiki_dir):
         """Friendly tab-label names map to the client data-filter values."""
         cases = {
-            "today": "today",
+            "focus": "focus",
+            "today": "focus",   # legacy alias
             "backlog": "open",
             "plan": "due",
             "upcoming": "due",  # legacy alias for the renamed Plan tab
