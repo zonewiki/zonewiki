@@ -1293,8 +1293,13 @@ body.editor-page main {
 .task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--bg)); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
 /* Selection is a ring, not a recolor — an urgency-tinted card (overdue red,
    due-today orange, …) must keep its color when selected. Only cards without
-   an urgency tint get the subtle accent background. */
-.task-item.task-selected { outline: 2px solid var(--btn-primary); outline-offset: -1px; }
+   an urgency tint get the subtle accent background. The crisp ring sits just
+   outside the card with a soft halo around it so it reads at a glance. */
+.task-item.task-selected {
+  outline: 2px solid var(--btn-primary);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent);
+}
 .task-item.task-selected:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
   border-color: var(--btn-primary);
   background: color-mix(in srgb, var(--btn-primary) 6%, var(--bg));
