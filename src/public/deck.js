@@ -3,6 +3,9 @@
 (function () {
   'use strict';
 
+  // Pure task logic lives in deck-core.js (loaded before this file).
+  const { dateToStr, isBlocked, isDeferred, tagMatchScore } = window.DeckCore;
+
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
   if (!allApps.length) return;
@@ -66,7 +69,9 @@
   let undoToastEl = null;
   let pendingUndoFn = null;
   const pendingCompletions = new Map(); // taskId → timeoutId
-  const CAPACITY = 5;  // day sections with >= this many tasks are flagged
+  // Day sections with >= this many tasks are flagged; [[deck capacity=N]]
+  // overrides the default per embed.
+  const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   const STALE_DAYS = 3;  // focus plans older than this are styled stale
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
@@ -96,6 +101,10 @@
     const id = draggedId;
     clearBoardDropOver();
     if (div.dataset.dropBucket === 'someday') updateTask(id, { focus_date: null });
+    else if (div.dataset.dropBucket === 'later') {
+      // "Later" is a range, not a day — ask which date (min: beyond this week).
+      openDatePicker('', d => { if (d) updateTask(id, { focus_date: d }); }, div, dateOffset(7));
+    }
     else if (div.dataset.dropDay) updateTask(id, { focus_date: div.dataset.dropDay });
   });
 
@@ -150,6 +159,24 @@
     fn();
   }
 
+  // Plain auto-dismissing toast (no undo button) — for server-rejected writes.
+  function showNotice(msg) {
+    const el = document.createElement('div');
+    el.className = 'raw-toast task-undo-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+
+  async function noticeFromResponse(res, fallback) {
+    try {
+      const body = await res.json();
+      showNotice(body.error || fallback);
+    } catch (_) {
+      showNotice(fallback);
+    }
+  }
+
   // ── API ────────────────────────────────────────────────────────────────────
 
   async function fetchDeck() {
@@ -192,6 +219,7 @@
       refreshOtherInstances(instanceId);
       return task;
     }
+    await noticeFromResponse(res, 'Could not create task');
     return null;
   }
 
@@ -205,8 +233,9 @@
       const updated = await res.json();
       const idx = tasks.findIndex(t => t.id === id);
       if (idx !== -1) tasks[idx] = updated;
-      // If recurring spawned a new task, re-fetch
-      if (data.completed && tasks[idx]?.recurrence) {
+      // Completion/skip/reopen of a recurring task spawns or removes an
+      // instance server-side — re-fetch to pick it up.
+      if (updated.recurrence && (data.completed || data.skip || 'wont_do' in data)) {
         await fetchDeck();
       } else {
         render();
@@ -215,6 +244,7 @@
       refreshOtherInstances(instanceId);
       return updated;
     }
+    await noticeFromResponse(res, 'Update rejected');
     return null;
   }
 
@@ -348,34 +378,8 @@
 
   // ── Filtering ──────────────────────────────────────────────────────────────
 
-  function dateToStr(d) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
   function todayStr() {
     return dateToStr(new Date());
-  }
-
-  // A task with an open (non-completed) blocker is not actionable: it is
-  // excluded from Focus and dimmed elsewhere. Completing the blocker
-  // surfaces it again automatically.
-  function isBlocked(t, byId) {
-    return (t.blocked_by || []).some(bid => {
-      const blocker = byId.get(bid);
-      return blocker && !blocker.completed_at;
-    });
-  }
-
-  // A task is deferred (hidden from Backlog/Focus/Plan) until its start_date,
-  // or until defer_days before its due_date — the most restrictive wins.
-  function isDeferred(t, today) {
-    if (t.completed_at) return false;
-    if (t.start_date && t.start_date > today) return true;
-    if (t.defer_days != null && t.due_date) {
-      const due = new Date(t.due_date + 'T00:00:00');
-      const showFrom = dateToStr(new Date(due - t.defer_days * 86400000));
-      if (showFrom > today) return true;
-    }
-    return false;
   }
 
   function filterTasks() {
@@ -713,54 +717,19 @@
     return '';
   }
 
-  // Which bucket a date falls in: 'overdue', an exact YYYY-MM-DD for today..+6,
-  // or 'later'.
-  function dayBucketKey(d) {
-    if (!d) return 'later';
-    const today = todayStr();
-    if (d < today) return 'overdue';
-    if (d > dateOffset(6)) return 'later';
-    return d;
-  }
-
-  function fullDayLabel(d) {
-    return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
-  }
-
-  // Board grouping is plan-first: a task's planned date (focus_date) wins over
-  // its deadline, so dragging a due-dated task to another day visibly moves it.
-  function planDate(t) { return t.focus_date || t.due_date || ''; }
-
-  // Group Upcoming tasks into ordered day sections for the board. Date sections
-  // (today..+6) and Someday are droppable (re-plan targets); Overdue and Later
-  // are display-only.
+  // Day-board grouping lives in DeckCore; bind it to the current date here.
   function boardBuckets(list) {
-    const groups = {};
-    list.forEach(t => {
-      const key = (!t.due_date && !t.focus_date) ? 'someday' : dayBucketKey(planDate(t));
-      (groups[key] = groups[key] || []).push(t);
-    });
-    // Within a day, deadlines first (soonest due), then undated, then by title.
-    const byDate = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.title || '').localeCompare(b.title || '');
-    const byNewest = (a, b) => (b.created_at || '').localeCompare(a.created_at || '');
-    const sections = [];
-    if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
-    for (let i = 0; i < 7; i++) {
-      const d = dateOffset(i);
-      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
-      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byDate) });
-    }
-    if (groups['later']) sections.push({ key: 'later', label: 'Later', date: null, droppable: false, tasks: groups['later'].sort(byDate) });
-    if (groups['someday']) sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: groups['someday'].sort(byNewest) });
-    return sections;
+    return window.DeckCore.boardBuckets(list, todayStr());
   }
 
   // Open a native date picker (anchored at `anchor` so showPicker is reliable)
-  // and call cb with the chosen YYYY-MM-DD (or null).
-  function openDatePicker(current, cb, anchor) {
+  // and call cb with the chosen YYYY-MM-DD (or null). `min` restricts the
+  // earliest selectable date.
+  function openDatePicker(current, cb, anchor, min) {
     const inp = document.createElement('input');
     inp.type = 'date';
     if (current) inp.value = current;
+    if (min) inp.min = min;
     const r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20 };
     inp.style.cssText = `position:fixed;left:${r.left}px;top:${r.bottom}px;width:1px;height:1px;opacity:0;border:none;padding:0;`;
     document.body.appendChild(inp);
@@ -881,6 +850,9 @@
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
       const metaHtml = hasMeta ? `<div class="${metaClass}">${startDisplay}${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}${blockedDisplay}${blockingDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
+      const skipBtnHtml = (!task.completed_at && task.recurrence)
+        ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
+        : '';
       const wontDoBtnHtml = !task.completed_at
         ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
         : '';
@@ -895,7 +867,7 @@
             <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
           </div>
           <div class="task-actions">
-            ${wontDoBtnHtml}
+            ${skipBtnHtml}${wontDoBtnHtml}
           </div>
           ${metaHtml}${descHtml}
         </li>`;
@@ -1000,6 +972,15 @@
         const id = btn.dataset.id;
         updateTask(id, { wont_do: true });
         showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
+      });
+    });
+
+    listEl.querySelectorAll('.task-skip-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        updateTask(id, { skip: true });
+        showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false }));
       });
     });
 
@@ -1292,17 +1273,6 @@
     tagAcEl?.remove();
     tagAcEl = null;
     tagAcIndex = -1;
-  }
-
-  function tagMatchScore(q, tag) {
-    const ql = q.toLowerCase(), tl = tag.toLowerCase();
-    if (tl.startsWith(ql)) return 2;
-    if (tl.includes(ql))   return 1;
-    let qi = 0;
-    for (let i = 0; i < tl.length && qi < ql.length; i++) {
-      if (tl[i] === ql[qi]) qi++;
-    }
-    return qi === ql.length ? 0 : -1;
   }
 
   function selectTagAcItem(text) {

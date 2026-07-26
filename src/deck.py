@@ -63,6 +63,7 @@ def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
     _migrate_completed_split()
+    _archive_old_completed()
 
 
 def _migrate_completed_split() -> None:
@@ -152,6 +153,49 @@ def _read_deck() -> list[dict]:
 def _read_completed() -> list[dict]:
     """Read completed tasks."""
     return _read_list_lenient(_completed_path())
+
+
+def _archive_glob() -> list[Path]:
+    """Per-year archive files, e.g. _deck_completed-2025.json (sorted)."""
+    return sorted(DECK_FILE.parent.glob("_deck_completed-*.json"))
+
+
+def _read_archived() -> list[dict]:
+    """Completed tasks rolled into per-year archives — searched, not shown."""
+    tasks: list[dict] = []
+    for path in _archive_glob():
+        tasks.extend(_read_list_lenient(path))
+    return tasks
+
+
+def _archive_old_completed() -> None:
+    """Roll completed tasks from previous years into _deck_completed-YYYY.json.
+
+    Runs at startup so the hot completed file (what the Completed tab loads)
+    stays small forever. Archived tasks remain in the search index via
+    _read_archived(). Skips silently if the hot file is unreadable — archiving
+    is an optimization, never worth failing startup over."""
+    with _LOCK:
+        completed = _read_completed()
+        current_year = str(date.today().year)
+        keep, old_by_year = [], {}
+        for t in completed:
+            year = (t.get("completed_at") or "")[:4]
+            if year and year < current_year:
+                old_by_year.setdefault(year, []).append(t)
+            else:
+                keep.append(t)
+        if not old_by_year:
+            return
+        changed = []
+        for year, tasks in old_by_year.items():
+            path = DECK_FILE.parent / f"_deck_completed-{year}.json"
+            merged = _read_list_lenient(path) + tasks
+            _atomic_write(path, json.dumps(merged, indent=2, ensure_ascii=False))
+            changed.append(path)
+        _atomic_write(_completed_path(), json.dumps(keep, indent=2, ensure_ascii=False))
+        if GIT_ENABLED and _git_commit_fn:
+            _git_commit_fn(changed + [_completed_path()], "Archive completed deck tasks")
 
 
 def _read_all() -> list[dict]:
@@ -356,6 +400,10 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         page_val = page_slug
     raw_filter = params.get("filter", "").strip().lower()
     filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
+    try:
+        capacity = max(1, min(99, int(params.get("capacity", ""))))
+    except ValueError:
+        capacity = ""  # client falls back to its default
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
@@ -364,7 +412,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
       <option value="focus">Focus</option>
@@ -488,6 +536,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     <button type="button" class="btn" id="task-delete-cancel{sfx}">Cancel</button>
   </div>
 </dialog>
+<script src="/public/deck-core.js" defer></script>
 <script src="/public/deck.js" defer></script>"""
 
 
@@ -557,13 +606,14 @@ _task_docs_cache: dict = {"key": None, "docs": []}
 
 
 def _deck_mtimes() -> tuple:
-    """Cache key: mtimes of both deck files (None when a file is absent)."""
+    """Cache key: paths + mtimes of every deck file, archives included."""
     def mt(p: Path):
         try:
             return p.stat().st_mtime_ns
         except OSError:
             return None
-    return (mt(DECK_FILE), mt(_completed_path()))
+    paths = [DECK_FILE, _completed_path()] + _archive_glob()
+    return tuple((str(p), mt(p)) for p in paths)
 
 
 def task_search_docs() -> list[dict]:
@@ -580,7 +630,7 @@ def task_search_docs() -> list[dict]:
     if _task_docs_cache["key"] == key:
         return _task_docs_cache["docs"]
     docs = []
-    for task in _read_all():
+    for task in _read_all() + _read_archived():
         title = task.get("title", "")
         desc = task.get("description", "")
         text = f"{title} {desc}".strip()
@@ -609,6 +659,13 @@ def _handle_deck_corrupt(exc):
     return jsonify({"error": "deck storage temporarily unavailable, please retry"}), 503
 
 
+@bp.errorhandler(400)
+def _handle_bad_request(exc):
+    # JSON body so deck.js can surface the reason (e.g. dependency cycles)
+    # instead of Flask's HTML error page.
+    return jsonify({"error": exc.description}), 400
+
+
 @bp.get("/api/deck")
 def api_get_deck():
     return jsonify(_read_deck())
@@ -622,8 +679,11 @@ def api_get_deck_completed():
 def _is_deferred(task: dict, today: str) -> bool:
     """True when the task is hidden until a later date — either an absolute
     start_date or defer_days before its due_date (most restrictive wins).
-    Mirror of isDeferred() in deck.js; keep the two in sync."""
+    An explicit plan overrides deferral: focus_date <= today keeps the task
+    visible. Mirror of isDeferred() in deck-core.js; keep the two in sync."""
     if task.get("completed_at"):
+        return False
+    if task.get("focus_date") and task["focus_date"] <= today:
         return False
     if task.get("start_date") and task["start_date"] > today:
         return True
@@ -639,15 +699,42 @@ def _is_deferred(task: dict, today: str) -> bool:
 def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
-    for t in _read_deck():
-        # Skip deferred tasks — they are not visible in Backlog/Focus/Plan
+    tasks = _read_deck()
+    active_ids = {t["id"] for t in tasks}
+    for t in tasks:
+        # Skip tasks not actionable right now: deferred ones are not visible in
+        # Backlog/Focus/Plan, and blocked ones can't be worked on anyway.
         if not t.get("due_date") or _is_deferred(t, today):
+            continue
+        if any(b in active_ids for b in t.get("blocked_by") or []):
             continue
         if t["due_date"] < today:
             overdue += 1
         elif t["due_date"] == today:
             today_count += 1
     return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
+
+
+def _has_blocking_cycle(start_id: str, tasks: list[dict]) -> bool:
+    """True when following blocked_by edges from start_id reaches start_id
+    again. A cycle would make every task in it permanently non-actionable
+    (each waiting on the other), so writes that create one are rejected."""
+    graph = {t["id"]: t.get("blocked_by") or [] for t in tasks}
+    seen = set()
+    stack = list(graph.get(start_id, []))
+    while stack:
+        tid = stack.pop()
+        if tid == start_id:
+            return True
+        if tid not in seen:
+            seen.add(tid)
+            stack.extend(graph.get(tid, []))
+    return False
+
+
+def _check_no_cycle(task_id: str, data: dict, active: list[dict]) -> None:
+    if ("blocked_by" in data or "blocking" in data) and _has_blocking_cycle(task_id, active):
+        abort(400, description="Rejected: this dependency would create a cycle")
 
 
 def _reconcile_blocking(task_id: str, blocking_ids: list, active: list[dict]) -> None:
@@ -677,6 +764,7 @@ def api_create_deck_item():
     active.append(task)
     if isinstance(data.get("blocking"), list):
         _reconcile_blocking(task["id"], data["blocking"], active)
+    _check_no_cycle(task["id"], data, active)
     _write_deck(active)
     return jsonify(task), 201
 
@@ -739,20 +827,33 @@ def api_update_deck_item(task_id):
     _apply_task_fields(task, data)
     if isinstance(data.get("blocking"), list):
         _reconcile_blocking(task_id, data["blocking"], active)
+    _check_no_cycle(task_id, data, active)
 
-    if "wont_do" in data:
+    if data.get("skip") and not task.get("completed_at"):
+        # Skip this occurrence: archive it as won't-do but DO spawn the next
+        # instance — the series continues, unlike a plain won't-do which ends
+        # it. On a non-recurring task this degrades to a plain won't-do.
+        spawned = _spawn_recurring(task)
+        task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        task["wont_do"] = True
+        active = [t for t in active if t["id"] != task_id]
+        completed_list.append(task)
+        if spawned:
+            active.append(spawned)
+    elif "wont_do" in data:
         if data["wont_do"] and not task.get("completed_at"):
             # Won't do: move active → completed, marked as abandoned.
-            # Deliberately does NOT spawn a recurring instance — skipping an
-            # occurrence should not perpetuate the series.
+            # Deliberately does NOT spawn a recurring instance — abandoning a
+            # task should not perpetuate the series (use skip for that).
             task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             task["wont_do"] = True
             active = [t for t in active if t["id"] != task_id]
             completed_list.append(task)
         elif not data["wont_do"] and task.get("completed_at"):
-            # Reopen a won't-do task: move completed → active
-            task["completed_at"] = None
-            task["wont_do"] = False
+            # Reopen a won't-do task: move completed → active. _uncomplete_task
+            # also removes the instance a skip spawned (exact spawned_from
+            # match), so undoing a skip does not leave a duplicate.
+            active = _uncomplete_task(task, active)
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
     elif "completed" in data:

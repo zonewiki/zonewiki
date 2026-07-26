@@ -54,6 +54,7 @@ No build step. No database. No auth (local use only).
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
+        ├── deck-core.js    # Pure deck logic (no DOM) — shared by deck.js and Node-run tests
         ├── deck.js         # Deck (task management) app JS, loaded via [[deck]] embed
 ```
 
@@ -123,14 +124,14 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201). Accepts a `blocking` id list — reconciled into other tasks' `blocked_by` server-side. |
-| PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, page, blocked_by, blocking, focus_date, wont_do). `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it. A `blocking` id list is reconciled into other tasks' `blocked_by` in the same write. |
+| PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, page, blocked_by, blocking, focus_date, wont_do, skip). `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. A `blocking` id list is reconciled into other tasks' `blocked_by` in the same write. Writes that would create a `blocked_by` cycle are rejected with 400 JSON. |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204. Strips the deleted id from every remaining task's `blocked_by`. |
 | POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204. Also strips dangling `blocked_by` references. |
 | POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
 | POST   | `/api/deck/restore`   | Re-insert full task snapshots (undo after delete); body `{ tasks: [...] }`. Snapshots keep their original id/created_at/completion state; unknown fields are dropped, existing ids skipped. A `blocking` list per snapshot restores reverse dependency edges. Returns restored tasks (201). |
 | POST   | `/api/deck/reorder`   | Update sort order; body `{ order: [id1, id2, …] }` |
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
-| GET    | `/api/deck/due-count` | Count tasks due today + overdue |
+| GET    | `/api/deck/due-count` | Count tasks due today + overdue, excluding deferred and blocked (open-blocker) tasks |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`        | Auto-generated index of all scratch notes, newest first |
@@ -205,6 +206,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag. Comma = AND (all tags must match, the narrowing default); pipe `a\|b` = OR (any tag matches). |
 | `filter` | tab name: `focus`, `backlog`, `plan` (aka `upcoming`), `deferred`, `completed` (internal aliases `open`/`due`/`hidden`/`done` also accepted) | `focus` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
+| `capacity` | integer 1–99 | 5 | Day-board WIP limit: Plan-tab day sections with at least this many tasks are flagged amber. |
 
 **Examples:**
 ```markdown
@@ -216,7 +218,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 [[deck page=self tag=sprint-1]]
 ```
 
-**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck.js" defer>`. Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-filter`).
+**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-filter`, `data-init-capacity`).
 
 **Implementation:**
 - `_DECK_RE` detects `[[deck …]]` (case-insensitive).
@@ -369,7 +371,7 @@ The deck logic is in `src/deck.py` (Flask Blueprint), registered by `server.py` 
 
 ### Storage
 
-Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes (except reorder, which is silent).
+Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes (except reorder, which is silent). Completed tasks live in `_deck_completed.json`; at startup, completed tasks from previous years are rolled into per-year archives (`_deck_completed-YYYY.json`) so the hot file stays small. Archived tasks remain in the search index but are not shown in the Completed tab.
 
 All deck mutations are serialized through a module-level lock (`_LOCK`) and written atomically (temp file + `os.replace`), because the Flask dev server is threaded and unguarded concurrent read-modify-write on the JSON files would otherwise lose updates. Write-path reads use a strict reader that refuses to overwrite a present-but-unreadable file (raises `_DeckCorrupt` → 503) rather than treating a torn read as an empty list and wiping every task.
 
@@ -396,13 +398,16 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 
 - **Filter tabs** (labels): Focus · Plan · Backlog · Deferred · Completed (internal `data-filter` values `focus`/`due`/`open`/`hidden`/`completed`). Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (Backlog) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on Backlog.
 - **Focus tab**: shows tasks with `focus_date <= today` and overdue/due-today tasks, excluding tasks with an open blocker (they return automatically when the blocker completes). Past focus dates are not removed — tasks stay in Focus as a working set — but a bar at the top counts plans ≥3 days old (`STALE_DAYS`) and clears them in one click, with undo. Sorted: overdue first, due today, then focused tasks.
-- **Plan (`due`) tab — day board**: shows **all** open (non-deferred) tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`). `Overdue`/`Later` are display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
+- **Plan (`due`) tab — day board**: shows **all** open (non-deferred) tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections, `Later`, and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`); dropping on `Later` opens a native date picker (min today+7) for the target date. `Overdue` is display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Inline date editing**: the ⏰ (due) and 📅 (plan) spans in each card's meta row open a native date picker on click — no modal needed. Keyboard: **f** plans the selected task for today, **F** for tomorrow (pressing again clears).
 - **Sort options**: Manual order (drag-and-drop) · Created
 - **Filters**: Tag text filter — comma-separated tags require all (AND); pipe-separated (`a|b`) match any (OR)
 - **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
 - **Inline completion**: Checkbox toggles mark task complete after a short grace period (cancellable)
 - **Won't do**: each active task card has a ✗ button (hover-reveal) that archives the task as abandoned. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
+- **Skip occurrence**: recurring task cards additionally have a ⏭ button — archives this occurrence as won't-do but spawns the next instance, so the series continues. Undo (or reopening the won't-do entry) removes the spawned instance again.
+- **Deferral**: `start_date`/`defer_days` hide a task from Focus/Backlog/Plan (Deferred tab shows it). An explicit plan overrides deferral — `focus_date <= today` makes the task visible regardless. Rule lives in `DeckCore.isDeferred` (client) and `_is_deferred` (server); keep them in sync.
+- **Rejected writes** (e.g. dependency cycles) surface as an auto-dismissing toast (`showNotice`) with the server's error message.
 - **Edit modal**: Double-click a card (or Enter on the selected task) opens a modal for full task editing, including a "From done" checkbox on recurring tasks (repeat from completion date) and a Links picker for blocked-by/blocking edges.
 - **Blocked tasks**: cards whose `blocked_by` contains an open task are dimmed (`task-blocked-item`) and left out of Focus; they stay visible in Backlog/Plan so they can still be re-planned.
 - **Recurring tasks**: completing one spawns the next instance (`spawned_from` links it to the completed task). The next due date steps from the previous due date (or from today when `recurrence.from` is `"completion"`) and is always advanced until ≥ today, so completing a long-overdue task never spawns an already-overdue instance. Monthly recurrence clamps to the real last day of the target month (Jan 31 → Feb 28/29). Un-completing removes exactly the spawned instance.
@@ -447,6 +452,8 @@ pip install pytest                                   # Install pytest (once, int
 pytest tests/ -v                                     # Run all tests
 pytest tests/test_section_editing.py -v              # Run section-editing tests only
 ```
+
+`tests/test_deck_core.py` exercises the pure client logic in `src/public/deck-core.js` by running it under Node (`node -e`); those tests skip automatically when Node is not installed.
 
 **Always run the full test suite before and after making changes to `src/server.py`.**
 

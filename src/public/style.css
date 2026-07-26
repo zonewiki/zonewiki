@@ -1353,6 +1353,15 @@ body.editor-page main {
 }
 .task-wontdo-btn:hover { background: color-mix(in srgb, #dc2626 15%, var(--bg)); color: #dc2626; }
 
+.task-skip-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; padding: 0;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer; font-size: .8rem; line-height: 1;
+  border-radius: 3px; transition: color .15s, background .15s;
+}
+.task-skip-btn:hover { background: var(--code-bg); color: var(--fg); }
+
 .task-wontdo-badge { color: #dc2626 !important; }
 
 .task-actions {

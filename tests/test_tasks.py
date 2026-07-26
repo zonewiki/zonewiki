@@ -1358,3 +1358,208 @@ class TestDueCountDeferral:
         create_task(client, title="Far due", due_date=future, defer_days=3)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["count"] == 0
+
+
+# ── Round 2: plan overrides deferral ──────────────────────────────────────────
+
+
+class TestPlanOverridesDeferral:
+    def test_planned_deferred_task_counts_as_due(self, client):
+        """focus_date <= today makes a deferred task visible (and countable)."""
+        past = (date.today() - timedelta(days=2)).isoformat()
+        future = (date.today() + timedelta(days=5)).isoformat()
+        create_task(client, title="Planned anyway", due_date=past,
+                    start_date=future, focus_date=date.today().isoformat())
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["overdue"] == 1
+
+    def test_future_plan_does_not_override(self, client):
+        past = (date.today() - timedelta(days=2)).isoformat()
+        future = (date.today() + timedelta(days=5)).isoformat()
+        create_task(client, title="Still hidden", due_date=past,
+                    start_date=future, focus_date=future)
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["count"] == 0
+
+
+# ── Round 2: dependency cycle rejection ───────────────────────────────────────
+
+
+class TestCycleRejection:
+    def test_direct_cycle_rejected(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
+        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [b["id"]]})
+        assert resp.status_code == 400
+        assert "cycle" in resp.get_json()["error"].lower()
+        # And nothing was written
+        a_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == a["id"])
+        assert a_now["blocked_by"] == []
+
+    def test_self_block_rejected(self, client):
+        a = create_task(client, title="A").get_json()
+        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [a["id"]]})
+        assert resp.status_code == 400
+
+    def test_transitive_cycle_rejected(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
+        c = create_task(client, title="C", blocked_by=[b["id"]]).get_json()
+        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [c["id"]]})
+        assert resp.status_code == 400
+
+    def test_cycle_via_blocking_rejected(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
+        # b blocking a would mean a -> b -> a
+        resp = client.put(f"/api/deck/{b['id']}", json={"blocking": [a["id"]]})
+        assert resp.status_code == 400
+
+    def test_create_cycle_rejected(self, client):
+        b = create_task(client, title="B").get_json()
+        resp = client.post("/api/deck", json={
+            "title": "A", "blocked_by": [b["id"]], "blocking": [b["id"]],
+        })
+        assert resp.status_code == 400
+
+    def test_valid_chain_accepted(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
+        resp = client.put(f"/api/deck/{b['id']}", json={"blocked_by": [a["id"]]})
+        assert resp.status_code == 200
+
+
+# ── Round 2: skip occurrence ──────────────────────────────────────────────────
+
+
+class TestSkipOccurrence:
+    def test_skip_archives_and_spawns(self, client):
+        task = create_task(client, title="Recurring", due_date=_future(2),
+                           rec_type="daily", rec_interval=1).get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        assert resp.status_code == 200
+        assert resp.get_json()["wont_do"] is True
+        active = client.get("/api/deck").get_json()
+        assert len(active) == 1
+        assert active[0]["spawned_from"] == task["id"]
+        assert active[0]["due_date"] == _future(3)
+        completed = client.get("/api/deck/completed").get_json()
+        assert completed[0]["id"] == task["id"]
+        assert completed[0]["wont_do"] is True
+
+    def test_undo_skip_removes_spawned(self, client):
+        task = create_task(client, title="Recurring", due_date=_future(2),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        client.put(f"/api/deck/{task['id']}", json={"wont_do": False})
+        active = client.get("/api/deck").get_json()
+        assert [t["id"] for t in active] == [task["id"]]
+        assert active[0]["completed_at"] is None
+        assert active[0]["wont_do"] is False
+
+    def test_skip_non_recurring_is_plain_wont_do(self, client):
+        task = create_task(client, title="One-off").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        assert client.get("/api/deck").get_json() == []
+        completed = client.get("/api/deck/completed").get_json()
+        assert completed[0]["wont_do"] is True
+
+
+# ── Round 2: due badge excludes blocked ───────────────────────────────────────
+
+
+class TestDueCountBlocked:
+    def test_blocked_overdue_not_counted(self, client):
+        blocker = create_task(client, title="Blocker").get_json()
+        past = (date.today() - timedelta(days=1)).isoformat()
+        create_task(client, title="Blocked overdue", due_date=past,
+                    blocked_by=[blocker["id"]])
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["count"] == 0
+
+    def test_unblocked_after_blocker_completes(self, client):
+        blocker = create_task(client, title="Blocker").get_json()
+        past = (date.today() - timedelta(days=1)).isoformat()
+        create_task(client, title="Blocked overdue", due_date=past,
+                    blocked_by=[blocker["id"]])
+        client.put(f"/api/deck/{blocker['id']}", json={"completed": True})
+        counts = client.get("/api/deck/due-count").get_json()
+        assert counts["overdue"] == 1
+
+
+# ── Round 2: capacity embed param ─────────────────────────────────────────────
+
+
+class TestCapacityParam:
+    def test_capacity_lands_in_embed(self, client, wiki_dir):
+        (wiki_dir / "board.md").write_text("# Board\n\n[[deck capacity=7]]\n",
+                                           encoding="utf-8")
+        html_out = client.get("/page/board").get_data(as_text=True)
+        assert 'data-init-capacity="7"' in html_out
+
+    def test_invalid_capacity_is_empty(self, client, wiki_dir):
+        (wiki_dir / "board.md").write_text("# Board\n\n[[deck capacity=lots]]\n",
+                                           encoding="utf-8")
+        html_out = client.get("/page/board").get_data(as_text=True)
+        assert 'data-init-capacity=""' in html_out
+
+    def test_embed_loads_deck_core(self, client, wiki_dir):
+        (wiki_dir / "board.md").write_text("# Board\n\n[[deck]]\n", encoding="utf-8")
+        html_out = client.get("/page/board").get_data(as_text=True)
+        core = html_out.index('src="/public/deck-core.js"')
+        app = html_out.index('src="/public/deck.js"')
+        assert core < app
+
+
+# ── Round 2: completed-task year archives ─────────────────────────────────────
+
+
+class TestCompletedArchive:
+    def _seed_completed(self, wiki_dir, tasks):
+        (wiki_dir / "_deck_completed.json").write_text(
+            json.dumps(tasks), encoding="utf-8")
+
+    def test_old_years_rolled_into_archives(self, client, wiki_dir):
+        year = date.today().year
+        self._seed_completed(wiki_dir, [
+            {"id": "old1", "title": "Ancient", "completed_at": f"{year-2}-05-01T10:00:00"},
+            {"id": "old2", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"},
+            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
+        ])
+        deck_module._archive_old_completed()
+        hot = json.loads((wiki_dir / "_deck_completed.json").read_text(encoding="utf-8"))
+        assert [t["id"] for t in hot] == ["new1"]
+        arch1 = json.loads((wiki_dir / f"_deck_completed-{year-2}.json").read_text(encoding="utf-8"))
+        arch2 = json.loads((wiki_dir / f"_deck_completed-{year-1}.json").read_text(encoding="utf-8"))
+        assert [t["id"] for t in arch1] == ["old1"]
+        assert [t["id"] for t in arch2] == ["old2"]
+
+    def test_archive_merges_into_existing_file(self, client, wiki_dir):
+        year = date.today().year
+        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(
+            json.dumps([{"id": "prior", "title": "Already archived",
+                         "completed_at": f"{year-1}-01-01T10:00:00"}]), encoding="utf-8")
+        self._seed_completed(wiki_dir, [
+            {"id": "old", "title": "Old", "completed_at": f"{year-1}-06-01T10:00:00"},
+        ])
+        deck_module._archive_old_completed()
+        arch = json.loads((wiki_dir / f"_deck_completed-{year-1}.json").read_text(encoding="utf-8"))
+        assert [t["id"] for t in arch] == ["prior", "old"]
+
+    def test_noop_when_nothing_old(self, client, wiki_dir):
+        year = date.today().year
+        self._seed_completed(wiki_dir, [
+            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
+        ])
+        deck_module._archive_old_completed()
+        assert not list(wiki_dir.glob("_deck_completed-*.json"))
+
+    def test_archived_tasks_stay_searchable(self, client, wiki_dir):
+        year = date.today().year
+        self._seed_completed(wiki_dir, [
+            {"id": "old1", "title": "Zephyrscale audit",
+             "completed_at": f"{year-1}-05-01T10:00:00"},
+        ])
+        deck_module._archive_old_completed()
+        results = client.get("/api/search?q=zephyrscale").get_json()
+        assert any(r.get("type") == "task" for r in results)
