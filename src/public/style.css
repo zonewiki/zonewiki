@@ -1291,7 +1291,14 @@ body.editor-page main {
 .task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--bg)); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
 .task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--bg)); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
 .task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--bg)); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
-.task-item.task-selected { border-color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 6%, var(--bg)); outline: none; }
+/* Selection is a ring, not a recolor — an urgency-tinted card (overdue red,
+   due-today orange, …) must keep its color when selected. Only cards without
+   an urgency tint get the subtle accent background. */
+.task-item.task-selected { outline: 2px solid var(--btn-primary); outline-offset: -1px; }
+.task-item.task-selected:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
+  border-color: var(--btn-primary);
+  background: color-mix(in srgb, var(--btn-primary) 6%, var(--bg));
+}
 .task-item.task-selected .task-wontdo-btn { opacity: 1; }
 .task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
 .task-item[draggable]:active { cursor: grabbing; }
