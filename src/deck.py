@@ -209,10 +209,10 @@ def _read_all() -> list[dict]:
         return _read_deck() + _read_completed()
 
 
-def _write_deck(tasks: list[dict]) -> None:
+def _write_deck(tasks: list[dict], message: str = "Update deck") -> None:
     _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
     if GIT_ENABLED and _git_commit_fn:
-        _git_commit_fn([DECK_FILE], "Update deck")
+        _git_commit_fn([DECK_FILE], message)
 
 
 def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
@@ -1050,10 +1050,8 @@ def api_reorder_deck():
             continue
         if task_id in id_map:
             id_map[task_id][field] = val
-    _write_deck(active)
+    _write_deck(active, "Reorder deck")
     return "", 204
-
-
 @bp.post("/api/deck/batch-tag")
 @_locked
 def api_batch_tag_deck():
