@@ -371,7 +371,7 @@ The deck logic is in `src/deck.py` (Flask Blueprint), registered by `server.py` 
 
 ### Storage
 
-Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes (except reorder, which is silent). Completed tasks live in `_deck_completed.json`; at startup, completed tasks from previous years are rolled into per-year archives (`_deck_completed-YYYY.json`) so the hot file stays small. Archived tasks remain in the search index but are not shown in the Completed tab.
+Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes. Completed tasks live in `_deck_completed.json`; at startup, completed tasks from previous years are rolled into per-year archives (`_deck_completed-YYYY.json`) so the hot file stays small. Archived tasks remain in the search index but are not shown in the Completed tab.
 
 All deck mutations are serialized through a module-level lock (`_LOCK`) and written atomically (temp file + `os.replace`), because the Flask dev server is threaded and unguarded concurrent read-modify-write on the JSON files would otherwise lose updates. Write-path reads use a strict reader that refuses to overwrite a present-but-unreadable file (raises `_DeckCorrupt` → 503) rather than treating a torn read as an empty list and wiping every task.
 

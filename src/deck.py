@@ -215,10 +215,6 @@ def _write_deck(tasks: list[dict]) -> None:
         _git_commit_fn([DECK_FILE], "Update deck")
 
 
-def _write_deck_no_commit(tasks: list[dict]) -> None:
-    _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
-
-
 def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
     """Write both files and commit them together in a single git commit."""
     completed_file = _completed_path()
@@ -1054,7 +1050,7 @@ def api_reorder_deck():
             continue
         if task_id in id_map:
             id_map[task_id][field] = val
-    _write_deck_no_commit(active)
+    _write_deck(active)
     return "", 204
 
 
