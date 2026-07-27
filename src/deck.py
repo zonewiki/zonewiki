@@ -834,7 +834,8 @@ def api_update_deck_item(task_id):
         _reconcile_blocking(task_id, data["blocking"], active)
     _check_no_cycle(task_id, data, active)
 
-    if data.get("skip") and not task.get("completed_at"):
+    did_skip = bool(data.get("skip") and not task.get("completed_at"))
+    if did_skip:
         # Skip this occurrence: archive it as won't-do but DO spawn the next
         # instance — the series continues, unlike a plain won't-do which ends
         # it. On a non-recurring task this degrades to a plain won't-do.
@@ -875,7 +876,7 @@ def api_update_deck_item(task_id):
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
 
-    if data.get("skip") and not task.get("completed_at"):
+    if did_skip:
         msg = "Skip deck task"
     elif "wont_do" in data:
         msg = "Reopen deck task" if not data["wont_do"] else "Abandon deck task"
