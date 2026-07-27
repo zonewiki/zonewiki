@@ -129,7 +129,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204. Also strips dangling `blocked_by` references. |
 | POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
 | POST   | `/api/deck/restore`   | Re-insert full task snapshots (undo after delete); body `{ tasks: [...] }`. Snapshots keep their original id/created_at/completion state; unknown fields are dropped, existing ids skipped. A `blocking` list per snapshot restores reverse dependency edges. Returns restored tasks (201). |
-| POST   | `/api/deck/reorder`   | Update sort order; body `{ order: [id1, id2, …] }` |
+| POST   | `/api/deck/reorder`   | Update sort order. Body `{ order: [id1, id2, …] }` densely renumbers the given ids to `0..n-1` — used when the full unfiltered Backlog is visible, which also rebalances away any float drift from prior sparse updates. Body `{ updates: [{ id, sort_order }, …] }` sets specific ids to specific (possibly fractional) values without touching any other task — used when a tag/search/page filter narrows the visible list, so reordering never collides with the `sort_order` of tasks the filter is hiding. |
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
 | GET    | `/api/deck/due-count` | Count tasks due today + overdue, excluding deferred and blocked (open-blocker) tasks |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |

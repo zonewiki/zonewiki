@@ -1027,13 +1027,21 @@ def api_batch_complete_deck():
 def api_reorder_deck():
     data = request.get_json(force=True)
     order = data.get("order", [])
-    if not order:
+    updates = data.get("updates", [])
+    if not order and not updates:
         abort(400)
     active = _read_deck_strict()
     id_map = {t["id"]: t for t in active}
     for i, task_id in enumerate(order):
         if task_id in id_map:
             id_map[task_id]["sort_order"] = i
+    for u in updates:
+        task_id = u.get("id")
+        sort_order = u.get("sort_order")
+        if not isinstance(sort_order, (int, float)) or isinstance(sort_order, bool):
+            continue
+        if task_id in id_map:
+            id_map[task_id]["sort_order"] = sort_order
     _write_deck_no_commit(active)
     return "", 204
 

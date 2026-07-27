@@ -338,13 +338,51 @@
     });
   }
 
-  async function reorder(order) {
+  async function postReorder(body) {
     await fetch('/api/deck/reorder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order }),
+      body: JSON.stringify(body),
     });
     refreshOtherInstances(instanceId);
+  }
+
+  async function reorder(order) { return postReorder({ order }); }
+  async function reorderUpdates(updates) { return postReorder({ updates }); }
+
+  // True when the visible task list is a narrowed view (tag/search/page
+  // filter) of the full Backlog rather than every open task. Manual reorders
+  // done under a narrowed view must not renumber the whole visible list —
+  // tasks hidden by the filter would keep their old sort_order and collide
+  // with the freshly-renumbered ones once the filter is cleared.
+  function hasNarrowingFilter() {
+    return !!(filterTag.value.trim() || filterSearch?.value.trim() || initPage);
+  }
+
+  // Assign sort_order values to `groupIds` (already spliced into `ids` at
+  // `insertIdx`, contiguously and in order) so they land between the nearest
+  // already-ordered neighbors. Only the group's own tasks are touched — every
+  // other task keeps its existing sort_order, so the move stays correctly
+  // placed relative to filtered-out tasks once the filter is cleared.
+  function interpolateOrder(ids, insertIdx, groupIds, byId) {
+    const groupSet = new Set(groupIds);
+    let prevVal = null;
+    for (let i = insertIdx - 1; i >= 0; i--) {
+      const t = byId.get(ids[i]);
+      if (t && !groupSet.has(ids[i]) && t.sort_order != null) { prevVal = t.sort_order; break; }
+    }
+    let nextVal = null;
+    for (let i = insertIdx + groupIds.length; i < ids.length; i++) {
+      const t = byId.get(ids[i]);
+      if (t && !groupSet.has(ids[i]) && t.sort_order != null) { nextVal = t.sort_order; break; }
+    }
+    const lo = prevVal != null ? prevVal : (nextVal != null ? nextVal - 1 : 0);
+    const hi = nextVal != null ? nextVal : (prevVal != null ? prevVal + 1 : lo + 1);
+    const n = groupIds.length;
+    groupIds.forEach((id, i) => {
+      const t = byId.get(id);
+      if (t) t.sort_order = lo + (hi - lo) * (i + 1) / (n + 1);
+    });
   }
 
   // ── Delete confirmation dialog ─────────────────────────────────────────────
@@ -1767,14 +1805,19 @@
       // Within-section reorder uses standard behavior (no adjustment).
       const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
       ids.splice(insertIdx, 0, draggedId);
-      // Only assign sort_order to items that already had one, plus the dragged item
-      ids.forEach((tid, i) => {
-        const t = byId.get(tid);
-        if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
-      });
-      // Send only the items that have a sort_order to the server
-      const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
-      reorder(orderedIds);
+      if (hasNarrowingFilter()) {
+        interpolateOrder(ids, insertIdx, [draggedId], byId);
+        reorderUpdates([{ id: draggedId, sort_order: draggedTask.sort_order }]);
+      } else {
+        // Only assign sort_order to items that already had one, plus the dragged item
+        ids.forEach((tid, i) => {
+          const t = byId.get(tid);
+          if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
+        });
+        // Send only the items that have a sort_order to the server
+        const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
+        reorder(orderedIds);
+      }
       render();
     }
 
@@ -1870,12 +1913,19 @@
       }
       ids.length = 0; ids.push(...rest);
     }
-    ids.forEach((tid, i) => {
-      const t = byId.get(tid);
-      if (t && (t.sort_order != null || selectedIds.has(tid))) t.sort_order = i;
-    });
-    const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
-    reorder(orderedIds);
+    if (hasNarrowingFilter()) {
+      const groupIds = ids.filter(id => selectedIds.has(id));
+      const insertIdx = ids.findIndex(id => selectedIds.has(id));
+      interpolateOrder(ids, insertIdx, groupIds, byId);
+      reorderUpdates(groupIds.map(id => ({ id, sort_order: byId.get(id).sort_order })));
+    } else {
+      ids.forEach((tid, i) => {
+        const t = byId.get(tid);
+        if (t && (t.sort_order != null || selectedIds.has(tid))) t.sort_order = i;
+      });
+      const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
+      reorder(orderedIds);
+    }
     render();
   }
 

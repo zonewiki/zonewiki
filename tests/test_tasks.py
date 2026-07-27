@@ -458,6 +458,50 @@ class TestReorder:
         resp = client.post("/api/deck/reorder", json={})
         assert resp.status_code == 400
 
+    def test_reorder_updates_sets_sparse_sort_order(self, client):
+        """`updates` sets sort_order on the given ids only, without touching
+        any other task's sort_order — used for reordering under a narrowed
+        (tag/search/page-filtered) view so hidden tasks aren't disturbed."""
+        t1 = create_task(client, title="First").get_json()
+        t2 = create_task(client, title="Second").get_json()
+        t3 = create_task(client, title="Third").get_json()
+        client.post("/api/deck/reorder", json={
+            "order": [t1["id"], t2["id"], t3["id"]]
+        })
+
+        resp = client.post("/api/deck/reorder", json={
+            "updates": [{"id": t3["id"], "sort_order": 0.5}]
+        })
+        assert resp.status_code == 204
+
+        tasks = client.get("/api/deck").get_json()
+        by_id = {t["id"]: t for t in tasks}
+        assert by_id[t1["id"]]["sort_order"] == 0
+        assert by_id[t2["id"]]["sort_order"] == 1
+        assert by_id[t3["id"]]["sort_order"] == 0.5
+
+    def test_reorder_updates_ignores_unknown_id(self, client):
+        t1 = create_task(client, title="First").get_json()
+        resp = client.post("/api/deck/reorder", json={
+            "updates": [{"id": "does-not-exist", "sort_order": 3}]
+        })
+        assert resp.status_code == 204
+        tasks = client.get("/api/deck").get_json()
+        assert tasks[0]["id"] == t1["id"]
+
+    def test_reorder_updates_ignores_non_numeric_sort_order(self, client):
+        t1 = create_task(client, title="First").get_json()
+        resp = client.post("/api/deck/reorder", json={
+            "updates": [{"id": t1["id"], "sort_order": "not-a-number"}]
+        })
+        assert resp.status_code == 204
+        tasks = client.get("/api/deck").get_json()
+        assert tasks[0]["sort_order"] is None
+
+    def test_reorder_empty_updates_and_order(self, client):
+        resp = client.post("/api/deck/reorder", json={"order": [], "updates": []})
+        assert resp.status_code == 400
+
 
 # ---------- sort_order on update ----------
 
