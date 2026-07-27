@@ -347,8 +347,8 @@
     refreshOtherInstances(instanceId);
   }
 
-  async function reorder(order) { return postReorder({ order }); }
-  async function reorderUpdates(updates) { return postReorder({ updates }); }
+  async function reorder(order, field = 'sort_order') { return postReorder({ order, field }); }
+  async function reorderUpdates(updates, field = 'sort_order') { return postReorder({ updates, field }); }
 
   // True when the visible task list is a narrowed view (tag/search/page
   // filter) of the full Backlog rather than every open task. Manual reorders
@@ -364,24 +364,24 @@
   // already-ordered neighbors. Only the group's own tasks are touched — every
   // other task keeps its existing sort_order, so the move stays correctly
   // placed relative to filtered-out tasks once the filter is cleared.
-  function interpolateOrder(ids, insertIdx, groupIds, byId) {
+  function interpolateOrder(ids, insertIdx, groupIds, byId, field = 'sort_order') {
     const groupSet = new Set(groupIds);
     let prevVal = null;
     for (let i = insertIdx - 1; i >= 0; i--) {
       const t = byId.get(ids[i]);
-      if (t && !groupSet.has(ids[i]) && t.sort_order != null) { prevVal = t.sort_order; break; }
+      if (t && !groupSet.has(ids[i]) && t[field] != null) { prevVal = t[field]; break; }
     }
     let nextVal = null;
     for (let i = insertIdx + groupIds.length; i < ids.length; i++) {
       const t = byId.get(ids[i]);
-      if (t && !groupSet.has(ids[i]) && t.sort_order != null) { nextVal = t.sort_order; break; }
+      if (t && !groupSet.has(ids[i]) && t[field] != null) { nextVal = t[field]; break; }
     }
     const lo = prevVal != null ? prevVal : (nextVal != null ? nextVal - 1 : 0);
     const hi = nextVal != null ? nextVal : (prevVal != null ? prevVal + 1 : lo + 1);
     const n = groupIds.length;
     groupIds.forEach((id, i) => {
       const t = byId.get(id);
-      if (t) t.sort_order = lo + (hi - lo) * (i + 1) / (n + 1);
+      if (t) t[field] = lo + (hi - lo) * (i + 1) / (n + 1);
     });
   }
 
@@ -489,19 +489,16 @@
   // Per-tab fixed sort comparators; null = use the user's sort select
   const TAB_SORT = {
     focus: (a, b) => {
-      const today = todayStr();
-      const group = t => {
-        if (t.due_date && t.due_date < today) return 0;  // overdue by deadline
-        if (t.due_date && t.due_date === today) return 1; // due today
-        return 2; // focused only (focus_date <= today, no/future due)
-      };
-      const ga = group(a), gb = group(b);
-      if (ga !== gb) return ga - gb;
+      // Full manual ordering via focus_order (independent of backlog sort_order)
+      if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
+      if (a.focus_order != null) return -1;
+      if (b.focus_order != null) return 1;
+      // Fallback for tasks without a focus_order
       if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
       if (a.due_date) return -1;
       if (b.due_date) return 1;
       if (a.focus_date && b.focus_date) return a.focus_date.localeCompare(b.focus_date);
-      return (a.sort_order ?? 999) - (b.sort_order ?? 999);
+      return 0;
     },
     due:       (a, b) => (a.due_date || a.focus_date || '').localeCompare(b.due_date || b.focus_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
@@ -807,9 +804,10 @@
       newTasks   = rest.filter(t => t.sort_order == null)
                        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else if (activeFilter === 'focus') {
-      orderedTasks = sortTasks(filtered);
       dueTasks     = [];
-      newTasks     = [];
+      orderedTasks = sortTasks(filtered.filter(t => t.focus_order != null));
+      newTasks     = filtered.filter(t => t.focus_order == null)
+                             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else {
       dueTasks     = [];
       orderedTasks = sortTasks(filtered);
@@ -822,7 +820,7 @@
       return;
     }
 
-    const taskHTML = (task, draggable = (!TAB_SORT[activeFilter] && sortSelect.value === 'manual'), extraClass = '') => {
+    const taskHTML = (task, draggable = (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')), extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
       const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '')
         + (!task.completed_at && isBlocked(task, byId) ? ' task-blocked-item' : '');
@@ -918,10 +916,13 @@
     if (activeFilter === 'due') {
       html = boardBuckets(filtered).map(s => {
         const overCls = (s.date && s.tasks.length >= CAPACITY) ? ' board-day--over' : '';
+        const overIcon = (s.date && s.tasks.length >= CAPACITY)
+          ? `<span class="board-day-over-icon" title="Over capacity (${s.tasks.length}/${CAPACITY})">⚠</span>`
+          : '';
         const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
         const header = `<li class="board-day-divider${overCls}"${dropAttr}>` +
           `<span class="board-day-label">${esc(s.label)}</span>` +
-          `<span class="board-day-count">${s.tasks.length}</span></li>`;
+          `${overIcon}<span class="board-day-count">${s.tasks.length}</span></li>`;
         // Empty droppable days need a real drop area — a bare divider is too
         // thin to hit. Give them a placeholder that acts as the drop target.
         const body = s.tasks.length
@@ -951,6 +952,10 @@
       if (staleCount) {
         html += `<li class="focus-stale-bar">${staleCount} stale plan${staleCount > 1 ? 's' : ''}` +
           `<button class="btn btn-sm" id="focus-clear-stale">Clear</button></li>`;
+      }
+      if (orderedTasks.length >= CAPACITY) {
+        html += `<li class="focus-stale-bar focus-over-capacity">` +
+          `<span>⚠ ${orderedTasks.length} tasks in focus (limit: ${CAPACITY})</span></li>`;
       }
     }
     // Limit completed tab display
@@ -1048,7 +1053,7 @@
     // Drag and drop
     if (activeFilter === 'due') {
       setupBoardDragAndDrop();
-    } else if (!TAB_SORT[activeFilter] && sortSelect.value === 'manual') {
+    } else if (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')) {
       setupDragAndDrop();
     }
 
@@ -1620,7 +1625,7 @@
     if (deferDaysField) deferDaysField.style.visibility = isDeferDue ? 'hidden' : '';
     if (deferDueCheck) deferDueCheck.checked = isDeferDue;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : '';
+    document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
     if (linkChipsEl) {
       linkChipsEl.innerHTML = '';
@@ -1767,7 +1772,21 @@
     if (!id) return;
     const task = tasks.find(t => t.id === id);
     modal.close();
-    if (await confirmDelete(task?.title || '')) deleteTask(id);
+    if (await confirmDelete(task?.title || '')) {
+      const snapshot = task ? [{ ...task,
+        blocking: tasks.filter(x => (x.blocked_by || []).includes(task.id)).map(x => x.id) }] : [];
+      await deleteTask(id);
+      showUndo('Task deleted', async () => {
+        await fetch('/api/deck/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tasks: snapshot }),
+        });
+        await fetchDeck();
+        window.refreshDueBadge?.();
+        refreshOtherInstances(instanceId);
+      });
+    }
   });
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
@@ -1799,24 +1818,26 @@
       if (fromIdx === -1 || toIdx === -1) return;
       const byId = new Map(tasks.map(tk => [tk.id, tk]));
       const draggedTask = byId.get(draggedId);
-      const wasNew = draggedTask && draggedTask.sort_order == null;
+      const wasNew = activeFilter === 'focus'
+        ? draggedTask && draggedTask.focus_order == null
+        : draggedTask && draggedTask.sort_order == null;
       ids.splice(fromIdx, 1);
       // When dragging from new into ordered, insert BEFORE target (adjust index).
       // Within-section reorder uses standard behavior (no adjustment).
       const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
       ids.splice(insertIdx, 0, draggedId);
+      const field = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
       if (hasNarrowingFilter()) {
-        interpolateOrder(ids, insertIdx, [draggedId], byId);
-        reorderUpdates([{ id: draggedId, sort_order: draggedTask.sort_order }]);
+        interpolateOrder(ids, insertIdx, [draggedId], byId, field);
+        reorderUpdates([{ id: draggedId, [field]: draggedTask[field] }], field);
       } else {
-        // Only assign sort_order to items that already had one, plus the dragged item
+        // Only assign the field to items that already had one, plus the dragged item
         ids.forEach((tid, i) => {
           const t = byId.get(tid);
-          if (t && (t.sort_order != null || t.id === draggedId)) t.sort_order = i;
+          if (t && (t[field] != null || t.id === draggedId)) t[field] = i;
         });
-        // Send only the items that have a sort_order to the server
-        const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
-        reorder(orderedIds);
+        const orderedIds = ids.filter(tid => byId.get(tid)?.[field] != null);
+        reorder(orderedIds, field);
       }
       render();
     }
@@ -1872,7 +1893,7 @@
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
   function reorderSelected(direction) {
-    if (sortSelect.value !== 'manual' || !selectedIds.size) return;
+    if (activeFilter !== 'focus' && sortSelect.value !== 'manual' || !selectedIds.size) return;
     const items = visibleItems();
     const ids = items.map(el => el.dataset.id);
     const byId = new Map(tasks.map(tk => [tk.id, tk]));
@@ -1913,18 +1934,19 @@
       }
       ids.length = 0; ids.push(...rest);
     }
+    const field = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
     if (hasNarrowingFilter()) {
       const groupIds = ids.filter(id => selectedIds.has(id));
       const insertIdx = ids.findIndex(id => selectedIds.has(id));
-      interpolateOrder(ids, insertIdx, groupIds, byId);
-      reorderUpdates(groupIds.map(id => ({ id, sort_order: byId.get(id).sort_order })));
+      interpolateOrder(ids, insertIdx, groupIds, byId, field);
+      reorderUpdates(groupIds.map(id => ({ id, [field]: byId.get(id)[field] })), field);
     } else {
       ids.forEach((tid, i) => {
         const t = byId.get(tid);
-        if (t && (t.sort_order != null || selectedIds.has(tid))) t.sort_order = i;
+        if (t && (t[field] != null || selectedIds.has(tid))) t[field] = i;
       });
-      const orderedIds = ids.filter(tid => byId.get(tid)?.sort_order != null);
-      reorder(orderedIds);
+      const orderedIds = ids.filter(tid => byId.get(tid)?.[field] != null);
+      reorder(orderedIds, field);
     }
     render();
   }

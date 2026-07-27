@@ -256,6 +256,7 @@ def _new_task(**overrides) -> dict:
         "completed_at": None,
         "wont_do": False,
         "focus_date": None,
+        "focus_order": None,
         "sort_order": None,
         "recurrence": None,
         "page": None,
@@ -789,10 +790,18 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["defer_days"] = max(0, int(dd)) if dd is not None else None
     if "sort_order" in data:
         task["sort_order"] = data["sort_order"]
+    if "focus_order" in data:
+        task["focus_order"] = data["focus_order"]
     if "page" in data:
         task["page"] = (data["page"] or "").strip() or None
     if "focus_date" in data:
-        task["focus_date"] = _validate_date(data["focus_date"])
+        new_focus_date = _validate_date(data["focus_date"])
+        old_focus_date = task.get("focus_date")
+        # Reset focus_order when the task leaves or re-enters the focus view
+        # (null→value or value→null). Rescheduling (value→value) keeps the order.
+        if (old_focus_date is None) != (new_focus_date is None):
+            task["focus_order"] = None
+        task["focus_date"] = new_focus_date
     if "blocked_by" in data:
         blocked = data["blocked_by"]
         if isinstance(blocked, str):
@@ -1030,18 +1039,21 @@ def api_reorder_deck():
     updates = data.get("updates", [])
     if not order and not updates:
         abort(400)
+    field = data.get("field", "sort_order")
+    if field not in ("sort_order", "focus_order"):
+        abort(400)
     active = _read_deck_strict()
     id_map = {t["id"]: t for t in active}
     for i, task_id in enumerate(order):
         if task_id in id_map:
-            id_map[task_id]["sort_order"] = i
+            id_map[task_id][field] = i
     for u in updates:
         task_id = u.get("id")
-        sort_order = u.get("sort_order")
-        if not isinstance(sort_order, (int, float)) or isinstance(sort_order, bool):
+        val = u.get(field)
+        if not isinstance(val, (int, float)) or isinstance(val, bool):
             continue
         if task_id in id_map:
-            id_map[task_id]["sort_order"] = sort_order
+            id_map[task_id][field] = val
     _write_deck_no_commit(active)
     return "", 204
 

@@ -1249,18 +1249,19 @@ body.editor-page main {
 /* Upcoming day board — one section per day; dividers are drag-to-plan targets. */
 .board-day-divider {
   display: flex; align-items: center; gap: .5rem;
-  list-style: none; margin: .7rem 0 .35rem; padding: 0 .1rem .2rem;
-  border-bottom: 1px solid var(--border);
-  font-size: .72rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .03em; color: var(--muted);
+  list-style: none; margin: 1.6rem 0 0; padding: .1rem .5rem .35rem;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); background: var(--code-bg);
+  border: 1px solid var(--border); border-radius: 4px 4px 0 0;
 }
 .board-day-divider:first-child { margin-top: 0; }
 .board-day-label { flex: 1; }
 .board-day-count { font-weight: 700; color: var(--muted); }
 .board-day--over .board-day-count { color: #d97706; }  /* over capacity */
+.board-day-over-icon { color: #d97706; font-size: .8rem; margin-right: .25rem; cursor: default; }
 /* Highlight the whole section while dragging a card over it. */
 .board-day-divider.board-drop-over {
-  border-bottom-color: var(--btn-primary);
+  border-color: var(--btn-primary);
   color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
 }
 .board-item[draggable] { cursor: grab; }
@@ -1417,6 +1418,7 @@ body.editor-page main {
   font-size: .75rem; color: var(--muted);
   background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
 }
+.focus-over-capacity { color: #d97706; }
 
 .task-inbox-divider {
   list-style: none;
