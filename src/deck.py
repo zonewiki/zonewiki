@@ -762,7 +762,7 @@ def api_create_deck_item():
     if isinstance(data.get("blocking"), list):
         _reconcile_blocking(task["id"], data["blocking"], active)
     _check_no_cycle(task["id"], data, active)
-    _write_deck(active)
+    _write_deck(active, "Create deck task")
     return jsonify(task), 201
 
 
@@ -875,7 +875,15 @@ def api_update_deck_item(task_id):
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
 
-    _write_both(active, completed_list)
+    if data.get("skip") and not task.get("completed_at"):
+        msg = "Skip deck task"
+    elif "wont_do" in data:
+        msg = "Reopen deck task" if not data["wont_do"] else "Abandon deck task"
+    elif "completed" in data:
+        msg = "Uncomplete deck task" if not data["completed"] else "Complete deck task"
+    else:
+        msg = "Update deck task"
+    _write_both(active, completed_list, msg)
     return jsonify(task)
 
 
@@ -896,7 +904,7 @@ def api_delete_deck_item(task_id):
     active = [t for t in active if t["id"] != task_id]
     completed_list = [t for t in completed_list if t["id"] != task_id]
     _strip_blocked_refs({task_id}, active, completed_list)
-    _write_both(active, completed_list)
+    _write_both(active, completed_list, "Delete deck task")
     return "", 204
 
 
@@ -913,7 +921,7 @@ def api_batch_delete_deck():
     active = [t for t in active if t["id"] not in id_set]
     completed_list = [t for t in completed_list if t["id"] not in id_set]
     _strip_blocked_refs(id_set, active, completed_list)
-    _write_both(active, completed_list)
+    _write_both(active, completed_list, "Delete deck tasks")
     return "", 204
 
 
@@ -1023,7 +1031,7 @@ def api_batch_complete_deck():
         completed_list = [t for t in completed_list if t["id"] not in moving_ids]
         active = active + moving
 
-    _write_both(active, completed_list)
+    _write_both(active, completed_list, "Complete deck tasks" if mark_completed else "Reopen deck tasks")
     return jsonify(updated)
 
 
@@ -1082,5 +1090,5 @@ def api_batch_tag_deck():
             current = [t for t in current if t.lower() not in remove_tags]
         task["tags"] = current
         updated.append(task)
-    _write_both(active, completed_list)
+    _write_both(active, completed_list, "Tag deck tasks")
     return jsonify(updated)
