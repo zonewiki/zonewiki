@@ -81,15 +81,22 @@
     // Within a day, deadlines first (soonest due), then undated, then by title.
     const byDate = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.title || '').localeCompare(b.title || '');
     const byNewest = (a, b) => (b.created_at || '').localeCompare(a.created_at || '');
+    // Droppable buckets respect manual sort_order; fall back to date/title for unordered tasks.
+    const bySortOrder = (a, b) => {
+      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+      if (a.sort_order != null) return -1;
+      if (b.sort_order != null) return 1;
+      return byDate(a, b);
+    };
     const sections = [];
     if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
     for (let i = 0; i < 7; i++) {
       const d = addDays(today, i);
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
-      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byDate) });
+      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(bySortOrder) });
     }
-    if (groups['later']) sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: groups['later'].sort(byDate) });
-    if (groups['someday']) sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: groups['someday'].sort(byNewest) });
+    if (groups['later']) sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: groups['later'].sort(bySortOrder) });
+    if (groups['someday']) sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: groups['someday'].sort(bySortOrder) });
     return sections;
   }
 

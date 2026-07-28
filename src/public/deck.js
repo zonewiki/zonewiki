@@ -498,6 +498,11 @@
       if (a.due_date) return -1;
       if (b.due_date) return 1;
       if (a.focus_date && b.focus_date) return a.focus_date.localeCompare(b.focus_date);
+      // Final fallback: inherit backlog/plan priority so tasks land in Focus in the
+      // same relative order they were given in the Backlog or Plan tab.
+      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+      if (a.sort_order != null) return -1;
+      if (b.sort_order != null) return 1;
       return 0;
     },
     due:       (a, b) => (a.due_date || a.focus_date || '').localeCompare(b.due_date || b.focus_date || ''),
@@ -1792,8 +1797,45 @@
   // ── Drag and Drop ──────────────────────────────────────────────────────────
 
   // Upcoming board: make cards draggable; the list-level dragover/drop handlers
-  // (attached once at init) re-plan the task to the day section it's dropped on.
+  // (attached once at init) re-plan the task to the day section it's dropped on,
+  // or reorder within a bucket when the drop target is in the same day section.
   function setupBoardDragAndDrop() {
+    const byId = new Map(tasks.map(tk => [tk.id, tk]));
+
+    function executeBoardItemDrop(targetItem) {
+      const targetId = targetItem.dataset.id;
+      if (!draggedId || targetId === draggedId) return;
+      const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(draggedId)}"]`);
+      const draggedDiv = draggedEl && boardDivider(draggedEl);
+      const targetDiv = boardDivider(targetItem);
+      if (draggedDiv && targetDiv && draggedDiv === targetDiv) {
+        // Same bucket: reorder within the day section using sort_order.
+        const bucketIds = Array.from(listEl.querySelectorAll('.task-item'))
+          .filter(el => boardDivider(el) === draggedDiv)
+          .map(el => el.dataset.id);
+        const fromIdx = bucketIds.indexOf(draggedId);
+        const toIdx   = bucketIds.indexOf(targetId);
+        if (fromIdx === -1 || toIdx === -1) return;
+        bucketIds.splice(fromIdx, 1);
+        bucketIds.splice(toIdx, 0, draggedId);
+        interpolateOrder(bucketIds, toIdx, [draggedId], byId, 'sort_order');
+        const draggedTask = byId.get(draggedId);
+        reorderUpdates([{ id: draggedId, sort_order: draggedTask.sort_order }], 'sort_order');
+        render();
+      } else {
+        // Different bucket: replan to the target's day (same logic as divider drop).
+        clearBoardDropOver();
+        if (!targetDiv || !targetDiv.dataset.dropBucket) return;
+        const id = draggedId;
+        if (targetDiv.dataset.dropBucket === 'someday') updateTask(id, { focus_date: null });
+        else if (targetDiv.dataset.dropBucket === 'later') {
+          openDatePicker('', d => { if (d) updateTask(id, { focus_date: d }); }, targetDiv, dateOffset(7));
+        } else if (targetDiv.dataset.dropDay) {
+          updateTask(id, { focus_date: targetDiv.dataset.dropDay });
+        }
+      }
+    }
+
     listEl.querySelectorAll('.task-item[draggable]').forEach(item => {
       item.addEventListener('dragstart', e => {
         draggedId = item.dataset.id;
@@ -1804,6 +1846,21 @@
         item.classList.remove('task-dragging');
         draggedId = null;
         clearBoardDropOver();
+        listEl.querySelectorAll('.task-drag-over').forEach(el => el.classList.remove('task-drag-over'));
+      });
+      item.addEventListener('dragover', e => {
+        if (!draggedId) return;
+        e.preventDefault();
+        e.stopPropagation();  // suppress list-level bucket-highlight when over a task item
+        e.dataTransfer.dropEffect = 'move';
+        if (item.dataset.id !== draggedId) item.classList.add('task-drag-over');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('task-drag-over'));
+      item.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();  // prevent list-level handler from also firing
+        item.classList.remove('task-drag-over');
+        executeBoardItemDrop(item);
       });
     });
   }
