@@ -1404,16 +1404,21 @@
       .slice(0, 8);
   }
 
-  filterTag.addEventListener('input', () => {
+  function maybeShowTagAc() {
     const val = filterTag.value;
     const commaIdx = val.lastIndexOf(',');
-    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
-    if (partial.startsWith('#')) {
+    // Current segment, with an optional leading '#' stripped. Suggest on any
+    // non-empty partial (typing '#' first is optional), or on an empty focused
+    // field so the full tag menu is one keystroke away.
+    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim().replace(/^#/, '');
+    if (partial || document.activeElement === filterTag) {
       showTagAc(computeTagMatches());
     } else {
       hideTagAc();
     }
-  });
+  }
+  filterTag.addEventListener('input', maybeShowTagAc);
+  filterTag.addEventListener('focus', maybeShowTagAc);
 
   filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
 
