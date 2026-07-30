@@ -653,6 +653,106 @@ class TestDeferDays:
         assert spawned[0]["start_date"] is None
 
 
+class TestPlanLead:
+    """defer_days = "plan N days before due": derives focus_date = due - lead,
+    the single mechanism for both hiding a task and planning when it surfaces."""
+
+    def test_lead_sets_focus_date_on_create(self, client):
+        t = client.post("/api/deck", json={
+            "title": "Renew", "due_date": "2027-07-01", "defer_days": 10,
+        }).get_json()
+        assert t["defer_days"] == 10
+        assert t["focus_date"] == "2027-06-21"
+
+    def test_lead_zero_plans_on_due_date(self, client):
+        t = client.post("/api/deck", json={
+            "title": "On due", "due_date": "2027-07-01", "defer_days": 0,
+        }).get_json()
+        assert t["focus_date"] == "2027-07-01"
+
+    def test_focus_recomputed_when_due_changes(self, client):
+        tid = client.post("/api/deck", json={
+            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"due_date": "2027-08-01"}).get_json()
+        assert t["focus_date"] == "2027-07-22"
+
+    def test_lead_wins_over_focus_date_in_same_save(self, client):
+        # The modal sends both focus_date and defer_days; the lead-derived plan
+        # date must win over the focus_date sent alongside it.
+        t = client.post("/api/deck", json={
+            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
+            "focus_date": "2027-01-01",
+        }).get_json()
+        assert t["focus_date"] == "2027-06-21"
+
+    def test_bare_focus_change_is_manual_override(self, client):
+        # A Plan-board drag PUTs focus_date only (no defer_days) — it must stick.
+        tid = client.post("/api/deck", json={
+            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"focus_date": "2027-06-25"}).get_json()
+        assert t["focus_date"] == "2027-06-25"
+        assert t["defer_days"] == 10
+
+    def test_lead_without_due_leaves_focus_none(self, client):
+        t = client.post("/api/deck", json={"title": "X", "defer_days": 10}).get_json()
+        assert t["defer_days"] == 10
+        assert t["focus_date"] is None
+
+    def test_lead_task_hidden_until_plan_date(self, client):
+        future = (date.today() + timedelta(days=30)).isoformat()
+        t = client.post("/api/deck", json={
+            "title": "Far", "due_date": future, "defer_days": 10,
+        }).get_json()
+        # Plan date (due - 10) is still 20 days out, so the task is deferred.
+        assert deck_module._is_deferred(t, date.today().isoformat()) is True
+
+    def test_lead_task_visible_once_plan_date_reached(self, client):
+        soon = (date.today() + timedelta(days=5)).isoformat()
+        t = client.post("/api/deck", json={
+            "title": "Soon", "due_date": soon, "defer_days": 10,
+        }).get_json()
+        # Plan date (due - 10) is in the past, so the task is visible and planned.
+        assert deck_module._is_deferred(t, date.today().isoformat()) is False
+
+
+class TestYearlyRecurrence:
+    def test_yearly_spawn_advances_one_year(self, client):
+        tid = client.post("/api/deck", json={
+            "title": "Annual", "due_date": "2026-07-01",
+            "rec_type": "yearly", "rec_interval": 1,
+        }).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        spawned = [t for t in client.get("/api/deck").get_json()
+                   if t["id"] != tid and not t["completed_at"]]
+        assert len(spawned) == 1
+        assert spawned[0]["due_date"] == "2027-07-01"
+        assert spawned[0]["recurrence"]["type"] == "yearly"
+
+    def test_yearly_leap_day_clamps(self, client):
+        tid = client.post("/api/deck", json={
+            "title": "Leap", "due_date": "2028-02-29",
+            "rec_type": "yearly", "rec_interval": 1,
+        }).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        spawned = [t for t in client.get("/api/deck").get_json()
+                   if t["id"] != tid and not t["completed_at"]]
+        assert spawned[0]["due_date"] == "2029-02-28"
+
+    def test_yearly_spawn_carries_plan_lead(self, client):
+        tid = client.post("/api/deck", json={
+            "title": "Annual+lead", "due_date": "2026-07-01", "defer_days": 10,
+            "rec_type": "yearly", "rec_interval": 1,
+        }).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        spawned = [t for t in client.get("/api/deck").get_json()
+                   if t["id"] != tid and not t["completed_at"]][0]
+        assert spawned["due_date"] == "2027-07-01"
+        assert spawned["defer_days"] == 10
+        assert spawned["focus_date"] == "2027-06-21"
+
+
 # ── Batch Complete ───────────────────────────────────────────────────────────
 
 

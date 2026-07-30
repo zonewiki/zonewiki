@@ -278,7 +278,19 @@ def _rec_step(base: date, rtype: str, interval: int) -> date:
         return base + timedelta(weeks=interval)
     if rtype == "monthly":
         return _add_months(base, interval)
+    if rtype == "yearly":
+        # Reuse month arithmetic so Feb-29 clamps to Feb-28 in non-leap years.
+        return _add_months(base, 12 * interval)
     return base + timedelta(days=interval)  # daily (and any unknown type)
+
+
+def _plan_date(due: str, lead_days: int) -> str:
+    """Plan date derived from a deadline: due_date minus lead_days.
+
+    A ``defer_days`` value means "plan (and reveal) the task this many days
+    before its due date", so the plan date (focus_date) is always due - lead."""
+    d = datetime.strptime(due, "%Y-%m-%d").date() - timedelta(days=lead_days)
+    return d.isoformat()
 
 
 def _spawn_recurring(task: dict) -> dict | None:
@@ -307,12 +319,18 @@ def _spawn_recurring(task: dict) -> dict | None:
     while next_due < today:
         next_due = _rec_step(next_due, rtype, interval)
 
+    due_str = next_due.strftime("%Y-%m-%d")
+    lead = task.get("defer_days")
+    # "Plan N days before due" rides along: the spawned instance re-derives its
+    # plan date from its own new due date, so it stays hidden until then.
+    focus_date = _plan_date(due_str, lead) if lead is not None else None
     return _new_task(
         title=task["title"],
         description=task.get("description", ""),
         tags=task.get("tags", []),
-        due_date=next_due.strftime("%Y-%m-%d"),
-        defer_days=task.get("defer_days"),
+        due_date=due_str,
+        defer_days=lead,
+        focus_date=focus_date,
         sort_order=task.get("sort_order", 0),
         recurrence=task.get("recurrence"),
         page=task.get("page"),
@@ -465,6 +483,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
         </select>
       </div>
       <div class="task-field" id="task-rec-interval-field{sfx}" style="display:none">
@@ -487,19 +506,10 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         </div>
       </div>
     </div>
-    <div class="task-field-row hide-until-row">
+    <div class="task-field-row">
       <div class="task-field">
-        <label>Hide until</label>
-        <input type="hidden" id="task-edit-start{sfx}" name="start_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{sfx}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field task-field-center">
-        <label for="task-edit-defer-due{sfx}">Due date</label>
-        <input type="checkbox" id="task-edit-defer-due{sfx}">
-      </div>
-      <div class="task-field">
-        <label for="task-edit-defer-days{sfx}">N days before due</label>
-        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="1" placeholder="e.g. 3">
+        <label for="task-edit-defer-days{sfx}">Plan before due <span class="field-hint">(days early; 0 = on due date)</span></label>
+        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="e.g. 10">
       </div>
     </div>
     <div class="task-field-row">
@@ -793,14 +803,21 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["focus_order"] = data["focus_order"]
     if "page" in data:
         task["page"] = (data["page"] or "").strip() or None
+    old_focus_date = task.get("focus_date")
     if "focus_date" in data:
-        new_focus_date = _validate_date(data["focus_date"])
-        old_focus_date = task.get("focus_date")
-        # Reset focus_order when the task leaves or re-enters the focus view
-        # (null→value or value→null). Rescheduling (value→value) keeps the order.
-        if (old_focus_date is None) != (new_focus_date is None):
-            task["focus_order"] = None
-        task["focus_date"] = new_focus_date
+        task["focus_date"] = _validate_date(data["focus_date"])
+    # "Plan N days before due" (defer_days) derives the plan date from the
+    # deadline and wins over any focus_date sent alongside it: whenever this
+    # update touches the lead or the due date, recompute focus_date = due - lead.
+    # A bare focus_date change (e.g. a Plan-board drag with no defer_days in the
+    # payload) is left as the manual override above.
+    if ("defer_days" in data or "due_date" in data) \
+            and task.get("defer_days") is not None and task.get("due_date"):
+        task["focus_date"] = _plan_date(task["due_date"], task["defer_days"])
+    # Reset focus_order when the task leaves or re-enters the focus view
+    # (null→value or value→null). Rescheduling (value→value) keeps the order.
+    if (old_focus_date is None) != (task.get("focus_date") is None):
+        task["focus_order"] = None
     if "blocked_by" in data:
         blocked = data["blocked_by"]
         if isinstance(blocked, str):
@@ -808,7 +825,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["blocked_by"] = blocked if blocked else []
     if "rec_type" in data:
         rec_type = data["rec_type"]
-        if rec_type in ("daily", "weekly", "monthly"):
+        if rec_type in ("daily", "weekly", "monthly", "yearly"):
             task["recurrence"] = {
                 "type": rec_type,
                 "interval": max(1, int(data.get("rec_interval", 1))),

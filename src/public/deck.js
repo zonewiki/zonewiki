@@ -932,7 +932,7 @@
         ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${staleClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
         : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
       const startDisplay = task.start_date ? `<span class="task-date-info">hidden until ${formatDate(task.start_date)}</span>` : '';
-      const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'hidden until due' : `hidden until ${task.defer_days}d before due`}</span>` : '';
+      const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'plan on due date' : `plan ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at
         ? (task.wont_do
             ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
@@ -1704,14 +1704,8 @@
     document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
     document.getElementById('task-edit-title' + sfx).value = task ? task.title : '';
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
-    document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : '';
-    const deferDaysInput = document.getElementById('task-edit-defer-days' + sfx);
-    const deferDueCheck = document.getElementById('task-edit-defer-due' + sfx);
-    const deferDaysField = deferDaysInput?.closest('.task-field');
-    const isDeferDue = task?.defer_days === 0;
-    deferDaysInput.value = isDeferDue ? '' : (task?.defer_days ?? '');
-    if (deferDaysField) deferDaysField.style.visibility = isDeferDue ? 'hidden' : '';
-    if (deferDueCheck) deferDueCheck.checked = isDeferDue;
+    // "Plan before due" (defer_days): 0 shows as "0" (plan on the due date).
+    document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days ?? '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
@@ -1766,21 +1760,6 @@
     const recFromField = document.getElementById('task-rec-from-field' + sfx);
     if (recFromField) recFromField.style.display = recTypeSelect.value ? '' : 'none';
   });
-
-  // Hide-until-due checkbox
-  const deferDueCheckEl = document.getElementById('task-edit-defer-due' + sfx);
-  if (deferDueCheckEl) {
-    deferDueCheckEl.addEventListener('change', () => {
-      const ddi = document.getElementById('task-edit-defer-days' + sfx);
-      const ddf = ddi?.closest('.task-field');
-      if (deferDueCheckEl.checked) {
-        ddi.value = '';
-        if (ddf) ddf.style.visibility = 'hidden';
-      } else {
-        if (ddf) ddf.style.visibility = '';
-      }
-    });
-  }
 
   // Quick due-date shortcuts
   function dateOffset(days) {
@@ -1843,12 +1822,13 @@
     const data = {
       title: document.getElementById('task-edit-title' + sfx).value.trim(),
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
-      start_date: document.getElementById('task-edit-start' + sfx).value || null,
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
       focus_date: document.getElementById('task-edit-focus' + sfx).value || null,
-      defer_days: document.getElementById('task-edit-defer-due' + sfx)?.checked
-        ? 0
-        : (parseInt(document.getElementById('task-edit-defer-days' + sfx).value) ?? null) || null,
+      // "Plan before due": empty → null; otherwise clamp to >= 0 (0 = on due date).
+      defer_days: (() => {
+        const v = document.getElementById('task-edit-defer-days' + sfx).value.trim();
+        return v === '' ? null : Math.max(0, parseInt(v, 10) || 0);
+      })(),
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
