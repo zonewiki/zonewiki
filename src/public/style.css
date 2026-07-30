@@ -1558,6 +1558,10 @@ body.editor-page main {
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
 .task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
+/* Keep every label to one line so the controls below them line up. */
+.task-field-row .task-field > label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .task-edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
 .task-edit-created { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
 .task-edit-actions .btn-danger { margin-left: auto; background: #fecaca; color: #991b1b; border: none; }
