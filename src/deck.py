@@ -486,14 +486,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <option value="yearly">Yearly</option>
         </select>
       </div>
-      <div class="task-field" id="task-rec-interval-field{sfx}" style="display:none">
-        <label for="task-edit-rec-interval{sfx}">Every N</label>
-        <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
-      </div>
-      <div class="task-field task-field-center" id="task-rec-from-field{sfx}" style="display:none" title="Repeat from the completion date instead of the due date">
-        <label for="task-edit-rec-from{sfx}">From done</label>
-        <input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from">
-      </div>
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">Plan before due</label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
@@ -509,6 +501,16 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <button type="button" data-focus="mon">Mon</button>
           <button type="button" data-focus="clear">✕</button>
         </div>
+      </div>
+    </div>
+    <div class="task-field-row" id="task-rec-extra{sfx}" style="display:none">
+      <div class="task-field">
+        <label for="task-edit-rec-interval{sfx}">Every N</label>
+        <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
+      </div>
+      <div class="task-field task-field-center" title="Repeat from the completion date instead of the due date">
+        <label for="task-edit-rec-from{sfx}">From done</label>
+        <input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from">
       </div>
     </div>
     <div class="task-field-row">
