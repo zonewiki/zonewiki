@@ -489,11 +489,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field-row">
       <div class="task-field">
-        <label for="task-edit-defer-days{sfx}">Plan before due</label>
-        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
-        <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
-      </div>
-      <div class="task-field">
         <label>Plan for</label>
         <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
         <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
@@ -503,6 +498,11 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <button type="button" data-focus="mon">Mon</button>
           <button type="button" data-focus="clear">✕</button>
         </div>
+      </div>
+      <div class="task-field">
+        <label for="task-edit-defer-days{sfx}">Plan before due</label>
+        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
+        <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
       </div>
     </div>
     <div class="task-field-row" id="task-rec-extra{sfx}" style="display:none">
