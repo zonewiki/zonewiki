@@ -1541,7 +1541,7 @@ body.editor-page main {
 .task-edit-form { display: flex; flex-direction: column; gap: .75rem; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
 .task-field label { font-size: .8rem; font-weight: 500; color: var(--muted); }
-.field-hint { font-weight: 400; }
+.field-hint { font-weight: 400; font-size: .75rem; color: var(--muted); }
 .task-field input, .task-field textarea, .task-field select {
   padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
   background: var(--bg); color: var(--fg); font-size: .9rem; font-family: inherit;

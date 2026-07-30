@@ -1816,13 +1816,16 @@
     const focusEl = document.getElementById('task-edit-focus' + sfx);
     const hintEl  = document.getElementById('task-edit-lead-hint' + sfx);
     const trigger = modal.querySelector('[data-date-trigger="task-edit-focus' + sfx + '"]');
+    const hasDue = !!dueEl.value;
+    // "Plan before due" is only meaningful relative to a due date — disable it
+    // (with a hint) until one is set, rather than letting it silently do nothing.
+    leadEl.disabled = !hasDue;
+    if (hintEl) hintEl.textContent = hasDue ? '' : 'Set a due date first';
     const lead = leadEl.value.trim();
-    const active = lead !== '';
-    const driving = active && !!dueEl.value;
+    const driving = lead !== '' && hasDue;
     if (driving) {
       focusEl.value = addDays(dueEl.value, -Math.max(0, parseInt(lead, 10) || 0));
     }
-    if (hintEl) hintEl.textContent = (active && !dueEl.value) ? 'Set a due date to plan before it' : '';
     if (trigger) {
       trigger.disabled = driving;
       trigger.classList.toggle('date-trigger--derived', driving);
