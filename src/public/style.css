@@ -1398,6 +1398,60 @@ body.editor-page main {
 }
 .task-clickable-date:hover { background: var(--code-bg); color: var(--fg); }
 .task-date-empty { opacity: .3; }
+
+/* Custom calendar popup (deck plan/due date picker) */
+.deck-datepicker {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  padding: .5rem;
+  width: 15rem;
+  font-size: .8rem;
+  color: var(--fg);
+  user-select: none;
+}
+.deck-datepicker .dp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .4rem;
+}
+.deck-datepicker .dp-title { font-weight: 600; }
+.deck-datepicker .dp-nav {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  width: 1.6rem; height: 1.6rem; line-height: 1; cursor: pointer;
+  font-size: 1rem; padding: 0;
+}
+.deck-datepicker .dp-nav:hover { background: var(--code-bg); }
+.deck-datepicker .dp-weekdays,
+.deck-datepicker .dp-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.deck-datepicker .dp-weekdays span {
+  text-align: center; color: var(--muted); font-size: .7rem; padding: .15rem 0;
+}
+.deck-datepicker .dp-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--fg);
+  border-radius: 4px; cursor: pointer; font-size: .8rem; padding: 0;
+}
+.deck-datepicker button.dp-day:hover { background: var(--code-bg); }
+.deck-datepicker .dp-blank { visibility: hidden; }
+.deck-datepicker .dp-today { outline: 1px solid var(--border); }
+.deck-datepicker .dp-selected {
+  background: var(--btn-primary); color: var(--btn-primary-fg);
+}
+.deck-datepicker .dp-selected:hover { background: var(--btn-primary); }
+.deck-datepicker .dp-disabled { opacity: .3; cursor: default; }
+.deck-datepicker .dp-foot {
+  display: flex; justify-content: space-between; margin-top: .4rem;
+}
+.deck-datepicker .dp-foot button {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .2rem .5rem; cursor: pointer; font-size: .75rem;
+}
+.deck-datepicker .dp-foot button:hover { background: var(--code-bg); }
 .task-item.task-marked-today:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #f59e0b; }
 .task-item.task-marked-tmrw:not(.task-urg-overdue):not(.task-urg-today)  { border-left: 3px solid #60a5fa; }
 .task-item.task-marked-mon:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #a78bfa; }
@@ -1490,6 +1544,14 @@ body.editor-page main {
   background: var(--bg); color: var(--fg); font-size: .9rem; font-family: inherit;
 }
 .task-field textarea { resize: vertical; min-height: 60px; }
+/* Custom-calendar date field (replaces native <input type=date> in the modal) */
+.date-trigger {
+  padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--muted); font-size: .9rem; font-family: inherit;
+  text-align: left; cursor: pointer; width: 100%;
+}
+.date-trigger:hover { background: var(--code-bg); }
+.date-trigger.date-trigger--set { color: var(--fg); }
 .task-field-row { display: flex; gap: .75rem; }
 .task-field-row .task-field { flex: 1; }
 .task-edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }

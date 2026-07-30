@@ -447,8 +447,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field-row">
       <div class="task-field">
-        <label for="task-edit-due{sfx}">Due date</label>
-        <input type="date" id="task-edit-due{sfx}" name="due_date">
+        <label>Due date</label>
+        <input type="hidden" id="task-edit-due{sfx}" name="due_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-due{sfx}" data-placeholder="Set date">Set date</button>
         <div class="task-date-shortcuts">
           <button type="button" data-due="today">Today</button>
           <button type="button" data-due="tomorrow">Tmrw</button>
@@ -475,8 +476,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from">
       </div>
       <div class="task-field">
-        <label for="task-edit-focus{sfx}">Plan for</label>
-        <input type="date" id="task-edit-focus{sfx}" name="focus_date">
+        <label>Plan for</label>
+        <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
         <div class="task-date-shortcuts">
           <button type="button" data-focus="today">Today</button>
           <button type="button" data-focus="tmrw">Tmrw</button>
@@ -487,8 +489,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     </div>
     <div class="task-field-row hide-until-row">
       <div class="task-field">
-        <label for="task-edit-start{sfx}">Hide until</label>
-        <input type="date" id="task-edit-start{sfx}" name="start_date">
+        <label>Hide until</label>
+        <input type="hidden" id="task-edit-start{sfx}" name="start_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{sfx}" data-placeholder="Set date">Set date</button>
       </div>
       <div class="task-field task-field-center">
         <label for="task-edit-defer-due{sfx}">Due date</label>

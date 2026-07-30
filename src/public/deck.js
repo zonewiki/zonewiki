@@ -762,22 +762,100 @@
     return window.DeckCore.boardBuckets(list, todayStr());
   }
 
-  // Open a native date picker (anchored at `anchor` so showPicker is reliable)
-  // and call cb with the chosen YYYY-MM-DD (or null). `min` restricts the
-  // earliest selectable date.
-  function openDatePicker(current, cb, anchor, min) {
-    const inp = document.createElement('input');
-    inp.type = 'date';
-    if (current) inp.value = current;
-    if (min) inp.min = min;
+  // Custom in-page calendar popup, anchored at `anchor`. Calls cb with the
+  // chosen YYYY-MM-DD, or null if the user clicks Clear. Dismissing without a
+  // choice (Escape / outside click) never calls cb. We build our own calendar
+  // instead of <input type=date> because Firefox's native picker fires `change`
+  // on month navigation, committing a date before the user picks a day.
+  // `min` (YYYY-MM-DD) restricts the earliest selectable date.
+  // `parent` is where the popup is appended — defaults to document.body, but
+  // callers inside a <dialog> (the edit modal) must pass the dialog element so
+  // the popup renders in the same top layer instead of behind the modal.
+  function openDatePicker(current, cb, anchor, min, parent = document.body) {
+    // Only one picker at a time.
+    document.querySelectorAll('.deck-datepicker').forEach(el => el.remove());
+
+    const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+    const today = todayStr();
+    // View month starts on the current value, else today.
+    const anchorDate = new Date((current || today) + 'T00:00:00');
+    let viewY = anchorDate.getFullYear();
+    let viewM = anchorDate.getMonth();
+
+    const pop = document.createElement('div');
+    pop.className = 'deck-datepicker';
     const r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20 };
-    inp.style.cssText = `position:fixed;left:${r.left}px;top:${r.bottom}px;width:1px;height:1px;opacity:0;border:none;padding:0;`;
-    document.body.appendChild(inp);
-    const cleanup = () => inp.remove();
-    inp.addEventListener('change', () => { cb(inp.value || null); cleanup(); });
-    inp.addEventListener('blur', () => setTimeout(cleanup, 200));
-    if (inp.showPicker) { try { inp.showPicker(); } catch (_) { inp.focus(); } }
-    else inp.focus();
+    pop.style.cssText = `position:fixed;left:${Math.round(r.left)}px;top:${Math.round(r.bottom + 4)}px;z-index:1000;`;
+    parent.appendChild(pop);
+
+    let done = false;
+    function cleanup() {
+      if (done) return;
+      done = true;
+      pop.remove();
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOutside, true);
+    }
+    function commit(val) { const c = cb; cleanup(); c(val); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); cleanup(); } }
+    function onOutside(e) { if (!pop.contains(e.target) && e.target !== anchor) cleanup(); }
+
+    function draw() {
+      const first = new Date(viewY, viewM, 1);
+      // Monday-first offset (JS getDay: 0=Sun).
+      const lead = (first.getDay() + 6) % 7;
+      const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
+
+      let cells = '';
+      for (let i = 0; i < lead; i++) cells += '<span class="dp-day dp-blank"></span>';
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${viewY}-${String(viewM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const cls = ['dp-day'];
+        if (ds === current) cls.push('dp-selected');
+        if (ds === today) cls.push('dp-today');
+        const disabled = min && ds < min;
+        if (disabled) cls.push('dp-disabled');
+        cells += `<button type="button" class="${cls.join(' ')}"${disabled ? ' disabled' : ''} data-date="${ds}">${d}</button>`;
+      }
+
+      pop.innerHTML =
+        `<div class="dp-head">` +
+          `<button type="button" class="dp-nav" data-nav="-1">‹</button>` +
+          `<span class="dp-title">${MONTHS[viewM]} ${viewY}</span>` +
+          `<button type="button" class="dp-nav" data-nav="1">›</button>` +
+        `</div>` +
+        `<div class="dp-weekdays">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>` +
+        `<div class="dp-grid">${cells}</div>` +
+        `<div class="dp-foot">` +
+          `<button type="button" class="dp-today-btn">Today</button>` +
+          `<button type="button" class="dp-clear-btn">Clear</button>` +
+        `</div>`;
+    }
+
+    pop.addEventListener('click', e => {
+      const nav = e.target.closest('[data-nav]');
+      if (nav) {
+        viewM += Number(nav.dataset.nav);
+        if (viewM < 0) { viewM = 11; viewY--; }
+        else if (viewM > 11) { viewM = 0; viewY++; }
+        draw();
+        return;
+      }
+      if (e.target.classList.contains('dp-today-btn')) {
+        if (!(min && today < min)) commit(today);
+        return;
+      }
+      if (e.target.classList.contains('dp-clear-btn')) { commit(null); return; }
+      const day = e.target.closest('.dp-day[data-date]');
+      if (day && !day.disabled) commit(day.dataset.date);
+    });
+
+    draw();
+    document.addEventListener('keydown', onKey, true);
+    // Defer outside-click wiring so the opening click doesn't immediately close it.
+    setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
   }
 
   function render() {
@@ -1678,6 +1756,7 @@
       newCb.checked = false;
     }
     deleteBtn.style.display = task ? '' : 'none';
+    refreshDateTriggers();
     modal.showModal();
     document.getElementById('task-edit-title' + sfx).focus();
   }
@@ -1733,6 +1812,24 @@
         else if (fv === 'mon')   focusInput.value = nextMonday();
         else if (fv === 'clear') focusInput.value = '';
       }
+      refreshDateTriggers();
+    });
+  });
+
+  // ── Modal date triggers (custom calendar popup, no native <input type=date>) ──
+  // Each date field is a hidden <input> holding the value plus a visible button
+  // showing it; clicking the button opens the same in-page calendar the cards use.
+  function refreshDateTriggers() {
+    modal.querySelectorAll('.date-trigger').forEach(btn => {
+      const input = document.getElementById(btn.dataset.dateTrigger);
+      btn.textContent = input && input.value ? formatDate(input.value) : (btn.dataset.placeholder || 'Set date');
+      btn.classList.toggle('date-trigger--set', !!(input && input.value));
+    });
+  }
+  modal.querySelectorAll('.date-trigger').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.dateTrigger);
+      openDatePicker(input.value || '', d => { input.value = d || ''; refreshDateTriggers(); }, btn, undefined, modal);
     });
   });
 
