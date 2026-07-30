@@ -486,6 +486,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <option value="yearly">Yearly</option>
         </select>
       </div>
+    </div>
+    <div class="task-field-row">
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">Plan before due</label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
