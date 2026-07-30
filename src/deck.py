@@ -468,13 +468,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label>Due date</label>
         <input type="hidden" id="task-edit-due{sfx}" name="due_date">
         <button type="button" class="date-trigger" data-date-trigger="task-edit-due{sfx}" data-placeholder="Set date">Set date</button>
-        <div class="task-date-shortcuts">
-          <button type="button" data-due="today">Today</button>
-          <button type="button" data-due="tomorrow">Tmrw</button>
-          <button type="button" data-due="+3">+3d</button>
-          <button type="button" data-due="next-week">Mon</button>
-          <button type="button" data-due="clear">✕</button>
-        </div>
       </div>
       <div class="task-field">
         <label for="task-edit-rec-type{sfx}">Repeat</label>
@@ -500,12 +493,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label>Plan for</label>
         <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
         <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
-        <div class="task-date-shortcuts">
-          <button type="button" data-focus="today">Today</button>
-          <button type="button" data-focus="tmrw">Tmrw</button>
-          <button type="button" data-focus="mon">Mon</button>
-          <button type="button" data-focus="clear">✕</button>
-        </div>
       </div>
       <div class="task-field">
         <label for="task-edit-defer-days{sfx}">Plan before due</label>

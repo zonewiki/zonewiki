@@ -292,11 +292,8 @@ class TestPageViewLink:
         assert 'data-init-filter="due"' in body
 
     def test_embed_contains_focus_date_field(self, wiki_dir):
-        """Edit modal includes a Plan for (focus_date) date input and shortcuts."""
+        """Edit modal includes a Plan for (focus_date) date field."""
         html = server.render_md("[[deck]]\n")
         assert 'id="task-edit-focus"' in html
         assert 'name="focus_date"' in html
-        assert 'data-focus="today"' in html
-        assert 'data-focus="tmrw"' in html
-        assert 'data-focus="mon"' in html
-        assert 'data-focus="clear"' in html
+        assert 'data-date-trigger="task-edit-focus"' in html

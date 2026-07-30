@@ -1564,9 +1564,7 @@ body.editor-page main {
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
 .task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
-/* Size fields by role: date fields carry the quick-shortcut buttons and need
-   room to keep them on one line; Repeat/Every N/From done stay compact. */
-.task-field-row .task-field:has(.task-date-shortcuts) { flex: 3 1 12rem; }
+/* Keep Repeat interval and the From-done checkbox compact. */
 .task-field-row .task-field:has(input[name="rec_interval"]) { flex: 0 1 5rem; }
 .task-field-row .task-field-check { flex: 0 0 auto; }
 /* Keep every label to one line so the controls below them line up. */
@@ -1612,17 +1610,6 @@ body.editor-page main {
   color: var(--link);
 }
 
-.task-date-shortcuts {
-  display: flex; flex-wrap: nowrap; gap: .2rem; margin-top: .25rem;
-}
-.task-date-shortcuts button {
-  font-size: .68rem; padding: .12rem .3rem; border-radius: 3px;
-  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
-  cursor: pointer; font-family: inherit; line-height: 1.3; white-space: nowrap;
-}
-.task-date-shortcuts button:hover {
-  background: var(--code-bg); color: var(--fg); border-color: var(--link);
-}
 
 @media (max-width: 640px) {
   .tasks-toolbar { flex-direction: column; align-items: stretch; justify-content: stretch; }

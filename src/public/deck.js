@@ -1740,6 +1740,7 @@
     document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
     const recFromCb = document.getElementById('task-edit-rec-from' + sfx);
     if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
+    syncRecFields();
     // Show "move to new" only for existing tasks with a sort_order
     const newField = document.getElementById('task-edit-inbox-field' + sfx);
     const newCb = document.getElementById('task-edit-inbox' + sfx);
@@ -1756,7 +1757,7 @@
     document.getElementById('task-edit-title' + sfx).focus();
   }
 
-  // Quick due-date shortcuts
+  // Relative-date helpers (used by card rendering and focus defaults).
   function dateOffset(days) {
     const d = new Date();
     d.setDate(d.getDate() + days);
@@ -1769,26 +1770,16 @@
     d.setDate(d.getDate() + add);
     return dateToStr(d);
   }
-  document.querySelectorAll('#task-edit-modal' + sfx + ' .task-date-shortcuts button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const dueInput = document.getElementById('task-edit-due' + sfx);
-      const v = btn.dataset.due;
-      if (v === 'today')         dueInput.value = dateOffset(0);
-      else if (v === 'tomorrow') dueInput.value = dateOffset(1);
-      else if (v === '+3')       dueInput.value = dateOffset(3);
-      else if (v === 'next-week') dueInput.value = nextMonday();
-      else if (v === 'clear')    dueInput.value = '';
-      const fv = btn.dataset.focus;
-      if (fv) {
-        const focusInput = document.getElementById('task-edit-focus' + sfx);
-        if (fv === 'today')      focusInput.value = dateOffset(0);
-        else if (fv === 'tmrw')  focusInput.value = dateOffset(1);
-        else if (fv === 'mon')   focusInput.value = nextMonday();
-        else if (fv === 'clear') focusInput.value = '';
-      }
-      refreshDateTriggers();
-    });
-  });
+
+  // Every N / From done are only meaningful with a repeat type — disable them
+  // (rather than hide, which would shift the row) when Repeat is "—".
+  function syncRecFields() {
+    const on = !!recTypeSelect.value;
+    document.getElementById('task-edit-rec-interval' + sfx).disabled = !on;
+    const rf = document.getElementById('task-edit-rec-from' + sfx);
+    if (rf) rf.disabled = !on;
+  }
+  recTypeSelect.addEventListener('change', syncRecFields);
 
   // ── Modal date triggers (custom calendar popup, no native <input type=date>) ──
   // Each date field is a hidden <input> holding the value plus a visible button
