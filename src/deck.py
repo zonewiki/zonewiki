@@ -490,9 +490,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-rec-interval{sfx}">Every N</label>
         <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
       </div>
-      <div class="task-field task-field-center" title="Repeat from the completion date instead of the due date">
+      <div class="task-field task-field-check" title="Repeat from the completion date instead of the due date">
         <label for="task-edit-rec-from{sfx}">From done</label>
-        <input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from">
+        <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
       </div>
     </div>
     <div class="task-field-row">
