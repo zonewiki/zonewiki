@@ -49,7 +49,6 @@
   const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
   const deleteBtn = document.getElementById('task-edit-delete' + sfx);
   const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
-  const recExtraRow = document.getElementById('task-rec-extra' + sfx);
   const deleteModal = document.getElementById('task-delete-modal' + sfx);
   const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
   const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -1741,9 +1740,6 @@
     document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
     const recFromCb = document.getElementById('task-edit-rec-from' + sfx);
     if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
-    // Recurrence detail fields live on their own row so revealing them never
-    // shifts the date fields above.
-    recExtraRow.style.display = recType ? '' : 'none';
     // Show "move to new" only for existing tasks with a sort_order
     const newField = document.getElementById('task-edit-inbox-field' + sfx);
     const newCb = document.getElementById('task-edit-inbox' + sfx);
@@ -1759,10 +1755,6 @@
     modal.showModal();
     document.getElementById('task-edit-title' + sfx).focus();
   }
-
-  recTypeSelect.addEventListener('change', () => {
-    recExtraRow.style.display = recTypeSelect.value ? '' : 'none';
-  });
 
   // Quick due-date shortcuts
   function dateOffset(days) {
