@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, isBlocked, isDeferred, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isBlocked, isDeferred, tagMatchScore } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -1756,7 +1756,7 @@
       newCb.checked = false;
     }
     deleteBtn.style.display = task ? '' : 'none';
-    refreshDateTriggers();
+    syncPlanLead();
     modal.showModal();
     document.getElementById('task-edit-title' + sfx).focus();
   }
@@ -1814,9 +1814,42 @@
   modal.querySelectorAll('.date-trigger').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = document.getElementById(btn.dataset.dateTrigger);
-      openDatePicker(input.value || '', d => { input.value = d || ''; refreshDateTriggers(); }, btn, undefined, modal);
+      openDatePicker(input.value || '', d => {
+        input.value = d || '';
+        // Picking an explicit plan date leaves lead mode (see syncPlanLead).
+        if (btn.dataset.dateTrigger === 'task-edit-focus' + sfx) {
+          document.getElementById('task-edit-defer-days' + sfx).value = '';
+        }
+        syncPlanLead();
+      }, btn, undefined, modal);
     });
   });
+
+  // "Plan for" (focus_date) and "Plan before due" (defer_days) both set the one
+  // plan date. The lead is the single source of truth while it has a value: it
+  // fills the plan date (due − lead) and locks that field so the two can't
+  // silently disagree. Clearing the lead (or picking an explicit plan date,
+  // above) hands control back to the plan-date field.
+  function syncPlanLead() {
+    const leadEl  = document.getElementById('task-edit-defer-days' + sfx);
+    const dueEl   = document.getElementById('task-edit-due' + sfx);
+    const focusEl = document.getElementById('task-edit-focus' + sfx);
+    const hintEl  = document.getElementById('task-edit-lead-hint' + sfx);
+    const trigger = modal.querySelector('[data-date-trigger="task-edit-focus' + sfx + '"]');
+    const lead = leadEl.value.trim();
+    const active = lead !== '';
+    const driving = active && !!dueEl.value;
+    if (driving) {
+      focusEl.value = addDays(dueEl.value, -Math.max(0, parseInt(lead, 10) || 0));
+    }
+    if (hintEl) hintEl.textContent = (active && !dueEl.value) ? 'Set a due date to plan before it' : '';
+    if (trigger) {
+      trigger.disabled = driving;
+      trigger.classList.toggle('date-trigger--derived', driving);
+    }
+    refreshDateTriggers();
+  }
+  document.getElementById('task-edit-defer-days' + sfx).addEventListener('input', syncPlanLead);
 
   cancelBtn.addEventListener('click', () => { hideEditTagAc(); modal.close(); });
 

@@ -1549,6 +1549,11 @@ body.editor-page main {
 }
 .date-trigger:hover { background: var(--code-bg); }
 .date-trigger.date-trigger--set { color: var(--fg); }
+/* Plan date is derived from (and locked by) the "Plan before due" lead. */
+.date-trigger:disabled, .date-trigger.date-trigger--derived {
+  opacity: .7; cursor: default; font-style: italic;
+}
+.date-trigger:disabled:hover { background: var(--bg); }
 .task-field-row { display: flex; gap: .75rem; }
 .task-field-row .task-field { flex: 1; }
 .task-edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
