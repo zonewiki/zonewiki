@@ -787,7 +787,13 @@
     const pop = document.createElement('div');
     pop.className = 'deck-datepicker';
     const r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20 };
-    pop.style.cssText = `position:fixed;left:${Math.round(r.left)}px;top:${Math.round(r.bottom + 4)}px;z-index:1000;`;
+    // The edit modal centers itself with transform: translate(), which makes
+    // position:fixed resolve against the modal's box rather than the viewport.
+    // Offset the anchor's viewport coords by the parent's rect so the popup
+    // still lands directly under the trigger. (For document.body, pr is 0,0.)
+    const pr = (parent && parent !== document.body)
+      ? parent.getBoundingClientRect() : { left: 0, top: 0 };
+    pop.style.cssText = `position:fixed;left:${Math.round(r.left - pr.left)}px;top:${Math.round(r.bottom - pr.top + 4)}px;z-index:1000;`;
     parent.appendChild(pop);
 
     let done = false;
