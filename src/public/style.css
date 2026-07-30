@@ -1554,8 +1554,8 @@ body.editor-page main {
   opacity: .7; cursor: default; font-style: italic;
 }
 .date-trigger:disabled:hover { background: var(--bg); }
-.task-field-row { display: flex; gap: .75rem; }
-.task-field-row .task-field { flex: 1; }
+.task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+.task-field-row .task-field { flex: 1 1 8rem; }
 .task-edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
 .task-edit-created { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
 .task-edit-actions .btn-danger { margin-left: auto; background: #fecaca; color: #991b1b; border: none; }

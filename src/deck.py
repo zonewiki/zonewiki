@@ -505,10 +505,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
           <button type="button" data-focus="clear">✕</button>
         </div>
       </div>
-    </div>
-    <div class="task-field-row">
       <div class="task-field">
-        <label for="task-edit-defer-days{sfx}">Plan before due <span class="field-hint">(days early; 0 = on due date)</span></label>
+        <label for="task-edit-defer-days{sfx}">Plan before due <span class="field-hint">(days early)</span></label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="e.g. 10">
         <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
       </div>
