@@ -296,33 +296,56 @@ def _plan_date(due: str, lead_days: int) -> str:
 def _spawn_recurring(task: dict) -> dict | None:
     """If task has recurrence, create the next instance and return it.
 
-    ``recurrence.from`` picks the schedule anchor: ``"due"`` (default) steps
-    from the previous due date, keeping the series calendar-aligned;
-    ``"completion"`` steps from today, for interval habits. In both modes the
-    next due date is caught up until it is >= today, so completing a
-    long-overdue task never spawns an instance that is already overdue."""
+    ``recurrence.from`` picks the base date for stepping: ``"due"`` (default)
+    steps from the previous anchor date; ``"completion"`` steps from today.
+    ``recurrence.anchor`` picks which date field advances each cycle: ``"due"``
+    (default) advances the due date; ``"plan"`` advances the plan (focus) date
+    instead, for tasks scheduled by when you intend to work on them rather than
+    a hard deadline. In all modes the next date is caught up until >= today."""
     rec = task.get("recurrence")
     if not rec:
         return None
     rtype = rec.get("type", "daily")
     interval = rec.get("interval", 1)
+    anchor = rec.get("anchor", "due")
     today = date.today()
+    from_completion = rec.get("from") == "completion"
 
+    if anchor == "plan":
+        base = today
+        if not from_completion and task.get("focus_date"):
+            try:
+                base = datetime.strptime(task["focus_date"], "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        next_date = _rec_step(base, rtype, interval)
+        while next_date < today:
+            next_date = _rec_step(next_date, rtype, interval)
+        return _new_task(
+            title=task["title"],
+            description=task.get("description", ""),
+            tags=task.get("tags", []),
+            focus_date=next_date.strftime("%Y-%m-%d"),
+            sort_order=task.get("sort_order", 0),
+            recurrence=task.get("recurrence"),
+            page=task.get("page"),
+            spawned_from=task["id"],
+        )
+
+    # anchor == "due" (default): advance the due date.
     base = today
-    if rec.get("from") != "completion" and task.get("due_date"):
+    if not from_completion and task.get("due_date"):
         try:
             base = datetime.strptime(task["due_date"], "%Y-%m-%d").date()
         except ValueError:
             pass
-
     next_due = _rec_step(base, rtype, interval)
     while next_due < today:
         next_due = _rec_step(next_due, rtype, interval)
-
     due_str = next_due.strftime("%Y-%m-%d")
     lead = task.get("defer_days")
-    # "Plan N days before due" rides along: the spawned instance re-derives its
-    # plan date from its own new due date, so it stays hidden until then.
+    # "Plan N days before due" rides along: re-derive focus_date from the new
+    # due date so the spawned instance stays hidden until then.
     focus_date = _plan_date(due_str, lead) if lead is not None else None
     return _new_task(
         title=task["title"],
@@ -470,6 +493,18 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <button type="button" class="date-trigger" data-date-trigger="task-edit-due{sfx}" data-placeholder="Set date">Set date</button>
       </div>
       <div class="task-field">
+        <label>Plan for</label>
+        <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
+      </div>
+      <div class="task-field">
+        <label for="task-edit-defer-days{sfx}">Plan before due</label>
+        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
+        <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
+      </div>
+    </div>
+    <div class="task-field-row">
+      <div class="task-field">
         <label for="task-edit-rec-type{sfx}">Repeat</label>
         <select id="task-edit-rec-type{sfx}" name="rec_type">
           <option value="">—</option>
@@ -483,21 +518,13 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-rec-interval{sfx}">Every N</label>
         <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
       </div>
-      <div class="task-field task-field-check" title="Repeat from the completion date instead of the due date">
+      <div class="task-field task-field-check" title="Repeat from the completion date instead of the anchor date">
         <label for="task-edit-rec-from{sfx}">From done</label>
         <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
       </div>
-    </div>
-    <div class="task-field-row">
-      <div class="task-field">
-        <label>Plan for</label>
-        <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field">
-        <label for="task-edit-defer-days{sfx}">Plan before due</label>
-        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
-        <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
+      <div class="task-field task-field-cycles">
+        <label>Cycles</label>
+        <span id="task-edit-rec-anchor-label{sfx}" class="rec-anchor-label">—</span>
       </div>
     </div>
     <div class="task-field-row">
@@ -818,6 +845,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
                 "type": rec_type,
                 "interval": max(1, int(data.get("rec_interval", 1))),
                 "from": "completion" if data.get("rec_from") == "completion" else "due",
+                "anchor": "plan" if data.get("rec_anchor") == "plan" else "due",
             }
         else:
             task["recurrence"] = None
@@ -970,6 +998,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
             "type": rec["type"],
             "interval": max(1, int(rec.get("interval") or 1)),
             "from": "completion" if rec.get("from") == "completion" else "due",
+            "anchor": "plan" if rec.get("anchor") == "plan" else "due",
         }
     blocked = snap.get("blocked_by")
     if isinstance(blocked, list):

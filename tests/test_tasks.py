@@ -338,13 +338,61 @@ class TestRecurring:
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["recurrence"] == {"type": "weekly", "interval": 2, "from": "due"}
+        assert spawned["recurrence"] == {"type": "weekly", "interval": 2, "from": "due", "anchor": "due"}
 
     def test_complete_non_recurring_no_spawn(self, client):
         task = create_task(client, title="One-off").get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         assert len(tasks) == 0
+
+    def test_plan_anchor_steps_focus_date(self, client):
+        task = create_task(client, title="Weekly plan",
+                           focus_date=_future(7),
+                           rec_type="weekly", rec_interval=1,
+                           rec_anchor="plan").get_json()
+        assert task["recurrence"]["anchor"] == "plan"
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        active = client.get("/api/deck").get_json()
+        assert len(active) == 1
+        spawned = active[0]
+        assert spawned["focus_date"] == _future(14)
+        assert spawned["due_date"] is None
+
+    def test_plan_anchor_from_completion(self, client):
+        # from_completion + anchor=plan: step focus_date from today
+        task = create_task(client, title="Interval habit",
+                           focus_date=_future(7),
+                           rec_type="weekly", rec_interval=1,
+                           rec_anchor="plan", rec_from="completion").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        active = client.get("/api/deck").get_json()
+        spawned = active[0]
+        assert spawned["focus_date"] == _future(7)
+        assert spawned["due_date"] is None
+
+    def test_plan_anchor_does_not_carry_due_date(self, client):
+        # Even if the task had a due_date, anchor=plan spawns without one
+        task = create_task(client, title="Plan-anchored",
+                           due_date=_future(10), focus_date=_future(7),
+                           rec_type="weekly", rec_interval=1,
+                           rec_anchor="plan").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        active = client.get("/api/deck").get_json()
+        spawned = active[0]
+        assert spawned["focus_date"] == _future(14)
+        assert spawned["due_date"] is None
+
+    def test_due_anchor_default(self, client):
+        # No rec_anchor → defaults to "due" behavior
+        task = create_task(client, title="Default anchor",
+                           due_date=_future(10),
+                           rec_type="daily", rec_interval=1).get_json()
+        assert task["recurrence"]["anchor"] == "due"
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        active = client.get("/api/deck").get_json()
+        spawned = active[0]
+        assert spawned["due_date"] == _future(11)
 
 
 # ---------- Won't Do ----------
@@ -1238,7 +1286,7 @@ class TestCreateFieldParity:
         assert t["focus_date"] == "2026-08-01"
         assert t["page"] == "some-page"
         assert t["blocked_by"] == ["x", "y"]
-        assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
+        assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due", "anchor": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
         assert t["wont_do"] is False

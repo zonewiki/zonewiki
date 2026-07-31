@@ -1093,7 +1093,7 @@
         const field = el.dataset.field;
         const task = tasks.find(t => t.id === id);
         if (!task) return;
-        openDatePicker(task[field] || '', d => updateTask(id, { [field]: d }), el);
+        openDatePicker(task[field] || '', d => updateTask(id, { [field]: d }), el, todayStr());
       });
     });
 
@@ -1774,10 +1774,23 @@
   // Every N / From done are only meaningful with a repeat type — disable them
   // (rather than hide, which would shift the row) when Repeat is "—".
   function syncRecFields() {
-    const on = !!recTypeSelect.value;
-    document.getElementById('task-edit-rec-interval' + sfx).disabled = !on;
+    // Sub-controls are only active when Repeat is both enabled and set.
+    const on = !recTypeSelect.disabled && !!recTypeSelect.value;
+    const subHint = on ? '' : (recTypeSelect.disabled ? 'Set a due or plan date first' : 'Select a repeat type first');
+    const intervalEl = document.getElementById('task-edit-rec-interval' + sfx);
+    intervalEl.disabled = !on;
+    intervalEl.closest('.task-field').title = subHint;
     const rf = document.getElementById('task-edit-rec-from' + sfx);
-    if (rf) rf.disabled = !on;
+    if (rf) {
+      rf.disabled = !on;
+      rf.closest('.task-field').title = on ? 'Repeat from the completion date instead of the anchor date' : subHint;
+    }
+    const anchorLabel = document.getElementById('task-edit-rec-anchor-label' + sfx);
+    if (anchorLabel) {
+      const anchor = document.getElementById('task-edit-due' + sfx)?.value ? 'due date' : 'plan date';
+      anchorLabel.textContent = on ? anchor : '—';
+      anchorLabel.closest('.task-field').title = on ? `Each cycle advances the ${anchor}` : subHint;
+    }
   }
   recTypeSelect.addEventListener('change', syncRecFields);
 
@@ -1801,7 +1814,7 @@
           document.getElementById('task-edit-defer-days' + sfx).value = '';
         }
         syncPlanLead();
-      }, btn, undefined, modal);
+      }, btn, todayStr(), modal);
     });
   });
 
@@ -1810,6 +1823,9 @@
   // fills the plan date (due − lead) and locks that field so the two can't
   // silently disagree. Clearing the lead (or picking an explicit plan date,
   // above) hands control back to the plan-date field.
+  //
+  // Also gates Repeat on having at least one date, and auto-selects the "plan
+  // date" cycle anchor when only a plan date is set.
   function syncPlanLead() {
     const leadEl  = document.getElementById('task-edit-defer-days' + sfx);
     const dueEl   = document.getElementById('task-edit-due' + sfx);
@@ -1817,6 +1833,7 @@
     const hintEl  = document.getElementById('task-edit-lead-hint' + sfx);
     const trigger = modal.querySelector('[data-date-trigger="task-edit-focus' + sfx + '"]');
     const hasDue = !!dueEl.value;
+    const hasFocus = !!focusEl.value;
     // "Plan before due" is only meaningful relative to a due date — disable it
     // (with a hint) until one is set, rather than letting it silently do nothing.
     leadEl.disabled = !hasDue;
@@ -1831,6 +1848,11 @@
       trigger.classList.toggle('date-trigger--derived', driving);
     }
     refreshDateTriggers();
+    // Repeat requires at least one date to be meaningful.
+    const noDate = !hasDue && !hasFocus;
+    recTypeSelect.disabled = noDate;
+    recTypeSelect.closest('.task-field').title = noDate ? 'Set a due or plan date first' : '';
+    syncRecFields();
   }
   document.getElementById('task-edit-defer-days' + sfx).addEventListener('input', syncPlanLead);
 
@@ -1855,6 +1877,7 @@
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
+      rec_anchor: document.getElementById('task-edit-due' + sfx).value ? 'due' : 'plan',
       blocked_by: getLinkIds('blocked_by'),
       // The server reconciles other tasks' blocked_by from this in one write.
       blocking: getLinkIds('blocking'),
