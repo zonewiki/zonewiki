@@ -441,9 +441,16 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         capacity = max(1, min(99, int(params.get("capacity", ""))))
     except ValueError:
         capacity = ""  # client falls back to its default
-    # `unplanned=1` pins the Backlog's "Unplanned only" filter on for this
-    # embed; without it the client uses the user's remembered preference.
-    unplanned = "1" if params.get("unplanned", "").strip().lower() in ("1", "true", "yes") else ""
+    # `unplanned=1`/`unplanned=0` pins the Backlog's "Unplanned only" filter on
+    # or off for this embed. Omitted, the client uses the stored preference,
+    # which defaults on — so pinning it off is what a full-inventory embed needs.
+    raw_unplanned = params.get("unplanned", "").strip().lower()
+    if raw_unplanned in ("1", "true", "yes"):
+        unplanned = "1"
+    elif raw_unplanned in ("0", "false", "no"):
+        unplanned = "0"
+    else:
+        unplanned = ""
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
@@ -467,7 +474,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <option value="manual">Manual order</option>
         <option value="created_at">Created</option>
       </select>
-      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no plan date — the queue still awaiting a decision about when to do them">
+      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no plan date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
         <input type="checkbox" id="task-unplanned{sfx}"> Unplanned only
       </label>
       <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>

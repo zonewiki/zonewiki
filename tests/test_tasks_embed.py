@@ -144,12 +144,21 @@ class TestTasksLinkRender:
             html = server.render_md(f"[[deck unplanned={val}]]\n")
             assert 'data-init-unplanned="1"' in html, val
 
-    def test_embed_unplanned_defaults_off(self, wiki_dir):
-        """Without the param the client falls back to the stored preference."""
+    def test_embed_unplanned_param_can_pin_off(self, wiki_dir):
+        """unplanned=0 pins it off — what a full-inventory embed needs, since
+        the client default is on."""
+        for val in ("0", "false", "no", "FALSE"):
+            html = server.render_md(f"[[deck unplanned={val}]]\n")
+            assert 'data-init-unplanned="0"' in html, val
+
+    def test_embed_unplanned_unset_leaves_it_to_client(self, wiki_dir):
+        """No param → empty attribute → client uses the stored preference
+        (which defaults on)."""
         html = server.render_md("[[deck]]\n")
         assert 'data-init-unplanned=""' in html
 
-    def test_embed_unplanned_junk_is_off(self, wiki_dir):
+    def test_embed_unplanned_junk_is_unset(self, wiki_dir):
+        """An unparseable value must not silently pin the filter either way."""
         html = server.render_md("[[deck unplanned=maybe]]\n")
         assert 'data-init-unplanned=""' in html
 

@@ -74,7 +74,7 @@
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   const STALE_DAYS = 3;  // focus plans older than this are styled stale
-  let unplannedOnly = false;  // Backlog "Unplanned only" — set during init
+  let unplannedOnly = true;  // Backlog "Unplanned only" — resolved during init
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
   // focus_date); dropping on "Someday" clears the plan. These list-level
@@ -129,12 +129,20 @@
   function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 
   // "Unplanned only" is a standing preference, not a per-visit choice like the
-  // tab, so it persists across sessions (localStorage). `[[deck unplanned=1]]`
-  // pins it on for an embed regardless of what's stored.
-  const unplannedPinned = appEl?.dataset.initUnplanned === '1';
-  const unplannedStorageKey = `leaf-deck-unplanned:${location.pathname}#${instanceId}`;
+  // tab, so it persists across sessions (localStorage). It defaults ON: Backlog
+  // means the queue of work no day has claimed yet, and unchecking widens it to
+  // every open task. `[[deck unplanned=0|1]]` pins it either way for an embed.
+  // The key is versioned so this new default actually reaches anyone who had
+  // already toggled the previous, differently-scoped version of the filter.
+  const unplannedPin = appEl?.dataset.initUnplanned || '';
+  const unplannedStorageKey = `leaf-deck-unplanned-v2:${location.pathname}#${instanceId}`;
   function saveUnplanned(v) { try { localStorage.setItem(unplannedStorageKey, v ? '1' : '0'); } catch (_) {} }
-  function loadUnplanned() { try { return localStorage.getItem(unplannedStorageKey) === '1'; } catch (_) { return false; } }
+  function loadUnplanned() {
+    try {
+      const stored = localStorage.getItem(unplannedStorageKey);
+      return stored === null ? true : stored === '1';
+    } catch (_) { return true; }
+  }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -2353,7 +2361,7 @@
     }
   }
 
-  unplannedOnly = unplannedPinned || loadUnplanned();
+  unplannedOnly = unplannedPin ? unplannedPin === '1' : loadUnplanned();
   if (unplannedEl) unplannedEl.checked = unplannedOnly;
   syncUnplannedToggle();
 
