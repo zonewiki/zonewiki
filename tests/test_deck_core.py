@@ -38,28 +38,35 @@ class TestDates:
         assert run_core("DeckCore.addDays('2026-03-01', -1)") == "2026-02-28"
 
 
-class TestIsUnscheduled:
-    """Backlog's "Unscheduled only" filter: keep work not yet placed on a day."""
+class TestIsUnplanned:
+    """Backlog's "Unplanned only" filter: work with no decided day."""
 
-    def test_no_dates_is_unscheduled(self):
-        assert run_core("DeckCore.isUnscheduled({title: 'x'})") is True
+    def test_no_dates_is_unplanned(self):
+        assert run_core("DeckCore.isUnplanned({title: 'x'})") is True
 
-    def test_due_date_makes_it_scheduled(self):
+    def test_due_date_alone_is_still_unplanned(self):
+        # A deadline is not a decision about when to do the work. The board
+        # only parks such a task on its due day as a fallback, so it still
+        # belongs in the triage queue.
         t = {"due_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
+        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is True
 
-    def test_focus_date_makes_it_scheduled(self):
+    def test_focus_date_makes_it_planned(self):
         t = {"focus_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
+        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-    def test_both_dates_makes_it_scheduled(self):
+    def test_past_focus_date_still_counts_as_planned(self):
+        t = {"focus_date": "2026-01-01"}
+        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
+
+    def test_both_dates_makes_it_planned(self):
         t = {"due_date": "2026-08-01", "focus_date": "2026-07-28"}
-        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
+        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-    def test_lead_time_alone_is_still_unscheduled(self):
-        # defer_days without a due date derives no plan, so nothing is scheduled.
-        t = {"defer_days": 3}
-        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is True
+    def test_lead_time_derived_plan_counts_as_planned(self):
+        # defer_days derives a focus_date server-side, so such a task is planned.
+        t = {"due_date": "2026-08-01", "defer_days": 3, "focus_date": "2026-07-29"}
+        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
 
 class TestIsBlocked:

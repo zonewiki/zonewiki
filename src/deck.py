@@ -441,9 +441,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         capacity = max(1, min(99, int(params.get("capacity", ""))))
     except ValueError:
         capacity = ""  # client falls back to its default
-    # `unscheduled=1` pins the Backlog's "Unscheduled only" filter on for this
+    # `unplanned=1` pins the Backlog's "Unplanned only" filter on for this
     # embed; without it the client uses the user's remembered preference.
-    unscheduled = "1" if params.get("unscheduled", "").strip().lower() in ("1", "true", "yes") else ""
+    unplanned = "1" if params.get("unplanned", "").strip().lower() in ("1", "true", "yes") else ""
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
@@ -452,7 +452,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unscheduled="{unscheduled}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
       <option value="focus">Focus</option>
@@ -467,8 +467,8 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <option value="manual">Manual order</option>
         <option value="created_at">Created</option>
       </select>
-      <label class="task-unsched-toggle" id="task-unsched-wrap{sfx}" title="Show only tasks with no due date and no plan date — dated work lives on the Plan board">
-        <input type="checkbox" id="task-unscheduled{sfx}"> Unscheduled only
+      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no plan date — the queue still awaiting a decision about when to do them">
+        <input type="checkbox" id="task-unplanned{sfx}"> Unplanned only
       </label>
       <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>
     </div>

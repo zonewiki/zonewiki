@@ -207,7 +207,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | `filter` | tab name: `focus`, `backlog`, `plan` (aka `upcoming`), `completed` (internal aliases `open`/`due`/`done` also accepted) | `focus` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 | `capacity` | integer 1–99 | 5 | Day-board WIP limit: Plan-tab day sections with at least this many tasks are flagged amber. |
-| `unscheduled` | `1`/`true`/`yes` | — | Pins the Backlog's "Unscheduled only" toggle on, overriding the user's stored preference for this embed. |
+| `unplanned` | `1`/`true`/`yes` | — | Pins the Backlog's "Unplanned only" toggle on, overriding the user's stored preference for this embed. |
 
 **Examples:**
 ```markdown
@@ -217,10 +217,10 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 [[deck filter=backlog]]
 [[deck tag=urgent filter=upcoming]]
 [[deck page=self tag=sprint-1]]
-[[deck filter=backlog unscheduled=1]]
+[[deck filter=backlog unplanned=1]]
 ```
 
-**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-filter`, `data-init-capacity`, `data-init-unscheduled`).
+**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-filter`, `data-init-capacity`, `data-init-unplanned`).
 
 **Implementation:**
 - `_DECK_RE` detects `[[deck …]]` (case-insensitive).
@@ -410,7 +410,7 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 - **Won't do**: each active task card has a ✗ button (hover-reveal) that archives the task as abandoned. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
 - **Skip occurrence**: recurring task cards additionally have a ⏭ button — archives this occurrence as won't-do but spawns the next instance, so the series continues. Undo (or reopening the won't-do entry) removes the spawned instance again.
 - **No hiding**: the deck never hides a task. Every open task is reachable from Backlog or the Plan board at all times, and scheduling only decides *where* a task appears, not *whether* it does. (Earlier versions had a Deferred tab plus `start_date`/`defer_days` hiding; both are gone.)
-- **Backlog "Unscheduled only" toggle**: a checkbox in the toolbar, shown only on the Backlog tab, narrowing the list to tasks with neither `due_date` nor `focus_date` — dated work already has a home on the Plan board. Predicate is `DeckCore.isUnscheduled` (client-only; the server never filters views). It is a standing preference, so it persists in `localStorage` keyed by page path + embed instance, unlike the active tab (`sessionStorage`). `[[deck unscheduled=1]]` pins it on for an embed regardless of what is stored.
+- **Backlog "Unplanned only" toggle**: a checkbox in the toolbar, shown only on the Backlog tab, narrowing the list to tasks with no `focus_date` — the queue still awaiting a decision about *when* to do them. A `due_date` alone does not count as planned: the day board only parks such a task on its deadline as a fallback (`planDate() = focus_date || due_date`), which looks placed but is the one day the work should not start. Planning a task is therefore what removes it from this list. Predicate is `DeckCore.isUnplanned` (client-only; the server never filters views). It is a standing preference, so it persists in `localStorage` keyed by page path + embed instance, unlike the active tab (`sessionStorage`). `[[deck unplanned=1]]` pins it on for an embed regardless of what is stored.
 - **Rejected writes** (e.g. dependency cycles) surface as an auto-dismissing toast (`showNotice`) with the server's error message.
 - **Edit modal**: Double-click a card (or Enter on the selected task) opens a modal for full task editing, including a "From done" checkbox on recurring tasks (repeat from completion date) and a Links picker for blocked-by/blocking edges.
 - **Blocked tasks**: cards whose `blocked_by` contains an open task are dimmed (`task-blocked-item`) and left out of Focus; they stay visible in Backlog/Plan so they can still be re-planned.

@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isBlocked, isUnscheduled, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isBlocked, isUnplanned, tagMatchScore } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -44,8 +44,8 @@
   const sortSelect = document.getElementById('task-sort' + sfx);
   const filterTag = document.getElementById('task-filter-tag' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
-  const unschedEl = document.getElementById('task-unscheduled' + sfx);
-  const unschedWrap = document.getElementById('task-unsched-wrap' + sfx);
+  const unplannedEl = document.getElementById('task-unplanned' + sfx);
+  const unplannedWrap = document.getElementById('task-unplanned-wrap' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
   const form = document.getElementById('task-edit-form' + sfx);
   const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
@@ -74,7 +74,7 @@
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   const STALE_DAYS = 3;  // focus plans older than this are styled stale
-  let unscheduledOnly = false;  // Backlog "Unscheduled only" — set during init
+  let unplannedOnly = false;  // Backlog "Unplanned only" — set during init
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
   // focus_date); dropping on "Someday" clears the plan. These list-level
@@ -128,13 +128,13 @@
   function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
   function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 
-  // "Unscheduled only" is a standing preference, not a per-visit choice like
-  // the tab, so it persists across sessions (localStorage). `[[deck
-  // unscheduled=1]]` pins it on for an embed regardless of what's stored.
-  const unschedPinned = appEl?.dataset.initUnscheduled === '1';
-  const unschedStorageKey = `leaf-deck-unscheduled:${location.pathname}#${instanceId}`;
-  function saveUnscheduled(v) { try { localStorage.setItem(unschedStorageKey, v ? '1' : '0'); } catch (_) {} }
-  function loadUnscheduled() { try { return localStorage.getItem(unschedStorageKey) === '1'; } catch (_) { return false; } }
+  // "Unplanned only" is a standing preference, not a per-visit choice like the
+  // tab, so it persists across sessions (localStorage). `[[deck unplanned=1]]`
+  // pins it on for an embed regardless of what's stored.
+  const unplannedPinned = appEl?.dataset.initUnplanned === '1';
+  const unplannedStorageKey = `leaf-deck-unplanned:${location.pathname}#${instanceId}`;
+  function saveUnplanned(v) { try { localStorage.setItem(unplannedStorageKey, v ? '1' : '0'); } catch (_) {} }
+  function loadUnplanned() { try { return localStorage.getItem(unplannedStorageKey) === '1'; } catch (_) { return false; } }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -457,11 +457,11 @@
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else {
-      // "open" (Backlog) shows non-completed by default. With "Unscheduled
-      // only" on it narrows to undated work, since anything with a due or plan
-      // date already has a home on the Plan board.
+      // "open" (Backlog) shows non-completed by default. With "Unplanned only"
+      // on it narrows to tasks with no decided day, so the list reads as the
+      // triage queue; planning a task is what removes it from here.
       filtered = filtered.filter(t => !t.completed_at);
-      if (unscheduledOnly) filtered = filtered.filter(isUnscheduled);
+      if (unplannedOnly) filtered = filtered.filter(isUnplanned);
     }
 
     // Tag filter. Comma-separated = AND (all must match) — the narrowing
@@ -1371,21 +1371,21 @@
   tabsEl.addEventListener('change', () => {
     activeFilter = tabsEl.value;
     saveActiveTab(activeFilter);
-    syncUnschedToggle();
+    syncUnplannedToggle();
     if (activeFilter === 'completed') fetchCompleted();
     render();
   });
 
   // The toggle only means anything on Backlog — every other tab is defined by
   // dates — so it rides along with the active tab instead of always showing.
-  function syncUnschedToggle() {
-    if (unschedWrap) unschedWrap.hidden = activeFilter !== 'open';
+  function syncUnplannedToggle() {
+    if (unplannedWrap) unplannedWrap.hidden = activeFilter !== 'open';
   }
 
-  if (unschedEl) {
-    unschedEl.addEventListener('change', () => {
-      unscheduledOnly = unschedEl.checked;
-      saveUnscheduled(unscheduledOnly);
+  if (unplannedEl) {
+    unplannedEl.addEventListener('change', () => {
+      unplannedOnly = unplannedEl.checked;
+      saveUnplanned(unplannedOnly);
       render();
     });
   }
@@ -2353,9 +2353,9 @@
     }
   }
 
-  unscheduledOnly = unschedPinned || loadUnscheduled();
-  if (unschedEl) unschedEl.checked = unscheduledOnly;
-  syncUnschedToggle();
+  unplannedOnly = unplannedPinned || loadUnplanned();
+  if (unplannedEl) unplannedEl.checked = unplannedOnly;
+  syncUnplannedToggle();
 
   fetchDeck().then(() => {
     if (activeFilter === 'completed') fetchCompleted();

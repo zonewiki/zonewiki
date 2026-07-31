@@ -134,30 +134,30 @@ class TestTasksLinkRender:
         assert 'value="hidden"' not in html
         assert "Deferred" not in html
 
-    def test_embed_unscheduled_param_pins_toggle(self, wiki_dir):
-        """[[deck unscheduled=1]] pins the Backlog "Unscheduled only" filter."""
-        html = server.render_md("[[deck unscheduled=1]]\n")
-        assert 'data-init-unscheduled="1"' in html
+    def test_embed_unplanned_param_pins_toggle(self, wiki_dir):
+        """[[deck unplanned=1]] pins the Backlog "Unplanned only" filter on."""
+        html = server.render_md("[[deck unplanned=1]]\n")
+        assert 'data-init-unplanned="1"' in html
 
-    def test_embed_unscheduled_accepts_truthy_words(self, wiki_dir):
+    def test_embed_unplanned_accepts_truthy_words(self, wiki_dir):
         for val in ("1", "true", "yes", "TRUE"):
-            html = server.render_md(f"[[deck unscheduled={val}]]\n")
-            assert 'data-init-unscheduled="1"' in html, val
+            html = server.render_md(f"[[deck unplanned={val}]]\n")
+            assert 'data-init-unplanned="1"' in html, val
 
-    def test_embed_unscheduled_defaults_off(self, wiki_dir):
+    def test_embed_unplanned_defaults_off(self, wiki_dir):
         """Without the param the client falls back to the stored preference."""
         html = server.render_md("[[deck]]\n")
-        assert 'data-init-unscheduled=""' in html
+        assert 'data-init-unplanned=""' in html
 
-    def test_embed_unscheduled_junk_is_off(self, wiki_dir):
-        html = server.render_md("[[deck unscheduled=maybe]]\n")
-        assert 'data-init-unscheduled=""' in html
+    def test_embed_unplanned_junk_is_off(self, wiki_dir):
+        html = server.render_md("[[deck unplanned=maybe]]\n")
+        assert 'data-init-unplanned=""' in html
 
-    def test_embed_has_unscheduled_toggle(self, wiki_dir):
+    def test_embed_has_unplanned_toggle(self, wiki_dir):
         """The toggle ships in the toolbar markup."""
         html = server.render_md("[[deck]]\n")
-        assert 'id="task-unscheduled"' in html
-        assert "Unscheduled only" in html
+        assert 'id="task-unplanned"' in html
+        assert "Unplanned only" in html
 
     def test_embed_filter_unknown_passthrough(self, wiki_dir):
         """An unrecognized filter value passes through unchanged (client ignores it)."""

@@ -26,12 +26,14 @@
     });
   }
 
-  // A task is unscheduled when it carries neither a deadline nor a plan date:
-  // work that hasn't been placed on a day yet. The Backlog's "Unscheduled only"
-  // filter keeps exactly these, so dated work lives on the Plan board instead.
+  // A task is unplanned when it has no focus_date: no day has been decided for
+  // it. A due date alone doesn't count — the board renders such a task on its
+  // deadline as a fallback, which looks placed but is the one day it should not
+  // be worked on. The Backlog's "Unplanned only" filter keeps exactly these, so
+  // the list reads as the queue awaiting a planning decision.
   // Client-only: the server has no say in which tasks a view shows.
-  function isUnscheduled(t) {
-    return !t.due_date && !t.focus_date;
+  function isUnplanned(t) {
+    return !t.focus_date;
   }
 
   function tagMatchScore(q, tag) {
@@ -94,7 +96,7 @@
   }
 
   const DeckCore = {
-    dateToStr, addDays, isBlocked, isUnscheduled, tagMatchScore,
+    dateToStr, addDays, isBlocked, isUnplanned, tagMatchScore,
     planDate, dayBucketKey, fullDayLabel, boardBuckets,
   };
 
