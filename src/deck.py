@@ -245,7 +245,6 @@ def _new_task(**overrides) -> dict:
         "title": "",
         "description": "",
         "tags": [],
-        "hide_until_plan": False,
         "due_date": None,
         "defer_days": None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -289,7 +288,7 @@ def _plan_date(due: str, lead_days: int) -> str:
 
     A ``defer_days`` value means "plan the task this many days before its due
     date", so the plan date (focus_date) is always due - lead. It schedules
-    only — the task is never hidden on account of a lead time."""
+    only — nothing in the deck hides a task on account of a lead time."""
     d = datetime.strptime(due, "%Y-%m-%d").date() - timedelta(days=lead_days)
     return d.isoformat()
 
@@ -327,7 +326,6 @@ def _spawn_recurring(task: dict) -> dict | None:
             description=task.get("description", ""),
             tags=task.get("tags", []),
             focus_date=next_date.strftime("%Y-%m-%d"),
-            hide_until_plan=bool(task.get("hide_until_plan")),
             sort_order=task.get("sort_order", 0),
             recurrence=task.get("recurrence"),
             page=task.get("page"),
@@ -356,7 +354,6 @@ def _spawn_recurring(task: dict) -> dict | None:
         due_date=due_str,
         defer_days=lead,
         focus_date=focus_date,
-        hide_until_plan=bool(task.get("hide_until_plan")),
         sort_order=task.get("sort_order", 0),
         recurrence=task.get("recurrence"),
         page=task.get("page"),
@@ -425,7 +422,6 @@ _FILTER_ALIASES = {
     "focus": "focus", "today": "focus",
     "backlog": "open", "open": "open",
     "plan": "due", "upcoming": "due", "due": "due",
-    "deferred": "hidden", "hidden": "hidden",
     "completed": "completed", "done": "completed",
 }
 
@@ -445,6 +441,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         capacity = max(1, min(99, int(params.get("capacity", ""))))
     except ValueError:
         capacity = ""  # client falls back to its default
+    # `unscheduled=1` pins the Backlog's "Unscheduled only" filter on for this
+    # embed; without it the client uses the user's remembered preference.
+    unscheduled = "1" if params.get("unscheduled", "").strip().lower() in ("1", "true", "yes") else ""
 
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
@@ -453,13 +452,12 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unscheduled="{unscheduled}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
       <option value="focus">Focus</option>
       <option value="due">Plan</option>
       <option value="open">Backlog</option>
-      <option value="hidden">Deferred</option>
       <option value="completed">Completed</option>
     </select>
     <div class="tasks-toolbar">
@@ -469,6 +467,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <option value="manual">Manual order</option>
         <option value="created_at">Created</option>
       </select>
+      <label class="task-unsched-toggle" id="task-unsched-wrap{sfx}" title="Show only tasks with no due date and no plan date — dated work lives on the Plan board">
+        <input type="checkbox" id="task-unscheduled{sfx}"> Unscheduled only
+      </label>
       <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>
     </div>
   </div>
@@ -504,10 +505,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-defer-days{sfx}">Plan before due</label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
         <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
-      </div>
-      <div class="task-field task-field-check" id="task-edit-hide-field{sfx}" title="Keep this out of Backlog and Plan until its plan date">
-        <label for="task-edit-hide{sfx}">Hide until planned</label>
-        <span class="check-wrap"><input type="checkbox" id="task-edit-hide{sfx}" name="hide_until_plan"></span>
       </div>
     </div>
     <div class="task-field-row">
@@ -708,25 +705,6 @@ def api_get_deck_completed():
     return jsonify(_read_completed())
 
 
-def _is_deferred(task: dict, today: str) -> bool:
-    """True when the task is hidden until its plan date.
-
-    Hiding is opt-in per task via ``hide_until_plan``: without it a scheduled
-    task stays in Backlog/Plan and merely lands in Focus on its plan date.
-    ``defer_days`` only schedules (derives focus_date = due - lead); combined
-    with the flag it hides the task until that lead date.
-
-    The date hidden until is the plan date, falling back to the deadline:
-    ``focus_date or due_date``. A task with neither has nothing to hide until,
-    so the flag is inert. Mirror of isDeferred() in deck-core.js; keep in sync."""
-    if task.get("completed_at"):
-        return False
-    if not task.get("hide_until_plan"):
-        return False
-    until = task.get("focus_date") or task.get("due_date")
-    return bool(until) and until > today
-
-
 @bp.get("/api/deck/due-count")
 def api_tasks_due_count():
     today = date.today().isoformat()
@@ -734,9 +712,8 @@ def api_tasks_due_count():
     tasks = _read_deck()
     active_ids = {t["id"] for t in tasks}
     for t in tasks:
-        # Skip tasks not actionable right now: deferred ones are not visible in
-        # Backlog/Focus/Plan, and blocked ones can't be worked on anyway.
-        if not t.get("due_date") or _is_deferred(t, today):
+        # Blocked tasks can't be worked on, so they don't count as due.
+        if not t.get("due_date"):
             continue
         if any(b in active_ids for b in t.get("blocked_by") or []):
             continue
@@ -814,8 +791,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
-    if "hide_until_plan" in data:
-        task["hide_until_plan"] = bool(data["hide_until_plan"])
     if "defer_days" in data:
         dd = data["defer_days"]
         task["defer_days"] = max(0, int(dd)) if dd is not None else None
@@ -991,7 +966,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
                 pass
     if isinstance(snap.get("defer_days"), int):
         task["defer_days"] = max(0, snap["defer_days"])
-    task["hide_until_plan"] = bool(snap.get("hide_until_plan"))
     if isinstance(snap.get("id"), str) and snap["id"]:
         task["id"] = snap["id"]
     for field in ("created_at", "completed_at", "spawned_from", "page"):

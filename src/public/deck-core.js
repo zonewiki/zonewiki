@@ -26,18 +26,12 @@
     });
   }
 
-  // A task is hidden from Backlog/Focus/Plan until its plan date, but only
-  // when it opts in via hide_until_plan. Without the flag a scheduled task
-  // stays visible and merely lands in Focus on its plan date; defer_days only
-  // schedules (focus_date = due - lead) and hides nothing on its own.
-  // The date hidden until is focus_date, falling back to due_date; a task with
-  // neither has nothing to hide until, so the flag is inert.
-  // Mirror of _is_deferred() in deck.py; keep the two in sync.
-  function isDeferred(t, today) {
-    if (t.completed_at) return false;
-    if (!t.hide_until_plan) return false;
-    const until = t.focus_date || t.due_date;
-    return !!until && until > today;
+  // A task is unscheduled when it carries neither a deadline nor a plan date:
+  // work that hasn't been placed on a day yet. The Backlog's "Unscheduled only"
+  // filter keeps exactly these, so dated work lives on the Plan board instead.
+  // Client-only: the server has no say in which tasks a view shows.
+  function isUnscheduled(t) {
+    return !t.due_date && !t.focus_date;
   }
 
   function tagMatchScore(q, tag) {
@@ -100,7 +94,7 @@
   }
 
   const DeckCore = {
-    dateToStr, addDays, isBlocked, isDeferred, tagMatchScore,
+    dateToStr, addDays, isBlocked, isUnscheduled, tagMatchScore,
     planDate, dayBucketKey, fullDayLabel, boardBuckets,
   };
 

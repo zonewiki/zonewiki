@@ -1238,6 +1238,18 @@ body.editor-page main {
 /* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
 .tasks-toolbar input { flex: 1 1 0; min-width: 80px; }
 
+/* Backlog "Unscheduled only" toggle. Opts out of the text-input sizing above
+   (flex-grow, min-width, box borders) — it's a checkbox, not a field. */
+.task-unsched-toggle {
+  display: flex; align-items: center; gap: .3rem; flex: 0 0 auto;
+  font-size: .8rem; color: var(--muted); white-space: nowrap; cursor: pointer;
+}
+.task-unsched-toggle[hidden] { display: none; }
+.tasks-toolbar .task-unsched-toggle input[type="checkbox"] {
+  flex: 0 0 auto; min-width: 0; width: 1rem; height: 1rem; padding: 0;
+  border: none; accent-color: var(--btn-primary); cursor: pointer;
+}
+
 /* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
    which would otherwise force a 1.5rem left margin and indent the list + its
    bottom border. */
@@ -1528,11 +1540,6 @@ body.editor-page main {
   accent-color: var(--btn-primary);
 }
 .task-field-check .check-wrap { display: flex; align-items: center; justify-content: center; min-height: 2.15rem; }
-/* Gated checkbox (e.g. "Hide until planned" with no date set): dim it so the
-   disabled state reads the same way as a disabled input. */
-.task-field--disabled { opacity: .5; }
-.task-field--disabled label { cursor: default; }
-.task-field input[type="checkbox"]:disabled { cursor: not-allowed; }
 
 /* Task edit modal */
 .task-edit-modal {

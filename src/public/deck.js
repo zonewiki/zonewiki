@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isBlocked, isDeferred, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isBlocked, isUnscheduled, tagMatchScore } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -44,6 +44,8 @@
   const sortSelect = document.getElementById('task-sort' + sfx);
   const filterTag = document.getElementById('task-filter-tag' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
+  const unschedEl = document.getElementById('task-unscheduled' + sfx);
+  const unschedWrap = document.getElementById('task-unsched-wrap' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
   const form = document.getElementById('task-edit-form' + sfx);
   const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
@@ -72,6 +74,7 @@
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   const STALE_DAYS = 3;  // focus plans older than this are styled stale
+  let unscheduledOnly = false;  // Backlog "Unscheduled only" — set during init
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
   // focus_date); dropping on "Someday" clears the plan. These list-level
@@ -124,6 +127,14 @@
   const tabStorageKey = `leaf-deck-tab:${location.pathname}#${instanceId}`;
   function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
   function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
+
+  // "Unscheduled only" is a standing preference, not a per-visit choice like
+  // the tab, so it persists across sessions (localStorage). `[[deck
+  // unscheduled=1]]` pins it on for an embed regardless of what's stored.
+  const unschedPinned = appEl?.dataset.initUnscheduled === '1';
+  const unschedStorageKey = `leaf-deck-unscheduled:${location.pathname}#${instanceId}`;
+  function saveUnscheduled(v) { try { localStorage.setItem(unschedStorageKey, v ? '1' : '0'); } catch (_) {} }
+  function loadUnscheduled() { try { return localStorage.getItem(unschedStorageKey) === '1'; } catch (_) { return false; } }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -432,14 +443,8 @@
       );
     }
 
-    // Hide tasks that opted into hiding and whose plan date is still ahead
-    if (activeFilter !== 'completed' && activeFilter !== 'hidden') {
-      filtered = filtered.filter(t => !isDeferred(t, today));
-    }
-
     // Tab filter
     if (activeFilter === 'focus') {
-      const today = todayStr();
       const byId = new Map(tasks.map(t => [t.id, t]));
       filtered = filtered.filter(t => !t.completed_at && !isBlocked(t, byId) && (
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
@@ -451,11 +456,12 @@
       filtered = filtered.filter(t => !t.completed_at);
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
-    } else if (activeFilter === 'hidden') {
-      filtered = filtered.filter(t => isDeferred(t, today));
     } else {
-      // "open" (Backlog) shows non-completed by default
+      // "open" (Backlog) shows non-completed by default. With "Unscheduled
+      // only" on it narrows to undated work, since anything with a due or plan
+      // date already has a home on the Plan board.
       filtered = filtered.filter(t => !t.completed_at);
+      if (unscheduledOnly) filtered = filtered.filter(isUnscheduled);
     }
 
     // Tag filter. Comma-separated = AND (all must match) — the narrowing
@@ -506,8 +512,6 @@
     },
     due:       (a, b) => (a.due_date || a.focus_date || '').localeCompare(b.due_date || b.focus_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
-    // Deferred tab: soonest reveal first — the date each task is hidden until.
-    hidden: (a, b) => (a.focus_date || a.due_date || '').localeCompare(b.focus_date || b.due_date || ''),
   };
 
   function sortTasks(tasksArr) {
@@ -937,10 +941,6 @@
       const focusDisplay = !task.completed_at
         ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${staleClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
         : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
-      // Opt-in hiding: badge the date the task stays out of Backlog/Plan until.
-      const hideUntil = task.hide_until_plan ? (task.focus_date || task.due_date) : null;
-      const startDisplay = (hideUntil && !task.completed_at)
-        ? `<span class="task-date-info">🙈 hidden until ${formatDate(hideUntil)}</span>` : '';
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'plan on due date' : `plan ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at
         ? (task.wont_do
@@ -973,10 +973,10 @@
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.focus_date || task.recurrence ||
         task.page || (task.blocked_by && task.blocked_by.length) || blocking.length ||
-        task.hide_until_plan || task.defer_days != null || task.completed_at);
-      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || startDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || blockedDisplay || blockingDisplay || tagsRight;
+        task.defer_days != null || task.completed_at);
+      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || blockedDisplay || blockingDisplay || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${startDisplay}${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}${blockedDisplay}${blockingDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}${blockedDisplay}${blockingDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1371,9 +1371,24 @@
   tabsEl.addEventListener('change', () => {
     activeFilter = tabsEl.value;
     saveActiveTab(activeFilter);
+    syncUnschedToggle();
     if (activeFilter === 'completed') fetchCompleted();
     render();
   });
+
+  // The toggle only means anything on Backlog — every other tab is defined by
+  // dates — so it rides along with the active tab instead of always showing.
+  function syncUnschedToggle() {
+    if (unschedWrap) unschedWrap.hidden = activeFilter !== 'open';
+  }
+
+  if (unschedEl) {
+    unschedEl.addEventListener('change', () => {
+      unscheduledOnly = unschedEl.checked;
+      saveUnscheduled(unscheduledOnly);
+      render();
+    });
+  }
 
   sortSelect.addEventListener('change', render);
   // Tag filter: only apply on Enter, blur, or autocomplete selection (not every keystroke)
@@ -1715,7 +1730,6 @@
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
     // "Plan before due" (defer_days): 0 shows as "0" (plan on the due date).
     document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days ?? '';
-    document.getElementById('task-edit-hide' + sfx).checked = !!task?.hide_until_plan;
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
@@ -1852,22 +1866,6 @@
       trigger.disabled = driving;
       trigger.classList.toggle('date-trigger--derived', driving);
     }
-    // "Hide until planned" needs something to hide until — a plan date, or a
-    // due date to fall back on. With neither, disable it rather than let it
-    // silently do nothing (same treatment as "Plan before due" above).
-    const hideEl = document.getElementById('task-edit-hide' + sfx);
-    const hideField = document.getElementById('task-edit-hide-field' + sfx);
-    if (hideEl) {
-      const canHide = hasDue || hasFocus || driving;
-      hideEl.disabled = !canHide;
-      if (!canHide) hideEl.checked = false;
-      if (hideField) {
-        hideField.classList.toggle('task-field--disabled', !canHide);
-        hideField.title = canHide
-          ? 'Keep this out of Backlog and Plan until its plan date'
-          : 'Set a due or plan date first';
-      }
-    }
     refreshDateTriggers();
     // Repeat requires at least one date to be meaningful.
     const noDate = !hasDue && !hasFocus;
@@ -1889,7 +1887,6 @@
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
       focus_date: document.getElementById('task-edit-focus' + sfx).value || null,
-      hide_until_plan: document.getElementById('task-edit-hide' + sfx).checked,
       // "Plan before due": empty → null; otherwise clamp to >= 0 (0 = on due date).
       defer_days: (() => {
         const v = document.getElementById('task-edit-defer-days' + sfx).value.trim();
@@ -2338,14 +2335,13 @@
   // tab remembered this session > Backlog default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
-  // The canonical tab names are the <option> values (focus/due/open/hidden/
-  // completed); this map mirrors deck.py's _FILTER_ALIASES for friendly names
-  // in ?filter= URLs. The embed filter arrives already normalized by the server.
+  // The canonical tab names are the <option> values (focus/due/open/completed);
+  // this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?filter=
+  // URLs. The embed filter arrives already normalized by the server.
   const FILTER_ALIASES = {
     focus: 'focus', today: 'focus',
     backlog: 'open', open: 'open',
     plan: 'due', upcoming: 'due', due: 'due',
-    deferred: 'hidden', hidden: 'hidden',
     completed: 'completed', done: 'completed',
   };
   const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'open';
@@ -2356,6 +2352,10 @@
       activeFilter = restoreFilter;
     }
   }
+
+  unscheduledOnly = unschedPinned || loadUnscheduled();
+  if (unschedEl) unschedEl.checked = unscheduledOnly;
+  syncUnschedToggle();
 
   fetchDeck().then(() => {
     if (activeFilter === 'completed') fetchCompleted();

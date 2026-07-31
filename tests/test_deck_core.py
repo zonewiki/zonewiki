@@ -38,37 +38,28 @@ class TestDates:
         assert run_core("DeckCore.addDays('2026-03-01', -1)") == "2026-02-28"
 
 
-class TestIsDeferred:
-    def test_flag_hides_until_plan_date(self):
-        t = {"hide_until_plan": True, "focus_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is True
+class TestIsUnscheduled:
+    """Backlog's "Unscheduled only" filter: keep work not yet placed on a day."""
 
-    def test_visible_once_plan_date_arrives(self):
-        t = {"hide_until_plan": True, "focus_date": TODAY}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+    def test_no_dates_is_unscheduled(self):
+        assert run_core("DeckCore.isUnscheduled({title: 'x'})") is True
 
-    def test_falls_back_to_due_date(self):
-        t = {"hide_until_plan": True, "due_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is True
+    def test_due_date_makes_it_scheduled(self):
+        t = {"due_date": "2026-08-01"}
+        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
 
-    def test_plan_date_wins_over_due_date(self):
-        t = {"hide_until_plan": True, "due_date": "2026-08-01", "focus_date": TODAY}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+    def test_focus_date_makes_it_scheduled(self):
+        t = {"focus_date": "2026-08-01"}
+        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
 
-    def test_flag_inert_without_any_date(self):
-        t = {"hide_until_plan": True}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+    def test_both_dates_makes_it_scheduled(self):
+        t = {"due_date": "2026-08-01", "focus_date": "2026-07-28"}
+        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is False
 
-    def test_no_flag_never_hides(self):
-        # Scheduling alone must not hide: without the opt-in the task stays in
-        # Backlog/Plan even when its dates are weeks out.
-        t = {"due_date": "2026-08-10", "defer_days": 3, "focus_date": "2026-08-07"}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
-
-    def test_completed_never_hides(self):
-        t = {"hide_until_plan": True, "focus_date": "2026-08-01",
-             "completed_at": "2026-07-26T10:00:00"}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+    def test_lead_time_alone_is_still_unscheduled(self):
+        # defer_days without a due date derives no plan, so nothing is scheduled.
+        t = {"defer_days": 3}
+        assert run_core(f"DeckCore.isUnscheduled({json.dumps(t)})") is True
 
 
 class TestIsBlocked:
