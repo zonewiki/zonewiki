@@ -137,10 +137,6 @@ class TestValidation:
         resp = client.post("/api/deck", json={"title": "Bad date", "due_date": "not-a-date"})
         assert resp.status_code == 400
 
-    def test_create_invalid_start_date(self, client):
-        resp = client.post("/api/deck", json={"title": "Bad start", "start_date": "2025/01/01"})
-        assert resp.status_code == 400
-
     def test_update_invalid_due_date(self, client):
         task = create_task(client, title="Task").get_json()
         resp = client.put(f"/api/deck/{task['id']}", json={"due_date": "31-12-2025"})
@@ -151,10 +147,14 @@ class TestValidation:
         assert resp.status_code == 201
         assert resp.get_json()["due_date"] == "2025-06-15"
 
-    def test_create_valid_start_date(self, client):
-        resp = create_task(client, title="Deferred", start_date="2025-07-01")
+    def test_create_with_hide_until_plan(self, client):
+        resp = create_task(client, title="Deferred", due_date="2025-07-01",
+                           hide_until_plan=True)
         assert resp.status_code == 201
-        assert resp.get_json()["start_date"] == "2025-07-01"
+        assert resp.get_json()["hide_until_plan"] is True
+
+    def test_hide_until_plan_defaults_false(self, client):
+        assert create_task(client, title="Plain").get_json()["hide_until_plan"] is False
 
     def test_null_date_clears_field(self, client):
         task = create_task(client, title="Has date", due_date="2025-06-15").get_json()
@@ -311,15 +311,16 @@ class TestRecurring:
         spawned = next(t for t in tasks if t["id"] != task["id"])
         assert spawned["due_date"] == "2099-04-30"
 
-    def test_spawned_task_start_date_is_none(self, client):
+    def test_spawned_task_keeps_hide_until_plan(self, client):
+        # The flag is a property of the series, so each new occurrence hides
+        # itself until its own plan date.
         task = create_task(client, title="Recurring deferred",
-                           due_date=_future(10),
-                           start_date=_future(8),
+                           due_date=_future(10), hide_until_plan=True,
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["start_date"] is None
+        assert spawned["hide_until_plan"] is True
 
     def test_spawned_task_preserves_tags(self, client):
         task = create_task(client, title="Tagged recurring",
@@ -674,7 +675,7 @@ class TestDeferDays:
         assert resp.status_code == 200
         assert resp.get_json()["defer_days"] is None
 
-    def test_defer_days_zero_means_hide_until_due(self, client):
+    def test_defer_days_zero_means_plan_on_due(self, client):
         resp = client.post("/api/deck", json={"title": "Task", "defer_days": 0})
         assert resp.status_code == 201
         assert resp.get_json()["defer_days"] == 0
@@ -698,12 +699,12 @@ class TestDeferDays:
         spawned = [t for t in tasks if t["id"] != task_id and not t["completed_at"]]
         assert len(spawned) == 1
         assert spawned[0]["defer_days"] == 3
-        assert spawned[0]["start_date"] is None
+        assert spawned[0]["hide_until_plan"] is False
 
 
 class TestPlanLead:
-    """defer_days = "plan N days before due": derives focus_date = due - lead,
-    the single mechanism for both hiding a task and planning when it surfaces."""
+    """defer_days = "plan N days before due": derives focus_date = due - lead.
+    It schedules only — a lead time never hides the task."""
 
     def test_lead_sets_focus_date_on_create(self, client):
         t = client.post("/api/deck", json={
@@ -748,13 +749,15 @@ class TestPlanLead:
         assert t["defer_days"] == 10
         assert t["focus_date"] is None
 
-    def test_lead_task_hidden_until_plan_date(self, client):
+    def test_lead_task_not_hidden_before_plan_date(self, client):
         future = (date.today() + timedelta(days=30)).isoformat()
         t = client.post("/api/deck", json={
             "title": "Far", "due_date": future, "defer_days": 10,
         }).get_json()
-        # Plan date (due - 10) is still 20 days out, so the task is deferred.
-        assert deck_module._is_deferred(t, date.today().isoformat()) is True
+        # The plan date (due - 10) is still 20 days out, but a lead time only
+        # schedules: the task stays visible in Backlog/Plan.
+        assert t["focus_date"] == (date.today() + timedelta(days=20)).isoformat()
+        assert deck_module._is_deferred(t, date.today().isoformat()) is False
 
     def test_lead_task_visible_once_plan_date_reached(self, client):
         soon = (date.today() + timedelta(days=5)).isoformat()
@@ -763,6 +766,97 @@ class TestPlanLead:
         }).get_json()
         # Plan date (due - 10) is in the past, so the task is visible and planned.
         assert deck_module._is_deferred(t, date.today().isoformat()) is False
+
+    def test_lead_task_stays_visible_when_plan_cleared(self, client):
+        # Dragging a lead-time task to Someday clears focus_date; the lead must
+        # not resurrect the old hiding behaviour and make the task disappear.
+        future = (date.today() + timedelta(days=30)).isoformat()
+        tid = client.post("/api/deck", json={
+            "title": "Far", "due_date": future, "defer_days": 10,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"focus_date": None}).get_json()
+        assert t["focus_date"] is None
+        assert deck_module._is_deferred(t, date.today().isoformat()) is False
+
+    def test_lead_plus_hide_flag_hides_until_lead_date(self, client):
+        # Opting in restores the old behaviour: hidden until due - lead.
+        future = (date.today() + timedelta(days=30)).isoformat()
+        t = client.post("/api/deck", json={
+            "title": "Far", "due_date": future, "defer_days": 10,
+            "hide_until_plan": True,
+        }).get_json()
+        assert deck_module._is_deferred(t, date.today().isoformat()) is True
+
+
+class TestHideUntilPlan:
+    """Opt-in hiding: a task is deferred only when hide_until_plan is set and
+    its plan date (focus_date, falling back to due_date) is still ahead."""
+
+    def _today(self):
+        return date.today().isoformat()
+
+    def test_flag_hides_until_plan_date(self, client):
+        future = (date.today() + timedelta(days=5)).isoformat()
+        t = client.post("/api/deck", json={
+            "title": "X", "focus_date": future, "hide_until_plan": True,
+        }).get_json()
+        assert deck_module._is_deferred(t, self._today()) is True
+
+    def test_visible_once_plan_date_arrives(self, client):
+        t = client.post("/api/deck", json={
+            "title": "X", "focus_date": self._today(), "hide_until_plan": True,
+        }).get_json()
+        assert deck_module._is_deferred(t, self._today()) is False
+
+    def test_falls_back_to_due_date_without_plan(self, client):
+        future = (date.today() + timedelta(days=5)).isoformat()
+        t = client.post("/api/deck", json={
+            "title": "X", "due_date": future, "hide_until_plan": True,
+        }).get_json()
+        assert deck_module._is_deferred(t, self._today()) is True
+
+    def test_plan_date_wins_over_due_date(self, client):
+        # Re-planning a hidden task to today reveals it even though the
+        # deadline is still far off.
+        future = (date.today() + timedelta(days=30)).isoformat()
+        tid = client.post("/api/deck", json={
+            "title": "X", "due_date": future, "hide_until_plan": True,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"focus_date": self._today()}).get_json()
+        assert deck_module._is_deferred(t, self._today()) is False
+
+    def test_flag_inert_without_any_date(self, client):
+        t = client.post("/api/deck", json={
+            "title": "X", "hide_until_plan": True,
+        }).get_json()
+        assert deck_module._is_deferred(t, self._today()) is False
+
+    def test_completed_task_never_deferred(self, client):
+        future = (date.today() + timedelta(days=5)).isoformat()
+        tid = client.post("/api/deck", json={
+            "title": "X", "focus_date": future, "hide_until_plan": True,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"completed": True}).get_json()
+        assert deck_module._is_deferred(t, self._today()) is False
+
+    def test_flag_can_be_toggled_off(self, client):
+        future = (date.today() + timedelta(days=5)).isoformat()
+        tid = client.post("/api/deck", json={
+            "title": "X", "focus_date": future, "hide_until_plan": True,
+        }).get_json()["id"]
+        t = client.put(f"/api/deck/{tid}", json={"hide_until_plan": False}).get_json()
+        assert t["hide_until_plan"] is False
+        assert deck_module._is_deferred(t, self._today()) is False
+
+    def test_restore_preserves_flag(self, client):
+        future = (date.today() + timedelta(days=5)).isoformat()
+        snap = client.post("/api/deck", json={
+            "title": "X", "focus_date": future, "hide_until_plan": True,
+        }).get_json()
+        client.delete(f"/api/deck/{snap['id']}")
+        resp = client.post("/api/deck/restore", json={"tasks": [snap]})
+        assert resp.status_code == 201
+        assert resp.get_json()[0]["hide_until_plan"] is True
 
 
 class TestYearlyRecurrence:
@@ -1271,7 +1365,7 @@ class TestCreateFieldParity:
         """Create route goes through _apply_task_fields — every field lands."""
         resp = create_task(
             client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
-            due_date="2026-08-01", start_date="2026-07-30", defer_days=-2,
+            due_date="2026-08-01", hide_until_plan=True, defer_days=-2,
             focus_date="2026-08-01", page="  some-page ", blocked_by="x, y",
             rec_type="weekly", rec_interval=3,
         )
@@ -1281,7 +1375,7 @@ class TestCreateFieldParity:
         assert t["description"] == "notes"
         assert t["tags"] == ["a", "b"]
         assert t["due_date"] == "2026-08-01"
-        assert t["start_date"] == "2026-07-30"
+        assert t["hide_until_plan"] is True
         assert t["defer_days"] == 0          # clamped to >= 0
         assert t["focus_date"] == "2026-08-01"
         assert t["page"] == "some-page"
@@ -1535,7 +1629,8 @@ class TestDueCountDeferral:
     def test_deferred_overdue_task_not_counted(self, client):
         past = (date.today() - timedelta(days=2)).isoformat()
         future = (date.today() + timedelta(days=5)).isoformat()
-        create_task(client, title="Hidden overdue", due_date=past, start_date=future)
+        create_task(client, title="Hidden overdue", due_date=past,
+                    focus_date=future, hide_until_plan=True)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["count"] == 0
 
@@ -1545,11 +1640,12 @@ class TestDueCountDeferral:
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["overdue"] == 1
 
-    def test_defer_days_hides_far_future_due(self, client):
+    def test_defer_days_alone_does_not_hide(self, client):
+        # A lead time only schedules; without the opt-in flag the task stays
+        # visible (and here, not yet due, so it simply isn't counted as due).
         future = (date.today() + timedelta(days=10)).isoformat()
-        create_task(client, title="Far due", due_date=future, defer_days=3)
-        counts = client.get("/api/deck/due-count").get_json()
-        assert counts["count"] == 0
+        t = create_task(client, title="Far due", due_date=future, defer_days=3).get_json()
+        assert deck_module._is_deferred(t, date.today().isoformat()) is False
 
 
 # ── Round 2: plan overrides deferral ──────────────────────────────────────────
@@ -1557,11 +1653,10 @@ class TestDueCountDeferral:
 
 class TestPlanOverridesDeferral:
     def test_planned_deferred_task_counts_as_due(self, client):
-        """focus_date <= today makes a deferred task visible (and countable)."""
+        """A plan date of today reveals the task even with hiding on."""
         past = (date.today() - timedelta(days=2)).isoformat()
-        future = (date.today() + timedelta(days=5)).isoformat()
         create_task(client, title="Planned anyway", due_date=past,
-                    start_date=future, focus_date=date.today().isoformat())
+                    hide_until_plan=True, focus_date=date.today().isoformat())
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["overdue"] == 1
 
@@ -1569,7 +1664,7 @@ class TestPlanOverridesDeferral:
         past = (date.today() - timedelta(days=2)).isoformat()
         future = (date.today() + timedelta(days=5)).isoformat()
         create_task(client, title="Still hidden", due_date=past,
-                    start_date=future, focus_date=future)
+                    hide_until_plan=True, focus_date=future)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["count"] == 0
 

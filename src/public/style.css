@@ -1528,6 +1528,11 @@ body.editor-page main {
   accent-color: var(--btn-primary);
 }
 .task-field-check .check-wrap { display: flex; align-items: center; justify-content: center; min-height: 2.15rem; }
+/* Gated checkbox (e.g. "Hide until planned" with no date set): dim it so the
+   disabled state reads the same way as a disabled input. */
+.task-field--disabled { opacity: .5; }
+.task-field--disabled label { cursor: default; }
+.task-field input[type="checkbox"]:disabled { cursor: not-allowed; }
 
 /* Task edit modal */
 .task-edit-modal {

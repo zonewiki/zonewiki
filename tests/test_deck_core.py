@@ -39,22 +39,36 @@ class TestDates:
 
 
 class TestIsDeferred:
-    def test_start_date_hides(self):
-        t = {"start_date": "2026-08-01"}
+    def test_flag_hides_until_plan_date(self):
+        t = {"hide_until_plan": True, "focus_date": "2026-08-01"}
         assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is True
 
-    def test_plan_overrides_deferral(self):
-        t = {"start_date": "2026-08-01", "focus_date": TODAY}
+    def test_visible_once_plan_date_arrives(self):
+        t = {"hide_until_plan": True, "focus_date": TODAY}
         assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
 
-    def test_future_plan_does_not_override(self):
-        t = {"start_date": "2026-08-01", "focus_date": "2026-08-01"}
+    def test_falls_back_to_due_date(self):
+        t = {"hide_until_plan": True, "due_date": "2026-08-01"}
         assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is True
 
-    def test_defer_days_before_due(self):
-        t = {"due_date": "2026-08-10", "defer_days": 3}
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is True
-        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '2026-08-07')") is False
+    def test_plan_date_wins_over_due_date(self):
+        t = {"hide_until_plan": True, "due_date": "2026-08-01", "focus_date": TODAY}
+        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+
+    def test_flag_inert_without_any_date(self):
+        t = {"hide_until_plan": True}
+        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+
+    def test_no_flag_never_hides(self):
+        # Scheduling alone must not hide: without the opt-in the task stays in
+        # Backlog/Plan even when its dates are weeks out.
+        t = {"due_date": "2026-08-10", "defer_days": 3, "focus_date": "2026-08-07"}
+        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
+
+    def test_completed_never_hides(self):
+        t = {"hide_until_plan": True, "focus_date": "2026-08-01",
+             "completed_at": "2026-07-26T10:00:00"}
+        assert run_core(f"DeckCore.isDeferred({json.dumps(t)}, '{TODAY}')") is False
 
 
 class TestIsBlocked:

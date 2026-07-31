@@ -26,19 +26,18 @@
     });
   }
 
-  // A task is deferred (hidden from Backlog/Focus/Plan) until its start_date,
-  // or until defer_days before its due_date — the most restrictive wins.
-  // An explicit plan overrides deferral: focus_date <= today makes the task
-  // visible even when start_date/defer_days would still hide it.
+  // A task is hidden from Backlog/Focus/Plan until its plan date, but only
+  // when it opts in via hide_until_plan. Without the flag a scheduled task
+  // stays visible and merely lands in Focus on its plan date; defer_days only
+  // schedules (focus_date = due - lead) and hides nothing on its own.
+  // The date hidden until is focus_date, falling back to due_date; a task with
+  // neither has nothing to hide until, so the flag is inert.
   // Mirror of _is_deferred() in deck.py; keep the two in sync.
   function isDeferred(t, today) {
     if (t.completed_at) return false;
-    if (t.focus_date && t.focus_date <= today) return false;
-    if (t.start_date && t.start_date > today) return true;
-    if (t.defer_days != null && t.due_date) {
-      if (addDays(t.due_date, -t.defer_days) > today) return true;
-    }
-    return false;
+    if (!t.hide_until_plan) return false;
+    const until = t.focus_date || t.due_date;
+    return !!until && until > today;
   }
 
   function tagMatchScore(q, tag) {

@@ -245,7 +245,7 @@ def _new_task(**overrides) -> dict:
         "title": "",
         "description": "",
         "tags": [],
-        "start_date": None,
+        "hide_until_plan": False,
         "due_date": None,
         "defer_days": None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -287,8 +287,9 @@ def _rec_step(base: date, rtype: str, interval: int) -> date:
 def _plan_date(due: str, lead_days: int) -> str:
     """Plan date derived from a deadline: due_date minus lead_days.
 
-    A ``defer_days`` value means "plan (and reveal) the task this many days
-    before its due date", so the plan date (focus_date) is always due - lead."""
+    A ``defer_days`` value means "plan the task this many days before its due
+    date", so the plan date (focus_date) is always due - lead. It schedules
+    only — the task is never hidden on account of a lead time."""
     d = datetime.strptime(due, "%Y-%m-%d").date() - timedelta(days=lead_days)
     return d.isoformat()
 
@@ -326,6 +327,7 @@ def _spawn_recurring(task: dict) -> dict | None:
             description=task.get("description", ""),
             tags=task.get("tags", []),
             focus_date=next_date.strftime("%Y-%m-%d"),
+            hide_until_plan=bool(task.get("hide_until_plan")),
             sort_order=task.get("sort_order", 0),
             recurrence=task.get("recurrence"),
             page=task.get("page"),
@@ -345,7 +347,7 @@ def _spawn_recurring(task: dict) -> dict | None:
     due_str = next_due.strftime("%Y-%m-%d")
     lead = task.get("defer_days")
     # "Plan N days before due" rides along: re-derive focus_date from the new
-    # due date so the spawned instance stays hidden until then.
+    # due date so the spawned instance is planned for its own lead date.
     focus_date = _plan_date(due_str, lead) if lead is not None else None
     return _new_task(
         title=task["title"],
@@ -354,6 +356,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         due_date=due_str,
         defer_days=lead,
         focus_date=focus_date,
+        hide_until_plan=bool(task.get("hide_until_plan")),
         sort_order=task.get("sort_order", 0),
         recurrence=task.get("recurrence"),
         page=task.get("page"),
@@ -501,6 +504,10 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-defer-days{sfx}">Plan before due</label>
         <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
         <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
+      </div>
+      <div class="task-field task-field-check" id="task-edit-hide-field{sfx}" title="Keep this out of Backlog and Plan until its plan date">
+        <label for="task-edit-hide{sfx}">Hide until planned</label>
+        <span class="check-wrap"><input type="checkbox" id="task-edit-hide{sfx}" name="hide_until_plan"></span>
       </div>
     </div>
     <div class="task-field-row">
@@ -702,22 +709,22 @@ def api_get_deck_completed():
 
 
 def _is_deferred(task: dict, today: str) -> bool:
-    """True when the task is hidden until a later date — either an absolute
-    start_date or defer_days before its due_date (most restrictive wins).
-    An explicit plan overrides deferral: focus_date <= today keeps the task
-    visible. Mirror of isDeferred() in deck-core.js; keep the two in sync."""
+    """True when the task is hidden until its plan date.
+
+    Hiding is opt-in per task via ``hide_until_plan``: without it a scheduled
+    task stays in Backlog/Plan and merely lands in Focus on its plan date.
+    ``defer_days`` only schedules (derives focus_date = due - lead); combined
+    with the flag it hides the task until that lead date.
+
+    The date hidden until is the plan date, falling back to the deadline:
+    ``focus_date or due_date``. A task with neither has nothing to hide until,
+    so the flag is inert. Mirror of isDeferred() in deck-core.js; keep in sync."""
     if task.get("completed_at"):
         return False
-    if task.get("focus_date") and task["focus_date"] <= today:
+    if not task.get("hide_until_plan"):
         return False
-    if task.get("start_date") and task["start_date"] > today:
-        return True
-    if task.get("defer_days") is not None and task.get("due_date"):
-        due_dt = datetime.fromisoformat(task["due_date"] + "T00:00:00")
-        show_from = (due_dt - timedelta(days=task["defer_days"])).date().isoformat()
-        if show_from > today:
-            return True
-    return False
+    until = task.get("focus_date") or task.get("due_date")
+    return bool(until) and until > today
 
 
 @bp.get("/api/deck/due-count")
@@ -807,8 +814,8 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
-    if "start_date" in data:
-        task["start_date"] = _validate_date(data["start_date"])
+    if "hide_until_plan" in data:
+        task["hide_until_plan"] = bool(data["hide_until_plan"])
     if "defer_days" in data:
         dd = data["defer_days"]
         task["defer_days"] = max(0, int(dd)) if dd is not None else None
@@ -974,7 +981,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
     task["tags"] = [str(t).strip() for t in snap.get("tags") or [] if str(t).strip()]
-    for field in ("start_date", "due_date", "focus_date"):
+    for field in ("due_date", "focus_date"):
         val = snap.get(field)
         if isinstance(val, str):
             try:
@@ -984,6 +991,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
                 pass
     if isinstance(snap.get("defer_days"), int):
         task["defer_days"] = max(0, snap["defer_days"])
+    task["hide_until_plan"] = bool(snap.get("hide_until_plan"))
     if isinstance(snap.get("id"), str) and snap["id"]:
         task["id"] = snap["id"]
     for field in ("created_at", "completed_at", "spawned_from", "page"):
