@@ -542,7 +542,10 @@ def _apply_img_sizes(html_str: str) -> str:
     return _IMG_SIZE_RE.sub(fix, html_str)
 
 
-def render_md(text: str, *, slug: str = "") -> str:
+def render_md(text: str, *, slug: str = "", show_tags: bool = True, show_tldr: bool = True) -> str:
+    fm_meta, text = parse_frontmatter(text)
+    fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
+
     toc_html = ''
     if _TOC_RE.search(text):
         toc_html = _build_toc(text)
@@ -558,7 +561,7 @@ def render_md(text: str, *, slug: str = "") -> str:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     if deck_embeds:
         result = deck_module.inject_deck_embeds(result, deck_embeds)
-    return result
+    return fm_html + result
 
 
 def _iter_fenced_lines(lines: list[str]):
@@ -716,12 +719,99 @@ def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
 def strip_h1(content: str) -> str:
     """Remove the first H1 line so it isn't duplicated below the page header."""
     lines = content.split("\n")
-    for i, line in enumerate(lines):
-        if line.strip():
-            if re.match(r"^#\s+", line):
+    start = 0
+    if lines and lines[0].strip() == '---':
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '---':
+                start = i + 1
+                break
+    for i in range(start, len(lines)):
+        if lines[i].strip():
+            if re.match(r"^#\s+", lines[i]):
                 del lines[i]
             break
     return "\n".join(lines)
+
+
+_FRONTMATTER_FENCE = '---'
+
+
+def parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Parse a leading frontmatter block (--- ... ---) for `tags` and `tldr`.
+
+    Returns (metadata, content_with_frontmatter_removed). Absent or malformed
+    frontmatter (no closing fence) yields an empty metadata dict and the
+    original content unchanged.
+    """
+    lines = content.split("\n")
+    if not lines or lines[0].strip() != _FRONTMATTER_FENCE:
+        return {}, content
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == _FRONTMATTER_FENCE:
+            end_idx = i
+            break
+    if end_idx is None:
+        return {}, content
+
+    meta: dict = {}
+    for line in lines[1:end_idx]:
+        if ':' not in line:
+            continue
+        key, _, value = line.partition(':')
+        key = key.strip().lower()
+        value = value.strip()
+        if key == 'tags':
+            value = value.strip('[]')
+            tags = [t.strip().strip('"\'') for t in value.split(',') if t.strip()]
+            if tags:
+                meta['tags'] = tags
+        elif key == 'tldr':
+            value = value.strip('"\'')
+            if value:
+                meta['tldr'] = value
+
+    rest = lines[end_idx + 1:]
+    if rest and rest[0].strip() == '':
+        rest = rest[1:]
+    return meta, "\n".join(rest)
+
+
+def _render_tags_pills_html(tags: list[str]) -> str:
+    """Render a list of tags as clickable pills linking to search."""
+    if not tags:
+        return ''
+    from urllib.parse import urlencode
+
+    pills = ''.join(
+        f'<a class="task-tag page-tag" href="/search?{urlencode({"q": t})}">{html.escape(t)}</a>'
+        for t in tags
+    )
+    return f'<div class="page-tags">{pills}</div>'
+
+
+def _render_frontmatter_html(meta: dict, *, show_tags: bool = True, show_tldr: bool = True) -> str:
+    """Render parsed frontmatter (tags/tldr) as a collapsed-by-default block.
+
+    `show_tags`/`show_tldr` let a caller omit either half — used by view_page,
+    which renders both itself in the page-meta row instead of the body.
+    """
+    if not meta:
+        return ''
+    parts = []
+    if show_tldr:
+        tldr = meta.get('tldr')
+        if tldr:
+            parts.append(f'<p class="page-tldr">{html.escape(tldr)}</p>')
+    if show_tags:
+        parts.append(_render_tags_pills_html(meta.get('tags', [])))
+    parts = [p for p in parts if p]
+    if not parts:
+        return ''
+    return (
+        '<details class="page-frontmatter"><summary>tldr</summary>'
+        + ''.join(parts) + '</details>'
+    )
 
 
 def _resolve_relative_link(href: str, source_slug: str) -> str | None:
@@ -1328,11 +1418,32 @@ def view_page(slug):
             f'    <a href="/edit/{slug}" class="btn">Edit</a>'
         )
         last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
+        fm_meta, _ = parse_frontmatter(content)
+        tags_html = _render_tags_pills_html(fm_meta.get('tags', []))
+        # The tldr toggle is a checkbox rendered *before* the meta row with its
+        # label inside it, and the text as a sibling *after* it. Keeping the
+        # three as siblings (rather than a <details> wrapper) is what lets the
+        # label stay put on the tags line while the expanded text takes its own
+        # full-width line below — CSS-only, no overlay, no JS.
+        tldr_text = fm_meta.get('tldr', '')
+        if tldr_text:
+            tldr_checkbox = '<input type="checkbox" id="tldr-toggle" class="tldr-toggle">'
+            tldr_label = '<label class="tldr-label" for="tldr-toggle">tldr</label>'
+            tldr_body = f'<p class="page-tldr">{html.escape(tldr_text)}</p>'
+        else:
+            tldr_checkbox = tldr_label = tldr_body = ''
         page_meta_html = (
-            f'<div class="page-meta-wrapper">{last_modified}{meta_commit_btn}</div>'
-            if last_modified or meta_commit_btn else ""
+            f'{tldr_checkbox}'
+            f'<div class="page-meta-wrapper">'
+            f'<div class="page-meta-left">{tags_html}{tldr_label}</div>'
+            f'<div class="page-meta-right">{last_modified}{meta_commit_btn}</div>'
+            f'</div>'
+            f'{tldr_body}'
+            if last_modified or meta_commit_btn or tags_html or tldr_text else ""
         )
-        article_html = _inject_section_edit_buttons(render_md(strip_h1(content), slug=slug), slug)
+        article_html = _inject_section_edit_buttons(
+            render_md(strip_h1(content), slug=slug, show_tags=False, show_tldr=False), slug
+        )
 
     body = f"""{breadcrumb}{delete_dialog}
 <header class="page-header">
@@ -1340,8 +1451,8 @@ def view_page(slug):
   <div class="page-header-actions">
     {actions}
   </div>
-  {page_meta_html}
 </header>
+{page_meta_html}
 <article class="page-content">
   {article_html}
 </article>
@@ -1425,7 +1536,7 @@ def edit_page(slug):
     {rename_bar}
     <form id="editor-form" method="post" action="{form_action}">
       {section_hidden_fields}
-      <textarea id="editor-textarea" name="content"
+      <textarea id="editor-textarea" name="content" data-new="{'1' if is_new else ''}"
                 spellcheck="false" autocorrect="off" autocapitalize="off">{safe_content}</textarea>
     </form>
   </div>

@@ -782,7 +782,12 @@ if (textarea && previewPane) {
   });
 
   textarea.focus();
-  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  if (textarea.dataset.new === '1') {
+    // Brand-new page: land right after the pre-filled "# Title\n\n" so typing
+    // continues the body. Existing pages keep the cursor at the start instead
+    // of jumping (and scrolling) to the end of a possibly long file.
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  }
 
   // Sync preview scroll position with editor
   const previewScroller = previewPane.parentElement;

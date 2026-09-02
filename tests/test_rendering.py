@@ -2,7 +2,8 @@
 
 Covers: render_md, process_wikilinks, _build_toc, _apply_img_sizes,
         _render_task_dates, toggle_nth_checkbox (metadata), page_title,
-        to_slug, build_breadcrumb, strip_h1, _render_task_title.
+        to_slug, build_breadcrumb, strip_h1, _render_task_title,
+        parse_frontmatter, _render_frontmatter_html.
 
 Run with:
     pytest tests/test_rendering.py -v
@@ -25,9 +26,12 @@ import server
 from server import (
     _apply_img_sizes,
     _build_toc,
+    _render_frontmatter_html,
+    _render_tags_pills_html,
     _render_task_dates,
     build_breadcrumb,
     page_title,
+    parse_frontmatter,
     process_wikilinks,
     render_md,
     strip_h1,
@@ -143,6 +147,122 @@ class TestStripH1:
     def test_no_h1(self):
         content = "Just text.\n"
         assert strip_h1(content) == content
+
+    def test_removes_h1_after_frontmatter(self):
+        content = "---\ntags: a, b\n---\n\n# Title\n\nBody text.\n"
+        result = strip_h1(content)
+        assert "# Title" not in result
+        assert "Body text." in result
+        assert "tags: a, b" in result  # frontmatter itself is untouched
+
+    def test_frontmatter_without_h1_unchanged(self):
+        content = "---\ntags: a\n---\n\nBody only.\n"
+        assert strip_h1(content) == content
+
+
+# ===========================================================================
+# parse_frontmatter / _render_frontmatter_html
+# ===========================================================================
+
+class TestParseFrontmatter:
+
+    def test_no_frontmatter_returns_empty_meta(self):
+        meta, body = parse_frontmatter("# Title\n\nBody.\n")
+        assert meta == {}
+        assert body == "# Title\n\nBody.\n"
+
+    def test_parses_tags_and_tldr(self):
+        content = "---\ntags: work, urgent\ntldr: One line summary.\n---\n\n# Title\n\nBody.\n"
+        meta, body = parse_frontmatter(content)
+        assert meta == {"tags": ["work", "urgent"], "tldr": "One line summary."}
+        assert body == "# Title\n\nBody.\n"
+
+    def test_parses_bracketed_tag_list(self):
+        meta, _ = parse_frontmatter("---\ntags: [work, urgent]\n---\nBody.\n")
+        assert meta["tags"] == ["work", "urgent"]
+
+    def test_quoted_tldr_unquoted(self):
+        meta, _ = parse_frontmatter('---\ntldr: "Quoted summary"\n---\nBody.\n')
+        assert meta["tldr"] == "Quoted summary"
+
+    def test_unclosed_fence_returns_original_unchanged(self):
+        content = "---\ntags: a\n\n# Title\n\nBody.\n"
+        meta, body = parse_frontmatter(content)
+        assert meta == {}
+        assert body == content
+
+    def test_unknown_keys_ignored(self):
+        meta, _ = parse_frontmatter("---\ncreated: 2026-01-01\ntags: a\n---\nBody.\n")
+        assert meta == {"tags": ["a"]}
+
+    def test_empty_tags_and_tldr_omitted(self):
+        meta, _ = parse_frontmatter("---\ntags:\ntldr:\n---\nBody.\n")
+        assert meta == {}
+
+    def test_dashes_not_at_start_not_treated_as_frontmatter(self):
+        content = "# Title\n\n---\ntags: a\n---\n"
+        meta, body = parse_frontmatter(content)
+        assert meta == {}
+        assert body == content
+
+
+class TestRenderTagsPillsHtml:
+
+    def test_empty_list_renders_nothing(self):
+        assert _render_tags_pills_html([]) == ''
+
+    def test_renders_pills_with_search_links(self):
+        result = _render_tags_pills_html(["work", "urgent"])
+        assert 'class="task-tag page-tag"' in result
+        assert 'href="/search?q=work"' in result
+        assert 'href="/search?q=urgent"' in result
+
+
+class TestRenderFrontmatterHtml:
+
+    def test_empty_meta_renders_nothing(self):
+        assert _render_frontmatter_html({}) == ''
+
+    def test_tldr_rendered_as_paragraph(self):
+        result = _render_frontmatter_html({"tldr": "Summary here"})
+        assert '<p class="page-tldr">Summary here</p>' in result
+
+    def test_tags_rendered_as_linked_pills(self):
+        result = _render_frontmatter_html({"tags": ["work", "urgent"]})
+        assert 'class="task-tag page-tag"' in result
+        assert 'href="/search?q=work"' in result
+        assert 'href="/search?q=urgent"' in result
+
+    def test_tldr_html_escaped(self):
+        result = _render_frontmatter_html({"tldr": "<script>alert(1)</script>"})
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
+    def test_show_tags_false_omits_tags_keeps_tldr(self):
+        result = _render_frontmatter_html(
+            {"tldr": "Summary here", "tags": ["work"]}, show_tags=False
+        )
+        assert '<p class="page-tldr">Summary here</p>' in result
+        assert "task-tag" not in result
+
+    def test_show_tags_false_with_only_tags_renders_nothing(self):
+        assert _render_frontmatter_html({"tags": ["work"]}, show_tags=False) == ''
+
+    def test_collapsed_by_default(self):
+        result = _render_frontmatter_html({"tldr": "Summary here"})
+        assert result.startswith('<details class="page-frontmatter">')
+        assert '<summary>' in result
+        assert ' open' not in result.split('<summary>')[0]  # no `open` attribute
+
+    def test_show_tldr_false_omits_tldr_keeps_tags(self):
+        result = _render_frontmatter_html(
+            {"tldr": "Summary here", "tags": ["work"]}, show_tldr=False
+        )
+        assert "page-tldr" not in result
+        assert 'class="task-tag page-tag"' in result
+
+    def test_show_tldr_false_with_only_tldr_renders_nothing(self):
+        assert _render_frontmatter_html({"tldr": "Summary"}, show_tldr=False) == ''
 
 
 # ===========================================================================
@@ -351,6 +471,32 @@ class TestRenderMd:
         text = "- [ ] pending\n- [x] done\n"
         result = render_md(text)
         assert 'type="checkbox"' in result
+
+    def test_frontmatter_stripped_from_body_and_rendered_as_meta(self, wiki_dir):
+        text = "---\ntags: work\ntldr: Quick summary.\n---\n\n# Title\n\nBody.\n"
+        result = render_md(text)
+        assert "tags: work" not in result
+        assert "tldr:" not in result
+        assert '<p class="page-tldr">Quick summary.</p>' in result
+        assert 'class="task-tag page-tag"' in result
+        assert "<p>Body.</p>" in result
+
+    def test_no_frontmatter_no_meta_block(self, wiki_dir):
+        result = render_md("# Title\n\nBody.\n")
+        assert "page-frontmatter" not in result
+
+    def test_show_tags_false_keeps_tldr_omits_tags(self, wiki_dir):
+        text = "---\ntags: work\ntldr: Quick summary.\n---\n\n# Title\n\nBody.\n"
+        result = render_md(text, show_tags=False)
+        assert '<p class="page-tldr">Quick summary.</p>' in result
+        assert "task-tag" not in result
+
+    def test_show_tags_and_show_tldr_false_suppresses_both(self, wiki_dir):
+        text = "---\ntags: work\ntldr: Quick summary.\n---\n\n# Title\n\nBody.\n"
+        result = render_md(text, show_tags=False, show_tldr=False)
+        assert "page-frontmatter" not in result
+        assert "page-tldr" not in result
+        assert "task-tag" not in result
 
 
 # ===========================================================================

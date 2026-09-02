@@ -115,7 +115,6 @@ main {
   margin-bottom: 1.5rem;
   padding-bottom: .35rem;
   border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border));
-  position: relative;
 }
 
 .page-header h1 {
@@ -126,21 +125,77 @@ main {
 }
 
 .page-meta-wrapper {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: .4rem;
+  /* A normal block right after .page-header (not inside it, not absolutely
+     positioned): the border-bottom above stays anchored under the H1/actions
+     row, and this can still grow (e.g. an expanded tldr) without overlapping
+     the article below it. The negative top margin pulls it back up under
+     the header's own 1.5rem margin-bottom instead of adding a second gap. */
+  margin: -1.1rem 0 1.5rem;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: .75rem;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
   font-size: .75rem;
   color: var(--muted);
+}
+
+.page-meta-left, .page-meta-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
 }
 
 .page-meta {
   display: inline-flex;
   align-items: center;
   gap: .5rem;
+}
+
+/* ── Page frontmatter (tldr / tags) ──────────────────────────────────────── */
+
+.page-frontmatter { margin: 0 0 1rem; }
+.page-frontmatter summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: .85rem;
+  width: fit-content;
+}
+.page-frontmatter summary:hover { color: var(--fg); }
+.page-frontmatter[open] summary { margin-bottom: .5rem; }
+.page-tldr { color: var(--muted); font-style: italic; margin: 0 0 .5rem; }
+.page-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+.page-tag { text-decoration: none; }
+.page-tag:hover { background: var(--btn-primary); color: var(--btn-primary-fg); }
+
+/* tldr toggle in the page-meta row: a visually-hidden checkbox before the row,
+   its label inside the row next to the tags, and the text as a sibling after
+   the row. Because all three are siblings, checking the box reveals the text
+   as its own full-width line below — the label never moves, nothing overlays
+   the article, and no JS is involved. */
+.tldr-toggle { position: absolute; opacity: 0; width: 0; height: 0; }
+.tldr-label {
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+  white-space: nowrap;
+}
+.tldr-label::before { content: '▸ '; }
+.tldr-toggle:checked ~ .page-meta-wrapper .tldr-label::before { content: '▾ '; }
+.tldr-label:hover { color: var(--fg); }
+.tldr-toggle:focus-visible ~ .page-meta-wrapper .tldr-label {
+  outline: 2px solid var(--btn-primary);
+  outline-offset: 2px;
+}
+.tldr-toggle ~ .page-tldr { display: none; }
+/* When open, hand the row's bottom margin over to the revealed text so the
+   text sits snug under the label instead of a full 1.5rem gap below it. */
+.tldr-toggle:checked ~ .page-meta-wrapper { margin-bottom: .35rem; }
+.tldr-toggle:checked ~ .page-tldr {
+  display: block;
+  margin: 0 0 1.5rem;
+  font-size: .95rem;
 }
 
 /* ── Typography ────────────────────────────────────────────────────────────── */

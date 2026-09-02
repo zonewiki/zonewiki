@@ -137,6 +137,70 @@ class TestViewPage:
         resp = client.get("/page/../etc/passwd", headers=HOST)
         assert resp.status_code == 400
 
+    def test_frontmatter_rendered_as_meta_not_raw_yaml(self, client, wiki_dir):
+        write_page(
+            wiki_dir, "tagged",
+            "---\ntags: work, urgent\ntldr: Short summary.\n---\n\n# Tagged\n\nBody.\n",
+        )
+        resp = client.get("/page/tagged", headers=HOST)
+        assert resp.status_code == 200
+        text = resp.data.decode()
+        assert "tags: work" not in text
+        assert '<p class="page-tldr">Short summary.</p>' in text
+        assert 'class="task-tag page-tag"' in text
+        assert "Body." in text
+        assert "Tagged" in text  # title still derived correctly past the frontmatter
+
+    def test_tags_and_tldr_shown_once_in_meta_row_not_in_body(self, client, wiki_dir):
+        write_page(
+            wiki_dir, "tagged2",
+            "---\ntags: work, urgent\ntldr: Short summary.\n---\n\n# Tagged\n\nBody.\n",
+        )
+        resp = client.get("/page/tagged2", headers=HOST)
+        text = resp.data.decode()
+        # Tags and the collapsed tldr toggle both live in the page-meta-wrapper
+        # row (same line as "Last changed"), and appear there exactly once —
+        # not duplicated in the article body.
+        meta_start = text.index('class="page-meta-wrapper"')
+        article_start = text.index('class="page-content"')
+        assert 'class="task-tag page-tag"' in text[meta_start:article_start]
+        assert text.count('class="task-tag page-tag"') == 2  # "work" + "urgent"
+        assert text.count('<p class="page-tldr">') == 1
+        assert '<p class="page-tldr">' in text[meta_start:article_start]
+        assert '<p class="page-tldr">' not in text[article_start:]
+        # Tags and the tldr toggle label sit together in the left group, "Last
+        # changed" in the right group.
+        left_start = text.index('class="page-meta-left"')
+        right_start = text.index('class="page-meta-right"')
+        assert left_start < right_start
+        assert 'class="task-tag page-tag"' in text[left_start:right_start]
+        assert 'class="tldr-label"' in text[left_start:right_start]
+
+    def test_tldr_toggle_is_sibling_of_row_and_text(self, client, wiki_dir):
+        write_page(
+            wiki_dir, "tagged3",
+            "---\ntags: work\ntldr: Short summary.\n---\n\n# Tagged\n\nBody.\n",
+        )
+        resp = client.get("/page/tagged3", headers=HOST)
+        text = resp.data.decode()
+        # The CSS-only reveal needs checkbox → row → text as siblings in that
+        # order, so `.tldr-toggle:checked ~ .page-tldr` can match.
+        cb = text.index('class="tldr-toggle"')
+        row = text.index('class="page-meta-wrapper"')
+        para = text.index('<p class="page-tldr">')
+        assert cb < row < para
+        # The label points at the checkbox by id.
+        assert 'id="tldr-toggle"' in text
+        assert 'for="tldr-toggle"' in text
+
+    def test_no_tldr_toggle_when_no_tldr(self, client, wiki_dir):
+        write_page(wiki_dir, "tagsonly", "---\ntags: work\n---\n\n# T\n\nBody.\n")
+        resp = client.get("/page/tagsonly", headers=HOST)
+        text = resp.data.decode()
+        assert 'class="tldr-toggle"' not in text
+        assert 'class="tldr-label"' not in text
+        assert 'class="task-tag page-tag"' in text
+
 
 # ===========================================================================
 # edit_page GET
@@ -152,10 +216,31 @@ class TestEditPageGet:
         assert "Content here." in text
         assert 'name="content"' in text
 
+    def test_edit_shows_raw_frontmatter_for_editing(self, client, wiki_dir):
+        write_page(
+            wiki_dir, "tagged",
+            "---\ntags: work, urgent\ntldr: Short summary.\n---\n\n# Tagged\n\nBody.\n",
+        )
+        resp = client.get("/edit/tagged", headers=HOST)
+        text = resp.data.decode()
+        # The textarea holds the raw file content, frontmatter included verbatim,
+        # so it can be edited as plain text like everything else.
+        assert "tags: work, urgent" in text
+        assert "tldr: Short summary." in text
+
     def test_edit_new_page_shows_empty_editor(self, client):
         resp = client.get("/edit/brand-new-page", headers=HOST)
         assert resp.status_code == 200
         assert b'name="content"' in resp.data
+
+    def test_new_page_textarea_flagged_data_new(self, client):
+        resp = client.get("/edit/brand-new-page", headers=HOST)
+        assert 'data-new="1"' in resp.data.decode()
+
+    def test_existing_page_textarea_not_flagged_data_new(self, client, wiki_dir):
+        write_page(wiki_dir, "test-edit", "# Test\n\nContent here.\n")
+        resp = client.get("/edit/test-edit", headers=HOST)
+        assert 'data-new="1"' not in resp.data.decode()
 
     def test_edit_section_loads_section_content(self, client, wiki_dir):
         content = "# Title\n\npreamble\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n"
@@ -405,6 +490,17 @@ class TestApiPreview:
             headers={**HOST, "Content-Type": "text/plain"},
         )
         assert b'href="/page/linked"' in resp.data
+
+    def test_preview_renders_frontmatter_live(self, client):
+        resp = client.post(
+            "/api/preview",
+            data="---\ntags: draft\ntldr: In progress.\n---\n\n# Title\n\nBody.\n",
+            headers={**HOST, "Content-Type": "text/plain"},
+        )
+        text = resp.data.decode()
+        assert "tags: draft" not in text
+        assert '<p class="page-tldr">In progress.</p>' in text
+        assert 'class="task-tag page-tag"' in text
 
     def test_preview_empty_body(self, client):
         resp = client.post(
