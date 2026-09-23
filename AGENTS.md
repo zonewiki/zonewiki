@@ -31,7 +31,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | Integrated into the Pages view (`/pages`)    |
 | Storage             | Plain `.md` files in `pages/`               |
-| Container           | Docker (Arch Linux base image)              |
+| Container           | Docker (Ubuntu 26.04 LTS base image)        |
 
 No build step. No database. No auth (local use only).
 
@@ -42,7 +42,7 @@ No build step. No database. No auth (local use only).
 ```
 /
 ├── AGENTS.md               # This file (project documentation)
-├── Dockerfile              # Arch Linux-based container image
+├── Dockerfile              # Ubuntu 26.04 LTS-based container image
 ├── compose.yaml            # Docker Compose configuration
 ├── run.sh                  # Helper script: build/up/down/logs
 ├── .env                    # Host data path configuration
@@ -68,7 +68,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 ### Files
 
-- **`Dockerfile`** — Arch Linux base, installs Python + pip, installs `requirements.txt`, copies the `src/` directory into `/app`.
+- **`Dockerfile`** — Ubuntu 26.04 LTS base, installs Python + pip via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`.
 - **`compose.yaml`** — runs the Leaf container, mounts `$WIKI_DATA` (from `.env`) to `/wiki-data` inside the container, passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives.
 - **`run.sh`** — convenience script wrapping `docker build` plus whichever Compose command is available: `docker compose` or `docker-compose`. When it falls back to legacy `docker-compose` v1, `up` first does a quiet `down --remove-orphans` to avoid the known `ContainerConfig` recreate bug on newer Docker versions.
 - **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. `run.sh` passes the current user's UID/GID into Compose automatically so the container can write to the mounted wiki directory.
