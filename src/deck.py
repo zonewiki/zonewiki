@@ -512,7 +512,7 @@ def _parse_tasks_params(raw: str) -> dict:
 # is the tab's former label, kept so existing embeds keep working.
 _FILTER_ALIASES = {
     "focus": "focus", "today": "focus",
-    "all": "open", "backlog": "open", "open": "open",
+    "all": "open", "backlog": "open", "open": "open",   # "all": the label before "Open"
     "plan": "due", "upcoming": "due", "due": "due",
     "completed": "completed", "done": "completed",
 }
@@ -533,7 +533,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         capacity = max(1, min(99, int(params.get("capacity", ""))))
     except ValueError:
         capacity = ""  # client falls back to its default
-    # `unplanned=1`/`unplanned=0` pins the All tab's "Unplanned only" filter on
+    # `unplanned=1`/`unplanned=0` pins the Open tab's "Unplanned only" filter on
     # or off for this embed. Omitted, the client uses the stored preference,
     # which defaults off — so pinning it on gives a planning-queue embed.
     raw_unplanned = params.get("unplanned", "").strip().lower()
@@ -554,7 +554,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
-      <button type="button" role="tab" data-filter="open" aria-selected="false">All</button>
+      <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
       <button type="button" role="tab" data-filter="due" aria-selected="false">Plan</button>
       <button type="button" role="tab" data-filter="focus" aria-selected="false">Focus</button>
     </div>

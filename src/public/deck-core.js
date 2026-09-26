@@ -24,7 +24,7 @@
 
   // A task is unplanned when it has no start date: nobody has decided when to
   // do it. A due date alone doesn't count — the deadline is the one day the
-  // work should not start. The All tab's "Unplanned only" filter and the
+  // work should not start. The Open tab's "Unplanned only" filter and the
   // board's Unplanned section hold exactly these tasks.
   function isUnplanned(t) {
     return !t.start_date;

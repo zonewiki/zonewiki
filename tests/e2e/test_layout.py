@@ -215,7 +215,7 @@ DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-sort",
 
 
 def deck_header_rows(pg) -> int:
-    """Number of distinct lines the All tab's header controls sit on."""
+    """Number of distinct lines the Open tab's header controls sit on."""
     centres = sorted(
         (lambda b: b["y"] + b["height"] / 2)(pg.locator(sel).bounding_box())
         for sel in DECK_HEADER_PARTS)

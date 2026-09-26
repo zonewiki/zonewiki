@@ -1,4 +1,4 @@
-"""Deck: Plan board, start/due dates in the edit modal, and the All tab's "Unplanned only" toggle."""
+"""Deck: Plan board, start/due dates in the edit modal, and the Open tab's "Unplanned only" toggle."""
 
 import re
 from datetime import date, timedelta
@@ -76,7 +76,7 @@ def test_all_tab_unplanned_toggle(page, wiki):
     page.goto("/page/deck")
     open_tab(page, "open")
     toggle = page.locator("#task-unplanned")
-    expect(toggle).not_to_be_checked()  # off by default: All shows every open task
+    expect(toggle).not_to_be_checked()  # off by default: Open shows every open task
     expect(card(page, "Unplanned one")).to_be_visible()
     expect(card(page, "Planned one")).to_be_visible()
 
@@ -115,9 +115,9 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["All", "Plan", "Focus"])
-    # All is the default view and the only one marked active.
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["All"])
+    expect(tabs).to_have_text(["Open", "Plan", "Focus"])
+    # Open is the default view and the only one marked active.
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
     expect(page.locator("#task-unplanned-wrap")).to_be_visible()
 
     tabs.nth(1).click()
@@ -131,7 +131,7 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["All"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     page.keyboard.press("Shift+Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
@@ -405,7 +405,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     expect(card(page, "Done two")).to_be_visible()
     page.locator("body").click()
     page.keyboard.press("Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["All"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
 
 def test_completed_count_follows_completion(page, wiki):

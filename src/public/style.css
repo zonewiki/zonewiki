@@ -1373,7 +1373,7 @@ body.editor-page main {
 .tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
 .tasks-toolbar .btn { flex: none; }
 
-/* All tab's "Unplanned only" toggle. Opts out of the text-input sizing above
+/* Open tab's "Unplanned only" toggle. Opts out of the text-input sizing above
    (flex-grow, min-width, box borders) — it's a checkbox, not a field. */
 .task-unplanned-toggle {
   display: flex; align-items: center; gap: .3rem; flex: 0 0 auto;

@@ -115,7 +115,7 @@ class TestTasksLinkRender:
             "focus": "focus",
             "today": "focus",   # legacy alias
             "all": "open",
-            "backlog": "open",  # former label of the All tab
+            "backlog": "open",  # former label of the Open tab
             "plan": "due",
             "upcoming": "due",  # legacy alias for the renamed Plan tab
             "completed": "completed",
@@ -128,7 +128,7 @@ class TestTasksLinkRender:
         html = server.render_md("[[deck]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-filter="(\w+)"[^>]*>([^<]+)</button>', html)
-        assert tabs == [("open", "All"), ("due", "Plan"), ("focus", "Focus")]
+        assert tabs == [("open", "Open"), ("due", "Plan"), ("focus", "Focus")]
         # Completed is a link under the list, not a tab.
         assert 'id="task-completed-link"' in html
 
@@ -150,7 +150,7 @@ class TestTasksLinkRender:
         assert "Deferred" not in html
 
     def test_embed_unplanned_param_pins_toggle(self, wiki_dir):
-        """[[deck unplanned=1]] pins the All tab's "Unplanned only" filter on."""
+        """[[deck unplanned=1]] pins the Open tab's "Unplanned only" filter on."""
         html = server.render_md("[[deck unplanned=1]]\n")
         assert 'data-init-unplanned="1"' in html
 

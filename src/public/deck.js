@@ -83,7 +83,7 @@
   // Day sections with >= this many tasks are flagged; [[deck capacity=N]]
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
-  let unplannedOnly = false;  // All tab's "Unplanned only" — resolved during init
+  let unplannedOnly = false;  // Open tab's "Unplanned only" — resolved during init
 
   // Plan day board: dragging a task onto a day section sets its start_date;
   // dropping on "Unplanned" clears it. These list-level
@@ -284,7 +284,7 @@
 
   // "Unplanned only" is a standing preference, not a per-visit choice like the
   // tab, so it persists across sessions (localStorage). It defaults OFF: the
-  // All tab shows every open task, and checking it narrows the list to work no
+  // Open tab shows every open task, and checking it narrows the list to work no
   // day has claimed yet. `[[deck unplanned=0|1]]` pins it either way for an
   // embed. The key is versioned so a changed default actually reaches anyone
   // whose browser stored the previous default (v2 defaulted on).
@@ -747,7 +747,7 @@
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else {
-      // "open" (All) shows non-completed by default. With "Unplanned only"
+      // "open" (Open) shows non-completed by default. With "Unplanned only"
       // on it narrows to tasks with no start date, so the list reads as the
       // triage queue; giving a task a start date is what removes it from here.
       filtered = filtered.filter(t => !t.completed_at);
@@ -1169,7 +1169,7 @@
     const filtered = filterTasks();
 
 
-    // In "open" (All) view split into: due now (pinned top), ordered, new (inbox)
+    // In "open" (Open) view split into: due now (pinned top), ordered, new (inbox)
     let dueTasks, orderedTasks, newTasks;
     if (activeFilter === 'open') {
       const today = todayStr();
