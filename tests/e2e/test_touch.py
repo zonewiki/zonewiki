@@ -1,5 +1,6 @@
 """Deck on a touch phone: tap to edit, the ⋯ menu as a bottom sheet."""
 
+import re
 from datetime import date, timedelta
 
 import pytest
@@ -322,3 +323,85 @@ def test_edit_modal_is_compact_on_phone(phone):
     # The action bar sits at the bottom edge, within thumb reach.
     save = modal.get_by_role("button", name="Save").bounding_box()
     assert save["y"] + save["height"] > 844 - 60, save
+
+
+# ── Touch drag ───────────────────────────────────────────────────────────────
+# Phones never fire HTML5 drag events; a long press picks the card up instead.
+# Playwright has no touch-move API, so the gestures go through CDP.
+
+def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True):
+    """Long-press the centre of `source`, move to the centre of `target`, lift."""
+    cdp = page.context.new_cdp_session(page)
+    s, t = source.bounding_box(), target.bounding_box()
+    x0, y0 = s["x"] + s["width"] / 2, s["y"] + s["height"] / 2
+    x1, y1 = t["x"] + t["width"] / 2, t["y"] + t["height"] / 2
+
+    def send(kind, points):
+        cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
+
+    send("touchStart", [{"x": x0, "y": y0}])
+    page.wait_for_timeout(hold_ms)
+    for i in range(1, steps + 1):
+        send("touchMove", [{"x": x0 + (x1 - x0) * i / steps, "y": y0 + (y1 - y0) * i / steps}])
+        page.wait_for_timeout(16)
+    if release:
+        send("touchEnd", [])
+    return send
+
+
+def test_touch_drag_on_board_sets_start_date(phone):
+    open_tab(phone, "due")
+    target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
+    touch_drag(phone, card(phone, "Water plants"), target)
+    wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(1))
+    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    # The drop is not also a tap: the editor stays closed.
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+
+
+def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
+    tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
+    tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    tall.goto("/page/deck")
+    open_tab(tall, "due")
+    target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
+    touch_drag(tall, card(tall, "Water plants"), target)
+    wait_until(tall, lambda: tasks_by_title(tall)["Water plants"]["start_date"] is None)
+
+
+def test_touch_drag_reorders_all_tab(new_page, wiki):
+    pg = new_page(**TOUCH_PHONE)
+    ids = [pg.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("One", "Two", "Three")]
+    pg.request.post("/api/deck/reorder", data={"order": ids})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    pg.goto("/page/deck")
+    open_tab(pg, "open")
+    send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False)
+    # Mid-drag: a floating copy follows the finger, the target is marked.
+    expect(pg.locator(".task-touch-ghost")).to_have_count(1)
+    expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drag-over\b"))
+    send("touchEnd", [])
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Three", "One", "Two"])
+    wait_until(pg, lambda: [t["title"] for t in sorted(
+        pg.request.get("/api/deck").json(), key=lambda t: t["sort_order"])] == ["Three", "One", "Two"])
+
+
+def test_quick_swipe_scrolls_instead_of_dragging(phone):
+    # Moving before the long press completes is a scroll, not a pick-up.
+    open_tab(phone, "due")
+    target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
+    touch_drag(phone, card(phone, "Water plants"), target, hold_ms=0)
+    phone.wait_for_timeout(600)
+    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
+
+
+def test_long_press_in_place_neither_moves_nor_opens_editor(phone):
+    open_tab(phone, "due")
+    c = card(phone, "Water plants")
+    touch_drag(phone, c, c)
+    phone.wait_for_timeout(300)
+    expect(phone.locator(".task-touch-ghost")).to_have_count(0)
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)

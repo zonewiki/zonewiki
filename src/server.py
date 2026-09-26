@@ -1151,7 +1151,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <title>{safe_title} — {APP_NAME}</title>
   <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/public/style.css">

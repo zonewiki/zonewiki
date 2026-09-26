@@ -651,8 +651,18 @@ main {
 .bl-tooltip > a:last-child  { border-radius: 0 0 .35rem .35rem; }
 .bl-tooltip > a:only-child  { border-radius: .35rem; }
 .bl-tooltip > a:hover { background: var(--border); }
-.breadcrumb-right:hover .bl-count { opacity: 1; }
-.breadcrumb-right:hover .bl-tooltip { display: block; }
+/* Hover opens the list only where hover exists: on touch, :hover sticks after
+   a tap and would fight the tap toggle (.bl-open, set by leaf.js). */
+@media (hover: hover) {
+  .breadcrumb-right:hover .bl-count { opacity: 1; }
+  .breadcrumb-right:hover .bl-tooltip { display: block; }
+}
+.breadcrumb-right.bl-open .bl-count { opacity: 1; }
+.breadcrumb-right.bl-open .bl-tooltip { display: block; }
+@media (pointer: coarse) {
+  .bl-count { display: inline-block; padding: .35rem .5rem; margin: -.35rem -.5rem; }
+  .bl-tooltip > a { padding: .6rem .8rem; font-size: .9rem; }
+}
 
 /* ── Task list checkboxes ────────────────────────────────────────────────────── */
 
@@ -1371,6 +1381,11 @@ body.editor-page main {
 .task-item.task-completed { opacity: .6; }
 .task-item.task-completed .task-title { text-decoration: line-through; color: var(--muted); }
 .task-item.task-dragging { opacity: .4; }
+/* Touch drag: the card the finger carries (a clone of the picked-up card). */
+.task-touch-ghost {
+  position: fixed; z-index: 1000; margin: 0; pointer-events: none; list-style: none;
+  background: var(--bg); box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: .95;
+}
 .task-item.task-drag-over { border-color: var(--btn-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--btn-primary) 25%, transparent); }
 .task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--bg)); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }
 .task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--bg)); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
@@ -1590,6 +1605,9 @@ body.editor-page main {
   .task-wontdo-btn, .task-skip-btn { display: none; }
 }
 @media (pointer: coarse) {
+  /* A long press picks a card up (touch drag), so it must not select text
+     or open the iOS callout instead. */
+  .task-item[draggable] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .task-menu-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
   .task-checkbox input { width: 1.35rem; height: 1.35rem; }
   .task-clickable-date { padding: .25rem .35rem; }

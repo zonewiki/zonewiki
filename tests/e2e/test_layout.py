@@ -6,6 +6,8 @@ test writes PNGs to tests/e2e/_screenshots/ for a human (or an agent) to look at
 it asserts only that they were produced.
 """
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -161,3 +163,48 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     pg.goto("/page/deck")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
+
+
+# ── Backlinks chip ("← N" at the top right) ──────────────────────────────────
+
+def _backlinked_page(wiki):
+    wiki.write("target", "# Target\n\n" + "Filler paragraph.\n\n" * 80)
+    wiki.write("alpha", "# Alpha\n\nSee [[target]].\n")
+    wiki.write("beta", "# Beta\n\nSee [[target]].\n")
+
+
+def test_backlinks_chip_tap_opens_list_without_scrolling(new_page, wiki):
+    # Regression: phones have no hover, so tapping the chip only ever followed
+    # its #backlinks href and scrolled to the bottom of the page.
+    from conftest import TOUCH_PHONE
+    _backlinked_page(wiki)
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/target")
+    chip, tip = phone.locator(".bl-count"), phone.locator(".bl-tooltip")
+    expect(chip).to_have_text("← 2")
+    expect(tip).to_be_hidden()
+    chip.tap()
+    expect(tip).to_be_visible()
+    assert phone.evaluate("scrollY") == 0
+    # Links are finger-sized.
+    assert all(a.bounding_box()["height"] >= 36 for a in tip.locator("a").all())
+    chip.tap()                                  # a second tap closes it
+    expect(tip).to_be_hidden()
+    chip.tap()
+    phone.locator("h1").first.tap()             # so does a tap elsewhere
+    expect(tip).to_be_hidden()
+    chip.tap()
+    tip.get_by_role("link", name="Beta").tap()  # and its links navigate
+    expect(phone).to_have_url(re.compile(r"/page/beta$"))
+
+
+def test_backlinks_chip_desktop_hover_and_click(page, wiki):
+    _backlinked_page(wiki)
+    page.goto("/page/target")
+    tip = page.locator(".bl-tooltip")
+    expect(tip).to_be_hidden()
+    page.locator(".bl-count").hover()
+    expect(tip).to_be_visible()
+    page.locator(".bl-count").click()           # desktop click still jumps to the section
+    expect(page).to_have_url(re.compile(r"#backlinks$"))
+    page.wait_for_function("scrollY > 0")

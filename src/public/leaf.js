@@ -70,6 +70,25 @@
   if (rightEl) bc.appendChild(rightEl);
 }());
 
+// ── Backlinks chip ───────────────────────────────────────────────────────────
+// The "← N" chip lists the linking pages on hover and jumps to the Backlinks
+// section when clicked. Touch has no hover, so there a tap toggles the list
+// instead of scrolling the page down; a tap anywhere else closes it.
+// Delegated, because the breadcrumb code above rebuilds the breadcrumb.
+
+(function () {
+  document.addEventListener('click', e => {
+    const open = document.querySelector('.breadcrumb-right.bl-open');
+    const chip = e.target.closest('.bl-count');
+    if (chip && matchMedia('(hover: none)').matches) {
+      e.preventDefault();
+      chip.parentElement.classList.toggle('bl-open');
+      return;
+    }
+    if (open && !e.target.closest('.bl-tooltip')) open.classList.remove('bl-open');
+  });
+}());
+
 // ── Uncommitted changes badge ────────────────────────────────────────────────
 
 (function () {

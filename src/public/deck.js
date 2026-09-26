@@ -99,7 +99,11 @@
     const div = boardDivider(e.target);
     if (!div || !div.dataset.dropBucket) return;
     e.preventDefault();
-    const id = draggedId;
+    dropOnBucket(draggedId, div);
+  });
+  // Move a task to a board section: a day sets its start date, Unplanned
+  // clears it, and Later asks for a date.
+  function dropOnBucket(id, div) {
     clearBoardDropOver();
     if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
     else if (div.dataset.dropBucket === 'later') {
@@ -107,7 +111,7 @@
       openDatePicker('', d => { if (d) updateTask(id, { start_date: d }); }, div, dateOffset(7));
     }
     else if (div.dataset.dropDay) updateTask(id, { start_date: div.dataset.dropDay });
-  });
+  }
 
   // Touch: a tap on a card opens the editor (double-click, the desktop
   // gesture, is unreliable on phones). Mouse clicks keep selecting cards.
@@ -119,6 +123,97 @@
     if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
     openEditModal(card.dataset.id);
   });
+
+  // Touch drag. Phones never fire HTML5 drag events, so a long press picks a
+  // card up and the finger carries it; releasing drops it through the same code
+  // as a mouse drop. `touchDrop` is set by setupBoardDragAndDrop /
+  // setupDragAndDrop on each render (null where the view has no dragging):
+  //   target(el) → the element under the finger that would take the drop, or null
+  //   drop(target) → perform the drop (draggedId is set while it runs)
+  // Moving before the press completes is a scroll, and cancels the pick-up.
+  const LONG_PRESS_MS = 350;
+  let touchDrop = null;
+  let touchDrag = null;  // { item, x, y, timer, active, ghost, grabY, target, raf }
+  function touchDropTarget(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el && listEl.contains(el) && touchDrop ? touchDrop.target(el) : null;
+  }
+  function setTouchTarget(target) {
+    if (target === touchDrag.target) return;
+    touchDrag.target?.classList.remove('task-drag-over', 'board-drop-over');
+    touchDrag.target = target;
+    target?.classList.add(target.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over');
+  }
+  function startTouchDrag() {
+    const t = touchDrag, rect = t.item.getBoundingClientRect();
+    t.active = true;
+    draggedId = t.item.dataset.id;
+    t.item.classList.add('task-dragging');
+    t.grabY = t.y - rect.top;
+    t.ghost = t.item.cloneNode(true);
+    t.ghost.classList.remove('task-dragging', 'selected');
+    t.ghost.classList.add('task-touch-ghost');
+    Object.assign(t.ghost.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px' });
+    document.body.appendChild(t.ghost);
+    navigator.vibrate?.(15);
+    // Near the top or bottom edge the page scrolls, so a drop target that is
+    // off screen can still be reached.
+    const edge = 70;
+    const step = () => {
+      if (!touchDrag?.active) return;
+      const dy = touchDrag.y < edge ? -12 : touchDrag.y > window.innerHeight - edge ? 12 : 0;
+      if (dy) {
+        window.scrollBy(0, dy);
+        setTouchTarget(touchDropTarget(touchDrag.x, touchDrag.y));
+      }
+      touchDrag.raf = requestAnimationFrame(step);
+    };
+    t.raf = requestAnimationFrame(step);
+  }
+  function endTouchDrag(drop) {
+    const t = touchDrag;
+    touchDrag = null;
+    if (!t) return;
+    clearTimeout(t.timer);
+    if (!t.active) return;
+    cancelAnimationFrame(t.raf);
+    t.ghost.remove();
+    t.item.classList.remove('task-dragging');
+    const target = t.target;
+    target?.classList.remove('task-drag-over', 'board-drop-over');
+    if (drop && target && touchDrop) touchDrop.drop(target);
+    draggedId = null;
+  }
+  listEl.addEventListener('touchstart', e => {
+    endTouchDrag(false);
+    if (e.touches.length !== 1 || !touchDrop) return;
+    const item = e.target.closest('.task-item[draggable]');
+    if (!item || e.target.closest('input, button, a, .task-clickable-date, .task-inline-input')) return;
+    const p = e.touches[0];
+    touchDrag = { item, x: p.clientX, y: p.clientY, active: false, target: null,
+                  timer: setTimeout(startTouchDrag, LONG_PRESS_MS) };
+  }, { passive: true });
+  listEl.addEventListener('touchmove', e => {
+    if (!touchDrag) return;
+    const p = e.touches[0];
+    if (!touchDrag.active) {
+      if (Math.hypot(p.clientX - touchDrag.x, p.clientY - touchDrag.y) > 10) endTouchDrag(false);
+      return;
+    }
+    e.preventDefault();  // the finger is carrying a card, not scrolling the page
+    touchDrag.x = p.clientX;
+    touchDrag.y = p.clientY;
+    touchDrag.ghost.style.top = (p.clientY - touchDrag.grabY) + 'px';
+    setTouchTarget(touchDropTarget(p.clientX, p.clientY));
+  }, { passive: false });
+  listEl.addEventListener('touchend', e => {
+    // A finished drag must not also count as a tap (which opens the editor).
+    if (touchDrag?.active) e.preventDefault();
+    endTouchDrag(true);
+  });
+  listEl.addEventListener('touchcancel', () => endTouchDrag(false));
+  // The long press would otherwise open the browser's context menu.
+  listEl.addEventListener('contextmenu', e => { if (touchDrag) e.preventDefault(); });
 
   // Claim keyboard focus when user interacts with this instance
   appEl.addEventListener('pointerdown', () => { activeDeckInstance = instanceId; });
@@ -1251,6 +1346,7 @@
     });
 
     // Drag and drop
+    touchDrop = null;
     if (activeFilter === 'due') {
       setupBoardDragAndDrop();
     } else if (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')) {
@@ -1933,21 +2029,27 @@
         reorderUpdates([{ id: draggedId, sort_order: draggedTask.sort_order }], 'sort_order');
         render();
       } else {
-        // Different bucket: replan to the target's day (same logic as divider drop).
+        // Different bucket: move to the target's section (same as a divider drop).
         clearBoardDropOver();
-        if (!targetDiv || !targetDiv.dataset.dropBucket) return;
-        const id = draggedId;
-        if (targetDiv.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
-        else if (targetDiv.dataset.dropBucket === 'later') {
-          openDatePicker('', d => { if (d) updateTask(id, { start_date: d }); }, targetDiv, dateOffset(7));
-        } else if (targetDiv.dataset.dropDay) {
-          updateTask(id, { start_date: targetDiv.dataset.dropDay });
-        }
+        if (targetDiv && targetDiv.dataset.dropBucket) dropOnBucket(draggedId, targetDiv);
       }
     }
 
+    touchDrop = {
+      target: el => {
+        const item = el.closest('.task-item');
+        if (item) return item.dataset.id === draggedId ? null : item;
+        const div = boardDivider(el);
+        return div && div.dataset.dropBucket ? div : null;
+      },
+      drop: target => target.classList.contains('task-item')
+        ? executeBoardItemDrop(target) : dropOnBucket(draggedId, target),
+    };
+
     listEl.querySelectorAll('.task-item[draggable]').forEach(item => {
       item.addEventListener('dragstart', e => {
+        // Touch has its own long-press drag (see touchDrop).
+        if (lastPointerType === 'touch') { e.preventDefault(); return; }
         draggedId = item.dataset.id;
         item.classList.add('task-dragging');
         e.dataTransfer.effectAllowed = 'move';
@@ -2009,9 +2111,27 @@
       render();
     }
 
+    // Dropping on a section divider inserts the task before the first
+    // reorderable task that follows it.
+    function dropOnDivider(div) {
+      let next = div.nextElementSibling;
+      while (next && !next.matches('.task-item:not([data-due-pinned])')) next = next.nextElementSibling;
+      if (next) executeDrop(next.dataset.id);
+    }
+    touchDrop = {
+      target: el => {
+        const item = el.closest('.task-item[draggable]');
+        if (item) return item.dataset.id === draggedId ? null : item;
+        return el.closest('.task-inbox-divider:not(.task-inbox-divider--only)');
+      },
+      drop: target => target.classList.contains('task-item')
+        ? executeDrop(target.dataset.id) : dropOnDivider(target),
+    };
+
     const items = listEl.querySelectorAll('.task-item[draggable]');
     items.forEach(item => {
       item.addEventListener('dragstart', e => {
+        if (lastPointerType === 'touch') { e.preventDefault(); return; }
         draggedId = item.dataset.id;
         item.classList.add('task-dragging');
         e.dataTransfer.effectAllowed = 'move';
@@ -2050,9 +2170,7 @@
       div.addEventListener('drop', e => {
         e.preventDefault();
         div.classList.remove('task-drag-over');
-        let next = div.nextElementSibling;
-        while (next && !next.matches('.task-item:not([data-due-pinned])')) next = next.nextElementSibling;
-        if (next) executeDrop(next.dataset.id);
+        dropOnDivider(div);
       });
     });
   }

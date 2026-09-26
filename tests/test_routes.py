@@ -94,6 +94,16 @@ class TestViewPage:
         assert "Hello world." in text
         assert "My Page" in text
 
+    def test_viewport_resizes_with_on_screen_keyboard(self, client, wiki_dir):
+        # Regression: without interactive-widget=resizes-content, Android
+        # Chrome's keyboard only shrinks the visual viewport, so the
+        # full-screen deck editor kept its height and its Save/Cancel bar sat
+        # behind the keyboard.
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        text = client.get("/page/my-page", headers=HOST).data.decode()
+        assert ('<meta name="viewport" content="width=device-width, initial-scale=1, '
+                'interactive-widget=resizes-content">') in text
+
     def test_missing_page_redirects_to_editor(self, client):
         resp = client.get("/page/does-not-exist", headers=HOST)
         assert resp.status_code in (301, 302)
