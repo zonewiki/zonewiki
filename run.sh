@@ -53,6 +53,17 @@ if [[ -n "$LEAF_VERSION" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]
 fi
 BUILD_ARGS=(--build-arg "LEAF_VERSION=${LEAF_VERSION:-unknown}")
 
+# Give the container the host's timezone, so "today" (due badge, deck
+# dates, scratch-note names, "Last changed") matches the user's day instead
+# of UTC. TZ in .env (e.g. Europe/Berlin) overrides; without either, UTC.
+TZ_FLAGS=()
+TZ_VAL=$(env_val TZ)
+if [[ -n "$TZ_VAL" ]]; then
+  TZ_FLAGS=(--tz "$TZ_VAL")
+elif [[ -e /etc/localtime ]]; then
+  TZ_FLAGS=(--tz local)
+fi
+
 # Rootless podman already maps in-container root to the host user, so files
 # written to the mounted volume are owned by the host user. Only a rootful
 # podman (host user is root) needs an explicit --user to match that.
@@ -78,6 +89,7 @@ case "${1:-up}" in
     podman run -d --name "$CONTAINER" --replace --restart unless-stopped \
       --log-driver k8s-file \
       "${USER_FLAGS[@]}" \
+      "${TZ_FLAGS[@]}" \
       -p "${BIND_ADDR}:5000:5000" \
       -v "$VOLUME" \
       -e FLASK_ENV=production \
