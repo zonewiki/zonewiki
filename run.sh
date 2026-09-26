@@ -96,7 +96,7 @@ case "${1:-up}" in
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests "$@"
-       python -m pytest -q "$@"' -- "${@:2}"
+       python3 -m pytest -q "$@"' -- "${@:2}"
     ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
