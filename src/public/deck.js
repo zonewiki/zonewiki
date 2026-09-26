@@ -271,6 +271,15 @@
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
   const initPage = appEl?.dataset.initPage || urlParams.get('page') || '';
+  // [[deck list=…]] shows one separate list and nothing else; every other
+  // embed shows only the tasks in no list. ?list= opens a list in the main
+  // deck when no page embeds it (/deck redirects there).
+  const initList = cleanList(appEl?.dataset.initList || urlParams.get('list'));
+  function cleanList(name) {
+    return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
+      .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  function inScope(t) { return (t.list || '') === initList; }
   const urlFilter = urlParams.get('filter') || '';       // explicit per-navigation override
   const embedFilter = appEl?.dataset.initFilter || '';   // [[deck filter=…]] — always wins when specified
   const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
@@ -353,7 +362,7 @@
 
   async function fetchDeck() {
     const res = await fetch('/api/deck');
-    tasks = await res.json();
+    tasks = (await res.json()).filter(inScope);
     render();
     refreshCompletedCount();
   }
@@ -364,7 +373,7 @@
   let completedCount = null;
   async function refreshCompletedCount() {
     try {
-      const res = await fetch('/api/deck/completed-count');
+      const res = await fetch('/api/deck/completed-count' + (initList ? `?list=${encodeURIComponent(initList)}` : ''));
       if (res.ok) { completedCount = (await res.json()).count; syncCompletedLink(); }
     } catch (_) {}
   }
@@ -385,7 +394,7 @@
   }
   async function loadCompleted() {
     const res = await fetch('/api/deck/completed');
-    const completed = await res.json();
+    const completed = (await res.json()).filter(inScope);
     const existingIds = new Set(tasks.map(t => t.id));
     for (const t of completed) {
       if (!existingIds.has(t.id)) tasks.push(t);
@@ -402,7 +411,8 @@
     });
     if (res.ok) {
       const task = await res.json();
-      tasks.push(task);
+      if (inScope(task)) tasks.push(task);
+      else showNotice(listMovedNotice(task));
       render();
       window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
@@ -421,7 +431,10 @@
     if (res.ok) {
       const updated = await res.json();
       const idx = tasks.findIndex(t => t.id === id);
-      if (idx !== -1) tasks[idx] = updated;
+      if (idx !== -1) {
+        if (inScope(updated)) tasks[idx] = updated;
+        else { tasks.splice(idx, 1); showNotice(listMovedNotice(updated)); }
+      }
       // Completion/skip/reopen of a recurring task spawns or removes an
       // instance server-side — re-fetch to pick it up.
       if (updated.recurrence && (data.completed || data.skip || 'wont_do' in data)) {
@@ -435,6 +448,11 @@
     }
     await noticeFromResponse(res, 'Update rejected');
     return null;
+  }
+
+  // A task saved into another list leaves this view; say where it went.
+  function listMovedNotice(task) {
+    return task.list ? `Saved to list “${task.list}”.` : 'Moved to the main deck.';
   }
 
   async function deleteTask(id) {
@@ -1839,6 +1857,8 @@
     // A new task in a [[deck page=…]] embed belongs to that page; otherwise it
     // would vanish from the embed as soon as it is saved.
     document.getElementById('task-edit-page' + sfx).value = task ? task.page || '' : initPage;
+    // Likewise a new task in a [[deck list=…]] embed belongs to that list.
+    document.getElementById('task-edit-list' + sfx).value = task ? task.list || '' : initList;
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
     const createdEl = document.getElementById('task-edit-created' + sfx);
@@ -1970,6 +1990,7 @@
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
       page: document.getElementById('task-edit-page' + sfx).value.trim().replace(/^\/?page\//, '') || null,
+      list: cleanList(document.getElementById('task-edit-list' + sfx).value) || null,
     };
     // Shorthand in a new task's title wins over the fields (the preview said so).
     const quick = !id && quickParse();

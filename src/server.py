@@ -1098,7 +1098,6 @@ def _plain_task_title(title: str) -> str:
 
 def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict]) -> tuple[str, str]:
     """Return (bl_html, bl_chip) for the backlinks sections and the header chip."""
-    from urllib.parse import urlencode
     bl_html = ""
     bl_chip = ""
     if backlinks:
@@ -1117,7 +1116,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
         )
     if task_backlinks:
         tbl_items = "".join(
-            f'<li><a href="/deck?{html.escape(urlencode({"task": t["id"], "filter": "open"}))}">'
+            f'<li><a href="{html.escape(_task_href(t["id"], "open", t.get("list")))}">'
             f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
             for t in task_backlinks
         )
@@ -2094,7 +2093,7 @@ def do_search(q: str) -> list[dict]:
             "title": d["title"],
             "excerpt": search.make_excerpt(d["excerpt_text"], q),
         }
-        for k in ("type", "task_id", "status"):
+        for k in ("type", "task_id", "status", "list"):
             if d.get(k) is not None:
                 r[k] = d[k]
         r["href"] = _result_href(r)
@@ -2136,12 +2135,16 @@ def _deck_embeds(md_file: Path, slug: str) -> list[dict]:
     return embeds
 
 
-def deck_page_slug() -> str | None:
+def deck_page_slug(list_name: str | None = None) -> str | None:
     """The page to open for "the deck": deck.md if it embeds one, else the page
-    whose embed hides the fewest tasks (no tag=/page= filter), then by slug."""
+    whose embed hides the fewest tasks (no tag=/page= filter), then by slug.
+    With list_name, only embeds of that list count ([[deck list=…]]); without
+    it, list embeds don't, since they show none of the main deck's tasks."""
     best = None
     for md_file, slug in iter_pages():
         for params in _deck_embeds(md_file, slug):
+            if deck_module._clean_list(params.get("list")) != list_name:
+                continue
             rank = (slug != "deck", "page" in params, "tag" in params, slug)
             if best is None or rank < best:
                 best = rank
@@ -2150,9 +2153,28 @@ def deck_page_slug() -> str | None:
 
 @app.get("/deck")
 def open_deck():
-    slug = deck_page_slug() or "deck"   # no embed anywhere: offer to create deck.md
-    query = request.query_string.decode()
+    args = request.args.to_dict()
+    list_name = deck_module._clean_list(args.get("list"))
+    slug = deck_page_slug(list_name) if list_name else None
+    if slug:
+        # The page embeds the list itself; a ?list= left in the URL would
+        # also switch any plain [[deck]] on that page to the list.
+        del args["list"]
+    else:
+        # No page embeds the list: the main deck shows it via ?list=.
+        slug = deck_page_slug() or "deck"   # no embed anywhere: offer to create deck.md
+    from urllib.parse import urlencode
+    query = urlencode(args)
     return redirect(f"/page/{slug}" + (f"?{query}" if query else ""))
+
+
+def _task_href(task_id: str, tab: str, list_name: str | None) -> str:
+    """Link that opens one task in the deck (or its list's page) on `tab`."""
+    from urllib.parse import urlencode
+    params = {"task": task_id, "filter": tab}
+    if list_name:
+        params["list"] = list_name
+    return "/deck?" + urlencode(params)
 
 
 def _result_href(r: dict) -> str:
@@ -2161,9 +2183,8 @@ def _result_href(r: dict) -> str:
     highlighted (`?task=<id>`, handled by deck.js) rather than the bare _deck
     slug. By id, not title: titles can repeat or contain #words."""
     if r.get("type") == "task":
-        from urllib.parse import urlencode
         tab = "completed" if r.get("status") == "done" else "open"
-        return "/deck?" + urlencode({"task": r["task_id"], "filter": tab})
+        return _task_href(r["task_id"], tab, r.get("list"))
     return f"/page/{r['slug']}"
 
 

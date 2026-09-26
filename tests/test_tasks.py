@@ -1774,3 +1774,61 @@ class TestTagCleaning:
         before = path.stat().st_mtime_ns
         deck_module._migrate_deck_files()
         assert path.stat().st_mtime_ns == before
+
+
+# ---------- Separate lists ----------
+
+
+class TestLists:
+    """Tasks with a `list` live only in their [[deck list=…]] embed: the main
+    deck, due badge and completed count leave them out."""
+
+    def test_list_is_cleaned_and_cleared(self, client):
+        task = create_task(client, list="  #Grocery Run ").get_json()
+        assert task["list"] == "grocery-run"
+        resp = client.put(f"/api/deck/{task['id']}", json={"list": ""})
+        assert resp.get_json()["list"] is None
+
+    def test_list_must_be_string(self, client):
+        assert create_task(client, list=5).status_code == 400
+
+    def test_new_task_has_no_list(self, client):
+        assert create_task(client).get_json()["list"] is None
+
+    def test_due_count_ignores_list_tasks(self, client):
+        today = date.today().isoformat()
+        create_task(client, due_date=today)
+        create_task(client, due_date=today, list="groceries")
+        assert client.get("/api/deck/due-count").get_json()["count"] == 1
+
+    def test_completed_count_per_list(self, client):
+        for lst in (None, "groceries", "groceries"):
+            tid = create_task(client, list=lst).get_json()["id"]
+            client.put(f"/api/deck/{tid}", json={"completed": True})
+        assert client.get("/api/deck/completed-count").get_json()["count"] == 1
+        assert client.get("/api/deck/completed-count?list=Groceries").get_json()["count"] == 2
+
+    def test_recurring_spawn_keeps_list(self, client):
+        tid = create_task(client, list="chores", due_date=date.today().isoformat(),
+                          rec_type="weekly").get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        spawned = [t for t in client.get("/api/deck").get_json() if t["spawned_from"] == tid]
+        assert spawned and spawned[0]["list"] == "chores"
+
+    def test_restore_keeps_list(self, client):
+        task = create_task(client, list="chores").get_json()
+        client.delete(f"/api/deck/{task['id']}")
+        restored = client.post("/api/deck/restore", json={"tasks": [task]}).get_json()
+        assert restored[0]["list"] == "chores"
+
+    def test_embed_carries_list_and_suggestions(self, client, wiki_dir):
+        create_task(client, list="books")
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=Groceries]]\n", encoding="utf-8")
+        body = client.get("/page/shop").get_data(as_text=True)
+        assert 'data-init-list="groceries"' in body
+        assert '<option value="books">' in body
+
+    def test_search_links_to_list(self, client):
+        tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
+        hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
+        assert hit["href"] == f"/deck?task={tid}&filter=open&list=groceries"

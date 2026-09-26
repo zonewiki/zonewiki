@@ -141,6 +141,13 @@ def _clean_tags(tags) -> list[str]:
     return out
 
 
+def _clean_list(name) -> str | None:
+    """A list name as stored and matched: trimmed, lowercase, one word
+    (whitespace becomes "-", like tags), no leading "#". Empty means no list."""
+    name = re.sub(r"\s+", "-", str(name or "").strip().lstrip("#").strip().lower()).strip("-")
+    return name or None
+
+
 def _normalize_task(task: dict) -> bool:
     """Upgrade a task in place to the current format; True if it changed.
 
@@ -374,6 +381,7 @@ def _new_task(**overrides) -> dict:
         "sort_order": None,
         "recurrence": None,
         "page": None,
+        "list": None,
         "spawned_from": None,
     }
     task.update(overrides)
@@ -460,6 +468,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         sort_order=task.get("sort_order", 0),
         recurrence=next_rec,
         page=task.get("page"),
+        list=task.get("list"),
         spawned_from=task["id"],
     )
 
@@ -537,12 +546,24 @@ _FILTER_ALIASES = {
 }
 
 
+def known_lists() -> list[str]:
+    """Names of every list some task (open or completed) belongs to."""
+    return sorted({t["list"] for t in _read_all() if t.get("list")})
+
+
+def in_list(task: dict, name: str | None) -> bool:
+    """Whether task belongs to the view of list `name` (None: the main deck,
+    which holds exactly the tasks that are in no list)."""
+    return (task.get("list") or None) == (name or None)
+
+
 def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -> str:
     """Render the full interactive deck app HTML for embedding in a wiki page.
 
     instance_id differentiates multiple embeds on the same page.
     """
     tag_val = params.get("tag", "")
+    list_val = _clean_list(params.get("list")) or ""
     page_val = params.get("page", "")
     if page_val == "self" and page_slug:
         page_val = page_slug
@@ -566,11 +587,14 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     init_tag = html.escape(tag_val)
     init_page = html.escape(page_val)
     init_filter = html.escape(filt)
+    # Every list name in use, for the edit modal's List suggestions.
+    list_options = "".join(f'<option value="{html.escape(n)}">'
+                           for n in known_lists())
 
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-list="{html.escape(list_val)}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
@@ -614,6 +638,11 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <label for="task-edit-page{sfx}">Page <span class="field-hint">(linked wiki page)</span></label>
       <input type="text" id="task-edit-page{sfx}" name="page" list="task-edit-pages{sfx}" autocomplete="off" placeholder="—">
       <datalist id="task-edit-pages{sfx}"></datalist>
+    </div>
+    <div class="task-field">
+      <label for="task-edit-list{sfx}">List <span class="field-hint">(separate list: shown only where its [[deck list=…]] is embedded)</span></label>
+      <input type="text" id="task-edit-list{sfx}" name="list" list="task-edit-lists{sfx}" autocomplete="off" placeholder="—">
+      <datalist id="task-edit-lists{sfx}">{list_options}</datalist>
     </div>
     <div class="task-field-row task-row-dates">
       <div class="task-field">
@@ -755,7 +784,8 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
                     found = True
                     break
         if found:
-            results.append({"id": task["id"], "title": task.get("title", "")})
+            results.append({"id": task["id"], "title": task.get("title", ""),
+                            "list": task.get("list")})
     return results
 
 
@@ -803,6 +833,7 @@ def task_search_docs() -> list[dict]:
             "type": "task",
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",
+            "list": task.get("list"),
         })
     _task_docs_cache["key"] = key
     _task_docs_cache["docs"] = docs
@@ -838,8 +869,10 @@ def api_get_deck_completed():
 
 @bp.get("/api/deck/completed-count")
 def api_deck_completed_count():
-    """How many tasks the Completed view would list (for its link's label)."""
-    return jsonify({"count": len(_read_completed())})
+    """How many tasks the Completed view would list (for its link's label):
+    those of list ?list=, or without one for the main deck."""
+    name = _clean_list(request.args.get("list"))
+    return jsonify({"count": sum(in_list(t, name) for t in _read_completed())})
 
 
 @bp.get("/api/deck/due-count")
@@ -848,7 +881,8 @@ def api_tasks_due_count():
     overdue = today_count = 0
     tasks = _read_deck()
     for t in tasks:
-        if not t.get("due_date"):
+        # Tasks in a separate list stay on their list's page, out of the badge.
+        if not t.get("due_date") or t.get("list"):
             continue
         if t["due_date"] < today:
             overdue += 1
@@ -891,6 +925,8 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["focus_order"] = _as_order(data["focus_order"], "focus_order")
     if "page" in data:
         task["page"] = _as_str(data["page"] or "", "page").strip() or None
+    if "list" in data:
+        task["list"] = _clean_list(_as_str(data["list"] or "", "list"))
     old_start_date = task.get("start_date")
     old_rec = task.get("recurrence") or {}
     if "start_date" in data:
@@ -1042,6 +1078,8 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     for field in ("created_at", "completed_at", "spawned_from", "page"):
         if isinstance(snap.get(field), str) and snap[field]:
             task[field] = snap[field]
+    if isinstance(snap.get("list"), str):
+        task["list"] = _clean_list(snap["list"])
     if isinstance(snap.get("sort_order"), int):
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))

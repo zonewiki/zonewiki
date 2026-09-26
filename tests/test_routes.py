@@ -1283,6 +1283,28 @@ class TestDeckRedirect:
         os.utime(p, (t, t))   # mtime-keyed cache must notice
         assert self.go(client) == "/page/later"
 
+    def test_list_goes_to_page_embedding_it(self, client, wiki_dir):
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck]]\n")
+        write_page(wiki_dir, "shop", "# Shop\n\n[[deck list=groceries]]\n")
+        # The list param is dropped: the page's own embed selects the list.
+        assert self.go(client, "?task=abc&list=Groceries") == "/page/shop?task=abc"
+
+    def test_list_embed_is_never_the_main_deck(self, client, wiki_dir):
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=groceries]]\n")
+        write_page(wiki_dir, "zz", "# Z\n\n[[deck tag=x]]\n")
+        assert self.go(client) == "/page/zz"
+
+    def test_unembedded_list_opens_in_main_deck(self, client, wiki_dir):
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck]]\n")
+        assert self.go(client, "?list=books") == "/page/deck?list=books"
+
+    def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        tid = client.post("/api/deck", json={"title": "Seeds for [[Garden]]", "list": "shop"},
+                          headers=HOST).get_json()["id"]
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert f'href="/deck?task={tid}&amp;filter=open&amp;list=shop"' in body
+
     def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)

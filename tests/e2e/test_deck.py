@@ -489,3 +489,49 @@ def test_quick_add_is_not_applied_when_editing(page, wiki):
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Old task tomorrow")).to_be_visible()   # saved, title kept whole
     assert task_by_title(page, "Old task tomorrow")["start_date"] is None
+
+
+# ── Separate lists ([[deck list=…]]) ──────────────────────────────────────────
+
+
+def test_list_embed_shows_only_its_tasks(page, wiki):
+    page.request.post("/api/deck", data={"title": "Main task"})
+    page.request.post("/api/deck", data={"title": "Oat milk", "list": "groceries"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+
+    page.goto("/page/deck")
+    expect(card(page, "Main task")).to_be_visible()
+    expect(card(page, "Oat milk")).to_have_count(0)
+    open_tab(page, "due")
+    expect(card(page, "Main task")).to_be_visible()
+    expect(card(page, "Oat milk")).to_have_count(0)
+
+    page.goto("/page/shop")
+    expect(card(page, "Oat milk")).to_be_visible()
+    expect(card(page, "Main task")).to_have_count(0)
+
+
+def test_new_task_in_list_embed_joins_list(page, wiki):
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    page.goto("/page/shop")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    expect(modal.locator("#task-edit-list")).to_have_value("groceries")
+    modal.locator("#task-edit-title").fill("Bread")
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Bread")).to_be_visible()
+    wait_for_field(page, "Bread", "list", "groceries")
+
+
+def test_moving_task_out_of_list_removes_it(page, wiki):
+    page.request.post("/api/deck", data={"title": "Oat milk", "list": "groceries"})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    page.goto("/page/shop")
+    card(page, "Oat milk").dblclick()
+    modal = page.locator("#task-edit-modal")
+    modal.locator("#task-edit-list").fill("")
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Oat milk")).to_have_count(0)
+    expect(page.get_by_text("Moved to the main deck.")).to_be_visible()
+    wait_for_field(page, "Oat milk", "list", None)
