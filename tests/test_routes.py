@@ -1289,3 +1289,48 @@ class TestDeckRedirect:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert 'href="/deck?filter=focus"' in body
         assert "/page/deck" not in body
+
+
+# ===========================================================================
+# Cross-site request forgery
+# ===========================================================================
+
+class TestCrossSiteWrites:
+    """Regression: any website could post a form to localhost:5000 and delete
+    or overwrite pages (or deck tasks); the Host check alone let it through."""
+
+    EVIL = {**HOST, "Origin": "https://evil.example"}
+    SAME = {**HOST, "Origin": "http://localhost:5000"}
+
+    def test_forged_delete_and_edit_are_refused(self, client, wiki_dir):
+        write_page(wiki_dir, "victim", "# Victim\n\nkeep me\n")
+        assert client.post("/delete/victim", headers=self.EVIL).status_code == 403
+        resp = client.post("/edit/victim", data={"content": "<script>x</script>"}, headers=self.EVIL)
+        assert resp.status_code == 403
+        assert (wiki_dir / "victim.md").read_text(encoding="utf-8") == "# Victim\n\nkeep me\n"
+
+    def test_forged_deck_writes_are_refused(self, client, wiki_dir):
+        # text/plain: a cross-site fetch/form can send it without a preflight.
+        tid = client.post("/api/deck", json={"title": "Keep"}, headers=HOST).get_json()["id"]
+        resp = client.post("/api/deck", data='{"title": "Spam"}', content_type="text/plain", headers=self.EVIL)
+        assert resp.status_code == 403
+        assert client.delete(f"/api/deck/{tid}", headers=self.EVIL).status_code == 403
+        assert client.put(f"/api/deck/{tid}", json={"title": "x"}, headers=self.EVIL).status_code == 403
+        assert [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()] == ["Keep"]
+
+    def test_null_origin_is_refused(self, client, wiki_dir):
+        # A sandboxed iframe on an attacker's page posts with Origin: null.
+        write_page(wiki_dir, "victim", "# Victim\n")
+        assert client.post("/delete/victim", headers={**HOST, "Origin": "null"}).status_code == 403
+        assert (wiki_dir / "victim.md").exists()
+
+    def test_same_origin_and_originless_writes_work(self, client, wiki_dir):
+        write_page(wiki_dir, "a", "# A\n")
+        write_page(wiki_dir, "b", "# B\n")
+        assert client.post("/delete/a", headers=self.SAME).status_code == 302
+        assert client.post("/delete/b", headers=HOST).status_code == 302   # curl, scripts
+        assert client.post("/api/deck", json={"title": "Ok"}, headers=self.SAME).status_code == 201
+
+    def test_reads_are_not_affected(self, client, wiki_dir):
+        write_page(wiki_dir, "r", "# R\n")
+        assert client.get("/page/r", headers=self.EVIL).status_code == 200

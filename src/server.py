@@ -11,6 +11,7 @@ import subprocess
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
@@ -41,6 +42,27 @@ PUBLIC_DIR = Path(__file__).parent / "public"
 def check_host():
     if not ALLOW_REMOTE and request.host not in ALLOWED_HOSTS:
         abort(400)
+
+# Cross-site request forgery: without it, any page open in the browser could
+# post a form to http://localhost:5000/delete/<page> (or /edit, or the deck
+# API, which takes text/plain bodies without a CORS preflight), and the Host
+# check above passes because the Host really is localhost. Browsers send
+# Origin on every cross-site POST, so a write whose Origin names another site,
+# or is "null" (a sandboxed iframe), is refused. Leaf's own forms, fetches
+# and the pagehide beacon are same-origin; tools like curl send no Origin.
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.before_request
+def check_origin():
+    if request.method not in UNSAFE_METHODS:
+        return
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return
+    if origin == "null" or urlparse(origin).netloc != request.host:
+        abort(403, description="Cross-site request refused")
+
 
 @app.before_request
 def check_auth():
