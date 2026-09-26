@@ -28,7 +28,7 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 500
 
 def open_board(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_tab(page, "due")
     expect(page.locator(".board-day-divider").first).to_be_visible()
 
@@ -73,7 +73,7 @@ def test_all_tab_unplanned_toggle(page, wiki):
     page.request.post("/api/deck", data={"title": "Unplanned one"})
     page.request.post("/api/deck", data={"title": "Planned one", "start_date": tomorrow()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_tab(page, "open")
     toggle = page.locator("#task-unplanned")
     expect(toggle).not_to_be_checked()  # off by default: Open shows every open task
@@ -95,7 +95,7 @@ def test_old_stored_default_does_not_keep_toggle_on(page, wiki):
     # v2 of the preference defaulted on; browsers that stored it must now see
     # the new default (off) rather than a leftover "1".
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     page.evaluate("k => localStorage.setItem(k, '1')", "leaf-deck-unplanned-v2:/page/deck#0")
     page.reload()
     open_tab(page, "open")
@@ -116,8 +116,10 @@ def test_view_tabs_segmented_control(page, wiki):
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
     expect(tabs).to_have_text(["Open", "Plan", "Focus"])
-    # Open is the default view and the only one marked active.
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
+    # Focus is the default view and the only one marked active.
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
+    tabs.nth(0).click()
     expect(page.locator("#task-unplanned-wrap")).to_be_visible()
 
     tabs.nth(1).click()
@@ -154,7 +156,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
         page.request.post("/api/deck", data={"title": title, "start_date":
                                               (date.today() + timedelta(days=start)).isoformat()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_tab(page, "focus")
     expect(card(page, "Started last week")).to_be_visible()
     expect(card(page, "Starts today")).to_be_visible()
@@ -164,7 +166,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
 
 def test_empty_focus_offers_planning(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_tab(page, "focus")
     expect(page.locator(".tasks-empty")).to_contain_text("Nothing planned for today")
     page.get_by_role("button", name="Plan your day").click()
@@ -179,7 +181,7 @@ def test_past_start_date_reads_since(page, wiki):
     page.request.post("/api/deck", data={"title": "Started", "start_date": start.isoformat()})
     page.request.post("/api/deck", data={"title": "Started last year", "start_date": long_ago.isoformat()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_tab(page, "focus")
     chip = card(page, "Started").locator(".task-focus-info")
     expect(chip).to_have_text(f"📅 since {start.strftime('%b')} {start.day}")
@@ -228,7 +230,7 @@ def open_edit(page, title: str):
 def test_modal_days_before_due_sets_start_date(page, wiki):
     page.request.post("/api/deck", data={"title": "Report", "due_date": "2099-01-10"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     modal = open_edit(page, "Report")
     lead = modal.locator("#task-edit-lead")
     expect(lead).to_have_value("")
@@ -246,7 +248,7 @@ def test_modal_days_before_due_sets_start_date(page, wiki):
 def test_modal_lead_disabled_without_due_date(page, wiki):
     page.request.post("/api/deck", data={"title": "Undated"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     open_edit(page, "Undated")
     expect(page.locator("#task-edit-lead")).to_be_disabled()
 
@@ -257,7 +259,7 @@ def test_modal_lead_disabled_without_due_date(page, wiki):
 def _deck_with_one_task(page, wiki):
     page.request.post("/api/deck", data={"title": "Loaded"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     expect(card(page, "Loaded")).to_be_visible()
     # Changed elsewhere (another device) while this tab sat in the background.
     page.request.post("/api/deck", data={"title": "Added elsewhere"})
@@ -344,7 +346,7 @@ def test_task_link_to_missing_task_says_so(page, wiki):
 def test_list_field_moves_task_into_list(page, wiki):
     page.request.post("/api/deck", data={"title": "Prune"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     modal = open_edit(page, "Prune")
     # Usually set by the embed, so tucked into a closed section.
     expect(modal.locator("#task-edit-list")).to_be_hidden()
@@ -395,7 +397,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
 def test_completed_count_follows_completion(page, wiki):
     page.request.post("/api/deck", data={"title": "Finish me"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (0) →")
     card(page, "Finish me").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
@@ -417,7 +419,7 @@ def test_filter_points_to_matches_in_completed(page, wiki):
         tid = page.request.post("/api/deck", data={"title": title}).json()["id"]
         page.request.put(f"/api/deck/{tid}", data={"completed": True})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     link = page.locator("#task-completed-link")
     search = page.locator("#task-filter-search")
 
@@ -446,12 +448,25 @@ def test_filter_points_to_matches_in_completed(page, wiki):
     expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
 
 
+def test_new_task_on_default_focus_starts_today(page, wiki):
+    # A plain deck opens on Focus; a task added there starts today, so it
+    # stays in the view instead of vanishing on save.
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    page.locator("#task-add-btn").click()
+    page.locator("#task-edit-title").fill("Water plants")
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+    expect(card(page, "Water plants")).to_be_visible()
+    assert task_by_title(page, "Water plants")["start_date"] == date.today().isoformat()
+
+
 # Quick-add shorthand in a new task's title.
 
 def test_quick_add_shorthand_fills_fields(page, wiki):
     from datetime import date as _date
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     title = modal.locator("#task-edit-title")
@@ -471,7 +486,7 @@ def test_quick_add_shorthand_fills_fields(page, wiki):
 def test_quick_add_is_not_applied_when_editing(page, wiki):
     page.request.post("/api/deck", data={"title": "Old task"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     modal = open_edit(page, "Old task")
     modal.locator("#task-edit-title").fill("Old task tomorrow")
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
@@ -489,21 +504,21 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
 
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_have_count(0)
     open_tab(page, "due")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_have_count(0)
 
-    page.goto("/page/shop")
+    page.goto("/page/shop?filter=open")
     expect(card(page, "Oat milk")).to_be_visible()
     expect(card(page, "Main task")).to_have_count(0)
 
 
 def test_new_task_in_list_embed_joins_list(page, wiki):
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
-    page.goto("/page/shop")
+    page.goto("/page/shop?filter=open")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     expect(modal.locator("#task-edit-list")).to_have_value("groceries")
@@ -517,7 +532,7 @@ def test_new_task_in_list_embed_joins_list(page, wiki):
 def test_moving_task_out_of_list_removes_it(page, wiki):
     page.request.post("/api/deck", data={"title": "Oat milk", "list": "groceries"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
-    page.goto("/page/shop")
+    page.goto("/page/shop?filter=open")
     card(page, "Oat milk").dblclick()
     modal = page.locator("#task-edit-modal")
     modal.locator("#task-edit-links summary").click()

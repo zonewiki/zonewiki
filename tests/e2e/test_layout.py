@@ -163,7 +163,7 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     # the labels sat visibly high (caps 1.3px above centre).
     pg = new_page(viewport=viewport)
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck")
+    pg.goto("/page/deck?filter=open")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
 

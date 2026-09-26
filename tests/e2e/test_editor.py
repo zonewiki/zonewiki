@@ -168,7 +168,7 @@ def test_url_paste_asks_for_a_name_and_undoes(page, wiki):
 
 def test_url_paste_in_task_notes_undoes(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck")
+    page.goto("/page/deck?filter=open")
     page.locator("#task-add-btn").click()
     notes = page.locator("#task-edit-desc")
     notes.click()

@@ -70,7 +70,7 @@
 
   let tasks = [];
   let completedLoaded = false;
-  let activeFilter = 'open';
+  let activeFilter = 'focus';
   let draggedId = null;
   let selectedId  = null;
   let selectedIds = new Set();
@@ -1555,7 +1555,7 @@
   const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-filter]'));
   const VIEWS = ['open', 'due', 'focus', 'completed'];
   // The tab to return to from Completed (the link's "back" state).
-  let lastTab = 'open';
+  let lastTab = 'focus';
 
   // While the filter field is in use, the link counts the completed tasks it
   // matches ("✓ 2 matches in Completed →"), so a search that comes up empty
@@ -2430,7 +2430,7 @@
   const initSearch = urlParams.get('search') || '';
   if (filterSearch) filterSearch.value = [tagParamToQuery(initTag), initSearch].filter(Boolean).join(' ');
   // Precedence: URL ?filter= > embed filter (always wins when specified) >
-  // tab remembered this session > All default. So a [[deck filter=…]] embed
+  // tab remembered this session > Focus default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
   // The canonical tab names are the <option> values (focus/due/open/completed);
@@ -2442,7 +2442,7 @@
     plan: 'due', upcoming: 'due', due: 'due',
     completed: 'completed', done: 'completed',
   };
-  const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'open';
+  const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'focus';
   if (VIEWS.includes(restoreFilter)) {
     activeFilter = restoreFilter;
     if (restoreFilter !== 'completed') lastTab = restoreFilter;
