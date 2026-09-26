@@ -56,8 +56,7 @@ def test_filter_field_tag_autocomplete(page, wiki):
     field.press_sequentially("fix #ho")
     ac = page.locator(".tag-ac-dropdown")
     expect(ac.locator(".tag-ac-item")).to_have_text(["#home"])
-    field.press("ArrowDown")
-    field.press("Enter")
+    field.press("Enter")   # the first (best) match is preselected
     expect(field).to_have_value("fix #home ")
     expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
     # Tags already in the filter are not suggested again.
@@ -74,7 +73,6 @@ def test_tag_suggestions_after_free_text(page, wiki):
     field.click()
     field.press_sequentially("some text #ho")
     expect(page.locator(".tag-ac-dropdown .tag-ac-item")).to_have_text(["#home"])
-    field.press("ArrowDown")
     field.press("Enter")
     expect(field).to_have_value("some text #home ")
     # Other tag words still narrow them: with #home set, only #work remains
@@ -239,3 +237,179 @@ def test_quick_undo_never_overtakes_the_toggle(page, wiki):
     page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
     page.wait_for_timeout(500)
     assert "- [ ] Call the plumber" in wiki.read("todo")
+
+
+# ── Tag completion: the best match is preselected everywhere ─────────────────
+
+def seed_tags(page, wiki):
+    """work on 3 tasks, workshop and wood on 1 each, home on 1."""
+    for title, tags in (("A", "work"), ("B", "work"), ("C", "work,workshop"),
+                        ("D", "wood"), ("E", "home")):
+        page.request.post("/api/deck", data={"title": title, "tags": tags})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+
+
+def test_filter_tab_completes_to_best_match(page, wiki):
+    seed_tags(page, wiki)
+    field = page.locator("#task-filter-search")
+    field.click()
+    field.press_sequentially("#wo")
+    items = page.locator(".tag-ac-dropdown .tag-ac-item")
+    # Prefix matches, most-used first; the first is highlighted from the start.
+    expect(items).to_have_text(["#work", "#wood", "#workshop"])
+    expect(items.first).to_have_class(re.compile(r"\bselected\b"))
+    field.press("Tab")
+    expect(field).to_have_value("#work ")
+    expect(field).to_be_focused()
+
+
+def test_exact_match_comes_first(page, wiki):
+    seed_tags(page, wiki)
+    for title in ("F", "G", "H", "I"):   # workshop now more used than work
+        page.request.post("/api/deck", data={"title": title, "tags": "workshop"})
+    page.reload()
+    field = page.locator("#task-filter-search")
+    field.click()
+    field.press_sequentially("#work")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item").first).to_have_text("#work")
+
+
+def test_hover_moves_the_highlight(page, wiki):
+    seed_tags(page, wiki)
+    field = page.locator("#task-filter-search")
+    field.click()
+    field.press_sequentially("#wo")
+    items = page.locator(".tag-ac-dropdown .tag-ac-item")
+    items.nth(1).hover()
+    expect(items.nth(1)).to_have_class(re.compile(r"\bselected\b"))
+    expect(items.first).not_to_have_class(re.compile(r"\bselected\b"))
+
+
+def test_edit_modal_tags_complete_and_chain(page, wiki):
+    seed_tags(page, wiki)
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    modal.locator("#task-edit-title").fill("Chained")
+    tags = modal.locator("#task-edit-tags")
+    tags.click()
+    tags.press_sequentially("wo")
+    tags.press("Enter")                      # completes; does not save
+    expect(tags).to_have_value("work, ")
+    expect(modal).to_be_visible()
+    tags.press_sequentially("ho")
+    tags.press("Tab")
+    expect(tags).to_have_value("work, home, ")
+    # Esc with the dropdown open closes the dropdown, not the dialog.
+    tags.press_sequentially("wo")
+    tags.press("Escape")
+    expect(page.locator(".tag-ac-dropdown")).to_have_count(0)
+    expect(modal).to_be_visible()
+    tags.fill("work, home, ")
+    modal.get_by_role("button", name="Save").click()
+    expect(page.locator(".task-item").filter(has_text="Chained")).to_be_visible()
+    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Chained")
+    assert t["tags"] == ["work", "home"]
+
+
+def test_title_shorthand_tag_is_suggested(page, wiki):
+    seed_tags(page, wiki)
+    page.locator("#task-add-btn").click()
+    title = page.locator("#task-edit-title")
+    title.click()
+    title.press_sequentially("Call Bob #wo")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item").first).to_have_text("#work")
+    title.press("Tab")
+    expect(title).to_have_value("Call Bob #work ")
+    expect(page.locator("#task-edit-quick")).to_have_text("#work")
+
+
+def test_bulk_remove_suggests_only_tags_of_selected_tasks(page, wiki):
+    seed_tags(page, wiki)
+    card = page.locator(".task-item").filter(has=page.get_by_text("D", exact=True))
+    card.locator(".task-title").click()          # select the "wood" task
+    page.keyboard.press("Shift+T")               # remove-tag dialog
+    inp = page.locator("#bulk-tag-input")
+    expect(inp).to_be_focused()
+    inp.press_sequentially("w")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item")).to_have_text(["#wood"])
+    inp.press("Enter")                           # completes and applies
+    expect(inp).to_have_count(0)
+    # The dialog closes before the request finishes: wait for the card.
+    expect(card.locator(".task-tag")).to_have_count(0)
+    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "D")
+    assert t["tags"] == []
+
+
+def test_tag_with_space_is_findable_in_filter(page, wiki):
+    # Regression: a tag saved as "locallm xxx" never matched "#locallm xxx",
+    # since the filter splits on spaces. Tags are now one word each.
+    page.request.post("/api/deck", data={"title": "Try models", "tags": "locallm xxx"})
+    page.request.post("/api/deck", data={"title": "Other"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    field = page.locator("#task-filter-search")
+    field.click()
+    field.press_sequentially("#locallm")
+    field.press("Tab")
+    expect(field).to_have_value("#locallm-xxx ")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Try models"])
+
+
+def test_tag_fields_do_not_take_spaces(page, wiki):
+    seed_tags(page, wiki)
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    tags = modal.locator("#task-edit-tags")
+    tags.click()
+    tags.press_sequentially("local llm")
+    expect(tags).to_have_value("local-llm")
+    tags.press_sequentially(", x y")
+    expect(tags).to_have_value("local-llm, x-y")
+    # Paste goes through the same cleaning.
+    tags.fill("")
+    tags.evaluate("el => { el.value = 'a b ,  c'; el.dispatchEvent(new Event('input')); }")
+    expect(tags).to_have_value("a-b, c")
+    modal.locator("#task-edit-title").fill("Spaced")
+    modal.get_by_role("button", name="Save").click()
+    expect(page.locator(".task-item").filter(has_text="Spaced")).to_be_visible()
+    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Spaced")
+    assert t["tags"] == ["a-b", "c"]
+
+    # The bulk tag dialog (a single tag) too.
+    card = page.locator(".task-item").filter(has=page.get_by_text("E", exact=True))
+    card.locator(".task-title").click()
+    page.keyboard.press("t")
+    inp = page.locator("#bulk-tag-input")
+    inp.press_sequentially("new tag")
+    expect(inp).to_have_value("new-tag")
+
+
+def test_backspace_in_tags_field(page, wiki):
+    # Regression: the cleanup re-added the space after a comma, so Backspace
+    # could not get past ", ".
+    seed_tags(page, wiki)
+    page.locator("#task-add-btn").click()
+    tags = page.locator("#task-edit-tags")
+    tags.click()
+    tags.press_sequentially("zz,")
+    expect(tags).to_have_value("zz, ")
+    tags.press("Backspace")
+    expect(tags).to_have_value("zz,")
+    tags.press("Backspace")
+    expect(tags).to_have_value("zz")
+    tags.press_sequentially("a b")
+    expect(tags).to_have_value("zza-b")
+    for _ in range(2):
+        tags.press("Backspace")
+    expect(tags).to_have_value("zza")
+    # Deleting in the middle keeps the caret where it was.
+    tags.fill("")
+    tags.press_sequentially("one, two")
+    for _ in range(3):
+        tags.press("ArrowLeft")
+    tags.press("Backspace")
+    tags.press("Backspace")
+    expect(tags).to_have_value("onetwo")
+    tags.press_sequentially("-")
+    expect(tags).to_have_value("one-two")

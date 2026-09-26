@@ -425,3 +425,67 @@ def test_embed_filter_completed_still_opens_completed(page, wiki):
     page.goto("/page/log")
     expect(card(page, "Old work")).to_be_visible()
     expect(page.locator("#task-completed-link")).to_have_text("← Back to open tasks")
+
+
+def test_filter_points_to_matches_in_completed(page, wiki):
+    page.request.post("/api/deck", data={"title": "Buy milk"})
+    for title in ("Buy bread", "Fix bike"):
+        tid = page.request.post("/api/deck", data={"title": title}).json()["id"]
+        page.request.put(f"/api/deck/{tid}", data={"completed": True})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    link = page.locator("#task-completed-link")
+    search = page.locator("#task-filter-search")
+
+    search.fill("bread")
+    expect(page.locator(".tasks-empty")).to_be_visible()   # nothing open matches…
+    expect(link).to_have_text("✓ 1 match in Completed →")  # …but it was done
+    expect(link).to_have_class(re.compile(r"\bhas-matches\b"))
+    search.fill("buy")
+    expect(link).to_have_text("✓ 1 match in Completed →")
+    search.fill("b")
+    expect(link).to_have_text("✓ 2 matches in Completed →")
+
+    search.fill("bread")
+    link.click()   # the filter carries over into Completed
+    expect(card(page, "Buy bread")).to_be_visible()
+    expect(card(page, "Fix bike")).to_have_count(0)
+
+    link.click()
+    search.fill("")
+    expect(link).to_have_text("✓ Completed (2) →")
+    expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
+
+
+# Quick-add shorthand in a new task's title.
+
+def test_quick_add_shorthand_fills_fields(page, wiki):
+    from datetime import date as _date
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    title = modal.locator("#task-edit-title")
+    preview = modal.locator("#task-edit-quick")
+    expect(preview).to_be_hidden()
+    title.fill("Call Bob tomorrow #work due:+3")
+    expect(preview).to_have_text(re.compile(r"^📅 start Tomorrow · ⏰ due .+ · #work$"))
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Call Bob")).to_be_visible()
+    t = task_by_title(page, "Call Bob")
+    today = _date.today()
+    assert t["start_date"] == (today + timedelta(days=1)).isoformat()
+    assert t["due_date"] == (today + timedelta(days=3)).isoformat()
+    assert t["tags"] == ["work"]
+
+
+def test_quick_add_is_not_applied_when_editing(page, wiki):
+    page.request.post("/api/deck", data={"title": "Old task"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    modal = open_edit(page, "Old task")
+    modal.locator("#task-edit-title").fill("Old task tomorrow")
+    expect(modal.locator("#task-edit-quick")).to_be_hidden()
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Old task tomorrow")).to_be_visible()   # saved, title kept whole
+    assert task_by_title(page, "Old task tomorrow")["start_date"] is None

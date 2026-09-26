@@ -85,6 +85,47 @@
     return qi === ql.length ? 0 : -1;
   }
 
+  // Tag fields never hold a space: tags are one word each (the filter field
+  // splits on spaces). Applied on every input event of the edit modal's Tags
+  // field (list=true, comma-separated) and the bulk tag dialog (list=false):
+  // whitespace inside a tag becomes "-", whitespace after a comma or at the
+  // start goes, commas are followed by one space, and a finished tag loses a
+  // trailing "-". Returns the new value and where the caret should go.
+  function sanitizeTagInput(value, caret, list) {
+    const clean = v => {
+      if (!list) return v.trimStart().replace(/\s+/g, '-');
+      const segs = v.split(',');
+      return segs.map((seg, i) => {
+        const t = seg.trimStart().replace(/\s+/g, '-');
+        return i < segs.length - 1 ? t.replace(/-+$/, '') : t;
+      }).join(', ');
+    };
+    const out = clean(value);
+    const at = caret == null ? out.length : Math.min(clean(value.slice(0, caret)).length, out.length);
+    return { value: out, caret: at };
+  }
+
+  // How many tasks carry each tag — the tie-breaker for suggestions.
+  function tagCounts(tasks) {
+    const counts = {};
+    for (const t of tasks) for (const tag of t.tags || []) counts[tag] = (counts[tag] || 0) + 1;
+    return counts;
+  }
+
+  // Tag suggestions, best first — every tag field completes to the first one
+  // on Tab/Enter. Exact match, then prefix, substring and in-order letters
+  // (tagMatchScore); within a level the most-used tag wins, then A–Z. An empty
+  // partial lists the most-used tags.
+  function rankTags(partial, counts, limit = 8) {
+    const q = (partial || '').toLowerCase();
+    return Object.keys(counts)
+      .map(tag => ({ tag, score: !q ? 0 : tag.toLowerCase() === q ? 3 : tagMatchScore(q, tag) }))
+      .filter(x => x.score >= 0)
+      .sort((a, b) => b.score - a.score || counts[b.tag] - counts[a.tag] || a.tag.localeCompare(b.tag))
+      .slice(0, limit)
+      .map(x => x.tag);
+  }
+
   // Which board section a task belongs in: 'overdue' (missed deadline), an
   // exact YYYY-MM-DD for today..+6, 'later', or 'unplanned'. A start date in
   // the past lands on Today (it is available), not on Overdue.
@@ -138,10 +179,68 @@
     return sections;
   }
 
+  // ── Quick-add shorthand ────────────────────────────────────────────────────
+  // A new task's title may end in shorthand that fills its fields:
+  //   Call Bob tomorrow #work due:fri
+  // Only trailing words are read (a date word inside a sentence stays text),
+  // and the edit modal previews what was recognised before saving.
+  //   start:  today · tomorrow/tmrw · mon…sun (the next one, never today) ·
+  //           +3 / +3d / +2w · 2026-10-03
+  //   due:    due:<any of the above>
+  //   tags:   #tag (starting with a letter, so "Fix #3" keeps its number)
+  const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+  function parseDateWord(word, today) {
+    const w = word.toLowerCase();
+    if (w === 'today') return today;
+    if (w === 'tomorrow' || w === 'tmrw') return addDays(today, 1);
+    let m = w.match(/^\+(\d{1,3})([dw]?)$/);
+    if (m) return addDays(today, Number(m[1]) * (m[2] === 'w' ? 7 : 1));
+    m = w.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) {
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return dateToStr(d) === w ? w : null;   // rejects 2026-02-31
+    }
+    if (w.length >= 3) {
+      const wd = WEEKDAYS.findIndex(name => name.startsWith(w));
+      if (wd >= 0) {
+        const cur = new Date(today + 'T00:00:00').getDay();
+        return addDays(today, ((wd - cur + 6) % 7) + 1);   // 1..7 days ahead
+      }
+    }
+    return null;
+  }
+
+  // Returns { title, start_date, due_date, tags, found }. Unrecognised input
+  // (or shorthand that would leave no title) comes back unchanged, found=false.
+  function parseQuickAdd(input, today) {
+    const words = (input || '').trim().split(/\s+/).filter(Boolean);
+    const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], found: false };
+    let end = words.length;
+    while (end > 1) {
+      const w = words[end - 1];
+      if (/^#\p{L}[\p{L}\p{N}_-]*$/u.test(w)) {
+        const tag = w.slice(1).toLowerCase();
+        if (!out.tags.includes(tag)) out.tags.unshift(tag);
+      } else if (/^due:/i.test(w) && !out.due_date && parseDateWord(w.slice(4), today)) {
+        out.due_date = parseDateWord(w.slice(4), today);
+      } else if (!out.start_date && parseDateWord(w, today)) {
+        out.start_date = parseDateWord(w, today);
+      } else {
+        break;
+      }
+      end--;
+    }
+    if (end === words.length) return out;
+    out.title = words.slice(0, end).join(' ');
+    out.found = true;
+    return out;
+  }
+
   const DeckCore = {
-    dateToStr, addDays, isUnplanned, isOverdue, isFocus, tagMatchScore,
+    dateToStr, addDays, isUnplanned, isOverdue, isFocus, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
     parseFilter, matchesFilter, tagParamToQuery,
-    bucketKey, fullDayLabel, boardBuckets,
+    bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = DeckCore;

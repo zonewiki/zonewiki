@@ -1,5 +1,7 @@
 """Search modal: open/close, fuzzy page filter, content matches, keyboard nav."""
 
+import re
+
 from playwright.sync_api import expect
 
 
@@ -68,3 +70,42 @@ def test_unlinked_only(page, wiki):
     page.locator("#modal-unlinked").check()
     expect(page.locator("#modal-page-list .page-list-item[data-slug='gardening']")).to_have_count(0)
     expect(page.locator("#modal-page-list .page-list-item[data-slug='garage']")).to_have_count(1)
+
+
+def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
+    import os
+    seed(wiki)
+    # garage newest, then recipes, then gardening
+    for md in wiki.root.glob("*.md"):   # everything else (index…) is older
+        os.utime(md, (1_000_000_000, 1_000_000_000))
+    for age, slug in ((300, "gardening"), (200, "recipes"), (100, "garage")):
+        t = 1_900_000_000 - age
+        os.utime(wiki.root / f"{slug}.md", (t, t))
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    expect(page.locator("#modal-sort")).to_have_value("mtime-desc")
+    items = page.locator("#modal-page-list .page-list-item")
+    expect(items.first).to_have_attribute("data-slug", "garage")
+    expect(items.nth(1)).to_have_attribute("data-slug", "recipes")
+
+    # A sort picked by hand sticks across page loads.
+    page.locator("#modal-sort").select_option("title-asc")
+    page.reload()
+    page.keyboard.press("Control+p")
+    expect(page.locator("#modal-sort")).to_have_value("title-asc")
+
+
+def test_task_result_opens_the_page_that_embeds_the_deck(page, wiki):
+    # Regression: with no deck.md, opening a task from Ctrl+P landed on
+    # /edit/deck, an empty new page.
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    tid = page.request.post("/api/deck", data={"title": "Renew passport"}).json()["id"]
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("passport")
+    card = page.locator("#modal-content-matches .search-result-card").first
+    expect(card).to_be_visible()
+    card.click()
+    page.wait_for_url(f"**/page/tasks?task={tid}&filter=open")
+    expect(page.locator(f".task-item[data-id='{tid}']")).to_have_class(
+        re.compile(r"\btask-selected\b"))

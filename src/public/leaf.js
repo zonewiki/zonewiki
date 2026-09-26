@@ -16,7 +16,7 @@
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
   // All entries before the current page (last) become breadcrumb links
-  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch' && p.slug !== '_daily');
+  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch');
   if (!intermediates.length) return;
 
   const homeEl = bc.querySelector('.breadcrumb-home');
@@ -264,7 +264,17 @@ function setModalActive(idx) {
 }
 
 modalFilter?.addEventListener('input', applyModalControls);
-modalSort?.addEventListener('change', applyModalControls);
+// With an empty query the list is a quick switcher, so it opens on the most
+// recently edited pages. A sort picked from the dropdown is remembered.
+const MODAL_SORT_KEY = 'leaf-search-sort';
+try {
+  const saved = localStorage.getItem(MODAL_SORT_KEY);
+  if (modalSort && saved && [...modalSort.options].some(o => o.value === saved)) modalSort.value = saved;
+} catch (_) {}
+modalSort?.addEventListener('change', () => {
+  try { localStorage.setItem(MODAL_SORT_KEY, modalSort.value); } catch (_) {}
+  applyModalControls();
+});
 modalUnlinked?.addEventListener('change', applyModalControls);
 
 modalFilter?.addEventListener('keydown', e => {
@@ -383,13 +393,13 @@ async function fetchModalContentMatches(q) {
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
 function openQuickTask(defaultTag) {
-  // Always use the full deck edit modal — navigate to /page/deck with new param
+  // Always use the full deck edit modal — navigate to the deck page (/deck redirects there) with new param
   if (typeof window.openDeckEdit === 'function') {
     window.openDeckEdit(null, { tags: defaultTag || '' });
   } else {
     const params = new URLSearchParams({ new: '1' });
     if (defaultTag) params.set('tag', defaultTag);
-    window.location.href = '/page/deck?' + params.toString();
+    window.location.href = '/deck?' + params.toString();
   }
 }
 
@@ -512,10 +522,10 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task), gy=daily
+  // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task)
   if (awaitingG) {
     resetG();
-    const dest = { h: '/page/index', s: '/page/_scratch', d: '/page/deck', t: '/page/deck?tag=task', y: '/page/_daily' };
+    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: '/deck?tag=task' };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }
@@ -526,18 +536,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cs=scratch note, ct=task-tagged deck item, cd=daily note
+  // c-prefix create: cs=scratch note, ct=task-tagged deck item
   if (awaitingC) {
     resetC();
     if (e.key === 's') { e.preventDefault(); openScratch(); }
     else if (e.key === 't') { e.preventDefault(); openQuickTask('task'); }
-    else if (e.key === 'd') {
-      e.preventDefault();
-      fetch('/api/daily', { method: 'POST' })
-        .then(r => r.json())
-        .then(({ slug }) => { window.location.href = `/edit/${slug}`; })
-        .catch(() => {});
-    }
     return;
   }
   if (e.key === 'c') {

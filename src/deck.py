@@ -63,7 +63,7 @@ def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
     _migrate_completed_split()
-    _migrate_date_model()
+    _migrate_deck_files()
     _archive_old_completed()
 
 
@@ -127,15 +127,29 @@ def _read_list_strict(path: Path) -> list[dict]:
     return _normalize_list(data)
 
 
+def _clean_tags(tags) -> list[str]:
+    """Tags as the filter field can match them: one word each (whitespace
+    inside becomes "-", so "local llm" → "local-llm"), no leading "#", no
+    empties, no case-insensitive duplicates (the first spelling wins). The
+    filter splits on spaces, so a tag with a space could never be found."""
+    out, seen = [], set()
+    for tag in tags or []:
+        tag = re.sub(r"\s+", "-", str(tag).strip().lstrip("#").strip()).strip("-")
+        if tag and tag.lower() not in seen:
+            seen.add(tag.lower())
+            out.append(tag)
+    return out
+
+
 def _normalize_task(task: dict) -> bool:
-    """Upgrade a task from the old date model in place; True if it changed.
+    """Upgrade a task in place to the current format; True if it changed.
 
     Older decks stored the start date as ``focus_date``, a derivation rule
     ``defer_days`` (start N days before due) and ``recurrence.anchor`` (which
     date a cycle advances). The start date is now ``start_date``; the rule is
     gone because every derived date was already stored, and recurring spawns
     carry the start→due gap instead; the anchor is implied by which dates the
-    task has."""
+    task has. Tags are cleaned (_clean_tags): older decks allowed spaces."""
     changed = False
     if "focus_date" in task:
         task.setdefault("start_date", task["focus_date"])
@@ -148,6 +162,10 @@ def _normalize_task(task: dict) -> bool:
     if isinstance(rec, dict) and "anchor" in rec:
         del rec["anchor"]
         changed = True
+    tags = task.get("tags")
+    if isinstance(tags, list) and _clean_tags(tags) != tags:
+        task["tags"] = _clean_tags(tags)
+        changed = True
     return changed
 
 
@@ -158,10 +176,11 @@ def _normalize_list(tasks: list) -> list:
     return tasks
 
 
-def _migrate_date_model() -> None:
-    """One-time rewrite of every deck file into the current date model, so the
-    files on disk (and in git) stop carrying the old fields. Reads normalize
-    too, so this is tidiness, not correctness."""
+def _migrate_deck_files() -> None:
+    """One-time rewrite of every deck file into the current format
+    (_normalize_task: date model, clean tags), so the files on disk (and in
+    git) stop carrying the old shapes. Reads normalize too, so this is
+    tidiness, not correctness. A no-op once the files are current."""
     with _LOCK:
         changed = []
         for path in [DECK_FILE, _completed_path(), *_archive_glob()]:
@@ -175,7 +194,7 @@ def _migrate_date_model() -> None:
                 _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
                 changed.append(path)
         if changed and GIT_ENABLED and _git_commit_fn:
-            _git_commit_fn(changed, "Migrate deck to start_date model")
+            _git_commit_fn(changed, "Normalize deck files (date model, tags)")
 
 
 def _read_deck_strict() -> list[dict]:
@@ -581,13 +600,14 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     <div class="task-field">
       <label for="task-edit-title{sfx}">Title</label>
       <input type="text" id="task-edit-title{sfx}" name="title" required autocomplete="off">
+      <div class="task-quick-preview" id="task-edit-quick{sfx}" hidden></div>
     </div>
     <div class="task-field">
       <label for="task-edit-desc{sfx}">Notes</label>
       <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>
     </div>
     <div class="task-field">
-      <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated)</span></label>
+      <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated, no spaces)</span></label>
       <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
     </div>
     <div class="task-field">
@@ -862,7 +882,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     if "description" in data:
         task["description"] = _as_str(data["description"] or "", "description").strip()
     if "tags" in data:
-        task["tags"] = _as_str_list(data["tags"] or [], "tags")
+        task["tags"] = _clean_tags(_as_str_list(data["tags"] or [], "tags"))
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
     if "sort_order" in data:
@@ -1007,7 +1027,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
         return None
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
-    task["tags"] = [str(t).strip() for t in snap.get("tags") or [] if str(t).strip()]
+    task["tags"] = _clean_tags(snap.get("tags") if isinstance(snap.get("tags"), list) else [])
     _normalize_task(snap)
     for field in ("due_date", "start_date"):
         val = snap.get(field)
@@ -1138,8 +1158,8 @@ def api_batch_tag_deck():
     ids = _id_list(data)
     if not isinstance(data.get("add", []), list) or not isinstance(data.get("remove", []), list):
         abort(400, description="add/remove must be lists of strings")
-    add_tags = _as_str_list(data.get("add", []), "add")
-    remove_tags = [t.lower() for t in _as_str_list(data.get("remove", []), "remove")]
+    add_tags = _clean_tags(_as_str_list(data.get("add", []), "add"))
+    remove_tags = [t.lower() for t in _clean_tags(_as_str_list(data.get("remove", []), "remove"))]
     if not ids or not isinstance(ids, list):
         abort(400)
     if not add_tags and not remove_tags:

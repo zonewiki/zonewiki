@@ -207,3 +207,103 @@ class TestTagMatchScore:
         assert run_core("DeckCore.tagMatchScore('or', 'work')") == 1
         assert run_core("DeckCore.tagMatchScore('wk', 'work')") == 0
         assert run_core("DeckCore.tagMatchScore('xyz', 'work')") == -1
+
+
+def quick(title: str) -> dict:
+    return run_core(f"DeckCore.parseQuickAdd({json.dumps(title)}, {json.dumps(TODAY)})")
+
+
+class TestQuickAdd:
+    # TODAY (2026-07-26) is a Sunday.
+
+    def test_full_example(self):
+        q = quick("Call Bob tomorrow #work due:fri")
+        assert q == {"title": "Call Bob", "start_date": "2026-07-27",
+                     "due_date": "2026-07-31", "tags": ["work"], "found": True}
+
+    @pytest.mark.parametrize("word,expected", [
+        ("today", "2026-07-26"), ("tomorrow", "2026-07-27"), ("tmrw", "2026-07-27"),
+        ("mon", "2026-07-27"), ("friday", "2026-07-31"), ("thurs", "2026-07-30"),
+        ("sun", "2026-08-02"),          # a weekday is the next one, never today
+        ("+3", "2026-07-29"), ("+3d", "2026-07-29"), ("+2w", "2026-08-09"),
+        ("2026-10-03", "2026-10-03"),
+    ])
+    def test_start_words(self, word, expected):
+        assert quick(f"Do it {word}")["start_date"] == expected
+
+    def test_only_trailing_words_count(self):
+        # A date word inside the sentence is text.
+        assert quick("Read about the monday effect")["found"] is False
+        q = quick("Plan monday meeting fri")
+        assert q["title"] == "Plan monday meeting" and q["start_date"] == "2026-07-31"
+
+    def test_numeric_hash_is_not_a_tag(self):
+        assert quick("Fix #3")["found"] is False
+        assert quick("Fix #3 #bugs")["title"] == "Fix #3"
+
+    def test_invalid_date_stays_text(self):
+        assert quick("Pay rent due:2026-02-31")["found"] is False
+        assert quick("Pay rent due:someday")["found"] is False
+
+    def test_never_leaves_an_empty_title(self):
+        assert quick("tomorrow")["title"] == "tomorrow"
+        assert quick("#work fri")["title"] == "#work"
+
+    def test_tags_deduplicated_and_lowercased(self):
+        assert quick("Buy milk #Home #home #shop")["tags"] == ["home", "shop"]
+
+    def test_second_start_word_stays_in_title(self):
+        q = quick("Meet tomorrow fri")
+        assert q["title"] == "Meet tomorrow" and q["start_date"] == "2026-07-31"
+
+
+class TestTagRanking:
+    COUNTS = {"work": 5, "workout": 1, "wood": 9, "at-work": 2, "web": 3}
+
+    def rank(self, partial, counts=None, limit=8):
+        return run_core(f"DeckCore.rankTags({json.dumps(partial)}, {json.dumps(counts or self.COUNTS)}, {limit})")
+
+    def test_prefix_before_substring_most_used_first(self):
+        assert self.rank("wo") == ["wood", "work", "workout", "at-work"]
+
+    def test_exact_match_first_even_if_rarer(self):
+        assert self.rank("work", {"work": 1, "workshop": 9}) == ["work", "workshop"]
+
+    def test_case_insensitive(self):
+        assert self.rank("WO", {"Work": 2, "wood": 1}) == ["Work", "wood"]
+
+    def test_empty_partial_lists_most_used(self):
+        assert self.rank("", limit=3) == ["wood", "work", "web"]
+
+    def test_no_match(self):
+        assert self.rank("xyz") == []
+
+    def test_tag_counts(self):
+        tasks = [{"tags": ["a", "b"]}, {"tags": ["a"]}, {}]
+        assert run_core(f"DeckCore.tagCounts({json.dumps(tasks)})") == {"a": 2, "b": 1}
+
+
+class TestSanitizeTagInput:
+    def clean(self, value, caret=None, lst=True):
+        return run_core(f"DeckCore.sanitizeTagInput({json.dumps(value)}, {json.dumps(caret)}, {json.dumps(lst)})")
+
+    @pytest.mark.parametrize("value,expected", [
+        ("local ", "local-"),            # a space inside a tag is a hyphen at once
+        ("local llm", "local-llm"),
+        (" a", "a"),                     # no leading space
+        ("work,", "work, "),             # a comma brings its one space
+        ("work,  home", "work, home"),
+        ("work ,home", "work, home"),    # a finished tag loses a trailing "-"
+        ("a b, c  d, e", "a-b, c-d, e"),
+    ])
+    def test_list_field(self, value, expected):
+        assert self.clean(value)["value"] == expected
+
+    def test_single_tag_field(self):
+        assert self.clean("local llm", lst=False)["value"] == "local-llm"
+        assert self.clean("a, b", lst=False)["value"] == "a,-b"   # no list: comma is just a char
+
+    def test_caret_follows_the_edit(self):
+        # Typing "," between a and b: the caret lands before b, after the new space.
+        assert self.clean("a,b", caret=2) == {"value": "a, b", "caret": 3}
+        assert self.clean("local llm", caret=5) == {"value": "local-llm", "caret": 5}

@@ -729,10 +729,12 @@ class TestDueCount:
 
 
 class TestDeckPage:
-    def test_deck_route_removed(self, client):
-        """The standalone /deck route no longer exists."""
+    def test_deck_route_is_only_a_redirect(self, client):
+        """There is no standalone deck app: /deck just redirects to the wiki
+        page that embeds it (see TestDeckRedirect in test_routes.py)."""
         resp = client.get("/deck")
-        assert resp.status_code == 404
+        assert resp.status_code == 302
+        assert "tasks-app" not in resp.get_data(as_text=True)
 
     def test_deck_embed_in_wiki_page(self, client, wiki_dir):
         """A wiki page with [[deck]] renders the full deck app."""
@@ -802,7 +804,7 @@ class TestDateModelMigration:
         (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
         (wiki_dir / "_deck_completed.json").write_text(json.dumps([done]), encoding="utf-8")
         (wiki_dir / "_deck_completed-2025.json").write_text(json.dumps([done]), encoding="utf-8")
-        deck_module._migrate_date_model()
+        deck_module._migrate_deck_files()
         for name in ("_deck.json", "_deck_completed.json", "_deck_completed-2025.json"):
             [t] = json.loads((wiki_dir / name).read_text(encoding="utf-8"))
             self._assert_new(t)
@@ -811,7 +813,7 @@ class TestDateModelMigration:
         create_task(client, title="New", start_date="2027-01-01")
         path = wiki_dir / "_deck.json"
         before = path.stat().st_mtime_ns
-        deck_module._migrate_date_model()
+        deck_module._migrate_deck_files()
         assert path.stat().st_mtime_ns == before
 
     def test_old_recurring_task_carries_gap(self, client, wiki_dir):
@@ -1731,3 +1733,44 @@ class TestNoTaskLinking:
         resp = client.post("/api/deck/restore", json={"tasks": [
             {"id": "x", "title": "T", "blocked_by": ["y"], "blocking": ["z"]}]})
         assert "blocked_by" not in resp.get_json()[0]
+
+
+# ---------- Tags are one word each ----------
+
+
+class TestTagCleaning:
+    """Regression: a tag with a space ("locallm xxx") could never be matched,
+    because the filter field splits on spaces."""
+
+    def test_create_and_update_clean_tags(self, client):
+        t = create_task(client, title="T", tags=["locallm xxx", "#work", " ", "Work", "a  b"]).get_json()
+        assert t["tags"] == ["locallm-xxx", "work", "a-b"]
+        t = client.put(f"/api/deck/{t['id']}", json={"tags": "local llm, #home"}).get_json()
+        assert t["tags"] == ["local-llm", "home"]
+
+    def test_batch_tag_add_and_remove_clean_tags(self, client):
+        tid = create_task(client, title="T").get_json()["id"]
+        [t] = client.post("/api/deck/batch-tag", json={"ids": [tid], "add": ["local llm"]}).get_json()
+        assert t["tags"] == ["local-llm"]
+        # Removing by the spelling with a space finds the stored one.
+        [t] = client.post("/api/deck/batch-tag", json={"ids": [tid], "remove": ["local llm"]}).get_json()
+        assert t["tags"] == []
+
+    def test_restore_cleans_tags(self, client):
+        snap = {"id": "snap-1", "title": "Restored", "tags": ["a b", "#c"]}
+        [t] = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
+        assert t["tags"] == ["a-b", "c"]
+
+    def test_old_file_is_cleaned_on_read_and_migrated_once(self, client, wiki_dir):
+        old = {"id": "old-tags", "title": "Old", "tags": ["locallm xxx", "x"],
+               "created_at": "2026-01-01T00:00:00"}
+        path = wiki_dir / "_deck.json"
+        path.write_text(json.dumps([old]), encoding="utf-8")
+        [t] = client.get("/api/deck").get_json()
+        assert t["tags"] == ["locallm-xxx", "x"]
+        deck_module._migrate_deck_files()
+        [stored] = json.loads(path.read_text(encoding="utf-8"))
+        assert stored["tags"] == ["locallm-xxx", "x"]
+        before = path.stat().st_mtime_ns
+        deck_module._migrate_deck_files()
+        assert path.stat().st_mtime_ns == before

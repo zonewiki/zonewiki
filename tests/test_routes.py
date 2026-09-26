@@ -1,3 +1,4 @@
+import json
 """Tests for Leaf HTTP routes — page view/edit/save, search, upload, auth,
 rename with reference updates, conflict detection, and API endpoints.
 
@@ -600,7 +601,7 @@ class TestApiPagesList:
         pages = resp.get_json()
         slugs = {p["slug"] for p in pages}
         assert "_scratch" in slugs
-        assert "_daily" in slugs
+        assert "_daily" not in slugs   # daily notes were removed
 
 
 # ===========================================================================
@@ -678,13 +679,13 @@ class TestSearch:
         assert results[0]["slug"] == "rare"
 
     def test_search_page_task_links_to_the_task_by_id(self, client, wiki_dir):
-        # A task result must open /page/deck at that task (by id) — not the
+        # A task result must open the deck (/deck) at that task (by id) — not the
         # bare _deck storage slug, and not a title search.
         tid = client.post("/api/deck", json={"title": "buymilk urgent chore"}).get_json()["id"]
         resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
         body = resp.get_data(as_text=True)
         assert "/page/_deck" not in body
-        assert f"/page/deck?task={tid}&amp;filter=open" in body
+        assert f'href="/deck?task={tid}&amp;filter=open"' in body
 
     def test_search_page_completed_task_links_to_completed_tab(self, client, wiki_dir):
         r = client.post("/api/deck", json={"title": "finishreport tuvwxyz"})
@@ -692,7 +693,7 @@ class TestSearch:
         client.put(f"/api/deck/{tid}", json={"completed": True})
         resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert f"/page/deck?task={tid}&amp;filter=completed" in body
+        assert f'href="/deck?task={tid}&amp;filter=completed"' in body
 
 
 # ===========================================================================
@@ -866,6 +867,23 @@ class TestAuth:
         resp = auth_client.get("/public/style.css", headers=HOST)
         assert resp.status_code == 200
 
+    def test_home_screen_app_files_served_without_auth(self, auth_client):
+        # Browsers may fetch the manifest and icons without the session cookie.
+        manifest = auth_client.get("/public/manifest.json", headers=HOST)
+        assert manifest.status_code == 200
+        data = json.loads(manifest.data)
+        assert data["name"] == "Leaf" and data["start_url"] == "/"
+        for icon in data["icons"]:
+            resp = auth_client.get(icon["src"], headers=HOST)
+            assert resp.status_code == 200, icon["src"]
+            assert resp.mimetype == icon["type"]
+        assert auth_client.get("/public/apple-touch-icon.png", headers=HOST).status_code == 200
+
+    def test_pages_link_the_manifest_and_touch_icon(self, auth_client):
+        body = auth_client.get("/login", headers=HOST).get_data(as_text=True)
+        assert '<link rel="manifest" href="/public/manifest.json">' in body
+        assert '<link rel="apple-touch-icon" href="/public/apple-touch-icon.png">' in body
+
     def test_login_with_wrong_password_shows_error(self, auth_client):
         resp = auth_client.post(
             "/login",
@@ -935,29 +953,21 @@ class TestSpecialPages:
         assert resp.status_code == 200
         assert b"Scratch" in resp.data
 
-    def test_daily_index_page_loads(self, client):
-        resp = client.get("/page/_daily", headers=HOST)
-        assert resp.status_code == 200
-        assert b"Daily" in resp.data
-
     def test_api_scratch_creates_note(self, client, wiki_dir):
         resp = client.post("/api/scratch", data={"title": "My Note"}, headers=HOST)
         assert resp.status_code == 200
         slug = resp.get_json()["slug"]
         assert (wiki_dir / f"{slug}.md").exists()
 
-    def test_api_daily_creates_today_note(self, client, wiki_dir):
-        resp = client.post("/api/daily", headers=HOST)
-        assert resp.status_code == 200
-        slug = resp.get_json()["slug"]
-        assert slug.endswith("_daily")
-        assert (wiki_dir / f"{slug}.md").exists()
-
-    def test_api_daily_idempotent(self, client, wiki_dir):
-        client.post("/api/daily", headers=HOST)
-        resp = client.post("/api/daily", headers=HOST)
-        assert resp.status_code == 200
-        # Should return same slug
+    def test_daily_notes_are_gone(self, client, wiki_dir):
+        # The feature was removed: no endpoint, no shortcut, no index. An old
+        # daily note on disk is just an ordinary page.
+        assert client.post("/api/daily", headers=HOST).status_code in (404, 405)
+        (wiki_dir / "2026-01-01_daily.md").write_text("# 2026-01-01\n\nold\n", encoding="utf-8")
+        resp = client.get("/page/2026-01-01_daily", headers=HOST)
+        assert resp.status_code == 200 and b"old" in resp.data
+        # The shortcuts help (in every page's shell) no longer offers it.
+        assert "daily" not in resp.get_data(as_text=True).lower().replace("2026-01-01_daily", "")
 
 
 # ===========================================================================
@@ -1005,7 +1015,7 @@ class TestSearchResultHref:
         results = client.get("/api/search?q=ferns", headers=HOST).get_json()
         task_hits = [r for r in results if r.get("type") == "task"]
         assert task_hits, "expected a task hit"
-        assert task_hits[0]["href"] == f"/page/deck?task={tid}&filter=open"
+        assert task_hits[0]["href"] == f"/deck?task={tid}&filter=open"
 
 
 class TestBacklinkCacheInvalidation:
@@ -1043,7 +1053,7 @@ class TestTaskBacklinks:
                           headers=HOST).get_json()["id"]
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
-        assert f'href="/page/deck?task={tid}&amp;filter=open"' in section
+        assert f'href="/deck?task={tid}&amp;filter=open"' in section
 
     def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
         # Regression: the task title's own wikilinks were rendered as <a>
@@ -1224,3 +1234,58 @@ class TestRenameUpdatesAllReferences:
         write_page(wiki_dir, "old", "# Old\n")
         self.rename(client, "old", "new")
         assert not (wiki_dir / "_deck.json").exists()
+
+
+# ===========================================================================
+# /deck — find the page that embeds the deck
+# ===========================================================================
+
+class TestDeckRedirect:
+    """Regression: task links pointed at /page/deck, which in a wiki without
+    deck.md opened the editor on an empty page."""
+
+    def go(self, client, qs=""):
+        resp = client.get("/deck" + qs, headers=HOST)
+        assert resp.status_code == 302
+        return resp.headers["Location"]
+
+    def test_deck_embedded_on_another_page(self, client, wiki_dir):
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck]]\n")
+        assert self.go(client, "?task=abc&filter=open") == "/page/tasks?task=abc&filter=open"
+
+    def test_deck_md_wins(self, client, wiki_dir):
+        write_page(wiki_dir, "aaa", "# A\n\n[[deck]]\n")
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck filter=focus]]\n")
+        assert self.go(client) == "/page/deck"
+
+    def test_unfiltered_embed_preferred(self, client, wiki_dir):
+        # A tag= or page= embed may hide the task being linked to.
+        write_page(wiki_dir, "a-work", "# W\n\n[[deck tag=work]]\n")
+        write_page(wiki_dir, "b-garden", "# G\n\n[[deck page=self]]\n")
+        write_page(wiki_dir, "c-all", "# All\n\n[[deck filter=plan]]\n")
+        assert self.go(client) == "/page/c-all"
+
+    def test_embed_in_code_does_not_count(self, client, wiki_dir):
+        write_page(wiki_dir, "docs", "# Docs\n\n```\n[[deck]]\n```\n\nand `[[deck]]`\n")
+        write_page(wiki_dir, "zz", "# Z\n\n[[deck tag=x]]\n")
+        assert self.go(client) == "/page/zz"
+
+    def test_no_deck_anywhere_falls_back_to_deck_page(self, client, wiki_dir):
+        write_page(wiki_dir, "plain", "# Plain\n")
+        assert self.go(client, "?new=1") == "/page/deck?new=1"
+
+    def test_embed_added_later_is_found(self, client, wiki_dir):
+        import os, time
+        p = write_page(wiki_dir, "later", "# Later\n")
+        assert self.go(client) == "/page/deck"
+        p.write_text("# Later\n\n[[deck]]\n", encoding="utf-8")
+        t = time.time() + 5
+        os.utime(p, (t, t))   # mtime-keyed cache must notice
+        assert self.go(client) == "/page/later"
+
+    def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert 'href="/deck?filter=focus"' in body
+        assert "/page/deck" not in body

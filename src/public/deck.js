@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isUnplanned, isFocus, tagMatchScore, parseFilter, matchesFilter, tagParamToQuery } = window.DeckCore;
+  const { dateToStr, addDays, isUnplanned, isFocus, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -377,8 +377,13 @@
     if (activeFilter === 'completed') await fetchCompleted();
   }
 
-  async function fetchCompleted() {
-    if (completedLoaded) return;
+  let completedLoading = null;
+  function fetchCompleted() {
+    if (completedLoaded) return Promise.resolve();
+    // One request at a time: the filter field asks for these on every render.
+    return completedLoading ||= loadCompleted().finally(() => { completedLoading = null; });
+  }
+  async function loadCompleted() {
     const res = await fetch('/api/deck/completed');
     const completed = await res.json();
     const existingIds = new Set(tasks.map(t => t.id));
@@ -826,70 +831,18 @@
     const input = dlg.querySelector('#bulk-tag-input');
     const okBtn = dlg.querySelector('#bulk-tag-ok');
     const cancelBtn = dlg.querySelector('#bulk-tag-cancel');
-    let acEl = null;
-    let acIndex = -1;
-
-    function hideAc() { acEl?.remove(); acEl = null; acIndex = -1; }
-
-    function showAc(matches) {
-      hideAc();
-      if (!matches.length) return;
-      acEl = document.createElement('div');
-      acEl.className = 'tag-ac-dropdown';
-      acEl.style.position = 'absolute';
-      acEl.style.top = input.offsetTop + input.offsetHeight + 'px';
-      acEl.style.left = '0';
-      acEl.style.width = input.offsetWidth + 'px';
-      matches.forEach(tag => {
-        const item = document.createElement('div');
-        item.className = 'tag-ac-item';
-        item.textContent = '#' + tag;
-        item.addEventListener('mousedown', e => {
-          e.preventDefault();
-          input.value = tag;
-          hideAc();
-        });
-        acEl.appendChild(item);
-      });
-      input.parentElement.appendChild(acEl);
-    }
-
-    input.addEventListener('input', () => {
-      const partial = input.value.trim();
-      if (!partial) { hideAc(); return; }
-      const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
-      const matches = allTags
-        .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
-        .filter(({ score }) => score >= 0)
-        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
-        .map(({ tag }) => tag)
-        .slice(0, 8);
-      showAc(matches);
+    // Adding: any tag in use. Removing: only tags the selected tasks carry.
+    // Enter completes a half-typed tag to the best match and applies it.
+    const idSet = new Set(ids);
+    noSpacesInTags(input, false);
+    attachTagAc(input, {
+      word: () => (input.value.trim() ? { partial: input.value.trim() } : null),
+      suggest: w => rankTags(w.partial, tagCounts(removing ? tasks.filter(t => idSet.has(t.id)) : tasks)),
+      accept: tag => { input.value = tag; },
+      onEnter: () => submit(),
     });
 
     input.addEventListener('keydown', ev => {
-      if (acEl) {
-        const items = acEl.querySelectorAll('.tag-ac-item');
-        if (ev.key === 'ArrowDown') {
-          ev.preventDefault();
-          acIndex = (acIndex + 1) % items.length;
-          items.forEach((el, i) => el.classList.toggle('selected', i === acIndex));
-          return;
-        } else if (ev.key === 'ArrowUp') {
-          ev.preventDefault();
-          acIndex = acIndex <= 0 ? items.length - 1 : acIndex - 1;
-          items.forEach((el, i) => el.classList.toggle('selected', i === acIndex));
-          return;
-        } else if ((ev.key === 'Tab') && acIndex >= 0) {
-          ev.preventDefault();
-          input.value = items[acIndex].textContent.replace(/^#/, '');
-          hideAc();
-          return;
-        } else if (ev.key === 'Escape') {
-          hideAc();
-          return;
-        }
-      }
       if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); submit(); }
       if (ev.key === 'Escape') { ev.stopPropagation(); close(); }
     });
@@ -918,8 +871,7 @@
     }
 
     function close() {
-      hideAc();
-      dlg.close();
+      dlg.close();   // the tag dropdown lives inside dlg and goes with it
       dlg.remove();
     }
 
@@ -1165,6 +1117,7 @@
 
   function render() {
     sortSelect.style.display = TAB_SORT[activeFilter] ? 'none' : '';
+    syncCompletedLink();
 
     const filtered = filterTasks();
 
@@ -1628,10 +1581,25 @@
   // The tab to return to from Completed (the link's "back" state).
   let lastTab = 'open';
 
+  // While the filter field is in use, the link counts the completed tasks it
+  // matches ("✓ 2 matches in Completed →"), so a search that comes up empty
+  // here still shows where the task went. That needs the completed tasks,
+  // which are otherwise only loaded when the view is opened.
   function syncCompletedLink() {
     if (!completedLink) return;
-    completedLink.textContent = activeFilter === 'completed'
-      ? '← Back to open tasks'
+    let matches = 0;
+    const f = parseFilter(filterSearch?.value || '');
+    const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length);
+    if (filtering) {
+      if (!completedLoaded) { fetchCompleted(); }
+      else {
+        matches = tasks.filter(t => t.completed_at && matchesFilter(t, f)
+                                    && (!initPage || t.page === initPage)).length;
+      }
+    }
+    completedLink.classList.toggle('has-matches', matches > 0);
+    completedLink.textContent = activeFilter === 'completed' ? '← Back to open tasks'
+      : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
       : `✓ Completed${completedCount != null ? ` (${completedCount})` : ''} →`;
   }
 
@@ -1692,222 +1660,202 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(render, 150);
     });
+    // Esc leaves the field (an open tag dropdown takes the first Esc).
     filterSearch.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && !tagAcEl) { e.preventDefault(); filterSearch.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
     });
   }
 
   // ── Tag autocomplete ───────────────────────────────────────────────────────
-
-  let tagAcEl = null;
-  let tagAcIndex = -1;
-
-  function hideTagAc() {
-    tagAcEl?.remove();
-    tagAcEl = null;
-    tagAcIndex = -1;
+  // One dropdown for every place a tag is typed: the filter field (#tag), the
+  // edit modal's Tags field, a new task's title (#tag shorthand) and the bulk
+  // tag dialog. The best match (DeckCore.rankTags) is highlighted from the
+  // start, so Tab or Enter completes a half-typed tag to it; ↑/↓ pick another,
+  // Esc closes (and keeps what was typed). Each field supplies:
+  //   word()          the tag being typed at the caret, or null
+  //   suggest(word)   tags to offer, best first
+  //   accept(tag, w)  write the chosen tag into the field
+  //   onEnter()       optional: Enter also does this after completing
+  function attachTagAc(input, { word, suggest, accept, onEnter }) {
+    let el = null, idx = 0, tags = [];
+    const hide = () => { el?.remove(); el = null; tags = []; };
+    function highlight(i) {
+      idx = i;
+      el?.querySelectorAll('.tag-ac-item').forEach((it, j) => it.classList.toggle('selected', j === idx));
+    }
+    function choose(i) {
+      const w = word();
+      if (w && tags[i] != null) accept(tags[i], w);
+      hide();
+    }
+    function show() {
+      const w = document.activeElement === input ? word() : null;
+      const next = w ? suggest(w) : [];
+      hide();
+      if (!next.length) return;
+      tags = next;
+      el = document.createElement('div');
+      el.className = 'tag-ac-dropdown';
+      tags.forEach((tag, i) => {
+        const item = document.createElement('div');
+        item.className = 'tag-ac-item';
+        item.textContent = '#' + tag;
+        item.addEventListener('mouseenter', () => highlight(i));
+        item.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
+        el.appendChild(item);
+      });
+      // Inside the field's parent (not <body>): in the edit modal the dropdown
+      // must be in the dialog's top layer to be visible at all.
+      const parent = input.parentElement;
+      if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      el.style.top = input.offsetTop + input.offsetHeight + 'px';
+      el.style.left = input.offsetLeft + 'px';
+      el.style.width = input.offsetWidth + 'px';
+      parent.appendChild(el);
+      highlight(0);
+    }
+    // Capture phase: runs before the field's own key handlers, which must not
+    // see a key the dropdown used (Enter submitting, Esc closing the dialog).
+    input.addEventListener('keydown', e => {
+      if (!el) return;
+      const used = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+      if (e.key === 'ArrowDown') { used(); highlight((idx + 1) % tags.length); }
+      else if (e.key === 'ArrowUp') { used(); highlight((idx - 1 + tags.length) % tags.length); }
+      else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+        used(); choose(idx);
+        if (e.key === 'Enter') onEnter?.();
+      }
+      else if (e.key === 'Escape') { used(); hide(); }
+    }, true);
+    input.addEventListener('input', show);
+    input.addEventListener('click', show);
+    input.addEventListener('blur', () => setTimeout(hide, 150));
+    return { hide, isOpen: () => !!el };
   }
 
-  // The '#tag' word under the caret in the filter field, or null. Inside an
-  // OR word (#a|b) only the part after the last pipe is being completed.
-  function currentTagWord() {
-    const val = filterSearch.value;
-    const caret = filterSearch.selectionStart ?? val.length;
+  // Keep spaces out of a tag-only field as it is typed (sanitizeTagInput).
+  // On `input`, not keydown: that also covers paste and phone keyboards,
+  // which often report no key for a space. Registered before attachTagAc's
+  // own input listener, so suggestions see the cleaned value.
+  function noSpacesInTags(input, list) {
+    input.addEventListener('input', e => {
+      // Deleting never adds a space, and cleaning after it would undo the
+      // deletion (Backspace on "work, " re-added the space after the comma).
+      if (e.isComposing || e.inputType?.startsWith('delete')) return;
+      const { value, caret } = sanitizeTagInput(input.value, input.selectionStart, list);
+      if (value === input.value) return;
+      input.value = value;
+      input.setSelectionRange(caret, caret);
+    });
+  }
+
+  // The word under the caret, if it starts with '#'. Inside an OR word (#a|b)
+  // only the part after the last pipe is being completed.
+  function hashWordAtCaret(input) {
+    const val = input.value;
+    const caret = input.selectionStart ?? val.length;
     const start = val.lastIndexOf(' ', caret - 1) + 1;
     let end = val.indexOf(' ', caret);
     if (end < 0) end = val.length;
-    const word = val.slice(start, end);
-    if (!word.startsWith('#')) return null;
-    const pipe = word.lastIndexOf('|', caret - start - 1);
+    const w = val.slice(start, end);
+    if (!w.startsWith('#')) return null;
+    const pipe = w.lastIndexOf('|', caret - start - 1);
     const partStart = pipe >= 0 ? start + pipe + 1 : start;
     return { start, end, partStart, partial: val.slice(partStart, end).replace(/^#/, '') };
   }
 
-  function selectTagAcItem(tag) {
-    const w = currentTagWord();
-    if (!w) return;
-    const val = filterSearch.value;
-    const lead = w.partStart === w.start ? '#' : '';
+  // Replace that word (or its OR part) with "#tag " and put the caret after it.
+  function insertHashTag(input, tag, w) {
+    const val = input.value;
     const after = val.slice(w.end);
-    const insert = lead + tag + (after.startsWith(' ') ? '' : ' ');
-    filterSearch.value = val.slice(0, w.partStart) + insert + after;
+    const insert = (w.partStart === w.start ? '#' : '') + tag + (after.startsWith(' ') ? '' : ' ');
+    input.value = val.slice(0, w.partStart) + insert + after;
     const caret = w.partStart + insert.length;
-    filterSearch.focus();
-    filterSearch.setSelectionRange(caret, caret);
-    render();
+    input.focus();
+    input.setSelectionRange(caret, caret);
   }
 
-  function showTagAc(matches) {
-    hideTagAc();
-    if (!matches.length) return;
-    tagAcEl = document.createElement('div');
-    tagAcEl.className = 'tag-ac-dropdown';
-    matches.forEach(tag => {
-      const item = document.createElement('div');
-      item.className = 'tag-ac-item';
-      item.textContent = '#' + tag;
-      item.addEventListener('mousedown', e => { e.preventDefault(); selectTagAcItem(tag); hideTagAc(); });
-      tagAcEl.appendChild(item);
-    });
-    const rect = filterSearch.getBoundingClientRect();
-    tagAcEl.style.top  = (rect.bottom + window.scrollY) + 'px';
-    tagAcEl.style.left = rect.left + 'px';
-    tagAcEl.style.width = rect.width + 'px';
-    document.body.appendChild(tagAcEl);
-  }
-
-  function updateTagAcHighlight() {
-    if (!tagAcEl) return;
-    tagAcEl.querySelectorAll('.tag-ac-item').forEach((el, i) => {
-      el.classList.toggle('selected', i === tagAcIndex);
-    });
-  }
-
-  filterSearch.addEventListener('keydown', e => {
-    if (!tagAcEl) return;
-    const items = tagAcEl.querySelectorAll('.tag-ac-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      tagAcIndex = (tagAcIndex + 1) % items.length;
-      updateTagAcHighlight();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      tagAcIndex = tagAcIndex <= 0 ? items.length - 1 : tagAcIndex - 1;
-      updateTagAcHighlight();
-    } else if ((e.key === 'Enter' || e.key === 'Tab') && tagAcIndex >= 0) {
-      e.preventDefault();
-      selectTagAcItem(items[tagAcIndex].textContent.replace(/^#/, ''));
-      hideTagAc();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      hideTagAc();
-    }
-  });
-
-  // Suggest tags of the tasks the other tag words leave visible in this tab,
-  // minus the ones already in the filter. Free text is ignored: it is usually
+  // Filter field: tags of the tasks the *other* tag words leave visible in
+  // this tab, minus those already used. Free text is ignored: it is usually
   // still being typed ("some text #ta…") and would otherwise hide every tag.
-  function computeTagMatches(w) {
-    const val = filterSearch.value;
-    const rest = val.slice(0, w.start) + val.slice(w.end);
-    const otherTags = rest.split(/\s+/).filter(word => word.startsWith('#')).join(' ');
-    const visibleTasks = filterTasks(otherTags);
-    const used = parseFilter(rest).tagGroups.flat();
-    const available = [...new Set(visibleTasks.flatMap(t => t.tags || []))]
-      .filter(tag => !used.includes(tag.toLowerCase())).sort();
-    if (!w.partial) return available.slice(0, 12);
-    return available
-      .map(tag => ({ tag, score: tagMatchScore(w.partial, tag) }))
-      .filter(({ score }) => score >= 0)
-      .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
-      .map(({ tag }) => tag)
-      .slice(0, 8);
-  }
-
-  function maybeShowTagAc() {
-    const w = document.activeElement === filterSearch ? currentTagWord() : null;
-    if (w) showTagAc(computeTagMatches(w));
-    else hideTagAc();
-  }
-  filterSearch.addEventListener('input', maybeShowTagAc);
-  filterSearch.addEventListener('click', maybeShowTagAc);
-  filterSearch.addEventListener('blur', () => setTimeout(hideTagAc, 150));
-
+  if (filterSearch) attachTagAc(filterSearch, {
+    word: () => hashWordAtCaret(filterSearch),
+    suggest: w => {
+      const val = filterSearch.value;
+      const rest = val.slice(0, w.start) + val.slice(w.end);
+      const otherTags = rest.split(/\s+/).filter(word => word.startsWith('#')).join(' ');
+      const used = parseFilter(rest).tagGroups.flat();
+      const counts = tagCounts(filterTasks(otherTags));
+      for (const tag of Object.keys(counts)) if (used.includes(tag.toLowerCase())) delete counts[tag];
+      return rankTags(w.partial, counts, w.partial ? 8 : 12);
+    },
+    accept: (tag, w) => { insertHashTag(filterSearch, tag, w); render(); },
+  });
   // A new task starts with the tags the filter requires (single-tag words;
   // an OR word doesn't say which one), so it shows up in the current view.
   function filterDefaultTags() {
     return parseFilter(filterSearch?.value).tagGroups.filter(g => g.length === 1).map(g => g[0]).join(', ');
   }
 
-  // ── Edit modal tag autocomplete ─────────────────────────────────────────────
-
+  // Edit modal Tags field (comma-separated): completes the last entry and
+  // adds ", " so the next tag can follow straight away.
   const editTagsInput = document.getElementById('task-edit-tags' + sfx);
-  let editTagAcEl = null;
-  let editTagAcIndex = -1;
-
-  function hideEditTagAc() {
-    editTagAcEl?.remove();
-    editTagAcEl = null;
-    editTagAcIndex = -1;
-  }
-
-  function selectEditTagAcItem(text) {
-    const val = editTagsInput.value;
-    const commaIdx = val.lastIndexOf(',');
-    editTagsInput.value = (commaIdx >= 0 ? val.slice(0, commaIdx + 1) + ' ' : '') + text;
-    editTagsInput.focus();
-  }
-
-  function showEditTagAc(matches) {
-    hideEditTagAc();
-    if (!matches.length) return;
-    editTagAcEl = document.createElement('div');
-    editTagAcEl.className = 'tag-ac-dropdown';
-    matches.forEach((tag) => {
-      const item = document.createElement('div');
-      item.className = 'tag-ac-item';
-      item.textContent = '#' + tag;
-      item.addEventListener('mousedown', e => { e.preventDefault(); selectEditTagAcItem(tag); hideEditTagAc(); });
-      editTagAcEl.appendChild(item);
-    });
-    // Position relative to the input's parent (inside the dialog)
-    const parent = editTagsInput.parentElement;
-    parent.style.position = 'relative';
-    editTagAcEl.style.top = editTagsInput.offsetTop + editTagsInput.offsetHeight + 'px';
-    editTagAcEl.style.left = '0';
-    editTagAcEl.style.width = editTagsInput.offsetWidth + 'px';
-    parent.appendChild(editTagAcEl);
-  }
-
-  if (editTagsInput) {
-    editTagsInput.addEventListener('keydown', e => {
-      if (!editTagAcEl) return;
-      const items = editTagAcEl.querySelectorAll('.tag-ac-item');
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        editTagAcIndex = (editTagAcIndex + 1) % items.length;
-        items.forEach((el, i) => el.classList.toggle('selected', i === editTagAcIndex));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        editTagAcIndex = editTagAcIndex <= 0 ? items.length - 1 : editTagAcIndex - 1;
-        items.forEach((el, i) => el.classList.toggle('selected', i === editTagAcIndex));
-      } else if ((e.key === 'Enter' || e.key === 'Tab') && editTagAcIndex >= 0) {
-        e.preventDefault();
-        selectEditTagAcItem(items[editTagAcIndex].textContent.replace(/^#/, ''));
-        hideEditTagAc();
-      } else if (e.key === 'Escape') {
-        hideEditTagAc();
-      }
-    });
-
-    editTagsInput.addEventListener('input', () => {
+  if (editTagsInput) noSpacesInTags(editTagsInput, true);
+  const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
+    word: () => {
       const val = editTagsInput.value;
-      const commaIdx = val.lastIndexOf(',');
-      const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim();
-      if (!partial) { hideEditTagAc(); return; }
+      const comma = val.lastIndexOf(',');
+      const partial = (comma >= 0 ? val.slice(comma + 1) : val).trim();
+      return partial ? { comma, partial } : null;
+    },
+    suggest: w => {
+      const committed = editTagsInput.value.slice(0, Math.max(w.comma, 0))
+        .split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      const counts = tagCounts(tasks);
+      for (const tag of Object.keys(counts)) if (committed.includes(tag.toLowerCase())) delete counts[tag];
+      return rankTags(w.partial, counts);
+    },
+    accept: (tag, w) => {
+      const val = editTagsInput.value;
+      editTagsInput.value = (w.comma >= 0 ? val.slice(0, w.comma + 1) + ' ' : '') + tag + ', ';
+      editTagsInput.focus();
+    },
+  });
 
-      // Collect all known tags from all tasks
-      const committed = val.slice(0, commaIdx >= 0 ? commaIdx : 0)
-        .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
-      const matches = allTags
-        .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
-        .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
-        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
-        .map(({ tag }) => tag)
-        .slice(0, 8);
-
-      showEditTagAc(matches);
-    });
-
-    editTagsInput.addEventListener('blur', () => setTimeout(hideEditTagAc, 150));
-  }
+  // A new task's title: the #tag shorthand (DeckCore.parseQuickAdd) gets the
+  // same suggestions, from every tag in use.
+  if (titleInput) attachTagAc(titleInput, {
+    word: () => document.getElementById('task-edit-id' + sfx).value ? null : hashWordAtCaret(titleInput),
+    suggest: w => rankTags(w.partial, tagCounts(tasks), w.partial ? 8 : 12),
+    accept: (tag, w) => { insertHashTag(titleInput, tag, w); syncQuickPreview(); },
+  });
 
   // ── Add task ───────────────────────────────────────────────────────────────
 
   addBtn.addEventListener('click', () => openEditModal(null));
 
   // ── Edit modal ─────────────────────────────────────────────────────────────
+
+  // Quick-add shorthand (DeckCore.parseQuickAdd) — new tasks only: a title
+  // ending in "tomorrow #work due:fri" fills those fields on save. The line
+  // under the title shows what was recognised, so nothing is a surprise.
+  const quickPreview = document.getElementById('task-edit-quick' + sfx);
+  function quickParse() {
+    if (document.getElementById('task-edit-id' + sfx).value) return null;   // editing
+    const q = parseQuickAdd(titleInput.value, todayStr());
+    return q.found ? q : null;
+  }
+  function syncQuickPreview() {
+    const q = quickParse();
+    quickPreview.hidden = !q;
+    if (!q) return;
+    quickPreview.textContent = [
+      q.start_date && `📅 start ${formatDate(q.start_date)}`,
+      q.due_date && `⏰ due ${formatDate(q.due_date)}`,
+      ...q.tags.map(t => '#' + t),
+    ].filter(Boolean).join(' · ');
+  }
+  titleInput.addEventListener('input', syncQuickPreview);
 
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
@@ -1921,6 +1869,8 @@
     // A new task in a [[deck page=…]] embed belongs to that page; otherwise it
     // would vanish from the embed as soon as it is saved.
     document.getElementById('task-edit-page' + sfx).value = task ? task.page || '' : initPage;
+    titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
+    syncQuickPreview();
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -2033,7 +1983,7 @@
   }
   document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => syncDates('lead'));
 
-  cancelBtn.addEventListener('click', () => { hideEditTagAc(); modal.close(); });
+  cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
 
   modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
 
@@ -2051,6 +2001,14 @@
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
       page: document.getElementById('task-edit-page' + sfx).value.trim().replace(/^\/?page\//, '') || null,
     };
+    // Shorthand in a new task's title wins over the fields (the preview said so).
+    const quick = !id && quickParse();
+    if (quick) {
+      data.title = quick.title;
+      if (quick.start_date) data.start_date = quick.start_date;
+      if (quick.due_date) data.due_date = quick.due_date;
+      data.tags = [...new Set([...data.tags, ...quick.tags])];
+    }
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox' + sfx).checked) {

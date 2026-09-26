@@ -56,6 +56,9 @@ No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constrain
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
         ├── deck-core.js    # Pure deck logic (no DOM) — shared by deck.js and Node-run tests
         ├── deck.js         # Deck (task management) app JS, loaded via [[deck]] embed
+        ├── favicon.svg     # Browser tab icon
+        ├── icon.svg        # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
+        └── manifest.json   # Web app manifest (Add to home screen)
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
@@ -90,6 +93,10 @@ Leaf is available at **http://localhost:5000** after `./run.sh up`.
 
 Set `ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check is skipped. Phones on the same network reach Leaf at `http://<host-LAN-IP>:5000`. The UI is responsive down to phone widths and the editor works on mobile. The viewport meta sets `interactive-widget=resizes-content`, so on Android the on-screen keyboard shrinks the layout viewport rather than only the visual one. Without it, full-screen views (the deck edit modal, the mobile editor) keep their full height and their bottom bars end up behind the keyboard. iOS Safari ignores the setting. There is no auth by default — for LAN use consider setting `LEAF_PASSWORD` in `.env` to get a login gate.
 
+### Home-screen app
+
+`src/public/manifest.json` plus `apple-touch-icon.png`, `icon-192.png` and `icon-512.png` (linked from every page's `<head>` by `shell()`) give "Add to home screen" a proper Leaf name and icon. Everything under `/public/` is reachable without login, which matters because browsers may fetch these without the session cookie. The PNGs are rendered once from `src/public/icon.svg` (full-bleed green square, leaf inside the central 80% "maskable" safe zone) and committed, so there is still no build step. To change the icon, edit the SVG and re-render the PNGs, e.g. with a screenshot in the Playwright image (`leaf-e2e`). Caveat: Android only installs a standalone app over HTTPS; over plain `http://` on the LAN it adds a shortcut that opens in a browser tab. iOS Safari is more lenient.
+
 ### Data directory
 
 Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before creating directories and starting the container:
@@ -116,6 +123,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/`                   | Redirects to `/page/index`                      |
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
+| GET    | `/deck`               | Redirect to the page that embeds the deck, keeping the query string (`deck_page_slug()`: `deck.md` if it has an embed, else the page whose embed has no `page=`/`tag=` filter, then by slug; falls back to `/page/deck`). Every link to "the deck" goes through it. |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `pages/<slug>.md`        |
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
@@ -139,9 +147,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/api/deck/due-count` | Count tasks due today + overdue |
 | GET    | `/api/deck/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
-| POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`        | Auto-generated index of all scratch notes, newest first |
-| GET    | `/page/_daily`        | Auto-generated index of all daily notes, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Redirects to `/` (browsing lives in the search modal) |
@@ -154,7 +160,7 @@ Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
 - **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
 - **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the top right of the breadcrumb. On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section. Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `leaf.js`) instead of scrolling down. A second tap or a tap elsewhere closes it. The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
-- **Linked tasks** — open deck tasks whose title/description link to the page. Each entry is a single link to that task in the deck (`/page/deck?task=<id>&filter=open`); links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
+- **Linked tasks** — open deck tasks whose title/description link to the page. Each entry is a single link to that task in the deck (`/deck?task=<id>&filter=open`); links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
 
 ---
 
@@ -249,7 +255,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - `render_md()` uses a placeholder approach: `process_deck_embeds()` replaces each `[[deck]]` with a numbered placeholder before markdown processing, and `inject_deck_embeds()` swaps each `<p>PLACEHOLDER</p>` for its embed HTML after render.
 - `deck.js` also reads URL query params (`?tag=`, `?filter=`, `?new=1`) as fallback for initialization.
 
-**Typical usage:** Create `deck.md` with `[[deck]]` to get the full deck at `/page/deck`.
+**Typical usage:** Create `deck.md` with `[[deck]]` to get the full deck at `/page/deck`. The deck can live on any page, though: links to it (search results, Linked tasks, the due badge, `g d`, `c t`) use `/deck`, which finds the embedding page. Hard-coding `/page/deck` once sent wikis without `deck.md` to the editor for an empty page.
 
 **Task ↔ Page linking:**
 - Tasks have an optional `page` field (slug string) linking them to a wiki page.
@@ -307,7 +313,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - Backdrop click detection: `e.target === searchModal` (not coordinate comparison — coordinates break with `<select>` dropdowns).
   - Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime) and cached for the session. Each list item shows the page title and slug — dates are not shown in the modal.
   - Filter input instantly narrows the list by title/slug; after 300ms debounce fetches `/api/search` for full-text **Content matches** with excerpts shown below the page list.
-  - **Sort by** — Title A–Z, Title Z–A, Recently edited, Most linked.
+  - **Sort by** — Recently edited (default, so an empty query works as a quick switcher), Title A–Z, Title Z–A, Most linked. Applies while the query is empty; a sort picked by hand is remembered in `localStorage` (`leaf-search-sort`).
   - **Unlinked only** checkbox — pages with zero incoming wikilinks.
   - First match is highlighted; **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
 
@@ -322,7 +328,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
 - **Scratch note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
 - **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratch notes newest-first with title and timestamp. Not editable.
-- **`/page/_daily`** — special auto-generated page (no `.md` file on disk) listing all daily notes newest-first with title and date. Not editable.
+- Daily notes (`/api/daily`, `/page/_daily`, `c d`/`g y`) were removed on purpose. Existing `YYYY-MM-DD_daily.md` files are ordinary pages.
 - **`/page/_deleted`** — special auto-generated page listing all pages that exist in git history but not on disk (deleted pages), newest deletion first. Each entry shows title, slug, deletion date, and a one-click Restore button that calls `POST /restore/<slug>/<sha>`. Only available when `GIT_ENABLED`. Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
 - Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only).
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
@@ -337,8 +343,8 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **Ctrl/⌘+N** | anywhere | Open new-page modal |
-| **g** then **h/s/d/t/y** | anywhere | Navigate: Home / Scratch / Deck / Deck (tag=task) / Daily |
-| **c** then **s/t/d** | anywhere | Create: scratch note / task-tagged deck item / daily note |
+| **g** then **h/s/d/t** | anywhere | Navigate: Home / Scratch / Deck / Deck (tag=task) |
+| **c** then **s/t** | anywhere | Create: scratch note / task-tagged deck item |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
@@ -376,7 +382,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - **Performance**: page documents are tokenized once and cached in `server._search_doc_cache` keyed by slug, invalidated per-file on `mtime` change (so on-disk edits stay reflected). Deck task docs come from `deck.task_search_docs()`.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive. Returns up to 15 results (pages + tasks combined).
-- **Selecting a task result** (search modal or `/search` page) opens `/page/deck?task=<id>&filter=<open|completed>` — the deck page on the tab matching the task's state, with that task selected, scrolled into view and briefly highlighted (`.task-flash`) — rather than the bare `_deck` storage slug. The link is by id, not title: titles can repeat or contain a `#word` the filter field would read as a tag. Built by `_result_href()` in `server.py` (the search modal uses the result's `href`). A page's "Linked tasks" entries use the same link.
+- **Selecting a task result** (search modal or `/search` page) opens `/deck?task=<id>&filter=<open|completed>` — which redirects to the page embedding the deck — on the tab matching the task's state, with that task selected, scrolled into view and briefly highlighted (`.task-flash`) — rather than the bare `_deck` storage slug. The link is by id, not title: titles can repeat or contain a `#word` the filter field would read as a tag. Built by `_result_href()` in `server.py` (the search modal uses the result's `href`). A page's "Linked tasks" entries use the same link.
 
 ---
 
@@ -411,7 +417,7 @@ A task has two dates, each with one meaning:
 
 Nothing is derived or stored beyond these two fields. The edit modal's "Days before due" number is only another way to enter the start date (`start = due − N`) and is not saved; when the modal opens, it shows the gap between the two dates. A recurring instance keeps that gap: when the series advances the due date, the start date moves by the same amount. Changing one date by hand (in the modal, the ⏰/📅 chips, or a board drag) never moves the other.
 
-Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N days before due" rule) and `recurrence.anchor`. `_normalize_task()` converts them on every read (and in restore snapshots), and `_migrate_date_model()` rewrites the files once at startup, with its own git commit.
+Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N days before due" rule) and `recurrence.anchor`. `_normalize_task()` converts them on every read (and in restore snapshots), and `_migrate_deck_files()` rewrites the files once at startup, with its own git commit ("Normalize deck files (date model, tags)"; a no-op once the files are current).
 
 ### Task fields
 
@@ -420,7 +426,7 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 | `id` | UUID string | Auto-generated unique ID |
 | `title` | string | Task title (required) |
 | `description` | string | Optional notes/description |
-| `tags` | string[] | Comma-separated tags |
+| `tags` | string[] | Tags, one word each. `_clean_tags()` runs on every write, read and restore: whitespace inside a tag becomes `-` (`local llm` → `local-llm`; the filter field splits on spaces, so a tag with a space could never be matched), a leading `#` is dropped, empties go, and case-insensitive duplicates collapse to the first spelling. The edit modal's field is comma-separated. Tag-only fields refuse spaces as you type (`DeckCore.sanitizeTagInput` on `input`, so paste and phone keyboards too): a space inside a tag becomes `-`, one after a comma or at the start is dropped, a comma gets one space after it. Deletions (`inputType` `delete…`) are left alone, or Backspace on `work, ` would get the space put straight back. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Due date |
 | `created_at` | ISO datetime | Auto-set on creation |
 | `completed_at` | ISO datetime / `null` | Set when completed |
@@ -434,13 +440,14 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 ### UI
 
 - **View tabs**: a segmented control (`.view-tabs`, `role=tablist`, one `<button data-filter>` per view) in the order Open · Plan · Focus (internal `data-filter` values `open`/`due`/`focus`); the active view's button is filled (`.active`, `aria-selected`). One click switches; **Tab**/**Shift+Tab** cycle the three tabs in on-screen order (wrapping), with keyboard focus following the active button. The fourth view, `completed`, is deliberately not a tab (see Completed link). On phones the control spans the full width with equal-width buttons. (It replaced an earlier `<select>` dropdown.) Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (Open) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on Open.
-- **Completed link**: rarely needed, so it is a quiet link under the list (`.deck-completed-link`, `#task-completed-link`) reading `✓ Completed (N) →`. N comes from `GET /api/deck/completed-count` (the completed tasks themselves load only when the view opens) and is refreshed after every write. In the Completed view no tab is highlighted, the list starts with a "Completed" divider, and the link reads `← Back to open tasks`, returning to the tab you came from. From Completed, Tab goes to the first tab and Shift+Tab to the last. `?filter=completed`, `[[deck filter=completed]]` and the session-remembered view still open it.
+- **Completed link**: rarely needed, so it is a quiet link under the list (`.deck-completed-link`, `#task-completed-link`) reading `✓ Completed (N) →`. N comes from `GET /api/deck/completed-count` (the completed tasks themselves load only when the view opens) and is refreshed after every write. In the Completed view no tab is highlighted, the list starts with a "Completed" divider, and the link reads `← Back to open tasks`, returning to the tab you came from. While the filter field is in use on another view, the link instead counts the completed tasks that match (`✓ 2 matches in Completed →`, `.has-matches`), so a search that finds nothing open still shows where the task went; the completed tasks are fetched once for that (`fetchCompleted`, one request in flight at a time). From Completed, Tab goes to the first tab and Shift+Tab to the last. `?filter=completed`, `[[deck filter=completed]]` and the session-remembered view still open it.
 - **Focus tab**: everything available to work on now — tasks whose start date has arrived (`start_date <= today`) plus overdue/due-today deadlines (`DeckCore.isFocus`), i.e. exactly the Plan board's Overdue and Today sections. A task that started days ago is simply part of Focus; there is no "stale" or "carried over" handling. An empty Focus says "Nothing planned for today" with a button to the Plan tab.
 - **Plan (`due`) tab — day board**: shows **all** open tasks grouped by start date (`DeckCore.bucketKey`): `Overdue` (missed deadline, `due_date < today`), `Today` (`start_date <= today`, or due today), `Tomorrow` and weekday headers for the next days (`today..+6`), `Later`, and `Unplanned` (no start date; tasks with only a deadline are listed here nearest deadline first, not on their due day). Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections, `Later`, and `Unplanned` are **drop targets** (Later and Unplanned are always shown, even when empty, so there is always somewhere to drop). An **empty section is only its header row** (`.board-day--empty`, dashed, min 1.9rem tall, 2.5rem under `pointer: coarse`), and the row itself takes the drop. So a quiet week stays compact, and nothing grows or moves when a drag starts; placeholders that appeared on drag start once shifted the section under the pointer. dragging a task card onto a day sets its `start_date` to that day; dropping on `Unplanned` clears it (`start_date = null`); dropping on `Later` opens a native date picker (min today+7) for the target date. `Overdue` is display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Inline date editing**: the ⏰ (due) and 📅 (start) spans in each card's meta row open a date picker on click — no modal needed. Keyboard: **f** starts the selected task today, **F** tomorrow (pressing again clears).
 - **Header layout**: tabs, filter field, sort, the Open tab's "Unplanned" toggle and **+ New** share one line on desktop (`.tasks-toolbar` has `flex: 1 1 20rem`, so it wraps under the tabs only when less than 20rem is left). On phones they take two lines: the tabs, then search · sort · toggle · a label-less "+" button (`.task-add-label` hidden; the button's accessible name is "New task").
 - **Sort options**: Manual (drag-and-drop) · Created
 - **Filter field**: one field (`#task-filter-search`) for text and tags. Words starting with `#` filter by tag: separate words must all match (`#a #b`), and a pipe means any (`#a|b`). The rest is a text search over title and description. `DeckCore.parseFilter`/`matchesFilter` implement it. Typing a `#word` anywhere in the field opens tag suggestions: tags of the tasks the *other tag words* leave visible in the current tab, minus those already used. Free text is ignored for suggestions; it is usually still being typed and would otherwise hide every tag. `/` focuses the field, and `#` focuses it and starts a tag word. `[[deck tag=a,b]]` / `?tag=` (comma = all, pipe = any) are converted with `DeckCore.tagParamToQuery` and prefilled together with `?search=`. A new task gets the filter's single-tag words as default tags.
+- **Tag completion** (one helper, `attachTagAc` in `deck.js`, used by the filter field, the edit modal's Tags field, a new task's title `#tag` shorthand, and the bulk tag dialog `t`/`T`): suggestions are ranked by `DeckCore.rankTags`: exact match, then prefix, substring and in-order letters, and within each level the most-used tag (`tagCounts`) first, then A–Z. The first (best) suggestion is highlighted from the start, so **Tab or Enter completes a half-typed tag to it**; ↑/↓ pick another, hovering moves the highlight, and Esc closes the dropdown and keeps what was typed (it does not also close the dialog or leave the field). The key handler runs in the capture phase so the field's own Enter/Esc handling never sees a key the dropdown used. In the Tags field a completion appends `, ` for the next tag; in the bulk dialog Enter completes and applies; "Remove tag" (`T`) suggests only tags the selected tasks carry. The dropdown is appended to the field's parent, not `<body>`, because inside a `<dialog>` only the top layer is visible.
 - **Drag-and-drop**: Available in "Manual" sort mode; reorders tasks persistently
 - **`?task=<id>`**: selects that task after load, scrolls it into view and flashes it. If the Open tab's "Unplanned only" toggle would hide it, the toggle is switched off for that visit (the stored preference is kept). A task that no longer exists (deleted, or in a previous-year archive) gets a notice instead.
 - **Inline completion**: Checkbox toggles mark task complete after a short grace period (cancellable)
@@ -449,6 +456,7 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 - **No hiding**: the deck never hides a task. Every open task is reachable from the Open tab or the Plan board at all times, and scheduling only decides *where* a task appears, not *whether* it does. (Much earlier versions had a Deferred tab with a hiding start date; that is gone, and today's `start_date` never hides anything.)
 - **Open tab "Unplanned" toggle**: the Open tab (formerly "All", before that "Backlog") lists every open task. It was renamed because it never held completed tasks, and the name pairs with the Completed link. A checkbox in the toolbar, shown only on this tab and **off by default**, narrows the list to tasks with no `start_date` — the queue still awaiting a decision about *when* to do them, the same tasks as the board's Unplanned section. A `due_date` alone does not count as planned: the deadline is the one day the work should not start. Giving a task a start date is therefore what removes it from the narrowed list. Predicate is `DeckCore.isUnplanned` (client-only; the server never filters views). It is a standing preference, so it persists in `localStorage` keyed by page path + embed instance, unlike the active tab (`sessionStorage`); the key carries a version suffix (now `-v3`) that is bumped whenever the default changes, so browsers that stored the previous default pick up the new one. `[[deck unplanned=1|0]]` pins it either way for an embed regardless of what is stored.
 - **Rejected writes** (e.g. dependency cycles) surface as an auto-dismissing toast (`showNotice`) with the server's error message.
+- **Quick-add shorthand** (new tasks only, `DeckCore.parseQuickAdd`): a title ending in shorthand fills the task's fields on save, e.g. `Call Bob tomorrow #work due:fri`. Start date: `today`, `tomorrow`/`tmrw`, a weekday (`fri`/`friday`; the next one, never today), `+3`/`+3d`/`+2w`, or `YYYY-MM-DD`. Due date: `due:` + any of those. Tags: `#tag` starting with a letter (so `Fix #3` keeps its number). Only **trailing** words are read, so a date word inside the sentence stays text; shorthand that would leave no title is ignored; a second start word stays in the title. A line under the title (`#task-edit-quick`) previews what was recognised, and on save the shorthand wins over the date fields. Editing an existing task never parses its title.
 - **Edit modal**: double-click a card (or Enter on the selected task) on desktop, or **tap** a card on a touch device (tracked via the pointer type of the last `pointerdown`, so mouse clicks keep selecting), or "Edit…" in the ⋯ menu. Full task editing, including a "From done" checkbox on recurring tasks (repeat from completion date).
 - **Recurring tasks**: completing one spawns the next instance (`spawned_from` links it to the completed task). The next due date steps from the previous due date (or from today when `recurrence.from` is `"completion"`) and is always advanced until ≥ today, so completing a long-overdue task never spawns an already-overdue instance. Monthly recurrence clamps to the real last day of the target month (Jan 31 → Feb 28/29); yearly steps 12 months and clamps the same way (Feb 29 → Feb 28 in non-leap years). A series advances its primary date (due, else start); when the task has both dates, the start date moves with the due date so the gap is kept (it may land before today, which just means "available since"). Un-completing removes exactly the spawned instance.
 - **Delete undo**: deleting (keyboard, edit modal, or ⋯ menu — all via `deleteWithUndo()`) asks for confirmation and shows an undo toast; undo POSTs the full snapshots to `/api/deck/restore`, preserving every field including ids, completion state, and dependency edges.
@@ -459,7 +467,7 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 
 ### Keyboard shortcut
 
-- **g d** — Navigate to Deck (`/page/deck`)
+- **g d** — Navigate to Deck (`/deck`, which redirects to the page embedding it)
 - **c t** — Quick-add to deck with `tag=task` (works from any page)
 
 ---

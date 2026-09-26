@@ -359,7 +359,6 @@ def safe_path(slug: str) -> Path | None:
 
 
 SCRATCH_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(.+)$")
-DAILY_RE  = re.compile(r"^(\d{4}-\d{2}-\d{2})_daily$")
 
 
 def is_scratch(slug: str) -> bool:
@@ -434,11 +433,6 @@ def _list_dated_notes(pattern: re.Pattern, ts_format: str, date_format: str) -> 
 def list_scratch() -> list[dict]:
     """Return all scratch notes sorted newest first."""
     return _list_dated_notes(SCRATCH_RE, "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d %H:%M")
-
-
-def list_daily() -> list[dict]:
-    """Return all daily notes sorted newest first."""
-    return _list_dated_notes(DAILY_RE, "%Y-%m-%d", "%Y-%m-%d")
 
 
 _H1_RE = re.compile(r"^#[ \t]+(\S.*)$")
@@ -1094,7 +1088,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
         )
     if task_backlinks:
         tbl_items = "".join(
-            f'<li><a href="/page/deck?{html.escape(urlencode({"task": t["id"], "filter": "open"}))}">'
+            f'<li><a href="/deck?{html.escape(urlencode({"task": t["id"], "filter": "open"}))}">'
             f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
             for t in task_backlinks
         )
@@ -1170,6 +1164,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <title>{safe_title} — {APP_NAME}</title>
   <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/public/manifest.json">
+  <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="Leaf">
   <link rel="stylesheet" href="/public/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
@@ -1182,9 +1179,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
     <div class="search-modal-controls">
       <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">
       <select id="modal-sort">
+        <option value="mtime-desc">Recently edited</option>
         <option value="title-asc">Title A–Z</option>
         <option value="title-desc">Title Z–A</option>
-        <option value="mtime-desc">Recently edited</option>
         <option value="links-desc">Most linked</option>
       </select>
       <label class="unlinked-label">
@@ -1223,11 +1220,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
       <tr><td><kbd>c t</kbd></td><td>Add to Deck</td></tr>
-      <tr><td><kbd>c d</kbd></td><td>Open today's daily note</td></tr>
       <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
       <tr><td><kbd>g d</kbd></td><td>Go to Deck</td></tr>
-      <tr><td><kbd>g y</kbd></td><td>Go to Daily index</td></tr>
 
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
@@ -1267,7 +1262,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/page/deck?filter=focus" style="display: none;" title="Deck due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/deck?filter=focus" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
       <span id="deck-due-count">0</span>
     </a>
@@ -1336,7 +1331,7 @@ def index():
 
 
 def _index_page(slug: str, title: str, body_inner: str) -> str:
-    """Shared shell for the auto-generated index pages (_scratch, _daily, _deleted)."""
+    """Shared shell for the auto-generated index pages (_scratch, _deleted)."""
     body = f"""{build_breadcrumb(slug, title)}
 <header class="page-header"><h1>{title}</h1></header>
 <article class="page-content">{body_inner}</article>"""
@@ -1357,11 +1352,6 @@ def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
 @app.get("/page/_scratch")
 def scratch_page():
     return _index_page('_scratch', 'Scratch', _notes_list_html(list_scratch(), 'No entries yet.'))
-
-
-@app.get("/page/_daily")
-def daily_index_page():
-    return _index_page('_daily', 'Daily', _notes_list_html(list_daily(), 'No daily notes yet.'))
 
 
 @app.get("/page/_deleted")
@@ -1468,19 +1458,6 @@ def api_raw_create_page():
         raw_path.write_text(raw_content, encoding="utf-8")
         git_commit(raw_path, f"Add snippet link to _raw: {title[:60]}")
     return jsonify({"slug": slug, "title": title})
-
-
-@app.post("/api/daily")
-def api_daily():
-    today = datetime.now().strftime("%Y-%m-%d")
-    slug = f"{today}_daily"
-    path = safe_path(slug)
-    if path is None:
-        abort(400)
-    if not path.exists():
-        path.write_text(f"# {today}\n\n", encoding="utf-8")
-        git_commit(path, f"Create daily {today}")
-    return jsonify({"slug": slug})
 
 
 @app.post("/api/scratch")
@@ -2032,7 +2009,6 @@ def api_pages_list():
     pages.sort(key=lambda p: p["title"].lower())
     # Inject virtual special pages
     pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
-    pages.insert(0, {"slug": "_daily", "title": "Daily", "links": counts.get("_daily", 0), "mtime": 0})
     if GIT_ENABLED:
         pages.insert(0, {"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0})
     return jsonify(pages)
@@ -2105,6 +2081,51 @@ def api_search():
     return jsonify(do_search(q))
 
 
+# ── Where the deck lives ──────────────────────────────────────────────────────
+# The deck is not a route of its own but a [[deck]] embed on some page, often
+# /page/deck but not necessarily. Links to it (search results, Linked tasks,
+# the due badge, g d / c t) go through /deck, which redirects to that page and
+# keeps the query (?task=…, ?filter=…). Before, they pointed at /page/deck,
+# which for a wiki without deck.md opened the editor on an empty page.
+
+_deck_embed_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _deck_embeds(md_file: Path, slug: str) -> list[dict]:
+    """Params of each [[deck …]] on a page (code excluded), cached by mtime."""
+    try:
+        mtime = md_file.stat().st_mtime
+    except OSError:
+        return []
+    cached = _deck_embed_cache.get(slug)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    masked, _ = _mask_code(md_file.read_text(encoding="utf-8"))
+    embeds = [deck_module._parse_tasks_params(m.group(1) or "")
+              for m in deck_module._DECK_RE.finditer(masked)]
+    _deck_embed_cache[slug] = (mtime, embeds)
+    return embeds
+
+
+def deck_page_slug() -> str | None:
+    """The page to open for "the deck": deck.md if it embeds one, else the page
+    whose embed hides the fewest tasks (no tag=/page= filter), then by slug."""
+    best = None
+    for md_file, slug in iter_pages():
+        for params in _deck_embeds(md_file, slug):
+            rank = (slug != "deck", "page" in params, "tag" in params, slug)
+            if best is None or rank < best:
+                best = rank
+    return best[-1] if best else None
+
+
+@app.get("/deck")
+def open_deck():
+    slug = deck_page_slug() or "deck"   # no embed anywhere: offer to create deck.md
+    query = request.query_string.decode()
+    return redirect(f"/page/{slug}" + (f"?{query}" if query else ""))
+
+
 def _result_href(r: dict) -> str:
     """Destination URL for a search result. Task results open the deck page on
     the tab matching the task's state, with that one task selected and
@@ -2113,7 +2134,7 @@ def _result_href(r: dict) -> str:
     if r.get("type") == "task":
         from urllib.parse import urlencode
         tab = "completed" if r.get("status") == "done" else "open"
-        return "/page/deck?" + urlencode({"task": r["task_id"], "filter": tab})
+        return "/deck?" + urlencode({"task": r["task_id"], "filter": tab})
     return f"/page/{r['slug']}"
 
 
