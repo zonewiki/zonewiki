@@ -1135,22 +1135,20 @@
     const filtered = filterTasks();
 
 
-    // In "open" (Open) view split into: due now (pinned top), ordered, new (inbox)
+    // Open and Focus split into: due now (pinned top), ordered, new (inbox).
+    // The Due section holds exactly what the due badge counts (overdue + due
+    // today), so the badge's number is visible where its link lands (Focus).
     let dueTasks, orderedTasks, newTasks;
-    if (activeFilter === 'open') {
+    if (activeFilter === 'open' || activeFilter === 'focus') {
       const today = todayStr();
       const isDueNow = t => t.due_date && t.due_date <= today;
+      const orderField = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
       dueTasks = filtered.filter(isDueNow)
                          .sort((a, b) => a.due_date.localeCompare(b.due_date));
       const rest = filtered.filter(t => !isDueNow(t));
-      orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
-      newTasks   = rest.filter(t => t.sort_order == null)
+      orderedTasks = sortTasks(rest.filter(t => t[orderField] != null));
+      newTasks   = rest.filter(t => t[orderField] == null)
                        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-    } else if (activeFilter === 'focus') {
-      dueTasks     = [];
-      orderedTasks = sortTasks(filtered.filter(t => t.focus_order != null));
-      newTasks     = filtered.filter(t => t.focus_order == null)
-                             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else {
       dueTasks     = [];
       orderedTasks = sortTasks(filtered);
@@ -1255,7 +1253,7 @@
       return;
     }
 
-    // Due now section (overdue + due today) pinned at top of Open tab
+    // Due now section (overdue + due today) pinned at top of Open and Focus
     if (dueTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
       html += dueTasks.map(t => taskHTML(t, false)).join('');
@@ -1267,9 +1265,10 @@
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     if (activeFilter === 'focus') {
-      if (orderedTasks.length >= CAPACITY) {
+      const inFocus = dueTasks.length + orderedTasks.length;
+      if (inFocus >= CAPACITY) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
-          `<span>⚠ ${orderedTasks.length} tasks in focus (limit: ${CAPACITY})</span></li>`;
+          `<span>⚠ ${inFocus} tasks in focus (limit: ${CAPACITY})</span></li>`;
       }
     }
     // No tab is highlighted in Completed, so the list says where you are.

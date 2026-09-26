@@ -170,6 +170,31 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     expect(page.locator(".review-panel")).to_have_count(0)
 
 
+def test_due_badge_count_matches_focus_due_section(page, wiki):
+    # The badge counts deadlines (overdue + due today) and links to Focus,
+    # which also lists started tasks; its Due section shows exactly the
+    # counted ones, so the number is visible where the link lands.
+    d = lambda n: (date.today() + timedelta(days=n)).isoformat()
+    page.request.post("/api/deck", data={"title": "Overdue", "due_date": d(-2)})
+    page.request.post("/api/deck", data={"title": "Due today", "due_date": d(0)})
+    page.request.post("/api/deck", data={"title": "Started", "start_date": d(-1)})
+    page.request.post("/api/deck", data={"title": "Started, due later",
+                                         "start_date": d(0), "due_date": d(5)})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/index")
+    badge = page.locator("#deck-due-badge")
+    expect(page.locator("#deck-due-count")).to_have_text("2")
+    expect(badge).to_have_attribute("title", "1 overdue · 1 due today")
+    badge.click()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    pinned = page.locator(".task-item[data-due-pinned]")
+    expect(pinned).to_have_count(2)
+    expect(pinned.locator(".task-title")).to_have_text(["Overdue", "Due today"])
+    expect(page.locator(".task-inbox-divider--only").first).to_have_text("Due")
+    expect(card(page, "Started")).to_be_visible()
+    expect(card(page, "Started, due later")).to_be_visible()
+
+
 def test_empty_focus_offers_planning(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=open")
