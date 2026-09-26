@@ -180,12 +180,13 @@ def test_due_badge_count_matches_focus_due_section(page, wiki):
     page.request.post("/api/deck", data={"title": "Started", "start_date": d(-1)})
     page.request.post("/api/deck", data={"title": "Started, due later",
                                          "start_date": d(0), "due_date": d(5)})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    # No deck.md: the badge goes to the built-in /deck page.
     page.goto("/page/index")
     badge = page.locator("#deck-due-badge")
     expect(page.locator("#deck-due-count")).to_have_text("2")
     expect(badge).to_have_attribute("title", "1 overdue · 1 due today")
     badge.click()
+    expect(page).to_have_url(re.compile(r"/deck\?view=focus$"))
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     pinned = page.locator(".task-item[data-due-pinned]")
     expect(pinned).to_have_count(2)
@@ -193,6 +194,33 @@ def test_due_badge_count_matches_focus_due_section(page, wiki):
     expect(page.locator(".task-inbox-divider--only").first).to_have_text("Due")
     expect(card(page, "Started")).to_be_visible()
     expect(card(page, "Started, due later")).to_be_visible()
+
+
+def test_deck_page_opens_linked_task_and_lists(page, wiki):
+    # /deck is one built-in main deck, whatever embeds the wiki's pages have.
+    wiki.write("deck", "# Deck\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
+    tid = page.request.post("/api/deck", data={"title": "Untagged"}).json()["id"]
+    page.request.post("/api/deck", data={"title": "Milk", "list": "groceries"})
+    page.goto(f"/deck?task={tid}&view=open")
+    expect(page.locator(".tasks-app")).to_have_count(1)
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
+    expect(card(page, "Untagged")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(card(page, "Milk")).to_have_count(0)
+
+    page.goto("/deck?list=groceries&view=open")
+    expect(page.locator("h1")).to_have_text("groceries")
+    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Untagged")).to_have_count(0)
+
+
+def test_search_modal_lists_the_deck(page, wiki):
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("deck")
+    expect(page.locator(".page-list-item").first).to_contain_text("Deck")
+    page.locator("#modal-filter").press("Enter")
+    expect(page).to_have_url(re.compile(r"/deck$"))
+    expect(page.locator(".tasks-app")).to_have_count(1)
 
 
 def test_empty_focus_offers_planning(page, wiki):

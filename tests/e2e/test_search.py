@@ -95,9 +95,10 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
     expect(page.locator("#modal-sort")).to_have_value("title-asc")
 
 
-def test_task_result_opens_the_page_that_embeds_the_deck(page, wiki):
+def test_task_result_opens_the_deck_page(page, wiki):
     # Regression: with no deck.md, opening a task from Ctrl+P landed on
-    # /edit/deck, an empty new page.
+    # /edit/deck, an empty new page. It now opens the built-in /deck, whatever
+    # pages embed a deck.
     wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     tid = page.request.post("/api/deck", data={"title": "Renew passport"}).json()["id"]
     page.goto("/page/index")
@@ -106,6 +107,6 @@ def test_task_result_opens_the_page_that_embeds_the_deck(page, wiki):
     card = page.locator("#modal-content-matches .search-result-card").first
     expect(card).to_be_visible()
     card.click()
-    page.wait_for_url(f"**/page/tasks?task={tid}&view=open")
+    page.wait_for_url(f"**/deck?task={tid}&view=open")
     expect(page.locator(f".task-item[data-id='{tid}']")).to_have_class(
         re.compile(r"\btask-selected\b"))

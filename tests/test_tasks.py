@@ -729,13 +729,6 @@ class TestDueCount:
 
 
 class TestDeckPage:
-    def test_deck_route_is_only_a_redirect(self, client):
-        """There is no standalone deck app: /deck just redirects to the wiki
-        page that embeds it (see TestDeckRedirect in test_routes.py)."""
-        resp = client.get("/deck")
-        assert resp.status_code == 302
-        assert "tasks-app" not in resp.get_data(as_text=True)
-
     def test_deck_embed_in_wiki_page(self, client, wiki_dir):
         """A wiki page with [[deck]] renders the full deck app."""
         (wiki_dir / "deck.md").write_text("# Deck\n\n[[deck]]\n", encoding="utf-8")

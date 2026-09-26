@@ -265,7 +265,7 @@ async function loadModalPages() {
 function renderModalList(pages) {
   modalPageList.innerHTML = pages.map(p =>
     `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
-    `<a href="/page/${p.slug}">${he(p.title)}</a>` +
+    `<a href="${he(p.href || `/page/${p.slug}`)}">${he(p.title)}</a>` +
     `<span class="page-item-right"><span class="page-slug">${he(p.slug)}</span></span></li>`
   ).join('');
 }
@@ -369,7 +369,7 @@ function applyModalControls() {
       const titleHtml = field === 'title' ? highlightIndices(p.title, indices) : he(p.title);
       const slugHtml  = field === 'slug'  ? highlightIndices(p.slug,  indices) : he(p.slug);
       return `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
-        `<a href="/page/${p.slug}">${titleHtml}</a>` +
+        `<a href="${he(p.href || `/page/${p.slug}`)}">${titleHtml}</a>` +
         `<span class="page-item-right"><span class="page-slug">${slugHtml}</span></span></li>`;
     }).join('');
   } else {

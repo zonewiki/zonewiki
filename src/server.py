@@ -2059,8 +2059,10 @@ def api_pages_list():
             "edited": fmt_date(mtime),
         })
     pages.sort(key=lambda p: p["title"].lower())
-    # Inject virtual special pages
+    # Inject virtual special pages. `href` is for entries that are not
+    # /page/<slug> (the built-in deck page lives at /deck).
     pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
+    pages.insert(0, {"slug": "/deck", "title": "Deck", "href": "/deck", "links": 0, "mtime": 0})
     if GIT_ENABLED:
         pages.insert(0, {"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0})
     return jsonify(pages)
@@ -2133,63 +2135,33 @@ def api_search():
     return jsonify(do_search(q))
 
 
-# ── Where the deck lives ──────────────────────────────────────────────────────
-# The deck is not a route of its own but a [[deck]] embed on some page, often
-# /page/deck but not necessarily. Links to it (search results, Linked tasks,
-# the due badge, g d / c t) go through /deck, which redirects to that page and
-# keeps the query (?task=…, ?view=…). Before, they pointed at /page/deck,
-# which for a wiki without deck.md opened the editor on an empty page.
-
-_deck_embed_cache: dict[str, tuple[float, list[dict]]] = {}
-
-
-def _deck_embeds(md_file: Path, slug: str) -> list[dict]:
-    """Params of each [[deck …]] on a page (code excluded), cached by mtime."""
-    try:
-        mtime = md_file.stat().st_mtime
-    except OSError:
-        return []
-    cached = _deck_embed_cache.get(slug)
-    if cached and cached[0] == mtime:
-        return cached[1]
-    masked, _ = _mask_code(md_file.read_text(encoding="utf-8"))
-    embeds = [deck_module._parse_tasks_params(m.group(1) or "")
-              for m in deck_module._DECK_RE.finditer(masked)]
-    _deck_embed_cache[slug] = (mtime, embeds)
-    return embeds
-
-
-def deck_page_slug(list_name: str | None = None) -> str | None:
-    """The page to open for "the deck": deck.md if it embeds one, else the page
-    whose embed hides the fewest tasks (no tag= filter), then by slug.
-    With list_name, only embeds of that list count ([[deck list=…]]); without
-    it, list embeds don't, since they show none of the main deck's tasks."""
-    best = None
-    for md_file, slug in iter_pages():
-        for params in _deck_embeds(md_file, slug):
-            if deck_module._clean_list(params.get("list")) != list_name:
-                continue
-            rank = (slug != "deck", "tag" in params, slug)
-            if best is None or rank < best:
-                best = rank
-    return best[-1] if best else None
-
+# ── The deck page ─────────────────────────────────────────────────────────────
+# /deck is a built-in page showing one full main deck (or, with ?list=, that
+# separate list). Every link to "the deck" goes here: search results, Linked
+# tasks, the due badge, g d / c t. It used to redirect to whichever page
+# embedded [[deck]], so where a link landed depended on the wiki's pages, and
+# its ?view=/?task= applied to every embed there. [[deck …]] embeds are for
+# custom views on ordinary pages; nothing links to them.
 
 @app.get("/deck")
-def open_deck():
-    args = request.args.to_dict()
-    list_name = deck_module._clean_list(args.get("list"))
-    slug = deck_page_slug(list_name) if list_name else None
-    if slug:
-        # The page embeds the list itself; a ?list= left in the URL would
-        # also switch any plain [[deck]] on that page to the list.
-        del args["list"]
+def deck_page():
+    list_name = deck_module._clean_list(request.args.get("list"))
+    embed = deck_module._build_deck_embed({"list": list_name} if list_name else {})
+    sep = '<span class="breadcrumb-sep">›</span>'
+    if list_name:
+        title = f"{list_name} · Deck"
+        crumbs = [HOME_LINK, '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
+        heading = html.escape(list_name)
     else:
-        # No page embeds the list: the main deck shows it via ?list=.
-        slug = deck_page_slug() or "deck"   # no embed anywhere: offer to create deck.md
-    from urllib.parse import urlencode
-    query = urlencode(args)
-    return redirect(f"/page/{slug}" + (f"?{query}" if query else ""))
+        title = "Deck"
+        crumbs = [HOME_LINK, "<span>Deck</span>"]
+        heading = "Deck"
+    # data-slug keys the navigation trail (leaf.js); no page has this slug.
+    key = "/deck" + (f"?list={list_name}" if list_name else "")
+    body = f"""<div class="breadcrumb" data-slug="{html.escape(key)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>
+<header class="page-header"><h1>{heading}</h1></header>
+<article class="page-content">{embed}</article>"""
+    return shell(title, body)
 
 
 def _task_href(task_id: str, tab: str, list_name: str | None) -> str:

@@ -1238,63 +1238,48 @@ class TestRenameUpdatesAllReferences:
 # /deck — find the page that embeds the deck
 # ===========================================================================
 
-class TestDeckRedirect:
-    """Regression: task links pointed at /page/deck, which in a wiki without
-    deck.md opened the editor on an empty page."""
+class TestDeckPage:
+    """/deck is a built-in page with one full main deck. It used to redirect
+    to whichever page embedded [[deck]], so where the due badge and task links
+    landed depended on the wiki's pages (and, before that, /page/deck opened
+    the editor in a wiki without deck.md)."""
 
-    def go(self, client, qs=""):
+    def get(self, client, qs=""):
         resp = client.get("/deck" + qs, headers=HOST)
-        assert resp.status_code == 302
-        return resp.headers["Location"]
+        assert resp.status_code == 200
+        return resp.get_data(as_text=True)
 
-    def test_deck_embedded_on_another_page(self, client, wiki_dir):
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck]]\n")
-        assert self.go(client, "?task=abc&view=open") == "/page/tasks?task=abc&view=open"
+    def test_renders_one_main_deck(self, client, wiki_dir):
+        body = self.get(client)
+        assert body.count('class="tasks-app"') == 1
+        assert 'data-init-list=""' in body
+        assert 'data-init-tag=""' in body
+        assert 'data-init-view=""' in body   # ?view= / session / Focus decide
+        assert '<script src="/public/deck.js" defer></script>' in body
+        assert "<h1>Deck</h1>" in body
 
-    def test_deck_md_wins(self, client, wiki_dir):
-        write_page(wiki_dir, "aaa", "# A\n\n[[deck]]\n")
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck view=focus]]\n")
-        assert self.go(client) == "/page/deck"
+    def test_does_not_depend_on_pages(self, client, wiki_dir):
+        # Embeds elsewhere (even a deck.md) are ordinary pages now.
+        write_page(wiki_dir, "deck", "# My deck\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
+        body = self.get(client, "?task=abc&view=focus")
+        assert body.count('class="tasks-app"') == 1
+        assert "My deck" not in body
+        assert 'data-init-tag=""' in body
 
-    def test_unfiltered_embed_preferred(self, client, wiki_dir):
-        # A tag= or list= embed may hide the task being linked to.
-        write_page(wiki_dir, "a-work", "# W\n\n[[deck tag=work]]\n")
-        write_page(wiki_dir, "b-garden", "# G\n\n[[deck list=garden]]\n")
-        write_page(wiki_dir, "c-all", "# All\n\n[[deck view=plan]]\n")
-        assert self.go(client) == "/page/c-all"
+    def test_list(self, client, wiki_dir):
+        body = self.get(client, "?list=Groceries&task=abc")
+        assert 'data-init-list="groceries"' in body
+        assert '<a href="/deck">Deck</a>' in body
+        assert "<h1>groceries</h1>" in body
 
-    def test_embed_in_code_does_not_count(self, client, wiki_dir):
-        write_page(wiki_dir, "docs", "# Docs\n\n```\n[[deck]]\n```\n\nand `[[deck]]`\n")
-        write_page(wiki_dir, "zz", "# Z\n\n[[deck tag=x]]\n")
-        assert self.go(client) == "/page/zz"
+    def test_list_name_escaped(self, client, wiki_dir):
+        body = self.get(client, "?list=<b>x")
+        assert "<b>x" not in body
 
-    def test_no_deck_anywhere_falls_back_to_deck_page(self, client, wiki_dir):
-        write_page(wiki_dir, "plain", "# Plain\n")
-        assert self.go(client, "?new=1") == "/page/deck?new=1"
-
-    def test_embed_added_later_is_found(self, client, wiki_dir):
-        import os, time
-        p = write_page(wiki_dir, "later", "# Later\n")
-        assert self.go(client) == "/page/deck"
-        p.write_text("# Later\n\n[[deck]]\n", encoding="utf-8")
-        t = time.time() + 5
-        os.utime(p, (t, t))   # mtime-keyed cache must notice
-        assert self.go(client) == "/page/later"
-
-    def test_list_goes_to_page_embedding_it(self, client, wiki_dir):
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck]]\n")
-        write_page(wiki_dir, "shop", "# Shop\n\n[[deck list=groceries]]\n")
-        # The list param is dropped: the page's own embed selects the list.
-        assert self.go(client, "?task=abc&list=Groceries") == "/page/shop?task=abc"
-
-    def test_list_embed_is_never_the_main_deck(self, client, wiki_dir):
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=groceries]]\n")
-        write_page(wiki_dir, "zz", "# Z\n\n[[deck tag=x]]\n")
-        assert self.go(client) == "/page/zz"
-
-    def test_unembedded_list_opens_in_main_deck(self, client, wiki_dir):
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck]]\n")
-        assert self.go(client, "?list=books") == "/page/deck?list=books"
+    def test_in_search_modal_list(self, client, wiki_dir):
+        pages = client.get("/api/pages-list", headers=HOST).get_json()
+        deck = [p for p in pages if p.get("href") == "/deck"]
+        assert len(deck) == 1 and deck[0]["title"] == "Deck"
 
     def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
