@@ -8,3 +8,6 @@ src/__pycache__
 src/data
 .venv
 tests/__pycache__
+tests/e2e/_screenshots/
+.coverage
+__pycache__/

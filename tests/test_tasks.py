@@ -302,6 +302,69 @@ class TestRecurring:
         spawned = next(t for t in tasks if t["id"] != task["id"])
         assert spawned["due_date"] == "2099-04-30"
 
+    def _complete_and_get_spawn(self, client, task_id):
+        client.put(f"/api/deck/{task_id}", json={"completed": True})
+        return next(t for t in client.get("/api/deck").get_json()
+                    if t.get("spawned_from") == task_id)
+
+    def test_monthly_month_end_does_not_drift(self, client):
+        # Regression: each step used the previous (clamped) due date as its
+        # base, so Jan 31 → Feb 28 → Mar 28 → Apr 28… drifted forever.
+        task = create_task(client, title="Month end", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        dues = []
+        for _ in range(3):
+            task = self._complete_and_get_spawn(client, task["id"])
+            dues.append(task["due_date"])
+        assert dues == ["2099-02-28", "2099-03-31", "2099-04-30"]
+
+    def test_monthly_anchor_day_survives_edit_modal_save(self, client):
+        # The edit modal re-sends rec_type/rec_interval with the unchanged due
+        # date; that must not re-anchor the series to the clamped day.
+        task = create_task(client, title="Month end", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        spawned = self._complete_and_get_spawn(client, task["id"])
+        client.put(f"/api/deck/{spawned['id']}", json={
+            "title": "Month end", "due_date": "2099-02-28",
+            "rec_type": "monthly", "rec_interval": 1})
+        nxt = self._complete_and_get_spawn(client, spawned["id"])
+        assert nxt["due_date"] == "2099-03-31"
+
+    def test_monthly_anchor_kept_when_only_plan_date_changes(self, client):
+        task = create_task(client, title="Month end", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        spawned = self._complete_and_get_spawn(client, task["id"])
+        client.put(f"/api/deck/{spawned['id']}", json={
+            "due_date": "2099-02-28", "focus_date": "2099-02-20",
+            "rec_type": "monthly", "rec_interval": 1})
+        assert self._complete_and_get_spawn(client, spawned["id"])["due_date"] == "2099-03-31"
+
+    def test_monthly_anchor_resets_when_due_date_moved(self, client):
+        task = create_task(client, title="Rent", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={
+            "due_date": "2099-01-15", "rec_type": "monthly", "rec_interval": 1})
+        nxt = self._complete_and_get_spawn(client, task["id"])
+        assert nxt["due_date"] == "2099-02-15"
+
+    def test_yearly_leap_day_returns_in_leap_years(self, client):
+        task = create_task(client, title="Leap", due_date="2092-02-29",
+                           rec_type="yearly", rec_interval=1).get_json()
+        dues = []
+        for _ in range(4):
+            task = self._complete_and_get_spawn(client, task["id"])
+            dues.append(task["due_date"])
+        assert dues == ["2093-02-28", "2094-02-28", "2095-02-28", "2096-02-29"]
+
+    def test_plan_anchored_monthly_does_not_drift(self, client):
+        task = create_task(client, title="Plan end", focus_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1, rec_anchor="plan").get_json()
+        plans = []
+        for _ in range(2):
+            task = self._complete_and_get_spawn(client, task["id"])
+            plans.append(task["focus_date"])
+        assert plans == ["2099-02-28", "2099-03-31"]
+
     def test_spawned_task_preserves_tags(self, client):
         task = create_task(client, title="Tagged recurring",
                            due_date=_future(10),
@@ -363,6 +426,19 @@ class TestRecurring:
         spawned = active[0]
         assert spawned["focus_date"] == _future(14)
         assert spawned["due_date"] is None
+
+    def test_plan_anchor_overdue_plan_catches_up_to_today(self, client):
+        # A long-stale plan date must not spawn an instance planned in the past.
+        task = create_task(client, title="Stale weekly",
+                           focus_date=(date.today() - timedelta(days=30)).isoformat(),
+                           rec_type="weekly", rec_interval=1,
+                           rec_anchor="plan").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        planned = date.fromisoformat(spawned["focus_date"])
+        assert date.today() <= planned < date.today() + timedelta(days=7)
+        # Still on the original weekday cadence.
+        assert (planned - date.fromisoformat(task["focus_date"])).days % 7 == 0
 
     def test_due_anchor_default(self, client):
         # No rec_anchor → defaults to "due" behavior
@@ -1454,6 +1530,23 @@ class TestRestore:
         for field in ("title", "description", "tags", "due_date",
                       "focus_date", "page", "recurrence"):
             assert restored[field] == task[field]
+
+    def test_restore_keeps_yearly_recurrence(self, client):
+        # Regression: the snapshot sanitizer whitelisted only daily/weekly/
+        # monthly, so undoing the delete of a yearly task silently dropped
+        # its recurrence.
+        task = create_task(client, title="Birthday", due_date="2030-05-01",
+                           rec_type="yearly", rec_interval=1).get_json()
+        assert task["recurrence"]["type"] == "yearly"
+        client.delete(f"/api/deck/{task['id']}")
+        client.post("/api/deck/restore", json={"tasks": [task]})
+        restored = client.get("/api/deck").get_json()[0]
+        assert restored["recurrence"] == task["recurrence"]
+
+    def test_restore_drops_unknown_recurrence_type(self, client):
+        resp = client.post("/api/deck/restore", json={"tasks": [
+            {"title": "T", "recurrence": {"type": "hourly", "interval": 1}}]})
+        assert resp.get_json()[0]["recurrence"] is None
 
     def test_restore_completed_snapshot_lands_in_completed(self, client):
         task = create_task(client, title="Done one").get_json()

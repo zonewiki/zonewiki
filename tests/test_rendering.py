@@ -10,6 +10,7 @@ Run with:
 """
 
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -596,3 +597,68 @@ class TestRenderTaskTitleViaViewPage:
         result = process_wikilinks("[[A & B]]")
         # Slug should be "a-b" (not "a-amp-b")
         assert 'href="/page/a-b"' in result
+
+
+# ===========================================================================
+# Regressions from code review
+# ===========================================================================
+
+class TestDisabledAttributeStripping:
+    """render_md drops `disabled` from task-list checkboxes so they are
+    clickable. It used to strip every ` disabled` in the whole HTML, eating the
+    word from ordinary prose."""
+
+    def test_word_disabled_in_prose_survives(self, wiki_dir):
+        html = render_md("The account is disabled today.\n")
+        assert "The account is disabled today." in html
+
+    def test_disabled_attribute_in_raw_html_elsewhere_survives(self, wiki_dir):
+        html = render_md('<button disabled>x</button>\n')
+        assert "<button disabled>" in html
+
+    def test_task_checkbox_is_still_enabled(self, wiki_dir):
+        html = render_md("- [ ] task\n")
+        checkbox = re.search(r'<input[^>]*task-list-item-checkbox[^>]*>', html).group(0)
+        assert "disabled" not in checkbox
+
+
+class TestDirectivesInsideCode:
+    """[[wikilinks]], [[deck]] and [[toc]] are pre-processed on the raw text.
+    Inside code they must stay literal — they used to be rewritten into HTML
+    that then showed up escaped inside the code block (or embedded a whole deck
+    app inside a <pre>)."""
+
+    def test_wikilink_in_fenced_code_stays_literal(self, wiki_dir):
+        html = render_md("```\nsee [[some page]]\n```\n")
+        assert "see [[some page]]" in html
+        assert "wikilink" not in html
+
+    def test_wikilink_in_tilde_fence_stays_literal(self, wiki_dir):
+        html = render_md("~~~md\n[[a|b]]\n~~~\n")
+        assert "[[a|b]]" in html
+
+    def test_wikilink_in_inline_code_stays_literal(self, wiki_dir):
+        html = render_md("Write `[[page]]` to link, e.g. [[page]].\n")
+        assert "<code>[[page]]</code>" in html
+        assert html.count('class="wikilink') == 1
+
+    def test_double_backtick_inline_code(self, wiki_dir):
+        html = render_md("``a ` [[x]]`` and [[y]]\n")
+        assert "[[x]]" in html
+        assert 'href="/page/y"' in html
+
+    def test_deck_directive_in_code_not_embedded(self, wiki_dir):
+        html = render_md("```\n[[deck tag=work]]\n```\n")
+        assert "tasks-app" not in html
+        assert "[[deck tag=work]]" in html
+
+    def test_toc_directive_in_code_not_replaced(self, wiki_dir):
+        html = render_md("## A\n\n```\n[[toc]]\n```\n")
+        assert 'class="toc"' not in html
+        assert "[[toc]]" in html
+
+    def test_directives_outside_code_still_work(self, wiki_dir):
+        html = render_md("[[toc]]\n\n## A\n\n`code` then [[link]]\n\n```\nx\n```\n\n[[deck]]\n")
+        assert 'class="toc"' in html
+        assert 'href="/page/link"' in html
+        assert "tasks-app" in html

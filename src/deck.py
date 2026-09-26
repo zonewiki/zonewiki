@@ -262,25 +262,49 @@ def _new_task(**overrides) -> dict:
     return task
 
 
-def _add_months(base: date, months: int) -> date:
+def _add_months(base: date, months: int, day: int | None = None) -> date:
     """Add months to a date, clamping the day to the target month's last day
-    (Jan 31 + 1 month = Feb 28/29, not an invalid date and not always the 28th)."""
+    (Jan 31 + 1 month = Feb 28/29, not an invalid date and not always the 28th).
+    `day` overrides base.day as the wanted day of month, so a series anchored
+    on the 31st returns to the 31st after passing through a shorter month."""
     month = base.month + months
     year = base.year + (month - 1) // 12
     month = (month - 1) % 12 + 1
-    day = min(base.day, calendar.monthrange(year, month)[1])
+    day = min(day or base.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
 
 
-def _rec_step(base: date, rtype: str, interval: int) -> date:
+def _rec_step(base: date, rtype: str, interval: int, day: int | None = None) -> date:
     if rtype == "weekly":
         return base + timedelta(weeks=interval)
     if rtype == "monthly":
-        return _add_months(base, interval)
+        return _add_months(base, interval, day)
     if rtype == "yearly":
         # Reuse month arithmetic so Feb-29 clamps to Feb-28 in non-leap years.
-        return _add_months(base, 12 * interval)
+        return _add_months(base, 12 * interval, day)
     return base + timedelta(days=interval)  # daily (and any unknown type)
+
+
+def _next_occurrence(rec: dict, base: date, anchored: bool, today: date) -> tuple[date, dict]:
+    """Step a recurrence from base and catch up to >= today.
+
+    Monthly/yearly series remember their day of month in ``recurrence.day``:
+    stepping from the previous (possibly clamped) date alone would drift —
+    Jan 31 → Feb 28 → Mar 28 → … — so the anchor day is taken from the first
+    date the series stepped from and carried on every spawned copy. When the
+    base is the completion day (``from: completion``) there is no anchor.
+    Returns (next date, recurrence dict for the spawned instance)."""
+    rtype = rec.get("type", "daily")
+    interval = rec.get("interval", 1)
+    rec = dict(rec)
+    day = None
+    if rtype in ("monthly", "yearly") and anchored:
+        day = rec.get("day") or base.day
+        rec["day"] = day
+    nxt = _rec_step(base, rtype, interval, day)
+    while nxt < today:
+        nxt = _rec_step(nxt, rtype, interval, day)
+    return nxt, rec
 
 
 def _plan_date(due: str, lead_days: int) -> str:
@@ -305,43 +329,34 @@ def _spawn_recurring(task: dict) -> dict | None:
     rec = task.get("recurrence")
     if not rec:
         return None
-    rtype = rec.get("type", "daily")
-    interval = rec.get("interval", 1)
     anchor = rec.get("anchor", "due")
     today = date.today()
     from_completion = rec.get("from") == "completion"
 
-    if anchor == "plan":
-        base = today
-        if not from_completion and task.get("focus_date"):
+    def base_from(field: str) -> tuple[date, bool]:
+        """(base date, whether it is a real series anchor rather than today)."""
+        if not from_completion and task.get(field):
             try:
-                base = datetime.strptime(task["focus_date"], "%Y-%m-%d").date()
+                return datetime.strptime(task[field], "%Y-%m-%d").date(), True
             except ValueError:
                 pass
-        next_date = _rec_step(base, rtype, interval)
-        while next_date < today:
-            next_date = _rec_step(next_date, rtype, interval)
+        return today, False
+
+    if anchor == "plan":
+        next_date, next_rec = _next_occurrence(rec, *base_from("focus_date"), today)
         return _new_task(
             title=task["title"],
             description=task.get("description", ""),
             tags=task.get("tags", []),
             focus_date=next_date.strftime("%Y-%m-%d"),
             sort_order=task.get("sort_order", 0),
-            recurrence=task.get("recurrence"),
+            recurrence=next_rec,
             page=task.get("page"),
             spawned_from=task["id"],
         )
 
     # anchor == "due" (default): advance the due date.
-    base = today
-    if not from_completion and task.get("due_date"):
-        try:
-            base = datetime.strptime(task["due_date"], "%Y-%m-%d").date()
-        except ValueError:
-            pass
-    next_due = _rec_step(base, rtype, interval)
-    while next_due < today:
-        next_due = _rec_step(next_due, rtype, interval)
+    next_due, next_rec = _next_occurrence(rec, *base_from("due_date"), today)
     due_str = next_due.strftime("%Y-%m-%d")
     lead = task.get("defer_days")
     # "Plan N days before due" rides along: re-derive focus_date from the new
@@ -355,7 +370,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         defer_days=lead,
         focus_date=focus_date,
         sort_order=task.get("sort_order", 0),
-        recurrence=task.get("recurrence"),
+        recurrence=next_rec,
         page=task.get("page"),
         spawned_from=task["id"],
     )
@@ -787,6 +802,7 @@ def api_create_deck_item():
 
 def _apply_task_fields(task: dict, data: dict) -> None:
     """Apply non-completion field updates from request data onto task in place."""
+    old_due_date = task.get("due_date")
     if "title" in data:
         title = data["title"].strip()
         if not title:
@@ -808,6 +824,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     if "page" in data:
         task["page"] = (data["page"] or "").strip() or None
     old_focus_date = task.get("focus_date")
+    old_rec = task.get("recurrence") or {}
     if "focus_date" in data:
         task["focus_date"] = _validate_date(data["focus_date"])
     # "Plan N days before due" (defer_days) derives the plan date from the
@@ -836,6 +853,16 @@ def _apply_task_fields(task: dict, data: dict) -> None:
                 "from": "completion" if data.get("rec_from") == "completion" else "due",
                 "anchor": "plan" if data.get("rec_anchor") == "plan" else "due",
             }
+            # Re-saving the edit modal re-sends the recurrence; keep the
+            # series' day-of-month anchor unless the series or its anchor date
+            # actually changed (moving the date re-anchors the series).
+            new_rec = task["recurrence"]
+            anchor_field = "focus_date" if new_rec["anchor"] == "plan" else "due_date"
+            old_anchor_date = old_focus_date if anchor_field == "focus_date" else old_due_date
+            if (old_rec.get("day") and old_rec.get("type") == rec_type
+                    and old_rec.get("anchor", "due") == new_rec["anchor"]
+                    and task.get(anchor_field) == old_anchor_date):
+                new_rec["day"] = old_rec["day"]
         else:
             task["recurrence"] = None
 
@@ -982,13 +1009,15 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))
     rec = snap.get("recurrence")
-    if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly"):
+    if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
         task["recurrence"] = {
             "type": rec["type"],
             "interval": max(1, int(rec.get("interval") or 1)),
             "from": "completion" if rec.get("from") == "completion" else "due",
             "anchor": "plan" if rec.get("anchor") == "plan" else "due",
         }
+        if isinstance(rec.get("day"), int) and 1 <= rec["day"] <= 31:
+            task["recurrence"]["day"] = rec["day"]
     blocked = snap.get("blocked_by")
     if isinstance(blocked, list):
         task["blocked_by"] = [b for b in blocked if isinstance(b, str)]

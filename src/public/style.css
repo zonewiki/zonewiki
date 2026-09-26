@@ -97,6 +97,9 @@ body {
   border-color: var(--link-missing);
 }
 
+/* Shown only on small screens (see the 640px media query) */
+.mobile-only { display: none; }
+
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
 main {
@@ -200,6 +203,10 @@ main {
 
 /* ── Typography ────────────────────────────────────────────────────────────── */
 
+/* Break long unbroken tokens (identifiers, hashes, paths) rather than letting
+   them push the page wider than a phone viewport. Only kicks in when a word
+   would otherwise overflow; <pre>/tables keep their own horizontal scroll. */
+.page-content { overflow-wrap: break-word; }
 .page-content h1 { font-size: 1.875rem; font-weight: 700; margin: 2rem 0 .875rem; padding-bottom: .35rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border)); line-height: 1.25; letter-spacing: -.02em; }
 .page-content h2 { font-size: 1.25rem; font-weight: 700; margin: 0; padding-bottom: .1rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 30%, var(--border)); }
 .page-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; padding-bottom: .15rem; border-bottom: 1px solid var(--border); width: fit-content; }
@@ -1170,10 +1177,6 @@ body.editor-page main {
 }
 .pres-edit-btn:hover { opacity: .85; background: var(--border); }
 
-/* ── Editor mobile message ─────────────────────────────────────────────────── */
-
-.editor-mobile-msg { display: none; }
-
 /* ── Mobile ────────────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
@@ -1181,20 +1184,27 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
+  /* Bigger touch targets */
+  .btn { padding: .45rem 1rem; }
+
   /* Tables scroll horizontally instead of overflowing */
   .page-content table { display: block; overflow-x: auto; }
 
   /* TOC: no float on small screens */
   .toc { float: none; max-width: 100%; margin: 0 0 1rem 0; }
 
-  /* Editor — show message, hide editor */
-  .editor-wrap { display: none; }
-  .editor-mobile-msg {
-    display: block;
-    padding: 3rem 1.5rem;
-    text-align: center;
-    color: var(--muted);
+  /* Editor — full-screen; preview stacks under the textarea and is toggled
+     with the toolbar's Preview button (.mobile-only) or F2. */
+  .mobile-only { display: inline-block; }
+  .editor-wrap { flex-direction: column; }
+  .editor-pane { max-width: none; border: none; }
+  .preview-pane.visible {
+    max-width: none;
+    border-top: 1px solid var(--border);
+    padding: 1rem;
   }
+  /* 16px stops iOS Safari from zooming in when the textarea gets focus */
+  #editor-textarea { font-size: 16px; }
 }
 
 /* ── Raw page ──────────────────────────────────────────────────────────────── */

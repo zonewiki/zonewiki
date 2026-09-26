@@ -6,6 +6,7 @@ Run with:
 """
 
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -255,6 +256,17 @@ class TestEditPageGet:
         resp = client.get("/edit/../etc/passwd", headers=HOST)
         assert resp.status_code == 400
 
+    def test_editor_usable_on_mobile(self, client, wiki_dir):
+        """The editor must be served on small screens — no 'not available'
+        message, and the toolbar carries a mobile Preview toggle."""
+        write_page(wiki_dir, "test-edit", "# Test\n\nContent here.\n")
+        resp = client.get("/edit/test-edit", headers=HOST)
+        assert resp.status_code == 200
+        text = resp.data.decode()
+        assert "not available on small screens" not in text
+        assert "editor-mobile-msg" not in text
+        assert 'id="mobile-preview-btn"' in text
+
 
 # ===========================================================================
 # save_page POST (/edit/<slug>)
@@ -412,6 +424,24 @@ class TestDeletePage:
         resp = client.post("/delete/to-delete", headers=HOST)
         assert resp.status_code in (301, 302)
         assert not path.exists()
+
+    def test_delete_redirects_to_next(self, client, wiki_dir):
+        write_page(wiki_dir, "gone", "# Gone\n")
+        resp = client.post("/delete/gone", data={"next": "/page/other"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/other"
+
+    def test_delete_next_pointing_at_deleted_page_falls_back(self, client, wiki_dir):
+        write_page(wiki_dir, "gone", "# Gone\n")
+        resp = client.post("/delete/gone", data={"next": "/page/gone"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/index"
+
+    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example"])
+    def test_delete_next_rejects_offsite_redirect(self, client, wiki_dir, target):
+        # Regression: "//host" and "/\\host" start with "/" but browsers
+        # resolve them to another origin (open redirect).
+        write_page(wiki_dir, "gone", "# Gone\n")
+        resp = client.post("/delete/gone", data={"next": target}, headers=HOST)
+        assert resp.headers["Location"] == "/page/index"
 
     def test_delete_index_returns_400(self, client):
         resp = client.post("/delete/index", headers=HOST)
@@ -679,6 +709,13 @@ class TestApiToggleCheckbox:
         resp = client.post("/api/toggle-checkbox/bad-idx", data={"idx": "-1"}, headers=HOST)
         assert resp.status_code == 400
 
+    @pytest.mark.parametrize("idx", ["abc", "", "1.5"])
+    def test_returns_400_for_non_integer_idx(self, client, wiki_dir, idx):
+        # Regression: int() on the raw form value raised → 500.
+        write_page(wiki_dir, "bad-idx", "# CB\n\n- [ ] task\n")
+        resp = client.post("/api/toggle-checkbox/bad-idx", data={"idx": idx}, headers=HOST)
+        assert resp.status_code == 400
+
 
 # ===========================================================================
 # api_upload
@@ -748,6 +785,27 @@ class TestAuth:
         )
         assert resp.status_code in (301, 302)
         assert "login" not in resp.headers["Location"]
+
+    def test_login_redirects_to_next(self, auth_client):
+        resp = auth_client.post("/login?next=/page/foo",
+                                data={"password": "testpassword"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/foo"
+
+    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example"])
+    def test_login_next_rejects_offsite_redirect(self, auth_client, target):
+        # Regression: open redirect via protocol-relative next URL.
+        resp = auth_client.post("/login", query_string={"next": target},
+                                data={"password": "testpassword"}, headers=HOST)
+        assert resp.headers["Location"] == "/"
+
+    def test_login_without_password_configured_redirects_home(self, client):
+        resp = client.get("/login", headers=HOST)
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == "/"
+
+    def test_public_assets_served_without_auth(self, auth_client):
+        resp = auth_client.get("/public/style.css", headers=HOST)
+        assert resp.status_code == 200
 
     def test_login_with_wrong_password_shows_error(self, auth_client):
         resp = auth_client.post(
@@ -904,3 +962,121 @@ class TestBacklinkCacheInvalidation:
         write_page(wiki_dir, "source", "# Source\n\nSee [[Target]].\n")
         resp = client.get("/page/target", headers=HOST)
         assert "Source" in resp.data.decode()
+
+
+# ===========================================================================
+# Linked tasks (deck tasks that wikilink to a page)
+# ===========================================================================
+
+class TestTaskBacklinks:
+
+    def test_task_with_wikilink_listed_on_page(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert 'id="task-backlinks"' in html
+        section = html.split('id="task-backlinks"')[1].split("</section>")[0]
+        assert "Water Garden" in section
+
+    def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
+        # Regression: the task title's own wikilinks were rendered as <a>
+        # inside the outer deck <a> — nested anchors, which browsers split so
+        # half the entry went to the deck and half to the page.
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "Water [[Garden]] and [x](/page/garden)"},
+                    headers=HOST)
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        section = html.split('id="task-backlinks"')[1].split("</section>")[0]
+        items = re.findall(r"<li>(.*?)</li>", section)
+        assert len(items) == 1
+        assert items[0].count("<a ") == 1
+        assert "Water Garden and x" in items[0]
+
+    def test_wikilink_in_description_and_labelled_link(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "Chores",
+                                       "description": "see [[garden|the beds]]"}, headers=HOST)
+        assert [t["title"] for t in server.find_task_backlinks("garden")] == ["Chores"]
+
+    def test_markdown_page_link_counts(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
+        assert len(server.find_task_backlinks("garden")) == 1
+
+    def test_completed_and_unrelated_tasks_excluded(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        t = client.post("/api/deck", json={"title": "Done [[garden]]"}, headers=HOST).get_json()
+        client.put(f"/api/deck/{t['id']}", json={"completed": True}, headers=HOST)
+        client.post("/api/deck", json={"title": "About [[kitchen]]"}, headers=HOST)
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert 'id="task-backlinks"' not in html
+
+    def test_task_title_is_escaped(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": "<img src=x onerror=alert(1)> [[garden]]"},
+                    headers=HOST)
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert "<img src=x" not in html
+        assert "&lt;img src=x onerror=alert(1)&gt;" in html
+
+
+class TestPlainTaskTitle:
+
+    def test_plain_text_unchanged(self):
+        assert server._plain_task_title("a < b & c") == "a < b & c"
+
+    def test_wikilink_and_label(self):
+        assert server._plain_task_title("[[My Page]]") == "My Page"
+        assert server._plain_task_title("[[my-page|Label]]") == "Label"
+
+    def test_markdown_page_link(self):
+        assert server._plain_task_title("see [x](/page/foo) now") == "see x now"
+
+    def test_external_markdown_link_left_as_text(self):
+        assert server._plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
+
+
+# ===========================================================================
+# _raw inbox (URL + snippet capture)
+# ===========================================================================
+
+class TestRawPage:
+
+    def test_created_on_first_visit(self, client, wiki_dir):
+        resp = client.get("/page/_raw", headers=HOST)
+        assert resp.status_code == 200
+        assert (wiki_dir / "_raw.md").read_text() == "# Raw\n\n"
+        assert "<h3>Snippets</h3>" not in resp.get_data(as_text=True)
+
+    def test_append_url(self, client, wiki_dir):
+        resp = client.post("/api/raw/append-url",
+                           data={"url": "https://example.com", "title": "Ex"}, headers=HOST)
+        assert resp.get_json() == {"ok": True}
+        assert "- [Ex](https://example.com)\n" in (wiki_dir / "_raw.md").read_text()
+
+    def test_append_url_title_defaults_to_url(self, client, wiki_dir):
+        (wiki_dir / "_raw.md").write_text("# Raw", encoding="utf-8")  # no trailing newline
+        client.post("/api/raw/append-url", data={"url": "https://e.x"}, headers=HOST)
+        assert (wiki_dir / "_raw.md").read_text() == "# Raw\n- [https://e.x](https://e.x)\n"
+
+    def test_append_url_requires_url(self, client):
+        assert client.post("/api/raw/append-url", data={}, headers=HOST).status_code == 400
+
+    def test_create_snippet_page_and_link(self, client, wiki_dir):
+        resp = client.post("/api/raw/create-page",
+                           data={"text": "first line\nsecond"}, headers=HOST).get_json()
+        assert resp["title"] == "first line"
+        assert resp["slug"].startswith("_raw/")
+        snippet = wiki_dir / f"{resp['slug']}.md"
+        assert snippet.read_text() == "# first line\n\nfirst line\nsecond\n"
+        assert f"- [first line](/page/{resp['slug']})" in (wiki_dir / "_raw.md").read_text()
+        html = client.get("/page/_raw", headers=HOST).get_data(as_text=True)
+        assert "<h3>Snippets</h3>" in html
+        assert f'href="/page/{resp["slug"]}"' in html
+
+    def test_create_snippet_requires_text(self, client):
+        assert client.post("/api/raw/create-page", data={"text": "  "}, headers=HOST).status_code == 400
+
+    def test_snippet_pages_hidden_from_page_iteration(self, client, wiki_dir):
+        resp = client.post("/api/raw/create-page", data={"text": "x"}, headers=HOST).get_json()
+        assert resp["slug"] not in server.all_slugs()

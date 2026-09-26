@@ -940,6 +940,22 @@ class TestForceSectionSave:
         assert "modified b" in saved, "Section B was lost!"
         assert "pre" in saved, "Preamble was lost!"
 
+    def test_force_section_keeps_separator_before_next_section(self, client, wiki_dir):
+        """Regression: the editor loads a section with trailing newlines
+        stripped, so the posted content has none. Force-save used to splice it
+        in verbatim, gluing the next heading onto the last line
+        ("new a## B"), which also destroyed that heading."""
+        page = write_page(wiki_dir, "fs-glue", "pre\n\n## A\n\nold a\n\n## B\n\nb\n")
+        resp = client.post("/api/save/fs-glue", data={
+            "content": "## A\n\nnew a",
+            "force_section": "1",
+        }, headers=HOST)
+        assert resp.status_code == 200
+        saved = page.read_text(encoding="utf-8")
+        assert saved == "pre\n\n## A\n\nnew a\n\n## B\n\nb\n"
+        data = resp.get_json()
+        assert saved[data["start_char"]:data["end_char"]] == "## A\n\nnew a\n\n"
+
     def test_force_section_returns_updated_anchors(self, client, wiki_dir):
         original = "pre\n\n## A\n\nbody a\n\n## B\n\nbody b\n"
         write_page(wiki_dir, "fs2", original)

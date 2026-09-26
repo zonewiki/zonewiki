@@ -490,13 +490,17 @@ def _strip_links(text: str) -> str:
     return text
 
 
-def _build_toc(text: str) -> str:
+def _build_toc(text: str, unmask=lambda s: s) -> str:
+    """TOC from ## / ### headings. `text` may have code masked (so headings
+    inside fenced code are not picked up); `unmask` restores inline code in
+    the heading titles."""
     headings = re.findall(r'^(#{2,3})\s+(.+)', text, re.MULTILINE)
     if not headings:
         return ''
     items = []
     for hashes, title in headings:
         level = len(hashes)
+        title = unmask(title)
         plain = _plain_heading(title.strip())
         hid = _heading_id(plain)
         cls = ' class="toc-h3"' if level == 3 else ''
@@ -542,20 +546,67 @@ def _apply_img_sizes(html_str: str) -> str:
     return _IMG_SIZE_RE.sub(fix, html_str)
 
 
+# Private-use code points: never typed by users, and not matched by any of the
+# directive regexes, so a masked code region is invisible to pre-processing.
+_CODE_MASK_RE = re.compile('\ue000(\\d+)\ue001')
+_INLINE_CODE_RE = re.compile(r'(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)')
+
+
+def _mask_code(text: str) -> tuple[str, list[str]]:
+    """Replace fenced code blocks and inline code spans with opaque tokens.
+
+    [[wikilinks]], [[toc]] and [[deck]] are rewritten on the raw markdown before
+    markdown-it runs, so without this they would also be rewritten inside code
+    (showing up as escaped HTML in the block, or embedding a whole deck app in a
+    <pre>). Restore with _unmask_code() before rendering."""
+    stash: list[str] = []
+
+    def token(s: str) -> str:
+        stash.append(s)
+        return f'\ue000{len(stash) - 1}\ue001'
+
+    out = []
+    for _, line, in_fence in _iter_fenced_lines(text.splitlines(keepends=True)):
+        if in_fence:
+            body = line.rstrip('\n')
+            out.append(token(body) + line[len(body):])
+        else:
+            out.append(_INLINE_CODE_RE.sub(lambda m: token(m.group(0)), line))
+    return ''.join(out), stash
+
+
+def _unmask_code(text: str, stash: list[str]) -> str:
+    return _CODE_MASK_RE.sub(lambda m: stash[int(m.group(1))], text)
+
+
+# markdown-it's tasklists plugin renders checkboxes disabled; page view and the
+# editor preview make them clickable, so drop the attribute — on those inputs
+# only, never elsewhere in the document.
+_TASK_CHECKBOX_RE = re.compile(r'<input\b[^>]*\btask-list-item-checkbox\b[^>]*>')
+
+
+def _enable_task_checkboxes(html_str: str) -> str:
+    return _TASK_CHECKBOX_RE.sub(
+        lambda m: re.sub(r'\s+disabled(?:="[^"]*")?', '', m.group(0)), html_str)
+
+
 def render_md(text: str, *, slug: str = "", show_tags: bool = True, show_tldr: bool = True) -> str:
     fm_meta, text = parse_frontmatter(text)
     fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
 
+    text, code_stash = _mask_code(text)
+
     toc_html = ''
     if _TOC_RE.search(text):
-        toc_html = _build_toc(text)
+        toc_html = _build_toc(text, unmask=lambda s: _unmask_code(s, code_stash))
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
     text, deck_embeds = deck_module.process_deck_embeds(text, slug=slug)
 
-    result = _apply_img_sizes(md.render(process_wikilinks(text)))
-    result = re.sub(r'\s+disabled(?:="[^"]*")?', '', result)
+    text = _unmask_code(process_wikilinks(text), code_stash)
+    result = _apply_img_sizes(md.render(text))
+    result = _enable_task_checkboxes(result)
     result = _render_task_dates(result)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
@@ -587,23 +638,47 @@ def _iter_fenced_lines(lines: list[str]):
             yield i, line, True
 
 
+# A task-list item as markdown-it's tasklists plugin renders it: a list marker
+# (optionally inside blockquotes), then "[ ]"/"[x]" followed by whitespace and
+# text. Only these lines produce checkboxes, so only these may be counted —
+# the Nth rendered checkbox must be the Nth match here. Mirrored in leaf.js
+# (taskCheckboxOffsets) for toggling inside the editor.
+_TASK_ITEM_RE = re.compile(r'^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\](?=[ \t]+\S)')
+
+
+def _task_item_lines(lines: list[str]) -> list[tuple[int, re.Match]]:
+    """(line index, match) for every task-list checkbox line, skipping a
+    leading frontmatter block and fenced code."""
+    start = 0
+    if lines and lines[0].strip() == '---':
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '---':
+                start = i + 1
+                break
+    found = []
+    for i, line, in_fence in _iter_fenced_lines(lines):
+        if i < start or in_fence:
+            continue
+        m = _TASK_ITEM_RE.match(line)
+        if m:
+            found.append((i, m))
+    return found
+
+
 def toggle_nth_checkbox(content: str, idx: int) -> str:
-    """Toggle the Nth checkbox (0-based), skipping any inside fenced code blocks."""
+    """Toggle the Nth task-list checkbox (0-based), in rendered order."""
     lines = content.splitlines(keepends=True)
-    checkbox_line_indices = [
-        i for i, line, in_fence in _iter_fenced_lines(lines)
-        if not in_fence and re.search(r'\[([xX ])\]', line)
-    ]
-    if idx >= len(checkbox_line_indices):
+    items = _task_item_lines(lines)
+    if idx >= len(items):
         return content
-    li = checkbox_line_indices[idx]
+    li, m = items[idx]
     line = lines[li]
     eol = '\n' if line.endswith('\n') else ''
     body = line.rstrip('\n')
 
-    # Toggle the [ ] / [x]
-    is_checking = bool(re.search(r'\[ \]', body))
-    body = re.sub(r'\[([xX ])\]', lambda m: '[x]' if m.group(1) == ' ' else '[ ]', body, count=1)
+    # Toggle exactly the item's own [ ] / [x], never a later bracket on the line
+    is_checking = m.group(1) == ' '
+    body = body[:m.start(1)] + ('x' if is_checking else ' ') + body[m.end(1):]
 
     now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     meta_m = _TASK_META_SRC_RE.search(body)
@@ -940,23 +1015,15 @@ def update_references(old_slug: str, new_slug: str) -> list[Path]:
     return modified
 
 
-def _render_task_title(title: str) -> str:
-    """Render wikilinks and markdown links in a task title as safe HTML."""
-    def _wl_repl(m: re.Match) -> str:
-        inner = m.group(1)
-        if "|" in inner:
-            page_name, label = inner.split("|", 1)
-            s = to_slug(page_name)
-            return f'<a href="/page/{html.escape(s)}">{html.escape(label.strip())}</a>'
-        s = to_slug(inner)
-        return f'<a href="/page/{html.escape(s)}">{html.escape(inner.strip())}</a>'
-    result = re.sub(r'\[\[([^\[\]]+)\]\]', _wl_repl, title)
-    def _md_repl(m: re.Match) -> str:
-        return f'<a href="{html.escape(m.group(2))}">{html.escape(m.group(1))}</a>'
-    result = re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', _md_repl, result)
-    # Escape non-link text segments; link tags were inserted above and are safe
-    parts = re.split(r'(<a\b[^>]*>.*?</a>)', result, flags=re.DOTALL)
-    return ''.join(part if i % 2 == 1 else html.escape(part) for i, part in enumerate(parts))
+def _plain_task_title(title: str) -> str:
+    """Task title with wikilinks and /page/ links reduced to their labels.
+
+    Used where the whole title is already inside one link (Linked tasks), so
+    it must not contain anchors of its own — nested <a> is invalid HTML and
+    browsers split it into separate links."""
+    title = re.sub(r'\[\[([^\[\]|]+)\|([^\[\]]+)\]\]', lambda m: m.group(2).strip(), title)
+    title = re.sub(r'\[\[([^\[\]]+)\]\]', lambda m: m.group(1).strip(), title)
+    return re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', r'\1', title)
 
 
 def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict]) -> tuple[str, str]:
@@ -981,7 +1048,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
     if task_backlinks:
         tbl_items = "".join(
             f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">'
-            f'{_render_task_title(t["title"])}</a></li>'
+            f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
             for t in task_backlinks
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
@@ -1155,6 +1222,12 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
 </html>"""
 
 
+def _is_local_path(url: str) -> bool:
+    """True if url is a same-origin path. "//host" and "/\\host" start with "/"
+    but browsers resolve them to another origin, so reject those too."""
+    return url.startswith("/") and not url.startswith(("//", "/\\"))
+
+
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
 
@@ -1170,7 +1243,7 @@ def login():
             session.permanent = True
             session["authenticated"] = True
             next_url = request.args.get("next", "/")
-            if not next_url.startswith("/"):
+            if not _is_local_path(next_url):
                 next_url = "/"
             return redirect(next_url)
         error = "Incorrect password."
@@ -1521,13 +1594,13 @@ def edit_page(slug):
             f'<input type="hidden" name="section_idx" id="section-idx" value="{section}">'
         )
     breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
-    body = f"""<p class="editor-mobile-msg">The editor is not available on small screens. <a href="/page/{safe_slug}">View page instead.</a></p>
-<div class="editor-wrap">
+    body = f"""<div class="editor-wrap">
   <div class="editor-pane">
     {build_breadcrumb(slug, title, breadcrumb_extra)}
     <div class="editor-toolbar">
       <span class="slug-label">{safe_slug}</span>
       <span id="save-dot" class="save-dot">●</span>
+      <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
       <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
       {rename_btn}
       {delete_btn}
@@ -1619,10 +1692,11 @@ def api_save(slug):
         if rng is None:
             abort(400)
         fs_start, fs_end = rng
-        content = current[:fs_start] + raw_content + current[fs_end:]
-        new_hash = content_hash(content)
-        new_start = fs_start
-        new_end = fs_start + len(raw_content)
+        # Same splice as a normal section save, just without the hash guard
+        # (keeps the section's trailing blank lines so the next heading isn't
+        # glued onto the last line of the posted content).
+        content, new_hash, new_start, new_end = _splice_section(
+            current, content_hash(current), fs_start, fs_end, raw_content)
     elif is_section_edit:
         result = _splice_section(current, file_hash, start_char, end_char, raw_content)
         if result is None:
@@ -1708,7 +1782,7 @@ def delete_page(slug):
     path.unlink()
     git_commit(path, f"Delete {slug}")
     next_url = request.form.get("next", "")
-    if (not next_url.startswith("/")
+    if (not _is_local_path(next_url)
             or f"/page/{slug}" in next_url
             or f"/edit/{slug}" in next_url):
         next_url = "/page/index"
@@ -2007,8 +2081,8 @@ def api_toggle_checkbox(slug):
     path = safe_path(slug)
     if path is None or not path.exists():
         abort(404)
-    idx = int(request.form.get("idx", -1))
-    if idx < 0:
+    idx = request.form.get("idx", type=int)
+    if idx is None or idx < 0:
         abort(400)
     content = path.read_text(encoding="utf-8")
     path.write_text(toggle_nth_checkbox(content, idx), encoding="utf-8")
@@ -2188,8 +2262,8 @@ def api_commit_file():
 # ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Always bind to all interfaces so Docker's network bridge can forward
-    # connections. LAN exposure is controlled by compose.yaml's port mapping
-    # (127.0.0.1:5000:5000 = localhost only, 0.0.0.0:5000:5000 = LAN).
+    # Always bind to all interfaces so the container's network bridge can
+    # forward connections. LAN exposure is controlled by run.sh's port
+    # mapping (127.0.0.1:5000:5000 = localhost only, 0.0.0.0:5000:5000 = LAN).
     # The host-header check (ALLOWED_HOSTS) is the DNS-rebinding defence.
     app.run(host="0.0.0.0", port=5000)

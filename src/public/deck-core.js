@@ -90,8 +90,11 @@
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
       sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(bySortOrder) });
     }
-    if (groups['later']) sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: groups['later'].sort(bySortOrder) });
-    if (groups['someday']) sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: groups['someday'].sort(bySortOrder) });
+    // Later and Someday are always present, even when empty: they are the only
+    // drop targets for "plan beyond this week" and "unplan", so hiding them
+    // when empty would strand every task on a dated day.
+    sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(bySortOrder) });
+    sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: (groups['someday'] || []).sort(bySortOrder) });
     return sections;
   }
 

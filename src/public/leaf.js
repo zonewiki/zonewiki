@@ -933,6 +933,10 @@ function togglePreview() {
   if (showing) fetchPreview();
 }
 
+// Mobile: the toolbar's Preview button toggles the stacked preview pane (F2
+// doesn't exist on phones). Hidden on wide screens via .mobile-only.
+document.getElementById('mobile-preview-btn')?.addEventListener('click', togglePreview);
+
 async function fetchPreview() {
   if (!previewPane?.parentElement.classList.contains('visible')) return;
   try {
@@ -1297,6 +1301,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────
 
+// Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
+// in rendered order. Mirrors server.py's _task_item_lines/_TASK_ITEM_RE: only
+// list items whose text starts with the box produce a checkbox, fenced code
+// and a leading frontmatter block are skipped — so the Nth rendered checkbox
+// is the Nth offset here.
+const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
+
+function taskCheckboxOffsets(text) {
+  const lines = text.split('\n');
+  let start = 0;
+  if (lines.length && lines[0].trim() === '---') {
+    const close = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
+    if (close !== -1) start = close + 1;
+  }
+  const offsets = [];
+  let pos = 0, fence = null;
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    const run = t.length - t.replace(/^(`+|~+)/, '').length;  // leading fence chars
+    if (fence) {
+      // Closing fence: same char, at least as long, nothing else on the line
+      if (t[0] === fence[0] && run >= fence.length && run === t.length) fence = null;
+    } else if (run >= 3) {
+      fence = t.slice(0, run);
+    } else if (i >= start) {
+      const m = TASK_ITEM_RE.exec(line);
+      if (m) offsets.push(pos + m[1].length);
+    }
+    pos += line.length + 1;
+  });
+  return offsets;
+}
+
 document.addEventListener('change', e => {
   if (!e.target.matches('.task-list-item-checkbox')) return;
   const checkboxes = Array.from(document.querySelectorAll('.task-list-item-checkbox'));
@@ -1304,15 +1341,19 @@ document.addEventListener('change', e => {
   if (idx === -1) return;
 
   if (textarea) {
-    // Editor: toggle the Nth checkbox directly in the textarea, then refresh preview
-    const val = textarea.value;
-    const matches = [...val.matchAll(/\[([xX ])\]/g)];
-    if (idx < matches.length) {
-      const m = matches[idx];
-      const newChar = m[1] === ' ' ? 'x' : ' ';
-      textarea.value = val.slice(0, m.index) + `[${newChar}]` + val.slice(m.index + m[0].length);
-      clearTimeout(previewTimer);
-      previewTimer = setTimeout(fetchPreview, 300);
+    // Editor: toggle the Nth checkbox in the textarea. Goes through
+    // execCommand so it lands on the undo stack and fires `input` (live
+    // preview, unsaved dot, auto-save) like any other edit.
+    const offsets = taskCheckboxOffsets(textarea.value);
+    if (idx < offsets.length) {
+      const at = offsets[idx];
+      const newChar = textarea.value[at] === ' ' ? 'x' : ' ';
+      const { selectionStart, selectionEnd, scrollTop } = textarea;
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(at, at + 1);
+      document.execCommand('insertText', false, newChar);
+      textarea.setSelectionRange(selectionStart, selectionEnd);
+      textarea.scrollTop = scrollTop;
     }
   } else {
     // Page view: persist toggle to server

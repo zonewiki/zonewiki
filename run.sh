@@ -16,58 +16,103 @@ case "$WIKI_DATA" in
     ;;
 esac
 
-# Ensure subdirs exist on the host before Docker creates them as root
-mkdir -p "$WIKI_DATA" "$WIKI_DATA/_uploads"
+# Ensure subdirs exist on the host before the container creates them
+mkdir -p "$WIKI_DATA" "$WIKI_DATA/_assets"
 
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
 
-# Derive the Docker port-binding address from ALLOW_REMOTE.
+# Read an optional KEY from .env (empty when unset).
+env_val() {
+  grep "^$1=" .env 2>/dev/null | cut -d= -f2-
+}
+
+# Derive the port-binding address from ALLOW_REMOTE.
 # ALLOW_REMOTE=1 → bind on all interfaces (LAN accessible).
 # Unset/empty   → bind on loopback only (localhost only, more secure).
-ALLOW_REMOTE=$(grep '^ALLOW_REMOTE=' .env 2>/dev/null | cut -d= -f2-)
+ALLOW_REMOTE=$(env_val ALLOW_REMOTE)
 if [[ "${ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
   BIND_ADDR="0.0.0.0"
 else
   BIND_ADDR="127.0.0.1"
 fi
 
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  COMPOSE_CMD=(docker compose)
-  LEGACY_DOCKER_COMPOSE=0
-elif command -v docker-compose >/dev/null 2>&1; then
-  COMPOSE_CMD=(docker-compose)
-  LEGACY_DOCKER_COMPOSE=1
-else
-  echo "Error: neither 'docker compose' nor 'docker-compose' is available."
+if ! command -v podman >/dev/null 2>&1; then
+  echo "Error: 'podman' is not installed."
   exit 1
+fi
+
+IMAGE=leaf
+CONTAINER=leaf
+
+# Rootless podman already maps in-container root to the host user, so files
+# written to the mounted volume are owned by the host user. Only a rootful
+# podman (host user is root) needs an explicit --user to match that.
+USER_FLAGS=()
+if [[ "$HOST_UID" -eq 0 ]]; then
+  USER_FLAGS=(--user "${HOST_UID}:${HOST_GID}")
+fi
+
+# Relabel the mounted volume when SELinux is enforcing.
+VOLUME="${WIKI_DATA}:/wiki-data"
+if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
+  VOLUME="${VOLUME}:Z"
 fi
 
 case "${1:-up}" in
   build)
-    docker build -t leaf .
+    podman build -t "$IMAGE" .
     ;;
   up)
-    if [[ "$LEGACY_DOCKER_COMPOSE" -eq 1 ]]; then
-      # docker-compose v1 can crash while recreating containers on newer Docker releases.
-      env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" down --remove-orphans >/dev/null 2>&1 || true
-    fi
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" up --build -d
+    podman build -t "$IMAGE" .
+    # k8s-file (docker's json-file equivalent) so `podman logs -f` works even
+    # when the podman default log driver is journald (logs -f is unsupported).
+    podman run -d --name "$CONTAINER" --replace --restart unless-stopped \
+      --log-driver k8s-file \
+      "${USER_FLAGS[@]}" \
+      -p "${BIND_ADDR}:5000:5000" \
+      -v "$VOLUME" \
+      -e FLASK_ENV=production \
+      -e WIKI_DATA=/wiki-data \
+      -e "LEAF_PASSWORD=$(env_val LEAF_PASSWORD)" \
+      -e "SECRET_KEY=$(env_val SECRET_KEY)" \
+      -e "GIT_REMOTE=$(env_val GIT_REMOTE)" \
+      -e "ALLOW_REMOTE=${ALLOW_REMOTE}" \
+      "$IMAGE"
     echo "Leaf running at http://localhost:5000"
     echo "Leaf data: $WIKI_DATA"
     ;;
   down)
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" down
+    podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
     ;;
   logs)
-    env WIKI_DATA="$WIKI_DATA" UID="$HOST_UID" GID="$HOST_GID" BIND_ADDR="$BIND_ADDR" "${COMPOSE_CMD[@]}" logs -f
+    podman logs -f "$CONTAINER"
+    ;;
+  test)
+    # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
+    # Extra args go to pytest; without a tests/… path the whole suite runs.
+    podman build -q -t "$IMAGE" . >/dev/null
+    podman run --rm -v "$PWD:/repo:z" -w /repo "$IMAGE" sh -c \
+      'pip install --break-system-packages -q pytest 2>/dev/null
+       for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
+       [ -n "$paths" ] || set -- tests "$@"
+       python -m pytest -q "$@"' -- "${@:2}"
+    ;;
+  e2e)
+    # Browser tests (headless Chromium via Playwright) in a separate test image.
+    # Screenshots land in tests/e2e/_screenshots/.
+    podman build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
+    podman run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
+      python3 -m pytest tests/e2e -v -p no:cacheprovider "${@:2}"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs]"
-    echo "  build  - build the Docker image only"
+    echo "Usage: $0 [build|up|down|logs|test|e2e]"
+    echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
+    echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
+    echo "  e2e    - run browser tests in the Playwright image (extra args go to pytest)"
     exit 1
     ;;
 esac

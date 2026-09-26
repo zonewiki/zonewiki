@@ -31,7 +31,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | Integrated into the Pages view (`/pages`)    |
 | Storage             | Plain `.md` files in `pages/`               |
-| Container           | Docker (Ubuntu 26.04 LTS base image)        |
+| Container           | Podman (Ubuntu 26.04 LTS base image)        |
 
 No build step. No database. No auth (local use only).
 
@@ -42,9 +42,9 @@ No build step. No database. No auth (local use only).
 ```
 /
 ├── AGENTS.md               # This file (project documentation)
-├── Dockerfile              # Ubuntu 26.04 LTS-based container image
-├── compose.yaml            # Docker Compose configuration
-├── run.sh                  # Helper script: build/up/down/logs
+├── Containerfile           # Ubuntu 26.04 LTS-based container image (built by podman)
+├── Containerfile.e2e       # Test-only image for browser tests (Playwright + Chromium)
+├── run.sh                  # Helper script: build/up/down/logs/test/e2e (drives podman directly)
 ├── .env                    # Host data path configuration
 └── src/
     ├── requirements.txt
@@ -64,30 +64,35 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 ---
 
-## Docker / Container Setup
+## Podman / Container Setup
 
 ### Files
 
-- **`Dockerfile`** — Ubuntu 26.04 LTS base, installs Python + pip via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`.
-- **`compose.yaml`** — runs the Leaf container, mounts `$WIKI_DATA` (from `.env`) to `/wiki-data` inside the container, passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives.
-- **`run.sh`** — convenience script wrapping `docker build` plus whichever Compose command is available: `docker compose` or `docker-compose`. When it falls back to legacy `docker-compose` v1, `up` first does a quiet `down --remove-orphans` to avoid the known `ContainerConfig` recreate bug on newer Docker versions.
-- **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. `run.sh` passes the current user's UID/GID into Compose automatically so the container can write to the mounted wiki directory.
+- **`Containerfile`** — Ubuntu 26.04 LTS base, installs Python + pip via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`. Built with `podman build` (podman reads `Containerfile` by default).
+- **`run.sh`** — convenience script driving `podman build` and `podman run` directly (no Compose dependency). It reads `WIKI_DATA` and the optional env vars (`LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`) from `.env`, mounts `$WIKI_DATA` to `/wiki-data`, and passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives. `up` uses `--replace`, so re-running it rebuilds and restarts the existing container.
+- **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically; `run.sh` only passes an explicit `--user UID:GID` when podman runs rootful. When SELinux is enforcing, the volume is mounted with `:Z` relabelling.
 
 ### Commands
 
 ```bash
 ./run.sh            # build image and start Leaf (default: "up")
-./run.sh build      # build Docker image only
+./run.sh build      # build the container image only
 ./run.sh up         # build and start in detached mode
-./run.sh down       # stop and remove containers
+./run.sh down       # stop and remove the container
 ./run.sh logs       # follow container logs
+./run.sh test       # run unit/API tests inside the app image (extra args go to pytest; a tests/… path replaces the default whole suite)
+./run.sh e2e        # run browser tests in the Playwright image (extra args go to pytest)
 ```
 
 Leaf is available at **http://localhost:5000** after `./run.sh up`.
 
+### Mobile / phone access
+
+Set `ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check is skipped. Phones on the same network reach Leaf at `http://<host-LAN-IP>:5000`. The UI is responsive down to phone widths and the editor works on mobile. There is no auth by default — for LAN use consider setting `LEAF_PASSWORD` in `.env` to get a login gate.
+
 ### Data directory
 
-Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before creating directories and invoking Compose:
+Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before creating directories and starting the container:
 
 ```
 WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
@@ -147,6 +152,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page.
 - **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
+- **Linked tasks** — open deck tasks whose title/description link to the page. Each entry is a single link to the deck; links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
 
 ---
 
@@ -173,6 +179,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`
 - If the target page does not exist, render the link with a CSS class `wikilink-missing` so it can be styled differently (e.g. red or dashed underline). Clicking a missing wikilink redirects to `/edit/<slug>` so the page can be created immediately.
 - The same pre-processing must run in the `/api/preview` endpoint so the live editor preview also renders wikilinks correctly.
+- Code is exempt: `render_md()` masks fenced code blocks and inline code spans (`_mask_code`, private-use-character tokens) before running the wikilink, `[[toc]]` and `[[deck]]` pre-processors and restores them (`_unmask_code`) before `md.render()`, so directives inside code render literally. The TOC also ignores `##` lines inside fences.
 - Add a route `GET /api/pages` that returns a JSON list of all existing slugs — used by the editor to hint which wikilinks are valid.
 
 ### Image sizing
@@ -194,7 +201,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Version history
 
-- Git is installed in the Docker image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
+- Git is installed in the container image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
 - Every write operation (Done/save, create, rename, delete, restore, upload) calls `git_commit()` or `git_commit_rename()` to stage and commit the change. **Auto-save (`/api/save`) is the exception** — it writes the file to disk but does not create a git commit. Assets are tracked like pages — a `git push` backs up everything.
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
@@ -257,6 +264,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - `/edit/<slug>` renders a split-pane view: `<textarea>` on the left, live preview on the right.
 - Live preview updates as the user types (debounced, ~300ms) by calling `POST /api/preview`, which returns rendered HTML.
+- **Mobile editor** — on screens ≤640px the editor is not hidden; it becomes a full-screen stacked layout (textarea on top, preview below when toggled). The toolbar gains a **Preview** button (`#mobile-preview-btn`, class `mobile-only`) that calls the same `togglePreview()` as F2. The textarea font is 16px on mobile so iOS Safari doesn't zoom in on focus.
 - The editor textarea preserves tabs and disables spell-check.
 - The textarea receives focus automatically on page load.
 - **Auto-save while typing** — debounced ~2s after the user stops typing, the editor silently POSTs to `POST /api/save/<slug>`, which writes the file to disk (no git commit, no redirect). An unsaved-changes indicator (`●` dot in the toolbar) appears while there are unsaved changes and disappears when auto-save completes.
@@ -266,6 +274,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - On GET, the server computes a `file_hash` (SHA-256 prefix) and the section's `(start_char, end_char)` character range within the full file, embedding them as hidden form fields.
   - On save (auto-save or Done), the server verifies the hash matches the current file, then does a direct string-slice replacement at `[start_char:end_char]`. If the file changed on disk (hash mismatch), the save is **rejected**: auto-save gets a 409 JSON error; Done redirects to a full-file editor with a conflict banner.
   - After each auto-save, the server returns updated `{ file_hash, start_char, end_char }` so the next auto-save uses fresh offsets.
+  - The section's trailing blank lines are preserved on every splice (the editor loads the section with them stripped), including the conflict banner's "Save my version" (`force_section`), so the next heading never gets glued onto the section's last line.
   - This design avoids re-splitting the file on every save and eliminates the old index-based merge logic that could silently lose sections.
 - **Undo** — all programmatic text insertions (list continuation, bold, snippets, wikilink autocomplete, etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
 
@@ -275,7 +284,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
 - **File paste and drag & drop** — pasting a file from the clipboard or dropping files onto the editor textarea uploads them via `POST /api/upload`. Images insert as `![name](url)`, other files as `[name](url)`.
 - **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
-- **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin`). Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and returns 204. In the editor, clicking a checkbox in the live preview directly updates the textarea content (no server call — changes persist on save).
+- **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin`; `_enable_task_checkboxes` removes the plugin's `disabled` attribute from those inputs only). Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and returns 204 (400 for a missing/non-integer/negative idx). In the editor, clicking a checkbox in the live preview edits the textarea via `execCommand('insertText')` (undoable, triggers preview/auto-save).
+  - **Index mapping must match the renderer.** Only task-list items count: a list marker (`-`/`*`/`+`/`1.`/`1)`, optionally inside `>` blockquotes) followed by `[ ]`/`[x]`, whitespace and text. Fenced code and a leading frontmatter block are skipped; brackets in prose or later on the same line are not checkboxes. Server: `_TASK_ITEM_RE` / `_task_item_lines()`; client: `TASK_ITEM_RE` / `taskCheckboxOffsets()` in `leaf.js`. Keep the two in sync.
 - **Checkbox list continuation** — pressing Enter at the end of a `- [ ] task` or `- [x] task` line inserts `- [ ] ` on the next line (always unchecked). Pressing Enter on an empty checkbox item (`- [ ] ` with no text) exits the list.
 
 ### Rename
@@ -401,7 +411,7 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 | `created_at` | ISO datetime | Auto-set on creation |
 | `completed_at` | ISO datetime / `null` | Set when completed |
 | `sort_order` | integer | Manual sort position (priority = position) |
-| `recurrence` | `{ type, interval, from, anchor }` / `null` | Recurring schedule. `type` is `daily`/`weekly`/`monthly`/`yearly`. `from` is `"due"` (default — next date steps from the previous anchor date, calendar-aligned) or `"completion"` (steps from the completion day, for interval habits). `anchor` is `"due"` (default — advance the due date each cycle) or `"plan"` (advance the plan/focus date each cycle; spawned instance has no due date). |
+| `recurrence` | `{ type, interval, from, anchor, day? }` / `null` | Recurring schedule. `type` is `daily`/`weekly`/`monthly`/`yearly`. `from` is `"due"` (default — next date steps from the previous anchor date, calendar-aligned) or `"completion"` (steps from the completion day, for interval habits). `anchor` is `"due"` (default — advance the due date each cycle) or `"plan"` (advance the plan/focus date each cycle; spawned instance has no due date). `day` (monthly/yearly, set on the first spawn) is the series' day of month, so a month-end series returns to the 31st after a short month instead of drifting (Jan 31 → Feb 28 → Mar 31). Re-saving the edit modal keeps `day` unless the type, anchor or anchor date changes. |
 | `defer_days` | integer ≥ 0 / `null` | "Plan N days before due." When set together with `due_date`, the engine derives `focus_date = due_date - defer_days` (0 = plan on the due date) on create, on due/lead change, and on every recurring spawn. It **schedules only — no task is ever hidden**. A bare `focus_date` change (e.g. a Plan-board drag, no `defer_days` in the payload) is a manual override and is not recomputed. |
 | `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
 | `blocked_by` | string[] | Array of task IDs that block this task. Tasks with an open blocker are excluded from Focus and dimmed elsewhere; deleting a task strips it from all `blocked_by` lists. |
@@ -413,7 +423,7 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 
 - **Filter tabs** (labels): Focus · Plan · Backlog · Completed (internal `data-filter` values `focus`/`due`/`open`/`completed`). Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (Backlog) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on Backlog.
 - **Focus tab**: shows tasks with `focus_date <= today` and overdue/due-today tasks, excluding tasks with an open blocker (they return automatically when the blocker completes). Past focus dates are not removed — tasks stay in Focus as a working set — but a bar at the top counts plans ≥3 days old (`STALE_DAYS`) and clears them in one click, with undo. Sorted: overdue first, due today, then focused tasks.
-- **Plan (`due`) tab — day board**: shows **all** open tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections, `Later`, and `Someday` are **drop targets**: dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`); dropping on `Later` opens a native date picker (min today+7) for the target date. `Overdue` is display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
+- **Plan (`due`) tab — day board**: shows **all** open tasks grouped into day sections: `Overdue`, `Today`, `Tomorrow`, weekday headers for the next days (`today..+6`), `Later`, and `Someday` (tasks with no due date and no plan). Grouping is **plan-first** (`focus_date || due_date`) so a planned date overrides the deadline for placement. Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections, `Later`, and `Someday` are **drop targets** (Later and Someday are always shown, even when empty, so there is always somewhere to drop): dragging a task card onto a day sets its `focus_date` to that day (re-plan); dropping on `Someday` clears the plan (`focus_date = null`); dropping on `Later` opens a native date picker (min today+7) for the target date. `Overdue` is display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Inline date editing**: the ⏰ (due) and 📅 (plan) spans in each card's meta row open a native date picker on click — no modal needed. Keyboard: **f** plans the selected task for today, **F** for tomorrow (pressing again clears).
 - **Sort options**: Manual order (drag-and-drop) · Created
 - **Filters**: Tag text filter — comma-separated tags require all (AND); pipe-separated (`a|b`) match any (OR)
@@ -444,11 +454,11 @@ All deck mutations are serialized through a module-level lock (`_LOCK`) and writ
 - Light/dark mode via `prefers-color-scheme` media query.
 - Nav bar: fixed top, contains site title (links to home), search input, "New Page" button.
 - No external CSS frameworks — keep `style.css` self-contained.
-- Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, editor hidden with a message.
+- Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, larger touch targets. The editor is fully usable on phones — see "Mobile editor" in the In-Browser Editor section.
 
 ---
 
-## Local Development (without Docker)
+## Local Development (without Podman)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Create and activate virtualenv
@@ -469,13 +479,27 @@ pytest tests/ -v                                     # Run all tests
 pytest tests/test_section_editing.py -v              # Run section-editing tests only
 ```
 
+`tests/test_git.py` initializes a real git repo in the temp wiki dir and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules point `WIKI_DIR` at a plain temp dir, so git calls there are silent no-ops.
+
+To run the suite without a local venv: `./run.sh test` (runs inside the app image with the repo mounted).
+
+### Browser tests (`tests/e2e/`)
+
+End-to-end tests drive the real app in headless Chromium via Playwright. They run in a separate test image (`Containerfile.e2e`, based on Microsoft's Playwright image) so the app image stays browser-free and the app still has no build step or npm. `./run.sh e2e` builds that image (cached) and runs them with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k deck`). Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
+
+- `conftest.py` serves `server.app` on a background thread (werkzeug `make_server`, random port) and points it at a fresh temp wiki with its own git repo per test; each test gets a fresh browser context. All non-local requests (the highlight.js CDN) are aborted to keep runs offline and deterministic. Uncaught page JS errors fail the test.
+- Coverage: editor (auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking, content matches, arrow/Enter nav, unlinked filter), deck (Plan-board drag to a day and to Someday, Backlog "Unplanned only" default + persistence), layout (no horizontal page scroll at 390px phone width on page/editor/deck views, mobile Preview button, tldr toggle geometry).
+- `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review. It asserts nothing about appearance.
+- Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
+- Keep the `playwright==` pin in `Containerfile.e2e` equal to the image tag version.
+
 `tests/test_deck_core.py` exercises the pure client logic in `src/public/deck-core.js` by running it under Node (`node -e`); those tests skip automatically when Node is not installed.
 
 **Always run the full test suite before and after making changes to `src/server.py`.**
 
 **Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix). A feature or fix is not complete until it has test coverage.
 
-The tests use an in-process Flask test client and a temporary directory — no running server or Docker needed.
+The tests use an in-process Flask test client and a temporary directory — no running server or container needed.
 
 ---
 
@@ -497,7 +521,7 @@ mdit-py-plugins>=0.4
 - Do not use a database. Files are the only storage.
 - Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the top-right corner when auth is enabled.
 - Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
-- `ALLOW_REMOTE` is the single knob for network access. When unset, `run.sh` sets `BIND_ADDR=127.0.0.1` so Docker only exposes port 5000 on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` sets `BIND_ADDR=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. `compose.yaml` uses `${BIND_ADDR:-127.0.0.1}:5000:5000`.
+- `ALLOW_REMOTE` is the single knob for network access. When unset, `run.sh` sets `BIND_ADDR=127.0.0.1` so podman only exposes port 5000 on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` sets `BIND_ADDR=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. The port mapping passed to `podman run` is `-p ${BIND_ADDR}:5000:5000`.
 - A `before_request` hook in `server.py` validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks. Set `ALLOW_REMOTE=1` in `.env` to skip this check and allow access from any host.
 - Do not add a build step or bundler.
 - Slugs are derived from file paths relative to `PAGES_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).

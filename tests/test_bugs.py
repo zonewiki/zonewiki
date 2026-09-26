@@ -5,6 +5,7 @@ Run with:
 """
 
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -411,3 +412,61 @@ class TestBareSlugBacklinks:
         )
         assert "signals" in targets
         assert "ivo-petrenko" in targets
+
+
+# ===========================================================================
+# Bug: toggle_nth_checkbox counted any "[x]"/"[ ]" on a line, not just
+# task-list items, so its index disagreed with the rendered checkboxes and a
+# click toggled the wrong line.
+# ===========================================================================
+
+class TestToggleCheckboxOnlyTaskItems:
+
+    def test_bracket_in_prose_is_not_a_checkbox(self):
+        content = "Press [x] to close.\n\n- [ ] task\n"
+        out = toggle_nth_checkbox(content, 0)
+        assert out.startswith("Press [x] to close.\n")
+        assert "- [x] task" in out
+
+    def test_second_bracket_on_a_task_line_is_not_a_checkbox(self):
+        content = "- [ ] a [x] b\n- [ ] c\n"
+        out = toggle_nth_checkbox(content, 1)
+        assert out.startswith("- [ ] a [x] b\n")
+        assert "- [x] c" in out
+
+    def test_plain_list_item_with_brackets_is_not_a_checkbox(self):
+        content = "- see [ ] here\n- [ ] real\n"
+        assert "- [x] real" in toggle_nth_checkbox(content, 0)
+
+    def test_frontmatter_brackets_ignored(self):
+        content = "---\ntags: [a, b]\ntldr: [x] marks\n---\n# T\n\n- [ ] one\n"
+        assert "- [x] one" in toggle_nth_checkbox(content, 0)
+
+    @pytest.mark.parametrize("line", ["* [ ] star", "+ [ ] plus", "1. [ ] num",
+                                      "2) [ ] paren", "  - [ ] nested", "> - [ ] quoted"])
+    def test_task_item_variants_are_counted(self, line):
+        out = toggle_nth_checkbox(f"{line}\n", 0)
+        assert "[x]" in out
+
+    def test_index_matches_rendered_checkboxes(self, tmp_path, monkeypatch):
+        """The Nth rendered checkbox must be the Nth line the toggle counts."""
+        import server
+        monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
+        content = (
+            "Intro with [x] and [ ] in prose.\n\n"
+            "- [ ] first\n"
+            "- plain [ ] item\n"
+            "  - [x] second (nested)\n"
+            "\n```\n- [ ] in code\n```\n\n"
+            "1. [ ] third\n"
+            "> - [ ] fourth\n"
+            "- [ ] fifth [x] trailing\n"
+        )
+        html = server.render_md(content)
+        rendered = re.findall(r'<input[^>]*task-list-item-checkbox[^>]*>', html)
+        assert len(rendered) == 5
+        labels = ["first", "second", "third", "fourth", "fifth"]
+        for i, label in enumerate(labels):
+            out = toggle_nth_checkbox(content, i)
+            changed = [a for a, b in zip(content.splitlines(), out.splitlines()) if a != b]
+            assert len(changed) == 1 and label in changed[0], (i, changed)

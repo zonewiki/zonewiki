@@ -126,6 +126,16 @@ class TestBoardBuckets:
         assert day_sections[0]["label"] == "Today"
         assert day_sections[1]["label"] == "Tomorrow"
 
+    def test_empty_later_and_someday_still_offered_as_drop_targets(self):
+        # Regression: they used to be omitted when empty, so once every task
+        # was planned there was nowhere to drag one back to "unplanned".
+        sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
+        by_key = {s["key"]: s for s in sections}
+        assert by_key["later"]["tasks"] == [] and by_key["later"]["droppable"]
+        assert by_key["someday"]["tasks"] == [] and by_key["someday"]["droppable"]
+        assert [s["key"] for s in sections][-2:] == ["later", "someday"]
+        assert "overdue" not in by_key  # display-only, so still omitted when empty
+
 
 class TestTagMatchScore:
     def test_prefix_beats_substring_beats_subsequence(self):
