@@ -1434,6 +1434,12 @@ body.editor-page main {
 .task-item.task-completed { opacity: .6; }
 .task-item.task-completed .task-title { text-decoration: line-through; color: var(--muted); }
 .task-item.task-dragging { opacity: .4; }
+/* The task a ?task=<id> link points at, briefly. */
+.task-item.task-flash { animation: task-flash 2s ease-out; }
+@keyframes task-flash {
+  0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 55%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
 /* Touch swipe (deck.js): the card follows the finger; the uncovered space
    beside it says what releasing does, and the card takes that colour once
    the swipe is far enough to count (.task-swipe-armed). */

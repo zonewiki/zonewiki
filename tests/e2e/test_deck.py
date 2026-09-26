@@ -1,5 +1,6 @@
 """Deck: Plan board, start/due dates in the edit modal, and the All tab's "Unplanned only" toggle."""
 
+import re
 from datetime import date, timedelta
 
 from playwright.sync_api import expect
@@ -285,3 +286,55 @@ def test_deck_refresh_waits_while_editing(page, wiki):
     page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
     page.wait_for_timeout(300)
     expect(card(page, "Added elsewhere")).to_have_count(0)   # the editor is open: no re-render
+
+
+# ?task=<id> — search results and a page's "Linked tasks" point at one task.
+
+def _task_link_deck(page, wiki, deck="[[deck]]"):
+    wiki.write("deck", f"# Deck\n\n{deck}\n")
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"]
+           for t in ("Same title", "Same title", "Fix #3 now")]
+    return ids
+
+
+def test_task_link_selects_that_task_by_id(page, wiki):
+    ids = _task_link_deck(page, wiki)
+    page.goto(f"/page/deck?task={ids[1]}&filter=open")
+    target = page.locator(f".task-item[data-id='{ids[1]}']")
+    expect(target).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(target).to_have_class(re.compile(r"\btask-flash\b"))
+    # Nothing is filtered away: the twin and the #word task are still listed.
+    expect(page.locator(f".task-item[data-id='{ids[0]}']")).to_be_visible()
+    expect(page.locator("#task-filter-search")).to_have_value("")
+
+
+def test_task_link_to_title_with_hashword(page, wiki):
+    # Regression: the old ?search=<title> link read "#3" as a tag filter and
+    # showed nothing.
+    ids = _task_link_deck(page, wiki)
+    page.goto(f"/page/deck?task={ids[2]}&filter=open")
+    expect(page.locator(f".task-item[data-id='{ids[2]}']")).to_have_class(
+        re.compile(r"\btask-selected\b"))
+
+
+def test_task_link_lifts_unplanned_only_for_a_planned_task(page, wiki):
+    ids = _task_link_deck(page, wiki, "[[deck filter=all unplanned=1]]")
+    page.request.put(f"/api/deck/{ids[0]}", data={"start_date": tomorrow()})
+    page.goto(f"/page/deck?task={ids[0]}&filter=open")
+    expect(page.locator(f".task-item[data-id='{ids[0]}']")).to_have_class(
+        re.compile(r"\btask-selected\b"))
+    expect(page.locator("#task-unplanned")).not_to_be_checked()
+
+
+def test_task_link_to_completed_task(page, wiki):
+    ids = _task_link_deck(page, wiki)
+    page.request.put(f"/api/deck/{ids[0]}", data={"completed": True})
+    page.goto(f"/page/deck?task={ids[0]}&filter=completed")
+    expect(page.locator(f".task-item[data-id='{ids[0]}']")).to_have_class(
+        re.compile(r"\btask-selected\b"))
+
+
+def test_task_link_to_missing_task_says_so(page, wiki):
+    _task_link_deck(page, wiki)
+    page.goto("/page/deck?task=no-such-id&filter=open")
+    expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()

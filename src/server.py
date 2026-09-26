@@ -1094,7 +1094,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
         )
     if task_backlinks:
         tbl_items = "".join(
-            f'<li><a href="/page/deck?{html.escape(urlencode({"search": t["title"]}))}">'
+            f'<li><a href="/page/deck?{html.escape(urlencode({"task": t["id"], "filter": "open"}))}">'
             f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
             for t in task_backlinks
         )
@@ -2106,14 +2106,14 @@ def api_search():
 
 
 def _result_href(r: dict) -> str:
-    """Destination URL for a search result. Task results open the deck page with
-    the task title prefilled into the deck search filter (so only that task
-    shows) and the tab set to match its state, rather than the bare _deck slug."""
+    """Destination URL for a search result. Task results open the deck page on
+    the tab matching the task's state, with that one task selected and
+    highlighted (`?task=<id>`, handled by deck.js) rather than the bare _deck
+    slug. By id, not title: titles can repeat or contain #words."""
     if r.get("type") == "task":
         from urllib.parse import urlencode
-        term = re.sub(r"^\[Task\]\s*", "", r["title"])
         tab = "completed" if r.get("status") == "done" else "open"
-        return "/page/deck?" + urlencode({"search": term, "filter": tab})
+        return "/page/deck?" + urlencode({"task": r["task_id"], "filter": tab})
     return f"/page/{r['slug']}"
 
 

@@ -2460,8 +2460,35 @@
   if (unplannedEl) unplannedEl.checked = unplannedOnly;
   syncUnplannedToggle();
 
-  fetchDeck().then(() => {
-    if (activeFilter === 'completed') fetchCompleted();
+  // ?task=<id> (search results, a page's "Linked tasks"): show exactly that
+  // task — the link sets its tab, and here it is selected, scrolled into view
+  // and briefly highlighted. By id, not by title: a title can be shared, or
+  // contain a #word the filter field would read as a tag.
+  const initTaskId = urlParams.get('task') || '';
+  function revealTask(id) {
+    if (!tasks.some(t => t.id === id)) {
+      // Deleted, or rolled into a previous-year archive. One notice per page.
+      if (instanceId === '0') showNotice('That task is no longer in the deck.');
+      return;
+    }
+    // "Unplanned only" would hide a planned task: off for this visit only
+    // (the stored preference is left alone).
+    if (unplannedOnly && !filterTasks().some(t => t.id === id)) {
+      unplannedOnly = false;
+      if (unplannedEl) unplannedEl.checked = false;
+      render();
+    }
+    setSelected(id);
+    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('task-flash');
+    setTimeout(() => el.classList.remove('task-flash'), 2000);
+  }
+
+  fetchDeck().then(async () => {
+    if (activeFilter === 'completed') await fetchCompleted();
+    if (initTaskId) revealTask(initTaskId);
   });
 
   // Auto-open new item modal if ?new=1 in URL

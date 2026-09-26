@@ -677,15 +677,14 @@ class TestSearch:
         results = resp.get_json()
         assert results[0]["slug"] == "rare"
 
-    def test_search_page_task_links_to_filtered_deck(self, client, wiki_dir):
-        # A task result must open /page/deck with the title prefilled into the
-        # deck search filter — not the bare _deck storage slug.
-        client.post("/api/deck", json={"title": "buymilk urgent chore"})
+    def test_search_page_task_links_to_the_task_by_id(self, client, wiki_dir):
+        # A task result must open /page/deck at that task (by id) — not the
+        # bare _deck storage slug, and not a title search.
+        tid = client.post("/api/deck", json={"title": "buymilk urgent chore"}).get_json()["id"]
         resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
         body = resp.get_data(as_text=True)
         assert "/page/_deck" not in body
-        assert "/page/deck?search=buymilk+urgent+chore" in body
-        assert "filter=open" in body
+        assert f"/page/deck?task={tid}&amp;filter=open" in body
 
     def test_search_page_completed_task_links_to_completed_tab(self, client, wiki_dir):
         r = client.post("/api/deck", json={"title": "finishreport tuvwxyz"})
@@ -693,8 +692,7 @@ class TestSearch:
         client.put(f"/api/deck/{tid}", json={"completed": True})
         resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert "/page/deck?search=finishreport+tuvwxyz" in body
-        assert "filter=completed" in body
+        assert f"/page/deck?task={tid}&amp;filter=completed" in body
 
 
 # ===========================================================================
@@ -957,15 +955,15 @@ class TestSearchResultHref:
         assert results, "expected a search hit"
         assert results[0]["href"] == f"/page/{results[0]['slug']}"
 
-    def test_task_result_href_opens_deck_prefiltered(self, client, wiki_dir):
-        client.post("/api/deck", json={"title": "Water the ferns"}, headers=HOST)
+    def test_task_result_href_opens_deck_at_the_task(self, client, wiki_dir):
+        # Regression: the href prefilled the title into the deck's filter
+        # field, where a "#word" in the title reads as a tag filter.
+        tid = client.post("/api/deck", json={"title": "Water the ferns #3"},
+                          headers=HOST).get_json()["id"]
         results = client.get("/api/search?q=ferns", headers=HOST).get_json()
         task_hits = [r for r in results if r.get("type") == "task"]
         assert task_hits, "expected a task hit"
-        href = task_hits[0]["href"]
-        assert href.startswith("/page/deck?")
-        assert "search=Water+the+ferns" in href
-        assert "filter=open" in href
+        assert task_hits[0]["href"] == f"/page/deck?task={tid}&filter=open"
 
 
 class TestBacklinkCacheInvalidation:
@@ -996,6 +994,14 @@ class TestTaskBacklinks:
         assert 'id="task-backlinks"' in html
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
         assert "Water Garden" in section
+
+    def test_linked_task_links_to_the_task_by_id(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        tid = client.post("/api/deck", json={"title": "Water [[Garden]]"},
+                          headers=HOST).get_json()["id"]
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        section = html.split('id="task-backlinks"')[1].split("</section>")[0]
+        assert f'href="/page/deck?task={tid}&amp;filter=open"' in section
 
     def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
         # Regression: the task title's own wikilinks were rendered as <a>
