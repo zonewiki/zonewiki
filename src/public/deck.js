@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isBlocked, isUnplanned, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isUnplanned, tagMatchScore } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -73,7 +73,6 @@
   // Day sections with >= this many tasks are flagged; [[deck capacity=N]]
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
-  const STALE_DAYS = 3;  // focus plans older than this are styled stale
   let unplannedOnly = false;  // All tab's "Unplanned only" — resolved during init
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
@@ -108,6 +107,17 @@
       openDatePicker('', d => { if (d) updateTask(id, { focus_date: d }); }, div, dateOffset(7));
     }
     else if (div.dataset.dropDay) updateTask(id, { focus_date: div.dataset.dropDay });
+  });
+
+  // Touch: a tap on a card opens the editor (double-click, the desktop
+  // gesture, is unreliable on phones). Mouse clicks keep selecting cards.
+  let lastPointerType = 'mouse';
+  listEl.addEventListener('pointerdown', e => { lastPointerType = e.pointerType; }, true);
+  listEl.addEventListener('click', e => {
+    if (lastPointerType !== 'touch') return;
+    const card = e.target.closest('.task-item');
+    if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
+    openEditModal(card.dataset.id);
   });
 
   // Claim keyboard focus when user interacts with this instance
@@ -339,21 +349,143 @@
     });
   }
 
-  // Clear focus_date on the stale plans the Focus bar counts (same filtered
-  // view, so tag/page filters are respected), with undo restoring the dates.
-  async function clearStalePlans() {
-    const cutoff = dateOffset(-STALE_DAYS);
-    const stale = filterTasks().filter(t => t.focus_date && t.focus_date <= cutoff);
-    if (!stale.length) return;
-    const snapshot = stale.map(t => ({ id: t.id, focus_date: t.focus_date }));
-    await Promise.all(stale.map(t => putTask(t.id, { focus_date: null })));
+  async function afterBatchWrite() {
     await fetchDeck();
+    window.refreshDueBadge?.();
     refreshOtherInstances(instanceId);
-    showUndo(`${stale.length} stale plan${stale.length > 1 ? 's' : ''} cleared`, async () => {
-      await Promise.all(snapshot.map(s => putTask(s.id, { focus_date: s.focus_date })));
-      await fetchDeck();
-      refreshOtherInstances(instanceId);
+  }
+
+  // ── Card actions (shared by buttons, the ⋯ menu and the keyboard) ────────
+
+  function markWontDo(id) {
+    updateTask(id, { wont_do: true });
+    showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
+  }
+
+  function skipOccurrence(id) {
+    updateTask(id, { skip: true });
+    showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false }));
+  }
+
+  function setPlan(id, focusDate) {
+    const prev = tasks.find(t => t.id === id)?.focus_date ?? null;
+    updateTask(id, { focus_date: focusDate });
+    const msg = focusDate ? `Planned for ${formatDate(focusDate)}` : 'Plan cleared';
+    showUndo(msg, () => updateTask(id, { focus_date: prev }));
+  }
+
+  // Confirm, delete, and offer undo that restores the full snapshots (ids and
+  // every field). beforeDelete runs after confirmation.
+  async function deleteWithUndo(ids, beforeDelete) {
+    const count = ids.length;
+    const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
+    if (!await confirmDelete(title, count)) return;
+    const snapshot = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
+    beforeDelete?.();
+    await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
+    showUndo(count === 1 ? 'Task deleted' : `${count} tasks deleted`, async () => {
+      await fetch('/api/deck/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks: snapshot }),
+      });
+      await afterBatchWrite();
     });
+  }
+
+  // ── ⋯ task menu ────────────────────────────────────────────────────────────
+  // Every card action in one place, reachable by tap — the hover buttons,
+  // double-click and keyboard shortcuts don't exist on a phone. Renders as a
+  // popover at the button on desktop and as a bottom sheet on narrow screens.
+
+  let taskMenu = null;
+
+  function closeTaskMenu() {
+    if (!taskMenu) return;
+    taskMenu.backdrop.remove();
+    taskMenu.el.remove();
+    document.removeEventListener('keydown', taskMenu.onKey, true);
+    taskMenu.anchor?.focus({ preventScroll: true });
+    taskMenu = null;
+  }
+
+  function openTaskMenu(id, anchor) {
+    closeTaskMenu();
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const items = task.completed_at ? [
+      ['edit', 'Edit…'],
+      ['reopen', 'Reopen'],
+      ['delete', 'Delete…', 'danger'],
+    ] : [
+      ['edit', 'Edit…'],
+      ['today', 'Plan for today'],
+      ['tomorrow', 'Plan for tomorrow'],
+      ['pick', 'Pick plan date…'],
+      task.focus_date && ['unplan', 'Unplan'],
+      task.recurrence && ['skip', 'Skip this occurrence'],
+      ['wontdo', "Won't do"],
+      ['delete', 'Delete…', 'danger'],
+    ].filter(Boolean);
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'task-menu-backdrop';
+    const el = document.createElement('div');
+    el.className = 'task-menu';
+    el.setAttribute('role', 'menu');
+    el.innerHTML = `<div class="task-menu-title">${esc(task.title)}</div>` + items.map(([key, label, cls]) =>
+      `<button type="button" role="menuitem" data-action="${key}"${cls ? ` class="${cls}"` : ''}>${label}</button>`
+    ).join('');
+    document.body.append(backdrop, el);
+
+    // Desktop popover: under the button, right-aligned, flipped up if needed.
+    // (The narrow-screen bottom sheet is pure CSS and ignores these.)
+    const r = anchor.getBoundingClientRect();
+    const m = el.getBoundingClientRect();
+    const top = r.bottom + 4 + m.height > window.innerHeight ? r.top - 4 - m.height : r.bottom + 4;
+    el.style.top = `${Math.max(4, top)}px`;
+    el.style.left = `${Math.max(4, Math.min(r.right - m.width, window.innerWidth - m.width - 4))}px`;
+
+    const onKey = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTaskMenu(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation();
+        const btns = [...el.querySelectorAll('button')];
+        const i = btns.indexOf(document.activeElement);
+        btns[(i + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length].focus();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    backdrop.addEventListener('click', closeTaskMenu);
+    taskMenu = { el, backdrop, anchor, onKey };
+    el.querySelector('button')?.focus({ preventScroll: true });
+
+    el.addEventListener('click', e => {
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      if (!action) return;
+      closeTaskMenu();
+      runTaskAction(task, action, anchor);
+    });
+  }
+
+  function runTaskAction(task, action, anchor) {
+    const id = task.id;
+    switch (action) {
+      case 'edit':     openEditModal(id); break;
+      case 'today':    setPlan(id, dateOffset(0)); break;
+      case 'tomorrow': setPlan(id, dateOffset(1)); break;
+      case 'unplan':   setPlan(id, null); break;
+      case 'pick':
+        openDatePicker(task.focus_date || '', d => d !== undefined && setPlan(id, d), anchor, todayStr());
+        break;
+      case 'skip':     skipOccurrence(id); break;
+      case 'wontdo':   markWontDo(id); break;
+      case 'reopen':
+        updateTask(id, { completed: false });
+        showUndo('Task reopened', () => completeTasks([id], true));
+        break;
+      case 'delete':   deleteWithUndo([id]); break;
+    }
   }
 
   async function postReorder(body) {
@@ -453,8 +585,7 @@
 
     // Tab filter
     if (activeFilter === 'focus') {
-      const byId = new Map(tasks.map(t => [t.id, t]));
-      filtered = filtered.filter(t => !t.completed_at && !isBlocked(t, byId) && (
+      filtered = filtered.filter(t => !t.completed_at && (
         (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
       ));
     } else if (activeFilter === 'due') {
@@ -749,6 +880,14 @@
     return dateStr;
   }
 
+  // "Sep 21" (plus the year when it isn't this year), for "since …" labels.
+  function shortDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const opts = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString('en-US', opts);
+  }
+
   function dueDateClass(task) {
     if (!task.due_date || task.completed_at) return '';
     const today = todayStr();
@@ -798,15 +937,28 @@
 
     const pop = document.createElement('div');
     pop.className = 'deck-datepicker';
-    const r = anchor ? anchor.getBoundingClientRect() : { left: 20, bottom: 20 };
-    // The edit modal centers itself with transform: translate(), which makes
-    // position:fixed resolve against the modal's box rather than the viewport.
-    // Offset the anchor's viewport coords by the parent's rect so the popup
-    // still lands directly under the trigger. (For document.body, pr is 0,0.)
-    const pr = (parent && parent !== document.body)
+    const r = anchor ? anchor.getBoundingClientRect() : { left: 20, top: 16, bottom: 20 };
+    // A transformed parent makes position:fixed resolve against its box rather
+    // than the viewport; offset by its rect then. (The edit modal is no longer
+    // transformed, so normally this is 0,0.)
+    const pr = (parent && parent !== document.body && getComputedStyle(parent).transform !== 'none')
       ? parent.getBoundingClientRect() : { left: 0, top: 0 };
-    pop.style.cssText = `position:fixed;left:${Math.round(r.left - pr.left)}px;top:${Math.round(r.bottom - pr.top + 4)}px;z-index:1000;`;
+    pop.style.cssText = 'position:fixed;z-index:1000;';
     parent.appendChild(pop);
+
+    // Keep the calendar on screen. Runs after every draw(): the size is only
+    // known once the month is rendered, and a 6-week month is a row taller.
+    // Prefer below the anchor, else above it, else pinned inside the window;
+    // horizontally left-aligned with the anchor but never past either edge.
+    function place() {
+      const w = pop.offsetWidth, h = pop.offsetHeight;
+      const vw = window.innerWidth, vh = window.innerHeight, m = 4;
+      let top = r.bottom + m;
+      if (top + h > vh - m) top = r.top - m - h >= m ? r.top - m - h : Math.max(m, vh - m - h);
+      const left = Math.max(m, Math.min(r.left, vw - m - w));
+      pop.style.top = `${Math.round(top - pr.top)}px`;
+      pop.style.left = `${Math.round(left - pr.left)}px`;
+    }
 
     let done = false;
     function cleanup() {
@@ -850,6 +1002,7 @@
           `<button type="button" class="dp-today-btn">Today</button>` +
           `<button type="button" class="dp-clear-btn">Clear</button>` +
         `</div>`;
+      place();
     }
 
     pop.addEventListener('click', e => {
@@ -881,19 +1034,8 @@
 
     const filtered = filterTasks();
 
-    // Index tasks once per render — taskHTML runs per card and would otherwise
-    // scan the whole task array for every blocked-by/blocking lookup.
-    const byId = new Map(tasks.map(t => [t.id, t]));
-    const blockingIndex = new Map(); // blocker id → open tasks it blocks
-    for (const t of tasks) {
-      if (t.completed_at || !t.blocked_by) continue;
-      for (const bid of t.blocked_by) {
-        if (!blockingIndex.has(bid)) blockingIndex.set(bid, []);
-        blockingIndex.get(bid).push(t);
-      }
-    }
 
-    // In "open" (Backlog) view split into: due now (pinned top), ordered, new (inbox)
+    // In "open" (All) view split into: due now (pinned top), ordered, new (inbox)
     let dueTasks, orderedTasks, newTasks;
     if (activeFilter === 'open') {
       const today = todayStr();
@@ -917,14 +1059,19 @@
 
     if (activeFilter !== 'due' &&
         dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0) {
-      listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
+      if (activeFilter === 'focus') {
+        listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
+          '<button type="button" class="btn btn-sm" data-goto-tab="due">Plan your day</button></li>';
+        listEl.querySelector('[data-goto-tab]').addEventListener('click', () => switchTab('due'));
+      } else {
+        listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
+      }
       return;
     }
 
     const taskHTML = (task, draggable = (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')), extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
-      const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '')
-        + (!task.completed_at && isBlocked(task, byId) ? ' task-blocked-item' : '');
+      const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
@@ -938,16 +1085,13 @@
       const dueDisplay = !task.completed_at
         ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
         : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
-      // Past plans show their age instead of a date, so a stale Focus working
-      // set is visible at a glance (stale styling from STALE_DAYS on).
-      const focusAge = (!task.completed_at && task.focus_date && task.focus_date < todayStr())
-        ? Math.round((new Date(todayStr() + 'T00:00:00') - new Date(task.focus_date + 'T00:00:00')) / 86400000)
-        : 0;
-      const focusLabel = task.focus_date
-        ? (focusAge > 0 ? `planned ${focusAge}d ago` : formatDate(task.focus_date)) : '';
-      const staleClass = focusAge >= STALE_DAYS ? ' task-focus-stale' : '';
+      // The plan date is a start date: a past one means "available since",
+      // not late — so it reads "since Sep 21" with no warning styling.
+      const focusLabel = !task.focus_date ? ''
+        : (!task.completed_at && task.focus_date < todayStr())
+          ? `since ${shortDate(task.focus_date)}` : formatDate(task.focus_date);
       const focusDisplay = !task.completed_at
-        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${staleClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
+        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
         : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
       const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'plan on due date' : `plan ${task.defer_days}d before due`}</span>` : '';
       const completedDisplay = task.completed_at
@@ -957,34 +1101,12 @@
         : '';
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
-      // Blocked by: show full title, click to open modal
-      let blockedDisplay = '';
-      if (task.blocked_by && task.blocked_by.length) {
-        const links = task.blocked_by.map(bid => {
-          const blocker = byId.get(bid);
-          const title = blocker ? esc(blocker.title) : bid.slice(0, 6);
-          return `<a href="#" class="dep-link" data-id="${bid}">${title}</a>`;
-        }).join(' ');
-        blockedDisplay = `<span class="task-blocked">🚫 blocked by ${links}</span>`;
-      }
-
-      // Blocking: show full title, click to open modal
-      let blockingDisplay = '';
-      const blocking = blockingIndex.get(task.id) || [];
-      if (blocking.length) {
-        const links = blocking.map(t => {
-          return `<a href="#" class="dep-link" data-id="${t.id}">${esc(t.title)}</a>`;
-        }).join(' ');
-        blockingDisplay = `<span class="task-blocking">⛓ blocking ${links}</span>`;
-      }
-
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.focus_date || task.recurrence ||
-        task.page || (task.blocked_by && task.blocked_by.length) || blocking.length ||
-        task.defer_days != null || task.completed_at);
-      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || blockedDisplay || blockingDisplay || tagsRight;
+        task.page || task.defer_days != null || task.completed_at);
+      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}${blockedDisplay}${blockingDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1003,7 +1125,7 @@
             <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
           </div>
           <div class="task-actions">
-            ${skipBtnHtml}${wontDoBtnHtml}
+            ${skipBtnHtml}${wontDoBtnHtml}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">⋯</button>
           </div>
           ${metaHtml}${descHtml}
         </li>`;
@@ -1046,13 +1168,7 @@
       html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
-    // Focus: surface stale plans (planned >= STALE_DAYS ago) with one-click clear
     if (activeFilter === 'focus') {
-      const staleCount = filtered.filter(t => t.focus_date && t.focus_date <= dateOffset(-STALE_DAYS)).length;
-      if (staleCount) {
-        html += `<li class="focus-stale-bar">${staleCount} stale plan${staleCount > 1 ? 's' : ''}` +
-          `<button class="btn btn-sm" id="focus-clear-stale">Clear</button></li>`;
-      }
       if (orderedTasks.length >= CAPACITY) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
           `<span>⚠ ${orderedTasks.length} tasks in focus (limit: ${CAPACITY})</span></li>`;
@@ -1072,7 +1188,12 @@
     wireListHandlers();
 
     function wireListHandlers() {
-    listEl.querySelector('#focus-clear-stale')?.addEventListener('click', clearStalePlans);
+    listEl.querySelectorAll('.task-menu-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openTaskMenu(btn.dataset.id, btn);
+      });
+    });
 
     // "Show more" button
     const showMoreBtn = listEl.querySelector('#tasks-show-more-btn');
@@ -1110,31 +1231,13 @@
     });
 
     listEl.querySelectorAll('.task-wontdo-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        updateTask(id, { wont_do: true });
-        showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
-      });
+      btn.addEventListener('click', e => { e.stopPropagation(); markWontDo(btn.dataset.id); });
     });
 
     listEl.querySelectorAll('.task-skip-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const id = btn.dataset.id;
-        updateTask(id, { skip: true });
-        showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false }));
-      });
+      btn.addEventListener('click', e => { e.stopPropagation(); skipOccurrence(btn.dataset.id); });
     });
 
-    // Dependency links open the linked task's edit modal
-    listEl.querySelectorAll('.dep-link').forEach(link => {
-      link.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        openEditModal(link.dataset.id);
-      });
-    });
 
     listEl.querySelectorAll('.task-title').forEach(el => {
       el.addEventListener('dblclick', e => {
@@ -1375,13 +1478,37 @@
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
+  // Segmented control: one button per view, data-filter = the view's name.
 
-  tabsEl.addEventListener('change', () => {
-    activeFilter = tabsEl.value;
+  const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-filter]'));
+
+  // Mark the view's button active (no side effects — used during init too).
+  function markActiveTab(filter) {
+    tabButtons().forEach(b => {
+      const on = b.dataset.filter === filter;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+
+  function switchTab(filter) {
+    if (!tabButtons().some(b => b.dataset.filter === filter)) return;
+    activeFilter = filter;
+    markActiveTab(filter);
+    // Keyboard focus follows the active view (Tab-cycling from a focused tab
+    // would otherwise leave the focus ring on the previous one).
+    if (tabsEl.contains(document.activeElement)) {
+      tabsEl.querySelector(`[data-filter="${filter}"]`).focus();
+    }
     saveActiveTab(activeFilter);
     syncUnplannedToggle();
     if (activeFilter === 'completed') fetchCompleted();
     render();
+  }
+
+  tabsEl.addEventListener('click', e => {
+    const btn = e.target.closest('[data-filter]');
+    if (btn) switchTab(btn.dataset.filter);
   });
 
   // The toggle only means anything on All — every other tab is defined by
@@ -1616,114 +1743,6 @@
     editTagsInput.addEventListener('blur', () => setTimeout(hideEditTagAc, 150));
   }
 
-  // ── Links picker ──────────────────────────────────────────────────────────
-
-  const linkChipsEl = document.getElementById('link-chips' + sfx);
-  const linkSearchEl = document.getElementById('link-search' + sfx);
-  const linkTypeEl = document.getElementById('link-type' + sfx);
-  let linkAcEl = null;
-  let linkAcIndex = -1;
-  // [{type: 'blocked_by'|'blocking', taskId: string}]
-  let currentLinks = [];
-  let originalBlockingIds = [];
-
-  function getLinkIds(type) {
-    return currentLinks.filter(l => l.type === type).map(l => l.taskId);
-  }
-
-  function addLinkChip(type, taskId, title) {
-    if (!linkChipsEl) return;
-    if (currentLinks.some(l => l.type === type && l.taskId === taskId)) return;
-    currentLinks.push({ type, taskId });
-    const chip = document.createElement('span');
-    chip.className = 'link-chip';
-    chip.dataset.id = taskId;
-    chip.dataset.type = type;
-    const typeLabel = type === 'blocked_by' ? 'blocked by' : 'blocking';
-    chip.innerHTML = `<span class="link-chip-type">${typeLabel}</span><a href="#" class="link-chip-title" data-id="${taskId}">${esc(title)}</a><button type="button" class="chip-remove">×</button>`;
-    chip.querySelector('.link-chip-title').addEventListener('click', e => {
-      e.preventDefault();
-      modal.close();
-      openEditModal(taskId);
-    });
-    chip.querySelector('.chip-remove').addEventListener('click', () => {
-      currentLinks = currentLinks.filter(l => !(l.type === type && l.taskId === taskId));
-      chip.remove();
-    });
-    linkChipsEl.appendChild(chip);
-  }
-
-  function hideLinkAc() {
-    linkAcEl?.remove();
-    linkAcEl = null;
-    linkAcIndex = -1;
-  }
-
-  function showLinkAc(matches) {
-    hideLinkAc();
-    if (!matches.length) return;
-    linkAcEl = document.createElement('div');
-    linkAcEl.className = 'tag-ac-dropdown';
-    matches.forEach(t => {
-      const item = document.createElement('div');
-      item.className = 'tag-ac-item';
-      const tagStr = (t.tags && t.tags.length) ? t.tags.join(', ') + ' · ' : '';
-      item.innerHTML = `${esc(t.title)} <span class="blocker-ac-meta">${esc(tagStr)}${t.id.slice(0, 6)}</span>`;
-      item.addEventListener('mousedown', e => {
-        e.preventDefault();
-        addLinkChip(linkTypeEl.value, t.id, t.title);
-        linkSearchEl.value = '';
-        hideLinkAc();
-      });
-      linkAcEl.appendChild(item);
-    });
-    const parent = linkSearchEl.parentElement;
-    parent.style.position = 'relative';
-    linkAcEl.style.top = linkSearchEl.offsetTop + linkSearchEl.offsetHeight + 'px';
-    linkAcEl.style.left = '0';
-    linkAcEl.style.width = '100%';
-    parent.appendChild(linkAcEl);
-  }
-
-  if (linkSearchEl) {
-    linkSearchEl.addEventListener('input', () => {
-      const q = linkSearchEl.value.trim().toLowerCase();
-      if (!q) { hideLinkAc(); return; }
-      const currentType = linkTypeEl?.value || 'blocked_by';
-      const editingId = document.getElementById('task-edit-id' + sfx)?.value || '';
-      const matches = tasks
-        .filter(t => !t.completed_at && t.id !== editingId)
-        .filter(t => !currentLinks.some(l => l.type === currentType && l.taskId === t.id))
-        .filter(t => t.title.toLowerCase().includes(q) || t.id.slice(0, 6).startsWith(q))
-        .slice(0, 8);
-      showLinkAc(matches);
-    });
-
-    // Re-filter when type changes (stale dropdown would show wrong exclusions)
-    linkTypeEl?.addEventListener('change', () => { hideLinkAc(); linkSearchEl.value = ''; });
-
-    linkSearchEl.addEventListener('keydown', e => {
-      if (!linkAcEl) return;
-      const items = linkAcEl.querySelectorAll('.tag-ac-item');
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        linkAcIndex = (linkAcIndex + 1) % items.length;
-        items.forEach((el, i) => el.classList.toggle('selected', i === linkAcIndex));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        linkAcIndex = linkAcIndex <= 0 ? items.length - 1 : linkAcIndex - 1;
-        items.forEach((el, i) => el.classList.toggle('selected', i === linkAcIndex));
-      } else if ((e.key === 'Enter' || e.key === 'Tab') && linkAcIndex >= 0) {
-        e.preventDefault();
-        items[linkAcIndex].dispatchEvent(new MouseEvent('mousedown'));
-      } else if (e.key === 'Escape') {
-        hideLinkAc();
-      }
-    });
-
-    linkSearchEl.addEventListener('blur', () => setTimeout(hideLinkAc, 150));
-  }
-
   // ── Add task ───────────────────────────────────────────────────────────────
 
   addBtn.addEventListener('click', () => openEditModal(null));
@@ -1741,20 +1760,6 @@
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
-    if (linkChipsEl) {
-      linkChipsEl.innerHTML = '';
-      currentLinks = [];
-      if (task) {
-        (task.blocked_by || []).forEach(bid => {
-          const blocker = tasks.find(t => t.id === bid);
-          addLinkChip('blocked_by', bid, blocker ? blocker.title : bid.slice(0, 8));
-        });
-        tasks.filter(t => t.blocked_by && t.blocked_by.includes(task.id)).forEach(t => {
-          addLinkChip('blocking', t.id, t.title);
-        });
-      }
-      originalBlockingIds = getLinkIds('blocking');
-    }
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -1905,47 +1910,25 @@
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
       rec_anchor: document.getElementById('task-edit-due' + sfx).value ? 'due' : 'plan',
-      blocked_by: getLinkIds('blocked_by'),
-      // The server reconciles other tasks' blocked_by from this in one write.
-      blocking: getLinkIds('blocking'),
     };
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
     if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
       data.sort_order = null;
     }
-    const blockingChanged = data.blocking.length !== originalBlockingIds.length ||
-      data.blocking.some(tid => !originalBlockingIds.includes(tid));
     modal.close();
     if (id) {
       await updateTask(id, data);
     } else {
       await createTask(data);
     }
-    // Blocking reconciliation mutates other tasks server-side — re-fetch them.
-    if (blockingChanged) await fetchDeck();
   });
 
-  deleteBtn.addEventListener('click', async () => {
+  deleteBtn.addEventListener('click', () => {
     const id = document.getElementById('task-edit-id' + sfx).value;
     if (!id) return;
-    const task = tasks.find(t => t.id === id);
     modal.close();
-    if (await confirmDelete(task?.title || '')) {
-      const snapshot = task ? [{ ...task,
-        blocking: tasks.filter(x => (x.blocked_by || []).includes(task.id)).map(x => x.id) }] : [];
-      await deleteTask(id);
-      showUndo('Task deleted', async () => {
-        await fetch('/api/deck/restore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks: snapshot }),
-        });
-        await fetchDeck();
-        window.refreshDueBadge?.();
-        refreshOtherInstances(instanceId);
-      });
-    }
+    deleteWithUndo([id]);
   });
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
@@ -2165,6 +2148,8 @@
   document.addEventListener('keydown', async e => {
     // Only the active instance handles keyboard events (multi-embed safety)
     if (allApps.length > 1 && activeDeckInstance !== instanceId) return;
+    // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
+    if (taskMenu) return;
 
     // Ctrl+Z undo — works everywhere except inside the edit modal
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
@@ -2214,15 +2199,13 @@
       return;
     }
 
-    // Tab/Shift+Tab cycles the view selector
+    // Tab/Shift+Tab cycles the views
     if (e.key === 'Tab') {
       e.preventDefault();
-      const count = tabsEl.options.length;
-      const activeIdx = tabsEl.selectedIndex;
-      tabsEl.selectedIndex = e.shiftKey
-        ? (activeIdx > 0 ? activeIdx - 1 : count - 1)
-        : (activeIdx < count - 1 ? activeIdx + 1 : 0);
-      tabsEl.dispatchEvent(new Event('change'));
+      const filters = tabButtons().map(b => b.dataset.filter);
+      const i = filters.indexOf(activeFilter);
+      const n = filters.length;
+      switchTab(filters[e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
       return;
     }
 
@@ -2281,34 +2264,15 @@
       openEditModal(selectedId);
     } else if (e.key === 'Delete' && selectedIds.size) {
       e.preventDefault();
-      const ids = [...selectedIds];
-      const count = ids.length;
-      const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
-      if (await confirmDelete(title, count)) {
-        // Snapshot deleted tasks for undo, including reverse dependency edges
-        // (deletion strips this id from other tasks' blocked_by).
-        const deleted = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean)
-          .map(t => ({ ...t, blocking: tasks.filter(x => (x.blocked_by || []).includes(t.id)).map(x => x.id) }));
+      await deleteWithUndo([...selectedIds], () => {
+        // Move the selection to the next surviving card
         const next = items.find(el => !selectedIds.has(el.dataset.id) &&
                        items.indexOf(el) > currentIdx)
                   || items.find(el => !selectedIds.has(el.dataset.id));
         selectedId = next?.dataset.id || null;
         selectedIds = new Set(selectedId ? [selectedId] : []);
         anchorId = selectedId;
-        await deleteTasks(ids);
-        const label = count === 1 ? 'Task deleted' : `${count} tasks deleted`;
-        // Undo restores the full snapshots server-side (same ids, all fields).
-        showUndo(label, async () => {
-          await fetch('/api/deck/restore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tasks: deleted }),
-          });
-          await fetchDeck();
-          window.refreshDueBadge?.();
-          refreshOtherInstances(instanceId);
-        });
-      }
+      });
     } else if ((e.key === 't' || e.key === 'T') && selectedIds.size) {
       e.preventDefault();
       const ids = [...selectedIds];
@@ -2353,13 +2317,10 @@
     completed: 'completed', done: 'completed',
   };
   const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'open';
-  if (restoreFilter && tabsEl) {
-    const hasOption = Array.from(tabsEl.options).some(o => o.value === restoreFilter);
-    if (hasOption) {
-      tabsEl.value = restoreFilter;
-      activeFilter = restoreFilter;
-    }
+  if (restoreFilter && tabButtons().some(b => b.dataset.filter === restoreFilter)) {
+    activeFilter = restoreFilter;
   }
+  markActiveTab(activeFilter);
 
   unplannedOnly = unplannedPin ? unplannedPin === '1' : loadUnplanned();
   if (unplannedEl) unplannedEl.checked = unplannedOnly;

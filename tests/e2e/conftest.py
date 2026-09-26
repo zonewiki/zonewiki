@@ -34,6 +34,8 @@ SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
 PHONE = {"width": 390, "height": 844}
 DESKTOP = {"width": 1280, "height": 800}
+# A real phone: touch input, no hover, coarse pointer.
+TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
 
 
 # ── Server ────────────────────────────────────────────────────────────────────
@@ -91,6 +93,11 @@ class Wiki:
         return self.git("rev-parse", "HEAD").strip()
 
 
+def open_tab(page, view: str):
+    """Switch the deck to a view by its data-filter name (open/due/focus/completed)."""
+    page.locator(f"#tasks-tabs [data-filter='{view}']").click()
+
+
 # ── Browser ───────────────────────────────────────────────────────────────────
 
 
@@ -102,8 +109,9 @@ def browser():
         b.close()
 
 
-def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light"):
-    ctx = browser.new_context(base_url=base_url, viewport=viewport, color_scheme=color_scheme)
+def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **context_opts):
+    ctx = browser.new_context(base_url=base_url, viewport=viewport, color_scheme=color_scheme,
+                              **context_opts)
     # Keep tests offline and deterministic: the shell pulls highlight.js from a
     # CDN, and every use of it is guarded by `window.hljs`.
     host = base_url.split("//", 1)[1]
@@ -126,7 +134,8 @@ def page(browser, base_url, wiki):
 
 @pytest.fixture()
 def new_page(browser, base_url, wiki):
-    """Factory for extra pages with a custom viewport / colour scheme."""
+    """Factory for extra pages with a custom viewport / colour scheme / device
+    (e.g. new_page(**TOUCH_PHONE))."""
     opened = []
 
     def make(**kwargs):

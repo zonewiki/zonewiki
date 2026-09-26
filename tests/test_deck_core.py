@@ -38,6 +38,7 @@ class TestDates:
         assert run_core("DeckCore.addDays('2026-03-01', -1)") == "2026-02-28"
 
 
+
 class TestIsUnplanned:
     """All tab's "Unplanned only" filter: work with no decided day."""
 
@@ -68,24 +69,6 @@ class TestIsUnplanned:
         t = {"due_date": "2026-08-01", "defer_days": 3, "focus_date": "2026-07-29"}
         assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-
-class TestIsBlocked:
-    def test_open_blocker_blocks(self):
-        expr = (
-            "DeckCore.isBlocked({blocked_by: ['b']}, "
-            "new Map([['b', {completed_at: null}]]))"
-        )
-        assert run_core(expr) is True
-
-    def test_completed_blocker_does_not_block(self):
-        expr = (
-            "DeckCore.isBlocked({blocked_by: ['b']}, "
-            "new Map([['b', {completed_at: '2026-01-01T00:00:00'}]]))"
-        )
-        assert run_core(expr) is False
-
-    def test_dangling_ref_does_not_block(self):
-        assert run_core("DeckCore.isBlocked({blocked_by: ['gone']}, new Map())") is False
 
 
 class TestBoardBuckets:

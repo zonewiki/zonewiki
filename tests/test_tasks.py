@@ -1104,40 +1104,6 @@ class TestFocusDate:
         assert spawned["focus_date"] is None
 
 
-# ── blocked_by dependencies ────────────────────────────────────────────────────
-
-
-class TestBlockedBy:
-    def test_create_default_empty(self, client):
-        assert create_task(client, title="Free").get_json()["blocked_by"] == []
-
-    def test_create_with_list(self, client):
-        resp = create_task(client, title="Blocked", blocked_by=["a", "b"])
-        assert resp.get_json()["blocked_by"] == ["a", "b"]
-
-    def test_create_with_comma_string(self, client):
-        resp = create_task(client, title="Blocked", blocked_by="a, b ,c")
-        assert resp.get_json()["blocked_by"] == ["a", "b", "c"]
-
-    def test_update_blocked_by_list(self, client):
-        task = create_task(client, title="Task").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": ["x", "y"]})
-        assert resp.get_json()["blocked_by"] == ["x", "y"]
-
-    def test_update_blocked_by_string(self, client):
-        task = create_task(client, title="Task").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": "x, y"})
-        assert resp.get_json()["blocked_by"] == ["x", "y"]
-
-    def test_clear_blocked_by(self, client):
-        task = create_task(client, title="Task", blocked_by=["x"]).get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"blocked_by": []})
-        assert resp.get_json()["blocked_by"] == []
-
-
-# ── Page field (task ↔ page linking) ──────────────────────────────────────────
-
-
 class TestPageField:
     def test_create_with_page(self, client):
         assert create_task(client, title="T", page="my-proj").get_json()["page"] == "my-proj"
@@ -1322,7 +1288,7 @@ class TestCreateFieldParity:
         resp = create_task(
             client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
             due_date="2026-08-01", defer_days=-2,
-            focus_date="2026-08-01", page="  some-page ", blocked_by="x, y",
+            focus_date="2026-08-01", page="  some-page ",
             rec_type="weekly", rec_interval=3,
         )
         assert resp.status_code == 201
@@ -1334,7 +1300,6 @@ class TestCreateFieldParity:
         assert t["defer_days"] == 0          # clamped to >= 0
         assert t["focus_date"] == "2026-08-01"
         assert t["page"] == "some-page"
-        assert t["blocked_by"] == ["x", "y"]
         assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due", "anchor": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
@@ -1343,7 +1308,7 @@ class TestCreateFieldParity:
     def test_create_defaults(self, client):
         t = create_task(client, title="Bare").get_json()
         assert t["recurrence"] is None
-        assert t["blocked_by"] == []
+        assert "blocked_by" not in t
         assert t["tags"] == []
         assert t["due_date"] is None
         assert t["defer_days"] is None
@@ -1439,81 +1404,6 @@ class TestSpawnedFrom:
         assert [t["id"] for t in tasks] == [task["id"]]
 
 
-# ── blocked_by cleanup on delete ──────────────────────────────────────────────
-
-
-class TestBlockedRefCleanup:
-    def test_delete_strips_blocked_by_references(self, client):
-        blocker = create_task(client, title="Blocker").get_json()
-        blocked = create_task(client, title="Blocked",
-                              blocked_by=[blocker["id"]]).get_json()
-        client.delete(f"/api/deck/{blocker['id']}")
-        remaining = client.get("/api/deck").get_json()
-        assert [t["id"] for t in remaining] == [blocked["id"]]
-        assert remaining[0]["blocked_by"] == []
-
-    def test_batch_delete_strips_blocked_by_references(self, client):
-        b1 = create_task(client, title="B1").get_json()
-        b2 = create_task(client, title="B2").get_json()
-        blocked = create_task(client, title="Blocked",
-                              blocked_by=[b1["id"], b2["id"]]).get_json()
-        client.post("/api/deck/batch-delete", json={"ids": [b1["id"], b2["id"]]})
-        remaining = client.get("/api/deck").get_json()
-        assert remaining[0]["blocked_by"] == []
-
-    def test_delete_strips_references_in_completed(self, client):
-        blocker = create_task(client, title="Blocker").get_json()
-        blocked = create_task(client, title="Blocked",
-                              blocked_by=[blocker["id"]]).get_json()
-        client.put(f"/api/deck/{blocked['id']}", json={"completed": True})
-        client.delete(f"/api/deck/{blocker['id']}")
-        completed = client.get("/api/deck/completed").get_json()
-        assert completed[0]["blocked_by"] == []
-
-
-# ── Server-side blocking reconciliation ───────────────────────────────────────
-
-
-class TestBlockingReconcile:
-    def test_put_blocking_adds_reverse_edge(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B").get_json()
-        client.put(f"/api/deck/{a['id']}", json={"blocking": [b["id"]]})
-        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
-        assert b_now["blocked_by"] == [a["id"]]
-
-    def test_put_empty_blocking_removes_reverse_edge(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
-        client.put(f"/api/deck/{a['id']}", json={"blocking": []})
-        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
-        assert b_now["blocked_by"] == []
-
-    def test_create_with_blocking(self, client):
-        b = create_task(client, title="B").get_json()
-        a = create_task(client, title="A", blocking=[b["id"]]).get_json()
-        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
-        assert b_now["blocked_by"] == [a["id"]]
-
-    def test_blocking_unknown_ids_are_harmless(self, client):
-        a = create_task(client, title="A").get_json()
-        resp = client.put(f"/api/deck/{a['id']}", json={"blocking": ["nope", a["id"]]})
-        assert resp.status_code == 200
-        a_now = client.get("/api/deck").get_json()[0]
-        assert a_now["blocked_by"] == []  # no self-block
-
-    def test_blocking_preserves_other_blockers(self, client):
-        other = create_task(client, title="Other").get_json()
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[other["id"]]).get_json()
-        client.put(f"/api/deck/{a['id']}", json={"blocking": [b["id"]]})
-        b_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == b["id"])
-        assert sorted(b_now["blocked_by"]) == sorted([other["id"], a["id"]])
-
-
-# ── Restore (faithful delete-undo) ────────────────────────────────────────────
-
-
 class TestRestore:
     def test_restore_roundtrips_all_fields(self, client):
         task = create_task(client, title="Full", description="notes",
@@ -1582,24 +1472,11 @@ class TestRestore:
         assert resp.status_code == 201
         assert resp.get_json() == []
 
-    def test_restore_reapplies_reverse_blocking_edges(self, client):
-        blocker = create_task(client, title="Blocker").get_json()
-        blocked = create_task(client, title="Blocked",
-                              blocked_by=[blocker["id"]]).get_json()
-        client.delete(f"/api/deck/{blocker['id']}")
-        snap = dict(blocker, blocking=[blocked["id"]])
-        client.post("/api/deck/restore", json={"tasks": [snap]})
-        blocked_now = next(t for t in client.get("/api/deck").get_json()
-                           if t["id"] == blocked["id"])
-        assert blocked_now["blocked_by"] == [blocker["id"]]
-
-
 # ── due-count ────────────────────────────────────────────────────────────────
 
 
 class TestDueCount:
-    """Nothing is hidden any more, so due-count reflects every dated task;
-    only blocked tasks are excluded (they can't be worked on)."""
+    """Nothing is hidden any more, so due-count reflects every dated task."""
 
     def test_overdue_task_counted(self, client):
         past = (date.today() - timedelta(days=2)).isoformat()
@@ -1627,64 +1504,6 @@ class TestDueCount:
         create_task(client, title="Far due", due_date=future, defer_days=3)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["count"] == 0
-
-    def test_blocked_task_not_counted(self, client):
-        past = (date.today() - timedelta(days=2)).isoformat()
-        blocker = create_task(client, title="Blocker").get_json()
-        create_task(client, title="Blocked overdue", due_date=past,
-                    blocked_by=[blocker["id"]])
-        counts = client.get("/api/deck/due-count").get_json()
-        assert counts["count"] == 0
-
-
-# ── Round 2: dependency cycle rejection ───────────────────────────────────────
-
-
-class TestCycleRejection:
-    def test_direct_cycle_rejected(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
-        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [b["id"]]})
-        assert resp.status_code == 400
-        assert "cycle" in resp.get_json()["error"].lower()
-        # And nothing was written
-        a_now = next(t for t in client.get("/api/deck").get_json() if t["id"] == a["id"])
-        assert a_now["blocked_by"] == []
-
-    def test_self_block_rejected(self, client):
-        a = create_task(client, title="A").get_json()
-        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [a["id"]]})
-        assert resp.status_code == 400
-
-    def test_transitive_cycle_rejected(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
-        c = create_task(client, title="C", blocked_by=[b["id"]]).get_json()
-        resp = client.put(f"/api/deck/{a['id']}", json={"blocked_by": [c["id"]]})
-        assert resp.status_code == 400
-
-    def test_cycle_via_blocking_rejected(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
-        # b blocking a would mean a -> b -> a
-        resp = client.put(f"/api/deck/{b['id']}", json={"blocking": [a["id"]]})
-        assert resp.status_code == 400
-
-    def test_create_cycle_rejected(self, client):
-        b = create_task(client, title="B").get_json()
-        resp = client.post("/api/deck", json={
-            "title": "A", "blocked_by": [b["id"]], "blocking": [b["id"]],
-        })
-        assert resp.status_code == 400
-
-    def test_valid_chain_accepted(self, client):
-        a = create_task(client, title="A").get_json()
-        b = create_task(client, title="B", blocked_by=[a["id"]]).get_json()
-        resp = client.put(f"/api/deck/{b['id']}", json={"blocked_by": [a["id"]]})
-        assert resp.status_code == 200
-
-
-# ── Round 2: skip occurrence ──────────────────────────────────────────────────
 
 
 class TestSkipOccurrence:
@@ -1718,31 +1537,6 @@ class TestSkipOccurrence:
         assert client.get("/api/deck").get_json() == []
         completed = client.get("/api/deck/completed").get_json()
         assert completed[0]["wont_do"] is True
-
-
-# ── Round 2: due badge excludes blocked ───────────────────────────────────────
-
-
-class TestDueCountBlocked:
-    def test_blocked_overdue_not_counted(self, client):
-        blocker = create_task(client, title="Blocker").get_json()
-        past = (date.today() - timedelta(days=1)).isoformat()
-        create_task(client, title="Blocked overdue", due_date=past,
-                    blocked_by=[blocker["id"]])
-        counts = client.get("/api/deck/due-count").get_json()
-        assert counts["count"] == 0
-
-    def test_unblocked_after_blocker_completes(self, client):
-        blocker = create_task(client, title="Blocker").get_json()
-        past = (date.today() - timedelta(days=1)).isoformat()
-        create_task(client, title="Blocked overdue", due_date=past,
-                    blocked_by=[blocker["id"]])
-        client.put(f"/api/deck/{blocker['id']}", json={"completed": True})
-        counts = client.get("/api/deck/due-count").get_json()
-        assert counts["overdue"] == 1
-
-
-# ── Round 2: capacity embed param ─────────────────────────────────────────────
 
 
 class TestCapacityParam:
@@ -1847,7 +1641,6 @@ class TestMalformedInput:
         {"title": "T", "defer_days": "soon"},
         {"title": "T", "rec_type": "daily", "rec_interval": "often"},
         {"title": "T", "page": 3},
-        {"title": "T", "blocked_by": 3},
     ])
     def test_bad_field_types_are_400(self, client, payload):
         resp = client.post("/api/deck", json=payload)
@@ -1881,3 +1674,41 @@ class TestMalformedInput:
             {"title": "T", "recurrence": {"type": "daily", "interval": "x"}}]})
         assert resp.status_code == 201
         assert resp.get_json()[0]["recurrence"]["interval"] == 1
+
+
+class TestNoTaskLinking:
+    """Task-to-task links (blocked_by / blocking) were removed. The API ignores
+    them, and dependency data left in existing deck files has no effect."""
+
+    def test_link_fields_are_ignored(self, client):
+        other = create_task(client, title="Other").get_json()
+        t = create_task(client, title="T", blocked_by=[other["id"]], blocking=[other["id"]]).get_json()
+        assert "blocked_by" not in t
+        resp = client.put(f"/api/deck/{t['id']}", json={"blocked_by": [t["id"]], "blocking": [t["id"]]})
+        assert resp.status_code == 200          # a self-"cycle" is no longer an error
+        for task in client.get("/api/deck").get_json():
+            assert "blocked_by" not in task
+
+    def test_legacy_blocked_by_does_not_hide_from_due_count(self, client, wiki_dir):
+        past = (date.today() - timedelta(days=1)).isoformat()
+        (wiki_dir / "_deck.json").write_text(json.dumps([
+            {"id": "a", "title": "Blocker", "created_at": "2026-01-01T00:00:00"},
+            {"id": "b", "title": "Was blocked", "due_date": past, "blocked_by": ["a"],
+             "created_at": "2026-01-01T00:00:00"},
+        ]), encoding="utf-8")
+        assert client.get("/api/deck/due-count").get_json()["count"] == 1
+
+    def test_legacy_blocked_by_survives_untouched_on_delete(self, client, wiki_dir):
+        # Deleting a task no longer rewrites other tasks' dependency lists.
+        (wiki_dir / "_deck.json").write_text(json.dumps([
+            {"id": "a", "title": "A", "created_at": "2026-01-01T00:00:00"},
+            {"id": "b", "title": "B", "blocked_by": ["a"], "created_at": "2026-01-01T00:00:00"},
+        ]), encoding="utf-8")
+        client.delete("/api/deck/a")
+        assert client.get("/api/deck").get_json() == [
+            {"id": "b", "title": "B", "blocked_by": ["a"], "created_at": "2026-01-01T00:00:00"}]
+
+    def test_restore_drops_link_fields(self, client):
+        resp = client.post("/api/deck/restore", json={"tasks": [
+            {"id": "x", "title": "T", "blocked_by": ["y"], "blocking": ["z"]}]})
+        assert "blocked_by" not in resp.get_json()[0]

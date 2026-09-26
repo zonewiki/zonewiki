@@ -304,7 +304,6 @@ def _new_task(**overrides) -> dict:
         "sort_order": None,
         "recurrence": None,
         "page": None,
-        "blocked_by": [],
         "spawned_from": None,
     }
     task.update(overrides)
@@ -526,12 +525,12 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
 
     return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
-    <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
-      <option value="focus">Focus</option>
-      <option value="due">Plan</option>
-      <option value="open">All</option>
-      <option value="completed">Completed</option>
-    </select>
+    <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
+      <button type="button" role="tab" data-filter="open" aria-selected="false">All</button>
+      <button type="button" role="tab" data-filter="due" aria-selected="false">Plan</button>
+      <button type="button" role="tab" data-filter="focus" aria-selected="false">Focus</button>
+      <button type="button" role="tab" data-filter="completed" aria-selected="false">Completed</button>
+    </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search…" autocomplete="off">
       <input type="text" id="task-filter-tag{sfx}" placeholder="tag…" title="Comma = all tags (AND) · pipe a|b = any tag (OR)" autocomplete="off">
@@ -562,7 +561,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated)</span></label>
       <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
     </div>
-    <div class="task-field-row">
+    <div class="task-field-row task-row-dates">
       <div class="task-field">
         <label>Due date</label>
         <input type="hidden" id="task-edit-due{sfx}" name="due_date">
@@ -579,7 +578,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
       </div>
     </div>
-    <div class="task-field-row">
+    <div class="task-field-row task-row-repeat">
       <div class="task-field">
         <label for="task-edit-rec-type{sfx}">Repeat</label>
         <select id="task-edit-rec-type{sfx}" name="rec_type">
@@ -601,21 +600,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <div class="task-field task-field-cycles">
         <label>Cycles</label>
         <span id="task-edit-rec-anchor-label{sfx}" class="rec-anchor-label">—</span>
-      </div>
-    </div>
-    <div class="task-field-row">
-      <div class="task-field">
-        <label>Links</label>
-        <div class="links-picker" id="links-picker{sfx}">
-          <div class="link-chips" id="link-chips{sfx}"></div>
-          <div class="link-add-row">
-            <select id="link-type{sfx}" class="link-type-select">
-              <option value="blocked_by">blocked by</option>
-              <option value="blocking">blocking</option>
-            </select>
-            <input type="text" class="link-search" id="link-search{sfx}" placeholder="Search tasks…" autocomplete="off">
-          </div>
-        </div>
       </div>
     </div>
     <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>
@@ -788,7 +772,7 @@ def _handle_deck_corrupt(exc):
 
 @bp.errorhandler(400)
 def _handle_bad_request(exc):
-    # JSON body so deck.js can surface the reason (e.g. dependency cycles)
+    # JSON body so deck.js can surface the reason (e.g. an invalid field)
     # instead of Flask's HTML error page.
     return jsonify({"error": exc.description}), 400
 
@@ -808,55 +792,14 @@ def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
     tasks = _read_deck()
-    active_ids = {t["id"] for t in tasks}
     for t in tasks:
-        # Blocked tasks can't be worked on, so they don't count as due.
         if not t.get("due_date"):
-            continue
-        if any(b in active_ids for b in t.get("blocked_by") or []):
             continue
         if t["due_date"] < today:
             overdue += 1
         elif t["due_date"] == today:
             today_count += 1
     return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
-
-
-def _has_blocking_cycle(start_id: str, tasks: list[dict]) -> bool:
-    """True when following blocked_by edges from start_id reaches start_id
-    again. A cycle would make every task in it permanently non-actionable
-    (each waiting on the other), so writes that create one are rejected."""
-    graph = {t["id"]: t.get("blocked_by") or [] for t in tasks}
-    seen = set()
-    stack = list(graph.get(start_id, []))
-    while stack:
-        tid = stack.pop()
-        if tid == start_id:
-            return True
-        if tid not in seen:
-            seen.add(tid)
-            stack.extend(graph.get(tid, []))
-    return False
-
-
-def _check_no_cycle(task_id: str, data: dict, active: list[dict]) -> None:
-    if ("blocked_by" in data or "blocking" in data) and _has_blocking_cycle(task_id, active):
-        abort(400, description="Rejected: this dependency would create a cycle")
-
-
-def _reconcile_blocking(task_id: str, blocking_ids: list, active: list[dict]) -> None:
-    """Make task_id block exactly blocking_ids: add it to those tasks'
-    blocked_by and remove it everywhere else. Server-side so the whole
-    edit lands in one write instead of one request per affected task."""
-    wanted = {b for b in blocking_ids if isinstance(b, str)}
-    for t in active:
-        if t["id"] == task_id:
-            continue
-        blocked = t.get("blocked_by") or []
-        if t["id"] in wanted and task_id not in blocked:
-            t["blocked_by"] = blocked + [task_id]
-        elif t["id"] not in wanted and task_id in blocked:
-            t["blocked_by"] = [b for b in blocked if b != task_id]
 
 
 @bp.post("/api/deck")
@@ -869,9 +812,6 @@ def api_create_deck_item():
     _apply_task_fields(task, data)
     active = _read_deck_strict()
     active.append(task)
-    if isinstance(data.get("blocking"), list):
-        _reconcile_blocking(task["id"], data["blocking"], active)
-    _check_no_cycle(task["id"], data, active)
     _write_deck(active, "Create deck task")
     return jsonify(task), 201
 
@@ -915,8 +855,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     # (null→value or value→null). Rescheduling (value→value) keeps the order.
     if (old_focus_date is None) != (task.get("focus_date") is None):
         task["focus_order"] = None
-    if "blocked_by" in data:
-        task["blocked_by"] = _as_str_list(data["blocked_by"] or [], "blocked_by")
     if "rec_type" in data:
         rec_type = data["rec_type"]
         if rec_type in ("daily", "weekly", "monthly", "yearly"):
@@ -955,9 +893,6 @@ def api_update_deck_item(task_id):
         abort(404)
 
     _apply_task_fields(task, data)
-    if isinstance(data.get("blocking"), list):
-        _reconcile_blocking(task_id, data["blocking"], active)
-    _check_no_cycle(task_id, data, active)
 
     did_skip = bool(data.get("skip") and not task.get("completed_at"))
     if did_skip:
@@ -1013,15 +948,6 @@ def api_update_deck_item(task_id):
     return jsonify(task)
 
 
-def _strip_blocked_refs(dead_ids: set, *task_lists: list[dict]) -> None:
-    """Remove deleted task ids from every remaining task's blocked_by, so
-    deletion never leaves dangling dependency references."""
-    for tasks in task_lists:
-        for t in tasks:
-            if t.get("blocked_by") and any(b in dead_ids for b in t["blocked_by"]):
-                t["blocked_by"] = [b for b in t["blocked_by"] if b not in dead_ids]
-
-
 @bp.delete("/api/deck/<task_id>")
 @_locked
 def api_delete_deck_item(task_id):
@@ -1029,7 +955,6 @@ def api_delete_deck_item(task_id):
     completed_list = _read_completed_strict()
     active = [t for t in active if t["id"] != task_id]
     completed_list = [t for t in completed_list if t["id"] != task_id]
-    _strip_blocked_refs({task_id}, active, completed_list)
     _write_both(active, completed_list, "Delete deck task")
     return "", 204
 
@@ -1046,7 +971,6 @@ def api_batch_delete_deck():
     completed_list = _read_completed_strict()
     active = [t for t in active if t["id"] not in id_set]
     completed_list = [t for t in completed_list if t["id"] not in id_set]
-    _strip_blocked_refs(id_set, active, completed_list)
     _write_both(active, completed_list, "Delete deck tasks")
     return "", 204
 
@@ -1092,9 +1016,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
         }
         if isinstance(rec.get("day"), int) and 1 <= rec["day"] <= 31:
             task["recurrence"]["day"] = rec["day"]
-    blocked = snap.get("blocked_by")
-    if isinstance(blocked, list):
-        task["blocked_by"] = [b for b in blocked if isinstance(b, str)]
     return task
 
 
@@ -1119,9 +1040,6 @@ def api_restore_deck_items():
             continue
         existing.add(task["id"])
         (completed_list if task["completed_at"] else active).append(task)
-        # Re-add reverse dependency edges stripped when the task was deleted.
-        if isinstance(snap.get("blocking"), list):
-            _reconcile_blocking(task["id"], snap["blocking"], active)
         restored.append(task)
     if restored:
         _write_both(active, completed_list, "Restore deck tasks")

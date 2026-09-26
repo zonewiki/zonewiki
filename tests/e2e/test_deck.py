@@ -4,6 +4,8 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
+from conftest import open_tab
+
 
 def tomorrow() -> str:
     return (date.today() + timedelta(days=1)).isoformat()
@@ -26,7 +28,7 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 500
 def open_board(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    page.locator("#tasks-tabs").select_option("due")
+    open_tab(page, "due")
     expect(page.locator(".board-day-divider").first).to_be_visible()
 
 
@@ -71,9 +73,7 @@ def test_all_tab_unplanned_toggle(page, wiki):
     page.request.post("/api/deck", data={"title": "Planned one", "focus_date": tomorrow()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    tabs = page.locator("#tasks-tabs")
-    expect(tabs.locator("option[value='open']")).to_have_text("All")
-    tabs.select_option("open")
+    open_tab(page, "open")
     toggle = page.locator("#task-unplanned")
     expect(toggle).not_to_be_checked()  # off by default: All shows every open task
     expect(card(page, "Unplanned one")).to_be_visible()
@@ -85,7 +85,7 @@ def test_all_tab_unplanned_toggle(page, wiki):
 
     # A standing preference: survives a reload.
     page.reload()
-    page.locator("#tasks-tabs").select_option("open")
+    open_tab(page, "open")
     expect(page.locator("#task-unplanned")).to_be_checked()
     expect(card(page, "Planned one")).to_have_count(0)
 
@@ -97,7 +97,7 @@ def test_old_stored_default_does_not_keep_toggle_on(page, wiki):
     page.goto("/page/deck")
     page.evaluate("k => localStorage.setItem(k, '1')", "leaf-deck-unplanned-v2:/page/deck#0")
     page.reload()
-    page.locator("#tasks-tabs").select_option("open")
+    open_tab(page, "open")
     expect(page.locator("#task-unplanned")).not_to_be_checked()
 
 
@@ -107,3 +107,86 @@ def test_embed_pin_turns_toggle_on(page, wiki):
     page.goto("/page/deck")
     expect(page.locator("#task-unplanned")).to_be_checked()
     expect(card(page, "Planned one")).to_have_count(0)
+
+
+def test_view_tabs_segmented_control(page, wiki):
+    page.request.post("/api/deck", data={"title": "Some task"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    tabs = page.locator("#tasks-tabs [role='tab']")
+    expect(tabs).to_have_text(["All", "Plan", "Focus", "Completed"])
+    # All is the default view and the only one marked active.
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["All"])
+    expect(page.locator("#task-unplanned-wrap")).to_be_visible()
+
+    tabs.nth(1).click()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    expect(page.locator(".board-day-divider").first).to_be_visible()
+    expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
+
+    # Tab / Shift+Tab cycle through the views in on-screen order, wrapping;
+    # keyboard focus follows the active view.
+    page.keyboard.press("Tab")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_be_focused()
+    page.keyboard.press("Tab")
+    page.keyboard.press("Tab")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["All"])
+    page.keyboard.press("Shift+Tab")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Completed"])
+
+    # The active view survives a reload within the browser tab.
+    page.reload()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Completed"])
+
+
+def test_embed_filter_marks_its_tab_active(page, wiki):
+    wiki.write("deck", "# Deck\n\n[[deck filter=plan]]\n")
+    page.goto("/page/deck")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+
+
+def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
+    # The plan date is a *start* date: from that day on the task is available.
+    # A task that started days ago is simply part of Focus — not "carried over"
+    # or stale, and not singled out for a decision.
+    for title, start in [("Started last week", -7), ("Starts today", 0), ("Starts tomorrow", 1)]:
+        page.request.post("/api/deck", data={"title": title, "focus_date":
+                                              (date.today() + timedelta(days=start)).isoformat()})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    open_tab(page, "focus")
+    expect(card(page, "Started last week")).to_be_visible()
+    expect(card(page, "Starts today")).to_be_visible()
+    expect(card(page, "Starts tomorrow")).to_have_count(0)
+    expect(page.locator(".review-panel")).to_have_count(0)
+
+
+def test_empty_focus_offers_planning(page, wiki):
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    open_tab(page, "focus")
+    expect(page.locator(".tasks-empty")).to_contain_text("Nothing planned for today")
+    page.get_by_role("button", name="Plan your day").click()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+
+
+def test_past_start_date_reads_since(page, wiki):
+    # The plan date is a start date, so a past one reads "since Sep 21" —
+    # not "planned 5d ago", and not styled as stale/overdue.
+    start = date.today() - timedelta(days=5)
+    long_ago = date(date.today().year - 1, 3, 4)
+    page.request.post("/api/deck", data={"title": "Started", "focus_date": start.isoformat()})
+    page.request.post("/api/deck", data={"title": "Started last year", "focus_date": long_ago.isoformat()})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    open_tab(page, "focus")
+    chip = card(page, "Started").locator(".task-focus-info")
+    expect(chip).to_have_text(f"📅 since {start.strftime('%b')} {start.day}")
+    expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
+        f"📅 since Mar 4, {long_ago.year}")
+    color = chip.evaluate("el => getComputedStyle(el).color")
+    muted = chip.evaluate("""el => { const p = document.createElement('span');
+        p.style.color = 'var(--muted)'; el.parentNode.appendChild(p);
+        const c = getComputedStyle(p).color; p.remove(); return c; }""")
+    assert color == muted, (color, muted)   # plain muted meta colour, no stale red

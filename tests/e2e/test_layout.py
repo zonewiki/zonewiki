@@ -9,7 +9,7 @@ it asserts only that they were produced.
 import pytest
 from playwright.sync_api import expect
 
-from conftest import DESKTOP, PHONE, SCREENSHOT_DIR
+from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, open_tab
 
 # A page that stresses every wide element: long unbroken words/URLs, a wide
 # table, a long code line, an oversized image, and a deep list.
@@ -79,16 +79,16 @@ def horizontal_overflow(page) -> int:
 VIEWS = [
     ("page", "/page/stress", None),
     ("editor", "/edit/stress", None),
-    ("deck-focus", "/page/deck", "focus"),
-    ("deck-plan", "/page/deck", "due"),
     ("deck-all", "/page/deck", "open"),
+    ("deck-plan", "/page/deck", "due"),
+    ("deck-focus", "/page/deck", "focus"),
 ]
 
 
 def open_view(pg, url, tab):
     pg.goto(url)
     if tab:
-        pg.locator("#tasks-tabs").select_option(tab)
+        open_tab(pg, tab)
         expect(pg.locator("#tasks-list > li").first).to_be_visible()
 
 
@@ -137,3 +137,27 @@ def test_screenshots(new_page, wiki):
                 pg.screenshot(path=path, full_page=True)
                 shots.append(path)
     assert all(p.stat().st_size > 0 for p in shots)
+
+
+# Gap above the capital letters vs gap below the baseline, per view tab.
+# Uses the font's own metrics, so it holds for whatever font the browser picks.
+_TAB_TEXT_GAPS = """() => [...document.querySelectorAll('#tasks-tabs button')].map(b => {
+  const r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const m = ctx.measureText('H');
+  const range = document.createRange(); range.selectNodeContents(b);
+  const baseline = range.getBoundingClientRect().top + m.fontBoundingBoxAscent;
+  return [b.textContent, baseline - m.actualBoundingBoxAscent - r.top, r.bottom - baseline];
+})"""
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
+    # Regression: line-height 1.2 put all spare leading below the text, so
+    # the labels sat visibly high (caps 1.3px above centre).
+    pg = new_page(viewport=viewport)
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    pg.goto("/page/deck")
+    for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
+        assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"

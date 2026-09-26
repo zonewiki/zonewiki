@@ -9,9 +9,13 @@
 # package only works with the browser build that ships in the matching image.
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
+# Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js).
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY src/requirements.txt /tmp/requirements.txt
 RUN pip install --break-system-packages --no-cache-dir \
       -r /tmp/requirements.txt pytest playwright==1.63.0
 
 WORKDIR /repo
-CMD ["python3", "-m", "pytest", "tests/e2e", "-v"]
+CMD ["python3", "-m", "pytest", "tests/e2e", "tests/test_deck_core.py", "-v"]

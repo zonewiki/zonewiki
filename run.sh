@@ -99,11 +99,12 @@ case "${1:-up}" in
        python -m pytest -q "$@"' -- "${@:2}"
     ;;
   e2e)
-    # Browser tests (headless Chromium via Playwright) in a separate test image.
+    # Browser tests (headless Chromium via Playwright) plus the Node-run
+    # deck-core.js tests, in a separate test image that has both.
     # Screenshots land in tests/e2e/_screenshots/.
     podman build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
     podman run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
-      python3 -m pytest tests/e2e -v -p no:cacheprovider "${@:2}"
+      python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
   *)
     echo "Usage: $0 [build|up|down|logs|test|e2e]"

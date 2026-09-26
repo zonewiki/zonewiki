@@ -16,16 +16,6 @@
     return dateToStr(d);
   }
 
-  // A task with an open (non-completed) blocker is not actionable: it is
-  // excluded from Focus and dimmed elsewhere. Completing the blocker
-  // surfaces it again automatically. byId is a Map of id → task.
-  function isBlocked(t, byId) {
-    return (t.blocked_by || []).some(bid => {
-      const blocker = byId.get(bid);
-      return blocker && !blocker.completed_at;
-    });
-  }
-
   // A task is unplanned when it has no focus_date: no day has been decided for
   // it. A due date alone doesn't count — the board renders such a task on its
   // deadline as a fallback, which looks placed but is the one day it should not
@@ -99,7 +89,7 @@
   }
 
   const DeckCore = {
-    dateToStr, addDays, isBlocked, isUnplanned, tagMatchScore,
+    dateToStr, addDays, isUnplanned, tagMatchScore,
     planDate, dayBucketKey, fullDayLabel, boardBuckets,
   };
 

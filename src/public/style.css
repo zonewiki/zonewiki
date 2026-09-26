@@ -1265,24 +1265,31 @@ body.editor-page main {
 }
 .deck-header .btn { padding: .25rem .7rem; }
 
-/* View selector — a compact dropdown replacing the row of tab buttons.
-   Filled with the primary colour so the current view reads as active. */
-.tab-select {
-  appearance: none; -webkit-appearance: none;
-  padding: .3rem 1.7rem .3rem .7rem;
-  border: 1px solid var(--btn-primary); border-radius: 4px;
-  background-color: var(--btn-primary); color: var(--btn-primary-fg);
-  font-size: .85rem; font-weight: 600; cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right .55rem center;
+/* View selector — a segmented control: every view visible, one click to
+   switch, the current one filled with the primary colour. */
+.view-tabs {
+  display: inline-flex; flex: none;
+  border: 1px solid var(--btn-primary); border-radius: 4px; overflow: hidden;
 }
-/* The open option list is a native menu that ignores the green fill; give the
-   options the theme surface colour so the dropdown matches the rest of the UI
-   instead of the browser's default (near-black in dark mode). */
-.tab-select option, .tasks-toolbar select option {
+.view-tabs button {
+  /* Flex-centre the label in a fixed-height box with line-height 1: the text
+     box is then centred by construction, whatever the font's ascent/descent
+     (a taller line-height put all the spare leading below the text). */
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 1.65rem; padding: 0 .75rem; border: none; margin: 0;
+  background: transparent; color: var(--fg);
+  font: inherit; font-size: .85rem; font-weight: 600; line-height: 1;
+  cursor: pointer; white-space: nowrap;
+}
+.view-tabs button + button { border-left: 1px solid var(--btn-primary); }
+.view-tabs button:hover { background: color-mix(in srgb, var(--btn-primary) 14%, transparent); }
+.view-tabs button.active { background: var(--btn-primary); color: var(--btn-primary-fg); }
+.view-tabs button:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+/* Native option menus ignore the page theme; give them the surface colour
+   instead of the browser default (near-black in dark mode). */
+.tasks-toolbar select option {
   background: var(--nav-bg); color: var(--fg); font-weight: 400;
 }
-.tab-select:hover { opacity: .9; }
 
 /* Filters/sort/New sit inline at the right end of the header band. */
 .tasks-toolbar {
@@ -1536,11 +1543,7 @@ body.editor-page main {
 .task-focus-info.focus-today { color: #f59e0b !important; }
 .task-focus-info.focus-tmrw  { color: #60a5fa !important; }
 .task-focus-info.focus-mon   { color: #a78bfa !important; }
-.task-focus-info.task-focus-stale { color: var(--danger, #c33) !important; }
 
-/* Tasks waiting on an open blocker are not actionable — dim the whole card */
-.task-item.task-blocked-item { opacity: .55; }
-.task-item.task-blocked-item .task-title { color: var(--muted); }
 
 .focus-stale-bar {
   list-style: none;
@@ -1550,6 +1553,55 @@ body.editor-page main {
   background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
 }
 .focus-over-capacity { color: #d97706; }
+
+.tasks-empty .btn { margin-left: .5rem; }
+
+/* ⋯ per-card menu button + the menu itself */
+.task-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; padding: 0; margin: 0;
+  background: none; border: none; border-radius: 3px;
+  color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1;
+}
+.task-menu-btn:hover { background: var(--code-bg); color: var(--fg); }
+.task-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.task-menu {
+  position: fixed; z-index: 1000; min-width: 12rem; max-width: 18rem;
+  display: flex; flex-direction: column; padding: .3rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.task-menu-title {
+  padding: .3rem .6rem .4rem; font-size: .75rem; font-weight: 600; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border); margin-bottom: .2rem;
+}
+.task-menu button {
+  display: block; width: 100%; text-align: left;
+  padding: .4rem .6rem; border: none; border-radius: 4px; margin: 0;
+  background: none; color: var(--fg); font: inherit; font-size: .85rem; cursor: pointer;
+}
+.task-menu button:hover, .task-menu button:focus-visible { background: var(--code-bg); outline: none; }
+.task-menu button.danger { color: #dc2626; }
+
+/* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
+   the small hover-era icons go; everything tappable gets a real target. */
+@media (hover: none) {
+  .task-wontdo-btn, .task-skip-btn { display: none; }
+}
+@media (pointer: coarse) {
+  .task-menu-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
+  .task-checkbox input { width: 1.35rem; height: 1.35rem; }
+  .task-clickable-date { padding: .25rem .35rem; }
+  .tasks-empty .btn {
+    display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .75rem; font-size: .8rem;
+  }
+  .task-menu button { padding: .7rem .8rem; font-size: 1rem; }
+  /* iOS Safari zooms the page on focusing a field under 16px */
+  /* (element-qualified so it outranks the later .task-field input rules) */
+  dialog.task-edit-modal :is(input, textarea, select, .date-trigger),
+  .tasks-toolbar input, .tasks-toolbar select { font-size: 16px; }
+}
 
 .task-inbox-divider {
   list-style: none;
@@ -1607,11 +1659,16 @@ body.editor-page main {
 .task-field-check .check-wrap { display: flex; align-items: center; justify-content: center; min-height: 2.15rem; }
 
 /* Task edit modal */
+/* Centred the native modal way (inset 0 + margin auto, no transform) and
+   scrollable when taller than the window. No transform matters: it would make
+   position:fixed popups inside (the date picker) resolve against the dialog
+   and get clipped by its scrolling. Bottom padding lives on the sticky action
+   bar so Save/Cancel stay on screen while the form scrolls. */
 .task-edit-modal {
-  border: none; border-radius: 8px; padding: 1.5rem; max-width: 600px; width: 90vw;
+  border: none; border-radius: 8px; padding: 1.5rem 1.5rem 0; max-width: 600px; width: 90vw;
   background: var(--bg); color: var(--fg); box-shadow: 0 8px 30px rgba(0,0,0,.15);
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0;
-  overflow: visible;
+  position: fixed; inset: 0; margin: auto; height: fit-content;
+  max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain;
 }
 .task-edit-modal .wikilink-ac { position: absolute; }
 .task-edit-modal::backdrop { background: rgba(0,0,0,.4); }
@@ -1656,7 +1713,12 @@ body.editor-page main {
 .task-field-row .task-field > label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.task-edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.task-edit-actions {
+  display: flex; gap: .5rem; margin-top: .5rem;
+  position: sticky; bottom: 0; z-index: 1;
+  padding: .75rem 0 1.5rem; background: var(--bg);
+  border-top: 1px solid var(--border);
+}
 .task-edit-created { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
 .task-edit-actions .btn-danger { margin-left: auto; background: #fecaca; color: #991b1b; border: none; }
 .task-edit-actions .btn-danger:hover { background: #fca5a5; }
@@ -1697,9 +1759,42 @@ body.editor-page main {
 
 
 @media (max-width: 640px) {
+  .view-tabs { display: flex; width: 100%; }
+  /* Task editor: full screen on phones (it is a whole form, not a popup). */
+  .task-edit-modal {
+    width: 100%; max-width: none; height: 100dvh; max-height: none;
+    border-radius: 0; padding: 1rem 1rem 0;
+  }
+  .task-edit-actions { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+  /* The ⋯ menu becomes a bottom sheet (inline top/left from JS are overridden) */
+  .task-menu-backdrop { background: rgba(0, 0, 0, .35); }
+  .task-menu {
+    top: auto !important; left: 0 !important; right: 0; bottom: 0;
+    max-width: none; border-radius: 12px 12px 0 0;
+    padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
+  }
+  .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
   .tasks-toolbar { flex-direction: column; align-items: stretch; justify-content: stretch; }
   .tasks-toolbar input, .tasks-toolbar #task-filter-search { max-width: none; flex: none; }
-  .task-field-row { flex-direction: column; gap: .5rem; }
+  /* Compact phone editor: small fields share a line instead of each taking a
+     full-width row, and spacing is tighter. */
+  /* The form fills the full-screen dialog so the action bar sits at the
+     bottom edge (thumb reach) even when the fields are short. */
+  .task-edit-form { gap: .55rem; min-height: 100%; }
+  .task-edit-form .task-edit-actions { margin-top: auto; }
+  .task-field { gap: .15rem; }
+  .task-edit-modal textarea[name="description"] { height: 4.8em; min-height: 3.2em; }
+  .task-field-row { display: grid; gap: .55rem .6rem; }
+  /* Due date | Plan for, then the lead time across the full width */
+  .task-row-dates { grid-template-columns: 1fr 1fr; align-items: start; }
+  .task-row-dates .task-field:has(input[name="defer_days"]) { grid-column: 1 / -1; }
+  /* Repeat | Every N | From done, then "Cycles: …" as one inline line */
+  .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
+  .task-row-repeat .task-field-cycles {
+    grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: .4rem;
+  }
+  .task-row-repeat .rec-anchor-label { min-height: 0; }
+  .task-edit-created { margin-top: 0; }
 }
 
 /* ── Task links ([[tasks …]]) ────────────────────────────────────────────────── */
@@ -1711,98 +1806,3 @@ body.editor-page main {
   white-space: nowrap;
 }
 .task-page-link:hover { text-decoration: underline; }
-.task-blocked {
-  font-size: .75rem;
-  color: var(--danger, #c33);
-  white-space: normal;
-  word-break: break-word;
-}
-.task-blocking {
-  font-size: .75rem;
-  color: var(--muted);
-  white-space: normal;
-  word-break: break-word;
-}
-.dep-link {
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
-  font-size: .75rem;
-}
-.dep-link:hover {
-  text-decoration: underline;
-}
-.links-picker {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: .25rem;
-  display: flex;
-  flex-direction: column;
-  gap: .25rem;
-}
-.link-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .25rem;
-}
-.link-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: .25rem;
-  background: var(--tag-bg, #e8e8e8);
-  border-radius: 3px;
-  padding: .1rem .4rem;
-  font-size: .75rem;
-  white-space: nowrap;
-}
-.link-chip-type {
-  opacity: .6;
-  font-style: italic;
-}
-.link-chip-title {
-  color: inherit;
-  text-decoration: none;
-  font-weight: 500;
-}
-.link-chip-title:hover {
-  text-decoration: underline;
-}
-.link-chip .chip-remove {
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 0 .15rem;
-  font-size: .85rem;
-  line-height: 1;
-  color: var(--muted);
-}
-.link-chip .chip-remove:hover { color: var(--danger, #c33); }
-.link-add-row {
-  display: flex;
-  align-items: center;
-  gap: .25rem;
-}
-.link-type-select {
-  font-size: .8rem;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: .1rem .25rem;
-  background: var(--bg);
-  color: var(--fg);
-  cursor: pointer;
-}
-.link-search {
-  border: none;
-  outline: none;
-  flex: 1;
-  min-width: 120px;
-  font-size: .85rem;
-  padding: .2rem;
-  background: transparent;
-}
-.blocker-ac-meta {
-  font-size: .75rem;
-  opacity: .6;
-  margin-left: .4rem;
-  font-family: var(--mono);
-}

@@ -2,6 +2,7 @@
 
 import sys
 import os
+import re
 import json
 import tempfile
 from pathlib import Path
@@ -117,6 +118,13 @@ class TestTasksLinkRender:
         for label, expected in cases.items():
             html = server.render_md(f"[[deck filter={label}]]\n")
             assert f'data-init-filter="{expected}"' in html, label
+
+    def test_view_tabs_are_a_segmented_control_in_order(self, wiki_dir):
+        html = server.render_md("[[deck]]\n")
+        assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
+        tabs = re.findall(r'<button type="button" role="tab" data-filter="(\w+)"[^>]*>([^<]+)</button>', html)
+        assert tabs == [("open", "All"), ("due", "Plan"), ("focus", "Focus"),
+                        ("completed", "Completed")]
 
     def test_embed_filter_alias_case_insensitive(self, wiki_dir):
         """Filter label matching is case-insensitive."""
