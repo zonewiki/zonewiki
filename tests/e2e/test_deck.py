@@ -429,6 +429,11 @@ def test_filter_points_to_matches_in_completed(page, wiki):
     expect(link).to_have_text("✓ 1 match in Completed →")
     search.fill("b")
     expect(link).to_have_text("✓ 2 matches in Completed →")
+    search.fill("milk")   # matches only the open task: no unfiltered total
+    expect(link).to_have_text("✓ No matches in Completed →")
+    expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
+    search.fill("#nosuchtag")
+    expect(link).to_have_text("✓ No matches in Completed →")
 
     search.fill("bread")
     link.click()   # the filter carries over into Completed

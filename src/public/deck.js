@@ -1560,10 +1560,12 @@
   // While the filter field is in use, the link counts the completed tasks it
   // matches ("✓ 2 matches in Completed →"), so a search that comes up empty
   // here still shows where the task went. That needs the completed tasks,
-  // which are otherwise only loaded when the view is opened.
+  // which are otherwise only loaded when the view is opened. The unfiltered
+  // total is never shown while filtering: it would read as the number of
+  // completed tasks the filter leaves.
   function syncCompletedLink() {
     if (!completedLink) return;
-    let matches = 0;
+    let matches = null;
     const f = parseFilter(filterSearch?.value || '');
     const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length);
     if (filtering) {
@@ -1575,6 +1577,8 @@
     completedLink.classList.toggle('has-matches', matches > 0);
     completedLink.textContent = activeFilter === 'completed' ? '← Back to open tasks'
       : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
+      : matches === 0 ? '✓ No matches in Completed →'
+      : filtering ? '✓ Completed →'
       : `✓ Completed${completedCount != null ? ` (${completedCount})` : ''} →`;
   }
 
