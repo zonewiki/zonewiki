@@ -1254,14 +1254,14 @@ class TestDeckPage:
         assert body.count('class="tasks-app"') == 1
         assert 'data-init-list=""' in body
         assert 'data-init-tag=""' in body
-        assert 'data-init-view=""' in body   # ?view= / session / Focus decide
+        assert 'data-init-view=""' in body   # ?view= / session / Today decide
         assert '<script src="/public/deck.js" defer></script>' in body
         assert "<h1>Deck</h1>" in body
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a deck.md) are ordinary pages now.
         write_page(wiki_dir, "deck", "# My deck\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
-        body = self.get(client, "?task=abc&view=focus")
+        body = self.get(client, "?task=abc&view=today")
         assert body.count('class="tasks-app"') == 1
         assert "My deck" not in body
         assert 'data-init-tag=""' in body
@@ -1292,7 +1292,7 @@ class TestDeckPage:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck?view=focus"' in body
+        assert 'href="/deck?view=today"' in body
         assert "/page/deck" not in body
 
 

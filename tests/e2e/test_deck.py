@@ -115,9 +115,9 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["Open", "Plan", "Focus"])
-    # Focus is the default view and the only one marked active.
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    expect(tabs).to_have_text(["Open", "Plan", "Today"])
+    # Today is the default view and the only one marked active.
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
     expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
     tabs.nth(0).click()
     expect(page.locator("#task-unplanned-wrap")).to_be_visible()
@@ -130,16 +130,16 @@ def test_view_tabs_segmented_control(page, wiki):
     # Tab / Shift+Tab cycle through the views in on-screen order, wrapping;
     # keyboard focus follows the active view.
     page.keyboard.press("Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     page.keyboard.press("Shift+Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
 
     # The active view survives a reload within the browser tab.
     page.reload()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
@@ -152,11 +152,13 @@ def test_legacy_filter_url_param_still_works(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?filter=plan")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    page.goto("/deck?view=focus")   # the Today tab's former name
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
 
 
 def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     # The plan date is a *start* date: from that day on the task is available.
-    # A task that started days ago is simply part of Focus — not "carried over"
+    # A task that started days ago is simply part of Today — not "carried over"
     # or stale, and not singled out for a decision.
     for title, start in [("Started last week", -7), ("Starts today", 0), ("Starts tomorrow", 1)]:
         page.request.post("/api/deck", data={"title": title, "start_date":
@@ -171,7 +173,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
 
 
 def test_due_badge_count_matches_focus_due_section(page, wiki):
-    # The badge counts deadlines (overdue + due today) and links to Focus,
+    # The badge counts deadlines (overdue + due today) and links to Today,
     # which also lists started tasks; its Due section shows exactly the
     # counted ones, so the number is visible where the link lands.
     d = lambda n: (date.today() + timedelta(days=n)).isoformat()
@@ -186,8 +188,8 @@ def test_due_badge_count_matches_focus_due_section(page, wiki):
     expect(page.locator("#deck-due-count")).to_have_text("2")
     expect(badge).to_have_attribute("title", "1 overdue · 1 due today")
     badge.click()
-    expect(page).to_have_url(re.compile(r"/deck\?view=focus$"))
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page).to_have_url(re.compile(r"/deck\?view=today$"))
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     pinned = page.locator(".task-item[data-due-pinned]")
     expect(pinned).to_have_count(2)
     expect(pinned.locator(".task-title")).to_have_text(["Overdue", "Due today"])
@@ -508,11 +510,11 @@ def test_filter_points_to_matches_in_completed(page, wiki):
 
 
 def test_new_task_on_default_focus_starts_today(page, wiki):
-    # A plain deck opens on Focus; a task added there starts today, so it
+    # A plain deck opens on Today; a task added there starts today, so it
     # stays in the view instead of vanishing on save.
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Water plants")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()

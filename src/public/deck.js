@@ -1268,7 +1268,7 @@
       const inFocus = dueTasks.length + orderedTasks.length;
       if (inFocus >= CAPACITY) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
-          `<span>⚠ ${inFocus} tasks in focus (limit: ${CAPACITY})</span></li>`;
+          `<span>⚠ ${inFocus} tasks for today (limit: ${CAPACITY})</span></li>`;
       }
     }
     // No tab is highlighted in Completed, so the list says where you are.
@@ -2437,7 +2437,7 @@
   // this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?view=
   // URLs. The embed filter arrives already normalized by the server.
   const FILTER_ALIASES = {
-    focus: 'focus', today: 'focus',
+    today: 'focus', focus: 'focus',   // "focus": the tab's label before "Today"
     all: 'open', backlog: 'open', open: 'open',
     plan: 'due', upcoming: 'due', due: 'due',
     completed: 'completed', done: 'completed',

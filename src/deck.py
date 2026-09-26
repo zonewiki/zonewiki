@@ -551,7 +551,7 @@ def _parse_tasks_params(raw: str) -> dict:
 # using the labels the user actually sees, not just internal names. "backlog"
 # is the tab's former label, kept so existing embeds keep working.
 _FILTER_ALIASES = {
-    "focus": "focus", "today": "focus",
+    "today": "focus", "focus": "focus",   # "focus": the label before "Today"
     "all": "open", "backlog": "open", "open": "open",   # "all": the label before "Open"
     "plan": "due", "upcoming": "due", "due": "due",
     "completed": "completed", "done": "completed",
@@ -608,7 +608,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
       <button type="button" role="tab" data-filter="due" aria-selected="false">Plan</button>
-      <button type="button" role="tab" data-filter="focus" aria-selected="false">Focus</button>
+      <button type="button" role="tab" data-filter="focus" aria-selected="false">Today</button>
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
