@@ -45,13 +45,14 @@ fi
 IMAGE=leaf
 CONTAINER=leaf
 
-# Leaf's own version for the image ("<hash> <commit date>", "+dirty" with
-# uncommitted source changes); same format as server.py's _source_version().
-LEAF_VERSION=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
-if [[ -n "$LEAF_VERSION" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
-  LEAF_VERSION="$LEAF_VERSION +dirty"
+# The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
+# uncommitted source changes), shown next to server.py's VERSION; same format
+# as server.py's _source_build().
+LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
+if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
+  LEAF_BUILD="$LEAF_BUILD +dirty"
 fi
-BUILD_ARGS=(--build-arg "LEAF_VERSION=${LEAF_VERSION:-unknown}")
+BUILD_ARGS=(--build-arg "LEAF_BUILD=${LEAF_BUILD:-unknown}")
 
 # Give the container the host's timezone, so "today" (due badge, deck
 # dates, scratch-note names, "Last changed") matches the user's day instead

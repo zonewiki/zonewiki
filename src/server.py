@@ -26,13 +26,15 @@ import search
 
 app = Flask(__name__, static_folder=None)
 APP_NAME = "Leaf"
+# Leaf's version (semver), bumped by hand when a change is worth a number.
+VERSION = "1.0.0"
 
 
-def _source_version(root: Path = Path(__file__).resolve().parent.parent) -> str:
-    """Leaf's own version as "<short hash> <commit date>" ("+dirty" when the
-    source has uncommitted changes), read from the git checkout this file
-    lives in. The container image has no .git, so run.sh bakes the same
-    string into $LEAF_VERSION at build time instead."""
+def _source_build(root: Path = Path(__file__).resolve().parent.parent) -> str:
+    """The build Leaf runs from, as "<short hash> <commit date>" ("+dirty"
+    when the source has uncommitted changes), read from the git checkout this
+    file lives in. The container image has no .git, so run.sh bakes the same
+    string into $LEAF_BUILD at build time instead. Shown next to VERSION."""
     def git(*args: str) -> str:
         return subprocess.run(["git", "-C", str(root), *args], capture_output=True,
                               text=True, timeout=5, check=True).stdout.strip()
@@ -45,7 +47,7 @@ def _source_version(root: Path = Path(__file__).resolve().parent.parent) -> str:
         return "unknown"
 
 
-LEAF_VERSION = os.environ.get("LEAF_VERSION") or _source_version()
+LEAF_BUILD = os.environ.get("LEAF_BUILD") or _source_build()
 
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
@@ -1210,7 +1212,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-  <meta name="generator" content="{APP_NAME} {html.escape(LEAF_VERSION)}">
+  <meta name="generator" content="{APP_NAME} {VERSION}">
   <title>{safe_title} — {APP_NAME}</title>
   <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/public/manifest.json">
@@ -1289,7 +1291,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
-    <p class="leaf-version">{APP_NAME} {html.escape(LEAF_VERSION)}</p>
+    <p class="leaf-version">{APP_NAME} {VERSION}{f" · {html.escape(LEAF_BUILD)}" if LEAF_BUILD != "unknown" else ""}</p>
   </dialog>
   <dialog id="url-name-modal" class="scratch-modal">
     <p class="scratch-label">Paste link</p>
@@ -2257,7 +2259,7 @@ def api_preview():
 
 @app.get("/api/version")
 def api_version():
-    return jsonify({"version": LEAF_VERSION})
+    return jsonify({"version": VERSION, "build": LEAF_BUILD})
 
 
 @app.get("/api/pages")

@@ -95,7 +95,7 @@ Set `ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all i
 
 ### Version
 
-Leaf's version is the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `src/` had uncommitted changes. It shows at the bottom of the shortcuts modal (`?`), in a `<meta name="generator">` tag, and at `/api/version`. The image has no `.git`, so `run.sh` computes the string and passes it as the `LEAF_VERSION` build arg (the `Containerfile` sets it as an env var in its last layer, so a new commit only rebuilds that layer). Without the container, `server.py` reads the same string from git itself (`_source_version()`); `$LEAF_VERSION` wins when set, and `unknown` is the fallback.
+Leaf's version is a semver constant, `VERSION` in `server.py`, bumped by hand. Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `src/` had uncommitted changes (a commit can't contain its own hash, so this part can't be a committed constant). The shortcuts modal (`?`) shows both (`Leaf 1.0.0 · c28ec9e 2026-09-26 19:22`), the `<meta name="generator">` tag the version, and `/api/version` returns `{ version, build }`. The image has no `.git`, so `run.sh` computes the build string and passes it as the `LEAF_BUILD` build arg (the `Containerfile` sets it as an env var in its last layer, so a new commit only rebuilds that layer). Without the container, `server.py` reads the same string from git itself (`_source_build()`); `$LEAF_BUILD` wins when set, and with neither the modal shows the version alone.
 
 ### Home-screen app
 
@@ -136,7 +136,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI)     |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
-| GET    | `/api/version`        | `{ version }`: Leaf's own version (see Version) |
+| GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |

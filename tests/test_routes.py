@@ -1360,20 +1360,31 @@ class TestCrossSiteWrites:
 
 
 class TestVersion:
-    def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_VERSION", "abc1234 2026-09-26 12:00")
-        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert '<p class="leaf-version">Leaf abc1234 2026-09-26 12:00</p>' in body
-        assert '<meta name="generator" content="Leaf abc1234 2026-09-26 12:00">' in body
-        assert client.get("/api/version", headers=HOST).get_json() == {"version": "abc1234 2026-09-26 12:00"}
+    def test_version_is_semver(self):
+        assert re.fullmatch(r"\d+\.\d+\.\d+", server.VERSION)
 
-    def test_escaped(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_VERSION", "<b>")
+    def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(server, "VERSION", "1.2.3")
+        monkeypatch.setattr(server, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert "Leaf &lt;b&gt;</p>" in body
+        assert '<p class="leaf-version">Leaf 1.2.3 · abc1234 2026-09-26 12:00</p>' in body
+        assert '<meta name="generator" content="Leaf 1.2.3">' in body
+        assert client.get("/api/version", headers=HOST).get_json() == {
+            "version": "1.2.3", "build": "abc1234 2026-09-26 12:00"}
+
+    def test_unknown_build_shows_version_only(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(server, "VERSION", "1.2.3")
+        monkeypatch.setattr(server, "LEAF_BUILD", "unknown")
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert '<p class="leaf-version">Leaf 1.2.3</p>' in body
+
+    def test_build_escaped(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(server, "LEAF_BUILD", "<b>")
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert "· &lt;b&gt;</p>" in body
 
     @pytest.mark.skipif(not server.GIT_ENABLED, reason="git not installed")
-    def test_source_version_from_git(self, tmp_path):
+    def test_source_build_from_git(self, tmp_path):
         import subprocess
         def git(*args):
             subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
@@ -1383,13 +1394,13 @@ class TestVersion:
         (tmp_path / "src" / "a.py").write_text("x\n")
         git("add", "-A")
         git("commit", "-q", "-m", "c")
-        v = server._source_version(tmp_path)
+        v = server._source_build(tmp_path)
         assert re.fullmatch(r"[0-9a-f]{7,} \d{4}-\d\d-\d\d \d\d:\d\d", v), v
         (tmp_path / "src" / "a.py").write_text("y\n")
-        assert server._source_version(tmp_path) == v + " +dirty"
+        assert server._source_build(tmp_path) == v + " +dirty"
         (tmp_path / "README").write_text("outside src\n")
         (tmp_path / "src" / "a.py").write_text("x\n")
-        assert server._source_version(tmp_path) == v   # only src/ counts
+        assert server._source_build(tmp_path) == v   # only src/ counts
 
-    def test_source_version_without_git_repo(self, tmp_path):
-        assert server._source_version(tmp_path) == "unknown"
+    def test_source_build_without_git_repo(self, tmp_path):
+        assert server._source_build(tmp_path) == "unknown"
