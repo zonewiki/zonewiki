@@ -594,7 +594,6 @@ document.addEventListener('keydown', e => {
 const textarea = document.getElementById('editor-textarea');
 const previewPane = document.getElementById('editor-preview');
 let previewTimer = null;
-const editorSlug = document.querySelector('.breadcrumb[data-slug]')?.dataset.slug || '';
 
 if (textarea && previewPane) {
   // Auto-show preview on wide screens
@@ -964,7 +963,7 @@ document.getElementById('mobile-preview-btn')?.addEventListener('click', toggleP
 async function fetchPreview() {
   if (!previewPane?.parentElement.classList.contains('visible')) return;
   try {
-    const res = await fetch('/api/preview' + (editorSlug ? '?slug=' + encodeURIComponent(editorSlug) : ''), {
+    const res = await fetch('/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: textarea.value,

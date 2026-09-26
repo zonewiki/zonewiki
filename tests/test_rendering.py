@@ -423,7 +423,7 @@ class TestRenderMd:
 
     def test_renders_wikilinks(self, wiki_dir):
         write_page(wiki_dir, "target", "# Target\n")
-        result = render_md("See [[target]]", slug="source")
+        result = render_md("See [[target]]")
         assert 'href="/page/target"' in result
 
     def test_toc_placeholder_replaced(self, wiki_dir):

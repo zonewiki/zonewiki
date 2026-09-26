@@ -339,39 +339,23 @@ def test_task_link_to_missing_task_says_so(page, wiki):
     expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()
 
 
-# The edit modal's Page field (the task's `page` link).
+# The edit modal's List field.
 
-def test_new_task_in_page_embed_is_linked_to_that_page(page, wiki):
-    # Regression: a task created in a [[deck page=self]] embed had no page and
-    # vanished from the embed on save.
-    wiki.write("garden", "# Garden\n\n[[deck page=self]]\n")
-    page.goto("/page/garden")
-    page.locator("#task-add-btn").click()
-    modal = page.locator("#task-edit-modal")
-    expect(modal.locator("#task-edit-page")).to_have_value("garden")
-    modal.locator("#task-edit-title").fill("Water plants")
-    modal.get_by_role("button", name="Save").click()
-    expect(card(page, "Water plants")).to_be_visible()
-    wait_for_field(page, "Water plants", "page", "garden")
-
-
-def test_page_field_links_and_unlinks(page, wiki):
-    wiki.write("garden", "# Garden\n")
+def test_list_field_moves_task_into_list(page, wiki):
     page.request.post("/api/deck", data={"title": "Prune"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     modal = open_edit(page, "Prune")
-    expect(modal.locator("#task-edit-pages option[value='garden']")).to_have_count(1)
-    modal.locator("#task-edit-page").fill("garden")
+    # Usually set by the embed, so tucked into a closed section.
+    expect(modal.locator("#task-edit-list")).to_be_hidden()
+    modal.locator("#task-edit-links summary").click()
+    modal.locator("#task-edit-list").fill("Garden")
+    expect(modal.locator("#task-edit-links-summary")).to_have_text("Garden")
     modal.get_by_role("button", name="Save").click()
-    wait_for_field(page, "Prune", "page", "garden")
-    expect(card(page, "Prune").locator(".task-page-link")).to_have_text("📄 garden")
-
-    open_edit(page, "Prune")
-    expect(modal.locator("#task-edit-page")).to_have_value("garden")
-    modal.locator("#task-edit-page").fill("")
-    modal.get_by_role("button", name="Save").click()
-    wait_for_field(page, "Prune", "page", None)
+    # It leaves the main deck and says where it went.
+    expect(card(page, "Prune")).to_have_count(0)
+    expect(page.get_by_text("Saved to list “garden”.")).to_be_visible()
+    wait_for_field(page, "Prune", "list", "garden")
 
 
 # Completed: a link under the list instead of a tab.
@@ -518,6 +502,7 @@ def test_new_task_in_list_embed_joins_list(page, wiki):
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     expect(modal.locator("#task-edit-list")).to_have_value("groceries")
+    expect(modal.locator("#task-edit-links-summary")).to_have_text("groceries")
     modal.locator("#task-edit-title").fill("Bread")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Bread")).to_be_visible()
@@ -530,6 +515,7 @@ def test_moving_task_out_of_list_removes_it(page, wiki):
     page.goto("/page/shop")
     card(page, "Oat milk").dblclick()
     modal = page.locator("#task-edit-modal")
+    modal.locator("#task-edit-links summary").click()
     modal.locator("#task-edit-list").fill("")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Oat milk")).to_have_count(0)

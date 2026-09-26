@@ -532,7 +532,7 @@ class TestApiPreview:
     def test_preview_renders_wikilinks(self, client, wiki_dir):
         write_page(wiki_dir, "linked", "# Linked\n")
         resp = client.post(
-            "/api/preview?slug=source",
+            "/api/preview",
             data="[[linked]]",
             headers={**HOST, "Content-Type": "text/plain"},
         )
@@ -1212,21 +1212,19 @@ class TestRenameUpdatesAllReferences:
         write_page(wiki_dir, "old", "# Old\n")
         linked = client.post("/api/deck", json={
             "title": "Do [[old]] and [[Old|label]]", "description": "see [x](/page/old)",
-            "page": "old"}, headers=HOST).get_json()
-        done = client.post("/api/deck", json={"title": "Done [[old]]", "page": "old"},
+            }, headers=HOST).get_json()
+        done = client.post("/api/deck", json={"title": "Done [[old]]"},
                            headers=HOST).get_json()
         client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
-        other = client.post("/api/deck", json={"title": "[[older]]", "page": "older"},
+        other = client.post("/api/deck", json={"title": "[[older]]"},
                             headers=HOST).get_json()
         self.rename(client, "old", "new")
         tasks = {t["id"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
         assert tasks[linked["id"]]["title"] == "Do [[new]] and [[new|label]]"
         assert tasks[linked["id"]]["description"] == "see [x](/page/new)"
-        assert tasks[linked["id"]]["page"] == "new"
         assert tasks[other["id"]]["title"] == "[[older]]"
-        assert tasks[other["id"]]["page"] == "older"
         completed = client.get("/api/deck/completed", headers=HOST).get_json()
-        assert completed[0]["title"] == "Done [[new]]" and completed[0]["page"] == "new"
+        assert completed[0]["title"] == "Done [[new]]"
         html = client.get("/page/new", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' in html
 
@@ -1259,9 +1257,9 @@ class TestDeckRedirect:
         assert self.go(client) == "/page/deck"
 
     def test_unfiltered_embed_preferred(self, client, wiki_dir):
-        # A tag= or page= embed may hide the task being linked to.
+        # A tag= or list= embed may hide the task being linked to.
         write_page(wiki_dir, "a-work", "# W\n\n[[deck tag=work]]\n")
-        write_page(wiki_dir, "b-garden", "# G\n\n[[deck page=self]]\n")
+        write_page(wiki_dir, "b-garden", "# G\n\n[[deck list=garden]]\n")
         write_page(wiki_dir, "c-all", "# All\n\n[[deck filter=plan]]\n")
         assert self.go(client) == "/page/c-all"
 

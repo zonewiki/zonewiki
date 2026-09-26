@@ -123,7 +123,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/`                   | Redirects to `/page/index`                      |
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
-| GET    | `/deck`               | Redirect to the page that embeds the deck, keeping the query string (`deck_page_slug()`: `deck.md` if it has an embed, else the page whose embed has no `page=`/`tag=` filter, then by slug; falls back to `/page/deck`). Every link to "the deck" goes through it. With `?list=<name>` it goes to the page embedding `[[deck list=<name>]]` instead (dropping `list` from the query), or, if none does, to the main deck with `?list=` kept, which then shows that list. `[[deck list=…]]` embeds never count as the main deck. |
+| GET    | `/deck`               | Redirect to the page that embeds the deck, keeping the query string (`deck_page_slug()`: `deck.md` if it has an embed, else the page whose embed has no `tag=` filter, then by slug; falls back to `/page/deck`). Every link to "the deck" goes through it. With `?list=<name>` it goes to the page embedding `[[deck list=<name>]]` instead (dropping `list` from the query), or, if none does, to the main deck with `?list=` kept, which then shows that list. `[[deck list=…]]` embeds never count as the main deck. |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `pages/<slug>.md`        |
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
@@ -237,24 +237,22 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag. Comma = AND (all tags must match, the narrowing default); pipe `a\|b` = OR (any tag matches). |
 | `filter` | tab name: `focus`, `open`, `plan` (aka `upcoming`), `completed` (`all` and `backlog`, the Open tab's former labels, and internal aliases `due`/`done` also accepted) | Open (or the tab remembered this session) | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
-| `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 | `capacity` | integer 1–99 | 5 | Day-board WIP limit: Plan-tab day sections with at least this many tasks are flagged amber. |
-| `list` | list name | — | Makes the embed a **separate list**: it shows only tasks whose `list` field is that name, and new tasks created in it get the list. Every embed *without* `list=` shows only tasks in no list, and list tasks are also left out of the due badge and the main Completed count. Names are cleaned like tags but lowercased (`_clean_list`). Combines with `tag`/`page`/`filter`. |
+| `list` | list name | — | Makes the embed a **separate list**: it shows only tasks whose `list` field is that name, and new tasks created in it get the list. Every embed *without* `list=` shows only tasks in no list, and list tasks are also left out of the due badge and the main Completed count. Names are cleaned like tags but lowercased (`_clean_list`). Combines with `tag`/`filter`. |
 | `unplanned` | `1`/`true`/`yes` or `0`/`false`/`no` | — | Pins the Open tab's "Unplanned only" toggle on or off, overriding the user's stored preference for this embed. Omitted, the client uses the stored value, which **defaults off** — so a planning-queue embed wants `unplanned=1`. |
 
 **Examples:**
 ```markdown
 [[deck]]
 [[deck tag=work]]
-[[deck page=self]]
 [[deck filter=open]]
 [[deck tag=urgent filter=upcoming]]
-[[deck page=self tag=sprint-1]]
+[[deck list=groceries tag=weekly]]
 [[deck filter=open unplanned=1]]
 [[deck list=groceries]]
 ```
 
-**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-list`, `data-init-filter`, `data-init-capacity`, `data-init-unplanned`).
+**Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-list`, `data-init-filter`, `data-init-capacity`, `data-init-unplanned`).
 
 **Implementation:**
 - All of it lives in `deck.py`. `_DECK_RE` detects `[[deck …]]` (case-insensitive), and `_parse_tasks_params()` parses space-separated `key=value` pairs.
@@ -264,12 +262,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 **Typical usage:** Create `deck.md` with `[[deck]]` to get the full deck at `/page/deck`. The deck can live on any page, though: links to it (search results, Linked tasks, the due badge, `g d`, `c t`) use `/deck`, which finds the embedding page. Hard-coding `/page/deck` once sent wikis without `deck.md` to the editor for an empty page.
 
-**Task ↔ Page linking:**
-- Tasks have an optional `page` field (slug string) linking them to a wiki page.
-- The `page` field is set in the edit modal's **Page** field (`#task-edit-page`, suggestions from `/api/pages` via a `<datalist>`; a pasted `/page/` prefix is stripped) or via the API. A new task created in a `[[deck page=…]]` embed defaults to that page, so it stays visible in the embed after saving.
-- `[[deck page=self]]` filters to tasks whose `page` field matches the current page slug.
-- The `page` field is preserved by `_spawn_recurring()` for recurring tasks.
-- Tasks with a `page` field show a clickable page link in their metadata.
+**Task ↔ Page linking:** a task links to a page with a `[[wikilink]]` (or `/page/` link) in its title or notes, which lists it under that page's "Linked tasks". There used to be a separate `page` field with a `[[deck page=self]]` filter; it was removed because it duplicated wikilinks (linking) and tags or lists (per-page views), and suggested isolation it did not provide. `_normalize_task()` turns a stored `page` into `[[slug]]` appended to the notes (unless the title or notes already link there), and `_migrate_deck_files()` rewrites the files once. `page=` in an embed is ignored, and so is `page` in API bodies.
 
 ---
 
@@ -425,7 +418,7 @@ A task has two dates, each with one meaning:
 
 Nothing is derived or stored beyond these two fields. The edit modal's "Days before due" number is only another way to enter the start date (`start = due − N`) and is not saved; when the modal opens, it shows the gap between the two dates. A recurring instance keeps that gap: when the series advances the due date, the start date moves by the same amount. Changing one date by hand (in the modal, the ⏰/📅 chips, or a board drag) never moves the other.
 
-Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N days before due" rule) and `recurrence.anchor`. `_normalize_task()` converts them on every read (and in restore snapshots), and `_migrate_deck_files()` rewrites the files once at startup, with its own git commit ("Normalize deck files (date model, tags)"; a no-op once the files are current).
+Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N days before due" rule) and `recurrence.anchor`. `_normalize_task()` converts them on every read (and in restore snapshots), and `_migrate_deck_files()` rewrites the files once at startup, with its own git commit ("Normalize deck files (date model, tags, page links)"; a no-op once the files are current).
 
 ### Task fields
 
@@ -440,7 +433,6 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 | `completed_at` | ISO datetime / `null` | Set when completed |
 | `sort_order` | integer | Manual sort position (priority = position) |
 | `recurrence` | `{ type, interval, from, day? }` / `null` | Recurring schedule. `type` is `daily`/`weekly`/`monthly`/`yearly`. The series is driven by the task's **primary date** — `due_date` if set, else `start_date`. `from` is `"due"` (default — the next date steps from the previous primary date, calendar-aligned) or `"completion"` (steps from the completion day, for interval habits). `day` (monthly/yearly, set on the first spawn) is the series' day of month, so a month-end series returns to the 31st after a short month instead of drifting (Jan 31 → Feb 28 → Mar 31). Re-saving the edit modal keeps `day` unless the type or the primary date changes. |
-| `page` | string / `null` | Wiki page slug this task is linked to (for `[[deck page=self]]` embeds) |
 | `list` | string / `null` | Separate list the task belongs to (see Separate lists). `null` = the main deck. Kept by recurring spawns and restore snapshots. |
 | `start_date` | `"YYYY-MM-DD"` / `null` | The **start date**: from that day on the task is available to work on. Having one is what makes a task "planned". Focus shows tasks with `start_date <= today`; a past date is not overdue or stale, it just means the task has been available since then. Cards show a past start date as "since Sep 21" (`shortDate()`, year added when not the current year), with no warning styling. |
 | `spawned_from` | string / `null` | For instances spawned by completing a recurring task: the id of the completed task. Used to remove exactly the spawned instance when the completion is undone. |
@@ -463,7 +455,7 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 - **Won't do**: each active task card has a ✗ button (desktop) that archives the task as abandoned; also in the ⋯ menu. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.
 - **Skip occurrence**: recurring task cards additionally have a ⏭ button (desktop; also in the ⋯ menu) — archives this occurrence as won't-do but spawns the next instance, so the series continues. Undo (or reopening the won't-do entry) removes the spawned instance again.
 - **No hiding**: the deck never hides a task. Every open task is reachable from its own deck (the main deck, or its separate list's page) via the Open tab or the Plan board at all times, and from search. Scheduling only decides *where* a task appears, not *whether* it does. (Much earlier versions had a Deferred tab with a hiding start date; that is gone, and today's `start_date` never hides anything.)
-- **Separate lists**: a task's `list` field puts it in a named list that appears only in `[[deck list=<name>]]` embeds, deliberately kept out of the main deck (Open/Plan/Focus), tag embeds, the due badge and the main Completed count. Storage stays in `_deck.json`. `deck.js` drops out-of-scope tasks right after fetching (`inScope`), so tag suggestions, counts and reordering only ever see the list's own tasks. The edit modal's **List** field (suggestions: every list in use, `known_lists()`) moves a task between lists; a task saved into another list leaves the view with a notice ("Saved to list “x”." / "Moved to the main deck."). Search results and Linked tasks link to `/deck?…&list=<name>`, which opens the list's page.
+- **Separate lists**: a task's `list` field puts it in a named list that appears only in `[[deck list=<name>]]` embeds, deliberately kept out of the main deck (Open/Plan/Focus), tag embeds, the due badge and the main Completed count. Storage stays in `_deck.json`. `deck.js` drops out-of-scope tasks right after fetching (`inScope`), so tag suggestions, counts and reordering only ever see the list's own tasks. The edit modal's **List** field (suggestions: every list in use, `known_lists()`) moves a task between lists. It sits in a closed "List" section (`<details class="task-edit-links">`), since the embed usually fills it; its summary shows the value, and it is closed again every time the modal opens; a task saved into another list leaves the view with a notice ("Saved to list “x”." / "Moved to the main deck."). Search results and Linked tasks link to `/deck?…&list=<name>`, which opens the list's page.
 - **Open tab "Unplanned" toggle**: the Open tab (formerly "All", before that "Backlog") lists every open task. It was renamed because it never held completed tasks, and the name pairs with the Completed link. A checkbox in the toolbar, shown only on this tab and **off by default**, narrows the list to tasks with no `start_date` — the queue still awaiting a decision about *when* to do them, the same tasks as the board's Unplanned section. A `due_date` alone does not count as planned: the deadline is the one day the work should not start. Giving a task a start date is therefore what removes it from the narrowed list. Predicate is `DeckCore.isUnplanned` (client-only; the server never filters views). It is a standing preference, so it persists in `localStorage` keyed by page path + embed instance, unlike the active tab (`sessionStorage`); the key carries a version suffix (now `-v3`) that is bumped whenever the default changes, so browsers that stored the previous default pick up the new one. `[[deck unplanned=1|0]]` pins it either way for an embed regardless of what is stored.
 - **Rejected writes** (e.g. dependency cycles) surface as an auto-dismissing toast (`showNotice`) with the server's error message.
 - **Quick-add shorthand** (new tasks only, `DeckCore.parseQuickAdd`): a title ending in shorthand fills the task's fields on save, e.g. `Call Bob tomorrow #work due:fri`. Start date: `today`, `tomorrow`/`tmrw`, a weekday (`fri`/`friday`; the next one, never today), `+3`/`+3d`/`+2w`, or `YYYY-MM-DD`. Due date: `due:` + any of those. Tags: `#tag` starting with a letter (so `Fix #3` keeps its number). Only **trailing** words are read, so a date word inside the sentence stays text; shorthand that would leave no title is ignored; a second start word stays in the title. A line under the title (`#task-edit-quick`) previews what was recognised, and on save the shorthand wins over the date fields. Editing an existing task never parses its title.
@@ -573,4 +565,4 @@ mdit-py-plugins>=0.4
   - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
   - Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`). Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory. Images are never touched.
   - Links inside fenced code and inline code are left alone (`_mask_code`).
-  - Deck tasks (active and completed): the `page` field and links in titles/descriptions (`deck.rename_page_refs()`). Changed deck files are written without their own commit and included in the rename commit.
+  - Deck tasks (active and completed): links in titles/descriptions (`deck.rename_page_refs()`). Changed deck files are written without their own commit and included in the rename commit.

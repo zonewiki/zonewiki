@@ -270,7 +270,6 @@
 
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
-  const initPage = appEl?.dataset.initPage || urlParams.get('page') || '';
   // [[deck list=…]] shows one separate list and nothing else; every other
   // embed shows only the tasks in no list. ?list= opens a list in the main
   // deck when no page embeds it (/deck redirects there).
@@ -679,13 +678,13 @@
   async function reorder(order, field = 'sort_order') { return postReorder({ order, field }); }
   async function reorderUpdates(updates, field = 'sort_order') { return postReorder({ updates, field }); }
 
-  // True when the visible task list is a narrowed view (tag/search/page
+  // True when the visible task list is a narrowed view (tag/search
   // filter) of the full Backlog rather than every open task. Manual reorders
   // done under a narrowed view must not renumber the whole visible list —
   // tasks hidden by the filter would keep their old sort_order and collide
   // with the freshly-renumbered ones once the filter is cleared.
   function hasNarrowingFilter() {
-    return !!(filterSearch?.value.trim() || initPage);
+    return !!filterSearch?.value.trim();
   }
 
   // Assign sort_order values to `groupIds` (already spliced into `ids` at
@@ -775,11 +774,6 @@
       // triage queue; giving a task a start date is what removes it from here.
       filtered = filtered.filter(t => !t.completed_at);
       if (unplannedOnly) filtered = filtered.filter(isUnplanned);
-    }
-
-    // Page filter (set via URL param, stored in initPage)
-    if (initPage) {
-      filtered = filtered.filter(t => t.page === initPage);
     }
 
     return filtered;
@@ -1203,14 +1197,13 @@
             ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
             : `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>`)
         : '';
-      const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-        task.page || task.completed_at);
-      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || pageDisplay || tagsRight;
+        task.completed_at);
+      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}${pageDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1439,12 +1432,7 @@
   let noteAcEl = null;
   let noteAcIndex = 0;
 
-  fetch('/api/pages').then(r => r.json()).then(p => {
-    wikiPages = p;
-    // Suggestions for the edit modal's Page field.
-    const dl = document.getElementById('task-edit-pages' + sfx);
-    if (dl) dl.replaceChildren(...p.map(slug => Object.assign(document.createElement('option'), { value: slug })));
-  }).catch(() => {});
+  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
 
   function getNoteWikilinkQuery(ta) {
     const before = ta.value.slice(0, ta.selectionStart);
@@ -1581,8 +1569,7 @@
     if (filtering) {
       if (!completedLoaded) { fetchCompleted(); }
       else {
-        matches = tasks.filter(t => t.completed_at && matchesFilter(t, f)
-                                    && (!initPage || t.page === initPage)).length;
+        matches = tasks.filter(t => t.completed_at && matchesFilter(t, f)).length;
       }
     }
     completedLink.classList.toggle('has-matches', matches > 0);
@@ -1845,6 +1832,13 @@
   }
   titleInput.addEventListener('input', syncQuickPreview);
 
+  const linksDetails = document.getElementById('task-edit-links' + sfx);
+  const linksSummary = document.getElementById('task-edit-links-summary' + sfx);
+  function syncLinksSummary() {
+    linksSummary.textContent = document.getElementById('task-edit-list' + sfx).value.trim();
+  }
+  linksDetails.addEventListener('input', syncLinksSummary);
+
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
@@ -1854,11 +1848,13 @@
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterDefaultTags());
-    // A new task in a [[deck page=…]] embed belongs to that page; otherwise it
-    // would vanish from the embed as soon as it is saved.
-    document.getElementById('task-edit-page' + sfx).value = task ? task.page || '' : initPage;
-    // Likewise a new task in a [[deck list=…]] embed belongs to that list.
+    // A new task in a [[deck list=…]] embed belongs to that list; otherwise
+    // it would vanish from the embed as soon as it is saved.
     document.getElementById('task-edit-list' + sfx).value = task ? task.list || '' : initList;
+    // The embed usually sets it, so it sits in a closed section whose
+    // summary shows the value.
+    linksDetails.open = false;
+    syncLinksSummary();
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
     const createdEl = document.getElementById('task-edit-created' + sfx);
@@ -1989,7 +1985,6 @@
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
-      page: document.getElementById('task-edit-page' + sfx).value.trim().replace(/^\/?page\//, '') || null,
       list: cleanList(document.getElementById('task-edit-list' + sfx).value) || null,
     };
     // Shorthand in a new task's title wins over the fields (the preview said so).

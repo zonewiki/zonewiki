@@ -1127,24 +1127,6 @@ class TestStartDate:
         assert spawned["start_date"] == spawned["due_date"] == "2099-06-11"
 
 
-class TestPageField:
-    def test_create_with_page(self, client):
-        assert create_task(client, title="T", page="my-proj").get_json()["page"] == "my-proj"
-
-    def test_create_default_page_none(self, client):
-        assert create_task(client, title="T").get_json()["page"] is None
-
-    def test_update_page(self, client):
-        task = create_task(client, title="T").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"page": "linked"})
-        assert resp.get_json()["page"] == "linked"
-
-    def test_clear_page(self, client):
-        task = create_task(client, title="T", page="linked").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"page": ""})
-        assert resp.get_json()["page"] is None
-
-
 # ── Batch tag ──────────────────────────────────────────────────────────────────
 
 
@@ -1311,7 +1293,7 @@ class TestCreateFieldParity:
         resp = create_task(
             client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
             due_date="2026-08-01",
-            start_date="2026-08-01", page="  some-page ",
+            start_date="2026-08-01", list="  Some List ",
             rec_type="weekly", rec_interval=3,
         )
         assert resp.status_code == 201
@@ -1321,7 +1303,7 @@ class TestCreateFieldParity:
         assert t["tags"] == ["a", "b"]
         assert t["due_date"] == "2026-08-01"
         assert t["start_date"] == "2026-08-01"
-        assert t["page"] == "some-page"
+        assert t["list"] == "some-list"
         assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
@@ -1430,7 +1412,7 @@ class TestRestore:
     def test_restore_roundtrips_all_fields(self, client):
         task = create_task(client, title="Full", description="notes",
                            tags=["a"], due_date="2026-09-01",
-                           start_date="2026-08-30", page="some-page",
+                           start_date="2026-08-30", list="some-list",
                            rec_type="weekly", rec_interval=2).get_json()
         client.delete(f"/api/deck/{task['id']}")
         assert client.get("/api/deck").get_json() == []
@@ -1440,7 +1422,7 @@ class TestRestore:
         assert restored["id"] == task["id"]
         assert restored["created_at"] == task["created_at"]
         for field in ("title", "description", "tags", "due_date",
-                      "start_date", "page", "recurrence"):
+                      "start_date", "list", "recurrence"):
             assert restored[field] == task[field]
 
     def test_restore_keeps_yearly_recurrence(self, client):
@@ -1662,7 +1644,7 @@ class TestMalformedInput:
         {"title": "T", "due_date": 20990101},
         {"title": "T", "start_date": 20990101},
         {"title": "T", "rec_type": "daily", "rec_interval": "often"},
-        {"title": "T", "page": 3},
+        {"title": "T", "list": 3},
     ])
     def test_bad_field_types_are_400(self, client, payload):
         resp = client.post("/api/deck", json=payload)

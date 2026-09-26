@@ -169,7 +169,7 @@ class TestWritesCommit:
 
     def test_rename_commit_includes_updated_deck_tasks(self, client, wiki_dir):
         save(client, "old", "# Old\n")
-        client.post("/api/deck", json={"title": "Task", "page": "old"}, headers=HOST)
+        client.post("/api/deck", json={"title": "Task [[old]]"}, headers=HOST)
         client.post("/rename/old", data={"new_name": "new"}, headers=HOST)
         changed = git(wiki_dir, "show", "--name-only", "--format=", "HEAD").split()
         assert "_deck.json" in changed

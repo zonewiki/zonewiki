@@ -62,9 +62,9 @@ class TestParseParams:
         result = deck_module._parse_tasks_params("tag=work filter=due limit=5 sort=due_date")
         assert result == {"tag": "work", "filter": "due", "limit": "5", "sort": "due_date"}
 
-    def test_page_self(self):
-        result = deck_module._parse_tasks_params("page=self")
-        assert result == {"page": "self"}
+    def test_list(self):
+        result = deck_module._parse_tasks_params("list=groceries")
+        assert result == {"list": "groceries"}
 
     def test_case_insensitive_keys(self):
         result = deck_module._parse_tasks_params("Tag=work FILTER=due")
@@ -82,10 +82,11 @@ class TestTasksLinkRender:
         assert "tasks-list" in html
         assert "deck.js" in html
 
-    def test_edit_modal_has_page_field(self, wiki_dir):
+    def test_edit_modal_has_list_field(self, wiki_dir):
         html = server.render_md("[[deck]]\n[[deck]]\n")
-        assert 'id="task-edit-page"' in html and 'list="task-edit-pages"' in html
-        assert 'id="task-edit-page-1"' in html and 'list="task-edit-pages-1"' in html
+        assert 'id="task-edit-list"' in html and 'list="task-edit-lists"' in html
+        assert 'id="task-edit-list-1"' in html and 'list="task-edit-lists-1"' in html
+        assert "task-edit-page" not in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""
@@ -237,72 +238,57 @@ class TestTasksLinkRender:
         assert "tasks-app" in html
         assert 'data-init-tag="work"' in html
 
-    def test_embed_page_param(self, wiki_dir):
-        """[[deck page=my-project]] passes page as data attribute."""
+    def test_embed_page_param_is_ignored(self, wiki_dir):
+        """page= was removed: it no longer narrows the embed."""
         html = server.render_md("[[deck page=my-project]]\n")
-        assert 'data-init-page="my-project"' in html
-
-    def test_embed_page_self(self, client, wiki_dir):
-        """[[deck page=self]] resolves to current slug."""
-        create_task(client, title="T", page="my-page")
-        html = server.render_md("[[deck page=self]]\n", slug="my-page")
-        assert 'data-init-page="my-page"' in html
+        assert "data-init-page" not in html
 
 
-# ── Page field ──────────────────────────────────────────────────────────────────
+# ── Page field removed (now a wikilink in the notes) ───────────────────────────
 
 
-class TestPageField:
-    def test_create_with_page(self, client, wiki_dir):
-        resp = create_task(client, title="Linked", page="my-project")
-        assert resp.status_code == 201
-        data = resp.get_json()
-        assert data["page"] == "my-project"
+class TestPageFieldRemoved:
+    def test_page_in_request_is_ignored(self, client, wiki_dir):
+        data = create_task(client, title="T", page="my-project").get_json()
+        assert "page" not in data
+        resp = client.put(f"/api/deck/{data['id']}", json={"page": "x"})
+        assert resp.status_code == 200 and "page" not in resp.get_json()
 
-    def test_create_without_page(self, client, wiki_dir):
-        resp = create_task(client, title="No page")
-        data = resp.get_json()
-        assert data["page"] is None
+    def test_stored_page_becomes_wikilink(self, client, wiki_dir):
+        (wiki_dir / "_deck.json").write_text(json.dumps([
+            {"id": "a", "title": "Prune", "description": "Roses", "page": "garden"},
+            {"id": "b", "title": "Bare", "page": "garden"},
+            {"id": "c", "title": "Water [[Garden]]", "page": "garden"},
+            {"id": "d", "title": "Seeds", "description": "[see](/page/garden)", "page": "garden"},
+            {"id": "e", "title": "None", "page": None},
+        ]), encoding="utf-8")
+        tasks = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert all("page" not in t for t in tasks.values())
+        assert tasks["a"]["description"] == "Roses\n\n[[garden]]"
+        assert tasks["b"]["description"] == "[[garden]]"
+        assert tasks["c"].get("description", "") == ""     # title already links it
+        assert tasks["d"]["description"] == "[see](/page/garden)"
+        assert "description" not in tasks["e"] or tasks["e"]["description"] == ""
 
-    def test_update_page(self, client, wiki_dir):
-        resp = create_task(client, title="T")
-        task_id = resp.get_json()["id"]
-        resp2 = client.put(f"/api/deck/{task_id}", json={"page": "new-page"})
-        assert resp2.get_json()["page"] == "new-page"
+    def test_migrated_task_is_linked_task(self, client, wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
+        (wiki_dir / "_deck.json").write_text(json.dumps([
+            {"id": "a", "title": "Prune", "page": "garden"}]), encoding="utf-8")
+        body = client.get("/page/garden").get_data(as_text=True)
+        assert 'id="task-backlinks"' in body and "Prune" in body
 
-    def test_clear_page(self, client, wiki_dir):
-        resp = create_task(client, title="T", page="some-page")
-        task_id = resp.get_json()["id"]
-        resp2 = client.put(f"/api/deck/{task_id}", json={"page": ""})
-        assert resp2.get_json()["page"] is None
+    def test_startup_migration_rewrites_file(self, wiki_dir):
+        path = wiki_dir / "_deck.json"
+        path.write_text(json.dumps([{"id": "a", "title": "P", "page": "garden"}]), encoding="utf-8")
+        deck_module._migrate_deck_files()
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        assert stored == [{"id": "a", "title": "P", "description": "[[garden]]"}]
 
-    def test_page_self_filter(self, client, wiki_dir):
-        """[[deck page=self]] on slug 'my-project' passes page as data attribute."""
-        create_task(client, title="Linked", page="my-project")
-        create_task(client, title="Other", page="other-page")
-        create_task(client, title="No page")
-        html = server.render_md("[[deck page=self]]\n", slug="my-project")
-        assert 'data-init-page="my-project"' in html
-
-    def test_page_explicit_filter(self, client, wiki_dir):
-        """[[deck page=my-project]] passes page as data attribute."""
-        create_task(client, title="Linked", page="my-project")
-        create_task(client, title="Unlinked")
-        html = server.render_md("[[deck page=my-project]]\n")
-        assert 'data-init-page="my-project"' in html
-
-    def test_recurring_preserves_page(self, client, wiki_dir):
-        """Spawned recurring task inherits page field."""
-        resp = create_task(
-            client, title="Recur", page="proj",
-            due_date="2026-01-01", rec_type="daily", rec_interval=1
-        )
-        task_id = resp.get_json()["id"]
-        client.put(f"/api/deck/{task_id}", json={"completed": True})
-        tasks = client.get("/api/deck").get_json()
-        spawned = [t for t in tasks if t["id"] != task_id and t["title"] == "Recur"]
-        assert len(spawned) == 1
-        assert spawned[0]["page"] == "proj"
+    def test_restore_snapshot_with_page(self, client, wiki_dir):
+        snap = {"id": "old", "title": "Old", "description": "Notes", "page": "garden"}
+        restored = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
+        assert restored[0]["description"] == "Notes\n\n[[garden]]"
+        assert "page" not in restored[0]
 
 
 # ── Page view rendering ────────────────────────────────────────────────────────
@@ -326,7 +312,7 @@ class TestPageViewLink:
         """Preview endpoint renders [[deck]] as the full embed."""
         create_task(client, title="Preview task")
         resp = client.post(
-            "/api/preview?slug=test-page",
+            "/api/preview",
             data="[[deck]]\n",
             content_type="text/plain"
         )
@@ -335,14 +321,14 @@ class TestPageViewLink:
         assert "deck.js" in body
 
     def test_deck_embed_with_params(self, client, wiki_dir):
-        """[[deck tag=work page=proj filter=due]] passes all data attrs."""
+        """[[deck tag=work list=proj filter=due]] passes all data attrs."""
         (wiki_dir / "my-page.md").write_text(
-            "# My Page\n\n[[deck tag=work page=proj filter=due]]\n", encoding="utf-8"
+            "# My Page\n\n[[deck tag=work list=proj filter=due]]\n", encoding="utf-8"
         )
         resp = client.get("/page/my-page")
         body = resp.get_data(as_text=True)
         assert 'data-init-tag="work"' in body
-        assert 'data-init-page="proj"' in body
+        assert 'data-init-list="proj"' in body
         assert 'data-init-filter="due"' in body
 
     def test_embed_has_single_filter_field(self, wiki_dir):

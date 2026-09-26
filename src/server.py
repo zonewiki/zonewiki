@@ -631,7 +631,7 @@ def _enable_task_checkboxes(html_str: str) -> str:
         lambda m: re.sub(r'\s+disabled(?:="[^"]*")?', '', m.group(0)), html_str)
 
 
-def render_md(text: str, *, slug: str = "", show_tags: bool = True, show_tldr: bool = True) -> str:
+def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True) -> str:
     fm_meta, text = parse_frontmatter(text)
     fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
 
@@ -643,7 +643,7 @@ def render_md(text: str, *, slug: str = "", show_tags: bool = True, show_tldr: b
         text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
-    text, deck_embeds = deck_module.process_deck_embeds(text, slug=slug)
+    text, deck_embeds = deck_module.process_deck_embeds(text)
 
     text = _unmask_code(process_wikilinks(text), code_stash)
     result = _apply_img_sizes(md.render(text))
@@ -1429,7 +1429,7 @@ def raw_page():
         sub_html = f'<section class="backlinks"><h3>Snippets</h3><ul>{items}</ul></section>'
     else:
         sub_html = ''
-    article_html = render_md(strip_h1(content), slug="_raw")
+    article_html = render_md(strip_h1(content))
     body = f"""{build_breadcrumb('_raw', title)}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -1548,7 +1548,7 @@ def view_page(slug):
             f'    <a href="/uncommitted" class="btn">← Uncommitted</a>'
         )
         page_meta_html = ""
-        article_html = render_md(strip_h1(content), slug=slug)
+        article_html = render_md(strip_h1(content))
     else:
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
@@ -1582,7 +1582,7 @@ def view_page(slug):
             if last_modified or meta_commit_btn or tags_html or tldr_text else ""
         )
         article_html = _inject_section_edit_buttons(
-            render_md(strip_h1(content), slug=slug, show_tags=False, show_tldr=False), slug
+            render_md(strip_h1(content), show_tags=False, show_tldr=False), slug
         )
 
     body = f"""{breadcrumb}{delete_dialog}
@@ -1951,7 +1951,7 @@ def revision_view(slug, sha):
 </header>
 <div class="revision-banner">Revision <code>{sha[:7]}</code> — restoring will create a new commit.</div>
 <article class="page-content">
-  {render_md(strip_h1(content), slug=slug)}
+  {render_md(strip_h1(content))}
 </article>"""
     return shell(f"Revision {sha[:7]} — {title}", body)
 
@@ -2137,7 +2137,7 @@ def _deck_embeds(md_file: Path, slug: str) -> list[dict]:
 
 def deck_page_slug(list_name: str | None = None) -> str | None:
     """The page to open for "the deck": deck.md if it embeds one, else the page
-    whose embed hides the fewest tasks (no tag=/page= filter), then by slug.
+    whose embed hides the fewest tasks (no tag= filter), then by slug.
     With list_name, only embeds of that list count ([[deck list=…]]); without
     it, list embeds don't, since they show none of the main deck's tasks."""
     best = None
@@ -2145,7 +2145,7 @@ def deck_page_slug(list_name: str | None = None) -> str | None:
         for params in _deck_embeds(md_file, slug):
             if deck_module._clean_list(params.get("list")) != list_name:
                 continue
-            rank = (slug != "deck", "page" in params, "tag" in params, slug)
+            rank = (slug != "deck", "tag" in params, slug)
             if best is None or rank < best:
                 best = rank
     return best[-1] if best else None
@@ -2230,8 +2230,7 @@ def api_toggle_checkbox(slug):
 @app.post("/api/preview")
 def api_preview():
     text = request.get_data(as_text=True)
-    preview_slug = request.args.get("slug", "")
-    return render_md(text, slug=preview_slug)
+    return render_md(text)
 
 
 @app.get("/api/pages")

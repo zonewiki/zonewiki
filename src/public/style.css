@@ -1843,6 +1843,10 @@ body.editor-page main {
 .date-trigger:hover { background: var(--code-bg); }
 .date-trigger.date-trigger--set { color: var(--fg); }
 .task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+/* List: usually set by the embed, so collapsed; the summary shows the value. */
+.task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
+.task-edit-links[open] > summary { margin-bottom: .5rem; }
+.task-edit-links-summary { font-weight: 400; margin-left: .6rem; }
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
 .task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
@@ -1938,12 +1942,3 @@ body.editor-page main {
   .task-edit-created { margin-top: 0; }
 }
 
-/* ── Task links ([[tasks …]]) ────────────────────────────────────────────────── */
-
-.task-page-link {
-  font-size: .75rem;
-  color: var(--link);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.task-page-link:hover { text-decoration: underline; }

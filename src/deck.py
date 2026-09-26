@@ -156,8 +156,22 @@ def _normalize_task(task: dict) -> bool:
     date a cycle advances). The start date is now ``start_date``; the rule is
     gone because every derived date was already stored, and recurring spawns
     carry the start→due gap instead; the anchor is implied by which dates the
-    task has. Tags are cleaned (_clean_tags): older decks allowed spaces."""
+    task has. Tags are cleaned (_clean_tags): older decks allowed spaces.
+    The ``page`` field (a linked page slug) is gone: a wikilink in the notes
+    does the same, so the slug becomes ``[[slug]]`` there unless the title or
+    notes already link to it."""
     changed = False
+    if "page" in task:
+        slug = task.pop("page")
+        changed = True
+        if isinstance(slug, str) and slug.strip():
+            slug = slug.strip()
+            text = f"{task.get('title') or ''}\n{task.get('description') or ''}"
+            linked = re.search(r"\[\[\s*" + re.escape(slug) + r"\s*(\||\]\])", text, re.I) \
+                or f"/page/{slug})" in text
+            if not linked:
+                desc = (task.get("description") or "").rstrip()
+                task["description"] = f"{desc}\n\n[[{slug}]]" if desc else f"[[{slug}]]"
     if "focus_date" in task:
         task.setdefault("start_date", task["focus_date"])
         del task["focus_date"]
@@ -201,7 +215,7 @@ def _migrate_deck_files() -> None:
                 _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
                 changed.append(path)
         if changed and GIT_ENABLED and _git_commit_fn:
-            _git_commit_fn(changed, "Normalize deck files (date model, tags)")
+            _git_commit_fn(changed, "Normalize deck files (date model, tags, page links)")
 
 
 def _read_deck_strict() -> list[dict]:
@@ -380,7 +394,6 @@ def _new_task(**overrides) -> dict:
         "focus_order": None,
         "sort_order": None,
         "recurrence": None,
-        "page": None,
         "list": None,
         "spawned_from": None,
     }
@@ -467,7 +480,6 @@ def _spawn_recurring(task: dict) -> dict | None:
         start_date=new_start.isoformat() if new_start else None,
         sort_order=task.get("sort_order", 0),
         recurrence=next_rec,
-        page=task.get("page"),
         list=task.get("list"),
         spawned_from=task["id"],
     )
@@ -557,16 +569,13 @@ def in_list(task: dict, name: str | None) -> bool:
     return (task.get("list") or None) == (name or None)
 
 
-def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -> str:
+def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     """Render the full interactive deck app HTML for embedding in a wiki page.
 
     instance_id differentiates multiple embeds on the same page.
     """
     tag_val = params.get("tag", "")
     list_val = _clean_list(params.get("list")) or ""
-    page_val = params.get("page", "")
-    if page_val == "self" and page_slug:
-        page_val = page_slug
     raw_filter = params.get("filter", "").strip().lower()
     filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
     try:
@@ -585,7 +594,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         unplanned = ""
 
     init_tag = html.escape(tag_val)
-    init_page = html.escape(page_val)
     init_filter = html.escape(filt)
     # Every list name in use, for the edit modal's List suggestions.
     list_options = "".join(f'<option value="{html.escape(n)}">'
@@ -594,7 +602,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-page="{init_page}" data-init-list="{html.escape(list_val)}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
@@ -634,16 +642,6 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated, no spaces)</span></label>
       <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
     </div>
-    <div class="task-field">
-      <label for="task-edit-page{sfx}">Page <span class="field-hint">(linked wiki page)</span></label>
-      <input type="text" id="task-edit-page{sfx}" name="page" list="task-edit-pages{sfx}" autocomplete="off" placeholder="—">
-      <datalist id="task-edit-pages{sfx}"></datalist>
-    </div>
-    <div class="task-field">
-      <label for="task-edit-list{sfx}">List <span class="field-hint">(separate list: shown only where its [[deck list=…]] is embedded)</span></label>
-      <input type="text" id="task-edit-list{sfx}" name="list" list="task-edit-lists{sfx}" autocomplete="off" placeholder="—">
-      <datalist id="task-edit-lists{sfx}">{list_options}</datalist>
-    </div>
     <div class="task-field-row task-row-dates">
       <div class="task-field">
         <label>Due date</label>
@@ -680,6 +678,14 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
       </div>
     </div>
+    <details class="task-edit-links" id="task-edit-links{sfx}">
+      <summary>List<span class="task-edit-links-summary" id="task-edit-links-summary{sfx}"></span></summary>
+      <div class="task-field" title="A task in a list shows only where [[deck list=…]] embeds that list, not in the main deck">
+        <label for="task-edit-list{sfx}">List <span class="field-hint">(separate list; empty = main deck)</span></label>
+        <input type="text" id="task-edit-list{sfx}" name="list" list="task-edit-lists{sfx}" autocomplete="off" placeholder="—">
+        <datalist id="task-edit-lists{sfx}">{list_options}</datalist>
+      </div>
+    </details>
     <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>
     <div class="task-field" id="task-edit-inbox-field{sfx}" style="display:none">
       <label><input type="checkbox" id="task-edit-inbox{sfx}"> Move to New (remove from manual order)</label>
@@ -703,7 +709,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
 <script src="/public/deck.js" defer></script>"""
 
 
-def process_deck_embeds(text: str, slug: str = "") -> tuple[str, list[str]]:
+def process_deck_embeds(text: str) -> tuple[str, list[str]]:
     """Replace all [[deck ...]] directives with placeholders.
 
     Returns (modified_text, list_of_embed_htmls).
@@ -714,7 +720,7 @@ def process_deck_embeds(text: str, slug: str = "") -> tuple[str, list[str]]:
 
     def replacer(m: re.Match) -> str:
         params = _parse_tasks_params(m.group(1) or "")
-        embed_html = _build_deck_embed(params, page_slug=slug, instance_id=instance[0])
+        embed_html = _build_deck_embed(params, instance_id=instance[0])
         placeholder = f"{_DECK_PLACEHOLDER_BASE}_{instance[0]}"
         embeds.append((placeholder, embed_html))
         instance[0] += 1
@@ -739,9 +745,8 @@ _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
 
 
 def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
-    """Follow a page rename in the deck: re-point each task's `page` field and
-    rewrite links in titles/descriptions (via rewrite_text, the server's link
-    rewriter). Writes only files that changed and does not commit — returns
+    """Follow a page rename in the deck: rewrite links in task titles and
+    descriptions (via rewrite_text, the server's link rewriter). Writes only files that changed and does not commit — returns
     their paths so the caller includes them in the rename commit."""
     with _LOCK:
         changed = []
@@ -749,9 +754,6 @@ def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
                             (_completed_path(), _read_completed_strict())):
             dirty = False
             for t in tasks:
-                if t.get("page") == old_slug:
-                    t["page"] = new_slug
-                    dirty = True
                 for field in ("title", "description"):
                     if t.get(field):
                         new_text = rewrite_text(t[field])
@@ -923,8 +925,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["sort_order"] = _as_order(data["sort_order"], "sort_order")
     if "focus_order" in data:
         task["focus_order"] = _as_order(data["focus_order"], "focus_order")
-    if "page" in data:
-        task["page"] = _as_str(data["page"] or "", "page").strip() or None
     if "list" in data:
         task["list"] = _clean_list(_as_str(data["list"] or "", "list"))
     old_start_date = task.get("start_date")
@@ -1061,10 +1061,10 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     title = str(snap.get("title") or "").strip()
     if not title:
         return None
+    _normalize_task(snap)   # before reading fields: it may rewrite the notes
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
     task["tags"] = _clean_tags(snap.get("tags") if isinstance(snap.get("tags"), list) else [])
-    _normalize_task(snap)
     for field in ("due_date", "start_date"):
         val = snap.get(field)
         if isinstance(val, str):
@@ -1075,7 +1075,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
                 pass
     if isinstance(snap.get("id"), str) and snap["id"]:
         task["id"] = snap["id"]
-    for field in ("created_at", "completed_at", "spawned_from", "page"):
+    for field in ("created_at", "completed_at", "spawned_from"):
         if isinstance(snap.get(field), str) and snap[field]:
             task[field] = snap[field]
     if isinstance(snap.get("list"), str):
