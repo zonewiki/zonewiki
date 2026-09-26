@@ -557,21 +557,23 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <button type="button" role="tab" data-filter="open" aria-selected="false">All</button>
       <button type="button" role="tab" data-filter="due" aria-selected="false">Plan</button>
       <button type="button" role="tab" data-filter="focus" aria-selected="false">Focus</button>
-      <button type="button" role="tab" data-filter="completed" aria-selected="false">Completed</button>
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
-      <select id="task-sort{sfx}">
-        <option value="manual">Manual order</option>
+      <select id="task-sort{sfx}" title="Sort order" aria-label="Sort order">
+        <option value="manual">Manual</option>
         <option value="created_at">Created</option>
       </select>
       <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no start date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
-        <input type="checkbox" id="task-unplanned{sfx}"> Unplanned only
+        <input type="checkbox" id="task-unplanned{sfx}"> Unplanned
       </label>
-      <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>
+      <button class="btn btn-primary" id="task-add-btn{sfx}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
   <ul class="tasks-list" id="tasks-list{sfx}"></ul>
+  <div class="deck-footer">
+    <button type="button" class="deck-completed-link" id="task-completed-link{sfx}">✓ Completed</button>
+  </div>
 </div>
 <dialog id="task-edit-modal{sfx}" class="task-edit-modal">
   <form id="task-edit-form{sfx}" class="task-edit-form">
@@ -587,6 +589,11 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     <div class="task-field">
       <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated)</span></label>
       <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
+    </div>
+    <div class="task-field">
+      <label for="task-edit-page{sfx}">Page <span class="field-hint">(linked wiki page)</span></label>
+      <input type="text" id="task-edit-page{sfx}" name="page" list="task-edit-pages{sfx}" autocomplete="off" placeholder="—">
+      <datalist id="task-edit-pages{sfx}"></datalist>
     </div>
     <div class="task-field-row task-row-dates">
       <div class="task-field">
@@ -807,6 +814,12 @@ def api_get_deck():
 @bp.get("/api/deck/completed")
 def api_get_deck_completed():
     return jsonify(_read_completed())
+
+
+@bp.get("/api/deck/completed-count")
+def api_deck_completed_count():
+    """How many tasks the Completed view would list (for its link's label)."""
+    return jsonify({"count": len(_read_completed())})
 
 
 @bp.get("/api/deck/due-count")

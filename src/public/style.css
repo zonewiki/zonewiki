@@ -1351,9 +1351,11 @@ body.editor-page main {
   background: var(--nav-bg); color: var(--fg); font-weight: 400;
 }
 
-/* Filters/sort/New sit inline at the right end of the header band. */
+/* Filters/sort/New sit inline at the right end of the header band, on the
+   tabs' line. The 20rem basis (not the fields' natural width) is what keeps
+   them there: the band wraps under the tabs only when less than that is left. */
 .tasks-toolbar {
-  display: flex; gap: .4rem; flex: 1 1 auto; flex-wrap: wrap;
+  display: flex; gap: .4rem; flex: 1 1 20rem; min-width: 0;
   align-items: center; justify-content: flex-end;
 }
 .tasks-toolbar select, .tasks-toolbar input {
@@ -1368,7 +1370,8 @@ body.editor-page main {
   background-position: right .5rem center;
 }
 /* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
-.tasks-toolbar input { flex: 1 1 0; min-width: 80px; }
+.tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
+.tasks-toolbar .btn { flex: none; }
 
 /* All tab's "Unplanned only" toggle. Opts out of the text-input sizing above
    (flex-grow, min-width, box borders) — it's a checkbox, not a field. */
@@ -1377,6 +1380,17 @@ body.editor-page main {
   font-size: .8rem; color: var(--muted); white-space: nowrap; cursor: pointer;
 }
 .task-unplanned-toggle[hidden] { display: none; }
+
+/* Completed is not a tab (it is rarely needed): a quiet link under the list
+   opens it, and turns into "← Back to open tasks" there. */
+.deck-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
+.deck-completed-link {
+  background: none; border: none; padding: .3rem .2rem; margin: 0;
+  font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer;
+}
+.deck-completed-link:hover { color: var(--link); text-decoration: underline; }
+.deck-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+@media (pointer: coarse) { .deck-completed-link { padding: .6rem .4rem; } }
 .tasks-toolbar .task-unplanned-toggle input[type="checkbox"] {
   flex: 0 0 auto; min-width: 0; width: 1rem; height: 1rem; padding: 0;
   border: none; accent-color: var(--btn-primary); cursor: pointer;
@@ -1864,8 +1878,13 @@ body.editor-page main {
     padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
   }
   .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
-  .tasks-toolbar { flex-direction: column; align-items: stretch; justify-content: stretch; }
-  .tasks-toolbar input, .tasks-toolbar #task-filter-search { max-width: none; flex: none; }
+  /* Phones: tabs on one line, then search · sort · toggle · "+" on the next.
+     The New button drops its label to leave the search field the room. */
+  .tasks-toolbar { flex-basis: 100%; }
+  .tasks-toolbar #task-filter-search { min-width: 0; }
+  .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
+  .task-add-label { display: none; }
+  .deck-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
   /* Compact phone editor: small fields share a line instead of each taking a
      full-width row, and spacing is tighter. */
   /* The form fills the full-screen dialog so the action bar sits at the

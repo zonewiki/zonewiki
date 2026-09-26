@@ -101,7 +101,7 @@ def test_embed_tag_param_lands_in_filter_field(page, wiki):
 def test_new_task_takes_tags_from_filter(page, wiki):
     seed_deck(page, wiki)
     page.locator("#task-filter-search").fill("#work|home #urgent text")
-    page.get_by_role("button", name="+ New").click()
+    page.get_by_role("button", name="New task").click()
     # Only unambiguous (single-tag) words become default tags.
     expect(page.locator("#task-edit-tags")).to_have_value("urgent")
 

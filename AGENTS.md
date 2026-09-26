@@ -29,11 +29,11 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | Syntax highlight    | `highlight.js` (loaded client-side from CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | Integrated into the Pages view (`/pages`)    |
-| Storage             | Plain `.md` files in `pages/`               |
+| Search              | BM25 in `search.py`; search modal (Ctrl+P) and `/search` |
+| Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck*.json`) |
 | Container           | Podman (Ubuntu 26.04 LTS base image)        |
 
-No build step. No database. No auth (local use only).
+No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
 
 ---
 
@@ -137,13 +137,14 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/deck/reorder`   | Update sort order. Body `{ order: [id1, id2, …] }` densely renumbers the given ids to `0..n-1` — used when the full unfiltered All tab is visible, which also rebalances away any float drift from prior sparse updates. Body `{ updates: [{ id, sort_order }, …] }` sets specific ids to specific (possibly fractional) values without touching any other task — used when a tag/search/page filter narrows the visible list, so reordering never collides with the `sort_order` of tasks the filter is hiding. |
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
 | GET    | `/api/deck/due-count` | Count tasks due today + overdue |
+| GET    | `/api/deck/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | POST   | `/api/daily`    | Open or create today's daily note (`YYYY-MM-DD_daily.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`        | Auto-generated index of all scratch notes, newest first |
 | GET    | `/page/_daily`        | Auto-generated index of all daily notes, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
-| GET    | `/pages`              | Flat list of all pages, filterable client-side  |
+| GET    | `/pages`              | Redirects to `/` (browsing lives in the search modal) |
 | GET    | `/history/<slug>`     | Git commit log for a page (only when git is enabled) |
 | GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
@@ -160,7 +161,7 @@ Every page view includes:
 ## Rendering
 
 - `server.py` reads `pages/<slug>.md`, converts it to HTML using `markdown-it-py`, and injects it into a shared HTML shell (Python f-string in `server.py` — not a separate template file).
-- The HTML shell includes: nav bar, page title, content area, edit button, search bar.
+- The HTML shell includes: status badges, breadcrumb, page header (title, Edit/History/Present), content area, backlinks, and the search/shortcut/scratch modals. There is no nav bar (see Scratch).
 - `highlight.js` auto-highlights fenced code blocks client-side after load.
 - The shared shell renders the product brand as `Leaf`, with a small green inline SVG leaf logo in the breadcrumb home link.
 
@@ -224,7 +225,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters tasks by tag. Comma = AND (all tags must match, the narrowing default); pipe `a\|b` = OR (any tag matches). |
-| `filter` | tab name: `focus`, `all`, `plan` (aka `upcoming`), `completed` (`backlog`, the All tab's former label, and internal aliases `open`/`due`/`done` also accepted) | `focus` | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
+| `filter` | tab name: `focus`, `all`, `plan` (aka `upcoming`), `completed` (`backlog`, the All tab's former label, and internal aliases `open`/`due`/`done` also accepted) | All (or the tab remembered this session) | Sets the active tab and **always wins when specified** — a `[[deck filter=…]]` embed opens on that tab on every load and refresh. Normalized to the client `data-filter` value by `_FILTER_ALIASES`. A URL `?filter=` overrides it. |
 | `page` | slug or `self` | — | Filters to tasks linked to this page; `self` resolves to the current page's slug |
 | `capacity` | integer 1–99 | 5 | Day-board WIP limit: Plan-tab day sections with at least this many tasks are flagged amber. |
 | `unplanned` | `1`/`true`/`yes` or `0`/`false`/`no` | — | Pins the All tab's "Unplanned only" toggle on or off, overriding the user's stored preference for this embed. Omitted, the client uses the stored value, which **defaults off** — so a planning-queue embed wants `unplanned=1`. |
@@ -243,18 +244,16 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 **Rendered output:** The full deck app HTML (tabs, toolbar, task list, edit modal) is injected inline, plus `<script src="/public/deck-core.js" defer>` and `<script src="/public/deck.js" defer>` (order matters — deck.js reads `window.DeckCore`). Data attributes pass initialization params (`data-init-tag`, `data-init-page`, `data-init-filter`, `data-init-capacity`, `data-init-unplanned`).
 
 **Implementation:**
-- `_DECK_RE` detects `[[deck …]]` (case-insensitive).
-- `_parse_tasks_params()` parses space-separated `key=value` pairs.
-- `_build_deck_embed()` generates the full app HTML with data attributes.
-- `render_md()` uses a placeholder approach: replace `[[deck]]` with `_DECK_PLACEHOLDER` before markdown processing, then swap `<p>PLACEHOLDER</p>` with the embed HTML after render.
-- Only one `[[deck]]` embed per page is supported (subsequent ones are removed due to DOM ID conflicts).
+- All of it lives in `deck.py`. `_DECK_RE` detects `[[deck …]]` (case-insensitive), and `_parse_tasks_params()` parses space-separated `key=value` pairs.
+- `_build_deck_embed(params, page_slug, instance_id)` generates the full app HTML with data attributes. Element ids get a `-<n>` suffix for every embed after the first, so several embeds can share a page.
+- `render_md()` uses a placeholder approach: `process_deck_embeds()` replaces each `[[deck]]` with a numbered placeholder before markdown processing, and `inject_deck_embeds()` swaps each `<p>PLACEHOLDER</p>` for its embed HTML after render.
 - `deck.js` also reads URL query params (`?tag=`, `?filter=`, `?new=1`) as fallback for initialization.
 
 **Typical usage:** Create `deck.md` with `[[deck]]` to get the full deck at `/page/deck`.
 
 **Task ↔ Page linking:**
 - Tasks have an optional `page` field (slug string) linking them to a wiki page.
-- The `page` field is set via the API (there is no field for it in the edit modal).
+- The `page` field is set in the edit modal's **Page** field (`#task-edit-page`, suggestions from `/api/pages` via a `<datalist>`; a pasted `/page/` prefix is stripped) or via the API. A new task created in a `[[deck page=…]]` embed defaults to that page, so it stays visible in the embed after saving.
 - `[[deck page=self]]` filters to tasks whose `page` field matches the current page slug.
 - The `page` field is preserved by `_spawn_recurring()` for recurring tasks.
 - Tasks with a `page` field show a clickable page link in their metadata.
@@ -318,7 +317,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - There is no nav bar; navigation is via keyboard shortcuts. Phones have no keyboard, so at ≤640px a round **search button** (`MOBILE_SEARCH` in `server.py`, `.mobile-search`) sits in the bottom-right corner and opens the search modal (`openSearchModal`, the Ctrl+P action). `shell(..., search_button=False)` omits it, and the editor and the login page leave it out. It is hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then. `main` and the toasts get extra bottom space so the button never covers them.
 - **Status badges** (`.top-badges`: remote 🌐, deck due count, uncommitted count) are fixed at the top-left on desktop. At ≤640px they join the page flow above the breadcrumb, so they no longer cover it, and 🌐 is hidden, since on a phone remote access is a given.
-- **Keybinding:** `Ctrl+1` opens the scratch modal.
+- **Keybinding:** **c** then **s** creates a scratch note (see Keyboard Shortcuts).
 - User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
 - **Scratch note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
@@ -434,13 +433,15 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 
 ### UI
 
-- **View tabs**: a segmented control (`.view-tabs`, `role=tablist`, one `<button data-filter>` per view) in the order All · Plan · Focus · Completed (internal `data-filter` values `open`/`due`/`focus`/`completed`); the active view's button is filled (`.active`, `aria-selected`). One click switches; **Tab**/**Shift+Tab** cycle the views in on-screen order (wrapping), with keyboard focus following the active button. On phones the control spans the full width with equal-width buttons. (It replaced an earlier `<select>` dropdown.) Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (All) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on All.
+- **View tabs**: a segmented control (`.view-tabs`, `role=tablist`, one `<button data-filter>` per view) in the order All · Plan · Focus (internal `data-filter` values `open`/`due`/`focus`); the active view's button is filled (`.active`, `aria-selected`). One click switches; **Tab**/**Shift+Tab** cycle the three tabs in on-screen order (wrapping), with keyboard focus following the active button. The fourth view, `completed`, is deliberately not a tab (see Completed link). On phones the control spans the full width with equal-width buttons. (It replaced an earlier `<select>` dropdown.) Precedence on load: URL `?filter=` > `[[deck filter=…]]` embed filter (always wins when specified) > tab remembered this session > `open` (All) default. A filtered embed therefore always opens on its configured tab. For a plain `[[deck]]` (no filter), the active tab is remembered in `sessionStorage` (keyed by page path + embed instance), so a refresh lands on the tab the user last clicked while a fresh load in a new tab starts on All.
+- **Completed link**: rarely needed, so it is a quiet link under the list (`.deck-completed-link`, `#task-completed-link`) reading `✓ Completed (N) →`. N comes from `GET /api/deck/completed-count` (the completed tasks themselves load only when the view opens) and is refreshed after every write. In the Completed view no tab is highlighted, the list starts with a "Completed" divider, and the link reads `← Back to open tasks`, returning to the tab you came from. From Completed, Tab goes to the first tab and Shift+Tab to the last. `?filter=completed`, `[[deck filter=completed]]` and the session-remembered view still open it.
 - **Focus tab**: everything available to work on now — tasks whose start date has arrived (`start_date <= today`) plus overdue/due-today deadlines (`DeckCore.isFocus`), i.e. exactly the Plan board's Overdue and Today sections. A task that started days ago is simply part of Focus; there is no "stale" or "carried over" handling. An empty Focus says "Nothing planned for today" with a button to the Plan tab.
 - **Plan (`due`) tab — day board**: shows **all** open tasks grouped by start date (`DeckCore.bucketKey`): `Overdue` (missed deadline, `due_date < today`), `Today` (`start_date <= today`, or due today), `Tomorrow` and weekday headers for the next days (`today..+6`), `Later`, and `Unplanned` (no start date; tasks with only a deadline are listed here nearest deadline first, not on their due day). Day headers show a count and are flagged amber at/over `CAPACITY` (5). Date sections, `Later`, and `Unplanned` are **drop targets** (Later and Unplanned are always shown, even when empty, so there is always somewhere to drop). An **empty section is only its header row** (`.board-day--empty`, dashed, min 1.9rem tall, 2.5rem under `pointer: coarse`), and the row itself takes the drop. So a quiet week stays compact, and nothing grows or moves when a drag starts; placeholders that appeared on drag start once shifted the section under the pointer. dragging a task card onto a day sets its `start_date` to that day; dropping on `Unplanned` clears it (`start_date = null`); dropping on `Later` opens a native date picker (min today+7) for the target date. `Overdue` is display-only. Drag wiring is `setupBoardDragAndDrop` (per-card) plus list-level `dragover`/`drop` handlers attached once; manual-reorder drag (`setupDragAndDrop`) is used only on other tabs.
 - **Inline date editing**: the ⏰ (due) and 📅 (start) spans in each card's meta row open a date picker on click — no modal needed. Keyboard: **f** starts the selected task today, **F** tomorrow (pressing again clears).
-- **Sort options**: Manual order (drag-and-drop) · Created
+- **Header layout**: tabs, filter field, sort, the All tab's "Unplanned" toggle and **+ New** share one line on desktop (`.tasks-toolbar` has `flex: 1 1 20rem`, so it wraps under the tabs only when less than 20rem is left). On phones they take two lines: the tabs, then search · sort · toggle · a label-less "+" button (`.task-add-label` hidden; the button's accessible name is "New task").
+- **Sort options**: Manual (drag-and-drop) · Created
 - **Filter field**: one field (`#task-filter-search`) for text and tags. Words starting with `#` filter by tag: separate words must all match (`#a #b`), and a pipe means any (`#a|b`). The rest is a text search over title and description. `DeckCore.parseFilter`/`matchesFilter` implement it. Typing a `#word` anywhere in the field opens tag suggestions: tags of the tasks the *other tag words* leave visible in the current tab, minus those already used. Free text is ignored for suggestions; it is usually still being typed and would otherwise hide every tag. `/` focuses the field, and `#` focuses it and starts a tag word. `[[deck tag=a,b]]` / `?tag=` (comma = all, pipe = any) are converted with `DeckCore.tagParamToQuery` and prefilled together with `?search=`. A new task gets the filter's single-tag words as default tags.
-- **Drag-and-drop**: Available in "Manual order" sort mode; reorders tasks persistently
+- **Drag-and-drop**: Available in "Manual" sort mode; reorders tasks persistently
 - **`?task=<id>`**: selects that task after load, scrolls it into view and flashes it. If the All tab's "Unplanned only" toggle would hide it, the toggle is switched off for that visit (the stored preference is kept). A task that no longer exists (deleted, or in a previous-year archive) gets a notice instead.
 - **Inline completion**: Checkbox toggles mark task complete after a short grace period (cancellable)
 - **Won't do**: each active task card has a ✗ button (desktop) that archives the task as abandoned; also in the ⋯ menu. Won't-do tasks appear in the Completed tab with a red "✗ won't do" badge instead of a "done:" date. Unchecking them there reopens them. An undo toast is shown after marking.

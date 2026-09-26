@@ -654,6 +654,20 @@ class TestSortOrderUpdate:
         assert resp.get_json()["sort_order"] == 5
 
 
+# ---------- Completed Count ----------
+
+
+class TestCompletedCount:
+    def test_counts_completed_and_wont_do(self, client):
+        assert client.get("/api/deck/completed-count").get_json() == {"count": 0}
+        a = create_task(client, title="A").get_json()["id"]
+        b = create_task(client, title="B").get_json()["id"]
+        create_task(client, title="C")
+        client.put(f"/api/deck/{a}", json={"completed": True})
+        client.put(f"/api/deck/{b}", json={"wont_do": True})
+        assert client.get("/api/deck/completed-count").get_json() == {"count": 2}
+
+
 # ---------- Due Count ----------
 
 

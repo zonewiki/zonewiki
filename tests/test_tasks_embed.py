@@ -82,6 +82,11 @@ class TestTasksLinkRender:
         assert "tasks-list" in html
         assert "deck.js" in html
 
+    def test_edit_modal_has_page_field(self, wiki_dir):
+        html = server.render_md("[[deck]]\n[[deck]]\n")
+        assert 'id="task-edit-page"' in html and 'list="task-edit-pages"' in html
+        assert 'id="task-edit-page-1"' in html and 'list="task-edit-pages-1"' in html
+
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""
         create_task(client, title="Write code", tags=["work"])
@@ -123,8 +128,9 @@ class TestTasksLinkRender:
         html = server.render_md("[[deck]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-filter="(\w+)"[^>]*>([^<]+)</button>', html)
-        assert tabs == [("open", "All"), ("due", "Plan"), ("focus", "Focus"),
-                        ("completed", "Completed")]
+        assert tabs == [("open", "All"), ("due", "Plan"), ("focus", "Focus")]
+        # Completed is a link under the list, not a tab.
+        assert 'id="task-completed-link"' in html
 
     def test_embed_filter_alias_case_insensitive(self, wiki_dir):
         """Filter label matching is case-insensitive."""
@@ -175,7 +181,7 @@ class TestTasksLinkRender:
         """The toggle ships in the toolbar markup."""
         html = server.render_md("[[deck]]\n")
         assert 'id="task-unplanned"' in html
-        assert "Unplanned only" in html
+        assert re.search(r">\s*Unplanned\s*</label>", html)
 
     def test_embed_filter_unknown_passthrough(self, wiki_dir):
         """An unrecognized filter value passes through unchanged (client ignores it)."""

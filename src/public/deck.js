@@ -55,6 +55,7 @@
   const filterSearch = document.getElementById('task-filter-search' + sfx);
   const unplannedEl = document.getElementById('task-unplanned' + sfx);
   const unplannedWrap = document.getElementById('task-unplanned-wrap' + sfx);
+  const completedLink = document.getElementById('task-completed-link' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
   const form = document.getElementById('task-edit-form' + sfx);
   const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
@@ -354,6 +355,18 @@
     const res = await fetch('/api/deck');
     tasks = await res.json();
     render();
+    refreshCompletedCount();
+  }
+
+  // Completed is not a tab: a link under the list opens it, labelled with the
+  // number of completed tasks. The count comes from the server because the
+  // completed tasks themselves are only loaded when the view is opened.
+  let completedCount = null;
+  async function refreshCompletedCount() {
+    try {
+      const res = await fetch('/api/deck/completed-count');
+      if (res.ok) { completedCount = (await res.json()).count; syncCompletedLink(); }
+    } catch (_) {}
   }
 
   // Reload this instance from the server, honoring its current tab. Used to
@@ -386,7 +399,7 @@
       const task = await res.json();
       tasks.push(task);
       render();
-      window.refreshDueBadge?.();
+      window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
       return task;
     }
@@ -411,7 +424,7 @@
       } else {
         render();
       }
-      window.refreshDueBadge?.();
+      window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
       return updated;
     }
@@ -424,7 +437,7 @@
     if (res.ok) {
       tasks = tasks.filter(t => t.id !== id);
       render();
-      window.refreshDueBadge?.();
+      window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
     }
   }
@@ -439,7 +452,7 @@
       const idSet = new Set(ids);
       tasks = tasks.filter(t => !idSet.has(t.id));
       render();
-      window.refreshDueBadge?.();
+      window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
     }
   }
@@ -477,7 +490,7 @@
     if (res.ok) {
       // Re-fetch to capture any spawned recurring tasks
       await fetchDeck();
-      window.refreshDueBadge?.();
+      window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
     }
   }
@@ -494,7 +507,7 @@
 
   async function afterBatchWrite() {
     await fetchDeck();
-    window.refreshDueBadge?.();
+    window.refreshDueBadge?.(); refreshCompletedCount();
     refreshOtherInstances(instanceId);
   }
 
@@ -1294,6 +1307,10 @@
           `<span>⚠ ${orderedTasks.length} tasks in focus (limit: ${CAPACITY})</span></li>`;
       }
     }
+    // No tab is highlighted in Completed, so the list says where you are.
+    if (activeFilter === 'completed') {
+      html += '<li class="task-inbox-divider task-inbox-divider--only">Completed</li>';
+    }
     // Limit completed tab display
     let displayTasks = orderedTasks;
     if (activeFilter === 'completed' && orderedTasks.length > completedLimit) {
@@ -1451,7 +1468,12 @@
   let noteAcEl = null;
   let noteAcIndex = 0;
 
-  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
+  fetch('/api/pages').then(r => r.json()).then(p => {
+    wikiPages = p;
+    // Suggestions for the edit modal's Page field.
+    const dl = document.getElementById('task-edit-pages' + sfx);
+    if (dl) dl.replaceChildren(...p.map(slug => Object.assign(document.createElement('option'), { value: slug })));
+  }).catch(() => {});
 
   function getNoteWikilinkQuery(ta) {
     const before = ta.value.slice(0, ta.selectionStart);
@@ -1602,6 +1624,16 @@
   // Segmented control: one button per view, data-filter = the view's name.
 
   const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-filter]'));
+  const VIEWS = ['open', 'due', 'focus', 'completed'];
+  // The tab to return to from Completed (the link's "back" state).
+  let lastTab = 'open';
+
+  function syncCompletedLink() {
+    if (!completedLink) return;
+    completedLink.textContent = activeFilter === 'completed'
+      ? '← Back to open tasks'
+      : `✓ Completed${completedCount != null ? ` (${completedCount})` : ''} →`;
+  }
 
   // Mark the view's button active (no side effects — used during init too).
   function markActiveTab(filter) {
@@ -1613,13 +1645,15 @@
   }
 
   function switchTab(filter) {
-    if (!tabButtons().some(b => b.dataset.filter === filter)) return;
+    if (!VIEWS.includes(filter)) return;
+    if (filter !== 'completed') lastTab = filter;
     activeFilter = filter;
-    markActiveTab(filter);
+    markActiveTab(filter);   // Completed has no tab: none is marked
+    syncCompletedLink();
     // Keyboard focus follows the active view (Tab-cycling from a focused tab
     // would otherwise leave the focus ring on the previous one).
     if (tabsEl.contains(document.activeElement)) {
-      tabsEl.querySelector(`[data-filter="${filter}"]`).focus();
+      tabsEl.querySelector(`[data-filter="${filter}"]`)?.focus();
     }
     saveActiveTab(activeFilter);
     syncUnplannedToggle();
@@ -1630,6 +1664,10 @@
   tabsEl.addEventListener('click', e => {
     const btn = e.target.closest('[data-filter]');
     if (btn) switchTab(btn.dataset.filter);
+  });
+  completedLink?.addEventListener('click', () => {
+    switchTab(activeFilter === 'completed' ? lastTab : 'completed');
+    if (activeFilter === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
   });
 
   // The toggle only means anything on All — every other tab is defined by
@@ -1880,6 +1918,9 @@
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterDefaultTags());
+    // A new task in a [[deck page=…]] embed belongs to that page; otherwise it
+    // would vanish from the embed as soon as it is saved.
+    document.getElementById('task-edit-page' + sfx).value = task ? task.page || '' : initPage;
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -2008,6 +2049,7 @@
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
+      page: document.getElementById('task-edit-page' + sfx).value.trim().replace(/^\/?page\//, '') || null,
     };
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
@@ -2328,10 +2370,12 @@
     // Tab/Shift+Tab cycles the views
     if (e.key === 'Tab') {
       e.preventDefault();
+      // Only the tabs: Completed (reached by its link) is not in the cycle,
+      // and from there Tab goes to the first tab, Shift+Tab to the last.
       const filters = tabButtons().map(b => b.dataset.filter);
       const i = filters.indexOf(activeFilter);
       const n = filters.length;
-      switchTab(filters[e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
+      switchTab(filters[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
       return;
     }
 
@@ -2451,10 +2495,12 @@
     completed: 'completed', done: 'completed',
   };
   const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'open';
-  if (restoreFilter && tabButtons().some(b => b.dataset.filter === restoreFilter)) {
+  if (VIEWS.includes(restoreFilter)) {
     activeFilter = restoreFilter;
+    if (restoreFilter !== 'completed') lastTab = restoreFilter;
   }
   markActiveTab(activeFilter);
+  syncCompletedLink();
 
   unplannedOnly = unplannedPin ? unplannedPin === '1' : loadUnplanned();
   if (unplannedEl) unplannedEl.checked = unplannedOnly;

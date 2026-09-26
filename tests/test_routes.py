@@ -771,6 +771,48 @@ class TestApiUpload:
         assert "photo.png" not in url
 
 
+
+class TestServeUpload:
+    """Uploads must not run scripts with Leaf's origin (stored XSS)."""
+
+    def put(self, wiki_dir, name, data=b"x"):
+        (wiki_dir / "_assets" / name).write_bytes(data)
+        return f"/_assets/{name}"
+
+    def test_image_is_inline(self, client, wiki_dir):
+        resp = client.get(self.put(wiki_dir, "pic.png"), headers=HOST)
+        assert resp.status_code == 200
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_pdf_is_inline(self, client, wiki_dir):
+        resp = client.get(self.put(wiki_dir, "doc.pdf"), headers=HOST)
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+
+    def test_html_is_a_download(self, client, wiki_dir):
+        url = self.put(wiki_dir, "evil.html", b"<script>alert(1)</script>")
+        resp = client.get(url, headers=HOST)
+        assert resp.headers["Content-Disposition"].startswith("attachment")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_unknown_type_is_a_download(self, client, wiki_dir):
+        resp = client.get(self.put(wiki_dir, "blob.xyzzy"), headers=HOST)
+        assert resp.headers["Content-Disposition"].startswith("attachment")
+
+    def test_svg_is_inline_but_sandboxed(self, client, wiki_dir):
+        url = self.put(wiki_dir, "draw.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>")
+        resp = client.get(url, headers=HOST)
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.headers["Content-Security-Policy"].startswith("sandbox")
+
+    def test_upload_rejects_dot_names(self, client, wiki_dir):
+        from io import BytesIO
+        for name in ("..", ".git", ".hidden"):
+            data = {"file": (BytesIO(b"x"), "a.png"), "filename": name, "overwrite": "1"}
+            resp = client.post("/api/upload", data=data,
+                               content_type="multipart/form-data", headers=HOST)
+            assert resp.status_code == 400, name
+
 # ===========================================================================
 # Authentication (LEAF_PASSWORD)
 # ===========================================================================

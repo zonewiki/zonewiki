@@ -11,7 +11,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, open_tab
+from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, TOUCH_PHONE, open_tab
 
 # A page that stresses every wide element: long unbroken words/URLs, a wide
 # table, a long code line, an oversized image, and a deep list.
@@ -208,3 +208,28 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     page.locator(".bl-count").click()           # desktop click still jumps to the section
     expect(page).to_have_url(re.compile(r"#backlinks$"))
     page.wait_for_function("scrollY > 0")
+
+
+DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-sort",
+                     "#task-unplanned-wrap", "#task-add-btn"]
+
+
+def deck_header_rows(pg) -> int:
+    """Number of distinct lines the All tab's header controls sit on."""
+    centres = sorted(
+        (lambda b: b["y"] + b["height"] / 2)(pg.locator(sel).bounding_box())
+        for sel in DECK_HEADER_PARTS)
+    return 1 + sum(1 for a, b in zip(centres, centres[1:]) if b - a > 8)
+
+
+@pytest.mark.parametrize("ctx,rows", [({"viewport": DESKTOP}, 1), (TOUCH_PHONE, 2)],
+                         ids=["desktop", "phone"])
+def test_deck_all_tab_header_is_compact(new_page, wiki, ctx, rows):
+    # Tabs + search + sort + "Unplanned" + New: one line on desktop, two on a
+    # phone (it used to be two and five).
+    pg = new_page(**ctx)
+    seed(wiki, pg)
+    open_view(pg, "/page/deck", "open")
+    assert deck_header_rows(pg) == rows
+    assert pg.locator("#task-filter-search").bounding_box()["width"] >= 100
+    assert horizontal_overflow(pg) <= 0

@@ -115,7 +115,7 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["All", "Plan", "Focus", "Completed"])
+    expect(tabs).to_have_text(["All", "Plan", "Focus"])
     # All is the default view and the only one marked active.
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["All"])
     expect(page.locator("#task-unplanned-wrap")).to_be_visible()
@@ -131,14 +131,13 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
-    page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["All"])
     page.keyboard.press("Shift+Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Completed"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
     # The active view survives a reload within the browser tab.
     page.reload()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Completed"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
@@ -338,3 +337,91 @@ def test_task_link_to_missing_task_says_so(page, wiki):
     _task_link_deck(page, wiki)
     page.goto("/page/deck?task=no-such-id&filter=open")
     expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()
+
+
+# The edit modal's Page field (the task's `page` link).
+
+def test_new_task_in_page_embed_is_linked_to_that_page(page, wiki):
+    # Regression: a task created in a [[deck page=self]] embed had no page and
+    # vanished from the embed on save.
+    wiki.write("garden", "# Garden\n\n[[deck page=self]]\n")
+    page.goto("/page/garden")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    expect(modal.locator("#task-edit-page")).to_have_value("garden")
+    modal.locator("#task-edit-title").fill("Water plants")
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Water plants")).to_be_visible()
+    wait_for_field(page, "Water plants", "page", "garden")
+
+
+def test_page_field_links_and_unlinks(page, wiki):
+    wiki.write("garden", "# Garden\n")
+    page.request.post("/api/deck", data={"title": "Prune"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    modal = open_edit(page, "Prune")
+    expect(modal.locator("#task-edit-pages option[value='garden']")).to_have_count(1)
+    modal.locator("#task-edit-page").fill("garden")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Prune", "page", "garden")
+    expect(card(page, "Prune").locator(".task-page-link")).to_have_text("📄 garden")
+
+    open_edit(page, "Prune")
+    expect(modal.locator("#task-edit-page")).to_have_value("garden")
+    modal.locator("#task-edit-page").fill("")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Prune", "page", None)
+
+
+# Completed: a link under the list instead of a tab.
+
+def test_completed_link_opens_completed_and_goes_back(page, wiki):
+    for title in ("Open one", "Done one", "Done two"):
+        tid = page.request.post("/api/deck", data={"title": title}).json()["id"]
+        if title.startswith("Done"):
+            page.request.put(f"/api/deck/{tid}", data={"completed": True})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    open_tab(page, "due")
+    link = page.locator("#task-completed-link")
+    expect(link).to_have_text("✓ Completed (2) →")
+
+    link.click()
+    expect(page.locator("#tasks-tabs .active")).to_have_count(0)
+    expect(page.locator(".task-inbox-divider--only")).to_have_text("Completed")
+    expect(card(page, "Done one")).to_be_visible()
+    expect(card(page, "Open one")).to_have_count(0)
+    expect(link).to_have_text("← Back to open tasks")
+
+    # Back returns to the tab it came from.
+    link.click()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+
+    # Completed survives a reload, like any view; Tab from there goes to the
+    # first tab.
+    link.click()
+    page.reload()
+    expect(card(page, "Done two")).to_be_visible()
+    page.locator("body").click()
+    page.keyboard.press("Tab")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["All"])
+
+
+def test_completed_count_follows_completion(page, wiki):
+    page.request.post("/api/deck", data={"title": "Finish me"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (0) →")
+    card(page, "Finish me").locator("input[type=checkbox]").check()
+    # After the checkbox's ~5 s grace period.
+    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (1) →", timeout=10000)
+
+
+def test_embed_filter_completed_still_opens_completed(page, wiki):
+    tid = page.request.post("/api/deck", data={"title": "Old work"}).json()["id"]
+    page.request.put(f"/api/deck/{tid}", data={"completed": True})
+    wiki.write("log", "# Log\n\n[[deck filter=completed]]\n")
+    page.goto("/page/log")
+    expect(card(page, "Old work")).to_be_visible()
+    expect(page.locator("#task-completed-link")).to_have_text("← Back to open tasks")

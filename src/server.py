@@ -2191,6 +2191,8 @@ def api_upload():
     # Client may request a specific filename (e.g. after a conflict dialog)
     requested_name = request.form.get("filename", "").strip()
     filename = Path(requested_name).name if requested_name else original_name
+    if not filename or filename.startswith("."):
+        abort(400)   # "..", ".git" and friends: not an asset name
     overwrite = request.form.get("overwrite") == "1"
     dest = UPLOADS_DIR / filename
     if dest.exists() and not overwrite:
@@ -2205,9 +2207,25 @@ def serve_public(filename):
     return send_from_directory(PUBLIC_DIR, filename)
 
 
+# Uploads are shown inline only when the browser treats them as passive media.
+# Anything else (HTML, JS, …) would run with Leaf's origin, and so could read
+# and rewrite the wiki, so it is served as a download. SVG stays inline for
+# <img> tags but gets a sandbox CSP, which disables its scripts when the file
+# is opened directly.
+_INLINE_ASSET_PREFIXES = ("image/", "audio/", "video/")
+_INLINE_ASSET_TYPES = {"application/pdf", "text/plain"}
+_SVG_CSP = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+
+
 @app.get("/_assets/<filename>")
 def serve_upload(filename):
-    return send_from_directory(UPLOADS_DIR, filename)
+    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    inline = mime.startswith(_INLINE_ASSET_PREFIXES) or mime in _INLINE_ASSET_TYPES
+    resp = send_from_directory(UPLOADS_DIR, filename, as_attachment=not inline)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    if mime == "image/svg+xml":
+        resp.headers["Content-Security-Policy"] = _SVG_CSP
+    return resp
 
 
 # ── Uncommitted changes ───────────────────────────────────────────────────────
