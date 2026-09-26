@@ -1813,4 +1813,4 @@ class TestLists:
     def test_search_links_to_list(self, client):
         tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
         hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
-        assert hit["href"] == f"/deck?task={tid}&filter=open&list=groceries"
+        assert hit["href"] == f"/deck?task={tid}&view=open&list=groceries"

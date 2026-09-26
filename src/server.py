@@ -1290,7 +1290,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/deck?filter=focus" style="display: none;" title="Deck due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/deck?view=focus" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
       <span id="deck-due-count">0</span>
     </a>
@@ -2113,7 +2113,7 @@ def api_search():
 # The deck is not a route of its own but a [[deck]] embed on some page, often
 # /page/deck but not necessarily. Links to it (search results, Linked tasks,
 # the due badge, g d / c t) go through /deck, which redirects to that page and
-# keeps the query (?task=…, ?filter=…). Before, they pointed at /page/deck,
+# keeps the query (?task=…, ?view=…). Before, they pointed at /page/deck,
 # which for a wiki without deck.md opened the editor on an empty page.
 
 _deck_embed_cache: dict[str, tuple[float, list[dict]]] = {}
@@ -2171,7 +2171,7 @@ def open_deck():
 def _task_href(task_id: str, tab: str, list_name: str | None) -> str:
     """Link that opens one task in the deck (or its list's page) on `tab`."""
     from urllib.parse import urlencode
-    params = {"task": task_id, "filter": tab}
+    params = {"task": task_id, "view": tab}
     if list_name:
         params["list"] = list_name
     return "/deck?" + urlencode(params)

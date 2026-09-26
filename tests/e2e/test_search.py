@@ -106,6 +106,6 @@ def test_task_result_opens_the_page_that_embeds_the_deck(page, wiki):
     card = page.locator("#modal-content-matches .search-result-card").first
     expect(card).to_be_visible()
     card.click()
-    page.wait_for_url(f"**/page/tasks?task={tid}&filter=open")
+    page.wait_for_url(f"**/page/tasks?task={tid}&view=open")
     expect(page.locator(f".task-item[data-id='{tid}']")).to_have_class(
         re.compile(r"\btask-selected\b"))

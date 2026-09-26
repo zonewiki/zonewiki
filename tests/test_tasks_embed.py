@@ -59,8 +59,8 @@ class TestParseParams:
         assert result == {"tag": "work"}
 
     def test_multiple(self):
-        result = deck_module._parse_tasks_params("tag=work filter=due limit=5 sort=due_date")
-        assert result == {"tag": "work", "filter": "due", "limit": "5", "sort": "due_date"}
+        result = deck_module._parse_tasks_params("tag=work view=due limit=5 sort=due_date")
+        assert result == {"tag": "work", "view": "due", "limit": "5", "sort": "due_date"}
 
     def test_list(self):
         result = deck_module._parse_tasks_params("list=groceries")
@@ -101,14 +101,14 @@ class TestTasksLinkRender:
         assert 'data-init-tag="q3-launch,BUG-10002"' in html
 
     def test_embed_filter_param(self, client, wiki_dir):
-        """[[deck filter=due]] passes filter as data attribute."""
-        html = server.render_md("[[deck filter=due]]\n")
-        assert 'data-init-filter="due"' in html
+        """[[deck view=due]] passes filter as data attribute."""
+        html = server.render_md("[[deck view=due]]\n")
+        assert 'data-init-view="due"' in html
 
     def test_embed_filter_completed(self, client, wiki_dir):
-        """[[deck filter=completed]] passes filter as data attribute."""
-        html = server.render_md("[[deck filter=completed]]\n")
-        assert 'data-init-filter="completed"' in html
+        """[[deck view=completed]] passes filter as data attribute."""
+        html = server.render_md("[[deck view=completed]]\n")
+        assert 'data-init-view="completed"' in html
 
     def test_embed_filter_label_aliases(self, wiki_dir):
         """Friendly tab-label names map to the client data-filter values."""
@@ -122,8 +122,8 @@ class TestTasksLinkRender:
             "completed": "completed",
         }
         for label, expected in cases.items():
-            html = server.render_md(f"[[deck filter={label}]]\n")
-            assert f'data-init-filter="{expected}"' in html, label
+            html = server.render_md(f"[[deck view={label}]]\n")
+            assert f'data-init-view="{expected}"' in html, label
 
     def test_view_tabs_are_a_segmented_control_in_order(self, wiki_dir):
         html = server.render_md("[[deck]]\n")
@@ -135,14 +135,14 @@ class TestTasksLinkRender:
 
     def test_embed_filter_alias_case_insensitive(self, wiki_dir):
         """Filter label matching is case-insensitive."""
-        html = server.render_md("[[deck filter=All]]\n")
-        assert 'data-init-filter="open"' in html
+        html = server.render_md("[[deck view=All]]\n")
+        assert 'data-init-view="open"' in html
 
     def test_embed_filter_internal_names_still_work(self, wiki_dir):
         """Internal names (open/due) remain accepted for back-compat."""
         for name in ("open", "due"):
-            html = server.render_md(f"[[deck filter={name}]]\n")
-            assert f'data-init-filter="{name}"' in html
+            html = server.render_md(f"[[deck view={name}]]\n")
+            assert f'data-init-view="{name}"' in html
 
     def test_embed_no_deferred_tab(self, wiki_dir):
         """The Deferred tab is gone — nothing in the deck hides tasks now."""
@@ -184,10 +184,16 @@ class TestTasksLinkRender:
         assert 'id="task-unplanned"' in html
         assert re.search(r">\s*Unplanned\s*</label>", html)
 
+    def test_embed_legacy_filter_param(self, wiki_dir):
+        """`filter=` is the old name of `view=` and still works; view wins."""
+        assert 'data-init-view="due"' in server.render_md("[[deck filter=plan]]\n")
+        html = server.render_md("[[deck view=focus filter=plan]]\n")
+        assert 'data-init-view="focus"' in html
+
     def test_embed_filter_unknown_passthrough(self, wiki_dir):
         """An unrecognized filter value passes through unchanged (client ignores it)."""
-        html = server.render_md("[[deck filter=bogus]]\n")
-        assert 'data-init-filter="bogus"' in html
+        html = server.render_md("[[deck view=bogus]]\n")
+        assert 'data-init-view="bogus"' in html
 
     def test_multiple_embeds_only_first(self, client, wiki_dir):
         """Multiple [[deck]] on one page: all render with unique instance IDs."""
@@ -321,15 +327,15 @@ class TestPageViewLink:
         assert "deck.js" in body
 
     def test_deck_embed_with_params(self, client, wiki_dir):
-        """[[deck tag=work list=proj filter=due]] passes all data attrs."""
+        """[[deck tag=work list=proj view=due]] passes all data attrs."""
         (wiki_dir / "my-page.md").write_text(
-            "# My Page\n\n[[deck tag=work list=proj filter=due]]\n", encoding="utf-8"
+            "# My Page\n\n[[deck tag=work list=proj view=due]]\n", encoding="utf-8"
         )
         resp = client.get("/page/my-page")
         body = resp.get_data(as_text=True)
         assert 'data-init-tag="work"' in body
         assert 'data-init-list="proj"' in body
-        assert 'data-init-filter="due"' in body
+        assert 'data-init-view="due"' in body
 
     def test_embed_has_single_filter_field(self, wiki_dir):
         html = server.render_md("[[deck]]\n")

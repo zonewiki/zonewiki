@@ -547,7 +547,7 @@ def _parse_tasks_params(raw: str) -> dict:
 
 
 # Maps friendly tab-label names (and the internal names) to the data-filter
-# value the client uses to activate a tab. Lets `[[deck filter=all]]` work
+# value the client uses to activate a tab. Lets `[[deck view=all]]` work
 # using the labels the user actually sees, not just internal names. "backlog"
 # is the tab's former label, kept so existing embeds keep working.
 _FILTER_ALIASES = {
@@ -576,7 +576,8 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     """
     tag_val = params.get("tag", "")
     list_val = _clean_list(params.get("list")) or ""
-    raw_filter = params.get("filter", "").strip().lower()
+    # `view=` picks the tab; `filter=` is its old name, still accepted.
+    raw_filter = (params.get("view") or params.get("filter", "")).strip().lower()
     filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
     try:
         capacity = max(1, min(99, int(params.get("capacity", ""))))
@@ -602,7 +603,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-filter="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>

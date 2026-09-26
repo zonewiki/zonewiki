@@ -685,7 +685,7 @@ class TestSearch:
         resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
         body = resp.get_data(as_text=True)
         assert "/page/_deck" not in body
-        assert f'href="/deck?task={tid}&amp;filter=open"' in body
+        assert f'href="/deck?task={tid}&amp;view=open"' in body
 
     def test_search_page_completed_task_links_to_completed_tab(self, client, wiki_dir):
         r = client.post("/api/deck", json={"title": "finishreport tuvwxyz"})
@@ -693,7 +693,7 @@ class TestSearch:
         client.put(f"/api/deck/{tid}", json={"completed": True})
         resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert f'href="/deck?task={tid}&amp;filter=completed"' in body
+        assert f'href="/deck?task={tid}&amp;view=completed"' in body
 
 
 # ===========================================================================
@@ -1015,7 +1015,7 @@ class TestSearchResultHref:
         results = client.get("/api/search?q=ferns", headers=HOST).get_json()
         task_hits = [r for r in results if r.get("type") == "task"]
         assert task_hits, "expected a task hit"
-        assert task_hits[0]["href"] == f"/deck?task={tid}&filter=open"
+        assert task_hits[0]["href"] == f"/deck?task={tid}&view=open"
 
 
 class TestBacklinkCacheInvalidation:
@@ -1053,7 +1053,7 @@ class TestTaskBacklinks:
                           headers=HOST).get_json()["id"]
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
-        assert f'href="/deck?task={tid}&amp;filter=open"' in section
+        assert f'href="/deck?task={tid}&amp;view=open"' in section
 
     def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
         # Regression: the task title's own wikilinks were rendered as <a>
@@ -1249,18 +1249,18 @@ class TestDeckRedirect:
 
     def test_deck_embedded_on_another_page(self, client, wiki_dir):
         write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck]]\n")
-        assert self.go(client, "?task=abc&filter=open") == "/page/tasks?task=abc&filter=open"
+        assert self.go(client, "?task=abc&view=open") == "/page/tasks?task=abc&view=open"
 
     def test_deck_md_wins(self, client, wiki_dir):
         write_page(wiki_dir, "aaa", "# A\n\n[[deck]]\n")
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck filter=focus]]\n")
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck view=focus]]\n")
         assert self.go(client) == "/page/deck"
 
     def test_unfiltered_embed_preferred(self, client, wiki_dir):
         # A tag= or list= embed may hide the task being linked to.
         write_page(wiki_dir, "a-work", "# W\n\n[[deck tag=work]]\n")
         write_page(wiki_dir, "b-garden", "# G\n\n[[deck list=garden]]\n")
-        write_page(wiki_dir, "c-all", "# All\n\n[[deck filter=plan]]\n")
+        write_page(wiki_dir, "c-all", "# All\n\n[[deck view=plan]]\n")
         assert self.go(client) == "/page/c-all"
 
     def test_embed_in_code_does_not_count(self, client, wiki_dir):
@@ -1301,13 +1301,13 @@ class TestDeckRedirect:
         tid = client.post("/api/deck", json={"title": "Seeds for [[Garden]]", "list": "shop"},
                           headers=HOST).get_json()["id"]
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert f'href="/deck?task={tid}&amp;filter=open&amp;list=shop"' in body
+        assert f'href="/deck?task={tid}&amp;view=open&amp;list=shop"' in body
 
     def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck?filter=focus"' in body
+        assert 'href="/deck?view=focus"' in body
         assert "/page/deck" not in body
 
 

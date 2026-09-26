@@ -32,7 +32,7 @@ def seed_deck(page, wiki, embed="[[deck]]"):
     for title, tags in (("Fix bug", "work"), ("Buy milk", "home"), ("Fix fence", "home,work")):
         page.request.post("/api/deck", data={"title": title, "tags": tags})
     wiki.write("deck", f"# Deck\n\n{embed}\n")
-    page.goto("/page/deck?filter=open")
+    page.goto("/page/deck?view=open")
 
 
 # ── 4. One filter field: text plus #tags ─────────────────────────────────────
@@ -164,7 +164,7 @@ def phone_deck(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/deck", data={"title": "Water plants"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    phone.goto("/page/deck?filter=open")
+    phone.goto("/page/deck?view=open")
     return phone
 
 
@@ -247,7 +247,7 @@ def seed_tags(page, wiki):
                         ("D", "wood"), ("E", "home")):
         page.request.post("/api/deck", data={"title": title, "tags": tags})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?filter=open")
+    page.goto("/page/deck?view=open")
 
 
 def test_filter_tab_completes_to_best_match(page, wiki):
@@ -347,7 +347,7 @@ def test_tag_with_space_is_findable_in_filter(page, wiki):
     page.request.post("/api/deck", data={"title": "Try models", "tags": "locallm xxx"})
     page.request.post("/api/deck", data={"title": "Other"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?filter=open")
+    page.goto("/page/deck?view=open")
     field = page.locator("#task-filter-search")
     field.click()
     field.press_sequentially("#locallm")

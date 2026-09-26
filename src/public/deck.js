@@ -279,8 +279,9 @@
       .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
   }
   function inScope(t) { return (t.list || '') === initList; }
-  const urlFilter = urlParams.get('filter') || '';       // explicit per-navigation override
-  const embedFilter = appEl?.dataset.initFilter || '';   // [[deck filter=…]] — always wins when specified
+  // ?view= / [[deck view=…]] pick the tab; ?filter= is the old name, still accepted.
+  const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
+  const embedFilter = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
   const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
 
   // Remember the active tab per page + embed instance for the current tab only
@@ -2429,12 +2430,12 @@
   // [[deck tag=…]] / ?tag= and ?search= all land in the one filter field.
   const initSearch = urlParams.get('search') || '';
   if (filterSearch) filterSearch.value = [tagParamToQuery(initTag), initSearch].filter(Boolean).join(' ');
-  // Precedence: URL ?filter= > embed filter (always wins when specified) >
-  // tab remembered this session > Focus default. So a [[deck filter=…]] embed
+  // Precedence: URL ?view= > embed view (always wins when specified) >
+  // tab remembered this session > Focus default. So a [[deck view=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
   // The canonical tab names are the <option> values (focus/due/open/completed);
-  // this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?filter=
+  // this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?view=
   // URLs. The embed filter arrives already normalized by the server.
   const FILTER_ALIASES = {
     focus: 'focus', today: 'focus',

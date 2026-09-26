@@ -36,7 +36,7 @@ def phone(new_page, wiki):
     pg.request.post("/api/deck", data={"title": "Weekly review",
                                        "rec_type": "weekly", "due_date": day(2)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?filter=open")
+    pg.goto("/page/deck?view=open")
     return pg
 
 
@@ -129,7 +129,7 @@ def test_completed_task_menu(phone):
 def test_desktop_click_selects_does_not_edit(page, wiki):
     page.request.post("/api/deck", data={"title": "Water plants"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?filter=open")
+    page.goto("/page/deck?view=open")
     card(page, "Water plants").locator(".task-content").click()
     expect(card(page, "Water plants")).to_contain_class("task-selected")
     expect(page.locator("#task-edit-modal")).to_be_hidden()
@@ -138,7 +138,7 @@ def test_desktop_click_selects_does_not_edit(page, wiki):
 def test_desktop_menu_popover_and_keyboard(page, wiki):
     page.request.post("/api/deck", data={"title": "Water plants"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?filter=open")
+    page.goto("/page/deck?view=open")
     btn = card(page, "Water plants").locator(".task-menu-btn")
     btn.click()
     menu = page.locator(".task-menu")
@@ -182,7 +182,7 @@ def test_edit_modal_save_reachable_on_phone(new_page, wiki):
     phone = new_page(viewport={"width": 360, "height": 460}, has_touch=True, is_mobile=True)
     phone.request.post("/api/deck", data={"title": "Weekly review", "rec_type": "weekly"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    phone.goto("/page/deck?filter=open")
+    phone.goto("/page/deck?view=open")
     modal = open_editor(phone)
     save = modal.get_by_role("button", name="Save")
     # The action bar sticks to the bottom: Save is on screen without scrolling.
@@ -230,7 +230,7 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
     pg = new_page(viewport={"width": 1280, "height": 560})
     pg.request.post("/api/deck", data={"title": "Weekly review", "rec_type": "weekly"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?filter=open")
+    pg.goto("/page/deck?view=open")
     card(pg, "Weekly review").locator(".task-content").dblclick()
     modal = pg.locator("#task-edit-modal")
     expect(modal).to_be_visible()
@@ -301,7 +301,7 @@ def test_date_picker_pinned_on_screen_when_it_fits_nowhere(new_page, wiki):
     pg = new_page(viewport={"width": 844, "height": 390}, has_touch=True, is_mobile=True)
     pg.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?filter=open")
+    pg.goto("/page/deck?view=open")
     c = card(pg, "Water plants")
     c.evaluate("el => { document.body.style.paddingBottom = '100vh'; el.scrollIntoView({block: 'center'}); }")
     c.locator(".task-clickable-date[data-field='start_date']").tap()
@@ -363,7 +363,7 @@ def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
     tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
     tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    tall.goto("/page/deck?filter=open")
+    tall.goto("/page/deck?view=open")
     open_tab(tall, "due")
     target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
     touch_drag(tall, card(tall, "Water plants"), target)
@@ -375,7 +375,7 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
     ids = [pg.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("One", "Two", "Three")]
     pg.request.post("/api/deck/reorder", data={"order": ids})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?filter=open")
+    pg.goto("/page/deck?view=open")
     open_tab(pg, "open")
     send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False)
     # Mid-drag: a floating copy follows the finger, the target is marked.
