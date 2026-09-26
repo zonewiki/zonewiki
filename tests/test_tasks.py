@@ -1818,3 +1818,66 @@ class TestCompletedArchive:
         deck_module._archive_old_completed()
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
+
+
+class TestMalformedInput:
+    """Regression: malformed JSON bodies raised inside the handlers (500)
+    instead of being rejected with a 400 the client can show."""
+
+    @pytest.mark.parametrize("path", ["/api/deck", "/api/deck/batch-delete",
+                                      "/api/deck/batch-complete", "/api/deck/restore",
+                                      "/api/deck/reorder", "/api/deck/batch-tag"])
+    @pytest.mark.parametrize("body", ["[1, 2]", '"text"', "not json", "null"])
+    def test_non_object_body_is_400(self, client, path, body):
+        resp = client.post(path, data=body, content_type="application/json")
+        assert resp.status_code == 400
+        assert "error" in resp.get_json()
+
+    def test_update_non_object_body_is_400(self, client):
+        task = create_task(client).get_json()
+        assert client.put(f"/api/deck/{task['id']}", data="[]",
+                          content_type="application/json").status_code == 400
+
+    @pytest.mark.parametrize("payload", [
+        {"title": 5},
+        {"title": "T", "description": ["x"]},
+        {"title": "T", "tags": 7},
+        {"title": "T", "tags": [1, 2]},
+        {"title": "T", "due_date": 20990101},
+        {"title": "T", "defer_days": "soon"},
+        {"title": "T", "rec_type": "daily", "rec_interval": "often"},
+        {"title": "T", "page": 3},
+        {"title": "T", "blocked_by": 3},
+    ])
+    def test_bad_field_types_are_400(self, client, payload):
+        resp = client.post("/api/deck", json=payload)
+        assert resp.status_code == 400, payload
+        assert client.get("/api/deck").get_json() == []
+
+    def test_tags_string_is_split_on_commas(self, client):
+        task = create_task(client, tags="a, b,,c").get_json()
+        assert task["tags"] == ["a", "b", "c"]
+
+    def test_numeric_strings_still_accepted(self, client):
+        task = create_task(client, due_date="2099-01-10", defer_days="2",
+                           rec_type="weekly", rec_interval="3").get_json()
+        assert task["defer_days"] == 2
+        assert task["recurrence"]["interval"] == 3
+
+    @pytest.mark.parametrize("path", ["/api/deck/batch-delete", "/api/deck/batch-complete"])
+    def test_batch_ids_must_be_strings(self, client, path):
+        # An object in the list is unhashable → used to raise building set(ids).
+        assert client.post(path, json={"ids": [{"id": "x"}]}).status_code == 400
+
+    def test_batch_tag_bad_lists_are_400(self, client):
+        task = create_task(client).get_json()
+        assert client.post("/api/deck/batch-tag",
+                           json={"ids": [task["id"]], "add": "x"}).status_code == 400
+        assert client.post("/api/deck/batch-tag",
+                           json={"ids": [task["id"]], "add": [1]}).status_code == 400
+
+    def test_restore_bad_interval_degrades_instead_of_500(self, client):
+        resp = client.post("/api/deck/restore", json={"tasks": [
+            {"title": "T", "recurrence": {"type": "daily", "interval": "x"}}]})
+        assert resp.status_code == 201
+        assert resp.get_json()[0]["recurrence"]["interval"] == 1

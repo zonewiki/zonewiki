@@ -1080,3 +1080,80 @@ class TestRawPage:
     def test_snippet_pages_hidden_from_page_iteration(self, client, wiki_dir):
         resp = client.post("/api/raw/create-page", data={"text": "x"}, headers=HOST).get_json()
         assert resp["slug"] not in server.all_slugs()
+
+
+# ===========================================================================
+# Rename keeps every kind of reference working
+# ===========================================================================
+
+class TestRenameUpdatesAllReferences:
+    """Backlinks count markdown links, and deck tasks link pages too — a
+    rename used to update only [[wikilinks]] in pages, so every other link to
+    the page broke. It also rewrote wikilinks inside code examples."""
+
+    def rename(self, client, old, new):
+        resp = client.post(f"/rename/{old}", data={"new_name": new}, headers=HOST)
+        assert resp.status_code == 302
+
+    def test_markdown_links_rewritten(self, client, wiki_dir):
+        write_page(wiki_dir, "old", "# Old\n")
+        ref = write_page(wiki_dir, "ref", (
+            "[bare](old) [ext](old.md) [abs](/page/old) [anchor](old#part)\n"
+            "[other](older) [web](https://example.com/old) [img](/_assets/old.png)\n"))
+        self.rename(client, "old", "new")
+        assert ref.read_text() == (
+            "[bare](new) [ext](new.md) [abs](/page/new) [anchor](new#part)\n"
+            "[other](older) [web](https://example.com/old) [img](/_assets/old.png)\n")
+
+    def test_relative_links_across_directories(self, client, wiki_dir):
+        write_page(wiki_dir, "notes/old", "# Old\n")
+        sibling = write_page(wiki_dir, "notes/sib", "[s](old) [s2](./old.md)\n")
+        cousin = write_page(wiki_dir, "journal/day", "[c](../notes/old)\n")
+        self.rename(client, "notes/old", "archive/new")
+        assert sibling.read_text() == "[s](../archive/new) [s2](../archive/new.md)\n"
+        assert cousin.read_text() == "[c](../archive/new)\n"
+        assert server.find_backlinks("archive/new") and len(server.find_backlinks("archive/new")) == 2
+
+    def test_backlinks_survive_rename(self, client, wiki_dir):
+        write_page(wiki_dir, "old", "# Old\n")
+        write_page(wiki_dir, "ref", "# Ref\n\n[x](old.md) and [[old]]\n")
+        assert [b["slug"] for b in server.find_backlinks("old")] == ["ref"]
+        self.rename(client, "old", "new")
+        assert [b["slug"] for b in server.find_backlinks("new")] == ["ref"]
+
+    def test_links_inside_code_untouched(self, client, wiki_dir):
+        write_page(wiki_dir, "old", "# Old\n")
+        ref = write_page(wiki_dir, "ref", (
+            "[[old]] and `[[old]]` and [x](old)\n\n"
+            "```\n[[old]] [x](old)\n```\n"))
+        self.rename(client, "old", "new")
+        assert ref.read_text() == (
+            "[[new]] and `[[old]]` and [x](new)\n\n"
+            "```\n[[old]] [x](old)\n```\n")
+
+    def test_deck_tasks_follow_rename(self, client, wiki_dir):
+        write_page(wiki_dir, "old", "# Old\n")
+        linked = client.post("/api/deck", json={
+            "title": "Do [[old]] and [[Old|label]]", "description": "see [x](/page/old)",
+            "page": "old"}, headers=HOST).get_json()
+        done = client.post("/api/deck", json={"title": "Done [[old]]", "page": "old"},
+                           headers=HOST).get_json()
+        client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
+        other = client.post("/api/deck", json={"title": "[[older]]", "page": "older"},
+                            headers=HOST).get_json()
+        self.rename(client, "old", "new")
+        tasks = {t["id"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
+        assert tasks[linked["id"]]["title"] == "Do [[new]] and [[new|label]]"
+        assert tasks[linked["id"]]["description"] == "see [x](/page/new)"
+        assert tasks[linked["id"]]["page"] == "new"
+        assert tasks[other["id"]]["title"] == "[[older]]"
+        assert tasks[other["id"]]["page"] == "older"
+        completed = client.get("/api/deck/completed", headers=HOST).get_json()
+        assert completed[0]["title"] == "Done [[new]]" and completed[0]["page"] == "new"
+        html = client.get("/page/new", headers=HOST).get_data(as_text=True)
+        assert 'id="task-backlinks"' in html
+
+    def test_rename_without_deck_files_does_not_create_them(self, client, wiki_dir):
+        write_page(wiki_dir, "old", "# Old\n")
+        self.rename(client, "old", "new")
+        assert not (wiki_dir / "_deck.json").exists()

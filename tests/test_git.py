@@ -169,6 +169,14 @@ class TestWritesCommit:
         assert "old.md" in changed and "new.md" in changed and "ref.md" in changed
         assert is_clean(wiki_dir)
 
+    def test_rename_commit_includes_updated_deck_tasks(self, client, wiki_dir):
+        save(client, "old", "# Old\n")
+        client.post("/api/deck", json={"title": "Task", "page": "old"}, headers=HOST)
+        client.post("/rename/old", data={"new_name": "new"}, headers=HOST)
+        changed = git(wiki_dir, "show", "--name-only", "--format=", "HEAD").split()
+        assert "_deck.json" in changed
+        assert is_clean(wiki_dir)
+
     def test_upload_commits(self, client, wiki_dir):
         import io
         client.post("/api/upload", data={"file": (io.BytesIO(b"x"), "a.txt")},

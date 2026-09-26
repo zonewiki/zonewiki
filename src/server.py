@@ -4,6 +4,7 @@ import html
 import json
 import mimetypes
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -438,9 +439,24 @@ def list_daily() -> list[dict]:
     return _list_dated_notes(DAILY_RE, "%Y-%m-%d", "%Y-%m-%d")
 
 
+_H1_RE = re.compile(r"^#[ \t]+(\S.*)$")
+
+
 def page_title(content: str, slug: str) -> str:
-    m = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
-    return m.group(1).strip() if m else slug_display_name(slug)
+    """First "# " heading in the file, else a title derived from the slug.
+
+    Skips a leading frontmatter block and fenced code, so a shell comment in
+    a code example ("# install deps") never becomes the page title."""
+    lines = content.splitlines()
+    start = 0
+    if lines and lines[0].strip() == '---':
+        start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == '---'), 0)
+    for i, line, in_fence in _iter_fenced_lines(lines):
+        if i >= start and not in_fence:
+            m = _H1_RE.match(line)
+            if m:
+                return m.group(1).strip()
+    return slug_display_name(slug)
 
 
 def process_wikilinks(text: str) -> str:
@@ -986,32 +1002,61 @@ def find_task_backlinks(slug: str) -> list[dict]:
     return deck_module.find_task_backlinks(slug, to_slug)
 
 
-def update_references(old_slug: str, new_slug: str) -> list[Path]:
-    """Rewrite [[wikilinks]] across all pages after a rename.
+# A markdown link (not an image): prefix, label, href up to any #anchor/?query
+# or title, and the remainder inside the parentheses.
+_MD_LINK_REWRITE_RE = re.compile(r'(?<!!)(\[[^\]]*\]\()([^)#?\s]+)([^)]*\))')
 
-    Returns a list of files that were modified.
-    """
-    modified: list[Path] = []
-    for md_file, _ in iter_pages():
-        content = md_file.read_text(encoding="utf-8")
 
-        def replace(m: re.Match) -> str:
-            inner = m.group(1)
-            if "|" in inner:
-                page_name, label = inner.split("|", 1)
-                raw_name = page_name.strip()
-                if raw_name == old_slug or to_slug(page_name) == old_slug:
-                    return f"[[{new_slug}|{label}]]"
-            else:
-                raw_name = inner.strip()
-                if raw_name == old_slug or to_slug(inner) == old_slug:
-                    return f"[[{new_slug}]]"
+def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str = "") -> str:
+    """Point every link to old_slug in text at new_slug.
+
+    Handles [[wikilinks]] (with or without |label) and markdown links in the
+    forms backlinks recognise — relative (`old`, `../dir/old`, `old.md`) and
+    absolute (`/page/old`) — keeping each link's style, anchor and title.
+    Relative hrefs are recomputed from source_slug's directory. Code blocks
+    and inline code are left untouched."""
+    text, stash = _mask_code(text)
+
+    def wikilink(m: re.Match) -> str:
+        page_name, sep, label = m.group(1).partition("|")
+        if page_name.strip() == old_slug or to_slug(page_name) == old_slug:
+            return f"[[{new_slug}{sep}{label}]]"
+        return m.group(0)
+
+    source_dir = posixpath.dirname(source_slug)
+
+    def md_link(m: re.Match) -> str:
+        prefix, href, rest = m.groups()
+        if href.startswith("/page/"):
+            if href[len("/page/"):] == old_slug:
+                return f"{prefix}/page/{new_slug}{rest}"
             return m.group(0)
+        is_md = href.endswith(".md")
+        target = _resolve_md_link(href, source_slug) if is_md else _resolve_bare_link(href, source_slug)
+        if target != old_slug:
+            return m.group(0)
+        new_href = posixpath.relpath(new_slug, source_dir or ".") + (".md" if is_md else "")
+        return f"{prefix}{new_href}{rest}"
 
-        new_content = WIKILINK_RE.sub(replace, content)
+    text = WIKILINK_RE.sub(wikilink, text)
+    text = _MD_LINK_REWRITE_RE.sub(md_link, text)
+    return _unmask_code(text, stash)
+
+
+def update_references(old_slug: str, new_slug: str) -> list[Path]:
+    """Rewrite links to old_slug across all pages and deck tasks after a rename.
+
+    Returns the files that were modified (pages and deck storage), so the
+    rename commit can include them."""
+    modified: list[Path] = []
+    for md_file, file_slug in iter_pages():
+        content = md_file.read_text(encoding="utf-8")
+        new_content = rewrite_page_links(content, old_slug, new_slug, file_slug)
         if new_content != content:
             md_file.write_text(new_content, encoding="utf-8")
             modified.append(md_file)
+    modified += deck_module.rename_page_refs(
+        old_slug, new_slug, lambda text: rewrite_page_links(text, old_slug, new_slug))
     return modified
 
 

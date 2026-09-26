@@ -662,3 +662,23 @@ class TestDirectivesInsideCode:
         assert 'class="toc"' in html
         assert 'href="/page/link"' in html
         assert "tasks-app" in html
+
+
+class TestPageTitleIgnoresCode:
+    """Regression: page_title took the first "# " line anywhere, so a page
+    without an H1 whose code block had a shell comment was titled after it."""
+
+    def test_comment_in_code_block_is_not_a_title(self):
+        assert page_title("Intro\n\n```bash\n# install deps\n```\n", "my-page") == "My Page"
+
+    def test_h1_after_code_block_is_found(self):
+        assert page_title("```\n# nope\n```\n\n# Real Title\n", "x") == "Real Title"
+
+    def test_h1_after_frontmatter(self):
+        assert page_title("---\ntags: a\n---\n# Title\n", "x") == "Title"
+
+    def test_hash_without_space_is_not_heading(self):
+        assert page_title("#hashtag\n", "tagged-page") == "Tagged Page"
+
+    def test_heading_does_not_span_lines(self):
+        assert page_title("#\nnext line\n", "empty-h") == "Empty H"

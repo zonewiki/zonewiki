@@ -197,7 +197,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - `.page-meta-wrapper` is a normal-flow block rendered as a sibling right after `</header>` (not nested inside it, not absolutely positioned) — so `.page-header`'s `border-bottom` stays anchored directly under the H1/actions row, while the meta row can still grow (e.g. an expanded tldr) and push the article below it down instead of overlapping it. It uses a small negative top margin (`margin: -1.1rem 0 1.5rem`) to sit close under the header despite being a separate block, rather than living inside the header's own margin.
 - `strip_h1()` skips over a leading frontmatter block before looking for the first non-empty line, so the H1 immediately after frontmatter is still correctly stripped (not duplicated below the page header).
 - The **editor textarea always holds the raw, unparsed file** — including the frontmatter block verbatim — so editing it is just editing text like any other part of the file; there is no separate metadata-edit form. The live preview pane shows the parsed tldr/tags block (both, at the top of the article) as you type, via the same `render_md()` path — it has no separate meta row to place them in.
-- `page_title()` is unaffected: its regex scans the whole file for the first `# ` line regardless of what precedes it, so frontmatter never confuses title extraction.
+- `page_title()` returns the first `# ` heading in the file, skipping a leading frontmatter block and fenced code (so a `# comment` in a code example is never the title), else a title derived from the slug.
 
 ### Version history
 
@@ -397,6 +397,8 @@ The deck logic is in `src/deck.py` (Flask Blueprint), registered by `server.py` 
 
 Tasks are stored in `_deck.json` in the wiki data directory (alongside markdown files). The file is a flat JSON array of task objects, committed to git on changes. Completed tasks live in `_deck_completed.json`; at startup, completed tasks from previous years are rolled into per-year archives (`_deck_completed-YYYY.json`) so the hot file stays small. Archived tasks remain in the search index but are not shown in the Completed tab.
 
+Request bodies are validated (`_json_object`, `_as_str`, `_as_int`, `_as_str_list`, `_id_list`): a non-object body or a wrongly typed field is a 400 with a JSON `{ error }`, never a 500. Numeric strings are accepted for integer fields, and `tags`/`blocked_by` may be a comma-separated string.
+
 All deck mutations are serialized through a module-level lock (`_LOCK`) and written atomically (temp file + `os.replace`), because the Flask dev server is threaded and unguarded concurrent read-modify-write on the JSON files would otherwise lose updates. Write-path reads use a strict reader that refuses to overwrite a present-but-unreadable file (raises `_DeckCorrupt` → 503) rather than treating a torn read as an empty list and wiping every task.
 
 ### Task fields
@@ -531,4 +533,8 @@ mdit-py-plugins>=0.4
 - File writes call `path.parent.mkdir(parents=True, exist_ok=True)` before writing to auto-create subdirectories.
 - `pages/index.md` is the home page and must always exist. Do not allow it to be deleted or renamed via the UI.
 - All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `pages/` before writing (prevent path traversal — use `Path.resolve()` and `relative_to()`).
-- When a page is renamed, all other `.md` files are scanned for wikilinks referencing the old slug and updated to the new slug. Match both `[[Old Name]]` and `[[Old Name|Label]]` forms by comparing the slugified page name inside the brackets against the old slug. Replace only the page-name portion, preserving any `|Label` suffix.
+- When a page is renamed, every link to it is re-pointed (`rewrite_page_links()` via `update_references()`), so nothing that backlinks count is left broken:
+  - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
+  - Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`). Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory. Images are never touched.
+  - Links inside fenced code and inline code are left alone (`_mask_code`).
+  - Deck tasks (active and completed): the `page` field and links in titles/descriptions (`deck.rename_page_refs()`). Changed deck files are written without their own commit and included in the rename commit.

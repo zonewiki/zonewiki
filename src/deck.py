@@ -224,10 +224,59 @@ def _write_both(active: list[dict], completed: list[dict], message: str = "Updat
         _git_commit_fn([DECK_FILE, completed_file], message)
 
 
+def _json_object() -> dict:
+    """The request's JSON body, which must be an object (else 400)."""
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        abort(400, description="Request body must be a JSON object")
+    return data
+
+
+def _as_str(val, name: str) -> str:
+    if not isinstance(val, str):
+        abort(400, description=f"{name} must be a string")
+    return val
+
+
+def _as_int(val, name: str) -> int:
+    """int() that accepts numbers and numeric strings, else 400."""
+    if isinstance(val, bool):
+        abort(400, description=f"{name} must be an integer")
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        abort(400, description=f"{name} must be an integer")
+
+
+def _as_str_list(val, name: str) -> list[str]:
+    """A list of strings; a single string is split on commas."""
+    if isinstance(val, str):
+        val = val.split(",")
+    if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+        abort(400, description=f"{name} must be a list of strings")
+    return [v.strip() for v in val if v.strip()]
+
+
+def _id_list(data: dict) -> list[str]:
+    """The body's `ids` — a list of task-id strings (else 400)."""
+    ids = data.get("ids", [])
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        abort(400, description="ids must be a list of task ids")
+    return ids
+
+
+def _as_order(val, name: str):
+    if val is not None and (isinstance(val, bool) or not isinstance(val, (int, float))):
+        abort(400, description=f"{name} must be a number")
+    return val
+
+
 def _validate_date(val: str | None) -> str | None:
     """Return val if it's a valid YYYY-MM-DD string or None, else raise 400."""
     if not val:
         return None
+    if not isinstance(val, str):
+        abort(400, description="Invalid date format, expected YYYY-MM-DD")
     try:
         datetime.strptime(val, "%Y-%m-%d")
         return val
@@ -626,6 +675,32 @@ WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
 _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
 
 
+def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
+    """Follow a page rename in the deck: re-point each task's `page` field and
+    rewrite links in titles/descriptions (via rewrite_text, the server's link
+    rewriter). Writes only files that changed and does not commit — returns
+    their paths so the caller includes them in the rename commit."""
+    with _LOCK:
+        changed = []
+        for path, tasks in ((DECK_FILE, _read_deck_strict()),
+                            (_completed_path(), _read_completed_strict())):
+            dirty = False
+            for t in tasks:
+                if t.get("page") == old_slug:
+                    t["page"] = new_slug
+                    dirty = True
+                for field in ("title", "description"):
+                    if t.get(field):
+                        new_text = rewrite_text(t[field])
+                        if new_text != t[field]:
+                            t[field] = new_text
+                            dirty = True
+            if dirty:
+                _atomic_write(path, json.dumps(tasks, indent=2, ensure_ascii=False))
+                changed.append(path)
+        return changed
+
+
 def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
     """Return deck tasks whose title or description contain a wikilink to slug."""
     results = []
@@ -786,9 +861,9 @@ def _reconcile_blocking(task_id: str, blocking_ids: list, active: list[dict]) ->
 @bp.post("/api/deck")
 @_locked
 def api_create_deck_item():
-    data = request.get_json(force=True)
-    if not data.get("title", "").strip():
-        abort(400)
+    data = _json_object()
+    if not _as_str(data.get("title", ""), "title").strip():
+        abort(400, description="Title cannot be empty")
     task = _new_task()
     _apply_task_fields(task, data)
     active = _read_deck_strict()
@@ -804,25 +879,25 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     """Apply non-completion field updates from request data onto task in place."""
     old_due_date = task.get("due_date")
     if "title" in data:
-        title = data["title"].strip()
+        title = _as_str(data["title"], "title").strip()
         if not title:
             abort(400, description="Title cannot be empty")
         task["title"] = title
     if "description" in data:
-        task["description"] = data["description"].strip()
+        task["description"] = _as_str(data["description"] or "", "description").strip()
     if "tags" in data:
-        task["tags"] = [t.strip() for t in data["tags"] if t.strip()]
+        task["tags"] = _as_str_list(data["tags"] or [], "tags")
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
     if "defer_days" in data:
         dd = data["defer_days"]
-        task["defer_days"] = max(0, int(dd)) if dd is not None else None
+        task["defer_days"] = max(0, _as_int(dd, "defer_days")) if dd is not None else None
     if "sort_order" in data:
-        task["sort_order"] = data["sort_order"]
+        task["sort_order"] = _as_order(data["sort_order"], "sort_order")
     if "focus_order" in data:
-        task["focus_order"] = data["focus_order"]
+        task["focus_order"] = _as_order(data["focus_order"], "focus_order")
     if "page" in data:
-        task["page"] = (data["page"] or "").strip() or None
+        task["page"] = _as_str(data["page"] or "", "page").strip() or None
     old_focus_date = task.get("focus_date")
     old_rec = task.get("recurrence") or {}
     if "focus_date" in data:
@@ -840,16 +915,13 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     if (old_focus_date is None) != (task.get("focus_date") is None):
         task["focus_order"] = None
     if "blocked_by" in data:
-        blocked = data["blocked_by"]
-        if isinstance(blocked, str):
-            blocked = [b.strip() for b in blocked.split(",") if b.strip()]
-        task["blocked_by"] = blocked if blocked else []
+        task["blocked_by"] = _as_str_list(data["blocked_by"] or [], "blocked_by")
     if "rec_type" in data:
         rec_type = data["rec_type"]
         if rec_type in ("daily", "weekly", "monthly", "yearly"):
             task["recurrence"] = {
                 "type": rec_type,
-                "interval": max(1, int(data.get("rec_interval", 1))),
+                "interval": max(1, _as_int(data.get("rec_interval", 1), "rec_interval")),
                 "from": "completion" if data.get("rec_from") == "completion" else "due",
                 "anchor": "plan" if data.get("rec_anchor") == "plan" else "due",
             }
@@ -870,7 +942,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
 @bp.put("/api/deck/<task_id>")
 @_locked
 def api_update_deck_item(task_id):
-    data = request.get_json(force=True)
+    data = _json_object()
     active = _read_deck_strict()
     completed_list = _read_completed_strict()
 
@@ -964,8 +1036,8 @@ def api_delete_deck_item(task_id):
 @bp.post("/api/deck/batch-delete")
 @_locked
 def api_batch_delete_deck():
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
+    data = _json_object()
+    ids = _id_list(data)
     if not ids or not isinstance(ids, list):
         abort(400)
     id_set = set(ids)
@@ -1012,7 +1084,8 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
         task["recurrence"] = {
             "type": rec["type"],
-            "interval": max(1, int(rec.get("interval") or 1)),
+            "interval": rec["interval"] if isinstance(rec.get("interval"), int)
+                        and not isinstance(rec["interval"], bool) and rec["interval"] >= 1 else 1,
             "from": "completion" if rec.get("from") == "completion" else "due",
             "anchor": "plan" if rec.get("anchor") == "plan" else "due",
         }
@@ -1029,7 +1102,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
 def api_restore_deck_items():
     """Re-insert full task snapshots (undo after delete). Snapshots keep their
     original id/created_at/etc.; ids that already exist are skipped."""
-    data = request.get_json(force=True)
+    data = _json_object()
     snaps = data.get("tasks", [])
     if not snaps or not isinstance(snaps, list):
         abort(400)
@@ -1057,8 +1130,8 @@ def api_restore_deck_items():
 @bp.post("/api/deck/batch-complete")
 @_locked
 def api_batch_complete_deck():
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
+    data = _json_object()
+    ids = _id_list(data)
     mark_completed = data.get("completed", True)
     if not ids or not isinstance(ids, list):
         abort(400)
@@ -1094,9 +1167,12 @@ def api_batch_complete_deck():
 @bp.post("/api/deck/reorder")
 @_locked
 def api_reorder_deck():
-    data = request.get_json(force=True)
+    data = _json_object()
     order = data.get("order", [])
     updates = data.get("updates", [])
+    if not isinstance(order, list) or not isinstance(updates, list) \
+            or not all(isinstance(u, dict) for u in updates):
+        abort(400, description="order must be a list of ids, updates a list of objects")
     if not order and not updates:
         abort(400)
     field = data.get("field", "sort_order")
@@ -1120,10 +1196,12 @@ def api_reorder_deck():
 @_locked
 def api_batch_tag_deck():
     """Add or remove tags from multiple deck items."""
-    data = request.get_json(force=True)
-    ids = data.get("ids", [])
-    add_tags = [t.strip() for t in data.get("add", []) if t.strip()]
-    remove_tags = [t.strip().lower() for t in data.get("remove", []) if t.strip()]
+    data = _json_object()
+    ids = _id_list(data)
+    if not isinstance(data.get("add", []), list) or not isinstance(data.get("remove", []), list):
+        abort(400, description="add/remove must be lists of strings")
+    add_tags = _as_str_list(data.get("add", []), "add")
+    remove_tags = [t.lower() for t in _as_str_list(data.get("remove", []), "remove")]
     if not ids or not isinstance(ids, list):
         abort(400)
     if not add_tags and not remove_tags:
