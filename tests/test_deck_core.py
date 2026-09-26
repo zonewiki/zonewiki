@@ -157,6 +157,50 @@ class TestBoardBuckets:
         assert "overdue" not in by_key  # display-only, so still omitted when empty
 
 
+class TestFilterField:
+    """The deck's single filter field: text plus #tag words."""
+
+    @pytest.mark.parametrize("q,expected", [
+        ("", {"text": "", "tagGroups": []}),
+        ("fix bug", {"text": "fix bug", "tagGroups": []}),
+        ("#Work", {"text": "", "tagGroups": [["work"]]}),
+        ("fix  #work #home bug", {"text": "fix bug", "tagGroups": [["work"], ["home"]]}),
+        ("#a|b", {"text": "", "tagGroups": [["a", "b"]]}),
+        ("#a|#b", {"text": "", "tagGroups": [["a", "b"]]}),
+        ("#", {"text": "", "tagGroups": []}),            # a bare '#' while typing
+    ])
+    def test_parse(self, q, expected):
+        assert run_core(f"DeckCore.parseFilter({json.dumps(q)})") == expected
+
+    TASKS = [
+        {"id": "1", "title": "Fix bug", "tags": ["work"]},
+        {"id": "2", "title": "Buy milk", "description": "and bread", "tags": ["home"]},
+        {"id": "3", "title": "Fix fence", "tags": ["home", "work"]},
+    ]
+
+    @pytest.mark.parametrize("q,ids", [
+        ("fix", ["1", "3"]),
+        ("bread", ["2"]),                 # description counts
+        ("#work", ["1", "3"]),
+        ("#work #home", ["3"]),           # separate words: all
+        ("#work|home", ["1", "2", "3"]),  # pipe: any
+        ("fix #home", ["3"]),
+        ("#WORK", ["1", "3"]),
+        ("#nope", []),
+    ])
+    def test_matches(self, q, ids):
+        expr = (f"{json.dumps(self.TASKS)}.filter(t => DeckCore.matchesFilter(t, "
+                f"DeckCore.parseFilter({json.dumps(q)}))).map(t => t.id)")
+        assert run_core(expr) == ids
+
+    @pytest.mark.parametrize("raw,q", [
+        ("", ""), ("work", "#work"), ("a, b", "#a #b"), ("a|b", "#a|b"),
+    ])
+    def test_tag_param_to_query(self, raw, q):
+        # [[deck tag=…]] keeps its old syntax: comma = all, pipe = any.
+        assert run_core(f"DeckCore.tagParamToQuery({json.dumps(raw)})") == q
+
+
 class TestTagMatchScore:
     def test_prefix_beats_substring_beats_subsequence(self):
         assert run_core("DeckCore.tagMatchScore('wo', 'work')") == 2

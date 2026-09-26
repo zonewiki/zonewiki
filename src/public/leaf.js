@@ -445,6 +445,11 @@ function openNewPage() {
   newPageInput.focus();
 }
 
+// ── Phone search button ───────────────────────────────────────────────────────
+// The touch stand-in for Ctrl+P.
+
+document.querySelector('.mobile-search')?.addEventListener('click', openSearchModal);
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 const shortcutsModal = document.getElementById('shortcuts-modal');
@@ -1311,6 +1316,25 @@ if (renameToggle && renameBar) {
   });
 }
 
+// ── Editor ⋯ menu (phones) ───────────────────────────────────────────────────
+// Holds Rename…/Delete on small screens; any click closes it again (after the
+// item's own handler has run).
+
+const editorMoreBtn = document.getElementById('editor-more-btn');
+const editorMore = document.getElementById('editor-more');
+if (editorMoreBtn && editorMore) {
+  const setOpen = open => {
+    editorMore.classList.toggle('open', open);
+    editorMoreBtn.setAttribute('aria-expanded', String(open));
+  };
+  editorMoreBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    setOpen(!editorMore.classList.contains('open'));
+  });
+  document.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+}
+
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1375,13 +1399,54 @@ document.addEventListener('change', e => {
       textarea.scrollTop = scrollTop;
     }
   } else {
-    // Page view: persist toggle to server
-    const slug = window.location.pathname.replace(/^\/page\//, '');
-    const data = new FormData();
-    data.append('idx', idx);
-    fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data });
+    // Page view: persist the toggle, with an undo toast — a mis-tap on a
+    // phone otherwise edits the file silently. Undo is a second toggle.
+    const cb = e.target;
+    const post = () => toggleCheckboxOnServer(idx).then(ok => {
+      if (!ok) { cb.checked = !cb.checked; showCheckboxToast('Could not save the checkbox'); }
+    });
+    post();
+    const text = (cb.closest('li')?.textContent || '').trim().split('\n')[0];
+    const label = text.length > 40 ? text.slice(0, 39) + '…' : text;
+    showCheckboxToast(`${cb.checked ? 'Checked' : 'Unchecked'} “${label}”`, () => {
+      cb.checked = !cb.checked;
+      post();
+    });
   }
 });
+
+// Toggles are chained, so an undo can never overtake the toggle it reverts
+// (the server flips whatever state the file has when the request arrives).
+let checkboxQueue = Promise.resolve();
+function toggleCheckboxOnServer(idx) {
+  const slug = window.location.pathname.replace(/^\/page\//, '');
+  const data = new FormData();
+  data.append('idx', idx);
+  checkboxQueue = checkboxQueue
+    .then(() => fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data }))
+    .then(r => r.ok, () => false);
+  return checkboxQueue;
+}
+
+let checkboxToast = null;
+function showCheckboxToast(msg, undo) {
+  checkboxToast?.remove();
+  const el = document.createElement('div');
+  el.className = 'raw-toast task-undo-toast';
+  const span = document.createElement('span');
+  span.textContent = msg;
+  el.appendChild(span);
+  if (undo) {
+    const btn = document.createElement('button');
+    btn.className = 'btn task-undo-btn';
+    btn.textContent = 'Undo';
+    btn.addEventListener('click', () => { el.remove(); undo(); });
+    el.appendChild(btn);
+  }
+  document.body.appendChild(el);
+  checkboxToast = el;
+  setTimeout(() => el.remove(), 6000);
+}
 
 // ── Presentation mode ─────────────────────────────────────────────────────────
 

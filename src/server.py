@@ -235,9 +235,11 @@ def _diff_to_html(diff: str) -> str:
     return ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
 
 
-def _commit_form_html(filepath: str, title: str, on_success: str, *, small: bool = False) -> str:
-    """Commit button form wired up by leaf.js (posts to /api/commit-file)."""
-    btn_cls = "btn btn-primary btn-sm" if small else "btn btn-primary"
+def _commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool = False) -> str:
+    """Commit button form wired up by leaf.js (posts to /api/commit-file).
+    `inline` renders it as a link-styled word that sits at the end of the
+    page's "Last changed … — uncommitted" line instead of a separate button."""
+    btn_cls = "commit-link" if inline else "btn btn-primary"
     return (
         f'<form class="commit-file-form" style="display:inline"'
         f' data-filepath="{html.escape(filepath)}"'
@@ -1134,7 +1136,7 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
             f'<div class="page-meta">Last changed {html.escape(mtime_dt.strftime("%Y-%m-%d"))} '
             f'({html.escape(relative_time(mtime_dt))}) — uncommitted</div>'
         )
-        return last_modified, _commit_form_html(filepath, title, "reload", small=True)
+        return last_modified, _commit_form_html(filepath, title, "reload", inline=True)
     entries = git_log(path, max_count=1)
     if entries:
         e = entries[0]
@@ -1142,7 +1144,21 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
     return "", ""
 
 
-def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_head: str | None = None) -> str:
+_SVG = ('<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+        'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
+
+# Phone search button. Search is otherwise opened with Ctrl+P, which a phone
+# doesn't have; leaf.js wires this to the same openSearchModal(). Shown at
+# ≤640px only, see style.css.
+MOBILE_SEARCH = (f'<button type="button" class="mobile-search" aria-label="Search" title="Search">{_SVG}'
+                 '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg></button>')
+
+
+def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
+          extra_head: str | None = None, search_button: bool = True) -> str:
+    """Wrap body in the page skeleton. `search_button=False` drops the phone
+    search button (the editor has its own toolbar; the login page has nothing
+    to search)."""
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     safe_title = html.escape(title)
@@ -1263,6 +1279,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False, extra_
   <main>
     {body}
   </main>
+  {MOBILE_SEARCH if search_button and not editor else ""}
 </body>
 </html>"""
 
@@ -1301,7 +1318,7 @@ def login():
     <button type="submit" class="btn btn-primary">Sign in</button>
   </form>
 </div>"""
-    return shell("Sign in", body)
+    return shell("Sign in", body, search_button=False)
 
 
 @app.post("/logout")
@@ -1612,6 +1629,11 @@ def edit_page(slug):
     can_delete = not is_protected(slug) and not is_new
     rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new and section is None else ""
     delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if GIT_ENABLED else ""}">Delete</button>' if can_delete and section is None else ""
+    # Phones: Rename/Delete fold into a ⋯ menu so Preview and Done keep the
+    # toolbar; on wider screens .editor-more is display:contents (inline).
+    more_btn = ('<button type="button" class="btn mobile-only" id="editor-more-btn" aria-haspopup="true" '
+                'aria-expanded="false" aria-controls="editor-more" title="More actions">⋯</button>'
+                if rename_btn or delete_btn else "")
     delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete and section is None else ""
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
@@ -1647,8 +1669,8 @@ def edit_page(slug):
       <span id="save-dot" class="save-dot">●</span>
       <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
       <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
-      {rename_btn}
-      {delete_btn}
+      {more_btn}
+      <span class="editor-more" id="editor-more">{rename_btn}{delete_btn}</span>
     </div>
     {delete_form}
     {rename_bar}

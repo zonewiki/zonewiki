@@ -560,8 +560,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
       <button type="button" role="tab" data-filter="completed" aria-selected="false">Completed</button>
     </div>
     <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{sfx}" placeholder="Search…" autocomplete="off">
-      <input type="text" id="task-filter-tag{sfx}" placeholder="tag…" title="Comma = all tags (AND) · pipe a|b = any tag (OR)" autocomplete="off">
+      <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
       <select id="task-sort{sfx}">
         <option value="manual">Manual order</option>
         <option value="created_at">Created</option>

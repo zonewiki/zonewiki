@@ -339,6 +339,11 @@ class TestPageViewLink:
         assert 'data-init-page="proj"' in body
         assert 'data-init-filter="due"' in body
 
+    def test_embed_has_single_filter_field(self, wiki_dir):
+        html = server.render_md("[[deck]]\n")
+        assert 'id="task-filter-search"' in html
+        assert "task-filter-tag" not in html
+
     def test_embed_contains_start_date_field(self, wiki_dir):
         """Edit modal has a Start (start_date) field and an unstored
         days-before-due helper; the old lead/anchor fields are gone."""

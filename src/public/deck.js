@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isUnplanned, isFocus, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isUnplanned, isFocus, tagMatchScore, parseFilter, matchesFilter, tagParamToQuery } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -42,7 +42,6 @@
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
   const addBtn = document.getElementById('task-add-btn' + sfx);
   const sortSelect = document.getElementById('task-sort' + sfx);
-  const filterTag = document.getElementById('task-filter-tag' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
   const unplannedEl = document.getElementById('task-unplanned' + sfx);
   const unplannedWrap = document.getElementById('task-unplanned-wrap' + sfx);
@@ -130,10 +129,22 @@
   // setupDragAndDrop on each render (null where the view has no dragging):
   //   target(el) → the element under the finger that would take the drop, or null
   //   drop(target) → perform the drop (draggedId is set while it runs)
-  // Moving before the press completes is a scroll, and cancels the pick-up.
+  // Moving before the press completes is a scroll, and cancels the pick-up —
+  // unless the move is mostly sideways on an open task: that is a swipe.
+  // Swipe right past the threshold completes the task (the checkbox's grace
+  // period, so a tap on the checkbox still cancels); swipe left starts it
+  // today (with an undo toast). Swipes work in every view, drags only where
+  // touchDrop is set.
   const LONG_PRESS_MS = 350;
   let touchDrop = null;
-  let touchDrag = null;  // { item, x, y, timer, active, ghost, grabY, target, raf }
+  let touchDrag = null;  // { item, x, y, timer, active, swiping, canSwipe, ghost, grabY, target, raf }
+  function setSwipe(dx) {
+    const item = touchDrag.item;
+    const threshold = Math.min(110, item.offsetWidth * 0.3);
+    item.style.transform = `translateX(${dx}px)`;
+    item.dataset.swipe = dx > 0 ? 'complete' : 'start';
+    item.classList.toggle('task-swipe-armed', Math.abs(dx) >= threshold);
+  }
   function touchDropTarget(x, y) {
     const el = document.elementFromPoint(x, y);
     return el && listEl.contains(el) && touchDrop ? touchDrop.target(el) : null;
@@ -175,6 +186,16 @@
     touchDrag = null;
     if (!t) return;
     clearTimeout(t.timer);
+    if (t.swiping) {
+      const armed = t.item.classList.contains('task-swipe-armed');
+      const action = t.item.dataset.swipe;
+      t.item.style.transform = '';
+      t.item.classList.remove('task-swipe-armed');
+      delete t.item.dataset.swipe;
+      if (drop && armed && action === 'complete') beginComplete(t.item.dataset.id, t.item);
+      if (drop && armed && action === 'start') setStart(t.item.dataset.id, todayStr());
+      return;
+    }
     if (!t.active) return;
     cancelAnimationFrame(t.raf);
     t.ghost.remove();
@@ -186,18 +207,35 @@
   }
   listEl.addEventListener('touchstart', e => {
     endTouchDrag(false);
-    if (e.touches.length !== 1 || !touchDrop) return;
-    const item = e.target.closest('.task-item[draggable]');
+    if (e.touches.length !== 1) return;
+    const item = e.target.closest('.task-item');
     if (!item || e.target.closest('input, button, a, .task-clickable-date, .task-inline-input')) return;
+    const canDrag = !!touchDrop && item.matches('[draggable]');
+    const canSwipe = !tasks.find(t => t.id === item.dataset.id)?.completed_at;
+    if (!canDrag && !canSwipe) return;
     const p = e.touches[0];
-    touchDrag = { item, x: p.clientX, y: p.clientY, active: false, target: null,
-                  timer: setTimeout(startTouchDrag, LONG_PRESS_MS) };
+    touchDrag = { item, x: p.clientX, y: p.clientY, active: false, swiping: false, canSwipe,
+                  target: null, timer: canDrag ? setTimeout(startTouchDrag, LONG_PRESS_MS) : null };
   }, { passive: true });
   listEl.addEventListener('touchmove', e => {
     if (!touchDrag) return;
     const p = e.touches[0];
+    const dx = p.clientX - touchDrag.x, dy = p.clientY - touchDrag.y;
+    if (touchDrag.swiping) {
+      e.preventDefault();
+      setSwipe(dx);
+      return;
+    }
     if (!touchDrag.active) {
-      if (Math.hypot(p.clientX - touchDrag.x, p.clientY - touchDrag.y) > 10) endTouchDrag(false);
+      const sideways = Math.abs(dx) > 1.5 * Math.abs(dy);
+      if (touchDrag.canSwipe && sideways && Math.abs(dx) > 10) {
+        clearTimeout(touchDrag.timer);
+        touchDrag.swiping = true;
+        e.preventDefault();
+        setSwipe(dx);
+      } else if (!sideways && Math.hypot(dx, dy) > 10) {
+        endTouchDrag(false);  // a vertical move: the page scrolls
+      }
       return;
     }
     e.preventDefault();  // the finger is carrying a card, not scrolling the page
@@ -207,8 +245,8 @@
     setTouchTarget(touchDropTarget(p.clientX, p.clientY));
   }, { passive: false });
   listEl.addEventListener('touchend', e => {
-    // A finished drag must not also count as a tap (which opens the editor).
-    if (touchDrag?.active) e.preventDefault();
+    // A finished drag or swipe must not also count as a tap (which opens the editor).
+    if (touchDrag?.active || touchDrag?.swiping) e.preventDefault();
     endTouchDrag(true);
   });
   listEl.addEventListener('touchcancel', () => endTouchDrag(false));
@@ -601,7 +639,7 @@
   // tasks hidden by the filter would keep their old sort_order and collide
   // with the freshly-renumbered ones once the filter is cleared.
   function hasNarrowingFilter() {
-    return !!(filterTag.value.trim() || filterSearch?.value.trim() || initPage);
+    return !!(filterSearch?.value.trim() || initPage);
   }
 
   // Assign sort_order values to `groupIds` (already spliced into `ids` at
@@ -665,18 +703,15 @@
     return dateToStr(new Date());
   }
 
-  function filterTasks() {
+  // `query` defaults to the filter field; the tag autocomplete passes the
+  // field minus the word being typed.
+  function filterTasks(query = filterSearch?.value || '') {
     const today = todayStr();
     let filtered = tasks;
 
-    // Text search filter (title + description)
-    const searchTerm = (filterSearch?.value || '').trim().toLowerCase();
-    if (searchTerm) {
-      filtered = filtered.filter(t =>
-        t.title.toLowerCase().includes(searchTerm) ||
-        (t.description || '').toLowerCase().includes(searchTerm)
-      );
-    }
+    // Filter field: text search plus '#tag' words (DeckCore.parseFilter).
+    const f = parseFilter(query);
+    if (f.text || f.tagGroups.length) filtered = filtered.filter(t => matchesFilter(t, f));
 
     // Tab filter
     if (activeFilter === 'focus') {
@@ -694,23 +729,6 @@
       // triage queue; giving a task a start date is what removes it from here.
       filtered = filtered.filter(t => !t.completed_at);
       if (unplannedOnly) filtered = filtered.filter(isUnplanned);
-    }
-
-    // Tag filter. Comma-separated = AND (all must match) — the narrowing
-    // default; pipe-separated = OR (any match). e.g. "a,b" needs both tags,
-    // "a|b" needs either.
-    const rawTag = filterTag.value.trim().toLowerCase();
-    if (rawTag) {
-      const orMode = rawTag.includes('|');
-      const terms = rawTag.split(orMode ? '|' : ',').map(s => s.trim()).filter(Boolean);
-      if (terms.length) {
-        filtered = filtered.filter(t => {
-          const tags = (t.tags || []).map(tg => tg.toLowerCase());
-          return orMode
-            ? terms.some(term => tags.includes(term))
-            : terms.every(term => tags.includes(term));
-        });
-      }
     }
 
     // Page filter (set via URL param, stored in initPage)
@@ -1234,14 +1252,14 @@
           ? `<span class="board-day-over-icon" title="Over capacity (${s.tasks.length}/${CAPACITY})">⚠</span>`
           : '';
         const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
-        const header = `<li class="board-day-divider${overCls}"${dropAttr}>` +
+        const emptyCls = s.tasks.length ? '' : ' board-day--empty';
+        const header = `<li class="board-day-divider${overCls}${emptyCls}"${dropAttr}>` +
           `<span class="board-day-label">${esc(s.label)}</span>` +
           `${overIcon}<span class="board-day-count">${s.tasks.length}</span></li>`;
-        // Empty droppable days need a real drop area — a bare divider is too
-        // thin to hit. Give them a placeholder that acts as the drop target.
-        const body = s.tasks.length
-          ? s.tasks.map(t => taskHTML(t, true, 'board-item')).join('')
-          : (s.droppable ? `<li class="board-day-empty"${dropAttr}></li>` : '');
+        // An empty section is just its header row, which is itself the drop
+        // target (styled tall enough to hit). Nothing grows when a drag
+        // starts, so the section you aim at never moves under the pointer.
+        const body = s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
         return header + body;
       }).join('');
       listEl.innerHTML = html;
@@ -1619,17 +1637,6 @@
   }
 
   sortSelect.addEventListener('change', render);
-  // Tag filter: only apply on Enter, blur, or autocomplete selection (not every keystroke)
-  filterTag.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !tagAcEl) {
-      e.preventDefault();
-      render();
-    } else if (e.key === 'Escape' && !tagAcEl) {
-      e.preventDefault();
-      filterTag.blur();
-    }
-  });
-  filterTag.addEventListener('blur', () => { setTimeout(() => { render(); }, 160); });
   if (filterSearch) {
     // Debounced — render() rebuilds the whole list, too heavy per keystroke.
     let searchTimer = null;
@@ -1638,7 +1645,7 @@
       searchTimer = setTimeout(render, 150);
     });
     filterSearch.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
+      if (e.key === 'Escape' && !tagAcEl) { e.preventDefault(); filterSearch.blur(); }
     });
   }
 
@@ -1653,12 +1660,33 @@
     tagAcIndex = -1;
   }
 
-  function selectTagAcItem(text) {
-    const val = filterTag.value;
-    const commaIdx = val.lastIndexOf(',');
-    filterTag.value = (commaIdx >= 0 ? val.slice(0, commaIdx + 1) + ' ' : '') + text;
+  // The '#tag' word under the caret in the filter field, or null. Inside an
+  // OR word (#a|b) only the part after the last pipe is being completed.
+  function currentTagWord() {
+    const val = filterSearch.value;
+    const caret = filterSearch.selectionStart ?? val.length;
+    const start = val.lastIndexOf(' ', caret - 1) + 1;
+    let end = val.indexOf(' ', caret);
+    if (end < 0) end = val.length;
+    const word = val.slice(start, end);
+    if (!word.startsWith('#')) return null;
+    const pipe = word.lastIndexOf('|', caret - start - 1);
+    const partStart = pipe >= 0 ? start + pipe + 1 : start;
+    return { start, end, partStart, partial: val.slice(partStart, end).replace(/^#/, '') };
+  }
+
+  function selectTagAcItem(tag) {
+    const w = currentTagWord();
+    if (!w) return;
+    const val = filterSearch.value;
+    const lead = w.partStart === w.start ? '#' : '';
+    const after = val.slice(w.end);
+    const insert = lead + tag + (after.startsWith(' ') ? '' : ' ');
+    filterSearch.value = val.slice(0, w.partStart) + insert + after;
+    const caret = w.partStart + insert.length;
+    filterSearch.focus();
+    filterSearch.setSelectionRange(caret, caret);
     render();
-    filterTag.focus();
   }
 
   function showTagAc(matches) {
@@ -1666,14 +1694,14 @@
     if (!matches.length) return;
     tagAcEl = document.createElement('div');
     tagAcEl.className = 'tag-ac-dropdown';
-    matches.forEach((tag, i) => {
+    matches.forEach(tag => {
       const item = document.createElement('div');
       item.className = 'tag-ac-item';
       item.textContent = '#' + tag;
       item.addEventListener('mousedown', e => { e.preventDefault(); selectTagAcItem(tag); hideTagAc(); });
       tagAcEl.appendChild(item);
     });
-    const rect = filterTag.getBoundingClientRect();
+    const rect = filterSearch.getBoundingClientRect();
     tagAcEl.style.top  = (rect.bottom + window.scrollY) + 'px';
     tagAcEl.style.left = rect.left + 'px';
     tagAcEl.style.width = rect.width + 'px';
@@ -1687,7 +1715,7 @@
     });
   }
 
-  filterTag.addEventListener('keydown', e => {
+  filterSearch.addEventListener('keydown', e => {
     if (!tagAcEl) return;
     const items = tagAcEl.querySelectorAll('.tag-ac-item');
     if (e.key === 'ArrowDown') {
@@ -1703,54 +1731,45 @@
       selectTagAcItem(items[tagAcIndex].textContent.replace(/^#/, ''));
       hideTagAc();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       hideTagAc();
-      filterTag.blur();
     }
   });
 
-  function computeTagMatches() {
-    const val = filterTag.value;
-    const commaIdx = val.lastIndexOf(',');
-    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim().replace(/^#/, '');
-
-    // Collect tags only from tasks visible under the current tab + committed tag filters.
-    const committedVal = commaIdx >= 0 ? val.slice(0, commaIdx) : '';
-    const origVal = filterTag.value;
-    filterTag.value = committedVal;
-    const visibleTasks = filterTasks();
-    filterTag.value = origVal;
-
-    const committed = committedVal.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    const available = [...new Set(visibleTasks.flatMap(t => t.tags || []))].sort();
-
-    if (!partial) {
-      return available.filter(tag => !committed.includes(tag.toLowerCase())).slice(0, 12);
-    }
+  // Suggest tags of the tasks the other tag words leave visible in this tab,
+  // minus the ones already in the filter. Free text is ignored: it is usually
+  // still being typed ("some text #ta…") and would otherwise hide every tag.
+  function computeTagMatches(w) {
+    const val = filterSearch.value;
+    const rest = val.slice(0, w.start) + val.slice(w.end);
+    const otherTags = rest.split(/\s+/).filter(word => word.startsWith('#')).join(' ');
+    const visibleTasks = filterTasks(otherTags);
+    const used = parseFilter(rest).tagGroups.flat();
+    const available = [...new Set(visibleTasks.flatMap(t => t.tags || []))]
+      .filter(tag => !used.includes(tag.toLowerCase())).sort();
+    if (!w.partial) return available.slice(0, 12);
     return available
-      .map(tag => ({ tag, score: tagMatchScore(partial, tag) }))
-      .filter(({ tag, score }) => score >= 0 && !committed.includes(tag.toLowerCase()))
+      .map(tag => ({ tag, score: tagMatchScore(w.partial, tag) }))
+      .filter(({ score }) => score >= 0)
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .map(({ tag }) => tag)
       .slice(0, 8);
   }
 
   function maybeShowTagAc() {
-    const val = filterTag.value;
-    const commaIdx = val.lastIndexOf(',');
-    // Current segment, with an optional leading '#' stripped. Suggest on any
-    // non-empty partial (typing '#' first is optional), or on an empty focused
-    // field so the full tag menu is one keystroke away.
-    const partial = (commaIdx >= 0 ? val.slice(commaIdx + 1) : val).trim().replace(/^#/, '');
-    if (partial || document.activeElement === filterTag) {
-      showTagAc(computeTagMatches());
-    } else {
-      hideTagAc();
-    }
+    const w = document.activeElement === filterSearch ? currentTagWord() : null;
+    if (w) showTagAc(computeTagMatches(w));
+    else hideTagAc();
   }
-  filterTag.addEventListener('input', maybeShowTagAc);
-  filterTag.addEventListener('focus', maybeShowTagAc);
+  filterSearch.addEventListener('input', maybeShowTagAc);
+  filterSearch.addEventListener('click', maybeShowTagAc);
+  filterSearch.addEventListener('blur', () => setTimeout(hideTagAc, 150));
 
-  filterTag.addEventListener('blur', () => setTimeout(hideTagAc, 150));
+  // A new task starts with the tags the filter requires (single-tag words;
+  // an OR word doesn't say which one), so it shows up in the current view.
+  function filterDefaultTags() {
+    return parseFilter(filterSearch?.value).tagGroups.filter(g => g.length === 1).map(g => g[0]).join(', ');
+  }
 
   // ── Edit modal tag autocomplete ─────────────────────────────────────────────
 
@@ -1850,7 +1869,7 @@
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
-    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
+    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterDefaultTags());
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
       createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
@@ -2255,7 +2274,7 @@
     if (modal.open || deleteModal.open || document.querySelector('dialog[open].scratch-modal')) return;
     const focus = document.activeElement;
 
-    // '/' focuses search, '#' focuses tag filter — even from non-input context
+    // '/' focuses the filter field; '#' focuses it and starts a tag word
     if (e.key === '/' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
       e.preventDefault();
       filterSearch?.focus();
@@ -2263,7 +2282,13 @@
     }
     if (e.key === '#' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
       e.preventDefault();
-      if (filterTag) { filterTag.focus(); filterTag.value = '#'; filterTag.dispatchEvent(new Event('input')); }
+      if (filterSearch) {
+        const v = filterSearch.value.trimEnd();
+        filterSearch.value = v ? v + ' #' : '#';
+        filterSearch.focus();
+        filterSearch.setSelectionRange(filterSearch.value.length, filterSearch.value.length);
+        filterSearch.dispatchEvent(new Event('input'));
+      }
       return;
     }
 
@@ -2391,9 +2416,9 @@
   // ── Init ───────────────────────────────────────────────────────────────────
 
   // Apply URL-param pre-filtering
-  if (initTag && filterTag) filterTag.value = initTag;
+  // [[deck tag=…]] / ?tag= and ?search= all land in the one filter field.
   const initSearch = urlParams.get('search') || '';
-  if (initSearch && filterSearch) filterSearch.value = initSearch;
+  if (filterSearch) filterSearch.value = [tagParamToQuery(initTag), initSearch].filter(Boolean).join(' ');
   // Precedence: URL ?filter= > embed filter (always wins when specified) >
   // tab remembered this session > All default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the

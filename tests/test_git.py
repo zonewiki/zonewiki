@@ -253,6 +253,9 @@ class TestHistory:
         html = client.get("/page/p", headers=HOST).get_data(as_text=True)
         assert "— uncommitted" in html
         assert 'data-filepath="p.md"' in html
+        # Commit is one more word on the meta line, not a button row of its own.
+        meta = html.split('class="page-meta-right"')[1].split("</div></div>")[0]
+        assert 'class="commit-link"' in meta and "btn-primary" not in meta
 
 
 class TestRevision:
