@@ -171,6 +171,11 @@ Every page view includes:
 - `highlight.js` auto-highlights fenced code blocks client-side after load.
 - The shared shell renders the product brand as `Leaf`, with a small green inline SVG leaf logo in the breadcrumb home link.
 
+### Autolinks and callouts
+
+- **Bare URLs become links** (`gfm_autolink_plugin`): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link. Code spans, fenced code and existing links are untouched. It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
+- **Callouts** (markdown-it's `alerts` option, GitHub/Obsidian syntax): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css` (GitHub colours, a `--alert` variable per kind, dark variants). Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
+
 ### Page header
 
 Every rendered page displays a `<header class="page-header">` above the article content containing:
@@ -289,6 +294,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **Wikilink autocomplete** — typing `[[` opens a dropdown of existing page slugs filtered as you type. Arrow keys navigate, Enter or Tab inserts `[[slug]]`, Escape closes. Slugs are fetched once from `/api/pages` on load.
 - **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
 - **File paste and drag & drop** — pasting a file from the clipboard or dropping files onto the editor textarea uploads them via `POST /api/upload`. Images insert as `![name](url)`, other files as `[name](url)`.
+- **URL paste** (`pasteUrlAsLink` in `leaf.js`, also used by the deck's task notes): pasting a bare URL over selected text makes `[selection](url)`; otherwise a prompt asks for a label (none, or cancel, inserts the plain URL, which autolinks on render). The insert goes through `execCommand('insertText')`, so Ctrl+Z undoes it; it once assigned `textarea.value` and wiped the undo history.
 - **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
 - **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin`; `_enable_task_checkboxes` removes the plugin's `disabled` attribute from those inputs only). Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and returns 204 (400 for a missing/non-integer/negative idx). In page view each toggle shows an **undo toast** ("Checked “…” · Undo"; undo is a second toggle). The toggle requests are chained (`toggleCheckboxOnServer`), so an undo can never overtake the toggle it reverts. In the editor, clicking a checkbox in the live preview edits the textarea via `execCommand('insertText')` (undoable, triggers preview/auto-save).
   - **Index mapping must match the renderer.** Only task-list items count: a list marker (`-`/`*`/`+`/`1.`/`1)`, optionally inside `>` blockquotes) followed by `[ ]`/`[x]`, whitespace and text. Fenced code and a leading frontmatter block are skipped; brackets in prose or later on the same line are not checkboxes. Server: `_TASK_ITEM_RE` / `_task_item_lines()`; client: `TASK_ITEM_RE` / `taskCheckboxOffsets()` in `leaf.js`. Keep the two in sync.

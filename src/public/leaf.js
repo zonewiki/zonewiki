@@ -195,6 +195,30 @@ function askUrlName(url) {
 window.askUrlName = askUrlName;
 closeOnBackdropClick(document.getElementById('url-name-modal'));
 
+// Pasting a bare URL into a markdown textarea (page editor, deck notes):
+// selected text becomes [selection](url); otherwise the name prompt asks for
+// a label (none, or cancel, inserts the plain URL). The insertion goes through
+// execCommand('insertText') so it is one step on the native undo stack and
+// fires `input` (preview, auto-save). Returns false if the paste is no URL.
+async function pasteUrlAsLink(ta, e) {
+  const url = (e.clipboardData.getData('text/plain') || '').trim();
+  if (!/^https?:\/\/\S+$/.test(url)) return false;
+  e.preventDefault();
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  let md;
+  if (start !== end) {
+    md = `[${ta.value.slice(start, end)}](${url})`;
+  } else {
+    const name = await askUrlName(url);
+    md = name ? `[${name}](${url})` : url;
+    ta.focus();                       // the prompt took focus and selection
+    ta.setSelectionRange(start, end);
+  }
+  document.execCommand('insertText', false, md);
+  return true;
+}
+window.pasteUrlAsLink = pasteUrlAsLink;
+
 // Mirror of server-side to_slug(): lowercase, non [a-z0-9_] runs → '-',
 // '/' preserved as a path separator. Keep the two in sync.
 function toSlug(name) {
@@ -767,34 +791,7 @@ if (textarea && previewPane) {
       await uploadFileAtCursor(file, null, false, unique);
       return;
     }
-    // URL paste: wrap selection or ask for display name
-    const text = (e.clipboardData.getData('text/plain') || '').trim();
-    if (/^https?:\/\/\S+$/.test(text)) {
-      e.preventDefault();
-      const start = textarea.selectionStart;
-      const end   = textarea.selectionEnd;
-      if (start !== end) {
-        // Text selected — wrap as [selection](url) without modal
-        const selected = textarea.value.slice(start, end);
-        const md = `[${selected}](${text})`;
-        textarea.value = textarea.value.slice(0, start) + md + textarea.value.slice(end);
-        textarea.selectionStart = textarea.selectionEnd = start + md.length;
-        fetchPreview();
-        return;
-      }
-      // No selection — existing modal behavior
-      const name = await askUrlName(text);
-      if (name === false) {
-        // cancelled — insert raw URL
-        document.execCommand('insertText', false, text);
-        return;
-      }
-      const md = name ? `[${name}](${text})` : text;
-      const pos = textarea.selectionStart;
-      textarea.value = textarea.value.slice(0, pos) + md + textarea.value.slice(textarea.selectionEnd);
-      textarea.selectionStart = textarea.selectionEnd = pos + md.length;
-      fetchPreview();
-    }
+    await pasteUrlAsLink(textarea, e);
   });
 
   textarea.addEventListener('dragover', (e) => { e.preventDefault(); });

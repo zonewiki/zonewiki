@@ -682,3 +682,44 @@ class TestPageTitleIgnoresCode:
 
     def test_heading_does_not_span_lines(self):
         assert page_title("#\nnext line\n", "empty-h") == "Empty H"
+
+
+class TestAutolinks:
+    """Bare URLs become links (GFM autolinks) for text the paste prompt never
+    saw: files edited on disk, unnamed pastes, URLs inside pasted text."""
+
+    def test_bare_url_www_and_email(self, wiki_dir):
+        html = server.render_md("see https://example.com/a?b=1. and www.x.org, or me@x.org\n")
+        assert '<a href="https://example.com/a?b=1">https://example.com/a?b=1</a>.' in html
+        assert '<a href="http://www.x.org">www.x.org</a>' in html
+        assert '<a href="mailto:me@x.org">me@x.org</a>' in html
+
+    def test_code_and_existing_links_untouched(self, wiki_dir):
+        html = server.render_md("`https://code.org` and [named](https://y.org)\n\n```\nhttps://fenced.org\n```\n")
+        assert "<code>https://code.org</code>" in html
+        assert html.count("<a ") == 1 and '<a href="https://y.org">named</a>' in html
+        assert "https://fenced.org" in html and 'href="https://fenced.org"' not in html
+
+    def test_wikilinks_still_work_next_to_urls(self, wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
+        html = server.render_md("[[Garden]] https://example.com\n")
+        assert 'href="/page/garden"' in html
+        assert '<a href="https://example.com">' in html
+
+
+class TestCallouts:
+    @pytest.mark.parametrize("kind", ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"])
+    def test_each_kind(self, wiki_dir, kind):
+        html = server.render_md(f"> [!{kind}]\n> Mind **this**.\n")
+        assert f'<div class="markdown-alert markdown-alert-{kind.lower()}">' in html
+        assert f'<p class="markdown-alert-title">{kind.title()}</p>' in html
+        assert "<strong>this</strong>" in html
+
+    def test_plain_quote_stays_a_quote(self, wiki_dir):
+        html = server.render_md("> just a quote\n")
+        assert "<blockquote>" in html and "markdown-alert" not in html
+
+    def test_wikilink_inside_callout(self, wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
+        html = server.render_md("> [!TIP]\n> See [[Garden]].\n")
+        assert "markdown-alert-tip" in html and 'href="/page/garden"' in html

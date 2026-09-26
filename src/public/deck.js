@@ -1539,39 +1539,9 @@
   if (titleInput) setupNoteAc(titleInput);
   if (descTextarea) setupNoteAc(descTextarea);
 
-  // ── URL paste handling for description textarea ────────────────────────────
-  // askUrlName (the paste-link modal) is shared from leaf.js.
-
-  if (descTextarea) {
-    descTextarea.addEventListener('paste', async (e) => {
-      const text = (e.clipboardData.getData('text/plain') || '').trim();
-      if (!/^https?:\/\/\S+$/.test(text)) return;
-      e.preventDefault();
-      const start = descTextarea.selectionStart;
-      const end = descTextarea.selectionEnd;
-      if (start !== end) {
-        // Text selected — wrap as [selection](url)
-        const selected = descTextarea.value.slice(start, end);
-        const md = `[${selected}](${text})`;
-        descTextarea.value = descTextarea.value.slice(0, start) + md + descTextarea.value.slice(end);
-        descTextarea.selectionStart = descTextarea.selectionEnd = start + md.length;
-        return;
-      }
-      // No selection — ask for display name
-      const name = await window.askUrlName(text);
-      if (name === false) {
-        // Cancelled — insert raw URL
-        const pos = descTextarea.selectionStart;
-        descTextarea.value = descTextarea.value.slice(0, pos) + text + descTextarea.value.slice(pos);
-        descTextarea.selectionStart = descTextarea.selectionEnd = pos + text.length;
-        return;
-      }
-      const md = name ? `[${name}](${text})` : text;
-      const pos = descTextarea.selectionStart;
-      descTextarea.value = descTextarea.value.slice(0, pos) + md + descTextarea.value.slice(pos);
-      descTextarea.selectionStart = descTextarea.selectionEnd = pos + md.length;
-    });
-  }
+  // Pasting a URL into the notes makes a markdown link (pasteUrlAsLink,
+  // shared from leaf.js, undoable).
+  descTextarea?.addEventListener('paste', e => window.pasteUrlAsLink(descTextarea, e));
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   // Segmented control: one button per view, data-filter = the view's name.

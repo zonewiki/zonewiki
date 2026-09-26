@@ -18,6 +18,7 @@ from markdown_it import MarkdownIt
 from mdit_py_plugins.anchors import anchors_plugin
 from mdit_py_plugins.deflist import deflist_plugin
 from mdit_py_plugins.footnote import footnote_plugin
+from mdit_py_plugins.gfm_autolink import gfm_autolink_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 import deck as deck_module
@@ -336,7 +337,9 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "",
 
 
 md = (
-    MarkdownIt(options_update={"html": True})
+    # alerts: GitHub/Obsidian callouts ("> [!NOTE]", TIP, IMPORTANT, WARNING,
+    # CAUTION) render as <div class="markdown-alert markdown-alert-…">.
+    MarkdownIt(options_update={"html": True, "alerts": True})
     .enable("table")
     .enable("strikethrough")
     .enable("smartquotes")
@@ -345,6 +348,10 @@ md = (
     .use(footnote_plugin)
     .use(deflist_plugin)
     .use(anchors_plugin, max_level=3)
+    # Bare URLs, www. addresses and emails become links (GFM autolinks), for
+    # text the editor's paste-a-URL prompt never saw: files edited on disk,
+    # an unnamed paste, a URL inside pasted text.
+    .use(gfm_autolink_plugin)
 )
 
 

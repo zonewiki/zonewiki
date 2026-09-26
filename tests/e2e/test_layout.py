@@ -21,6 +21,9 @@ tldr: A page full of things that like to overflow narrow screens.
 ---
 # Layout Stress
 
+> [!WARNING]
+> A callout with a https://example.com/very/long/bare/url/that/must/wrap/somewhere link.
+
 ## Long words
 
 Supercalifragilisticexpialidocious_and_then_some_more_unbroken_text_here
