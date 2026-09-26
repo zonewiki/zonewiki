@@ -25,6 +25,16 @@
     deckInstances.forEach(inst => inst.refresh());
   }
 
+  // A deck page can stay open for days (phones keep their tabs). Coming back
+  // to it — the tab shown again, or the page restored from the back/forward
+  // cache — reloads every embed, so tasks changed elsewhere appear and the
+  // day sections are computed for today, not the day the page was loaded.
+  function refreshStaleInstances() {
+    deckInstances.forEach(inst => inst.refreshIfIdle());
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStaleInstances(); });
+  window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstances(); });
+
   allApps.forEach(function(appEl) {
     initDeckInstance(appEl);
   });
@@ -2405,7 +2415,15 @@
   // ── Expose refresh and modal for quick-add ────────────────────────────────
 
   // Register this instance so writes in sibling embeds can refresh it.
-  deckInstances.push({ id: instanceId, refresh, openEdit: openEditModal });
+  // Background refresh re-renders the list, so it waits while the user is in
+  // the middle of something the re-render would destroy: a drag or swipe, a
+  // completion's grace period, an inline title edit, the ⋯ menu or the editor.
+  function refreshIfIdle() {
+    const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open ||
+      listEl.querySelector('.task-inline-input');
+    if (!busy) refresh();
+  }
+  deckInstances.push({ id: instanceId, refresh, refreshIfIdle, openEdit: openEditModal });
 
   // Quick-add (from any page) refreshes every embed on this page, not just the
   // last-initialized one. Both hooks reference the shared registry, so the fact

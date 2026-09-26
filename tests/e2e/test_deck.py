@@ -249,3 +249,39 @@ def test_modal_lead_disabled_without_due_date(page, wiki):
     page.goto("/page/deck")
     open_edit(page, "Undated")
     expect(page.locator("#task-edit-lead")).to_be_disabled()
+
+
+# ── Stale-tab refresh ────────────────────────────────────────────────────────
+# A deck tab can stay open for days; coming back to it reloads the tasks.
+
+def _deck_with_one_task(page, wiki):
+    page.request.post("/api/deck", data={"title": "Loaded"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    expect(card(page, "Loaded")).to_be_visible()
+    # Changed elsewhere (another device) while this tab sat in the background.
+    page.request.post("/api/deck", data={"title": "Added elsewhere"})
+
+
+def test_deck_refreshes_when_tab_becomes_visible(page, wiki):
+    _deck_with_one_task(page, wiki)
+    page.wait_for_timeout(300)
+    expect(card(page, "Added elsewhere")).to_have_count(0)   # no polling
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    expect(card(page, "Added elsewhere")).to_be_visible()
+
+
+def test_deck_refreshes_when_restored_from_bfcache(page, wiki):
+    _deck_with_one_task(page, wiki)
+    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    expect(card(page, "Added elsewhere")).to_be_visible()
+
+
+def test_deck_refresh_waits_while_editing(page, wiki):
+    _deck_with_one_task(page, wiki)
+    card(page, "Loaded").locator(".task-menu-btn").click()
+    page.get_by_role("menuitem", name="Edit…").click()
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(300)
+    expect(card(page, "Added elsewhere")).to_have_count(0)   # the editor is open: no re-render
