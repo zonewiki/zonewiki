@@ -1,4 +1,4 @@
-"""Deck: Plan-board drag-to-plan and the All tab's "Unplanned only" toggle."""
+"""Deck: Plan board, start/due dates in the edit modal, and the All tab's "Unplanned only" toggle."""
 
 from datetime import date, timedelta
 
@@ -47,7 +47,7 @@ def test_drag_to_tomorrow_plans_task(page, wiki):
     target = page.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
     card(page, "Draggable").drag_to(target)
 
-    wait_for_field(page, "Draggable", "focus_date", tomorrow())
+    wait_for_field(page, "Draggable", "start_date", tomorrow())
     # The card re-renders under the Tomorrow section.
     expect(card(page, "Draggable")).to_be_visible()
     section = card(page, "Draggable").evaluate(
@@ -56,21 +56,21 @@ def test_drag_to_tomorrow_plans_task(page, wiki):
     assert section == tomorrow()
 
 
-def test_drag_to_someday_clears_plan(page, wiki):
-    page.request.post("/api/deck", data={"title": "Planned", "focus_date": tomorrow()})
-    # Someday is the last section; Playwright's HTML5 drag can't auto-scroll
+def test_drag_to_unplanned_clears_start(page, wiki):
+    page.request.post("/api/deck", data={"title": "Planned", "start_date": tomorrow()})
+    # Unplanned is the last section; Playwright's HTML5 drag can't auto-scroll
     # mid-drag, so make both ends fit on screen.
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
-    target = page.locator(".board-day-divider[data-drop-bucket='someday']")
+    target = page.locator(".board-day-divider[data-drop-bucket='unplanned']")
     card(page, "Planned").drag_to(target)
-    wait_for_field(page, "Planned", "focus_date", None)
-    expect(page.locator(".board-day-divider[data-drop-bucket='someday'] .board-day-count")).to_have_text("1")
+    wait_for_field(page, "Planned", "start_date", None)
+    expect(page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-count")).to_have_text("1")
 
 
 def test_all_tab_unplanned_toggle(page, wiki):
     page.request.post("/api/deck", data={"title": "Unplanned one"})
-    page.request.post("/api/deck", data={"title": "Planned one", "focus_date": tomorrow()})
+    page.request.post("/api/deck", data={"title": "Planned one", "start_date": tomorrow()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     open_tab(page, "open")
@@ -102,7 +102,7 @@ def test_old_stored_default_does_not_keep_toggle_on(page, wiki):
 
 
 def test_embed_pin_turns_toggle_on(page, wiki):
-    page.request.post("/api/deck", data={"title": "Planned one", "focus_date": tomorrow()})
+    page.request.post("/api/deck", data={"title": "Planned one", "start_date": tomorrow()})
     wiki.write("deck", "# Deck\n\n[[deck filter=all unplanned=1]]\n")
     page.goto("/page/deck")
     expect(page.locator("#task-unplanned")).to_be_checked()
@@ -151,7 +151,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     # A task that started days ago is simply part of Focus — not "carried over"
     # or stale, and not singled out for a decision.
     for title, start in [("Started last week", -7), ("Starts today", 0), ("Starts tomorrow", 1)]:
-        page.request.post("/api/deck", data={"title": title, "focus_date":
+        page.request.post("/api/deck", data={"title": title, "start_date":
                                               (date.today() + timedelta(days=start)).isoformat()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
@@ -176,8 +176,8 @@ def test_past_start_date_reads_since(page, wiki):
     # not "planned 5d ago", and not styled as stale/overdue.
     start = date.today() - timedelta(days=5)
     long_ago = date(date.today().year - 1, 3, 4)
-    page.request.post("/api/deck", data={"title": "Started", "focus_date": start.isoformat()})
-    page.request.post("/api/deck", data={"title": "Started last year", "focus_date": long_ago.isoformat()})
+    page.request.post("/api/deck", data={"title": "Started", "start_date": start.isoformat()})
+    page.request.post("/api/deck", data={"title": "Started last year", "start_date": long_ago.isoformat()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     open_tab(page, "focus")
@@ -190,3 +190,62 @@ def test_past_start_date_reads_since(page, wiki):
         p.style.color = 'var(--muted)'; el.parentNode.appendChild(p);
         const c = getComputedStyle(p).color; p.remove(); return c; }""")
     assert color == muted, (color, muted)   # plain muted meta colour, no stale red
+
+
+def section_of(page, title: str) -> str:
+    """The drop-bucket key of the board section a card sits in ('' if display-only)."""
+    return card(page, title).evaluate(
+        "el => { let li = el; while (li && !li.classList.contains('board-day-divider'))"
+        " li = li.previousElementSibling; return li ? (li.dataset.dropBucket || li.textContent) : null; }")
+
+
+def test_board_groups_by_start_date(page, wiki):
+    today = date.today()
+    page.request.post("/api/deck", data={"title": "Started earlier",
+                                         "start_date": (today - timedelta(days=4)).isoformat()})
+    page.request.post("/api/deck", data={"title": "Deadline only",
+                                         "due_date": (today + timedelta(days=2)).isoformat()})
+    page.request.post("/api/deck", data={"title": "Missed",
+                                         "due_date": (today - timedelta(days=1)).isoformat()})
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    open_board(page, wiki)
+    # A past start date means "available since" — Today, not Overdue.
+    assert section_of(page, "Started earlier") == today.isoformat()
+    # A deadline alone is not a plan: the task waits in Unplanned, not on its due day.
+    assert section_of(page, "Deadline only") == "unplanned"
+    # Only a missed deadline is overdue.
+    assert section_of(page, "Missed").startswith("Overdue")
+
+
+def open_edit(page, title: str):
+    card(page, title).locator(".task-menu-btn").click()
+    page.get_by_role("menuitem", name="Edit…").click()
+    modal = page.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    return modal
+
+
+def test_modal_days_before_due_sets_start_date(page, wiki):
+    page.request.post("/api/deck", data={"title": "Report", "due_date": "2099-01-10"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    modal = open_edit(page, "Report")
+    lead = modal.locator("#task-edit-lead")
+    expect(lead).to_have_value("")
+    lead.fill("3")
+    expect(modal.locator("#task-edit-start")).to_have_value("2099-01-07")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Report", "start_date", "2099-01-07")
+    assert "defer_days" not in task_by_title(page, "Report")
+
+    # Reopening shows the gap between the two stored dates.
+    open_edit(page, "Report")
+    expect(lead).to_have_value("3")
+
+
+def test_modal_lead_disabled_without_due_date(page, wiki):
+    page.request.post("/api/deck", data={"title": "Undated"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    open_edit(page, "Undated")
+    expect(page.locator("#task-edit-lead")).to_be_disabled()

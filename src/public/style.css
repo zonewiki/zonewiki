@@ -1692,11 +1692,6 @@ body.editor-page main {
 }
 .date-trigger:hover { background: var(--code-bg); }
 .date-trigger.date-trigger--set { color: var(--fg); }
-/* Plan date is derived from (and locked by) the "Plan before due" lead. */
-.date-trigger:disabled, .date-trigger.date-trigger--derived {
-  opacity: .7; cursor: default; font-style: italic;
-}
-.date-trigger:disabled:hover { background: var(--bg); }
 .task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
@@ -1704,11 +1699,6 @@ body.editor-page main {
 /* Keep Repeat interval and the From-done checkbox compact. */
 .task-field-row .task-field:has(input[name="rec_interval"]) { flex: 0 1 5rem; }
 .task-field-row .task-field-check { flex: 0 0 auto; }
-.task-field-cycles { flex: 0 0 auto; }
-.rec-anchor-label {
-  display: flex; align-items: center; min-height: 2.15rem;
-  font-size: .9rem; color: var(--muted); font-style: italic;
-}
 /* Keep every label to one line so the controls below them line up. */
 .task-field-row .task-field > label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1785,15 +1775,11 @@ body.editor-page main {
   .task-field { gap: .15rem; }
   .task-edit-modal textarea[name="description"] { height: 4.8em; min-height: 3.2em; }
   .task-field-row { display: grid; gap: .55rem .6rem; }
-  /* Due date | Plan for, then the lead time across the full width */
+  /* Due date | Start, then the days-before-due helper across the full width */
   .task-row-dates { grid-template-columns: 1fr 1fr; align-items: start; }
-  .task-row-dates .task-field:has(input[name="defer_days"]) { grid-column: 1 / -1; }
-  /* Repeat | Every N | From done, then "Cycles: …" as one inline line */
+  .task-row-dates .task-field-lead { grid-column: 1 / -1; }
+  /* Repeat | Every N | From done */
   .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
-  .task-row-repeat .task-field-cycles {
-    grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: .4rem;
-  }
-  .task-row-repeat .rec-anchor-label { min-height: 0; }
   .task-edit-created { margin-top: 0; }
 }
 

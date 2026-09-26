@@ -63,6 +63,7 @@ def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
     _migrate_completed_split()
+    _migrate_date_model()
     _archive_old_completed()
 
 
@@ -123,7 +124,58 @@ def _read_list_strict(path: Path) -> list[dict]:
         raise _DeckCorrupt(str(path))
     if not isinstance(data, list):
         raise _DeckCorrupt(str(path))
-    return data
+    return _normalize_list(data)
+
+
+def _normalize_task(task: dict) -> bool:
+    """Upgrade a task from the old date model in place; True if it changed.
+
+    Older decks stored the start date as ``focus_date``, a derivation rule
+    ``defer_days`` (start N days before due) and ``recurrence.anchor`` (which
+    date a cycle advances). The start date is now ``start_date``; the rule is
+    gone because every derived date was already stored, and recurring spawns
+    carry the start→due gap instead; the anchor is implied by which dates the
+    task has."""
+    changed = False
+    if "focus_date" in task:
+        task.setdefault("start_date", task["focus_date"])
+        del task["focus_date"]
+        changed = True
+    if "defer_days" in task:
+        del task["defer_days"]
+        changed = True
+    rec = task.get("recurrence")
+    if isinstance(rec, dict) and "anchor" in rec:
+        del rec["anchor"]
+        changed = True
+    return changed
+
+
+def _normalize_list(tasks: list) -> list:
+    for t in tasks:
+        if isinstance(t, dict):
+            _normalize_task(t)
+    return tasks
+
+
+def _migrate_date_model() -> None:
+    """One-time rewrite of every deck file into the current date model, so the
+    files on disk (and in git) stop carrying the old fields. Reads normalize
+    too, so this is tidiness, not correctness."""
+    with _LOCK:
+        changed = []
+        for path in [DECK_FILE, _completed_path(), *_archive_glob()]:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(data, list):
+                continue
+            if any([_normalize_task(t) for t in data if isinstance(t, dict)]):
+                _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
+                changed.append(path)
+        if changed and GIT_ENABLED and _git_commit_fn:
+            _git_commit_fn(changed, "Migrate deck to start_date model")
 
 
 def _read_deck_strict() -> list[dict]:
@@ -140,7 +192,7 @@ def _read_list_lenient(path: Path) -> list[dict]:
     Used on read-only paths; write paths use _read_list_strict instead."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        return _normalize_list(data) if isinstance(data, list) else []
     except (OSError, json.JSONDecodeError, ValueError):
         return []
 
@@ -295,11 +347,10 @@ def _new_task(**overrides) -> dict:
         "description": "",
         "tags": [],
         "due_date": None,
-        "defer_days": None,
         "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "completed_at": None,
         "wont_do": False,
-        "focus_date": None,
+        "start_date": None,
         "focus_order": None,
         "sort_order": None,
         "recurrence": None,
@@ -355,73 +406,50 @@ def _next_occurrence(rec: dict, base: date, anchored: bool, today: date) -> tupl
     return nxt, rec
 
 
-def _plan_date(due: str, lead_days: int) -> str:
-    """Plan date derived from a deadline: due_date minus lead_days.
-
-    A ``defer_days`` value means "plan the task this many days before its due
-    date", so the plan date (focus_date) is always due - lead. It schedules
-    only — nothing in the deck hides a task on account of a lead time."""
-    d = datetime.strptime(due, "%Y-%m-%d").date() - timedelta(days=lead_days)
-    return d.isoformat()
-
-
 def _spawn_recurring(task: dict) -> dict | None:
     """If task has recurrence, create the next instance and return it.
 
-    ``recurrence.from`` picks the base date for stepping: ``"due"`` (default)
-    steps from the previous anchor date; ``"completion"`` steps from today.
-    ``recurrence.anchor`` picks which date field advances each cycle: ``"due"``
-    (default) advances the due date; ``"plan"`` advances the plan (focus) date
-    instead, for tasks scheduled by when you intend to work on them rather than
-    a hard deadline. In all modes the next date is caught up until >= today."""
+    The series is driven by the task's primary date — the due date if it has
+    one, else the start date. ``recurrence.from`` picks the base for stepping
+    it: ``"due"`` (default) steps from that date; ``"completion"`` steps from
+    today. The next date is caught up until >= today. When the task has both
+    dates, the start date moves with the due date, keeping the gap between
+    them ("start 3 days before due" carries over to every instance)."""
     rec = task.get("recurrence")
     if not rec:
         return None
-    anchor = rec.get("anchor", "due")
     today = date.today()
-    from_completion = rec.get("from") == "completion"
-
-    def base_from(field: str) -> tuple[date, bool]:
-        """(base date, whether it is a real series anchor rather than today)."""
-        if not from_completion and task.get(field):
-            try:
-                return datetime.strptime(task[field], "%Y-%m-%d").date(), True
-            except ValueError:
-                pass
-        return today, False
-
-    if anchor == "plan":
-        next_date, next_rec = _next_occurrence(rec, *base_from("focus_date"), today)
-        return _new_task(
-            title=task["title"],
-            description=task.get("description", ""),
-            tags=task.get("tags", []),
-            focus_date=next_date.strftime("%Y-%m-%d"),
-            sort_order=task.get("sort_order", 0),
-            recurrence=next_rec,
-            page=task.get("page"),
-            spawned_from=task["id"],
-        )
-
-    # anchor == "due" (default): advance the due date.
-    next_due, next_rec = _next_occurrence(rec, *base_from("due_date"), today)
-    due_str = next_due.strftime("%Y-%m-%d")
-    lead = task.get("defer_days")
-    # "Plan N days before due" rides along: re-derive focus_date from the new
-    # due date so the spawned instance is planned for its own lead date.
-    focus_date = _plan_date(due_str, lead) if lead is not None else None
+    due, start = _parse_date(task.get("due_date")), _parse_date(task.get("start_date"))
+    primary = due or start
+    anchored = primary is not None and rec.get("from") != "completion"
+    next_date, next_rec = _next_occurrence(rec, primary if anchored else today, anchored, today)
+    if due:
+        new_due = next_date
+        new_start = next_date - (due - start) if start else None
+    elif start:
+        new_due, new_start = None, next_date
+    else:
+        # No date at all: the series gets a due date (API-created only; the
+        # edit modal requires a date before it offers Repeat).
+        new_due, new_start = next_date, None
     return _new_task(
         title=task["title"],
         description=task.get("description", ""),
         tags=task.get("tags", []),
-        due_date=due_str,
-        defer_days=lead,
-        focus_date=focus_date,
+        due_date=new_due.isoformat() if new_due else None,
+        start_date=new_start.isoformat() if new_start else None,
         sort_order=task.get("sort_order", 0),
         recurrence=next_rec,
         page=task.get("page"),
         spawned_from=task["id"],
     )
+
+
+def _parse_date(val) -> date | None:
+    try:
+        return datetime.strptime(val, "%Y-%m-%d").date() if val else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _complete_task(task: dict, now: str | None = None) -> dict | None:
@@ -538,7 +566,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <option value="manual">Manual order</option>
         <option value="created_at">Created</option>
       </select>
-      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no plan date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
+      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no start date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
         <input type="checkbox" id="task-unplanned{sfx}"> Unplanned only
       </label>
       <button class="btn btn-primary" id="task-add-btn{sfx}">+ New</button>
@@ -568,14 +596,13 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <button type="button" class="date-trigger" data-date-trigger="task-edit-due{sfx}" data-placeholder="Set date">Set date</button>
       </div>
       <div class="task-field">
-        <label>Plan for</label>
-        <input type="hidden" id="task-edit-focus{sfx}" name="focus_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-focus{sfx}" data-placeholder="Set date">Set date</button>
+        <label>Start</label>
+        <input type="hidden" id="task-edit-start{sfx}" name="start_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{sfx}" data-placeholder="Set date">Set date</button>
       </div>
-      <div class="task-field">
-        <label for="task-edit-defer-days{sfx}">Plan before due</label>
-        <input type="number" id="task-edit-defer-days{sfx}" name="defer_days" min="0" placeholder="days early; 0 = due">
-        <span class="field-hint" id="task-edit-lead-hint{sfx}"></span>
+      <div class="task-field task-field-lead" title="Start this many days before the due date. Just another way to set the start date; recurring tasks keep this gap.">
+        <label for="task-edit-lead{sfx}">Days before due</label>
+        <input type="number" id="task-edit-lead{sfx}" min="0" placeholder="—">
       </div>
     </div>
     <div class="task-field-row task-row-repeat">
@@ -593,13 +620,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         <label for="task-edit-rec-interval{sfx}">Every N</label>
         <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
       </div>
-      <div class="task-field task-field-check" title="Repeat from the completion date instead of the anchor date">
+      <div class="task-field task-field-check" title="Repeat from the completion date instead of the due (or start) date">
         <label for="task-edit-rec-from{sfx}">From done</label>
         <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
-      </div>
-      <div class="task-field task-field-cycles">
-        <label>Cycles</label>
-        <span id="task-edit-rec-anchor-label{sfx}" class="rec-anchor-label">—</span>
       </div>
     </div>
     <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>
@@ -830,30 +853,19 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["tags"] = _as_str_list(data["tags"] or [], "tags")
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
-    if "defer_days" in data:
-        dd = data["defer_days"]
-        task["defer_days"] = max(0, _as_int(dd, "defer_days")) if dd is not None else None
     if "sort_order" in data:
         task["sort_order"] = _as_order(data["sort_order"], "sort_order")
     if "focus_order" in data:
         task["focus_order"] = _as_order(data["focus_order"], "focus_order")
     if "page" in data:
         task["page"] = _as_str(data["page"] or "", "page").strip() or None
-    old_focus_date = task.get("focus_date")
+    old_start_date = task.get("start_date")
     old_rec = task.get("recurrence") or {}
-    if "focus_date" in data:
-        task["focus_date"] = _validate_date(data["focus_date"])
-    # "Plan N days before due" (defer_days) derives the plan date from the
-    # deadline and wins over any focus_date sent alongside it: whenever this
-    # update touches the lead or the due date, recompute focus_date = due - lead.
-    # A bare focus_date change (e.g. a Plan-board drag with no defer_days in the
-    # payload) is left as the manual override above.
-    if ("defer_days" in data or "due_date" in data) \
-            and task.get("defer_days") is not None and task.get("due_date"):
-        task["focus_date"] = _plan_date(task["due_date"], task["defer_days"])
+    if "start_date" in data:
+        task["start_date"] = _validate_date(data["start_date"])
     # Reset focus_order when the task leaves or re-enters the focus view
     # (null→value or value→null). Rescheduling (value→value) keeps the order.
-    if (old_focus_date is None) != (task.get("focus_date") is None):
+    if (old_start_date is None) != (task.get("start_date") is None):
         task["focus_order"] = None
     if "rec_type" in data:
         rec_type = data["rec_type"]
@@ -862,18 +874,15 @@ def _apply_task_fields(task: dict, data: dict) -> None:
                 "type": rec_type,
                 "interval": max(1, _as_int(data.get("rec_interval", 1), "rec_interval")),
                 "from": "completion" if data.get("rec_from") == "completion" else "due",
-                "anchor": "plan" if data.get("rec_anchor") == "plan" else "due",
             }
             # Re-saving the edit modal re-sends the recurrence; keep the
-            # series' day-of-month anchor unless the series or its anchor date
-            # actually changed (moving the date re-anchors the series).
-            new_rec = task["recurrence"]
-            anchor_field = "focus_date" if new_rec["anchor"] == "plan" else "due_date"
-            old_anchor_date = old_focus_date if anchor_field == "focus_date" else old_due_date
+            # series' day of month unless the type or its primary date (due,
+            # else start) actually changed — moving that date re-anchors it.
+            old_primary = old_due_date or old_start_date
+            new_primary = task.get("due_date") or task.get("start_date")
             if (old_rec.get("day") and old_rec.get("type") == rec_type
-                    and old_rec.get("anchor", "due") == new_rec["anchor"]
-                    and task.get(anchor_field) == old_anchor_date):
-                new_rec["day"] = old_rec["day"]
+                    and new_primary == old_primary):
+                task["recurrence"]["day"] = old_rec["day"]
         else:
             task["recurrence"] = None
 
@@ -987,7 +996,8 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
     task["tags"] = [str(t).strip() for t in snap.get("tags") or [] if str(t).strip()]
-    for field in ("due_date", "focus_date"):
+    _normalize_task(snap)
+    for field in ("due_date", "start_date"):
         val = snap.get(field)
         if isinstance(val, str):
             try:
@@ -995,8 +1005,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
                 task[field] = val
             except ValueError:
                 pass
-    if isinstance(snap.get("defer_days"), int):
-        task["defer_days"] = max(0, snap["defer_days"])
     if isinstance(snap.get("id"), str) and snap["id"]:
         task["id"] = snap["id"]
     for field in ("created_at", "completed_at", "spawned_from", "page"):
@@ -1012,7 +1020,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
             "interval": rec["interval"] if isinstance(rec.get("interval"), int)
                         and not isinstance(rec["interval"], bool) and rec["interval"] >= 1 else 1,
             "from": "completion" if rec.get("from") == "completion" else "due",
-            "anchor": "plan" if rec.get("anchor") == "plan" else "due",
         }
         if isinstance(rec.get("day"), int) and 1 <= rec["day"] <= 31:
             task["recurrence"]["day"] = rec["day"]

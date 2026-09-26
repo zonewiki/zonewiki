@@ -46,60 +46,96 @@ class TestIsUnplanned:
         assert run_core("DeckCore.isUnplanned({title: 'x'})") is True
 
     def test_due_date_alone_is_still_unplanned(self):
-        # A deadline is not a decision about when to do the work. The board
-        # only parks such a task on its due day as a fallback, so it still
-        # belongs in the triage queue.
+        # A deadline is not a decision about when to do the work.
         t = {"due_date": "2026-08-01"}
         assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is True
 
-    def test_focus_date_makes_it_planned(self):
-        t = {"focus_date": "2026-08-01"}
+    def test_start_date_makes_it_planned(self):
+        t = {"start_date": "2026-08-01"}
         assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-    def test_past_focus_date_still_counts_as_planned(self):
-        t = {"focus_date": "2026-01-01"}
+    def test_past_start_date_still_counts_as_planned(self):
+        t = {"start_date": "2026-01-01"}
         assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-    def test_both_dates_makes_it_planned(self):
-        t = {"due_date": "2026-08-01", "focus_date": "2026-07-28"}
-        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
 
-    def test_lead_time_derived_plan_counts_as_planned(self):
-        # defer_days derives a focus_date server-side, so such a task is planned.
-        t = {"due_date": "2026-08-01", "defer_days": 3, "focus_date": "2026-07-29"}
-        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
+class TestIsFocus:
+    """Focus = started, or due today or earlier."""
 
+    @pytest.mark.parametrize("task,expected", [
+        ({}, False),
+        ({"start_date": TODAY}, True),
+        ({"start_date": "2026-07-01"}, True),          # started long ago
+        ({"start_date": "2026-07-27"}, False),         # starts tomorrow
+        ({"due_date": TODAY}, True),
+        ({"due_date": "2026-07-01"}, True),            # overdue
+        ({"due_date": "2026-07-30"}, False),
+        ({"due_date": "2026-07-01", "start_date": "2026-08-01"}, True),  # overdue wins
+    ])
+    def test_is_focus(self, task, expected):
+        assert run_core(f"DeckCore.isFocus({json.dumps(task)}, '{TODAY}')") is expected
 
 
 class TestBoardBuckets:
-    def test_grouping_is_plan_first(self):
-        tasks = [
-            {"id": "1", "title": "due tomorrow", "due_date": "2026-07-27"},
-            {"id": "2", "title": "planned today, due later",
-             "due_date": "2026-08-20", "focus_date": TODAY},
-            {"id": "3", "title": "overdue", "due_date": "2026-07-01"},
-            {"id": "4", "title": "someday"},
-            {"id": "5", "title": "later", "due_date": "2026-09-01"},
-        ]
+    def _by_key(self, tasks):
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
-        by_key = {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
+        return {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
+
+    def test_grouping_is_by_start_date(self):
+        by_key = self._by_key([
+            {"id": "1", "title": "starts tomorrow", "start_date": "2026-07-27"},
+            {"id": "2", "title": "starts today, due later",
+             "due_date": "2026-08-20", "start_date": TODAY},
+            {"id": "3", "title": "overdue", "due_date": "2026-07-01"},
+            {"id": "4", "title": "nothing"},
+            {"id": "5", "title": "starts later", "start_date": "2026-09-01"},
+        ])
         assert by_key["overdue"] == ["3"]
-        assert by_key[TODAY] == ["2"]          # plan wins over deadline
+        assert by_key[TODAY] == ["2"]
         assert by_key["2026-07-27"] == ["1"]
         assert by_key["later"] == ["5"]
-        assert by_key["someday"] == ["4"]
+        assert by_key["unplanned"] == ["4"]
 
-    def test_later_and_someday_are_droppable_overdue_is_not(self):
+    def test_past_start_date_is_today_not_overdue(self):
+        # Regression: a start date in the past put the task under Overdue,
+        # though the card itself says "since …" without any warning.
+        by_key = self._by_key([{"id": "1", "title": "x", "start_date": "2026-07-01"}])
+        assert by_key[TODAY] == ["1"]
+        assert "overdue" not in by_key
+
+    def test_due_date_alone_is_unplanned_not_on_its_deadline(self):
+        by_key = self._by_key([{"id": "1", "title": "x", "due_date": "2026-07-28"}])
+        assert by_key["unplanned"] == ["1"]
+        assert by_key["2026-07-28"] == []
+
+    def test_due_today_without_start_is_today(self):
+        by_key = self._by_key([{"id": "1", "title": "x", "due_date": TODAY}])
+        assert by_key[TODAY] == ["1"]
+
+    def test_missed_deadline_is_overdue_even_if_started(self):
+        by_key = self._by_key([{"id": "1", "title": "x", "due_date": "2026-07-20",
+                                "start_date": "2026-07-18"}])
+        assert by_key["overdue"] == ["1"]
+
+    def test_unplanned_sorted_by_nearest_deadline(self):
+        by_key = self._by_key([
+            {"id": "a", "title": "a", "sort_order": 0},
+            {"id": "b", "title": "b", "due_date": "2026-09-01"},
+            {"id": "c", "title": "c", "due_date": "2026-08-01"},
+        ])
+        assert by_key["unplanned"] == ["c", "b", "a"]
+
+    def test_later_and_unplanned_are_droppable_overdue_is_not(self):
         tasks = [
             {"id": "3", "title": "overdue", "due_date": "2026-07-01"},
-            {"id": "4", "title": "someday"},
-            {"id": "5", "title": "later", "due_date": "2026-09-01"},
+            {"id": "4", "title": "nothing"},
+            {"id": "5", "title": "later", "start_date": "2026-09-01"},
         ]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         droppable = {s["key"]: s["droppable"] for s in sections}
         assert droppable["overdue"] is False
         assert droppable["later"] is True
-        assert droppable["someday"] is True
+        assert droppable["unplanned"] is True
 
     def test_seven_day_sections_always_present(self):
         sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
@@ -109,14 +145,15 @@ class TestBoardBuckets:
         assert day_sections[0]["label"] == "Today"
         assert day_sections[1]["label"] == "Tomorrow"
 
-    def test_empty_later_and_someday_still_offered_as_drop_targets(self):
+    def test_empty_later_and_unplanned_still_offered_as_drop_targets(self):
         # Regression: they used to be omitted when empty, so once every task
         # was planned there was nowhere to drag one back to "unplanned".
         sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
         by_key = {s["key"]: s for s in sections}
         assert by_key["later"]["tasks"] == [] and by_key["later"]["droppable"]
-        assert by_key["someday"]["tasks"] == [] and by_key["someday"]["droppable"]
-        assert [s["key"] for s in sections][-2:] == ["later", "someday"]
+        assert by_key["unplanned"]["tasks"] == [] and by_key["unplanned"]["droppable"]
+        assert by_key["unplanned"]["label"] == "Unplanned"
+        assert [s["key"] for s in sections][-2:] == ["later", "unplanned"]
         assert "overdue" not in by_key  # display-only, so still omitted when empty
 
 

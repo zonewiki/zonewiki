@@ -61,7 +61,7 @@ def seed(wiki, page):
     for title, extra in [("Short task", {}),
                          ("A task with a rather long title that should wrap on narrow screens",
                           {"tags": ["work", "layout"]}),
-                         ("Planned today", {"focus_date": _today()})]:
+                         ("Planned today", {"start_date": _today()})]:
         page.request.post("/api/deck", data={"title": title, **extra})
 
 

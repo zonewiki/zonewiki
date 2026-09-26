@@ -330,12 +330,12 @@ class TestRecurring:
         nxt = self._complete_and_get_spawn(client, spawned["id"])
         assert nxt["due_date"] == "2099-03-31"
 
-    def test_monthly_anchor_kept_when_only_plan_date_changes(self, client):
+    def test_monthly_anchor_kept_when_only_start_date_changes(self, client):
         task = create_task(client, title="Month end", due_date="2099-01-31",
                            rec_type="monthly", rec_interval=1).get_json()
         spawned = self._complete_and_get_spawn(client, task["id"])
         client.put(f"/api/deck/{spawned['id']}", json={
-            "due_date": "2099-02-28", "focus_date": "2099-02-20",
+            "due_date": "2099-02-28", "start_date": "2099-02-20",
             "rec_type": "monthly", "rec_interval": 1})
         assert self._complete_and_get_spawn(client, spawned["id"])["due_date"] == "2099-03-31"
 
@@ -356,14 +356,14 @@ class TestRecurring:
             dues.append(task["due_date"])
         assert dues == ["2093-02-28", "2094-02-28", "2095-02-28", "2096-02-29"]
 
-    def test_plan_anchored_monthly_does_not_drift(self, client):
-        task = create_task(client, title="Plan end", focus_date="2099-01-31",
-                           rec_type="monthly", rec_interval=1, rec_anchor="plan").get_json()
-        plans = []
+    def test_start_only_monthly_does_not_drift(self, client):
+        task = create_task(client, title="Start end", start_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        starts = []
         for _ in range(2):
             task = self._complete_and_get_spawn(client, task["id"])
-            plans.append(task["focus_date"])
-        assert plans == ["2099-02-28", "2099-03-31"]
+            starts.append(task["start_date"])
+        assert starts == ["2099-02-28", "2099-03-31"]
 
     def test_spawned_task_preserves_tags(self, client):
         task = create_task(client, title="Tagged recurring",
@@ -382,7 +382,7 @@ class TestRecurring:
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["recurrence"] == {"type": "weekly", "interval": 2, "from": "due", "anchor": "due"}
+        assert spawned["recurrence"] == {"type": "weekly", "interval": 2, "from": "due"}
 
     def test_complete_non_recurring_no_spawn(self, client):
         task = create_task(client, title="One-off").get_json()
@@ -390,66 +390,91 @@ class TestRecurring:
         tasks = client.get("/api/deck").get_json()
         assert len(tasks) == 0
 
-    def test_plan_anchor_steps_focus_date(self, client):
-        task = create_task(client, title="Weekly plan",
-                           focus_date=_future(7),
-                           rec_type="weekly", rec_interval=1,
-                           rec_anchor="plan").get_json()
-        assert task["recurrence"]["anchor"] == "plan"
+    def test_start_only_series_steps_start_date(self, client):
+        # No due date: the start date drives the series.
+        task = create_task(client, title="Weekly start",
+                           start_date=_future(7),
+                           rec_type="weekly", rec_interval=1).get_json()
+        assert "anchor" not in task["recurrence"]
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         active = client.get("/api/deck").get_json()
         assert len(active) == 1
-        spawned = active[0]
-        assert spawned["focus_date"] == _future(14)
-        assert spawned["due_date"] is None
+        assert active[0]["start_date"] == _future(14)
+        assert active[0]["due_date"] is None
 
-    def test_plan_anchor_from_completion(self, client):
-        # from_completion + anchor=plan: step focus_date from today
+    def test_start_only_series_from_completion(self, client):
         task = create_task(client, title="Interval habit",
-                           focus_date=_future(7),
+                           start_date=_future(7),
                            rec_type="weekly", rec_interval=1,
-                           rec_anchor="plan", rec_from="completion").get_json()
-        client.put(f"/api/deck/{task['id']}", json={"completed": True})
-        active = client.get("/api/deck").get_json()
-        spawned = active[0]
-        assert spawned["focus_date"] == _future(7)
-        assert spawned["due_date"] is None
-
-    def test_plan_anchor_does_not_carry_due_date(self, client):
-        # Even if the task had a due_date, anchor=plan spawns without one
-        task = create_task(client, title="Plan-anchored",
-                           due_date=_future(10), focus_date=_future(7),
-                           rec_type="weekly", rec_interval=1,
-                           rec_anchor="plan").get_json()
-        client.put(f"/api/deck/{task['id']}", json={"completed": True})
-        active = client.get("/api/deck").get_json()
-        spawned = active[0]
-        assert spawned["focus_date"] == _future(14)
-        assert spawned["due_date"] is None
-
-    def test_plan_anchor_overdue_plan_catches_up_to_today(self, client):
-        # A long-stale plan date must not spawn an instance planned in the past.
-        task = create_task(client, title="Stale weekly",
-                           focus_date=(date.today() - timedelta(days=30)).isoformat(),
-                           rec_type="weekly", rec_interval=1,
-                           rec_anchor="plan").get_json()
+                           rec_from="completion").get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         spawned = client.get("/api/deck").get_json()[0]
-        planned = date.fromisoformat(spawned["focus_date"])
-        assert date.today() <= planned < date.today() + timedelta(days=7)
-        # Still on the original weekday cadence.
-        assert (planned - date.fromisoformat(task["focus_date"])).days % 7 == 0
+        assert spawned["start_date"] == _future(7)
+        assert spawned["due_date"] is None
 
-    def test_due_anchor_default(self, client):
-        # No rec_anchor → defaults to "due" behavior
-        task = create_task(client, title="Default anchor",
-                           due_date=_future(10),
-                           rec_type="daily", rec_interval=1).get_json()
-        assert task["recurrence"]["anchor"] == "due"
+    def test_start_only_stale_series_catches_up_to_today(self, client):
+        # A long-past start date must not spawn an instance starting in the past.
+        task = create_task(client, title="Stale weekly",
+                           start_date=(date.today() - timedelta(days=30)).isoformat(),
+                           rec_type="weekly", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
-        active = client.get("/api/deck").get_json()
-        spawned = active[0]
-        assert spawned["due_date"] == _future(11)
+        spawned = client.get("/api/deck").get_json()[0]
+        started = date.fromisoformat(spawned["start_date"])
+        assert date.today() <= started < date.today() + timedelta(days=7)
+        # Still on the original weekday cadence.
+        assert (started - date.fromisoformat(task["start_date"])).days % 7 == 0
+
+    def test_both_dates_carry_the_gap(self, client):
+        # Due drives the series; the start date keeps its distance to it.
+        task = create_task(client, title="Report",
+                           due_date=_future(10), start_date=_future(7),
+                           rec_type="weekly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == _future(17)
+        assert spawned["start_date"] == _future(14)
+
+    def test_gap_carried_from_completion(self, client):
+        task = create_task(client, title="Habit",
+                           due_date=_future(10), start_date=_future(8),
+                           rec_type="daily", rec_interval=5,
+                           rec_from="completion").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == _future(5)
+        assert spawned["start_date"] == _future(3)
+
+    def test_gap_carried_across_month_end_clamp(self, client):
+        # Start 3 days before a month-end due date; Feb clamps the due date
+        # and the start date follows it.
+        task = create_task(client, title="Rent",
+                           due_date="2099-01-31", start_date="2099-01-28",
+                           rec_type="monthly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == "2099-02-28"
+        assert spawned["start_date"] == "2099-02-25"
+
+    def test_overdue_series_catches_up_with_start_in_past(self, client):
+        # The due date catches up to >= today; the carried start date may then
+        # lie before today, which just means "available since".
+        task = create_task(client, title="Weekly",
+                           due_date=(date.today() - timedelta(days=21)).isoformat(),
+                           start_date=(date.today() - timedelta(days=27)).isoformat(),
+                           rec_type="weekly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        due = date.fromisoformat(spawned["due_date"])
+        assert date.today() <= due < date.today() + timedelta(days=7)
+        assert date.fromisoformat(spawned["start_date"]) == due - timedelta(days=6)
+
+    def test_undated_series_gets_a_due_date(self, client):
+        task = create_task(client, title="API-made",
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        spawned = client.get("/api/deck").get_json()[0]
+        assert spawned["due_date"] == _future(1)
+        assert spawned["start_date"] is None
 
 
 # ---------- Won't Do ----------
@@ -709,110 +734,93 @@ class TestDeckPage:
 # ── Defer Days (relative defer) ──────────────────────────────────────────────
 
 
-class TestDeferDays:
-    def test_create_with_defer_days(self, client):
-        resp = client.post("/api/deck", json={"title": "Deferred", "defer_days": 3, "due_date": "2026-07-10"})
-        assert resp.status_code == 201
-        task = resp.get_json()
-        assert task["defer_days"] == 3
-        assert task["due_date"] == "2026-07-10"
+class TestIndependentDates:
+    """due_date and start_date are two independent fields: neither is derived
+    from the other, and changing one never moves the other."""
 
-    def test_update_defer_days(self, client):
-        resp = client.post("/api/deck", json={"title": "Task"})
-        task_id = resp.get_json()["id"]
-        resp = client.put(f"/api/deck/{task_id}", json={"defer_days": 5})
-        assert resp.status_code == 200
-        assert resp.get_json()["defer_days"] == 5
-
-    def test_clear_defer_days(self, client):
-        resp = client.post("/api/deck", json={"title": "Task", "defer_days": 3})
-        task_id = resp.get_json()["id"]
-        resp = client.put(f"/api/deck/{task_id}", json={"defer_days": None})
-        assert resp.status_code == 200
-        assert resp.get_json()["defer_days"] is None
-
-    def test_defer_days_zero_means_hide_until_due(self, client):
-        resp = client.post("/api/deck", json={"title": "Task", "defer_days": 0})
-        assert resp.status_code == 201
-        assert resp.get_json()["defer_days"] == 0
-
-    def test_negative_defer_days_clamped_to_zero(self, client):
-        resp = client.post("/api/deck", json={"title": "Task", "defer_days": -5})
-        assert resp.status_code == 201
-        assert resp.get_json()["defer_days"] == 0
-
-    def test_recurring_spawn_preserves_defer_days(self, client):
-        resp = client.post("/api/deck", json={
-            "title": "Recurring",
-            "due_date": "2026-06-10",
-            "defer_days": 3,
-            "rec_type": "daily",
-            "rec_interval": 1,
-        })
-        task_id = resp.get_json()["id"]
-        client.put(f"/api/deck/{task_id}", json={"completed": True})
-        tasks = client.get("/api/deck").get_json()
-        spawned = [t for t in tasks if t["id"] != task_id and not t["completed_at"]]
-        assert len(spawned) == 1
-        assert spawned[0]["defer_days"] == 3
-
-
-class TestPlanLead:
-    """defer_days = "plan N days before due": derives focus_date = due - lead.
-    It schedules only — nothing in the deck hides a task any more."""
-
-    def test_lead_sets_focus_date_on_create(self, client):
-        t = client.post("/api/deck", json={
-            "title": "Renew", "due_date": "2027-07-01", "defer_days": 10,
-        }).get_json()
-        assert t["defer_days"] == 10
-        assert t["focus_date"] == "2027-06-21"
-
-    def test_lead_zero_plans_on_due_date(self, client):
-        t = client.post("/api/deck", json={
-            "title": "On due", "due_date": "2027-07-01", "defer_days": 0,
-        }).get_json()
-        assert t["focus_date"] == "2027-07-01"
-
-    def test_focus_recomputed_when_due_changes(self, client):
-        tid = client.post("/api/deck", json={
-            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
-        }).get_json()["id"]
+    def test_moving_due_date_leaves_start_date(self, client):
+        tid = create_task(client, due_date="2027-07-01", start_date="2027-06-21").get_json()["id"]
         t = client.put(f"/api/deck/{tid}", json={"due_date": "2027-08-01"}).get_json()
-        assert t["focus_date"] == "2027-07-22"
+        assert t["start_date"] == "2027-06-21"
 
-    def test_lead_wins_over_focus_date_in_same_save(self, client):
-        # The modal sends both focus_date and defer_days; the lead-derived plan
-        # date must win over the focus_date sent alongside it.
-        t = client.post("/api/deck", json={
-            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
-            "focus_date": "2027-01-01",
-        }).get_json()
-        assert t["focus_date"] == "2027-06-21"
+    def test_start_date_after_due_is_kept(self, client):
+        t = create_task(client, due_date="2027-07-01", start_date="2027-07-05").get_json()
+        assert t["start_date"] == "2027-07-05"
 
-    def test_bare_focus_change_is_manual_override(self, client):
-        # A Plan-board drag PUTs focus_date only (no defer_days) — it must stick.
-        tid = client.post("/api/deck", json={
-            "title": "X", "due_date": "2027-07-01", "defer_days": 10,
-        }).get_json()["id"]
-        t = client.put(f"/api/deck/{tid}", json={"focus_date": "2027-06-25"}).get_json()
-        assert t["focus_date"] == "2027-06-25"
-        assert t["defer_days"] == 10
+    def test_old_fields_in_payload_are_ignored(self, client):
+        # focus_date / defer_days / rec_anchor are gone from the API.
+        t = create_task(client, due_date="2027-07-01", focus_date="2027-06-01",
+                        defer_days=3, rec_type="daily", rec_anchor="plan").get_json()
+        assert t["start_date"] is None
+        assert "focus_date" not in t and "defer_days" not in t
+        assert "anchor" not in t["recurrence"]
 
-    def test_lead_without_due_leaves_focus_none(self, client):
-        t = client.post("/api/deck", json={"title": "X", "defer_days": 10}).get_json()
-        assert t["defer_days"] == 10
-        assert t["focus_date"] is None
 
-    def test_lead_task_stays_in_backlog_api(self, client):
-        # A lead time schedules but never hides: the task is returned by the
-        # deck API like any other, whatever its plan date.
-        future = (date.today() + timedelta(days=30)).isoformat()
-        client.post("/api/deck", json={
-            "title": "Far", "due_date": future, "defer_days": 10,
-        })
-        titles = [t["title"] for t in client.get("/api/deck").get_json()]
-        assert titles == ["Far"]
+class TestDateModelMigration:
+    """Decks written before start_date: focus_date → start_date, defer_days and
+    recurrence.anchor dropped — on read and, at startup, on disk."""
+
+    OLD = {"id": "old-1", "title": "Old", "description": "", "tags": [],
+           "due_date": "2027-07-01", "defer_days": 3, "focus_date": "2027-06-28",
+           "created_at": "2026-01-01T00:00:00", "completed_at": None,
+           "wont_do": False, "focus_order": None, "sort_order": 0, "page": None,
+           "recurrence": {"type": "weekly", "interval": 1, "from": "due", "anchor": "due"},
+           "spawned_from": None}
+
+    def _assert_new(self, t):
+        assert t["start_date"] == "2027-06-28"
+        assert "focus_date" not in t and "defer_days" not in t
+        assert t["recurrence"] == {"type": "weekly", "interval": 1, "from": "due"}
+
+    def test_read_normalizes(self, client, wiki_dir):
+        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        [t] = client.get("/api/deck").get_json()
+        self._assert_new(t)
+
+    def test_write_persists_normalized(self, client, wiki_dir):
+        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        client.put("/api/deck/old-1", json={"title": "Renamed"})
+        [t] = json.loads((wiki_dir / "_deck.json").read_text(encoding="utf-8"))
+        self._assert_new(t)
+
+    def test_startup_migration_rewrites_every_file(self, client, wiki_dir):
+        done = {**self.OLD, "id": "old-2", "completed_at": "2026-02-01T00:00:00"}
+        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        (wiki_dir / "_deck_completed.json").write_text(json.dumps([done]), encoding="utf-8")
+        (wiki_dir / "_deck_completed-2025.json").write_text(json.dumps([done]), encoding="utf-8")
+        deck_module._migrate_date_model()
+        for name in ("_deck.json", "_deck_completed.json", "_deck_completed-2025.json"):
+            [t] = json.loads((wiki_dir / name).read_text(encoding="utf-8"))
+            self._assert_new(t)
+
+    def test_startup_migration_leaves_new_files_untouched(self, client, wiki_dir):
+        create_task(client, title="New", start_date="2027-01-01")
+        path = wiki_dir / "_deck.json"
+        before = path.stat().st_mtime_ns
+        deck_module._migrate_date_model()
+        assert path.stat().st_mtime_ns == before
+
+    def test_old_recurring_task_carries_gap(self, client, wiki_dir):
+        old = {**self.OLD, "due_date": "2099-01-10", "focus_date": "2099-01-07"}
+        (wiki_dir / "_deck.json").write_text(json.dumps([old]), encoding="utf-8")
+        client.put("/api/deck/old-1", json={"completed": True})
+        [spawned] = client.get("/api/deck").get_json()
+        assert spawned["due_date"] == "2099-01-17"
+        assert spawned["start_date"] == "2099-01-14"
+
+    def test_old_plan_anchored_series_steps_start_date(self, client, wiki_dir):
+        old = {**self.OLD, "due_date": None, "defer_days": None, "focus_date": "2099-01-07",
+               "recurrence": {"type": "weekly", "interval": 1, "from": "due", "anchor": "plan"}}
+        (wiki_dir / "_deck.json").write_text(json.dumps([old]), encoding="utf-8")
+        client.put("/api/deck/old-1", json={"completed": True})
+        [spawned] = client.get("/api/deck").get_json()
+        assert spawned["start_date"] == "2099-01-14"
+        assert spawned["due_date"] is None
+
+    def test_restore_accepts_old_snapshot(self, client):
+        resp = client.post("/api/deck/restore", json={"tasks": [self.OLD]})
+        assert resp.status_code == 201
+        self._assert_new(resp.get_json()[0])
 
 
 class TestYearlyRecurrence:
@@ -838,17 +846,16 @@ class TestYearlyRecurrence:
                    if t["id"] != tid and not t["completed_at"]]
         assert spawned[0]["due_date"] == "2029-02-28"
 
-    def test_yearly_spawn_carries_plan_lead(self, client):
+    def test_yearly_spawn_carries_start_gap(self, client):
         tid = client.post("/api/deck", json={
-            "title": "Annual+lead", "due_date": "2026-07-01", "defer_days": 10,
+            "title": "Annual+lead", "due_date": "2026-07-01", "start_date": "2026-06-21",
             "rec_type": "yearly", "rec_interval": 1,
         }).get_json()["id"]
         client.put(f"/api/deck/{tid}", json={"completed": True})
         spawned = [t for t in client.get("/api/deck").get_json()
                    if t["id"] != tid and not t["completed_at"]][0]
         assert spawned["due_date"] == "2027-07-01"
-        assert spawned["defer_days"] == 10
-        assert spawned["focus_date"] == "2027-06-21"
+        assert spawned["start_date"] == "2027-06-21"
 
 
 # ── Batch Complete ───────────────────────────────────────────────────────────
@@ -1066,42 +1073,42 @@ class TestCompletedMigration:
 # ── Focus date (Today planning) ────────────────────────────────────────────────
 
 
-class TestFocusDate:
-    def test_create_with_focus_date(self, client):
-        resp = create_task(client, title="Planned", focus_date="2026-07-20")
+class TestStartDate:
+    def test_create_with_start_date(self, client):
+        resp = create_task(client, title="Planned", start_date="2026-07-20")
         assert resp.status_code == 201
-        assert resp.get_json()["focus_date"] == "2026-07-20"
+        assert resp.get_json()["start_date"] == "2026-07-20"
 
-    def test_create_default_focus_date_none(self, client):
-        assert create_task(client, title="No plan").get_json()["focus_date"] is None
+    def test_create_default_start_date_none(self, client):
+        assert create_task(client, title="No plan").get_json()["start_date"] is None
 
-    def test_create_invalid_focus_date(self, client):
-        resp = create_task(client, title="Bad", focus_date="20-07-2026")
+    def test_create_invalid_start_date(self, client):
+        resp = create_task(client, title="Bad", start_date="20-07-2026")
         assert resp.status_code == 400
 
-    def test_update_focus_date(self, client):
+    def test_update_start_date(self, client):
         task = create_task(client, title="Task").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": "2026-07-21"})
-        assert resp.get_json()["focus_date"] == "2026-07-21"
+        resp = client.put(f"/api/deck/{task['id']}", json={"start_date": "2026-07-21"})
+        assert resp.get_json()["start_date"] == "2026-07-21"
 
-    def test_clear_focus_date(self, client):
-        task = create_task(client, title="Task", focus_date="2026-07-20").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": None})
-        assert resp.get_json()["focus_date"] is None
+    def test_clear_start_date(self, client):
+        task = create_task(client, title="Task", start_date="2026-07-20").get_json()
+        resp = client.put(f"/api/deck/{task['id']}", json={"start_date": None})
+        assert resp.get_json()["start_date"] is None
 
-    def test_update_invalid_focus_date(self, client):
+    def test_update_invalid_start_date(self, client):
         task = create_task(client, title="Task").get_json()
-        resp = client.put(f"/api/deck/{task['id']}", json={"focus_date": "not-a-date"})
+        resp = client.put(f"/api/deck/{task['id']}", json={"start_date": "not-a-date"})
         assert resp.status_code == 400
 
-    def test_recurring_spawn_resets_focus_date(self, client):
+    def test_recurring_spawn_keeps_zero_gap(self, client):
         task = create_task(client, title="Recurring",
-                           due_date="2026-06-10", focus_date="2026-06-10",
+                           due_date="2099-06-10", start_date="2099-06-10",
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
         tasks = client.get("/api/deck").get_json()
         spawned = next(t for t in tasks if t["id"] != task["id"])
-        assert spawned["focus_date"] is None
+        assert spawned["start_date"] == spawned["due_date"] == "2099-06-11"
 
 
 class TestPageField:
@@ -1287,8 +1294,8 @@ class TestCreateFieldParity:
         """Create route goes through _apply_task_fields — every field lands."""
         resp = create_task(
             client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
-            due_date="2026-08-01", defer_days=-2,
-            focus_date="2026-08-01", page="  some-page ",
+            due_date="2026-08-01",
+            start_date="2026-08-01", page="  some-page ",
             rec_type="weekly", rec_interval=3,
         )
         assert resp.status_code == 201
@@ -1297,10 +1304,9 @@ class TestCreateFieldParity:
         assert t["description"] == "notes"
         assert t["tags"] == ["a", "b"]
         assert t["due_date"] == "2026-08-01"
-        assert t["defer_days"] == 0          # clamped to >= 0
-        assert t["focus_date"] == "2026-08-01"
+        assert t["start_date"] == "2026-08-01"
         assert t["page"] == "some-page"
-        assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due", "anchor": "due"}
+        assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
         assert t["wont_do"] is False
@@ -1311,7 +1317,7 @@ class TestCreateFieldParity:
         assert "blocked_by" not in t
         assert t["tags"] == []
         assert t["due_date"] is None
-        assert t["defer_days"] is None
+        assert t["start_date"] is None
 
 
 # ── Recurrence catch-up and from-completion mode ──────────────────────────────
@@ -1408,7 +1414,7 @@ class TestRestore:
     def test_restore_roundtrips_all_fields(self, client):
         task = create_task(client, title="Full", description="notes",
                            tags=["a"], due_date="2026-09-01",
-                           focus_date="2026-08-30", page="some-page",
+                           start_date="2026-08-30", page="some-page",
                            rec_type="weekly", rec_interval=2).get_json()
         client.delete(f"/api/deck/{task['id']}")
         assert client.get("/api/deck").get_json() == []
@@ -1418,7 +1424,7 @@ class TestRestore:
         assert restored["id"] == task["id"]
         assert restored["created_at"] == task["created_at"]
         for field in ("title", "description", "tags", "due_date",
-                      "focus_date", "page", "recurrence"):
+                      "start_date", "page", "recurrence"):
             assert restored[field] == task[field]
 
     def test_restore_keeps_yearly_recurrence(self, client):
@@ -1488,20 +1494,20 @@ class TestDueCount:
         # Planning an overdue task for later doesn't make the deadline go away.
         past = (date.today() - timedelta(days=2)).isoformat()
         future = (date.today() + timedelta(days=5)).isoformat()
-        create_task(client, title="Planned later", due_date=past, focus_date=future)
+        create_task(client, title="Planned later", due_date=past, start_date=future)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["overdue"] == 1
 
-    def test_lead_time_task_counted_when_due(self, client):
-        # A lead time no longer suppresses the count once the task is due.
+    def test_started_task_counted_when_due(self, client):
         today = date.today().isoformat()
-        create_task(client, title="Due today", due_date=today, defer_days=3)
+        started = (date.today() - timedelta(days=3)).isoformat()
+        create_task(client, title="Due today", due_date=today, start_date=started)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["today"] == 1
 
     def test_future_due_not_counted(self, client):
         future = (date.today() + timedelta(days=10)).isoformat()
-        create_task(client, title="Far due", due_date=future, defer_days=3)
+        create_task(client, title="Far due", due_date=future, start_date=future)
         counts = client.get("/api/deck/due-count").get_json()
         assert counts["count"] == 0
 
@@ -1638,7 +1644,7 @@ class TestMalformedInput:
         {"title": "T", "tags": 7},
         {"title": "T", "tags": [1, 2]},
         {"title": "T", "due_date": 20990101},
-        {"title": "T", "defer_days": "soon"},
+        {"title": "T", "start_date": 20990101},
         {"title": "T", "rec_type": "daily", "rec_interval": "often"},
         {"title": "T", "page": 3},
     ])
@@ -1652,9 +1658,8 @@ class TestMalformedInput:
         assert task["tags"] == ["a", "b", "c"]
 
     def test_numeric_strings_still_accepted(self, client):
-        task = create_task(client, due_date="2099-01-10", defer_days="2",
+        task = create_task(client, due_date="2099-01-10",
                            rec_type="weekly", rec_interval="3").get_json()
-        assert task["defer_days"] == 2
         assert task["recurrence"]["interval"] == 3
 
     @pytest.mark.parametrize("path", ["/api/deck/batch-delete", "/api/deck/batch-complete"])

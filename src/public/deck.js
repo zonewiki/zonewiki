@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isUnplanned, tagMatchScore } = window.DeckCore;
+  const { dateToStr, addDays, isUnplanned, isFocus, tagMatchScore } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -75,8 +75,8 @@
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   let unplannedOnly = false;  // All tab's "Unplanned only" — resolved during init
 
-  // Upcoming day board: dragging a task onto a day section re-plans it (sets
-  // focus_date); dropping on "Someday" clears the plan. These list-level
+  // Plan day board: dragging a task onto a day section sets its start_date;
+  // dropping on "Unplanned" clears it. These list-level
   // listeners are attached once and no-op outside the board view. Per-item
   // dragstart is (re)wired each render by setupBoardDragAndDrop().
   function boardDivider(el) {
@@ -101,12 +101,12 @@
     e.preventDefault();
     const id = draggedId;
     clearBoardDropOver();
-    if (div.dataset.dropBucket === 'someday') updateTask(id, { focus_date: null });
+    if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
     else if (div.dataset.dropBucket === 'later') {
       // "Later" is a range, not a day — ask which date (min: beyond this week).
-      openDatePicker('', d => { if (d) updateTask(id, { focus_date: d }); }, div, dateOffset(7));
+      openDatePicker('', d => { if (d) updateTask(id, { start_date: d }); }, div, dateOffset(7));
     }
-    else if (div.dataset.dropDay) updateTask(id, { focus_date: div.dataset.dropDay });
+    else if (div.dataset.dropDay) updateTask(id, { start_date: div.dataset.dropDay });
   });
 
   // Touch: a tap on a card opens the editor (double-click, the desktop
@@ -367,11 +367,11 @@
     showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false }));
   }
 
-  function setPlan(id, focusDate) {
-    const prev = tasks.find(t => t.id === id)?.focus_date ?? null;
-    updateTask(id, { focus_date: focusDate });
-    const msg = focusDate ? `Planned for ${formatDate(focusDate)}` : 'Plan cleared';
-    showUndo(msg, () => updateTask(id, { focus_date: prev }));
+  function setStart(id, startDate) {
+    const prev = tasks.find(t => t.id === id)?.start_date ?? null;
+    updateTask(id, { start_date: startDate });
+    const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
+    showUndo(msg, () => updateTask(id, { start_date: prev }));
   }
 
   // Confirm, delete, and offer undo that restores the full snapshots (ids and
@@ -419,10 +419,10 @@
       ['delete', 'Delete…', 'danger'],
     ] : [
       ['edit', 'Edit…'],
-      ['today', 'Plan for today'],
-      ['tomorrow', 'Plan for tomorrow'],
-      ['pick', 'Pick plan date…'],
-      task.focus_date && ['unplan', 'Unplan'],
+      ['today', 'Start today'],
+      ['tomorrow', 'Start tomorrow'],
+      ['pick', 'Pick start date…'],
+      task.start_date && ['unplan', 'Unplan'],
       task.recurrence && ['skip', 'Skip this occurrence'],
       ['wontdo', "Won't do"],
       ['delete', 'Delete…', 'danger'],
@@ -472,11 +472,11 @@
     const id = task.id;
     switch (action) {
       case 'edit':     openEditModal(id); break;
-      case 'today':    setPlan(id, dateOffset(0)); break;
-      case 'tomorrow': setPlan(id, dateOffset(1)); break;
-      case 'unplan':   setPlan(id, null); break;
+      case 'today':    setStart(id, dateOffset(0)); break;
+      case 'tomorrow': setStart(id, dateOffset(1)); break;
+      case 'unplan':   setStart(id, null); break;
       case 'pick':
-        openDatePicker(task.focus_date || '', d => d !== undefined && setPlan(id, d), anchor, todayStr());
+        openDatePicker(task.start_date || '', d => d !== undefined && setStart(id, d), anchor, todayStr());
         break;
       case 'skip':     skipOccurrence(id); break;
       case 'wontdo':   markWontDo(id); break;
@@ -585,20 +585,18 @@
 
     // Tab filter
     if (activeFilter === 'focus') {
-      filtered = filtered.filter(t => !t.completed_at && (
-        (t.focus_date && t.focus_date <= today) || (t.due_date && t.due_date <= today)
-      ));
+      filtered = filtered.filter(t => !t.completed_at && isFocus(t, today));
     } else if (activeFilter === 'due') {
-      // Upcoming is a day board: show all open tasks grouped by day. Scheduled
-      // tasks (due_date/focus_date) land on their day; unplanned ones go to the
-      // Someday section so they can be dragged into the week.
+      // Plan is a day board: show all open tasks grouped by start date; tasks
+      // without one go to the Unplanned section so they can be dragged into
+      // the week (DeckCore.boardBuckets).
       filtered = filtered.filter(t => !t.completed_at);
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else {
-      // "open" (Backlog) shows non-completed by default. With "Unplanned only"
-      // on it narrows to tasks with no decided day, so the list reads as the
-      // triage queue; planning a task is what removes it from here.
+      // "open" (All) shows non-completed by default. With "Unplanned only"
+      // on it narrows to tasks with no start date, so the list reads as the
+      // triage queue; giving a task a start date is what removes it from here.
       filtered = filtered.filter(t => !t.completed_at);
       if (unplannedOnly) filtered = filtered.filter(isUnplanned);
     }
@@ -641,7 +639,7 @@
       if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
       if (a.due_date) return -1;
       if (b.due_date) return 1;
-      if (a.focus_date && b.focus_date) return a.focus_date.localeCompare(b.focus_date);
+      if (a.start_date && b.start_date) return a.start_date.localeCompare(b.start_date);
       // Final fallback: inherit backlog/plan priority so tasks land in Focus in the
       // same relative order they were given in the Backlog or Plan tab.
       if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
@@ -649,7 +647,7 @@
       if (b.sort_order != null) return 1;
       return 0;
     },
-    due:       (a, b) => (a.due_date || a.focus_date || '').localeCompare(b.due_date || b.focus_date || ''),
+    due:       (a, b) => (a.due_date || a.start_date || '').localeCompare(b.due_date || b.start_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
   };
 
@@ -1077,23 +1075,22 @@
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
       const tagsHtml = tags ? `<div class="task-tags-right">${tags}</div>` : '';
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
-      const focusToday = task.focus_date === dateOffset(0);
-      const focusTmrw  = task.focus_date === dateOffset(1);
-      const focusMon   = task.focus_date === nextMonday();
+      const focusToday = task.start_date === dateOffset(0);
+      const focusTmrw  = task.start_date === dateOffset(1);
+      const focusMon   = task.start_date === nextMonday();
       const focusClass = focusToday ? ' task-marked-today' : focusTmrw ? ' task-marked-tmrw' : focusMon ? ' task-marked-mon' : '';
       const focusMetaClass = focusToday ? 'focus-today' : focusTmrw ? 'focus-tmrw' : focusMon ? 'focus-mon' : '';
       const dueDisplay = !task.completed_at
         ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
         : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
-      // The plan date is a start date: a past one means "available since",
-      // not late — so it reads "since Sep 21" with no warning styling.
-      const focusLabel = !task.focus_date ? ''
-        : (!task.completed_at && task.focus_date < todayStr())
-          ? `since ${shortDate(task.focus_date)}` : formatDate(task.focus_date);
+      // A past start date means "available since", not late — so it reads
+      // "since Sep 21" with no warning styling.
+      const focusLabel = !task.start_date ? ''
+        : (!task.completed_at && task.start_date < todayStr())
+          ? `since ${shortDate(task.start_date)}` : formatDate(task.start_date);
       const focusDisplay = !task.completed_at
-        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.focus_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="focus_date" title="${task.focus_date ? 'Click to change plan date' : 'Set plan date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
-        : (task.focus_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.focus_date)}</span>` : '');
-      const deferDaysDisplay = task.defer_days != null ? `<span class="task-date-info">${task.defer_days === 0 ? 'plan on due date' : `plan ${task.defer_days}d before due`}</span>` : '';
+        ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
+        : (task.start_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.start_date)}</span>` : '');
       const completedDisplay = task.completed_at
         ? (task.wont_do
             ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
@@ -1102,11 +1099,11 @@
       const pageDisplay = task.page ? `<a href="/page/${esc(task.page)}" class="task-page-link">📄 ${esc(task.page)}</a>` : '';
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
-      const hasRealMeta = !!(tags || task.due_date || task.focus_date || task.recurrence ||
-        task.page || task.defer_days != null || task.completed_at);
-      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || deferDaysDisplay || completedDisplay || recIcon || pageDisplay || tagsRight;
+      const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
+        task.page || task.completed_at);
+      const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || pageDisplay || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${deferDaysDisplay}${tagsRight}${recIcon}${pageDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}${pageDisplay}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1755,10 +1752,8 @@
     document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
     document.getElementById('task-edit-title' + sfx).value = task ? task.title : '';
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
-    // "Plan before due" (defer_days): 0 shows as "0" (plan on the due date).
-    document.getElementById('task-edit-defer-days' + sfx).value = task?.defer_days ?? '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-focus' + sfx).value = task ? task.focus_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
+    document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterTag.value.trim() || initTag || '');
     const createdEl = document.getElementById('task-edit-created' + sfx);
     if (task && task.created_at) {
@@ -1784,7 +1779,7 @@
       newCb.checked = false;
     }
     deleteBtn.style.display = task ? '' : 'none';
-    syncPlanLead();
+    syncDates('open');
     modal.showModal();
     document.getElementById('task-edit-title' + sfx).focus();
   }
@@ -1808,20 +1803,14 @@
   function syncRecFields() {
     // Sub-controls are only active when Repeat is both enabled and set.
     const on = !recTypeSelect.disabled && !!recTypeSelect.value;
-    const subHint = on ? '' : (recTypeSelect.disabled ? 'Set a due or plan date first' : 'Select a repeat type first');
+    const subHint = on ? '' : (recTypeSelect.disabled ? 'Set a due or start date first' : 'Select a repeat type first');
     const intervalEl = document.getElementById('task-edit-rec-interval' + sfx);
     intervalEl.disabled = !on;
     intervalEl.closest('.task-field').title = subHint;
     const rf = document.getElementById('task-edit-rec-from' + sfx);
     if (rf) {
       rf.disabled = !on;
-      rf.closest('.task-field').title = on ? 'Repeat from the completion date instead of the anchor date' : subHint;
-    }
-    const anchorLabel = document.getElementById('task-edit-rec-anchor-label' + sfx);
-    if (anchorLabel) {
-      const anchor = document.getElementById('task-edit-due' + sfx)?.value ? 'due date' : 'plan date';
-      anchorLabel.textContent = on ? anchor : '—';
-      anchorLabel.closest('.task-field').title = on ? `Each cycle advances the ${anchor}` : subHint;
+      rf.closest('.task-field').title = on ? 'Repeat from the completion date instead of the due (or start) date' : subHint;
     }
   }
   recTypeSelect.addEventListener('change', syncRecFields);
@@ -1841,52 +1830,42 @@
       const input = document.getElementById(btn.dataset.dateTrigger);
       openDatePicker(input.value || '', d => {
         input.value = d || '';
-        // Picking an explicit plan date leaves lead mode (see syncPlanLead).
-        if (btn.dataset.dateTrigger === 'task-edit-focus' + sfx) {
-          document.getElementById('task-edit-defer-days' + sfx).value = '';
-        }
-        syncPlanLead();
+        syncDates(btn.dataset.dateTrigger === 'task-edit-due' + sfx ? 'due' : 'start');
       }, btn, todayStr(), modal);
     });
   });
 
-  // "Plan for" (focus_date) and "Plan before due" (defer_days) both set the one
-  // plan date. The lead is the single source of truth while it has a value: it
-  // fills the plan date (due − lead) and locks that field so the two can't
-  // silently disagree. Clearing the lead (or picking an explicit plan date,
-  // above) hands control back to the plan-date field.
-  //
-  // Also gates Repeat on having at least one date, and auto-selects the "plan
-  // date" cycle anchor when only a plan date is set.
-  function syncPlanLead() {
-    const leadEl  = document.getElementById('task-edit-defer-days' + sfx);
+  // "Days before due" is not stored: it is just another way to enter the start
+  // date, shown as the gap between the two dates (and that gap is what a
+  // recurring task carries to its next instance). `changed` says which field
+  // the user touched: typing a number ('lead') sets start = due − N; any other
+  // change recomputes the number from the two dates. Moving the due date never
+  // moves the start date — like the inline ⏰ edit, one edit changes one date.
+  // Also gates Repeat on having at least one date.
+  function syncDates(changed) {
+    const leadEl  = document.getElementById('task-edit-lead' + sfx);
     const dueEl   = document.getElementById('task-edit-due' + sfx);
-    const focusEl = document.getElementById('task-edit-focus' + sfx);
-    const hintEl  = document.getElementById('task-edit-lead-hint' + sfx);
-    const trigger = modal.querySelector('[data-date-trigger="task-edit-focus' + sfx + '"]');
-    const hasDue = !!dueEl.value;
-    const hasFocus = !!focusEl.value;
-    // "Plan before due" is only meaningful relative to a due date — disable it
-    // (with a hint) until one is set, rather than letting it silently do nothing.
-    leadEl.disabled = !hasDue;
-    if (hintEl) hintEl.textContent = hasDue ? '' : 'Set a due date first';
+    const startEl = document.getElementById('task-edit-start' + sfx);
     const lead = leadEl.value.trim();
-    const driving = lead !== '' && hasDue;
-    if (driving) {
-      focusEl.value = addDays(dueEl.value, -Math.max(0, parseInt(lead, 10) || 0));
+    if (changed === 'lead' && dueEl.value && lead !== '') {
+      startEl.value = addDays(dueEl.value, -Math.max(0, parseInt(lead, 10) || 0));
     }
-    if (trigger) {
-      trigger.disabled = driving;
-      trigger.classList.toggle('date-trigger--derived', driving);
+    if (changed !== 'lead') {
+      const gap = (dueEl.value && startEl.value)
+        ? Math.round((new Date(dueEl.value + 'T00:00:00') - new Date(startEl.value + 'T00:00:00')) / 86400000)
+        : null;
+      leadEl.value = gap != null && gap >= 0 ? gap : '';
     }
+    // Only meaningful relative to a due date.
+    leadEl.disabled = !dueEl.value;
     refreshDateTriggers();
     // Repeat requires at least one date to be meaningful.
-    const noDate = !hasDue && !hasFocus;
+    const noDate = !dueEl.value && !startEl.value;
     recTypeSelect.disabled = noDate;
-    recTypeSelect.closest('.task-field').title = noDate ? 'Set a due or plan date first' : '';
+    recTypeSelect.closest('.task-field').title = noDate ? 'Set a due or start date first' : '';
     syncRecFields();
   }
-  document.getElementById('task-edit-defer-days' + sfx).addEventListener('input', syncPlanLead);
+  document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => syncDates('lead'));
 
   cancelBtn.addEventListener('click', () => { hideEditTagAc(); modal.close(); });
 
@@ -1899,17 +1878,11 @@
       title: document.getElementById('task-edit-title' + sfx).value.trim(),
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
-      focus_date: document.getElementById('task-edit-focus' + sfx).value || null,
-      // "Plan before due": empty → null; otherwise clamp to >= 0 (0 = on due date).
-      defer_days: (() => {
-        const v = document.getElementById('task-edit-defer-days' + sfx).value.trim();
-        return v === '' ? null : Math.max(0, parseInt(v, 10) || 0);
-      })(),
+      start_date: document.getElementById('task-edit-start' + sfx).value || null,
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
       rec_type: recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
-      rec_anchor: document.getElementById('task-edit-due' + sfx).value ? 'due' : 'plan',
     };
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
     // Move to new: reset sort_order to null
@@ -1964,11 +1937,11 @@
         clearBoardDropOver();
         if (!targetDiv || !targetDiv.dataset.dropBucket) return;
         const id = draggedId;
-        if (targetDiv.dataset.dropBucket === 'someday') updateTask(id, { focus_date: null });
+        if (targetDiv.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
         else if (targetDiv.dataset.dropBucket === 'later') {
-          openDatePicker('', d => { if (d) updateTask(id, { focus_date: d }); }, targetDiv, dateOffset(7));
+          openDatePicker('', d => { if (d) updateTask(id, { start_date: d }); }, targetDiv, dateOffset(7));
         } else if (targetDiv.dataset.dropDay) {
-          updateTask(id, { focus_date: targetDiv.dataset.dropDay });
+          updateTask(id, { start_date: targetDiv.dataset.dropDay });
         }
       }
     }
@@ -2188,13 +2161,13 @@
       return;
     }
 
-    // 'f' / 'F' — plan selected task for today / tomorrow
+    // 'f' / 'F' — start selected task today / tomorrow
     if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && selectedId) {
       e.preventDefault();
       const task = tasks.find(t => t.id === selectedId);
       if (task && !task.completed_at) {
         const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
-        updateTask(task.id, { focus_date: task.focus_date === target ? null : target });
+        updateTask(task.id, { start_date: task.start_date === target ? null : target });
       }
       return;
     }

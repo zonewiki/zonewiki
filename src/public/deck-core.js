@@ -16,14 +16,28 @@
     return dateToStr(d);
   }
 
-  // A task is unplanned when it has no focus_date: no day has been decided for
-  // it. A due date alone doesn't count — the board renders such a task on its
-  // deadline as a fallback, which looks placed but is the one day it should not
-  // be worked on. The All tab's "Unplanned only" filter keeps exactly these, so
-  // the list reads as the queue awaiting a planning decision.
+  // Two dates, one meaning each:
+  //   due_date   — the deadline; only a past due date makes a task overdue.
+  //   start_date — the day the task becomes available; a past one just means
+  //                "available since", never overdue.
   // Client-only: the server has no say in which tasks a view shows.
+
+  // A task is unplanned when it has no start date: nobody has decided when to
+  // do it. A due date alone doesn't count — the deadline is the one day the
+  // work should not start. The All tab's "Unplanned only" filter and the
+  // board's Unplanned section hold exactly these tasks.
   function isUnplanned(t) {
-    return !t.focus_date;
+    return !t.start_date;
+  }
+
+  function isOverdue(t, today) {
+    return !!t.due_date && t.due_date < today;
+  }
+
+  // Available now: started, or due today (or earlier). The Focus tab shows
+  // exactly these — the board's Overdue and Today sections.
+  function isFocus(t, today) {
+    return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
   }
 
   function tagMatchScore(q, tag) {
@@ -37,17 +51,14 @@
     return qi === ql.length ? 0 : -1;
   }
 
-  // Board grouping is plan-first: a task's planned date (focus_date) wins over
-  // its deadline, so dragging a due-dated task to another day visibly moves it.
-  function planDate(t) { return t.focus_date || t.due_date || ''; }
-
-  // Which bucket a date falls in: 'overdue', an exact YYYY-MM-DD for
-  // today..+6, or 'later'.
-  function dayBucketKey(d, today) {
-    if (!d) return 'later';
-    if (d < today) return 'overdue';
-    if (d > addDays(today, 6)) return 'later';
-    return d;
+  // Which board section a task belongs in: 'overdue' (missed deadline), an
+  // exact YYYY-MM-DD for today..+6, 'later', or 'unplanned'. A start date in
+  // the past lands on Today (it is available), not on Overdue.
+  function bucketKey(t, today) {
+    if (isOverdue(t, today)) return 'overdue';
+    if (isFocus(t, today)) return today;
+    if (!t.start_date) return 'unplanned';
+    return t.start_date > addDays(today, 6) ? 'later' : t.start_date;
   }
 
   function fullDayLabel(d) {
@@ -55,12 +66,13 @@
   }
 
   // Group Plan-tab tasks into ordered day sections for the board. Date sections
-  // (today..+6), Later, and Someday are droppable (re-plan targets); Overdue is
-  // display-only. Dropping on Later opens a date picker in the UI layer.
+  // (today..+6), Later, and Unplanned are droppable (dropping sets or clears the
+  // start date); Overdue is display-only. Dropping on Later opens a date picker
+  // in the UI layer.
   function boardBuckets(list, today) {
     const groups = {};
     list.forEach(t => {
-      const key = (!t.due_date && !t.focus_date) ? 'someday' : dayBucketKey(planDate(t), today);
+      const key = bucketKey(t, today);
       (groups[key] = groups[key] || []).push(t);
     });
     // Within a day, deadlines first (soonest due), then undated, then by title.
@@ -80,17 +92,21 @@
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
       sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(bySortOrder) });
     }
-    // Later and Someday are always present, even when empty: they are the only
-    // drop targets for "plan beyond this week" and "unplan", so hiding them
-    // when empty would strand every task on a dated day.
+    // Later and Unplanned are always present, even when empty: they are the
+    // only drop targets for "start beyond this week" and "unplan", so hiding
+    // them when empty would strand every task on a dated day.
     sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(bySortOrder) });
-    sections.push({ key: 'someday', label: 'Someday', date: null, droppable: true, tasks: (groups['someday'] || []).sort(bySortOrder) });
+    // Unplanned: nearest deadline first (they need a start date soonest), then
+    // the undated rest in manual order.
+    const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
+      : a.due_date ? -1 : b.due_date ? 1 : bySortOrder(a, b);
+    sections.push({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: (groups['unplanned'] || []).sort(byDeadline) });
     return sections;
   }
 
   const DeckCore = {
-    dateToStr, addDays, isUnplanned, tagMatchScore,
-    planDate, dayBucketKey, fullDayLabel, boardBuckets,
+    dateToStr, addDays, isUnplanned, isOverdue, isFocus, tagMatchScore,
+    bucketKey, fullDayLabel, boardBuckets,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = DeckCore;

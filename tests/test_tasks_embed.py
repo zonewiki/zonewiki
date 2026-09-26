@@ -339,9 +339,13 @@ class TestPageViewLink:
         assert 'data-init-page="proj"' in body
         assert 'data-init-filter="due"' in body
 
-    def test_embed_contains_focus_date_field(self, wiki_dir):
-        """Edit modal includes a Plan for (focus_date) date field."""
+    def test_embed_contains_start_date_field(self, wiki_dir):
+        """Edit modal has a Start (start_date) field and an unstored
+        days-before-due helper; the old lead/anchor fields are gone."""
         html = server.render_md("[[deck]]\n")
-        assert 'id="task-edit-focus"' in html
-        assert 'name="focus_date"' in html
-        assert 'data-date-trigger="task-edit-focus"' in html
+        assert 'id="task-edit-start"' in html
+        assert 'name="start_date"' in html
+        assert 'data-date-trigger="task-edit-start"' in html
+        assert 'id="task-edit-lead"' in html
+        assert "defer_days" not in html and "focus_date" not in html
+        assert "rec-anchor" not in html

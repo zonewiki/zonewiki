@@ -31,7 +31,7 @@ def card(page, title):
 @pytest.fixture()
 def phone(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
-    pg.request.post("/api/deck", data={"title": "Water plants", "focus_date": day(0)})
+    pg.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     pg.request.post("/api/deck", data={"title": "Weekly review",
                                        "rec_type": "weekly", "due_date": day(2)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
@@ -68,7 +68,7 @@ def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
 def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
-    expect(items).to_have_text(["Edit…", "Plan for today", "Plan for tomorrow", "Pick plan date…",
+    expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
                                 "Skip this occurrence", "Won't do", "Delete…"])
     box = menu.bounding_box()
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
@@ -80,21 +80,21 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
 
 
 def test_menu_plan_and_unplan(phone):
-    open_menu(phone, "Weekly review").get_by_role("menuitem", name="Plan for tomorrow").tap()
-    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["focus_date"] == day(1))
+    open_menu(phone, "Weekly review").get_by_role("menuitem", name="Start tomorrow").tap()
+    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["start_date"] == day(1))
     menu = open_menu(phone, "Weekly review")
     menu.get_by_role("menuitem", name="Unplan").tap()
-    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["focus_date"] is None)
+    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["start_date"] is None)
     phone.locator(".task-undo-btn").tap()
-    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["focus_date"] == day(1))
+    wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["start_date"] == day(1))
 
 
 def test_menu_pick_date_opens_picker(phone):
-    open_menu(phone, "Water plants").get_by_role("menuitem", name="Pick plan date…").tap()
+    open_menu(phone, "Water plants").get_by_role("menuitem", name="Pick start date…").tap()
     picker = phone.locator(".deck-datepicker")
     expect(picker).to_be_visible()
     picker.locator(f".dp-day[data-date='{day(3)}']").tap()
-    wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["focus_date"] == day(3))
+    wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(3))
 
 
 def test_menu_skip_and_wont_do(phone):
@@ -146,11 +146,11 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     assert abs(mb["x"] + mb["width"] - (bb["x"] + bb["width"])) < 2 and mb["y"] > bb["y"]
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     page.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Plan for today")).to_be_focused()
+    expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
     page.keyboard.press("Enter")
     expect(menu).to_have_count(0)
     expect(page.locator("#task-edit-modal")).to_be_hidden()   # deck keys stayed out
-    wait_until(page, lambda: tasks_by_title(page)["Water plants"]["focus_date"] == day(0))
+    wait_until(page, lambda: tasks_by_title(page)["Water plants"]["start_date"] == day(0))
     btn = card(page, "Water plants").locator(".task-menu-btn")
     btn.click()
     page.keyboard.press("Escape")
@@ -242,7 +242,7 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
 
 # Regression: the ⏰/📅 chips sit at the right edge of a card, and the picker
 # opened left-aligned at the chip, so on a phone most of it was off-screen.
-@pytest.mark.parametrize("field", ["due_date", "focus_date"])
+@pytest.mark.parametrize("field", ["due_date", "start_date"])
 def test_card_date_picker_fits_on_phone(phone, field):
     chip = card(phone, "Water plants").locator(f".task-clickable-date[data-field='{field}']")
     chip.tap()
@@ -271,7 +271,7 @@ def test_edit_modal_fields_have_no_dead_space_on_phone(phone):
 # Regression: the picker's size was measured before the calendar was drawn
 # (height ~0), so the "no room below → open above" flip never happened and a
 # chip near the bottom of the screen opened a picker running off the bottom.
-def _open_chip_picker_at_bottom(page, field="focus_date"):
+def _open_chip_picker_at_bottom(page, field="start_date"):
     c = card(page, "Water plants")
     # Push the list down until the card sits at the bottom of the screen.
     c.evaluate("el => { const gap = innerHeight - el.getBoundingClientRect().bottom - 8;"
@@ -298,12 +298,12 @@ def test_card_date_picker_opens_upward_near_bottom(phone):
 def test_date_picker_pinned_on_screen_when_it_fits_nowhere(new_page, wiki):
     # Landscape phone: 390px tall — no room above or below a mid-screen chip.
     pg = new_page(viewport={"width": 844, "height": 390}, has_touch=True, is_mobile=True)
-    pg.request.post("/api/deck", data={"title": "Water plants", "focus_date": day(0)})
+    pg.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/page/deck")
     c = card(pg, "Water plants")
     c.evaluate("el => { document.body.style.paddingBottom = '100vh'; el.scrollIntoView({block: 'center'}); }")
-    c.locator(".task-clickable-date[data-field='focus_date']").tap()
+    c.locator(".task-clickable-date[data-field='start_date']").tap()
     picker = pg.locator(".deck-datepicker")
     expect(picker).to_be_visible()
     assert in_viewport(pg, picker), picker.bounding_box()
@@ -317,7 +317,7 @@ def test_edit_modal_is_compact_on_phone(phone):
         modal.evaluate("d => [d.scrollHeight, d.clientHeight]")
     def top(sel):
         return modal.locator(sel).bounding_box()["y"]
-    assert abs(top("[data-date-trigger='task-edit-due']") - top("[data-date-trigger='task-edit-focus']")) <= 1.5
+    assert abs(top("[data-date-trigger='task-edit-due']") - top("[data-date-trigger='task-edit-start']")) <= 1.5
     assert abs(top("#task-edit-rec-type") - top("#task-edit-rec-interval")) <= 1.5
     # The action bar sits at the bottom edge, within thumb reach.
     save = modal.get_by_role("button", name="Save").bounding_box()
