@@ -39,7 +39,7 @@ class TestDates:
 
 
 class TestIsUnplanned:
-    """Backlog's "Unplanned only" filter: work with no decided day."""
+    """All tab's "Unplanned only" filter: work with no decided day."""
 
     def test_no_dates_is_unplanned(self):
         assert run_core("DeckCore.isUnplanned({title: 'x'})") is True

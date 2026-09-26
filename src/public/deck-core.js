@@ -29,7 +29,7 @@
   // A task is unplanned when it has no focus_date: no day has been decided for
   // it. A due date alone doesn't count — the board renders such a task on its
   // deadline as a fallback, which looks placed but is the one day it should not
-  // be worked on. The Backlog's "Unplanned only" filter keeps exactly these, so
+  // be worked on. The All tab's "Unplanned only" filter keeps exactly these, so
   // the list reads as the queue awaiting a planning decision.
   // Client-only: the server has no say in which tasks a view shows.
   function isUnplanned(t) {

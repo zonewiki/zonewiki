@@ -81,7 +81,7 @@ VIEWS = [
     ("editor", "/edit/stress", None),
     ("deck-focus", "/page/deck", "focus"),
     ("deck-plan", "/page/deck", "due"),
-    ("deck-backlog", "/page/deck", "open"),
+    ("deck-all", "/page/deck", "open"),
 ]
 
 

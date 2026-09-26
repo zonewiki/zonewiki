@@ -74,7 +74,7 @@
   // overrides the default per embed.
   const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   const STALE_DAYS = 3;  // focus plans older than this are styled stale
-  let unplannedOnly = true;  // Backlog "Unplanned only" — resolved during init
+  let unplannedOnly = false;  // All tab's "Unplanned only" — resolved during init
 
   // Upcoming day board: dragging a task onto a day section re-plans it (sets
   // focus_date); dropping on "Someday" clears the plan. These list-level
@@ -129,19 +129,19 @@
   function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 
   // "Unplanned only" is a standing preference, not a per-visit choice like the
-  // tab, so it persists across sessions (localStorage). It defaults ON: Backlog
-  // means the queue of work no day has claimed yet, and unchecking widens it to
-  // every open task. `[[deck unplanned=0|1]]` pins it either way for an embed.
-  // The key is versioned so this new default actually reaches anyone who had
-  // already toggled the previous, differently-scoped version of the filter.
+  // tab, so it persists across sessions (localStorage). It defaults OFF: the
+  // All tab shows every open task, and checking it narrows the list to work no
+  // day has claimed yet. `[[deck unplanned=0|1]]` pins it either way for an
+  // embed. The key is versioned so a changed default actually reaches anyone
+  // whose browser stored the previous default (v2 defaulted on).
   const unplannedPin = appEl?.dataset.initUnplanned || '';
-  const unplannedStorageKey = `leaf-deck-unplanned-v2:${location.pathname}#${instanceId}`;
+  const unplannedStorageKey = `leaf-deck-unplanned-v3:${location.pathname}#${instanceId}`;
   function saveUnplanned(v) { try { localStorage.setItem(unplannedStorageKey, v ? '1' : '0'); } catch (_) {} }
   function loadUnplanned() {
     try {
       const stored = localStorage.getItem(unplannedStorageKey);
-      return stored === null ? true : stored === '1';
-    } catch (_) { return true; }
+      return stored === '1';
+    } catch (_) { return false; }
   }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
@@ -1384,7 +1384,7 @@
     render();
   });
 
-  // The toggle only means anything on Backlog — every other tab is defined by
+  // The toggle only means anything on All — every other tab is defined by
   // dates — so it rides along with the active tab instead of always showing.
   function syncUnplannedToggle() {
     if (unplannedWrap) unplannedWrap.hidden = activeFilter !== 'open';
@@ -2340,7 +2340,7 @@
   const initSearch = urlParams.get('search') || '';
   if (initSearch && filterSearch) filterSearch.value = initSearch;
   // Precedence: URL ?filter= > embed filter (always wins when specified) >
-  // tab remembered this session > Backlog default. So a [[deck filter=…]] embed
+  // tab remembered this session > All default. So a [[deck filter=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
   // user last clicked across refreshes within the same browser tab.
   // The canonical tab names are the <option> values (focus/due/open/completed);
@@ -2348,7 +2348,7 @@
   // URLs. The embed filter arrives already normalized by the server.
   const FILTER_ALIASES = {
     focus: 'focus', today: 'focus',
-    backlog: 'open', open: 'open',
+    all: 'open', backlog: 'open', open: 'open',
     plan: 'due', upcoming: 'due', due: 'due',
     completed: 'completed', done: 'completed',
   };

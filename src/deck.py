@@ -480,11 +480,12 @@ def _parse_tasks_params(raw: str) -> dict:
 
 
 # Maps friendly tab-label names (and the internal names) to the data-filter
-# value the client uses to activate a tab. Lets `[[deck filter=backlog]]` work
-# using the labels the user actually sees, not just internal names.
+# value the client uses to activate a tab. Lets `[[deck filter=all]]` work
+# using the labels the user actually sees, not just internal names. "backlog"
+# is the tab's former label, kept so existing embeds keep working.
 _FILTER_ALIASES = {
     "focus": "focus", "today": "focus",
-    "backlog": "open", "open": "open",
+    "all": "open", "backlog": "open", "open": "open",
     "plan": "due", "upcoming": "due", "due": "due",
     "completed": "completed", "done": "completed",
 }
@@ -505,9 +506,9 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
         capacity = max(1, min(99, int(params.get("capacity", ""))))
     except ValueError:
         capacity = ""  # client falls back to its default
-    # `unplanned=1`/`unplanned=0` pins the Backlog's "Unplanned only" filter on
+    # `unplanned=1`/`unplanned=0` pins the All tab's "Unplanned only" filter on
     # or off for this embed. Omitted, the client uses the stored preference,
-    # which defaults on — so pinning it off is what a full-inventory embed needs.
+    # which defaults off — so pinning it on gives a planning-queue embed.
     raw_unplanned = params.get("unplanned", "").strip().lower()
     if raw_unplanned in ("1", "true", "yes"):
         unplanned = "1"
@@ -528,7 +529,7 @@ def _build_deck_embed(params: dict, page_slug: str = "", instance_id: int = 0) -
     <select class="tab-select" id="tasks-tabs{sfx}" aria-label="View">
       <option value="focus">Focus</option>
       <option value="due">Plan</option>
-      <option value="open">Backlog</option>
+      <option value="open">All</option>
       <option value="completed">Completed</option>
     </select>
     <div class="tasks-toolbar">

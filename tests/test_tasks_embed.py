@@ -108,7 +108,8 @@ class TestTasksLinkRender:
         cases = {
             "focus": "focus",
             "today": "focus",   # legacy alias
-            "backlog": "open",
+            "all": "open",
+            "backlog": "open",  # former label of the All tab
             "plan": "due",
             "upcoming": "due",  # legacy alias for the renamed Plan tab
             "completed": "completed",
@@ -119,7 +120,7 @@ class TestTasksLinkRender:
 
     def test_embed_filter_alias_case_insensitive(self, wiki_dir):
         """Filter label matching is case-insensitive."""
-        html = server.render_md("[[deck filter=Backlog]]\n")
+        html = server.render_md("[[deck filter=All]]\n")
         assert 'data-init-filter="open"' in html
 
     def test_embed_filter_internal_names_still_work(self, wiki_dir):
@@ -135,7 +136,7 @@ class TestTasksLinkRender:
         assert "Deferred" not in html
 
     def test_embed_unplanned_param_pins_toggle(self, wiki_dir):
-        """[[deck unplanned=1]] pins the Backlog "Unplanned only" filter on."""
+        """[[deck unplanned=1]] pins the All tab's "Unplanned only" filter on."""
         html = server.render_md("[[deck unplanned=1]]\n")
         assert 'data-init-unplanned="1"' in html
 

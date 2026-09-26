@@ -1,4 +1,4 @@
-"""Deck: Plan-board drag-to-plan and the Backlog "Unplanned only" toggle."""
+"""Deck: Plan-board drag-to-plan and the All tab's "Unplanned only" toggle."""
 
 from datetime import date, timedelta
 
@@ -66,22 +66,44 @@ def test_drag_to_someday_clears_plan(page, wiki):
     expect(page.locator(".board-day-divider[data-drop-bucket='someday'] .board-day-count")).to_have_text("1")
 
 
-def test_backlog_unplanned_toggle(page, wiki):
+def test_all_tab_unplanned_toggle(page, wiki):
     page.request.post("/api/deck", data={"title": "Unplanned one"})
     page.request.post("/api/deck", data={"title": "Planned one", "focus_date": tomorrow()})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    page.locator("#tasks-tabs").select_option("open")
+    tabs = page.locator("#tasks-tabs")
+    expect(tabs.locator("option[value='open']")).to_have_text("All")
+    tabs.select_option("open")
     toggle = page.locator("#task-unplanned")
-    expect(toggle).to_be_checked()  # on by default
+    expect(toggle).not_to_be_checked()  # off by default: All shows every open task
     expect(card(page, "Unplanned one")).to_be_visible()
-    expect(card(page, "Planned one")).to_have_count(0)
-
-    toggle.uncheck()
     expect(card(page, "Planned one")).to_be_visible()
+
+    toggle.check()
+    expect(card(page, "Planned one")).to_have_count(0)
+    expect(card(page, "Unplanned one")).to_be_visible()
 
     # A standing preference: survives a reload.
     page.reload()
     page.locator("#tasks-tabs").select_option("open")
+    expect(page.locator("#task-unplanned")).to_be_checked()
+    expect(card(page, "Planned one")).to_have_count(0)
+
+
+def test_old_stored_default_does_not_keep_toggle_on(page, wiki):
+    # v2 of the preference defaulted on; browsers that stored it must now see
+    # the new default (off) rather than a leftover "1".
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck")
+    page.evaluate("k => localStorage.setItem(k, '1')", "leaf-deck-unplanned-v2:/page/deck#0")
+    page.reload()
+    page.locator("#tasks-tabs").select_option("open")
     expect(page.locator("#task-unplanned")).not_to_be_checked()
-    expect(card(page, "Planned one")).to_be_visible()
+
+
+def test_embed_pin_turns_toggle_on(page, wiki):
+    page.request.post("/api/deck", data={"title": "Planned one", "focus_date": tomorrow()})
+    wiki.write("deck", "# Deck\n\n[[deck filter=all unplanned=1]]\n")
+    page.goto("/page/deck")
+    expect(page.locator("#task-unplanned")).to_be_checked()
+    expect(card(page, "Planned one")).to_have_count(0)

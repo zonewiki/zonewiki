@@ -1303,7 +1303,7 @@ body.editor-page main {
 /* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
 .tasks-toolbar input { flex: 1 1 0; min-width: 80px; }
 
-/* Backlog "Unplanned only" toggle. Opts out of the text-input sizing above
+/* All tab's "Unplanned only" toggle. Opts out of the text-input sizing above
    (flex-grow, min-width, box borders) — it's a checkbox, not a field. */
 .task-unplanned-toggle {
   display: flex; align-items: center; gap: .3rem; flex: 0 0 auto;
