@@ -45,6 +45,14 @@ fi
 IMAGE=leaf
 CONTAINER=leaf
 
+# Leaf's own version for the image ("<hash> <commit date>", "+dirty" with
+# uncommitted source changes); same format as server.py's _source_version().
+LEAF_VERSION=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
+if [[ -n "$LEAF_VERSION" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
+  LEAF_VERSION="$LEAF_VERSION +dirty"
+fi
+BUILD_ARGS=(--build-arg "LEAF_VERSION=${LEAF_VERSION:-unknown}")
+
 # Rootless podman already maps in-container root to the host user, so files
 # written to the mounted volume are owned by the host user. Only a rootful
 # podman (host user is root) needs an explicit --user to match that.
@@ -61,10 +69,10 @@ fi
 
 case "${1:-up}" in
   build)
-    podman build -t "$IMAGE" .
+    podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
     ;;
   up)
-    podman build -t "$IMAGE" .
+    podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
     # k8s-file (docker's json-file equivalent) so `podman logs -f` works even
     # when the podman default log driver is journald (logs -f is unsupported).
     podman run -d --name "$CONTAINER" --replace --restart unless-stopped \
@@ -91,7 +99,7 @@ case "${1:-up}" in
   test)
     # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
-    podman build -q -t "$IMAGE" . >/dev/null
+    podman build -q "${BUILD_ARGS[@]}" -t "$IMAGE" . >/dev/null
     podman run --rm -v "$PWD:/repo:z" -w /repo "$IMAGE" sh -c \
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
