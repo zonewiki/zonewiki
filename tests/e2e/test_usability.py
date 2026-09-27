@@ -1,7 +1,7 @@
 """Deck filter field, commit link, phone editor menu, card swipes, checkbox undo."""
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
@@ -141,7 +141,7 @@ def test_desktop_editor_keeps_inline_buttons(page, wiki):
     expect(page.locator("#rename-toggle")).to_be_visible()
 
 
-# ── 7a. Swipe a card: right = complete, left = start today ───────────────────
+# ── 7a. Swipe a card: in and out of Focus ─────────────────────────────────────
 
 def swipe(page, locator, dx, dy=0, steps=8, release=True):
     cdp = page.context.new_cdp_session(page)
@@ -160,33 +160,90 @@ def swipe(page, locator, dx, dy=0, steps=8, release=True):
     return send
 
 
-def phone_deck(new_page, wiki):
+def phone_deck(new_page, wiki, view="open", **fields):
     phone = new_page(**TOUCH_PHONE)
-    phone.request.post("/api/deck", data={"title": "Water plants"})
+    phone.request.post("/api/deck", data={"title": "Water plants", **fields})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    phone.goto("/page/deck?view=open")
+    phone.goto(f"/page/deck?view={view}")
     return phone
 
 
-def test_swipe_right_completes(new_page, wiki):
+TODAY = date.today().isoformat()
+NEXT_WEEK = (date.today() + timedelta(days=7)).isoformat()
+
+
+def test_swipe_right_on_open_starts_today(new_page, wiki):
     phone = phone_deck(new_page, wiki)
     c = card(phone, "Water plants")
     send = swipe(phone, c, 200, release=False)
     expect(c).to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    assert c.get_attribute("data-swipe-label") == "📅 Start today"
     send("touchEnd", [])
-    # Same grace period as ticking the checkbox.
-    expect(c).to_have_class(re.compile(r"\btask-completing\b"))
-    expect(c.locator("input[type=checkbox]")).to_be_checked()
-    wait_until(phone, lambda: not any(t["title"] == "Water plants"
-                                      for t in phone.request.get("/api/deck").json()), 8000)
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
+    expect(phone.locator(".task-undo-toast")).to_contain_text("Starts")
     expect(phone.locator("#task-edit-modal")).to_be_hidden()   # not also a tap
 
 
-def test_swipe_left_starts_today(new_page, wiki):
-    phone = phone_deck(new_page, wiki)
+def test_swipe_left_on_open_does_nothing(new_page, wiki):
+    phone = phone_deck(new_page, wiki, start_date=NEXT_WEEK)
+    c = card(phone, "Water plants")
+    send = swipe(phone, c, -200, release=False)
+    assert c.evaluate("el => el.style.transform") in ("", "translateX(0px)")
+    expect(c).not_to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    send("touchEnd", [])
+    phone.wait_for_timeout(300)
+    assert task(phone, "Water plants")["start_date"] == NEXT_WEEK
+
+
+def test_swipe_right_on_open_task_already_in_focus_does_nothing(new_page, wiki):
+    phone = phone_deck(new_page, wiki, start_date=(date.today() - timedelta(days=3)).isoformat())
+    c = card(phone, "Water plants")
+    send = swipe(phone, c, 200, release=False)
+    expect(c).not_to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    send("touchEnd", [])
+    phone.wait_for_timeout(300)
+    assert task(phone, "Water plants")["start_date"] != TODAY
+
+
+def test_swipe_left_on_focus_moves_back_to_open(new_page, wiki):
+    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY)
+    c = card(phone, "Water plants")
+    send = swipe(phone, c, -200, release=False)
+    expect(c).to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    assert c.get_attribute("data-swipe-label") == "↩ Unplan"
+    send("touchEnd", [])
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] is None)
+    expect(c).to_have_count(0)   # left Focus
+    expect(phone.locator(".task-undo-toast")).to_contain_text("Start date cleared")
+
+
+def test_swipe_right_on_focus_does_nothing(new_page, wiki):
+    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY)
+    c = card(phone, "Water plants")
+    swipe(phone, c, 200)
+    phone.wait_for_timeout(300)
+    expect(c).not_to_have_class(re.compile(r"\btask-completing\b"))   # no swipe-to-done
+    t = task(phone, "Water plants")
+    assert t["start_date"] == TODAY and not t["completed_at"]
+
+
+def test_due_task_cannot_be_swiped_out_of_focus(new_page, wiki):
+    # Clearing the start date would leave it in Focus: the deadline keeps it.
+    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY, due_date=TODAY)
+    c = card(phone, "Water plants")
+    send = swipe(phone, c, -200, release=False)
+    expect(c).not_to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    send("touchEnd", [])
+    phone.wait_for_timeout(300)
+    assert task(phone, "Water plants")["start_date"] == TODAY
+
+
+def test_swipes_on_plan_go_both_ways(new_page, wiki):
+    phone = phone_deck(new_page, wiki, view="plan", start_date=NEXT_WEEK)
+    swipe(phone, card(phone, "Water plants"), 200)
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
     swipe(phone, card(phone, "Water plants"), -200)
-    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == date.today().isoformat())
-    expect(phone.locator(".task-undo-toast")).to_contain_text("Starts")
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] is None)
 
 
 def test_short_swipe_does_nothing(new_page, wiki):
@@ -194,7 +251,6 @@ def test_short_swipe_does_nothing(new_page, wiki):
     c = card(phone, "Water plants")
     swipe(phone, c, 40)
     phone.wait_for_timeout(300)
-    expect(c).not_to_have_class(re.compile(r"\btask-completing\b"))
     assert task(phone, "Water plants")["start_date"] is None
     assert c.evaluate("el => el.style.transform") == ""
 
@@ -204,7 +260,6 @@ def test_vertical_move_is_not_a_swipe(new_page, wiki):
     c = card(phone, "Water plants")
     swipe(phone, c, 30, dy=120)
     phone.wait_for_timeout(300)
-    expect(c).not_to_have_class(re.compile(r"\btask-completing\b"))
     assert task(phone, "Water plants")["start_date"] is None
 
 

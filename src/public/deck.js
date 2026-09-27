@@ -142,19 +142,42 @@
   //   drop(target) → perform the drop (draggedId is set while it runs)
   // Moving before the press completes is a scroll, and cancels the pick-up —
   // unless the move is mostly sideways on an open task: that is a swipe.
-  // Swipe right past the threshold completes the task (the checkbox's grace
-  // period, so a tap on the checkbox still cancels); swipe left starts it
-  // today (with an undo toast). Swipes work in every view, drags only where
-  // touchDrop is set.
+  // Swipes only move a task in and out of Focus (swipeActions): right starts
+  // it today (Open and Plan), left clears its start date (Focus and Plan).
+  // A direction with nothing to do doesn't move the card. Both come with an
+  // undo toast (setStart). Drags work only where touchDrop is set.
   const LONG_PRESS_MS = 350;
   let touchDrop = null;
-  let touchDrag = null;  // { item, x, y, timer, active, swiping, canSwipe, ghost, grabY, target, raf }
+  let touchDrag = null;  // { item, x, y, timer, active, swiping, swipe, ghost, grabY, target, raf }
+  // What a swipe does on this task in the current view: { right, left },
+  // each 'start' (start today), 'unplan' (clear the start date) or null.
+  function swipeActions(task) {
+    if (!task || task.completed_at) return { right: null, left: null };
+    const today = todayStr();
+    // Already in Focus: nothing to start. Due now: clearing the start date
+    // would leave it in Focus (the deadline keeps it there).
+    const start = isFocus(task, today) ? null : 'start';
+    const unplan = task.start_date && !isDueNow(task, today) ? 'unplan' : null;
+    if (activeFilter === 'open') return { right: start, left: null };
+    if (activeFilter === 'focus') return { right: null, left: unplan };
+    if (activeFilter === 'due') return { right: start, left: unplan };
+    return { right: null, left: null };
+  }
+  const SWIPE_LABELS = { start: '📅 Start today', unplan: '↩ Unplan' };
   function setSwipe(dx) {
     const item = touchDrag.item;
+    const action = dx > 0 ? touchDrag.swipe.right : touchDrag.swipe.left;
+    if (!action) dx = 0;  // nothing to do this way: the card stays put
     const threshold = Math.min(110, item.offsetWidth * 0.3);
     item.style.transform = `translateX(${dx}px)`;
-    item.dataset.swipe = dx > 0 ? 'complete' : 'start';
-    item.classList.toggle('task-swipe-armed', Math.abs(dx) >= threshold);
+    if (action) {
+      item.dataset.swipe = action;
+      item.dataset.swipeSide = dx > 0 ? 'right' : 'left';
+      item.dataset.swipeLabel = SWIPE_LABELS[action];
+    } else {
+      delete item.dataset.swipe;
+    }
+    item.classList.toggle('task-swipe-armed', !!action && Math.abs(dx) >= threshold);
   }
   function touchDropTarget(x, y) {
     const el = document.elementFromPoint(x, y);
@@ -203,8 +226,8 @@
       t.item.style.transform = '';
       t.item.classList.remove('task-swipe-armed');
       delete t.item.dataset.swipe;
-      if (drop && armed && action === 'complete') beginComplete(t.item.dataset.id, t.item);
       if (drop && armed && action === 'start') setStart(t.item.dataset.id, todayStr());
+      if (drop && armed && action === 'unplan') setStart(t.item.dataset.id, null);
       return;
     }
     if (!t.active) return;
@@ -222,10 +245,11 @@
     const item = e.target.closest('.task-item');
     if (!item || e.target.closest('input, button, a, .task-clickable-date, .task-inline-input')) return;
     const canDrag = !!touchDrop && item.matches('[draggable]');
-    const canSwipe = !tasks.find(t => t.id === item.dataset.id)?.completed_at;
+    const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
+    const canSwipe = !!(swipe.right || swipe.left);
     if (!canDrag && !canSwipe) return;
     const p = e.touches[0];
-    touchDrag = { item, x: p.clientX, y: p.clientY, active: false, swiping: false, canSwipe,
+    touchDrag = { item, x: p.clientX, y: p.clientY, active: false, swiping: false, canSwipe, swipe,
                   target: null, timer: canDrag ? setTimeout(startTouchDrag, LONG_PRESS_MS) : null };
   }, { passive: true });
   listEl.addEventListener('touchmove', e => {

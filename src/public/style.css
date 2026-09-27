@@ -1510,19 +1510,21 @@ body.editor-page main {
 .tasks-list { overflow-x: clip; overflow-clip-margin: 6px; }
 .task-item[data-swipe] { position: relative; }
 .task-item[data-swipe]::after {
+  content: attr(data-swipe-label);
   position: absolute; top: 50%; transform: translateY(-50%);
   font-size: .8rem; font-weight: 600; color: var(--muted); white-space: nowrap;
 }
-.task-item[data-swipe="complete"]::after { content: "✓ Done"; right: calc(100% + .75rem); }
-.task-item[data-swipe="start"]::after { content: "📅 Start today"; left: calc(100% + .75rem); }
-.task-item.task-swipe-armed[data-swipe="complete"] {
-  border-color: #16a34a; background: color-mix(in srgb, #16a34a 12%, var(--bg));
-}
+/* The label sits in the space the card uncovers: left of it on a right swipe. */
+.task-item[data-swipe-side="right"]::after { right: calc(100% + .75rem); }
+.task-item[data-swipe-side="left"]::after { left: calc(100% + .75rem); }
 .task-item.task-swipe-armed[data-swipe="start"] {
   border-color: var(--link); background: color-mix(in srgb, var(--link) 10%, var(--bg));
 }
-.task-item.task-swipe-armed[data-swipe="complete"]::after { color: #16a34a; }
+.task-item.task-swipe-armed[data-swipe="unplan"] {
+  border-color: #d97706; background: color-mix(in srgb, #d97706 10%, var(--bg));
+}
 .task-item.task-swipe-armed[data-swipe="start"]::after { color: var(--link); }
+.task-item.task-swipe-armed[data-swipe="unplan"]::after { color: #d97706; }
 /* Touch drag: the card the finger carries (a clone of the picked-up card). */
 .task-touch-ghost {
   position: fixed; z-index: 1000; margin: 0; pointer-events: none; list-style: none;
