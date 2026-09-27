@@ -236,3 +236,30 @@ def test_deck_all_tab_header_is_compact(new_page, wiki, ctx, rows):
     assert deck_header_rows(pg) == rows
     assert pg.locator("#task-filter-search").bounding_box()["width"] >= 100
     assert horizontal_overflow(pg) <= 0
+
+
+def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
+    # Regression: the navigation trail (up to 6 visited pages) was one flex
+    # row that neither wrapped nor shrank, so a few long titles made the page
+    # wider than the phone. The full-screen deck edit modal grew with it and
+    # its Save/Cancel bar ended up off-screen.
+    pg = new_page(**TOUCH_PHONE)
+    pg.request.post("/api/deck", data={"title": "Water plants", "start_date": _today()})
+    # A full trail (5 pages before the current one) of titles with long words.
+    for i in range(5):
+        wiki.write(f"long-{i}", f"# Infrastructure-Troubleshooting{i} Kubernetes\n")
+        pg.goto(f"/page/long-{i}")
+    pg.goto("/deck?view=focus")
+    expect(pg.locator(".breadcrumb a")).to_have_count(7)  # home, 5 pages, current
+    assert horizontal_overflow(pg) <= 0
+    last = pg.locator(".breadcrumb a").nth(5)
+    assert last.evaluate("el => el.scrollWidth > el.clientWidth"), "long titles are cut off"
+
+    pg.locator(".task-item").filter(has=pg.get_by_text("Water plants", exact=True)) \
+        .locator(".task-content").tap()
+    modal = pg.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    box = modal.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= PHONE["width"] + 0.5, box
+    save = modal.get_by_role("button", name="Save").bounding_box()
+    assert save["x"] + save["width"] <= PHONE["width"] and save["y"] + save["height"] <= PHONE["height"], save

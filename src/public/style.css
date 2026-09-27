@@ -649,6 +649,17 @@ main {
   font-weight: 600;
 }
 .breadcrumb-sep { opacity: .5; }
+/* The navigation trail holds up to 6 pages. It stays on one line, and the
+   page titles shrink with an ellipsis instead of pushing the page wider than
+   a phone (which also pushed the full-screen deck modal's buttons off-screen). */
+.breadcrumb > a:not(.breadcrumb-home),
+.breadcrumb > span:not(.breadcrumb-sep):not(.breadcrumb-right) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb-home, .breadcrumb-sep, .breadcrumb-clear, .breadcrumb-right { flex-shrink: 0; }
 .breadcrumb-clear {
   margin-left: .25rem;
   padding: 0 .25rem;
