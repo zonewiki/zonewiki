@@ -932,9 +932,17 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     old_rec = task.get("recurrence") or {}
     if "start_date" in data:
         task["start_date"] = _validate_date(data["start_date"])
-    # Reset focus_order when the task leaves or re-enters the focus view
-    # (null→value or value→null). Rescheduling (value→value) keeps the order.
-    if (old_start_date is None) != (task.get("start_date") is None):
+    # focus_order is the task's place in Today's arrangement. It is cleared
+    # when the task is unplanned or planned (null→value or value→null), and
+    # when it moves to a day after today: it then comes back unarranged on
+    # that day. Moving it to today or an earlier day keeps its place, and so
+    # does leaving it alone (an unfinished arrangement carries over). An
+    # explicit focus_order in the same request (undo of a move) wins.
+    new_start_date = task.get("start_date")
+    planned_or_unplanned = (old_start_date is None) != (new_start_date is None)
+    moved_later = ("start_date" in data and new_start_date
+                   and new_start_date > date.today().isoformat())
+    if "focus_order" not in data and (planned_or_unplanned or moved_later):
         task["focus_order"] = None
     if "rec_type" in data:
         rec_type = data["rec_type"]

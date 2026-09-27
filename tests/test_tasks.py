@@ -654,6 +654,49 @@ class TestSortOrderUpdate:
         assert resp.get_json()["sort_order"] == 5
 
 
+# ---------- focus_order (Today's arrangement) on update ----------
+
+
+class TestFocusOrderReset:
+    def arranged(self, client, start):
+        task = create_task(client, title="Arranged", start_date=start).get_json()
+        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        return task["id"]
+
+    def focus_order_after(self, client, tid, **data):
+        return client.put(f"/api/deck/{tid}", json=data).get_json()["focus_order"]
+
+    def test_moving_to_a_later_day_clears_it(self, client):
+        today = date.today()
+        tid = self.arranged(client, today.isoformat())
+        tomorrow = (today + timedelta(days=1)).isoformat()
+        assert self.focus_order_after(client, tid, start_date=tomorrow) is None
+
+    def test_moving_to_today_or_earlier_keeps_it(self, client):
+        today = date.today()
+        tid = self.arranged(client, (today - timedelta(days=2)).isoformat())
+        assert self.focus_order_after(client, tid, start_date=today.isoformat()) == 0
+        yesterday = (today - timedelta(days=1)).isoformat()
+        assert self.focus_order_after(client, tid, start_date=yesterday) == 0
+
+    def test_other_edits_keep_it(self, client):
+        tid = self.arranged(client, date.today().isoformat())
+        assert self.focus_order_after(client, tid, title="Renamed") == 0
+        later = (date.today() + timedelta(days=9)).isoformat()
+        assert self.focus_order_after(client, tid, due_date=later) == 0
+
+    def test_unplanning_clears_it(self, client):
+        tid = self.arranged(client, date.today().isoformat())
+        assert self.focus_order_after(client, tid, start_date=None) is None
+
+    def test_explicit_focus_order_wins(self, client):
+        # Undo of a move sends the old date and the old place together.
+        tid = self.arranged(client, date.today().isoformat())
+        assert self.focus_order_after(client, tid, start_date=None) is None
+        assert self.focus_order_after(client, tid, start_date=date.today().isoformat(),
+                                      focus_order=0) == 0
+
+
 # ---------- Completed Count ----------
 
 

@@ -547,10 +547,13 @@
   }
 
   function setStart(id, startDate) {
-    const prev = tasks.find(t => t.id === id)?.start_date ?? null;
+    const task = tasks.find(t => t.id === id);
+    const prev = task?.start_date ?? null;
+    const prevFocus = task?.focus_order ?? null;
     updateTask(id, { start_date: startDate });
     const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
-    showUndo(msg, () => updateTask(id, { start_date: prev }));
+    // A move can clear the task's place on Today; undo puts it back.
+    showUndo(msg, () => updateTask(id, { start_date: prev, focus_order: prevFocus }));
   }
 
   // Confirm, delete, and offer undo that restores the full snapshots (ids and

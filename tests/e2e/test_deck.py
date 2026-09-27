@@ -716,3 +716,21 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     expect(new).to_have_class(re.compile(r"\btask-selected\b"))
     expect(new).to_be_in_viewport()
     expect(page.locator(".task-item.task-selected")).to_have_count(1)
+
+
+def test_undo_of_start_tomorrow_restores_today_arrangement(page, wiki):
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Bravo", "Alpha")]
+    page.request.post("/api/deck/reorder", data={"order": ids, "field": "focus_order"})
+    page.goto("/deck?view=today")
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    card(page, "Bravo").locator(".task-menu-btn").click()
+    page.locator(".task-menu").get_by_role("menuitem", name="Start tomorrow").click()
+    expect(_today_titles(page)).to_have_text(["Alpha"])
+    # Moving to a later day clears its place on Today ...
+    wait_for_field(page, "Bravo", "focus_order", None)
+    # ... and undo puts it back where it was, not under "Not arranged".
+    page.locator(".task-undo-btn").click()
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    wait_for_field(page, "Bravo", "focus_order", 0)
