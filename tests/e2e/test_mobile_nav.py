@@ -1,5 +1,6 @@
 """Phone search button, status badges on phones, and the compact Plan board."""
 
+import re
 from datetime import date
 
 from playwright.sync_api import expect
@@ -37,10 +38,10 @@ def test_search_button_opens_search_and_steps_aside_while_typing(new_page, wiki)
     expect(phone.locator(".mobile-search")).to_be_hidden()
 
 
-def test_no_search_button_in_editor(new_page, wiki):
+def test_no_action_buttons_in_editor(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/edit/index")
-    expect(phone.locator(".mobile-search")).to_have_count(0)
+    expect(phone.locator(".mobile-actions")).to_have_count(0)
 
 
 def test_page_end_not_hidden_behind_search_button(new_page, wiki):
@@ -50,6 +51,33 @@ def test_page_end_not_hidden_behind_search_button(new_page, wiki):
     phone.evaluate("scrollTo(0, document.body.scrollHeight)")
     last = phone.get_by_text("The last line.").bounding_box()
     assert last["y"] + last["height"] <= phone.locator(".mobile-search").bounding_box()["y"]
+
+
+# ── Phone new-note button ────────────────────────────────────────────────────
+# Next to search: `c s` (a new scratch note) for a phone.
+
+def test_new_note_button_sits_left_of_search_on_phones(page, new_page, wiki):
+    page.goto("/page/index")
+    expect(page.locator(".mobile-note")).to_be_hidden()
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/index")
+    note, search = phone.locator(".mobile-note"), phone.locator(".mobile-search")
+    expect(note).to_be_visible()
+    nb, sb = note.bounding_box(), search.bounding_box()
+    assert nb["width"] >= 44 and nb["height"] >= 44
+    assert nb["x"] + nb["width"] < sb["x"] and abs(nb["y"] - sb["y"]) < 1
+
+
+def test_new_note_button_creates_a_scratch_note(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/deck")
+    phone.locator(".mobile-note").tap()
+    expect(phone.locator("#scratch-modal")).to_be_visible()
+    # The title field has focus (keyboard up), so the buttons step aside.
+    expect(phone.locator(".mobile-actions")).to_be_hidden()
+    phone.locator("#scratch-title").fill("Shopping idea")
+    phone.locator("#scratch-title").press("Enter")
+    expect(phone).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
 
 
 # ── Status badges on phones ──────────────────────────────────────────────────

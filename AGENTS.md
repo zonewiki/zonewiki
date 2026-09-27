@@ -327,7 +327,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ## Scratch
 
-- There is no nav bar; navigation is via keyboard shortcuts. Phones have no keyboard, so at ≤640px a round **search button** (`MOBILE_SEARCH` in `server.py`, `.mobile-search`) sits in the bottom-right corner and opens the search modal (`openSearchModal`, the Ctrl+P action). `shell(..., search_button=False)` omits it, and the editor and the login page leave it out. It is hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then. `main` and the toasts get extra bottom space so the button never covers them.
+- There is no nav bar; navigation is via keyboard shortcuts. Phones have no keyboard, so at ≤640px two round **action buttons** (`MOBILE_ACTIONS` in `server.py`, `.mobile-actions`) sit in the bottom-right corner: **New note** (`.mobile-note`) opens the scratch-note dialog (`openScratch`, the `c s` action), and **Search** (`.mobile-search`, in the corner itself) opens the search modal (`openSearchModal`, the Ctrl+P action). `shell(..., action_buttons=False)` omits them, and the editor and the login page leave them out. They are hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then. `main` and the toasts get extra bottom space so the buttons never cover them.
 - **Status badges** (`.top-badges`: remote 🌐, deck due count, uncommitted count) are fixed at the top-left on desktop. At ≤640px they join the page flow above the breadcrumb, so they no longer cover it, and 🌐 is hidden, since on a phone remote access is a given.
 - **Keybinding:** **c** then **s** creates a scratch note (see Keyboard Shortcuts).
 - User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
@@ -487,7 +487,7 @@ Older decks used `focus_date` (now `start_date`), `defer_days` (a stored "plan N
 - Font: system font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`).
 - Monospace: `"JetBrains Mono", "Fira Code", monospace`.
 - Light/dark mode via `prefers-color-scheme` media query.
-- No nav bar (keyboard shortcuts); on phones a floating search button (see the Scratch section).
+- No nav bar (keyboard shortcuts); on phones floating New note and Search buttons (see the Scratch section).
 - No external CSS frameworks — keep `style.css` self-contained.
 - Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, larger touch targets. The editor is fully usable on phones — see "Mobile editor" in the In-Browser Editor section.
 

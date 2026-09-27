@@ -99,7 +99,7 @@ body {
 
 /* Shown only on small screens (see the 640px media query) */
 .mobile-only { display: none; }
-.mobile-search { display: none; }
+.mobile-actions { display: none; }
 
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
@@ -1251,22 +1251,27 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
-  /* Phone search button (see MOBILE_SEARCH in server.py): the touch stand-in
-     for Ctrl+P, a round button in the bottom-right corner within thumb reach. */
-  .mobile-search {
-    display: flex; align-items: center; justify-content: center;
-    position: fixed; z-index: 300; width: 3.25rem; height: 3.25rem;
+  /* Phone action buttons (see MOBILE_ACTIONS in server.py): the touch
+     stand-ins for `c s` and Ctrl+P, round buttons in the bottom-right corner
+     within thumb reach; search sits in the corner itself. */
+  .mobile-actions {
+    display: flex; gap: .75rem;
+    position: fixed; z-index: 300;
     right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+  .mobile-actions button {
+    display: flex; align-items: center; justify-content: center;
+    width: 3.25rem; height: 3.25rem; padding: 0;
     border: 1px solid var(--border); border-radius: 50%;
     background: var(--nav-bg); color: var(--fg); cursor: pointer;
     box-shadow: 0 4px 14px rgba(0,0,0,.18);
   }
-  /* Keep the end of the page and the toasts clear of the button. */
-  body:has(.mobile-search) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
-  body:has(.mobile-search) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  /* Keep the end of the page and the toasts clear of the buttons. */
+  body:has(.mobile-actions) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  body:has(.mobile-actions) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
   /* While typing, the on-screen keyboard owns the bottom of the screen; the
-     button would otherwise ride on top of it. */
-  body:has(:is(input, textarea, select, [contenteditable]):focus) .mobile-search { display: none; }
+     buttons would otherwise ride on top of it. */
+  body:has(:is(input, textarea, select, [contenteditable]):focus) .mobile-actions { display: none; }
 
   /* The status badges join the page flow instead of floating over the
      breadcrumb. The container has no box of its own, so with no badge
