@@ -903,3 +903,19 @@ def test_completed_matches_survive_the_load_race(page, wiki):
     page.wait_for_timeout(300)
     expect(page.locator("#task-completed-link")).to_have_text("✓ 1 match in Completed →")
 
+
+def test_focus_pin_all_appends_others_to_pinned(page, wiki):
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today, "tags": tag}).json()["id"]
+           for t, tag in (("Alpha", "x"), ("Bravo", "x"), ("Charlie", "x"), ("Hidden", "y"))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.request.post("/api/deck/reorder", data={"order": [ids[2]], "field": "focus_order"})
+    page.goto("/deck?view=focus&tag=x")
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
+    pin_all = _section(page, "others").get_by_role("button", name="Pin all")
+    pin_all.click()
+    # Appended in Others' order; the task hidden by the filter stays in Others.
+    wait_until(lambda: _arranged(page) == ["Charlie", "Alpha", "Bravo"])
+    assert task_by_title(page, "Hidden")["focus_order"] is None
+    expect(_section(page, "others")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    expect(pin_all).to_have_count(0)  # nothing left to pin

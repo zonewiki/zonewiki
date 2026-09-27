@@ -949,12 +949,22 @@
 
   // A section heading on Open and Focus. It looks like a Plan-board day
   // heading and, like one, takes drops: an empty section is only this row.
-  function sectionHTML(zone, label, count) {
+  // `action` is an optional button in the heading (Others: Pin all).
+  function sectionHTML(zone, label, count, action = '') {
     const empty = count ? '' : ' board-day--empty';
     return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
-      `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
+      `<span class="board-day-label">${label}</span>${action}<span class="board-day-count">${count}</span></li>`;
   }
 
+  // Others' "Pin all": every visible task of Others goes to the end of Pinned,
+  // in the order they are listed. Tasks hidden by the filter stay in Others.
+  function pinAll() {
+    const list = sectionList();
+    const others = list.slice(list.indexOf(sectionKey('others')) + 1);
+    const rest = list.filter(id => !others.includes(id));
+    rest.splice(rest.indexOf(sectionKey('others')), 0, ...others);
+    applySectionList(rest);
+  }
 
   function sortTasks(tasksArr) {
     const fixed = TAB_SORT[activeFilter];
@@ -1434,7 +1444,10 @@
     const focusSections = activeFilter === 'focus' && (orderedTasks.length || unarrangedTasks.length);
     if (focusSections) html += sectionHTML('pinned', 'Pinned', orderedTasks.length);
     html += displayTasks.map(t => taskHTML(t)).join('');
-    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length);
+    const pinAllBtn = unarrangedTasks.length
+      ? '<button type="button" class="section-action" data-section-action="pin-all" title="Append all of these to Pinned">Pin all</button>'
+      : '';
+    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length, pinAllBtn);
     html += unarrangedTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
@@ -1443,6 +1456,7 @@
     wireListHandlers();
 
     function wireListHandlers() {
+    listEl.querySelector('[data-section-action="pin-all"]')?.addEventListener('click', pinAll);
     listEl.querySelectorAll('.task-menu-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
