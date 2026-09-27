@@ -136,3 +136,20 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     expect(phone.locator(".task-touch-ghost")).to_have_count(1)
     assert [r.bounding_box() for r in rows.all()] == before
     send("touchEnd", [])
+
+
+# ── Sign out on phones ───────────────────────────────────────────────────────
+
+def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
+    # Regression: Sign out sat in the bottom-right corner, under the New note
+    # and Search buttons.
+    import server
+    monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/login", form={"password": "pw"})
+    phone.goto("/page/index")
+    signout = phone.get_by_role("button", name="Sign out")
+    expect(signout).to_be_visible()
+    s, a = signout.bounding_box(), phone.locator(".mobile-actions").bounding_box()
+    assert s["x"] + s["width"] <= a["x"] or s["y"] + s["height"] <= a["y"], (s, a)
+    assert s["x"] >= 0 and s["y"] + s["height"] <= 844

@@ -1282,7 +1282,10 @@ body.editor-page main {
   body:has(.mobile-actions) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
   /* While typing, the on-screen keyboard owns the bottom of the screen; the
      buttons would otherwise ride on top of it. */
-  body:has(:is(input, textarea, select, [contenteditable]):focus) .mobile-actions { display: none; }
+  body:has(:is(input, textarea, select, [contenteditable]):focus) :is(.mobile-actions, .signout-form) { display: none; }
+  /* Sign out moves to the other corner: the bottom right holds the action
+     buttons. Level with them, in the space main keeps clear at the bottom. */
+  .signout-form { right: auto; left: 1rem; bottom: calc(1.65rem + env(safe-area-inset-bottom)); }
 
   /* The status badges join the page flow instead of floating over the
      breadcrumb. The container has no box of its own, so with no badge
