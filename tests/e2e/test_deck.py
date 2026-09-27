@@ -623,43 +623,78 @@ def test_focus_starts_from_open_order_without_new_section(page, wiki):
     # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
     expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
     expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
-    # Nothing arranged yet: no "Not arranged" heading over the whole day.
-    expect(page.locator(".task-inbox-divider--only", has_text="Not arranged")).to_have_count(0)
+    # Nothing arranged yet: an empty Arranged section, everything under Not arranged.
+    expect(_section(page, "arranged")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    expect(_section(page, "unarranged").locator(".board-day-count")).to_have_text("4")
 
 
-def test_focus_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
+def _section(page, zone):
+    return page.locator(f".focus-section[data-focus-zone='{zone}']")
+
+
+def _arranged(page):
+    return _by_order(page, "focus_order")
+
+
+def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo", "Charlie")]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
-    card(page, "Charlie").drag_to(card(page, "Alpha"))
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo", "Charlie"])
+
+    # Onto the (empty) Arranged heading: only the dragged task is arranged.
+    card(page, "Charlie").drag_to(_section(page, "arranged"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
-    # The first reorder fixes the whole day, not just the moved task.
+    wait_for_field(page, "Charlie", "focus_order", 0)
+    assert _arranged(page) == ["Charlie"]
+
+    # Within Not arranged nothing moves: it is always in Open's order.
+    card(page, "Bravo").drag_to(card(page, "Alpha"))
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
+    assert _arranged(page) == ["Charlie"]
+
+    # Onto an arranged task: placed before it, nothing else is arranged.
+    card(page, "Alpha").drag_to(card(page, "Charlie"))
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Charlie", "Bravo"])
+    wait_for_field(page, "Alpha", "focus_order", 0)
+    assert _arranged(page) == ["Alpha", "Charlie"]
+    assert task_by_title(page, "Bravo")["focus_order"] is None
+
+    # Onto the Not arranged heading from below: appended to Arranged.
+    card(page, "Bravo").drag_to(_section(page, "unarranged"))
     wait_for_field(page, "Bravo", "focus_order", 2)
-    assert _by_order(page, "focus_order") == ["Charlie", "Alpha", "Bravo"]
+    expect(_section(page, "unarranged")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+
+    # From Arranged onto the Not arranged heading: back to unarranged.
+    card(page, "Alpha").drag_to(_section(page, "unarranged"))
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha"])
+    wait_for_field(page, "Alpha", "focus_order", None)
+    assert _arranged(page) == ["Charlie", "Bravo"]
+    # ... and onto an unarranged task works the same way.
+    card(page, "Bravo").drag_to(card(page, "Alpha"))
+    wait_for_field(page, "Bravo", "focus_order", None)
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
+
+    # Open's order is never touched.
     assert _by_order(page, "sort_order") == ["Alpha", "Bravo", "Charlie"]
 
-    # A task planned later queues behind the arranged day.
-    page.request.post("/api/deck", data={"title": "Later addition", "start_date": today})
-    page.reload()
-    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo", "Later addition"])
-    # It sits under a "Not arranged" heading below the arranged day.
-    heading = page.locator(".task-inbox-divider--only", has_text="Not arranged")
-    expect(heading).to_have_count(1)
-    assert heading.evaluate(
-        "el => el.nextElementSibling.querySelector('.task-title').textContent") == "Later addition"
-    # Dragging it into the day arranges it; the heading goes with the last one.
-    card(page, "Later addition").drag_to(card(page, "Alpha"))
-    expect(_focus_titles(page)).to_have_text(["Charlie", "Later addition", "Alpha", "Bravo"])
-    expect(heading).to_have_count(0)
-    wait_for_field(page, "Later addition", "focus_order", 1)
+
+def test_focus_not_arranged_follows_open_order(page, wiki):
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=focus")
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
     open_tab(page, "open")
-    expect(page.locator(".task-item .task-title")).to_have_text(
-        ["Later addition", "Alpha", "Bravo", "Charlie"])
+    card(page, "Bravo").drag_to(card(page, "Alpha"))
+    open_tab(page, "focus")
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
 
 
-def test_focus_keyboard_reorder_skips_due_pinned(page, wiki):
+def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/deck", data={"title": "Deadline", "due_date": today})
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
@@ -667,13 +702,20 @@ def test_focus_keyboard_reorder_skips_due_pinned(page, wiki):
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
+    # Within Not arranged the order is Open's: ↑ on Alpha does nothing.
     card(page, "Alpha").click()
     page.keyboard.press("Control+Shift+ArrowUp")
-    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
+    # ↑ on the first unarranged task arranges it.
+    card(page, "Bravo").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    wait_for_field(page, "Bravo", "focus_order", 0)
     page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
-    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
+    assert _arranged(page) == ["Bravo"]
+    # ↓ on the last arranged task unarranges it.
+    page.keyboard.press("Control+Shift+ArrowDown")
+    wait_for_field(page, "Bravo", "focus_order", None)
     expect(page.locator(".task-item[data-due-pinned] .task-title")).to_have_text(["Deadline"])
-    wait_for_field(page, "Bravo", "focus_order", 1)
     assert task_by_title(page, "Deadline")["focus_order"] is None
 
 
@@ -692,7 +734,7 @@ def test_task_added_on_focus_lands_at_the_end(page, wiki):
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
-    card(page, "Bravo").drag_to(card(page, "Alpha"))  # arrange part of the day
+    card(page, "Bravo").drag_to(_section(page, "arranged"))  # arrange part of the day
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")

@@ -840,21 +840,84 @@
     return !!t.due_date && t.due_date <= today;
   }
 
-  // Focus's order is focus_order for every task below the Due section. The
-  // first reorder there fixes the whole day: `visibleIds` (the reordered,
-  // possibly filtered visible list) is merged into the full Focus list, with
-  // tasks the filter hides keeping their slots, and all of it is renumbered.
-  function applyFocusOrder(visibleIds) {
+  // Focus has two sections: Arranged (focus_order, your order for the day)
+  // and Not arranged (no focus_order, always in Open's order). A move works on
+  // the visible list with both headings as slots in it (focusList): whatever
+  // ends up above the "Not arranged" heading is arranged, in that order; the
+  // rest is unarranged. So dropping on that heading from above unarranges a
+  // task, and from below appends it to Arranged.
+  const FOCUS_ARRANGED = '#arranged', FOCUS_UNARRANGED = '#unarranged';
+  function focusTasks() {
     const today = todayStr();
-    const full = [...tasks]
+    return [...tasks]
       .filter(t => !t.completed_at && isFocus(t, today) && !isDueNow(t, today))
       .sort(TAB_SORT.focus);
-    const vis = new Set(visibleIds);
-    let k = 0;
-    const ids = full.map(t => vis.has(t.id) ? visibleIds[k++] : t.id);
+  }
+  function focusList() {
     const byId = new Map(tasks.map(t => [t.id, t]));
-    ids.forEach((id, i) => { byId.get(id).focus_order = i; });
-    reorder(ids, 'focus_order');
+    const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
+    return [FOCUS_ARRANGED, ...ids.filter(id => byId.get(id).focus_order != null),
+            FOCUS_UNARRANGED, ...ids.filter(id => byId.get(id).focus_order == null)];
+  }
+  // Save a rearranged focusList(). Tasks hidden by the filter keep their
+  // slots in the arranged order; the visible ones fill the rest.
+  function applyFocusList(list) {
+    const visArranged = list.slice(0, list.indexOf(FOCUS_UNARRANGED)).filter(id => id !== FOCUS_ARRANGED);
+    const vis = new Set(list);
+    const old = focusTasks().filter(t => t.focus_order != null).map(t => t.id);
+    const arranged = [];
+    let k = 0;
+    old.forEach(id => {
+      if (!vis.has(id)) arranged.push(id);
+      else if (k < visArranged.length) arranged.push(visArranged[k++]);
+    });
+    arranged.push(...visArranged.slice(k));
+    const kept = new Set(arranged);
+    const unarranged = old.filter(id => !kept.has(id));
+    if (!unarranged.length && arranged.join() === old.join()) return;
+    const byId = new Map(tasks.map(t => [t.id, t]));
+    arranged.forEach((id, i) => { byId.get(id).focus_order = i; });
+    unarranged.forEach(id => { byId.get(id).focus_order = null; });
+    postReorder({ order: arranged, updates: unarranged.map(id => ({ id, focus_order: null })),
+                  field: 'focus_order' });
+    render();
+  }
+  // Drag on Focus: drop `draggedId` on a task or a section heading (`key`).
+  function focusDrop(key) {
+    const list = focusList();
+    const from = list.indexOf(draggedId), to = list.indexOf(key);
+    if (from === -1 || to === -1 || from === to) return;
+    list.splice(from, 1);
+    list.splice(to, 0, draggedId);
+    applyFocusList(list);
+  }
+  // Ctrl+Shift+↑/↓ on Focus: the selection moves one slot; the headings count
+  // as slots, so ↑ on the first unarranged task arranges it and ↓ on the last
+  // arranged one unarranges it.
+  function focusKeyMove(direction) {
+    const list = focusList();
+    const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
+    if (!idxs.length) return;
+    const group = idxs.map(i => list[i]);
+    const rest = list.filter(id => !selectedIds.has(id));
+    if (direction === 'up') {
+      const above = list[idxs[0] - 1];
+      if (above === undefined || above === FOCUS_ARRANGED) return;
+      rest.splice(rest.indexOf(above), 0, ...group);
+    } else {
+      const below = list[idxs[idxs.length - 1] + 1];
+      if (below === undefined) return;
+      rest.splice(rest.indexOf(below) + 1, 0, ...group);
+    }
+    applyFocusList(rest);
+  }
+
+  // A Focus section heading. It looks like a Plan-board day heading and, like
+  // one, takes drops: an empty section is only this row.
+  function focusSectionHTML(zone, label, count) {
+    const empty = count ? '' : ' board-day--empty';
+    return `<li class="board-day-divider focus-section${empty}" data-focus-zone="${zone}">` +
+      `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
   }
 
   function sortTasks(tasksArr) {
@@ -1318,7 +1381,8 @@
     if (dueTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
       html += dueTasks.map(t => taskHTML(t, false)).join('');
-      if (orderedTasks.length > 0 || newTasks.length > 0 || unarrangedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
+      // Focus's own section headings follow instead of a plain divider.
+      if (activeFilter !== 'focus' && (orderedTasks.length > 0 || newTasks.length > 0)) html += '<li class="task-inbox-divider"></li>';
     }
     if (newTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">New</li>';
@@ -1342,15 +1406,13 @@
       displayTasks = orderedTasks.slice(0, completedLimit);
       truncated = true;
     }
+    // Focus: both sections always have a heading, even when empty, because
+    // the heading is where a task is dropped to enter an empty section.
+    const focusSections = activeFilter === 'focus' && (orderedTasks.length || unarrangedTasks.length);
+    if (focusSections) html += focusSectionHTML('arranged', 'Arranged', orderedTasks.length);
     html += displayTasks.map(t => taskHTML(t)).join('');
-    if (unarrangedTasks.length > 0) {
-      // The heading only means something once part of the day is arranged.
-      if (orderedTasks.length > 0) {
-        html += '<li class="task-inbox-divider"></li>' +
-                '<li class="task-inbox-divider task-inbox-divider--only">Not arranged</li>';
-      }
-      html += unarrangedTasks.map(t => taskHTML(t)).join('');
-    }
+    if (focusSections) html += focusSectionHTML('unarranged', 'Not arranged', unarrangedTasks.length);
+    html += unarrangedTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
@@ -2173,9 +2235,11 @@
     });
   }
 
+  const DIVIDER_TARGETS = '.task-inbox-divider:not(.task-inbox-divider--only), .focus-section';
   function setupDragAndDrop() {
     function executeDrop(targetId) {
       if (!draggedId || targetId === draggedId) return;
+      if (activeFilter === 'focus') { focusDrop(targetId); return; }
       const ids = Array.from(listEl.querySelectorAll('.task-item:not([data-due-pinned])'))
                        .map(el => el.dataset.id);
       const fromIdx = ids.indexOf(draggedId);
@@ -2183,16 +2247,14 @@
       if (fromIdx === -1 || toIdx === -1) return;
       const byId = new Map(tasks.map(tk => [tk.id, tk]));
       const draggedTask = byId.get(draggedId);
-      const wasNew = activeFilter !== 'focus' && draggedTask && draggedTask.sort_order == null;
+      const wasNew = draggedTask && draggedTask.sort_order == null;
       ids.splice(fromIdx, 1);
       // When dragging from new into ordered, insert BEFORE target (adjust index).
       // Within-section reorder uses standard behavior (no adjustment).
       const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
       ids.splice(insertIdx, 0, draggedId);
       const field = 'sort_order';
-      if (activeFilter === 'focus') {
-        applyFocusOrder(ids);
-      } else if (hasNarrowingFilter()) {
+      if (hasNarrowingFilter()) {
         interpolateOrder(ids, insertIdx, [draggedId], byId, field);
         reorderUpdates([{ id: draggedId, [field]: draggedTask[field] }], field);
       } else {
@@ -2208,8 +2270,13 @@
     }
 
     // Dropping on a section divider inserts the task before the first
-    // reorderable task that follows it.
+    // reorderable task that follows it. A Focus heading is a slot of its own
+    // (focusDrop).
     function dropOnDivider(div) {
+      if (div.dataset.focusZone) {
+        executeDrop(div.dataset.focusZone === 'arranged' ? FOCUS_ARRANGED : FOCUS_UNARRANGED);
+        return;
+      }
       let next = div.nextElementSibling;
       while (next && !next.matches('.task-item:not([data-due-pinned])')) next = next.nextElementSibling;
       if (next) executeDrop(next.dataset.id);
@@ -2218,13 +2285,15 @@
       target: el => {
         const item = el.closest('.task-item[data-drag]');
         if (item) return item.dataset.id === draggedId ? null : item;
-        return el.closest('.task-inbox-divider:not(.task-inbox-divider--only)');
+        return el.closest(DIVIDER_TARGETS);
       },
       drop: target => target.classList.contains('task-item')
         ? executeDrop(target.dataset.id) : dropOnDivider(target),
     };
 
     const items = listEl.querySelectorAll('.task-item[data-drag]');
+    const clearDropOver = () => listEl.querySelectorAll('.task-drag-over, .board-drop-over')
+      .forEach(el => el.classList.remove('task-drag-over', 'board-drop-over'));
     items.forEach(item => {
       item.addEventListener('dragstart', e => {
         if (lastPointerType === 'touch') { e.preventDefault(); return; }
@@ -2235,7 +2304,7 @@
       item.addEventListener('dragend', () => {
         item.classList.remove('task-dragging');
         draggedId = null;
-        listEl.querySelectorAll('.task-drag-over').forEach(el => el.classList.remove('task-drag-over'));
+        clearDropOver();
       });
       item.addEventListener('dragover', e => {
         e.preventDefault();
@@ -2254,18 +2323,18 @@
       });
     });
 
-    // Section dividers are also drop targets — dropping on one inserts the
-    // dragged task before the first task-item that follows the divider.
-    listEl.querySelectorAll('.task-inbox-divider:not(.task-inbox-divider--only)').forEach(div => {
+    // Section dividers are also drop targets (dropOnDivider).
+    listEl.querySelectorAll(DIVIDER_TARGETS).forEach(div => {
+      const overCls = div.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over';
       div.addEventListener('dragover', e => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        div.classList.add('task-drag-over');
+        div.classList.add(overCls);
       });
-      div.addEventListener('dragleave', () => div.classList.remove('task-drag-over'));
+      div.addEventListener('dragleave', () => div.classList.remove(overCls));
       div.addEventListener('drop', e => {
         e.preventDefault();
-        div.classList.remove('task-drag-over');
+        div.classList.remove(overCls);
         dropOnDivider(div);
       });
     });
@@ -2274,7 +2343,8 @@
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
   function reorderSelected(direction) {
-    if (activeFilter !== 'focus' && sortSelect.value !== 'manual' || !selectedIds.size) return;
+    if (activeFilter === 'focus') { focusKeyMove(direction); return; }
+    if (sortSelect.value !== 'manual' || !selectedIds.size) return;
     // Due-pinned tasks are not reorderable (and not draggable either).
     const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
     const byId = new Map(tasks.map(tk => [tk.id, tk]));
@@ -2286,7 +2356,7 @@
 
       if (direction === 'down') {
         if (idx === ids.length - 1) return;
-        if (activeFilter !== 'focus' && selTask && selTask.sort_order == null) {
+        if (selTask && selTask.sort_order == null) {
           // Moving new item into ordered: place at top of ordered section
           ids.splice(idx, 1);
           const firstOrd = ids.findIndex(id => byId.get(id)?.sort_order != null);
@@ -2316,9 +2386,7 @@
       ids.length = 0; ids.push(...rest);
     }
     const field = 'sort_order';
-    if (activeFilter === 'focus') {
-      applyFocusOrder(ids);
-    } else if (hasNarrowingFilter()) {
+    if (hasNarrowingFilter()) {
       const groupIds = ids.filter(id => selectedIds.has(id));
       const insertIdx = ids.findIndex(id => selectedIds.has(id));
       interpolateOrder(ids, insertIdx, groupIds, byId, field);

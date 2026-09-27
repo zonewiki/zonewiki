@@ -628,6 +628,25 @@ class TestReorder:
         tasks = client.get("/api/deck").get_json()
         assert tasks[0]["sort_order"] is None
 
+    def test_reorder_updates_can_clear_focus_order_only(self, client):
+        """Dragging a task out of Focus's arrangement clears its focus_order
+        (null) in the same request that renumbers the rest. sort_order can't
+        be cleared this way."""
+        t1 = create_task(client, title="First").get_json()
+        t2 = create_task(client, title="Second").get_json()
+        client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]]})
+        client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]], "field": "focus_order"})
+        resp = client.post("/api/deck/reorder", json={
+            "order": [t2["id"]], "updates": [{"id": t1["id"], "focus_order": None}],
+            "field": "focus_order"})
+        assert resp.status_code == 204
+        by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert by_id[t1["id"]]["focus_order"] is None
+        assert by_id[t2["id"]]["focus_order"] == 0
+        client.post("/api/deck/reorder", json={"updates": [{"id": t1["id"], "sort_order": None}]})
+        by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert by_id[t1["id"]]["sort_order"] == 0
+
     def test_reorder_empty_updates_and_order(self, client):
         resp = client.post("/api/deck/reorder", json={"order": [], "updates": []})
         assert resp.status_code == 400

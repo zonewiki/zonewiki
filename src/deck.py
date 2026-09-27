@@ -1191,6 +1191,10 @@ def api_reorder_deck():
     for u in updates:
         task_id = u.get("id")
         val = u.get(field)
+        # focus_order may be cleared (null): the task leaves Focus's arrangement.
+        if val is None and field == "focus_order" and task_id in id_map:
+            id_map[task_id][field] = None
+            continue
         if not isinstance(val, (int, float)) or isinstance(val, bool):
             continue
         if task_id in id_map:

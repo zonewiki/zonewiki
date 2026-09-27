@@ -437,3 +437,18 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     expect(pg.locator(".task-item .task-title")).to_have_text(["Two", "One"])
     card(pg, "Two").dispatch_event("pointerdown", {"pointerType": "mouse", "bubbles": True})
     assert card(pg, "Two").evaluate("el => el.draggable")
+
+
+def test_touch_drag_across_focus_sections(new_page, wiki):
+    pg = new_page(**TOUCH_PHONE)
+    for t in ("Alpha", "Bravo"):
+        pg.request.post("/api/deck", data={"title": t, "start_date": day(0)})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    pg.goto("/deck?view=focus")
+    arranged = pg.locator(".focus-section[data-focus-zone='arranged']")
+    unarranged = pg.locator(".focus-section[data-focus-zone='unarranged']")
+    touch_drag(pg, card(pg, "Bravo"), arranged)
+    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] == 0)
+    assert tasks_by_title(pg)["Alpha"]["focus_order"] is None
+    touch_drag(pg, card(pg, "Bravo"), unarranged)
+    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] is None)
