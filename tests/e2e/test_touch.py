@@ -13,6 +13,15 @@ def day(offset: int) -> str:
     return (date.today() + timedelta(days=offset)).isoformat()
 
 
+def pick_day(picker, d: str):
+    """Tap date `d` in an open date picker. The picker opens on the current
+    month, so near a month's end the target is a page further (tests picking
+    today + N used to fail on a month's last days)."""
+    if d[:7] != day(0)[:7]:
+        picker.locator(".dp-nav[data-nav='1']").tap()
+    picker.locator(f".dp-day[data-date='{d}']").tap()
+
+
 def tasks_by_title(page) -> dict:
     return {t["title"]: t for t in page.request.get("/api/deck").json()}
 
@@ -94,7 +103,7 @@ def test_menu_pick_date_opens_picker(phone):
     open_menu(phone, "Water plants").get_by_role("menuitem", name="Pick start date…").tap()
     picker = phone.locator(".deck-datepicker")
     expect(picker).to_be_visible()
-    picker.locator(f".dp-day[data-date='{day(3)}']").tap()
+    pick_day(picker, day(3))
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(3))
 
 
@@ -253,7 +262,7 @@ def test_card_date_picker_fits_on_phone(phone, field):
     assert pb["x"] >= 0 and pb["x"] + pb["width"] <= 390, pb
     assert pb["y"] >= 0 and pb["y"] + pb["height"] <= 844, pb
     assert pb["y"] >= cb["y"] + cb["height"] or pb["y"] + pb["height"] <= cb["y"]  # not covering the chip
-    picker.locator(f".dp-day[data-date='{day(4)}']").tap()
+    pick_day(picker, day(4))
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"][field] == day(4))
 
 
