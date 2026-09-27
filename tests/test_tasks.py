@@ -654,7 +654,7 @@ class TestSortOrderUpdate:
         assert resp.get_json()["sort_order"] == 5
 
 
-# ---------- focus_order (Today's arrangement) on update ----------
+# ---------- focus_order (the Focus tab's arrangement) on update ----------
 
 
 class TestFocusOrderReset:

@@ -113,8 +113,8 @@ class TestTasksLinkRender:
     def test_embed_filter_label_aliases(self, wiki_dir):
         """Friendly tab-label names map to the client data-filter values."""
         cases = {
-            "today": "focus",
-            "focus": "focus",   # former label of the Today tab
+            "today": "focus",   # the Focus tab's label for a while
+            "focus": "focus",
             "all": "open",
             "backlog": "open",  # former label of the Open tab
             "plan": "due",
@@ -129,7 +129,7 @@ class TestTasksLinkRender:
         html = server.render_md("[[deck]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-filter="(\w+)"[^>]*>([^<]+)</button>', html)
-        assert tabs == [("open", "Open"), ("due", "Plan"), ("focus", "Today")]
+        assert tabs == [("open", "Open"), ("due", "Plan"), ("focus", "Focus")]
         # Completed is a link under the list, not a tab.
         assert 'id="task-completed-link"' in html
 

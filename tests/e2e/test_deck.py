@@ -115,9 +115,9 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["Open", "Plan", "Today"])
-    # Today is the default view and the only one marked active.
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
+    expect(tabs).to_have_text(["Open", "Plan", "Focus"])
+    # Focus is the default view and the only one marked active.
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
     expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
     tabs.nth(0).click()
     expect(page.locator("#task-unplanned-wrap")).to_be_visible()
@@ -130,16 +130,16 @@ def test_view_tabs_segmented_control(page, wiki):
     # Tab / Shift+Tab cycle through the views in on-screen order, wrapping;
     # keyboard focus follows the active view.
     page.keyboard.press("Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     page.keyboard.press("Shift+Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
     # The active view survives a reload within the browser tab.
     page.reload()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
@@ -152,13 +152,13 @@ def test_legacy_filter_url_param_still_works(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?filter=plan")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
-    page.goto("/deck?view=focus")   # the Today tab's former name
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    page.goto("/deck?view=today")   # the Focus tab's label for a while
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
 
 def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     # The plan date is a *start* date: from that day on the task is available.
-    # A task that started days ago is simply part of Today — not "carried over"
+    # A task that started days ago is simply part of Focus — not "carried over"
     # or stale, and not singled out for a decision.
     for title, start in [("Started last week", -7), ("Starts today", 0), ("Starts tomorrow", 1)]:
         page.request.post("/api/deck", data={"title": title, "start_date":
@@ -173,7 +173,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
 
 
 def test_due_badge_count_matches_focus_due_section(page, wiki):
-    # The badge counts deadlines (overdue + due today) and links to Today,
+    # The badge counts deadlines (overdue + due today) and links to Focus,
     # which also lists started tasks; its Due section shows exactly the
     # counted ones, so the number is visible where the link lands.
     d = lambda n: (date.today() + timedelta(days=n)).isoformat()
@@ -188,8 +188,8 @@ def test_due_badge_count_matches_focus_due_section(page, wiki):
     expect(page.locator("#deck-due-count")).to_have_text("2")
     expect(badge).to_have_attribute("title", "1 overdue · 1 due today")
     badge.click()
-    expect(page).to_have_url(re.compile(r"/deck\?view=today$"))
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(page).to_have_url(re.compile(r"/deck\?view=focus$"))
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     pinned = page.locator(".task-item[data-due-pinned]")
     expect(pinned).to_have_count(2)
     expect(pinned.locator(".task-title")).to_have_text(["Overdue", "Due today"])
@@ -510,11 +510,11 @@ def test_filter_points_to_matches_in_completed(page, wiki):
 
 
 def test_new_task_on_default_focus_starts_today(page, wiki):
-    # A plain deck opens on Today; a task added there starts today, so it
+    # A plain deck opens on Focus; a task added there starts today, so it
     # stays in the view instead of vanishing on save.
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Water plants")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
@@ -604,7 +604,7 @@ def test_moving_task_out_of_list_removes_it(page, wiki):
     wait_for_field(page, "Oat milk", "list", None)
 
 
-def _today_titles(page):
+def _focus_titles(page):
     return page.locator(".task-item:not([data-due-pinned]) .task-title")
 
 
@@ -613,28 +613,28 @@ def _by_order(page, field):
     return [t["title"] for t in sorted(tasks, key=lambda t: t[field])]
 
 
-def test_today_starts_from_open_order_without_new_section(page, wiki):
+def test_focus_starts_from_open_order_without_new_section(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo", "Charlie")]
     page.request.post("/api/deck/reorder", data={"order": list(reversed(ids))})
     page.request.post("/api/deck", data={"title": "Unordered", "start_date": today})
-    page.goto("/deck?view=today")
+    page.goto("/deck?view=focus")
     # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
-    expect(_today_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
     expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
     # Nothing arranged yet: no "Not arranged" heading over the whole day.
     expect(page.locator(".task-inbox-divider--only", has_text="Not arranged")).to_have_count(0)
 
 
-def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
+def test_focus_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo", "Charlie")]
     page.request.post("/api/deck/reorder", data={"order": ids})
-    page.goto("/deck?view=today")
+    page.goto("/deck?view=focus")
     card(page, "Charlie").drag_to(card(page, "Alpha"))
-    expect(_today_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
     # The first reorder fixes the whole day, not just the moved task.
     wait_for_field(page, "Bravo", "focus_order", 2)
     assert _by_order(page, "focus_order") == ["Charlie", "Alpha", "Bravo"]
@@ -643,7 +643,7 @@ def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
     # A task planned later queues behind the arranged day.
     page.request.post("/api/deck", data={"title": "Later addition", "start_date": today})
     page.reload()
-    expect(_today_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo", "Later addition"])
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo", "Later addition"])
     # It sits under a "Not arranged" heading below the arranged day.
     heading = page.locator(".task-inbox-divider--only", has_text="Not arranged")
     expect(heading).to_have_count(1)
@@ -651,7 +651,7 @@ def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
         "el => el.nextElementSibling.querySelector('.task-title').textContent") == "Later addition"
     # Dragging it into the day arranges it; the heading goes with the last one.
     card(page, "Later addition").drag_to(card(page, "Alpha"))
-    expect(_today_titles(page)).to_have_text(["Charlie", "Later addition", "Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Charlie", "Later addition", "Alpha", "Bravo"])
     expect(heading).to_have_count(0)
     wait_for_field(page, "Later addition", "focus_order", 1)
     open_tab(page, "open")
@@ -659,47 +659,47 @@ def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
         ["Later addition", "Alpha", "Bravo", "Charlie"])
 
 
-def test_today_keyboard_reorder_skips_due_pinned(page, wiki):
+def test_focus_keyboard_reorder_skips_due_pinned(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/deck", data={"title": "Deadline", "due_date": today})
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Bravo", "Alpha")]
     page.request.post("/api/deck/reorder", data={"order": ids})
-    page.goto("/deck?view=today")
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    page.goto("/deck?view=focus")
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
     card(page, "Alpha").click()
     page.keyboard.press("Control+Shift+ArrowUp")
-    expect(_today_titles(page)).to_have_text(["Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
     page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
-    expect(_today_titles(page)).to_have_text(["Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
     expect(page.locator(".task-item[data-due-pinned] .task-title")).to_have_text(["Deadline"])
     wait_for_field(page, "Bravo", "focus_order", 1)
     assert task_by_title(page, "Deadline")["focus_order"] is None
 
 
-def test_today_capacity_counts_unarranged_tasks(page, wiki):
+def test_focus_capacity_counts_unarranged_tasks(page, wiki):
     today = date.today().isoformat()
     for i in range(5):
         page.request.post("/api/deck", data={"title": f"Task {i}", "start_date": today})
-    page.goto("/deck?view=today")
-    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks for today")
+    page.goto("/deck?view=focus")
+    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in focus")
 
 
-def test_task_added_on_today_lands_at_the_end(page, wiki):
+def test_task_added_on_focus_lands_at_the_end(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/deck", data={"title": "Old unordered", "start_date": today})
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/deck/reorder", data={"order": ids})
-    page.goto("/deck?view=today")
+    page.goto("/deck?view=focus")
     card(page, "Bravo").drag_to(card(page, "Alpha"))  # arrange part of the day
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
     page.reload()
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
 
 
 def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
@@ -707,8 +707,8 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     for i in range(30):
         page.request.post("/api/deck", data={"title": f"Filler {i}", "start_date": today})
     page.set_viewport_size({"width": 1000, "height": 600})
-    page.goto("/deck?view=today")
-    expect(_today_titles(page)).to_have_count(30)
+    page.goto("/deck?view=focus")
+    expect(_focus_titles(page)).to_have_count(30)
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
@@ -718,19 +718,19 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     expect(page.locator(".task-item.task-selected")).to_have_count(1)
 
 
-def test_undo_of_start_tomorrow_restores_today_arrangement(page, wiki):
+def test_undo_of_start_tomorrow_restores_focus_arrangement(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Bravo", "Alpha")]
     page.request.post("/api/deck/reorder", data={"order": ids, "field": "focus_order"})
-    page.goto("/deck?view=today")
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    page.goto("/deck?view=focus")
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
     card(page, "Bravo").locator(".task-menu-btn").click()
     page.locator(".task-menu").get_by_role("menuitem", name="Start tomorrow").click()
-    expect(_today_titles(page)).to_have_text(["Alpha"])
-    # Moving to a later day clears its place on Today ...
+    expect(_focus_titles(page)).to_have_text(["Alpha"])
+    # Moving to a later day clears its place on Focus ...
     wait_for_field(page, "Bravo", "focus_order", None)
     # ... and undo puts it back where it was, not under "Not arranged".
     page.locator(".task-undo-btn").click()
-    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
     wait_for_field(page, "Bravo", "focus_order", 0)

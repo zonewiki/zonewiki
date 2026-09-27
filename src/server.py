@@ -1314,7 +1314,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/deck?view=today" style="display: none;" title="Deck due">
+    <a id="deck-due-badge" class="deck-due-badge" href="/deck?view=focus" style="display: none;" title="Deck due">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
       <span id="deck-due-count">0</span>
     </a>

@@ -552,7 +552,7 @@
     const prevFocus = task?.focus_order ?? null;
     updateTask(id, { start_date: startDate });
     const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
-    // A move can clear the task's place on Today; undo puts it back.
+    // A move can clear the task's place on Focus; undo puts it back.
     showUndo(msg, () => updateTask(id, { start_date: prev, focus_order: prevFocus }));
   }
 
@@ -788,7 +788,7 @@
   // Per-tab fixed sort comparators; null = use the user's sort select
   const TAB_SORT = {
     focus: (a, b) => {
-      // Tasks arranged on Today (focus_order) come first, in that order; the
+      // Tasks arranged on Focus (focus_order) come first, in that order; the
       // rest follow in Open's order (sort_order), so a freshly planned day
       // already reads in priority order. Never-ordered tasks come last, oldest
       // first, so a task added during the day lands at the end of the list.
@@ -808,9 +808,9 @@
     return !!t.due_date && t.due_date <= today;
   }
 
-  // Today's order is focus_order for every task below the Due section. The
+  // Focus's order is focus_order for every task below the Due section. The
   // first reorder there fixes the whole day: `visibleIds` (the reordered,
-  // possibly filtered visible list) is merged into the full Today list, with
+  // possibly filtered visible list) is merged into the full Focus list, with
   // tasks the filter hides keeping their slots, and all of it is renumbered.
   function applyFocusOrder(visibleIds) {
     const today = todayStr();
@@ -1155,10 +1155,10 @@
     const filtered = filterTasks();
 
 
-    // Open and Today pin "due now" at the top. The Due section holds exactly
+    // Open and Focus pin "due now" at the top. The Due section holds exactly
     // what the due badge counts (overdue + due today), so the badge's number
-    // is visible where its link lands (Today). Open then splits the rest into
-    // new (inbox, on top) and ordered. Today splits it into the tasks arranged
+    // is visible where its link lands (Focus). Open then splits the rest into
+    // new (inbox, on top) and ordered. Focus splits it into the tasks arranged
     // there (focus_order) and, below them, "Not arranged" ones in Open's order
     // (TAB_SORT.focus): already triaged, they just have no slot in the day yet.
     let dueTasks, orderedTasks, newTasks, unarrangedTasks = [];
@@ -1297,7 +1297,7 @@
       const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
       if (inFocus >= CAPACITY) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
-          `<span>⚠ ${inFocus} tasks for today (limit: ${CAPACITY})</span></li>`;
+          `<span>⚠ ${inFocus} tasks in focus (limit: ${CAPACITY})</span></li>`;
       }
     }
     // No tab is highlighted in Completed, so the list says where you are.
@@ -2046,7 +2046,7 @@
       await updateTask(id, data);
     } else {
       // Select the new task so it is easy to find wherever the view sorts it
-      // (on Today it lands at the end, possibly below the fold). A view that
+      // (on Focus it lands at the end, possibly below the fold). A view that
       // doesn't show it (another list, a filter) leaves the selection alone.
       const task = await createTask(data);
       const el = task && listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
@@ -2484,7 +2484,7 @@
   // this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?view=
   // URLs. The embed filter arrives already normalized by the server.
   const FILTER_ALIASES = {
-    today: 'focus', focus: 'focus',   // "focus": the tab's label before "Today"
+    focus: 'focus', today: 'focus',   // "today": the tab's label for a while
     all: 'open', backlog: 'open', open: 'open',
     plan: 'due', upcoming: 'due', due: 'due',
     completed: 'completed', done: 'completed',

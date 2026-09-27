@@ -1292,7 +1292,7 @@ class TestDeckPage:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck?view=today"' in body
+        assert 'href="/deck?view=focus"' in body
         assert "/page/deck" not in body
 
 
