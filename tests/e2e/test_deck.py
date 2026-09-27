@@ -488,6 +488,8 @@ def test_filter_points_to_matches_in_completed(page, wiki):
     expect(page.locator(".tasks-empty")).to_be_visible()   # nothing open matches…
     expect(link).to_have_text("✓ 1 match in Completed →")  # …but it was done
     expect(link).to_have_class(re.compile(r"\bhas-matches\b"))
+    # Subtle: the muted colour of the plain link, not the link blue.
+    match_colour = link.evaluate("el => getComputedStyle(el).color")
     search.fill("buy")
     expect(link).to_have_text("✓ 1 match in Completed →")
     search.fill("b")
@@ -495,6 +497,8 @@ def test_filter_points_to_matches_in_completed(page, wiki):
     search.fill("milk")   # matches only the open task: no unfiltered total
     expect(link).to_have_text("✓ No matches in Completed →")
     expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
+    page.mouse.move(0, 0)  # no hover colour
+    assert link.evaluate("el => getComputedStyle(el).color") == match_colour
     search.fill("#nosuchtag")
     expect(link).to_have_text("✓ No matches in Completed →")
 
