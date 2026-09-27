@@ -1021,7 +1021,13 @@ body.editor-page main {
   color: var(--muted);
   font-family: var(--mono);
   margin-right: auto;
+  /* A long slug is cut off, never pushes the buttons (Done) off-screen. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.editor-toolbar > :not(.slug-label) { flex-shrink: 0; }
 
 .save-dot {
   font-size: .5rem;

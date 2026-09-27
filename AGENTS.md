@@ -275,6 +275,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 - `/edit/<slug>` renders a split-pane view: `<textarea>` on the left, live preview on the right.
 - Live preview updates as the user types (debounced, ~300ms) by calling `POST /api/preview`, which returns rendered HTML.
+- **Toolbar** — one line on every screen: the slug label shrinks with an ellipsis (full slug in its tooltip) and the buttons keep their size, so a long slug never pushes Done off-screen.
 - **Mobile editor** — on screens ≤640px the editor is not hidden; it becomes a full-screen stacked layout (textarea on top, preview below when toggled). The toolbar gains a **Preview** button (`#mobile-preview-btn`, class `mobile-only`) that calls the same `togglePreview()` as F2. The textarea font is 16px on mobile so iOS Safari doesn't zoom in on focus. Rename… and Delete move into a **⋯ dropdown** (`#editor-more-btn`, `.editor-more`) so the toolbar fits on one line; on wider screens `.editor-more` is `display: contents`, so the buttons stay inline.
 - The editor textarea preserves tabs and disables spell-check.
 - The textarea receives focus automatically on page load.

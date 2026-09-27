@@ -263,3 +263,22 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     assert box["x"] >= 0 and box["x"] + box["width"] <= PHONE["width"] + 0.5, box
     save = modal.get_by_role("button", name="Save").bounding_box()
     assert save["x"] + save["width"] <= PHONE["width"] and save["y"] + save["height"] <= PHONE["height"], save
+
+
+@pytest.mark.parametrize("slug,title", [
+    ("short", "A page title that goes on and on and on and does not stop anywhere soon"),
+    ("a-page-slug-that-goes-on-and-on-and-does-not-stop", "Long slug"),
+    ("unbroken", "Supercalifragilisticexpialidocious-Infrastructure-Troubleshooting"),
+    # No hyphen to break at: the slug label cannot wrap.
+    ("supercalifragilisticexpialidocious_infrastructure_troubleshooting", "Unbreakable slug"),
+])
+def test_editor_toolbar_fits_on_phone_with_long_title(new_page, wiki, slug, title):
+    # Regression: a long page title or slug pushed the Done button off-screen.
+    wiki.write(slug, f"# {title}\n\nText.\n")
+    pg = new_page(**TOUCH_PHONE)
+    pg.goto(f"/edit/{slug}")
+    assert horizontal_overflow(pg) <= 0
+    done = pg.get_by_role("button", name="Done").bounding_box()
+    assert done["x"] >= 0 and done["x"] + done["width"] <= PHONE["width"], done
+    # One line: the slug is cut off rather than wrapped into a tall column.
+    assert pg.locator(".editor-toolbar").bounding_box()["height"] < 60

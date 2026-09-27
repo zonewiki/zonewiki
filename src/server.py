@@ -1701,7 +1701,7 @@ def edit_page(slug):
   <div class="editor-pane">
     {build_breadcrumb(slug, title, breadcrumb_extra)}
     <div class="editor-toolbar">
-      <span class="slug-label">{safe_slug}</span>
+      <span class="slug-label" title="{safe_slug}">{safe_slug}</span>
       <span id="save-dot" class="save-dot">●</span>
       <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
       <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
