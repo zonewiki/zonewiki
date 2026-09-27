@@ -79,9 +79,6 @@
   let undoToastEl = null;
   let pendingUndoFn = null;
   const pendingCompletions = new Map(); // taskId → timeoutId
-  // Day sections with >= this many tasks are flagged; [[deck capacity=N]]
-  // overrides the default per embed.
-  const CAPACITY = parseInt(appEl.dataset.initCapacity, 10) || 5;
   let unplannedOnly = false;  // Open tab's "Unplanned only" — resolved during init
 
   // Plan day board: dragging a task onto a day section sets its start_date;
@@ -301,6 +298,9 @@
 
   const urlParams = new URLSearchParams(window.location.search);
   const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
+  // WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
+  // set: [[deck limit=N]], or ?limit=N (the built-in /deck page has no embed).
+  const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
   // [[deck list=…]] shows one separate list and nothing else; every other
   // embed shows only the tasks in no list. ?list= opens a list in the main
   // deck when no page embeds it (/deck redirects there).
@@ -1392,9 +1392,10 @@
     // Upcoming day board: one section per day, dividers double as drop targets.
     if (activeFilter === 'due') {
       html = boardBuckets(filtered).map(s => {
-        const overCls = (s.date && s.tasks.length >= CAPACITY) ? ' board-day--over' : '';
-        const overIcon = (s.date && s.tasks.length >= CAPACITY)
-          ? `<span class="board-day-over-icon" title="Over capacity (${s.tasks.length}/${CAPACITY})">⚠</span>`
+        const over = LIMIT && s.date && s.tasks.length >= LIMIT;
+        const overCls = over ? ' board-day--over' : '';
+        const overIcon = over
+          ? `<span class="board-day-over-icon" title="Over the limit (${s.tasks.length}/${LIMIT})">⚠</span>`
           : '';
         const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
         const emptyCls = s.tasks.length ? '' : ' board-day--empty';
@@ -1419,9 +1420,9 @@
     }
     if (activeFilter === 'focus') {
       const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
-      if (inFocus >= CAPACITY) {
+      if (LIMIT && inFocus >= LIMIT) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
-          `<span>⚠ ${inFocus} tasks in focus (limit: ${CAPACITY})</span></li>`;
+          `<span>⚠ ${inFocus} tasks in focus (limit: ${LIMIT})</span></li>`;
       }
     }
     // No tab is highlighted in Completed, so the list says where you are.

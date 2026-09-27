@@ -1600,18 +1600,22 @@ class TestSkipOccurrence:
         assert completed[0]["wont_do"] is True
 
 
-class TestCapacityParam:
-    def test_capacity_lands_in_embed(self, client, wiki_dir):
-        (wiki_dir / "board.md").write_text("# Board\n\n[[deck capacity=7]]\n",
-                                           encoding="utf-8")
-        html_out = client.get("/page/board").get_data(as_text=True)
-        assert 'data-init-capacity="7"' in html_out
+class TestLimitParam:
+    def _embed(self, client, wiki_dir, directive):
+        (wiki_dir / "board.md").write_text(f"# Board\n\n{directive}\n", encoding="utf-8")
+        return client.get("/page/board").get_data(as_text=True)
 
-    def test_invalid_capacity_is_empty(self, client, wiki_dir):
-        (wiki_dir / "board.md").write_text("# Board\n\n[[deck capacity=lots]]\n",
-                                           encoding="utf-8")
-        html_out = client.get("/page/board").get_data(as_text=True)
-        assert 'data-init-capacity=""' in html_out
+    def test_no_limit_by_default(self, client, wiki_dir):
+        assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck]]")
+
+    def test_limit_lands_in_embed(self, client, wiki_dir):
+        assert 'data-init-limit="7"' in self._embed(client, wiki_dir, "[[deck limit=7]]")
+
+    def test_capacity_is_the_old_name(self, client, wiki_dir):
+        assert 'data-init-limit="4"' in self._embed(client, wiki_dir, "[[deck capacity=4]]")
+
+    def test_invalid_limit_is_empty(self, client, wiki_dir):
+        assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck limit=lots]]")
 
     def test_embed_loads_deck_core(self, client, wiki_dir):
         (wiki_dir / "board.md").write_text("# Board\n\n[[deck]]\n", encoding="utf-8")

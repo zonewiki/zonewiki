@@ -579,10 +579,12 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # `view=` picks the tab; `filter=` is its old name, still accepted.
     raw_filter = (params.get("view") or params.get("filter", "")).strip().lower()
     filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
+    # `limit=N` turns on the WIP limit (Focus warning, Plan day flags); without
+    # it there is none. `capacity=` is its old name, still accepted.
     try:
-        capacity = max(1, min(99, int(params.get("capacity", ""))))
+        limit = max(1, min(99, int(params.get("limit") or params.get("capacity", ""))))
     except ValueError:
-        capacity = ""  # client falls back to its default
+        limit = ""  # no limit
     # `unplanned=1`/`unplanned=0` pins the Open tab's "Unplanned only" filter on
     # or off for this embed. Omitted, the client uses the stored preference,
     # which defaults off — so pinning it on gives a planning-queue embed.
@@ -603,7 +605,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-capacity="{capacity}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>

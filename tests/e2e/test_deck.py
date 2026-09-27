@@ -726,12 +726,26 @@ def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
     assert task_by_title(page, "Deadline")["focus_order"] is None
 
 
-def test_focus_capacity_counts_unarranged_tasks(page, wiki):
+def test_focus_limit_is_off_unless_set(page, wiki):
     today = date.today().isoformat()
     for i in range(5):
         page.request.post("/api/deck", data={"title": f"Task {i}", "start_date": today})
+    # No limit by default: no Focus warning, no flagged day on Plan.
     page.goto("/deck?view=focus")
-    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in focus")
+    expect(_focus_titles(page)).to_have_count(5)
+    expect(page.locator(".focus-over-capacity")).to_have_count(0)
+    open_tab(page, "due")
+    expect(page.locator(".board-day-divider", has_text="Today")).to_be_visible()
+    expect(page.locator(".board-day--over")).to_have_count(0)
+    # ?limit= (the /deck page) turns it on; the count includes Others.
+    page.goto("/deck?view=focus&limit=5")
+    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in focus (limit: 5)")
+    open_tab(page, "due")
+    expect(page.locator(".board-day--over")).to_have_count(1)
+    # [[deck limit=N]] in an embed.
+    wiki.write("board", "# Board\n\n[[deck view=focus limit=3]]\n")
+    page.goto("/page/board")
+    expect(page.locator(".focus-over-capacity")).to_contain_text("(limit: 3)")
 
 
 def test_task_added_on_focus_lands_at_the_end(page, wiki):
