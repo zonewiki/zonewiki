@@ -1489,7 +1489,7 @@ body.editor-page main {
   border-color: var(--btn-primary);
   color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
 }
-.board-item[draggable] { cursor: grab; }
+.board-item[data-drag] { cursor: grab; }
 /* An empty section is only its header row (no body), so a quiet week doesn't
    push the tasks off screen. The row is the drop target, so it is tall
    enough to hit; consecutive empty days stack tightly. */
@@ -1575,10 +1575,10 @@ body.editor-page main {
 .task-item.task-selected:hover .task-meta--hover-only {
   border-top-color: color-mix(in srgb, var(--fg) 16%, var(--border));
 }
-.task-item[draggable] { cursor: grab; user-select: none; -webkit-user-select: none; }
-.task-item[draggable]:active { cursor: grabbing; }
-.task-item[draggable] .task-title,
-.task-item[draggable] .task-content { cursor: grab; }
+.task-item[data-drag] { cursor: grab; user-select: none; -webkit-user-select: none; }
+.task-item[data-drag]:active { cursor: grabbing; }
+.task-item[data-drag] .task-title,
+.task-item[data-drag] .task-content { cursor: grab; }
 
 .task-checkbox { grid-area: check; align-self: center; flex-shrink: 0; }
 .task-checkbox input { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--btn-primary); }
@@ -1770,7 +1770,7 @@ body.editor-page main {
 @media (pointer: coarse) {
   /* A long press picks a card up (touch drag), so it must not select text
      or open the iOS callout instead. */
-  .task-item[draggable] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .task-item[data-drag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   /* Sideways moves on a card are swipes (deck.js), not the browser's pan. */
   .task-item { touch-action: pan-y; }
   .task-menu-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }

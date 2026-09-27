@@ -414,3 +414,26 @@ def test_long_press_in_place_neither_moves_nor_opens_editor(phone):
     expect(phone.locator(".task-touch-ghost")).to_have_count(0)
     expect(phone.locator("#task-edit-modal")).to_be_hidden()
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
+
+
+def test_touch_press_turns_off_native_drag(new_page, wiki):
+    # Phone browsers start their own HTML5 drag on a long press of a
+    # draggable="true" element, which cancelled the touch drag mid-gesture:
+    # the first drop of an unselected card was lost. Under a finger a card is
+    # not natively draggable; a mouse press makes it draggable again.
+    pg = new_page(**TOUCH_PHONE)
+    ids = [pg.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("One", "Two")]
+    pg.request.post("/api/deck/reorder", data={"order": ids})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    pg.goto("/page/deck?view=open")
+    open_tab(pg, "open")
+    one = card(pg, "One")
+    assert one.evaluate("el => el.draggable")
+    send = touch_drag(pg, card(pg, "Two"), one, release=False)
+    assert not pg.locator("#tasks-list .task-dragging").evaluate("el => el.draggable")
+    # The carried copy never shows the selection ring.
+    expect(pg.locator(".task-touch-ghost")).not_to_have_class(re.compile(r"\btask-selected\b"))
+    send("touchEnd", [])
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Two", "One"])
+    card(pg, "Two").dispatch_event("pointerdown", {"pointerType": "mouse", "bubbles": True})
+    assert card(pg, "Two").evaluate("el => el.draggable")

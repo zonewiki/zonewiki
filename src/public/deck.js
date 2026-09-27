@@ -126,7 +126,15 @@
   // Touch: a tap on a card opens the editor (double-click, the desktop
   // gesture, is unreliable on phones). Mouse clicks keep selecting cards.
   let lastPointerType = 'mouse';
-  listEl.addEventListener('pointerdown', e => { lastPointerType = e.pointerType; }, true);
+  listEl.addEventListener('pointerdown', e => {
+    lastPointerType = e.pointerType;
+    // Under a finger a card is not natively draggable: phone browsers (Chrome
+    // on Android, iOS Safari) start their own HTML5 drag on a long press, which
+    // cancels the touch drag below mid-gesture, so the first drop was lost.
+    // A mouse press turns it back on (hybrid devices).
+    const card = e.target.closest('.task-item[data-drag]');
+    if (card) card.draggable = e.pointerType !== 'touch';
+  }, true);
   listEl.addEventListener('click', e => {
     if (lastPointerType !== 'touch') return;
     const card = e.target.closest('.task-item');
@@ -134,7 +142,7 @@
     openEditModal(card.dataset.id);
   });
 
-  // Touch drag. Phones never fire HTML5 drag events, so a long press picks a
+  // Touch drag. Phones do not fire HTML5 drag events reliably, so a long press picks a
   // card up and the finger carries it; releasing drops it through the same code
   // as a mouse drop. `touchDrop` is set by setupBoardDragAndDrop /
   // setupDragAndDrop on each render (null where the view has no dragging):
@@ -196,7 +204,7 @@
     t.item.classList.add('task-dragging');
     t.grabY = t.y - rect.top;
     t.ghost = t.item.cloneNode(true);
-    t.ghost.classList.remove('task-dragging', 'selected');
+    t.ghost.classList.remove('task-dragging', 'task-selected');
     t.ghost.classList.add('task-touch-ghost');
     Object.assign(t.ghost.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px' });
     document.body.appendChild(t.ghost);
@@ -244,7 +252,7 @@
     if (e.touches.length !== 1) return;
     const item = e.target.closest('.task-item');
     if (!item || e.target.closest('input, button, a, .task-clickable-date, .task-inline-input')) return;
-    const canDrag = !!touchDrop && item.matches('[draggable]');
+    const canDrag = !!touchDrop && item.matches('[data-drag]');
     const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
     const canSwipe = !!(swipe.right || swipe.left);
     if (!canDrag && !canSwipe) return;
@@ -1263,7 +1271,7 @@
       const wontDoBtnHtml = !task.completed_at
         ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
         : '';
-      const dragAttr = draggable ? 'draggable="true"' : '';
+      const dragAttr = draggable ? 'draggable="true" data-drag' : '';
       const duePinnedAttr = draggable ? '' : 'data-due-pinned="true"';
       return `
         <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}" data-id="${task.id}" ${dragAttr} ${duePinnedAttr}>
@@ -2134,7 +2142,7 @@
         ? executeBoardItemDrop(target) : dropOnBucket(draggedId, target),
     };
 
-    listEl.querySelectorAll('.task-item[draggable]').forEach(item => {
+    listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
       item.addEventListener('dragstart', e => {
         // Touch has its own long-press drag (see touchDrop).
         if (lastPointerType === 'touch') { e.preventDefault(); return; }
@@ -2208,7 +2216,7 @@
     }
     touchDrop = {
       target: el => {
-        const item = el.closest('.task-item[draggable]');
+        const item = el.closest('.task-item[data-drag]');
         if (item) return item.dataset.id === draggedId ? null : item;
         return el.closest('.task-inbox-divider:not(.task-inbox-divider--only)');
       },
@@ -2216,7 +2224,7 @@
         ? executeDrop(target.dataset.id) : dropOnDivider(target),
     };
 
-    const items = listEl.querySelectorAll('.task-item[draggable]');
+    const items = listEl.querySelectorAll('.task-item[data-drag]');
     items.forEach(item => {
       item.addEventListener('dragstart', e => {
         if (lastPointerType === 'touch') { e.preventDefault(); return; }
