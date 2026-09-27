@@ -683,3 +683,20 @@ def test_today_capacity_counts_unarranged_tasks(page, wiki):
         page.request.post("/api/deck", data={"title": f"Task {i}", "start_date": today})
     page.goto("/deck?view=today")
     expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks for today")
+
+
+def test_task_added_on_today_lands_at_the_end(page, wiki):
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Old unordered", "start_date": today})
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=today")
+    card(page, "Bravo").drag_to(card(page, "Alpha"))  # arrange part of the day
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
+    page.locator("#task-add-btn").click()
+    page.locator("#task-edit-title").fill("Added now")
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
+    page.reload()
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])

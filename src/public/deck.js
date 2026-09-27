@@ -786,15 +786,16 @@
   const TAB_SORT = {
     focus: (a, b) => {
       // Tasks arranged on Today (focus_order) come first, in that order; the
-      // rest follow in Open's order (sort_order, never-ordered newest first),
-      // so a freshly planned day already reads in priority order.
+      // rest follow in Open's order (sort_order), so a freshly planned day
+      // already reads in priority order. Never-ordered tasks come last, oldest
+      // first, so a task added during the day lands at the end of the list.
       if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
       if (a.focus_order != null) return -1;
       if (b.focus_order != null) return 1;
       if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
       if (a.sort_order != null) return -1;
       if (b.sort_order != null) return 1;
-      return (b.created_at || '').localeCompare(a.created_at || '');
+      return (a.created_at || '').localeCompare(b.created_at || '');
     },
     due:       (a, b) => (a.due_date || a.start_date || '').localeCompare(b.due_date || b.start_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
