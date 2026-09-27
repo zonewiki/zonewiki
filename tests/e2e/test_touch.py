@@ -454,3 +454,43 @@ def test_touch_drag_across_focus_sections(new_page, wiki):
     assert tasks_by_title(pg)["Alpha"]["focus_order"] is None
     touch_drag(pg, card(pg, "Bravo"), unarranged)
     wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] is None)
+
+
+def test_tap_outside_only_closes_the_card_date_picker(phone):
+    # Regression: the picker closed on mousedown, which touch fires only with
+    # the click, so the same tap also opened the card under the finger.
+    card(phone, "Water plants").locator(".task-clickable-date[data-field='start_date']").tap()
+    picker = phone.locator(".deck-datepicker")
+    expect(picker).to_be_visible()
+    card(phone, "Weekly review").locator(".task-title").tap()
+    expect(picker).to_have_count(0)
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    # The next tap works normally again.
+    card(phone, "Weekly review").locator(".task-title").tap()
+    expect(phone.locator("#task-edit-modal")).to_be_visible()
+
+
+def test_click_outside_only_closes_the_date_picker(page, wiki):
+    # With a mouse too, the click that closes the picker does nothing else:
+    # it neither selects another card nor ticks its checkbox.
+    page.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
+    page.request.post("/api/deck", data={"title": "Weekly review"})
+    page.goto("/deck?view=open")
+    chip = card(page, "Water plants").locator(".task-clickable-date[data-field='start_date']")
+    picker = page.locator(".deck-datepicker")
+    chip.click()
+    expect(picker).to_be_visible()
+    other = card(page, "Weekly review")
+    other.locator(".task-title").click()
+    expect(picker).to_have_count(0)
+    expect(other).not_to_have_class(re.compile(r"\btask-selected\b"))
+    chip.click()
+    expect(picker).to_be_visible()
+    other.locator(".task-checkbox input").click()
+    expect(picker).to_have_count(0)
+    page.wait_for_timeout(300)
+    expect(other.locator(".task-checkbox input")).not_to_be_checked()
+    assert tasks_by_title(page)["Weekly review"]["completed_at"] is None
+    # The next click acts normally again.
+    other.locator(".task-title").click()
+    expect(other).to_have_class(re.compile(r"\btask-selected\b"))

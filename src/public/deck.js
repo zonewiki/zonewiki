@@ -1219,11 +1219,18 @@
       done = true;
       pop.remove();
       document.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('pointerdown', onOutside, true);
     }
     function commit(val) { const c = cb; cleanup(); c(val); }
     function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); cleanup(); } }
-    function onOutside(e) { if (!pop.contains(e.target) && e.target !== anchor) cleanup(); }
+    // A press outside only closes the picker, with mouse and touch alike: its
+    // mouse events and click are swallowed, so it can't also select or open
+    // another card, tick its checkbox or press a button (like a native menu).
+    function onOutside(e) {
+      if (pop.contains(e.target) || e.target === anchor) return;
+      cleanup();
+      swallowNextClick();
+    }
 
     function draw() {
       const first = new Date(viewY, viewM, 1);
@@ -1279,7 +1286,30 @@
     draw();
     document.addEventListener('keydown', onKey, true);
     // Defer outside-click wiring so the opening click doesn't immediately close it.
-    setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
+    setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
+  }
+
+  // Swallow the mouse events and the click of the current press (mousedown
+  // selects a card; touch fires its mouse events with the click). Dropped at
+  // the click, the next press or after a second, since a scroll or a drag
+  // ends without any click.
+  const SWALLOWED = ['mousedown', 'mouseup', 'click'];
+  function swallowNextClick() {
+    const swallow = e => {
+      e.preventDefault();  // mousedown's default would focus a field
+      e.stopPropagation();
+      if (e.type === 'click') stop();
+    };
+    const stop = () => {
+      SWALLOWED.forEach(t => document.removeEventListener(t, swallow, true));
+      document.removeEventListener('pointerdown', onNextPress, true);
+      clearTimeout(timer);
+    };
+    const onNextPress = () => stop();
+    SWALLOWED.forEach(t => document.addEventListener(t, swallow, true));
+    // Registered after this press has finished dispatching.
+    setTimeout(() => document.addEventListener('pointerdown', onNextPress, true), 0);
+    const timer = setTimeout(stop, 1000);
   }
 
   function render() {
