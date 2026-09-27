@@ -164,7 +164,7 @@ def phone_deck(new_page, wiki, view="open", **fields):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/deck", data={"title": "Water plants", **fields})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    phone.goto(f"/page/deck?view={view}")
+    phone.goto(f"/deck?view={view}")
     return phone
 
 
