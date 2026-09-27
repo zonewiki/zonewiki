@@ -605,6 +605,14 @@ class TestApiPagesList:
         assert "_scratch" in slugs
         assert "_daily" not in slugs   # daily notes were removed
 
+    def test_special_pages_come_first_and_are_marked(self, client, wiki_dir):
+        write_page(wiki_dir, "aaa", "# AAA\n")
+        pages = client.get("/api/pages-list", headers=HOST).get_json()
+        special = [p["title"] for p in pages if p.get("special")]
+        assert special[:2] == ["Deck", "Scratch"]
+        assert [p["title"] for p in pages[:len(special)]] == special
+        assert not next(p for p in pages if p["slug"] == "aaa").get("special")
+
 
 # ===========================================================================
 # search

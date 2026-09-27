@@ -2066,13 +2066,16 @@ def api_pages_list():
             "edited": fmt_date(mtime),
         })
     pages.sort(key=lambda p: p["title"].lower())
-    # Inject virtual special pages. `href` is for entries that are not
-    # /page/<slug> (the built-in deck page lives at /deck).
-    pages.insert(0, {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0), "mtime": 0})
-    pages.insert(0, {"slug": "/deck", "title": "Deck", "href": "/deck", "links": 0, "mtime": 0})
+    # Built-in pages, first and in this order. `special` pins them to the top
+    # of the search modal's empty-query list (the phone's way to reach them);
+    # `href` is for entries that are not /page/<slug> (the deck is at /deck).
+    special = [
+        {"slug": "/deck", "title": "Deck", "href": "/deck", "links": 0},
+        {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0)},
+    ]
     if GIT_ENABLED:
-        pages.insert(0, {"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0})
-    return jsonify(pages)
+        special.append({"slug": "_deleted", "title": "Deleted Pages", "links": 0})
+    return jsonify([{**p, "mtime": 0, "special": True} for p in special] + pages)
 
 
 # ── Search ────────────────────────────────────────────────────────────────────

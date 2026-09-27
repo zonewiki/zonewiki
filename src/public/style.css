@@ -604,6 +604,11 @@ main {
   border-bottom: 1px solid var(--border);
 }
 .page-list-item:last-child { border-bottom: none; }
+/* Built-in pages pinned above the pages (search modal, empty query): the
+   last of them gets a stronger rule to set them apart. */
+.page-list-special:not(:has(+ .page-list-special)):not(:last-child) {
+  border-bottom: 2px solid color-mix(in srgb, var(--muted) 45%, var(--border));
+}
 .page-list-item a { color: var(--link); text-decoration: none; font-weight: 500; }
 .page-list-item a:hover { text-decoration: underline; }
 .page-list-item.hidden { display: none; }

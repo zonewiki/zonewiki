@@ -264,7 +264,7 @@ async function loadModalPages() {
 
 function renderModalList(pages) {
   modalPageList.innerHTML = pages.map(p =>
-    `<li class="page-list-item" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
+    `<li class="page-list-item${p.special ? ' page-list-special' : ''}" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
     `<a href="${he(p.href || `/page/${p.slug}`)}">${he(p.title)}</a>` +
     `<span class="page-item-right"><span class="page-slug">${he(p.slug)}</span></span></li>`
   ).join('');
@@ -375,15 +375,19 @@ function applyModalControls() {
   } else {
     // No query: static list, sort by dropdown, filter by unlinked checkbox.
     // Sort the data first and render once (no post-render DOM shuffling).
+    // The built-in pages (Deck, Scratch, …) come first in the server's order,
+    // whatever the sort, so they are always two taps away; "Unlinked only"
+    // looks for orphan pages, so it leaves them out.
+    const special = unlinked ? [] : modalPages.filter(p => p.special);
     const sorted = modalPages
-      .filter(p => !(unlinked && p.links > 0))
+      .filter(p => !p.special && !(unlinked && p.links > 0))
       .sort((a, b) => {
         if (sort === 'title-desc') return b.title.toLowerCase().localeCompare(a.title.toLowerCase());
         if (sort === 'mtime-desc') return b.mtime - a.mtime;
         if (sort === 'links-desc') return b.links - a.links;
         return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
       });
-    renderModalList(sorted.slice(0, 200));
+    renderModalList([...special, ...sorted.slice(0, 200)]);
   }
 
   setModalActive(q ? 0 : -1);

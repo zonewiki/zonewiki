@@ -4,6 +4,8 @@ import re
 
 from playwright.sync_api import expect
 
+from conftest import TOUCH_PHONE
+
 
 def seed(wiki):
     wiki.write("gardening", "# Gardening\n\nTomatoes need sun.\n")
@@ -84,7 +86,7 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
     page.goto("/page/index")
     page.keyboard.press("Control+p")
     expect(page.locator("#modal-sort")).to_have_value("mtime-desc")
-    items = page.locator("#modal-page-list .page-list-item")
+    items = page.locator("#modal-page-list .page-list-item:not(.page-list-special)")
     expect(items.first).to_have_attribute("data-slug", "garage")
     expect(items.nth(1)).to_have_attribute("data-slug", "recipes")
 
@@ -93,6 +95,35 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
     page.reload()
     page.keyboard.press("Control+p")
     expect(page.locator("#modal-sort")).to_have_value("title-asc")
+
+
+def test_empty_query_pins_built_in_pages_first(page, wiki):
+    seed(wiki)
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    items = page.locator("#modal-page-list .page-list-item")
+    expect(items.nth(0).locator("a")).to_have_text("Deck")
+    expect(items.nth(1).locator("a")).to_have_text("Scratch")
+    expect(items.nth(2).locator("a")).to_have_text("Deleted Pages")   # git is on
+    expect(items.nth(3)).not_to_have_class(re.compile(r"page-list-special"))
+    # Whatever the sort.
+    page.locator("#modal-sort").select_option("title-desc")
+    expect(items.nth(1).locator("a")).to_have_text("Scratch")
+    # Typing matches them like any other entry; "Unlinked only" (orphan
+    # pages) leaves them out.
+    page.locator("#modal-filter").fill("scra")
+    expect(items.first.locator("a")).to_have_text("Scratch")
+    page.locator("#modal-filter").fill("")
+    page.locator("#modal-unlinked").check()
+    expect(page.locator("#modal-page-list .page-list-special")).to_have_count(0)
+
+
+def test_phone_reaches_scratch_list_in_two_taps(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/index")
+    phone.locator(".mobile-search").tap()
+    phone.locator("#modal-page-list .page-list-special a", has_text="Scratch").tap()
+    phone.wait_for_url("**/page/_scratch")
 
 
 def test_task_result_opens_the_deck_page(page, wiki):

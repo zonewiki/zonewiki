@@ -320,6 +320,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - Page data is loaded lazily on first open from `GET /api/pages-list` (JSON: slug, title, links, mtime) and cached for the session. Each list item shows the page title and slug — dates are not shown in the modal.
   - Filter input instantly narrows the list by title/slug; after 300ms debounce fetches `/api/search` for full-text **Content matches** with excerpts shown below the page list.
   - **Sort by** — Recently edited (default, so an empty query works as a quick switcher), Title A–Z, Title Z–A, Most linked. Applies while the query is empty; a sort picked by hand is remembered in `localStorage` (`leaf-search-sort`).
+  - **Built-in pages first** — with an empty query, the entries `api_pages_list()` marks `special` (Deck, Scratch, Deleted Pages) are pinned above the pages in that order, whatever the sort, set apart by a stronger rule (`.page-list-special`). On a phone that makes the scratch list two taps away (search button → Scratch). Typing matches them like any other entry; "Unlinked only" leaves them out.
   - **Unlinked only** checkbox — pages with zero incoming wikilinks.
   - First match is highlighted; **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
 
@@ -336,7 +337,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratch notes newest-first with title and timestamp. Not editable.
 - Daily notes (`/api/daily`, `/page/_daily`, `c d`/`g y`) were removed on purpose. Existing `YYYY-MM-DD_daily.md` files are ordinary pages.
 - **`/page/_deleted`** — special auto-generated page listing all pages that exist in git history but not on disk (deleted pages), newest deletion first. Each entry shows title, slug, deletion date, and a one-click Restore button that calls `POST /restore/<slug>/<sha>`. Only available when `GIT_ENABLED`. Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
-- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only). A "Deck" entry (slug shown as `/deck`) links to the built-in deck page; entries may carry an `href` for targets that are not `/page/<slug>`.
+- Appears in the search modal as a synthetic entry injected by `api_pages_list()` with title "Scratch" (pinned at the top of the empty-query list, see Page List) — matches searches for "scratch" or "_scratch". `_deleted` is similarly injected with title "Deleted Pages" (git only). A "Deck" entry (slug shown as `/deck`) links to the built-in deck page; entries may carry an `href` for targets that are not `/page/<slug>`.
 - Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
 ---
