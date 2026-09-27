@@ -1832,7 +1832,6 @@ body.editor-page main {
 .tasks-show-more { text-align: center; padding: 1rem; }
 .tasks-show-more .btn { font-size: .8rem; }
 
-#task-edit-inbox-field label { font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
 /* Checkbox fields (e.g. "From done"): reset the generic text-input styling and
    center the box in a control-height band so it lines up with the inputs beside it. */
 .task-field input[type="checkbox"] {

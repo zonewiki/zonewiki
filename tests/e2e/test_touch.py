@@ -287,7 +287,9 @@ def _open_chip_picker_at_bottom(page, field="start_date"):
     c.evaluate("el => { const gap = innerHeight - el.getBoundingClientRect().bottom - 8;"
                " document.querySelector('.tasks-app').style.marginTop = gap + 'px'; }")
     chip = c.locator(f".task-clickable-date[data-field='{field}']")
-    chip.tap()
+    # Not tap(): Playwright would scroll the page (content follows the card,
+    # e.g. the Sorted heading) and the card would leave the bottom edge.
+    chip.dispatch_event("click")
     picker = page.locator(".deck-datepicker")
     expect(picker).to_be_visible()
     return chip, picker
@@ -445,8 +447,8 @@ def test_touch_drag_across_focus_sections(new_page, wiki):
         pg.request.post("/api/deck", data={"title": t, "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/deck?view=focus")
-    arranged = pg.locator(".focus-section[data-focus-zone='arranged']")
-    unarranged = pg.locator(".focus-section[data-focus-zone='unarranged']")
+    arranged = pg.locator(".list-section[data-section='pinned']")
+    unarranged = pg.locator(".list-section[data-section='others']")
     touch_drag(pg, card(pg, "Bravo"), arranged)
     wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] == 0)
     assert tasks_by_title(pg)["Alpha"]["focus_order"] is None

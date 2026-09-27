@@ -623,13 +623,15 @@ def test_focus_starts_from_open_order_without_new_section(page, wiki):
     # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
     expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
     expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
-    # Nothing arranged yet: an empty Arranged section, everything under Not arranged.
-    expect(_section(page, "arranged")).to_have_class(re.compile(r"\bboard-day--empty\b"))
-    expect(_section(page, "unarranged").locator(".board-day-count")).to_have_text("4")
+    # Nothing arranged yet: an empty Pinned section, everything Others.
+    expect(_section(page, "pinned")).to_have_text(re.compile("Pinned"))
+    expect(_section(page, "others")).to_have_text(re.compile("Others"))
+    expect(_section(page, "pinned")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    expect(_section(page, "others").locator(".board-day-count")).to_have_text("4")
 
 
 def _section(page, zone):
-    return page.locator(f".focus-section[data-focus-zone='{zone}']")
+    return page.locator(f".list-section[data-section='{zone}']")
 
 
 def _arranged(page):
@@ -644,13 +646,13 @@ def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo", "Charlie"])
 
-    # Onto the (empty) Arranged heading: only the dragged task is arranged.
-    card(page, "Charlie").drag_to(_section(page, "arranged"))
+    # Onto the (empty) Pinned heading: only the dragged task is arranged.
+    card(page, "Charlie").drag_to(_section(page, "pinned"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
     wait_for_field(page, "Charlie", "focus_order", 0)
     assert _arranged(page) == ["Charlie"]
 
-    # Within Not arranged nothing moves: it is always in Open's order.
+    # Within Others nothing moves: it is always in Open's order.
     card(page, "Bravo").drag_to(card(page, "Alpha"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
     assert _arranged(page) == ["Charlie"]
@@ -662,13 +664,13 @@ def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
     assert _arranged(page) == ["Alpha", "Charlie"]
     assert task_by_title(page, "Bravo")["focus_order"] is None
 
-    # Onto the Not arranged heading from below: appended to Arranged.
-    card(page, "Bravo").drag_to(_section(page, "unarranged"))
+    # Onto the Others heading from below: appended to Pinned.
+    card(page, "Bravo").drag_to(_section(page, "others"))
     wait_for_field(page, "Bravo", "focus_order", 2)
-    expect(_section(page, "unarranged")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    expect(_section(page, "others")).to_have_class(re.compile(r"\bboard-day--empty\b"))
 
-    # From Arranged onto the Not arranged heading: back to unarranged.
-    card(page, "Alpha").drag_to(_section(page, "unarranged"))
+    # From Pinned onto the Others heading: back to unarranged.
+    card(page, "Alpha").drag_to(_section(page, "others"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha"])
     wait_for_field(page, "Alpha", "focus_order", None)
     assert _arranged(page) == ["Charlie", "Bravo"]
@@ -702,19 +704,20 @@ def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
-    # Within Not arranged the order is Open's: ↑ on Alpha does nothing.
+    # Others can't be reordered: ↓ does nothing, ↑ pins the task (at the end
+    # of Pinned), even when it is not the first of Others.
     card(page, "Alpha").click()
-    page.keyboard.press("Control+Shift+ArrowUp")
-    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
-    # ↑ on the first unarranged task arranges it.
-    card(page, "Bravo").click()
-    page.keyboard.press("Control+Shift+ArrowUp")
-    wait_for_field(page, "Bravo", "focus_order", 0)
-    page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
-    assert _arranged(page) == ["Bravo"]
-    # ↓ on the last arranged task unarranges it.
     page.keyboard.press("Control+Shift+ArrowDown")
-    wait_for_field(page, "Bravo", "focus_order", None)
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
+    page.keyboard.press("Control+Shift+ArrowUp")
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
+    wait_for_field(page, "Alpha", "focus_order", 0)
+    page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
+    assert _arranged(page) == ["Alpha"]
+    # ↓ on the last pinned task unpins it.
+    page.keyboard.press("Control+Shift+ArrowDown")
+    wait_for_field(page, "Alpha", "focus_order", None)
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
     expect(page.locator(".task-item[data-due-pinned] .task-title")).to_have_text(["Deadline"])
     assert task_by_title(page, "Deadline")["focus_order"] is None
 
@@ -734,7 +737,7 @@ def test_task_added_on_focus_lands_at_the_end(page, wiki):
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
-    card(page, "Bravo").drag_to(_section(page, "arranged"))  # arrange part of the day
+    card(page, "Bravo").drag_to(_section(page, "pinned"))  # arrange part of the day
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
@@ -772,7 +775,109 @@ def test_undo_of_start_tomorrow_restores_focus_arrangement(page, wiki):
     expect(_focus_titles(page)).to_have_text(["Alpha"])
     # Moving to a later day clears its place on Focus ...
     wait_for_field(page, "Bravo", "focus_order", None)
-    # ... and undo puts it back where it was, not under "Not arranged".
+    # ... and undo puts it back where it was, not under "Others".
     page.locator(".task-undo-btn").click()
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
     wait_for_field(page, "Bravo", "focus_order", 0)
+
+
+def wait_until(predicate, timeout_s=5):
+    import time
+    end = time.monotonic() + timeout_s
+    while not predicate():
+        assert time.monotonic() < end, "condition not met in time"
+        time.sleep(0.05)
+
+
+def _open_titles(page, zone):
+    """Titles of the tasks in one Open section, in order."""
+    page.wait_for_selector(f".list-section[data-section='{zone}']")
+    return page.evaluate(f"""() => {{
+      const out = []; let el = document.querySelector(".list-section[data-section='{zone}']");
+      while ((el = el.nextElementSibling) && el.classList.contains('task-item'))
+        out.push(el.querySelector('.task-title').textContent);
+      return out; }}""")
+
+
+def test_open_has_unsorted_and_sorted_sections(page, wiki):
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    for t in ("Old new", "Fresh"):
+        page.request.post("/api/deck", data={"title": t})
+    page.request.post("/api/deck", data={"title": "Overdue", "due_date": "2020-01-01"})
+    page.goto("/deck?view=open")
+    expect(_section(page, "unsorted")).to_have_text(re.compile("Unsorted"))
+    expect(_section(page, "sorted")).to_have_text(re.compile("Sorted"))
+    # Unsorted: newest first. No Due section on Open: a due task sits in its section.
+    assert _open_titles(page, "unsorted") == ["Overdue", "Fresh", "Old new"]
+    assert _open_titles(page, "sorted") == ["Alpha", "Bravo"]
+    expect(page.locator(".task-item[data-due-pinned]")).to_have_count(0)
+    # No sort menu, no "Move to New" checkbox.
+    expect(page.locator("#task-sort")).to_have_count(0)
+    card(page, "Alpha").dblclick()
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    expect(page.locator("#task-edit-inbox")).to_have_count(0)
+
+
+def test_open_drag_between_unsorted_and_sorted(page, wiki):
+    page.set_viewport_size({"width": 1000, "height": 1200})
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    for t in ("One", "Two"):
+        page.request.post("/api/deck", data={"title": t})
+    page.goto("/deck?view=open")
+    assert _open_titles(page, "unsorted") == ["Two", "One"]
+    # Within Unsorted nothing moves (newest first).
+    card(page, "Two").drag_to(card(page, "One"))
+    assert _open_titles(page, "unsorted") == ["Two", "One"]
+    # Onto a sorted task: lands before it.
+    card(page, "One").drag_to(card(page, "Bravo"))
+    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
+    wait_for_field(page, "One", "sort_order", 1)
+    assert task_by_title(page, "Two")["sort_order"] is None
+    # Onto the Sorted heading: first in Sorted.
+    card(page, "Two").drag_to(_section(page, "sorted"))
+    wait_for_field(page, "Two", "sort_order", 0)
+    expect(_section(page, "unsorted")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    # A sorted task onto the Sorted heading (from below) or the Unsorted
+    # heading goes back to Unsorted.
+    card(page, "Bravo").drag_to(_section(page, "sorted"))
+    wait_for_field(page, "Bravo", "sort_order", None)
+    card(page, "Alpha").drag_to(_section(page, "unsorted"))
+    wait_for_field(page, "Alpha", "sort_order", None)
+    assert _open_titles(page, "sorted") == ["Two", "One"]
+    assert [t["title"] for t in sorted(
+        (t for t in page.request.get("/api/deck").json() if t["sort_order"] is not None),
+        key=lambda t: t["sort_order"])] == ["Two", "One"]
+
+
+def test_open_keyboard_crosses_the_sections(page, wiki):
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    for t in ("One", "Two"):
+        page.request.post("/api/deck", data={"title": t})
+    page.goto("/deck?view=open")
+    # ↓ on any unsorted task (not just the last) puts it first in Sorted.
+    card(page, "Two").click()
+    page.keyboard.press("Control+Shift+ArrowDown")
+    wait_for_field(page, "Two", "sort_order", 0)
+    assert _open_titles(page, "sorted") == ["Two", "Alpha", "Bravo"]
+    # ↑ on the first sorted task sends it back to Unsorted.
+    page.keyboard.press("Control+Shift+ArrowUp")
+    wait_for_field(page, "Two", "sort_order", None)
+    # ↑ within Unsorted does nothing.
+    card(page, "One").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    assert _open_titles(page, "unsorted") == ["Two", "One"]
+
+
+def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
+    ids = [page.request.post("/api/deck", data={"title": t, "tags": tags}).json()["id"]
+           for t, tags in (("A1", "a"), ("B1", "b"), ("A2", "a"), ("B2", "b"))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=open&tag=a")
+    assert _open_titles(page, "sorted") == ["A1", "A2"]
+    card(page, "A2").drag_to(card(page, "A1"))
+    wait_until(lambda: _open_titles(page, "sorted") == ["A2", "A1"])
+    wait_until(lambda: _by_order(page, "sort_order") == ["A2", "B1", "A1", "B2"])
+

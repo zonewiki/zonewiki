@@ -51,7 +51,6 @@
   const listEl = document.getElementById('tasks-list' + sfx);
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
   const addBtn = document.getElementById('task-add-btn' + sfx);
-  const sortSelect = document.getElementById('task-sort' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
   const unplannedEl = document.getElementById('task-unplanned' + sfx);
   const unplannedWrap = document.getElementById('task-unplanned-wrap' + sfx);
@@ -714,15 +713,6 @@
   async function reorder(order, field = 'sort_order') { return postReorder({ order, field }); }
   async function reorderUpdates(updates, field = 'sort_order') { return postReorder({ updates, field }); }
 
-  // True when the visible task list is a narrowed view (tag/search
-  // filter) of the full Backlog rather than every open task. Manual reorders
-  // done under a narrowed view must not renumber the whole visible list —
-  // tasks hidden by the filter would keep their old sort_order and collide
-  // with the freshly-renumbered ones once the filter is cleared.
-  function hasNarrowingFilter() {
-    return !!filterSearch?.value.trim();
-  }
-
   // Assign sort_order values to `groupIds` (already spliced into `ids` at
   // `insertIdx`, contiguously and in order) so they land between the nearest
   // already-ordered neighbors. Only the group's own tasks are touched — every
@@ -840,98 +830,122 @@
     return !!t.due_date && t.due_date <= today;
   }
 
-  // Focus has two sections: Arranged (focus_order, your order for the day)
-  // and Not arranged (no focus_order, always in Open's order). A move works on
-  // the visible list with both headings as slots in it (focusList): whatever
-  // ends up above the "Not arranged" heading is arranged, in that order; the
-  // rest is unarranged. So dropping on that heading from above unarranges a
-  // task, and from below appends it to Arranged.
-  const FOCUS_ARRANGED = '#arranged', FOCUS_UNARRANGED = '#unarranged';
+  // Open and Focus each have two sections under a heading (sectionHTML): one
+  // in a manual order, one in a fixed order.
+  //   Open:  Unsorted (no sort_order, newest first) · Sorted (sort_order)
+  //   Focus: Pinned (focus_order) · Others (no focus_order, in Open's order)
+  // A move works on the visible list with both headings as slots in it
+  // (sectionList): the side of the second heading a task lands on decides its
+  // section. So dropping on that heading moves a task across it, and moves
+  // within the fixed-order section change nothing.
+  const SECTIONS = {
+    open:  { field: 'sort_order',  top: 'unsorted', bottom: 'sorted', orderedTop: false },
+    focus: { field: 'focus_order', top: 'pinned',   bottom: 'others', orderedTop: true },
+  };
+  const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
   function focusTasks() {
     const today = todayStr();
     return [...tasks]
       .filter(t => !t.completed_at && isFocus(t, today) && !isDueNow(t, today))
       .sort(TAB_SORT.focus);
   }
-  function focusList() {
+  // Every task in the tab's manual order, including ones the filter hides.
+  function manualOrderIds(s) {
+    if (s.field === 'focus_order') return focusTasks().filter(t => t.focus_order != null).map(t => t.id);
+    return tasks.filter(t => !t.completed_at && t.sort_order != null)
+      .sort((a, b) => a.sort_order - b.sort_order).map(t => t.id);
+  }
+  function sectionList() {
+    const s = SECTIONS[activeFilter];
     const byId = new Map(tasks.map(t => [t.id, t]));
     const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
-    return [FOCUS_ARRANGED, ...ids.filter(id => byId.get(id).focus_order != null),
-            FOCUS_UNARRANGED, ...ids.filter(id => byId.get(id).focus_order == null)];
+    const manual = ids.filter(id => byId.get(id)[s.field] != null);
+    const fixed = ids.filter(id => byId.get(id)[s.field] == null);
+    return s.orderedTop
+      ? [sectionKey(s.top), ...manual, sectionKey(s.bottom), ...fixed]
+      : [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
   }
-  // Save a rearranged focusList(). Tasks hidden by the filter keep their
-  // slots in the arranged order; the visible ones fill the rest.
-  function applyFocusList(list) {
-    const visArranged = list.slice(0, list.indexOf(FOCUS_UNARRANGED)).filter(id => id !== FOCUS_ARRANGED);
+  // Save a rearranged sectionList(). Tasks hidden by the filter keep their
+  // slots in the manual order; the visible ones fill the rest.
+  function applySectionList(list) {
+    const s = SECTIONS[activeFilter];
+    const cut = list.indexOf(sectionKey(s.bottom));
+    const visManual = (s.orderedTop ? list.slice(0, cut) : list.slice(cut + 1))
+      .filter(id => !id.startsWith('#'));
     const vis = new Set(list);
-    const old = focusTasks().filter(t => t.focus_order != null).map(t => t.id);
-    const arranged = [];
+    const old = manualOrderIds(s);
+    const order = [];
     let k = 0;
     old.forEach(id => {
-      if (!vis.has(id)) arranged.push(id);
-      else if (k < visArranged.length) arranged.push(visArranged[k++]);
+      if (!vis.has(id)) order.push(id);
+      else if (k < visManual.length) order.push(visManual[k++]);
     });
-    arranged.push(...visArranged.slice(k));
-    const kept = new Set(arranged);
-    const unarranged = old.filter(id => !kept.has(id));
-    if (!unarranged.length && arranged.join() === old.join()) return;
+    order.push(...visManual.slice(k));
+    const kept = new Set(order);
+    const removed = old.filter(id => !kept.has(id));
+    if (!removed.length && order.join() === old.join()) return;
     const byId = new Map(tasks.map(t => [t.id, t]));
-    arranged.forEach((id, i) => { byId.get(id).focus_order = i; });
-    unarranged.forEach(id => { byId.get(id).focus_order = null; });
-    postReorder({ order: arranged, updates: unarranged.map(id => ({ id, focus_order: null })),
-                  field: 'focus_order' });
+    order.forEach((id, i) => { byId.get(id)[s.field] = i; });
+    removed.forEach(id => { byId.get(id)[s.field] = null; });
+    postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })), field: s.field });
     render();
   }
-  // Drag on Focus: drop `draggedId` on a task or a section heading (`key`).
-  function focusDrop(key) {
-    const list = focusList();
+  // Drop `draggedId` on a task or a section heading (`key`). A task entering
+  // the manual order from the other section lands before the task it is
+  // dropped on (on Open that is a move down, which otherwise lands after).
+  function sectionDrop(key) {
+    const s = SECTIONS[activeFilter];
+    const list = sectionList();
     const from = list.indexOf(draggedId), to = list.indexOf(key);
     if (from === -1 || to === -1 || from === to) return;
+    const byId = new Map(tasks.map(t => [t.id, t]));
+    const entering = byId.get(key)?.[s.field] != null && byId.get(draggedId)[s.field] == null;
     list.splice(from, 1);
-    list.splice(to, 0, draggedId);
-    applyFocusList(list);
+    list.splice(entering && from < to ? to - 1 : to, 0, draggedId);
+    applySectionList(list);
   }
-  // Ctrl+Shift+↑/↓ on Focus: the selection moves one slot; the headings count
-  // as slots, so ↑ on the first unarranged task arranges it and ↓ on the last
-  // arranged one unarranges it.
-  function focusKeyMove(direction) {
-    const list = focusList();
+  // Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
+  // slots, so the edge task of the manual order crosses into the other
+  // section. Tasks in the fixed-order section can't move within it; a move
+  // toward the manual order takes them straight across the heading.
+  function sectionKeyMove(direction) {
+    const s = SECTIONS[activeFilter];
+    const list = sectionList();
+    const byId = new Map(tasks.map(t => [t.id, t]));
     const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
     if (!idxs.length) return;
     const group = idxs.map(i => list[i]);
     const rest = list.filter(id => !selectedIds.has(id));
-    if (direction === 'up') {
+    if (group.every(id => byId.get(id)[s.field] == null)) {
+      if ((direction === 'up') !== s.orderedTop) return;  // away from the manual order
+      const at = rest.indexOf(sectionKey(s.bottom));
+      rest.splice(s.orderedTop ? at : at + 1, 0, ...group);
+    } else if (direction === 'up') {
       const above = list[idxs[0] - 1];
-      if (above === undefined || above === FOCUS_ARRANGED) return;
+      if (above === undefined || above === sectionKey(s.top)) return;
       rest.splice(rest.indexOf(above), 0, ...group);
     } else {
       const below = list[idxs[idxs.length - 1] + 1];
       if (below === undefined) return;
       rest.splice(rest.indexOf(below) + 1, 0, ...group);
     }
-    applyFocusList(rest);
+    applySectionList(rest);
   }
 
-  // A Focus section heading. It looks like a Plan-board day heading and, like
-  // one, takes drops: an empty section is only this row.
-  function focusSectionHTML(zone, label, count) {
+  // A section heading on Open and Focus. It looks like a Plan-board day
+  // heading and, like one, takes drops: an empty section is only this row.
+  function sectionHTML(zone, label, count) {
     const empty = count ? '' : ' board-day--empty';
-    return `<li class="board-day-divider focus-section${empty}" data-focus-zone="${zone}">` +
+    return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
       `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
   }
+
 
   function sortTasks(tasksArr) {
     const fixed = TAB_SORT[activeFilter];
     if (fixed) return [...tasksArr].sort(fixed);
 
-    const mode = sortSelect.value;
-    const sorted = [...tasksArr];
-    if (mode === 'manual') {
-      sorted.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    } else if (mode === 'created_at') {
-      sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-    }
-    return sorted;
+    return [...tasksArr].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   }
 
   // ── Bulk tag modal ──────────────────────────────────────────────────────────
@@ -1244,38 +1258,34 @@
   }
 
   function render() {
-    sortSelect.style.display = TAB_SORT[activeFilter] ? 'none' : '';
     syncCompletedLink();
 
     const filtered = filterTasks();
 
 
-    // Open and Focus pin "due now" at the top. The Due section holds exactly
-    // what the due badge counts (overdue + due today), so the badge's number
-    // is visible where its link lands (Focus). Open then splits the rest into
-    // new (inbox, on top) and ordered. Focus splits it into the tasks arranged
-    // there (focus_order) and, below them, "Not arranged" ones in Open's order
-    // (TAB_SORT.focus): already triaged, they just have no slot in the day yet.
-    let dueTasks, orderedTasks, newTasks, unarrangedTasks = [];
-    if (activeFilter === 'open' || activeFilter === 'focus') {
+    // Focus pins "due now" at the top: the Due section holds exactly what the
+    // due badge counts (overdue + due today), so the badge's number is visible
+    // where its link lands. Then both Open and Focus have two sections
+    // (SECTIONS): Open's Unsorted (newTasks) above Sorted (orderedTasks), and
+    // Focus's Pinned (orderedTasks) above Others (unarrangedTasks, in Open's
+    // order via TAB_SORT.focus). Open has no Due section: a due task keeps its
+    // place in the order, and its urgency colour marks it.
+    let dueTasks = [], orderedTasks, newTasks = [], unarrangedTasks = [];
+    if (activeFilter === 'focus') {
       const today = todayStr();
       dueTasks = filtered.filter(t => isDueNow(t, today))
                          .sort((a, b) => a.due_date.localeCompare(b.due_date));
-      const rest = filtered.filter(t => !isDueNow(t, today));
-      if (activeFilter === 'focus') {
-        const sorted = sortTasks(rest);
-        orderedTasks    = sorted.filter(t => t.focus_order != null);
-        unarrangedTasks = sorted.filter(t => t.focus_order == null);
-        newTasks        = [];
-      } else {
-        orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
-        newTasks     = rest.filter(t => t.sort_order == null)
-                           .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-      }
+      const sorted = sortTasks(filtered.filter(t => !isDueNow(t, today)));
+      orderedTasks    = sorted.filter(t => t.focus_order != null);
+      unarrangedTasks = sorted.filter(t => t.focus_order == null);
+    } else if (activeFilter === 'open') {
+      orderedTasks = sortTasks(filtered.filter(t => t.sort_order != null));
+      // Newest first; reversed first, so tasks created in the same second
+      // (created_at has no finer resolution) keep newest-first too.
+      newTasks     = filtered.filter(t => t.sort_order == null).reverse()
+                             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     } else {
-      dueTasks     = [];
       orderedTasks = sortTasks(filtered);
-      newTasks     = [];
     }
 
     if (activeFilter !== 'due' &&
@@ -1291,7 +1301,7 @@
       return;
     }
 
-    const taskHTML = (task, draggable = (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')), extraClass = '') => {
+    const taskHTML = (task, draggable = !!SECTIONS[activeFilter], extraClass = '') => {
       const checked = task.completed_at ? 'checked' : '';
       const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
@@ -1377,17 +1387,10 @@
       return;
     }
 
-    // Due now section (overdue + due today) pinned at top of Open and Focus
+    // Due now section (overdue + due today) pinned at the top of Focus
     if (dueTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
       html += dueTasks.map(t => taskHTML(t, false)).join('');
-      // Focus's own section headings follow instead of a plain divider.
-      if (activeFilter !== 'focus' && (orderedTasks.length > 0 || newTasks.length > 0)) html += '<li class="task-inbox-divider"></li>';
-    }
-    if (newTasks.length > 0) {
-      html += '<li class="task-inbox-divider task-inbox-divider--only">New</li>';
-      html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
-      if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     if (activeFilter === 'focus') {
       const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
@@ -1406,12 +1409,17 @@
       displayTasks = orderedTasks.slice(0, completedLimit);
       truncated = true;
     }
-    // Focus: both sections always have a heading, even when empty, because
-    // the heading is where a task is dropped to enter an empty section.
+    // Open and Focus: both sections always have a heading, even when empty,
+    // because the heading is where a task is dropped to enter an empty section.
+    if (activeFilter === 'open') {
+      html += sectionHTML('unsorted', 'Unsorted', newTasks.length);
+      html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
+      html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
+    }
     const focusSections = activeFilter === 'focus' && (orderedTasks.length || unarrangedTasks.length);
-    if (focusSections) html += focusSectionHTML('arranged', 'Arranged', orderedTasks.length);
+    if (focusSections) html += sectionHTML('pinned', 'Pinned', orderedTasks.length);
     html += displayTasks.map(t => taskHTML(t)).join('');
-    if (focusSections) html += focusSectionHTML('unarranged', 'Not arranged', unarrangedTasks.length);
+    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length);
     html += unarrangedTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
@@ -1489,7 +1497,7 @@
     touchDrop = null;
     if (activeFilter === 'due') {
       setupBoardDragAndDrop();
-    } else if (activeFilter === 'focus' || (!TAB_SORT[activeFilter] && sortSelect.value === 'manual')) {
+    } else if (SECTIONS[activeFilter]) {
       setupDragAndDrop();
     }
 
@@ -1762,7 +1770,6 @@
     });
   }
 
-  sortSelect.addEventListener('change', render);
   if (filterSearch) {
     // Debounced — render() rebuilds the whole list, too heavy per keystroke.
     let searchTimer = null;
@@ -2005,16 +2012,6 @@
     const recFromCb = document.getElementById('task-edit-rec-from' + sfx);
     if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
     syncRecFields();
-    // Show "move to new" only for existing tasks with a sort_order
-    const newField = document.getElementById('task-edit-inbox-field' + sfx);
-    const newCb = document.getElementById('task-edit-inbox' + sfx);
-    if (task && task.sort_order != null) {
-      newField.style.display = '';
-      newCb.checked = false;
-    } else {
-      newField.style.display = 'none';
-      newCb.checked = false;
-    }
     deleteBtn.style.display = task ? '' : 'none';
     syncDates('open');
     modal.showModal();
@@ -2131,10 +2128,6 @@
       data.tags = [...new Set([...data.tags, ...quick.tags])];
     }
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
-    // Move to new: reset sort_order to null
-    if (id && document.getElementById('task-edit-inbox' + sfx).checked) {
-      data.sort_order = null;
-    }
     modal.close();
     if (id) {
       await updateTask(id, data);
@@ -2235,52 +2228,13 @@
     });
   }
 
-  const DIVIDER_TARGETS = '.task-inbox-divider:not(.task-inbox-divider--only), .focus-section';
+  const DIVIDER_TARGETS = '.list-section';
   function setupDragAndDrop() {
     function executeDrop(targetId) {
       if (!draggedId || targetId === draggedId) return;
-      if (activeFilter === 'focus') { focusDrop(targetId); return; }
-      const ids = Array.from(listEl.querySelectorAll('.task-item:not([data-due-pinned])'))
-                       .map(el => el.dataset.id);
-      const fromIdx = ids.indexOf(draggedId);
-      const toIdx = ids.indexOf(targetId);
-      if (fromIdx === -1 || toIdx === -1) return;
-      const byId = new Map(tasks.map(tk => [tk.id, tk]));
-      const draggedTask = byId.get(draggedId);
-      const wasNew = draggedTask && draggedTask.sort_order == null;
-      ids.splice(fromIdx, 1);
-      // When dragging from new into ordered, insert BEFORE target (adjust index).
-      // Within-section reorder uses standard behavior (no adjustment).
-      const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
-      ids.splice(insertIdx, 0, draggedId);
-      const field = 'sort_order';
-      if (hasNarrowingFilter()) {
-        interpolateOrder(ids, insertIdx, [draggedId], byId, field);
-        reorderUpdates([{ id: draggedId, [field]: draggedTask[field] }], field);
-      } else {
-        // Only assign the field to items that already had one, plus the dragged item
-        ids.forEach((tid, i) => {
-          const t = byId.get(tid);
-          if (t && (t[field] != null || t.id === draggedId)) t[field] = i;
-        });
-        const orderedIds = ids.filter(tid => byId.get(tid)?.[field] != null);
-        reorder(orderedIds, field);
-      }
-      render();
+      sectionDrop(targetId);
     }
-
-    // Dropping on a section divider inserts the task before the first
-    // reorderable task that follows it. A Focus heading is a slot of its own
-    // (focusDrop).
-    function dropOnDivider(div) {
-      if (div.dataset.focusZone) {
-        executeDrop(div.dataset.focusZone === 'arranged' ? FOCUS_ARRANGED : FOCUS_UNARRANGED);
-        return;
-      }
-      let next = div.nextElementSibling;
-      while (next && !next.matches('.task-item:not([data-due-pinned])')) next = next.nextElementSibling;
-      if (next) executeDrop(next.dataset.id);
-    }
+    const dropOnDivider = div => executeDrop(sectionKey(div.dataset.section));
     touchDrop = {
       target: el => {
         const item = el.closest('.task-item[data-drag]');
@@ -2343,63 +2297,7 @@
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
   function reorderSelected(direction) {
-    if (activeFilter === 'focus') { focusKeyMove(direction); return; }
-    if (sortSelect.value !== 'manual' || !selectedIds.size) return;
-    // Due-pinned tasks are not reorderable (and not draggable either).
-    const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
-    const byId = new Map(tasks.map(tk => [tk.id, tk]));
-
-    if (selectedIds.size === 1) {
-      const idx = ids.indexOf(selectedId);
-      if (idx === -1) return;
-      const selTask = byId.get(selectedId);
-
-      if (direction === 'down') {
-        if (idx === ids.length - 1) return;
-        if (selTask && selTask.sort_order == null) {
-          // Moving new item into ordered: place at top of ordered section
-          ids.splice(idx, 1);
-          const firstOrd = ids.findIndex(id => byId.get(id)?.sort_order != null);
-          ids.splice(firstOrd === -1 ? ids.length : firstOrd, 0, selectedId);
-        } else {
-          [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
-        }
-      } else {
-        if (idx === 0) return;
-        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-      }
-    } else {
-      const sel = selectedIds;
-      const selIdx = ids.map((id, i) => sel.has(id) ? i : -1).filter(i => i >= 0);
-      const topIdx = selIdx[0], botIdx = selIdx[selIdx.length - 1];
-      const rest = ids.filter(id => !sel.has(id));
-      const group = selIdx.map(i => ids[i]);
-      if (direction === 'up') {
-        if (topIdx === 0) return;
-        const insertAt = rest.indexOf(ids[topIdx - 1]);
-        rest.splice(insertAt, 0, ...group);
-      } else {
-        if (botIdx === ids.length - 1) return;
-        const insertAt = rest.indexOf(ids[botIdx + 1]) + 1;
-        rest.splice(insertAt, 0, ...group);
-      }
-      ids.length = 0; ids.push(...rest);
-    }
-    const field = 'sort_order';
-    if (hasNarrowingFilter()) {
-      const groupIds = ids.filter(id => selectedIds.has(id));
-      const insertIdx = ids.findIndex(id => selectedIds.has(id));
-      interpolateOrder(ids, insertIdx, groupIds, byId, field);
-      reorderUpdates(groupIds.map(id => ({ id, [field]: byId.get(id)[field] })), field);
-    } else {
-      ids.forEach((tid, i) => {
-        const t = byId.get(tid);
-        if (t && (t[field] != null || selectedIds.has(tid))) t[field] = i;
-      });
-      const orderedIds = ids.filter(tid => byId.get(tid)?.[field] != null);
-      reorder(orderedIds, field);
-    }
-    render();
+    if (SECTIONS[activeFilter] && selectedIds.size) sectionKeyMove(direction);
   }
 
   document.addEventListener('keydown', async e => {

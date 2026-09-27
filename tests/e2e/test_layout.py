@@ -213,7 +213,7 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     page.wait_for_function("scrollY > 0")
 
 
-DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-sort",
+DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search",
                      "#task-unplanned-wrap", "#task-add-btn"]
 
 

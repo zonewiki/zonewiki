@@ -612,10 +612,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
-      <select id="task-sort{sfx}" title="Sort order" aria-label="Sort order">
-        <option value="manual">Manual</option>
-        <option value="created_at">Created</option>
-      </select>
       <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no start date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
         <input type="checkbox" id="task-unplanned{sfx}"> Unplanned
       </label>
@@ -688,9 +684,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
       </div>
     </details>
     <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>
-    <div class="task-field" id="task-edit-inbox-field{sfx}" style="display:none">
-      <label><input type="checkbox" id="task-edit-inbox{sfx}"> Move to New (remove from manual order)</label>
-    </div>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
       <button type="button" class="btn" id="task-edit-cancel{sfx}">Cancel</button>
@@ -1191,8 +1184,9 @@ def api_reorder_deck():
     for u in updates:
         task_id = u.get("id")
         val = u.get(field)
-        # focus_order may be cleared (null): the task leaves Focus's arrangement.
-        if val is None and field == "focus_order" and task_id in id_map:
+        # null clears the field: the task leaves the manual order (Open's
+        # Sorted section, Focus's Pinned section).
+        if val is None and task_id in id_map:
             id_map[task_id][field] = None
             continue
         if not isinstance(val, (int, float)) or isinstance(val, bool):
