@@ -623,6 +623,8 @@ def test_today_starts_from_open_order_without_new_section(page, wiki):
     # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
     expect(_today_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
     expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
+    # Nothing arranged yet: no "Not arranged" heading over the whole day.
+    expect(page.locator(".task-inbox-divider--only", has_text="Not arranged")).to_have_count(0)
 
 
 def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
@@ -642,6 +644,16 @@ def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
     page.request.post("/api/deck", data={"title": "Later addition", "start_date": today})
     page.reload()
     expect(_today_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo", "Later addition"])
+    # It sits under a "Not arranged" heading below the arranged day.
+    heading = page.locator(".task-inbox-divider--only", has_text="Not arranged")
+    expect(heading).to_have_count(1)
+    assert heading.evaluate(
+        "el => el.nextElementSibling.querySelector('.task-title').textContent") == "Later addition"
+    # Dragging it into the day arranges it; the heading goes with the last one.
+    card(page, "Later addition").drag_to(card(page, "Alpha"))
+    expect(_today_titles(page)).to_have_text(["Charlie", "Later addition", "Alpha", "Bravo"])
+    expect(heading).to_have_count(0)
+    wait_for_field(page, "Later addition", "focus_order", 1)
     open_tab(page, "open")
     expect(page.locator(".task-item .task-title")).to_have_text(
         ["Later addition", "Alpha", "Bravo", "Charlie"])

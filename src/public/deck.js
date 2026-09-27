@@ -1154,17 +1154,20 @@
     // Open and Today pin "due now" at the top. The Due section holds exactly
     // what the due badge counts (overdue + due today), so the badge's number
     // is visible where its link lands (Today). Open then splits the rest into
-    // new (inbox) and ordered; Today has no New section, since tasks not yet
-    // arranged there follow in Open's order (TAB_SORT.focus).
-    let dueTasks, orderedTasks, newTasks;
+    // new (inbox, on top) and ordered. Today splits it into the tasks arranged
+    // there (focus_order) and, below them, "Not arranged" ones in Open's order
+    // (TAB_SORT.focus): already triaged, they just have no slot in the day yet.
+    let dueTasks, orderedTasks, newTasks, unarrangedTasks = [];
     if (activeFilter === 'open' || activeFilter === 'focus') {
       const today = todayStr();
       dueTasks = filtered.filter(t => isDueNow(t, today))
                          .sort((a, b) => a.due_date.localeCompare(b.due_date));
       const rest = filtered.filter(t => !isDueNow(t, today));
       if (activeFilter === 'focus') {
-        orderedTasks = sortTasks(rest);
-        newTasks     = [];
+        const sorted = sortTasks(rest);
+        orderedTasks    = sorted.filter(t => t.focus_order != null);
+        unarrangedTasks = sorted.filter(t => t.focus_order == null);
+        newTasks        = [];
       } else {
         orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
         newTasks     = rest.filter(t => t.sort_order == null)
@@ -1177,7 +1180,8 @@
     }
 
     if (activeFilter !== 'due' &&
-        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0) {
+        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 &&
+        unarrangedTasks.length === 0) {
       if (activeFilter === 'focus') {
         listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
           '<button type="button" class="btn btn-sm" data-goto-tab="due">Plan your day</button></li>';
@@ -1278,7 +1282,7 @@
     if (dueTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
       html += dueTasks.map(t => taskHTML(t, false)).join('');
-      if (orderedTasks.length > 0 || newTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
+      if (orderedTasks.length > 0 || newTasks.length > 0 || unarrangedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     if (newTasks.length > 0) {
       html += '<li class="task-inbox-divider task-inbox-divider--only">New</li>';
@@ -1286,7 +1290,7 @@
       if (orderedTasks.length > 0) html += '<li class="task-inbox-divider"></li>';
     }
     if (activeFilter === 'focus') {
-      const inFocus = dueTasks.length + orderedTasks.length;
+      const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
       if (inFocus >= CAPACITY) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
           `<span>⚠ ${inFocus} tasks for today (limit: ${CAPACITY})</span></li>`;
@@ -1303,6 +1307,14 @@
       truncated = true;
     }
     html += displayTasks.map(t => taskHTML(t)).join('');
+    if (unarrangedTasks.length > 0) {
+      // The heading only means something once part of the day is arranged.
+      if (orderedTasks.length > 0) {
+        html += '<li class="task-inbox-divider"></li>' +
+                '<li class="task-inbox-divider task-inbox-divider--only">Not arranged</li>';
+      }
+      html += unarrangedTasks.map(t => taskHTML(t)).join('');
+    }
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
