@@ -2042,7 +2042,15 @@
     if (id) {
       await updateTask(id, data);
     } else {
-      await createTask(data);
+      // Select the new task so it is easy to find wherever the view sorts it
+      // (on Today it lands at the end, possibly below the fold). A view that
+      // doesn't show it (another list, a filter) leaves the selection alone.
+      const task = await createTask(data);
+      const el = task && listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
+      if (el) {
+        setSelected(task.id);
+        flashTask(el);
+      }
     }
   });
 
@@ -2512,6 +2520,10 @@
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (!el) return;
     el.scrollIntoView({ block: 'center' });
+    flashTask(el);
+  }
+
+  function flashTask(el) {
     el.classList.add('task-flash');
     setTimeout(() => el.classList.remove('task-flash'), 2000);
   }

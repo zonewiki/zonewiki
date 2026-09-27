@@ -700,3 +700,19 @@ def test_task_added_on_today_lands_at_the_end(page, wiki):
     expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
     page.reload()
     expect(_today_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered", "Added now"])
+
+
+def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
+    today = date.today().isoformat()
+    for i in range(30):
+        page.request.post("/api/deck", data={"title": f"Filler {i}", "start_date": today})
+    page.set_viewport_size({"width": 1000, "height": 600})
+    page.goto("/deck?view=today")
+    expect(_today_titles(page)).to_have_count(30)
+    page.locator("#task-add-btn").click()
+    page.locator("#task-edit-title").fill("Added now")
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+    new = card(page, "Added now")
+    expect(new).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(new).to_be_in_viewport()
+    expect(page.locator(".task-item.task-selected")).to_have_count(1)
