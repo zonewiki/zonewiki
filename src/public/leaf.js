@@ -15,8 +15,11 @@
   if (hist.length > 6) hist = hist.slice(-6);
   sessionStorage.setItem(KEY, JSON.stringify(hist));
 
-  // All entries before the current page (last) become breadcrumb links
-  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch');
+  // All entries before the current page (last) become breadcrumb links. A
+  // phone shows only the last 3 of them, so the trail is at most 4 pages.
+  const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
+  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch')
+                            .slice(-maxPrev);
   if (!intermediates.length) return;
 
   const homeEl = bc.querySelector('.breadcrumb-home');
