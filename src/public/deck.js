@@ -391,10 +391,17 @@
 
   // ── API ────────────────────────────────────────────────────────────────────
 
+  // /api/deck returns only open tasks, so replacing `tasks` drops the
+  // completed ones: they count as not loaded again (deckGen tells a completed
+  // load in flight that its merge target is gone).
+  let deckGen = 0;
   async function fetchDeck() {
     const res = await fetch('/api/deck');
     tasks = (await res.json()).filter(inScope);
+    deckGen++;
+    completedLoaded = false;
     render();
+    if (activeFilter === 'completed') fetchCompleted();
     refreshCompletedCount();
   }
 
@@ -412,7 +419,6 @@
   // Reload this instance from the server, honoring its current tab. Used to
   // pull in changes made by another embed on the same page.
   async function refresh() {
-    completedLoaded = false;
     await fetchDeck();
     if (activeFilter === 'completed') await fetchCompleted();
   }
@@ -424,8 +430,17 @@
     return completedLoading ||= loadCompleted().finally(() => { completedLoading = null; });
   }
   async function loadCompleted() {
-    const res = await fetch('/api/deck/completed');
-    const completed = (await res.json()).filter(inScope);
+    let completed, gen;
+    // The page load fetches open and completed tasks at the same time (the
+    // filter field, restored by the browser on reload, asks for completed
+    // matches). If fetchDeck replaced `tasks` meanwhile, merging into it would
+    // be lost: fetch again. This race made the match count flip between
+    // reloads.
+    do {
+      gen = deckGen;
+      const res = await fetch('/api/deck/completed');
+      completed = (await res.json()).filter(inScope);
+    } while (gen !== deckGen);
     const existingIds = new Set(tasks.map(t => t.id));
     for (const t of completed) {
       if (!existingIds.has(t.id)) tasks.push(t);

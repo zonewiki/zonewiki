@@ -881,3 +881,25 @@ def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
     wait_until(lambda: _open_titles(page, "sorted") == ["A2", "A1"])
     wait_until(lambda: _by_order(page, "sort_order") == ["A2", "B1", "A1", "B2"])
 
+
+def test_completed_matches_survive_the_load_race(page, wiki):
+    # Regression: with a filter at load, the completed tasks were fetched in
+    # parallel with the open ones. When they arrived first, the open tasks
+    # replaced the list and the completed ones were lost for good: the link
+    # said "No matches" on some reloads and "1 match" on others.
+    t = page.request.post("/api/deck", data={"title": "Buy milk"}).json()
+    page.request.put(f"/api/deck/{t['id']}", data={"completed": True})
+    page.request.post("/api/deck", data={"title": "Something else"})
+
+    def slow_open_tasks(route):
+        page.wait_for_timeout(400)  # the completed tasks arrive first
+        route.continue_()
+    page.route("**/api/deck", slow_open_tasks)
+    # Only once the (slow) open tasks are in: before that the link already
+    # showed the right count, and the bug only struck when they replaced it.
+    with page.expect_response("**/api/deck"):
+        page.goto("/deck?view=open&search=milk")
+    expect(card(page, "Something else")).to_have_count(0)  # filtered out
+    page.wait_for_timeout(300)
+    expect(page.locator("#task-completed-link")).to_have_text("✓ 1 match in Completed →")
+
