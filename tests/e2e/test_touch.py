@@ -433,8 +433,10 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     assert one.evaluate("el => el.draggable")
     send = touch_drag(pg, card(pg, "Two"), one, release=False)
     assert not pg.locator("#tasks-list .task-dragging").evaluate("el => el.draggable")
-    # The carried copy never shows the selection ring.
-    expect(pg.locator(".task-touch-ghost")).not_to_have_class(re.compile(r"\btask-selected\b"))
+    # Picking a card up selects it (visible feedback, as with a mouse press);
+    # the carried copy shows the selection too.
+    expect(pg.locator("#tasks-list .task-dragging")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(pg.locator(".task-touch-ghost")).to_have_class(re.compile(r"\btask-selected\b"))
     send("touchEnd", [])
     expect(pg.locator(".task-item .task-title")).to_have_text(["Two", "One"])
     card(pg, "Two").dispatch_event("pointerdown", {"pointerType": "mouse", "bubbles": True})

@@ -1556,6 +1556,14 @@ body.editor-page main {
 .task-touch-ghost {
   position: fixed; z-index: 1000; margin: 0; pointer-events: none; list-style: none;
   background: var(--bg); box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: .95;
+  transform: scale(1.03);  /* lifted off the list */
+}
+/* It carries the selection ring (picking a card up selects it) plus the lift shadow. */
+.task-item.task-selected.task-touch-ghost {
+  box-shadow:
+    inset 0 0 0 999px color-mix(in srgb, var(--fg) 8%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent),
+    0 6px 20px rgba(0,0,0,.25);
 }
 .task-item.task-drag-over { border-color: var(--btn-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--btn-primary) 25%, transparent); }
 .task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--bg)); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }

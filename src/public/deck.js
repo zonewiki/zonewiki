@@ -197,10 +197,16 @@
     const t = touchDrag, rect = t.item.getBoundingClientRect();
     t.active = true;
     draggedId = t.item.dataset.id;
+    // Picking a card up selects it, as a mouse press does, so the long press
+    // visibly took. Not setSelected(): its scrollIntoView would move the page
+    // under the finger.
+    selectedId = anchorId = draggedId;
+    selectedIds = new Set([draggedId]);
+    updateSelectionClasses();
     t.item.classList.add('task-dragging');
     t.grabY = t.y - rect.top;
     t.ghost = t.item.cloneNode(true);
-    t.ghost.classList.remove('task-dragging', 'task-selected');
+    t.ghost.classList.remove('task-dragging');
     t.ghost.classList.add('task-touch-ghost');
     Object.assign(t.ghost.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px' });
     document.body.appendChild(t.ghost);
