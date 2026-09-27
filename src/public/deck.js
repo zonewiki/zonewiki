@@ -785,25 +785,41 @@
   // Per-tab fixed sort comparators; null = use the user's sort select
   const TAB_SORT = {
     focus: (a, b) => {
-      // Full manual ordering via focus_order (independent of backlog sort_order)
+      // Tasks arranged on Today (focus_order) come first, in that order; the
+      // rest follow in Open's order (sort_order, never-ordered newest first),
+      // so a freshly planned day already reads in priority order.
       if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
       if (a.focus_order != null) return -1;
       if (b.focus_order != null) return 1;
-      // Fallback for tasks without a focus_order
-      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
-      if (a.due_date) return -1;
-      if (b.due_date) return 1;
-      if (a.start_date && b.start_date) return a.start_date.localeCompare(b.start_date);
-      // Final fallback: inherit backlog/plan priority so tasks land in Focus in the
-      // same relative order they were given in the Backlog or Plan tab.
       if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
       if (a.sort_order != null) return -1;
       if (b.sort_order != null) return 1;
-      return 0;
+      return (b.created_at || '').localeCompare(a.created_at || '');
     },
     due:       (a, b) => (a.due_date || a.start_date || '').localeCompare(b.due_date || b.start_date || ''),
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
   };
+
+  function isDueNow(t, today) {
+    return !!t.due_date && t.due_date <= today;
+  }
+
+  // Today's order is focus_order for every task below the Due section. The
+  // first reorder there fixes the whole day: `visibleIds` (the reordered,
+  // possibly filtered visible list) is merged into the full Today list, with
+  // tasks the filter hides keeping their slots, and all of it is renumbered.
+  function applyFocusOrder(visibleIds) {
+    const today = todayStr();
+    const full = [...tasks]
+      .filter(t => !t.completed_at && isFocus(t, today) && !isDueNow(t, today))
+      .sort(TAB_SORT.focus);
+    const vis = new Set(visibleIds);
+    let k = 0;
+    const ids = full.map(t => vis.has(t.id) ? visibleIds[k++] : t.id);
+    const byId = new Map(tasks.map(t => [t.id, t]));
+    ids.forEach((id, i) => { byId.get(id).focus_order = i; });
+    reorder(ids, 'focus_order');
+  }
 
   function sortTasks(tasksArr) {
     const fixed = TAB_SORT[activeFilter];
@@ -1135,20 +1151,25 @@
     const filtered = filterTasks();
 
 
-    // Open and Focus split into: due now (pinned top), ordered, new (inbox).
-    // The Due section holds exactly what the due badge counts (overdue + due
-    // today), so the badge's number is visible where its link lands (Focus).
+    // Open and Today pin "due now" at the top. The Due section holds exactly
+    // what the due badge counts (overdue + due today), so the badge's number
+    // is visible where its link lands (Today). Open then splits the rest into
+    // new (inbox) and ordered; Today has no New section, since tasks not yet
+    // arranged there follow in Open's order (TAB_SORT.focus).
     let dueTasks, orderedTasks, newTasks;
     if (activeFilter === 'open' || activeFilter === 'focus') {
       const today = todayStr();
-      const isDueNow = t => t.due_date && t.due_date <= today;
-      const orderField = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
-      dueTasks = filtered.filter(isDueNow)
+      dueTasks = filtered.filter(t => isDueNow(t, today))
                          .sort((a, b) => a.due_date.localeCompare(b.due_date));
-      const rest = filtered.filter(t => !isDueNow(t));
-      orderedTasks = sortTasks(rest.filter(t => t[orderField] != null));
-      newTasks   = rest.filter(t => t[orderField] == null)
-                       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      const rest = filtered.filter(t => !isDueNow(t, today));
+      if (activeFilter === 'focus') {
+        orderedTasks = sortTasks(rest);
+        newTasks     = [];
+      } else {
+        orderedTasks = sortTasks(rest.filter(t => t.sort_order != null));
+        newTasks     = rest.filter(t => t.sort_order == null)
+                           .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      }
     } else {
       dueTasks     = [];
       orderedTasks = sortTasks(filtered);
@@ -2106,16 +2127,16 @@
       if (fromIdx === -1 || toIdx === -1) return;
       const byId = new Map(tasks.map(tk => [tk.id, tk]));
       const draggedTask = byId.get(draggedId);
-      const wasNew = activeFilter === 'focus'
-        ? draggedTask && draggedTask.focus_order == null
-        : draggedTask && draggedTask.sort_order == null;
+      const wasNew = activeFilter !== 'focus' && draggedTask && draggedTask.sort_order == null;
       ids.splice(fromIdx, 1);
       // When dragging from new into ordered, insert BEFORE target (adjust index).
       // Within-section reorder uses standard behavior (no adjustment).
       const insertIdx = (wasNew && fromIdx < toIdx) ? toIdx - 1 : toIdx;
       ids.splice(insertIdx, 0, draggedId);
-      const field = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
-      if (hasNarrowingFilter()) {
+      const field = 'sort_order';
+      if (activeFilter === 'focus') {
+        applyFocusOrder(ids);
+      } else if (hasNarrowingFilter()) {
         interpolateOrder(ids, insertIdx, [draggedId], byId, field);
         reorderUpdates([{ id: draggedId, [field]: draggedTask[field] }], field);
       } else {
@@ -2198,8 +2219,8 @@
 
   function reorderSelected(direction) {
     if (activeFilter !== 'focus' && sortSelect.value !== 'manual' || !selectedIds.size) return;
-    const items = visibleItems();
-    const ids = items.map(el => el.dataset.id);
+    // Due-pinned tasks are not reorderable (and not draggable either).
+    const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
     const byId = new Map(tasks.map(tk => [tk.id, tk]));
 
     if (selectedIds.size === 1) {
@@ -2209,7 +2230,7 @@
 
       if (direction === 'down') {
         if (idx === ids.length - 1) return;
-        if (selTask && selTask.sort_order == null) {
+        if (activeFilter !== 'focus' && selTask && selTask.sort_order == null) {
           // Moving new item into ordered: place at top of ordered section
           ids.splice(idx, 1);
           const firstOrd = ids.findIndex(id => byId.get(id)?.sort_order != null);
@@ -2238,8 +2259,10 @@
       }
       ids.length = 0; ids.push(...rest);
     }
-    const field = activeFilter === 'focus' ? 'focus_order' : 'sort_order';
-    if (hasNarrowingFilter()) {
+    const field = 'sort_order';
+    if (activeFilter === 'focus') {
+      applyFocusOrder(ids);
+    } else if (hasNarrowingFilter()) {
       const groupIds = ids.filter(id => selectedIds.has(id));
       const insertIdx = ids.findIndex(id => selectedIds.has(id));
       interpolateOrder(ids, insertIdx, groupIds, byId, field);

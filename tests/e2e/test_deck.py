@@ -602,3 +602,72 @@ def test_moving_task_out_of_list_removes_it(page, wiki):
     expect(card(page, "Oat milk")).to_have_count(0)
     expect(page.get_by_text("Moved to the main deck.")).to_be_visible()
     wait_for_field(page, "Oat milk", "list", None)
+
+
+def _today_titles(page):
+    return page.locator(".task-item:not([data-due-pinned]) .task-title")
+
+
+def _by_order(page, field):
+    tasks = [t for t in page.request.get("/api/deck").json() if t[field] is not None]
+    return [t["title"] for t in sorted(tasks, key=lambda t: t[field])]
+
+
+def test_today_starts_from_open_order_without_new_section(page, wiki):
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Alpha", "Bravo", "Charlie")]
+    page.request.post("/api/deck/reorder", data={"order": list(reversed(ids))})
+    page.request.post("/api/deck", data={"title": "Unordered", "start_date": today})
+    page.goto("/deck?view=today")
+    # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
+    expect(_today_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
+    expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
+
+
+def test_today_drag_sets_its_own_order_and_leaves_open_alone(page, wiki):
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Alpha", "Bravo", "Charlie")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=today")
+    card(page, "Charlie").drag_to(card(page, "Alpha"))
+    expect(_today_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
+    # The first reorder fixes the whole day, not just the moved task.
+    wait_for_field(page, "Bravo", "focus_order", 2)
+    assert _by_order(page, "focus_order") == ["Charlie", "Alpha", "Bravo"]
+    assert _by_order(page, "sort_order") == ["Alpha", "Bravo", "Charlie"]
+
+    # A task planned later queues behind the arranged day.
+    page.request.post("/api/deck", data={"title": "Later addition", "start_date": today})
+    page.reload()
+    expect(_today_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo", "Later addition"])
+    open_tab(page, "open")
+    expect(page.locator(".task-item .task-title")).to_have_text(
+        ["Later addition", "Alpha", "Bravo", "Charlie"])
+
+
+def test_today_keyboard_reorder_skips_due_pinned(page, wiki):
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Deadline", "due_date": today})
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Bravo", "Alpha")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=today")
+    expect(_today_titles(page)).to_have_text(["Bravo", "Alpha"])
+    card(page, "Alpha").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    expect(_today_titles(page)).to_have_text(["Alpha", "Bravo"])
+    page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
+    expect(_today_titles(page)).to_have_text(["Alpha", "Bravo"])
+    expect(page.locator(".task-item[data-due-pinned] .task-title")).to_have_text(["Deadline"])
+    wait_for_field(page, "Bravo", "focus_order", 1)
+    assert task_by_title(page, "Deadline")["focus_order"] is None
+
+
+def test_today_capacity_counts_unarranged_tasks(page, wiki):
+    today = date.today().isoformat()
+    for i in range(5):
+        page.request.post("/api/deck", data={"title": f"Task {i}", "start_date": today})
+    page.goto("/deck?view=today")
+    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks for today")
