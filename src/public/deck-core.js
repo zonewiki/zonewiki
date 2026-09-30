@@ -22,14 +22,6 @@
   //                "available since", never overdue.
   // Client-only: the server has no say in which tasks a view shows.
 
-  // A task is unplanned when it has no start date: nobody has decided when to
-  // do it. A due date alone doesn't count — the deadline is the one day the
-  // work should not start. The Open tab's "Unplanned only" filter and the
-  // board's Unplanned section hold exactly these tasks.
-  function isUnplanned(t) {
-    return !t.start_date;
-  }
-
   function isOverdue(t, today) {
     return !!t.due_date && t.due_date < today;
   }
@@ -38,6 +30,29 @@
   // exactly these — the board's Overdue and Today sections.
   function isFocus(t, today) {
     return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
+  }
+
+  // Open's order, also the order inside every Plan-board section but Overdue:
+  // Unsorted (no sort_order) first, newest first, then Sorted in sort_order.
+  // Plan only moves tasks between days; the order is Open's.
+  function byOpenOrder(a, b) {
+    if (a.sort_order == null && b.sort_order == null) return (b.created_at || '').localeCompare(a.created_at || '');
+    if (a.sort_order == null) return -1;
+    if (b.sort_order == null) return 1;
+    return a.sort_order - b.sort_order;
+  }
+
+  // Focus's order: Pinned (focus_order) first, then Others in Open's sorted
+  // order. Never-sorted tasks come last, oldest first, so a task added during
+  // the day lands at the end.
+  function byFocusOrder(a, b) {
+    if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
+    if (a.focus_order != null) return -1;
+    if (b.focus_order != null) return 1;
+    if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
+    if (a.sort_order != null) return -1;
+    if (b.sort_order != null) return 1;
+    return (a.created_at || '').localeCompare(b.created_at || '');
   }
 
   // The deck's single filter field: words starting with '#' filter by tag, the
@@ -146,35 +161,32 @@
   // in the UI layer.
   function boardBuckets(list, today) {
     const groups = {};
-    list.forEach(t => {
+    // Reversed first, so tasks created in the same second (created_at has no
+    // finer resolution) keep newest-first too, as on Open.
+    [...list].reverse().forEach(t => {
       const key = bucketKey(t, today);
       (groups[key] = groups[key] || []).push(t);
     });
-    // Within a day, deadlines first (soonest due), then undated, then by title.
+    // Overdue: the most overdue first, then by title.
     const byDate = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.title || '').localeCompare(b.title || '');
-    const byNewest = (a, b) => (b.created_at || '').localeCompare(a.created_at || '');
-    // Droppable buckets respect manual sort_order; fall back to date/title for unordered tasks.
-    const bySortOrder = (a, b) => {
-      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
-      if (a.sort_order != null) return -1;
-      if (b.sort_order != null) return 1;
-      return byDate(a, b);
-    };
+    // Days and Later are in Open's order (byOpenOrder). The board decides
+    // which day a task is on, never where in the day: that is Open's order,
+    // and on the day itself Focus's.
     const sections = [];
     if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
     for (let i = 0; i < 7; i++) {
       const d = addDays(today, i);
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
-      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(bySortOrder) });
+      sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byOpenOrder) });
     }
     // Later and Unplanned are always present, even when empty: they are the
     // only drop targets for "start beyond this week" and "unplan", so hiding
     // them when empty would strand every task on a dated day.
-    sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(bySortOrder) });
+    sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(byOpenOrder) });
     // Unplanned: nearest deadline first (they need a start date soonest), then
-    // the undated rest in manual order.
+    // the rest in Open's order.
     const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
-      : a.due_date ? -1 : b.due_date ? 1 : bySortOrder(a, b);
+      : a.due_date ? -1 : b.due_date ? 1 : byOpenOrder(a, b);
     sections.push({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: (groups['unplanned'] || []).sort(byDeadline) });
     return sections;
   }
@@ -238,7 +250,7 @@
   }
 
   const DeckCore = {
-    dateToStr, addDays, isUnplanned, isOverdue, isFocus, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
+    dateToStr, addDays, isOverdue, isFocus, byOpenOrder, byFocusOrder, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
     parseFilter, matchesFilter, tagParamToQuery,
     bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   };

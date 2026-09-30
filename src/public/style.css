@@ -1437,14 +1437,6 @@ body.editor-page main {
 .tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
 .tasks-toolbar .btn { flex: none; }
 
-/* Open tab's "Unplanned only" toggle. Opts out of the text-input sizing above
-   (flex-grow, min-width, box borders) — it's a checkbox, not a field. */
-.task-unplanned-toggle {
-  display: flex; align-items: center; gap: .3rem; flex: 0 0 auto;
-  font-size: .8rem; color: var(--muted); white-space: nowrap; cursor: pointer;
-}
-.task-unplanned-toggle[hidden] { display: none; }
-
 /* Completed is not a tab (it is rarely needed): a quiet link under the list
    opens it, and turns into "← Back to open tasks" there. */
 .deck-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
@@ -1458,10 +1450,6 @@ body.editor-page main {
 .task-quick-preview[hidden] { display: none; }
 .deck-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
 @media (pointer: coarse) { .deck-completed-link { padding: .6rem .4rem; } }
-.tasks-toolbar .task-unplanned-toggle input[type="checkbox"] {
-  flex: 0 0 auto; min-width: 0; width: 1rem; height: 1rem; padding: 0;
-  border: none; accent-color: var(--btn-primary); cursor: pointer;
-}
 
 /* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
    which would otherwise force a 1.5rem left margin and indent the list + its

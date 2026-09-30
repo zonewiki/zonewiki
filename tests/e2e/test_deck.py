@@ -1,4 +1,4 @@
-"""Deck: Plan board, start/due dates in the edit modal, and the Open tab's "Unplanned only" toggle."""
+"""Deck: Plan board, start/due dates in the edit modal, views, sections and task links."""
 
 import re
 from datetime import date, timedelta
@@ -69,47 +69,6 @@ def test_drag_to_unplanned_clears_start(page, wiki):
     expect(page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-count")).to_have_text("1")
 
 
-def test_all_tab_unplanned_toggle(page, wiki):
-    page.request.post("/api/deck", data={"title": "Unplanned one"})
-    page.request.post("/api/deck", data={"title": "Planned one", "start_date": tomorrow()})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
-    open_tab(page, "open")
-    toggle = page.locator("#task-unplanned")
-    expect(toggle).not_to_be_checked()  # off by default: Open shows every open task
-    expect(card(page, "Unplanned one")).to_be_visible()
-    expect(card(page, "Planned one")).to_be_visible()
-
-    toggle.check()
-    expect(card(page, "Planned one")).to_have_count(0)
-    expect(card(page, "Unplanned one")).to_be_visible()
-
-    # A standing preference: survives a reload.
-    page.reload()
-    open_tab(page, "open")
-    expect(page.locator("#task-unplanned")).to_be_checked()
-    expect(card(page, "Planned one")).to_have_count(0)
-
-
-def test_old_stored_default_does_not_keep_toggle_on(page, wiki):
-    # v2 of the preference defaulted on; browsers that stored it must now see
-    # the new default (off) rather than a leftover "1".
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
-    page.evaluate("k => localStorage.setItem(k, '1')", "leaf-deck-unplanned-v2:/page/deck#0")
-    page.reload()
-    open_tab(page, "open")
-    expect(page.locator("#task-unplanned")).not_to_be_checked()
-
-
-def test_embed_pin_turns_toggle_on(page, wiki):
-    page.request.post("/api/deck", data={"title": "Planned one", "start_date": tomorrow()})
-    wiki.write("deck", "# Deck\n\n[[deck view=all unplanned=1]]\n")
-    page.goto("/page/deck")
-    expect(page.locator("#task-unplanned")).to_be_checked()
-    expect(card(page, "Planned one")).to_have_count(0)
-
-
 def test_view_tabs_segmented_control(page, wiki):
     page.request.post("/api/deck", data={"title": "Some task"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
@@ -118,14 +77,11 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(tabs).to_have_text(["Open", "Plan", "Focus"])
     # Focus is the default view and the only one marked active.
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
-    expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
     tabs.nth(0).click()
-    expect(page.locator("#task-unplanned-wrap")).to_be_visible()
 
     tabs.nth(1).click()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
     expect(page.locator(".board-day-divider").first).to_be_visible()
-    expect(page.locator("#task-unplanned-wrap")).to_be_hidden()
 
     # Tab / Shift+Tab cycle through the views in on-screen order, wrapping;
     # keyboard focus follows the active view.
@@ -377,15 +333,6 @@ def test_task_link_to_title_with_hashword(page, wiki):
     page.goto(f"/page/deck?task={ids[2]}&view=open")
     expect(page.locator(f".task-item[data-id='{ids[2]}']")).to_have_class(
         re.compile(r"\btask-selected\b"))
-
-
-def test_task_link_lifts_unplanned_only_for_a_planned_task(page, wiki):
-    ids = _task_link_deck(page, wiki, "[[deck view=all unplanned=1]]")
-    page.request.put(f"/api/deck/{ids[0]}", data={"start_date": tomorrow()})
-    page.goto(f"/page/deck?task={ids[0]}&view=open")
-    expect(page.locator(f".task-item[data-id='{ids[0]}']")).to_have_class(
-        re.compile(r"\btask-selected\b"))
-    expect(page.locator("#task-unplanned")).not_to_be_checked()
 
 
 def test_task_link_to_completed_task(page, wiki):
@@ -685,6 +632,69 @@ def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
 
     # Open's order is never touched.
     assert _by_order(page, "sort_order") == ["Alpha", "Bravo", "Charlie"]
+
+
+def _day_titles(page, day):
+    """Titles in one Plan-board day section, top to bottom."""
+    return page.evaluate("""day => {
+        const out = [];
+        let li = document.querySelector(`.board-day-divider[data-drop-day="${day}"]`)?.nextElementSibling;
+        for (; li && !li.classList.contains('board-day-divider'); li = li.nextElementSibling)
+          if (li.classList.contains('task-item')) out.push(li.querySelector('.task-title').textContent.trim());
+        return out;
+    }""", day)
+
+
+def test_board_uses_open_order_and_in_section_drop_changes_nothing(page, wiki):
+    # The board only decides the day. Inside a section tasks are in Open's
+    # order (Unsorted newest first, then Sorted), and a drop within the
+    # section writes nothing.
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
+           for t in ("Alpha", "Bravo", "Charlie")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.request.post("/api/deck", data={"title": "Newbie", "start_date": today})
+    page.goto("/deck?view=plan")
+    expect(card(page, "Charlie")).to_be_visible()
+    assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
+
+    card(page, "Charlie").drag_to(card(page, "Alpha"))
+    page.wait_for_timeout(300)
+    assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
+    assert _by_order(page, "sort_order") == ["Alpha", "Bravo", "Charlie"]
+    assert _arranged(page) == []
+
+    # Reordering on Open is what changes the board.
+    open_tab(page, "open")
+    card(page, "Charlie").drag_to(card(page, "Alpha"))
+    wait_for_field(page, "Charlie", "sort_order", 0)
+    open_tab(page, "due")
+    assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
+
+
+def test_board_drop_on_own_heading_changes_nothing_except_later(page, wiki):
+    # A drop on the task's own section heading sends nothing (the board has
+    # no order of its own); Later's heading still asks for another date.
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Today task", "start_date": today})
+    page.request.post("/api/deck", data={"title": "Loose task"})
+    far = (date.today() + timedelta(days=30)).isoformat()
+    page.request.post("/api/deck", data={"title": "Later task", "start_date": far})
+    page.goto("/deck?view=plan")
+    expect(card(page, "Later task")).to_be_visible()
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
+
+    card(page, "Today task").drag_to(page.locator(f".board-day-divider[data-drop-day='{today}']"))
+    card(page, "Loose task").drag_to(page.locator(".board-day-divider[data-drop-bucket='unplanned']"))
+    page.wait_for_timeout(300)
+    assert writes == []
+    expect(page.locator(".deck-datepicker")).to_have_count(0)
+
+    card(page, "Later task").drag_to(page.locator(".board-day-divider[data-drop-bucket='later']"))
+    expect(page.locator(".deck-datepicker")).to_be_visible()
 
 
 def test_focus_not_arranged_follows_open_order(page, wiki):

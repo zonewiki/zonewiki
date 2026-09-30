@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isUnplanned, isFocus, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = window.DeckCore;
+  const { dateToStr, addDays, isFocus, byOpenOrder, byFocusOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -52,8 +52,6 @@
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
   const addBtn = document.getElementById('task-add-btn' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
-  const unplannedEl = document.getElementById('task-unplanned' + sfx);
-  const unplannedWrap = document.getElementById('task-unplanned-wrap' + sfx);
   const completedLink = document.getElementById('task-completed-link' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
   const form = document.getElementById('task-edit-form' + sfx);
@@ -79,7 +77,6 @@
   let undoToastEl = null;
   let pendingUndoFn = null;
   const pendingCompletions = new Map(); // taskId → timeoutId
-  let unplannedOnly = false;  // Open tab's "Unplanned only" — resolved during init
 
   // Plan day board: dragging a task onto a day section sets its start_date;
   // dropping on "Unplanned" clears it. These list-level
@@ -108,9 +105,13 @@
     dropOnBucket(draggedId, div);
   });
   // Move a task to a board section: a day sets its start date, Unplanned
-  // clears it, and Later asks for a date.
+  // clears it, and Later asks for a date. A drop on the task's own section
+  // does nothing (the board has no order of its own), except on Later, where
+  // it picks another later date.
   function dropOnBucket(id, div) {
     clearBoardDropOver();
+    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+    if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later') return;
     if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
     else if (div.dataset.dropBucket === 'later') {
       // "Later" is a range, not a day — ask which date (min: beyond this week).
@@ -327,22 +328,6 @@
   const tabStorageKey = `leaf-deck-tab:${location.pathname}#${instanceId}`;
   function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
   function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
-
-  // "Unplanned only" is a standing preference, not a per-visit choice like the
-  // tab, so it persists across sessions (localStorage). It defaults OFF: the
-  // Open tab shows every open task, and checking it narrows the list to work no
-  // day has claimed yet. `[[deck unplanned=0|1]]` pins it either way for an
-  // embed. The key is versioned so a changed default actually reaches anyone
-  // whose browser stored the previous default (v2 defaulted on).
-  const unplannedPin = appEl?.dataset.initUnplanned || '';
-  const unplannedStorageKey = `leaf-deck-unplanned-v3:${location.pathname}#${instanceId}`;
-  function saveUnplanned(v) { try { localStorage.setItem(unplannedStorageKey, v ? '1' : '0'); } catch (_) {} }
-  function loadUnplanned() {
-    try {
-      const stored = localStorage.getItem(unplannedStorageKey);
-      return stored === '1';
-    } catch (_) { return false; }
-  }
 
   // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -731,35 +716,6 @@
     refreshOtherInstances(instanceId);
   }
 
-  async function reorder(order, field = 'sort_order') { return postReorder({ order, field }); }
-  async function reorderUpdates(updates, field = 'sort_order') { return postReorder({ updates, field }); }
-
-  // Assign sort_order values to `groupIds` (already spliced into `ids` at
-  // `insertIdx`, contiguously and in order) so they land between the nearest
-  // already-ordered neighbors. Only the group's own tasks are touched — every
-  // other task keeps its existing sort_order, so the move stays correctly
-  // placed relative to filtered-out tasks once the filter is cleared.
-  function interpolateOrder(ids, insertIdx, groupIds, byId, field = 'sort_order') {
-    const groupSet = new Set(groupIds);
-    let prevVal = null;
-    for (let i = insertIdx - 1; i >= 0; i--) {
-      const t = byId.get(ids[i]);
-      if (t && !groupSet.has(ids[i]) && t[field] != null) { prevVal = t[field]; break; }
-    }
-    let nextVal = null;
-    for (let i = insertIdx + groupIds.length; i < ids.length; i++) {
-      const t = byId.get(ids[i]);
-      if (t && !groupSet.has(ids[i]) && t[field] != null) { nextVal = t[field]; break; }
-    }
-    const lo = prevVal != null ? prevVal : (nextVal != null ? nextVal - 1 : 0);
-    const hi = nextVal != null ? nextVal : (prevVal != null ? prevVal + 1 : lo + 1);
-    const n = groupIds.length;
-    groupIds.forEach((id, i) => {
-      const t = byId.get(id);
-      if (t) t[field] = lo + (hi - lo) * (i + 1) / (n + 1);
-    });
-  }
-
   // ── Delete confirmation dialog ─────────────────────────────────────────────
 
   deleteCancelBtn?.addEventListener('click', () => deleteModal.close());
@@ -816,11 +772,9 @@
     } else if (activeFilter === 'completed') {
       filtered = filtered.filter(t => !!t.completed_at);
     } else {
-      // "open" (Open) shows non-completed by default. With "Unplanned only"
-      // on it narrows to tasks with no start date, so the list reads as the
-      // triage queue; giving a task a start date is what removes it from here.
+      // Open: every open task. Tasks still waiting for a day are the Plan
+      // board's Unplanned section.
       filtered = filtered.filter(t => !t.completed_at);
-      if (unplannedOnly) filtered = filtered.filter(isUnplanned);
     }
 
     return filtered;
@@ -828,22 +782,10 @@
 
   // ── Sorting ────────────────────────────────────────────────────────────────
 
-  // Per-tab fixed sort comparators; null = use the user's sort select
+  // Per-tab sort comparators. Open sorts with DeckCore.byOpenOrder in
+  // render(), and Plan with DeckCore.boardBuckets.
   const TAB_SORT = {
-    focus: (a, b) => {
-      // Tasks arranged on Focus (focus_order) come first, in that order; the
-      // rest follow in Open's order (sort_order), so a freshly planned day
-      // already reads in priority order. Never-ordered tasks come last, oldest
-      // first, so a task added during the day lands at the end of the list.
-      if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
-      if (a.focus_order != null) return -1;
-      if (b.focus_order != null) return 1;
-      if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
-      if (a.sort_order != null) return -1;
-      if (b.sort_order != null) return 1;
-      return (a.created_at || '').localeCompare(b.created_at || '');
-    },
-    due:       (a, b) => (a.due_date || a.start_date || '').localeCompare(b.due_date || b.start_date || ''),
+    focus:     byFocusOrder,  // Pinned (focus_order), then Open's order
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
   };
 
@@ -974,9 +916,7 @@
 
   function sortTasks(tasksArr) {
     const fixed = TAB_SORT[activeFilter];
-    if (fixed) return [...tasksArr].sort(fixed);
-
-    return [...tasksArr].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
   }
 
   // ── Bulk tag modal ──────────────────────────────────────────────────────────
@@ -1340,11 +1280,12 @@
       orderedTasks    = sorted.filter(t => t.focus_order != null);
       unarrangedTasks = sorted.filter(t => t.focus_order == null);
     } else if (activeFilter === 'open') {
-      orderedTasks = sortTasks(filtered.filter(t => t.sort_order != null));
-      // Newest first; reversed first, so tasks created in the same second
-      // (created_at has no finer resolution) keep newest-first too.
-      newTasks     = filtered.filter(t => t.sort_order == null).reverse()
-                             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      // DeckCore.byOpenOrder, which the Plan board uses too. Reversed first,
+      // so tasks created in the same second (created_at has no finer
+      // resolution) keep newest-first.
+      const sorted = [...filtered].reverse().sort(byOpenOrder);
+      orderedTasks = sorted.filter(t => t.sort_order != null);
+      newTasks     = sorted.filter(t => t.sort_order == null);
     } else {
       orderedTasks = sortTasks(filtered);
     }
@@ -1808,7 +1749,6 @@
       tabsEl.querySelector(`[data-filter="${filter}"]`)?.focus();
     }
     saveActiveTab(activeFilter);
-    syncUnplannedToggle();
     if (activeFilter === 'completed') fetchCompleted();
     render();
   }
@@ -1821,20 +1761,6 @@
     switchTab(activeFilter === 'completed' ? lastTab : 'completed');
     if (activeFilter === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
   });
-
-  // The toggle only means anything on All — every other tab is defined by
-  // dates — so it rides along with the active tab instead of always showing.
-  function syncUnplannedToggle() {
-    if (unplannedWrap) unplannedWrap.hidden = activeFilter !== 'open';
-  }
-
-  if (unplannedEl) {
-    unplannedEl.addEventListener('change', () => {
-      unplannedOnly = unplannedEl.checked;
-      saveUnplanned(unplannedOnly);
-      render();
-    });
-  }
 
   if (filterSearch) {
     // Debounced — render() rebuilds the whole list, too heavy per keystroke.
@@ -2219,37 +2145,22 @@
 
   // ── Drag and Drop ──────────────────────────────────────────────────────────
 
-  // Upcoming board: make cards draggable; the list-level dragover/drop handlers
-  // (attached once at init) re-plan the task to the day section it's dropped on,
-  // or reorder within a bucket when the drop target is in the same day section.
+  // Plan board: make cards draggable; the list-level dragover/drop handlers
+  // (attached once at init) re-plan the task to the section it's dropped on.
+  // A drop within its own section changes nothing: the order is Open's.
   function setupBoardDragAndDrop() {
-    const byId = new Map(tasks.map(tk => [tk.id, tk]));
-
     function executeBoardItemDrop(targetItem) {
       const targetId = targetItem.dataset.id;
       if (!draggedId || targetId === draggedId) return;
       const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(draggedId)}"]`);
       const draggedDiv = draggedEl && boardDivider(draggedEl);
       const targetDiv = boardDivider(targetItem);
-      if (draggedDiv && targetDiv && draggedDiv === targetDiv) {
-        // Same bucket: reorder within the day section using sort_order.
-        const bucketIds = Array.from(listEl.querySelectorAll('.task-item'))
-          .filter(el => boardDivider(el) === draggedDiv)
-          .map(el => el.dataset.id);
-        const fromIdx = bucketIds.indexOf(draggedId);
-        const toIdx   = bucketIds.indexOf(targetId);
-        if (fromIdx === -1 || toIdx === -1) return;
-        bucketIds.splice(fromIdx, 1);
-        bucketIds.splice(toIdx, 0, draggedId);
-        interpolateOrder(bucketIds, toIdx, [draggedId], byId, 'sort_order');
-        const draggedTask = byId.get(draggedId);
-        reorderUpdates([{ id: draggedId, sort_order: draggedTask.sort_order }], 'sort_order');
-        render();
-      } else {
-        // Different bucket: move to the target's section (same as a divider drop).
-        clearBoardDropOver();
-        if (targetDiv && targetDiv.dataset.dropBucket) dropOnBucket(draggedId, targetDiv);
-      }
+      // Same section: nothing to do. The board only decides the day; the
+      // order within it is Open's (DeckCore.byOpenOrder).
+      if (draggedDiv && targetDiv && draggedDiv === targetDiv) return;
+      // Another section: move there (same as a drop on its heading).
+      clearBoardDropOver();
+      if (targetDiv && targetDiv.dataset.dropBucket) dropOnBucket(draggedId, targetDiv);
     }
 
     touchDrop = {
@@ -2561,10 +2472,6 @@
   markActiveTab(activeFilter);
   syncCompletedLink();
 
-  unplannedOnly = unplannedPin ? unplannedPin === '1' : loadUnplanned();
-  if (unplannedEl) unplannedEl.checked = unplannedOnly;
-  syncUnplannedToggle();
-
   // ?task=<id> (search results, a page's "Linked tasks"): show exactly that
   // task — the link sets its tab, and here it is selected, scrolled into view
   // and briefly highlighted. By id, not by title: a title can be shared, or
@@ -2575,13 +2482,6 @@
       // Deleted, or rolled into a previous-year archive. One notice per page.
       if (instanceId === '0') showNotice('That task is no longer in the deck.');
       return;
-    }
-    // "Unplanned only" would hide a planned task: off for this visit only
-    // (the stored preference is left alone).
-    if (unplannedOnly && !filterTasks().some(t => t.id === id)) {
-      unplannedOnly = false;
-      if (unplannedEl) unplannedEl.checked = false;
-      render();
     }
     setSelected(id);
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);

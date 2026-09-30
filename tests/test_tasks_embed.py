@@ -150,39 +150,14 @@ class TestTasksLinkRender:
         assert 'value="hidden"' not in html
         assert "Deferred" not in html
 
-    def test_embed_unplanned_param_pins_toggle(self, wiki_dir):
-        """[[deck unplanned=1]] pins the Open tab's "Unplanned only" filter on."""
-        html = server.render_md("[[deck unplanned=1]]\n")
-        assert 'data-init-unplanned="1"' in html
-
-    def test_embed_unplanned_accepts_truthy_words(self, wiki_dir):
-        for val in ("1", "true", "yes", "TRUE"):
-            html = server.render_md(f"[[deck unplanned={val}]]\n")
-            assert 'data-init-unplanned="1"' in html, val
-
-    def test_embed_unplanned_param_can_pin_off(self, wiki_dir):
-        """unplanned=0 pins it off — what a full-inventory embed needs, since
-        the client default is on."""
-        for val in ("0", "false", "no", "FALSE"):
-            html = server.render_md(f"[[deck unplanned={val}]]\n")
-            assert 'data-init-unplanned="0"' in html, val
-
-    def test_embed_unplanned_unset_leaves_it_to_client(self, wiki_dir):
-        """No param → empty attribute → client uses the stored preference
-        (which defaults on)."""
-        html = server.render_md("[[deck]]\n")
-        assert 'data-init-unplanned=""' in html
-
-    def test_embed_unplanned_junk_is_unset(self, wiki_dir):
-        """An unparseable value must not silently pin the filter either way."""
-        html = server.render_md("[[deck unplanned=maybe]]\n")
-        assert 'data-init-unplanned=""' in html
-
-    def test_embed_has_unplanned_toggle(self, wiki_dir):
-        """The toggle ships in the toolbar markup."""
-        html = server.render_md("[[deck]]\n")
-        assert 'id="task-unplanned"' in html
-        assert re.search(r">\s*Unplanned\s*</label>", html)
+    def test_embed_has_no_unplanned_toggle(self, wiki_dir):
+        """The Open tab's "Unplanned only" toggle is gone: unplanned tasks are
+        the Plan board's Unplanned section. A leftover `unplanned=` param in an
+        embed is ignored."""
+        html = server.render_md("[[deck view=open unplanned=1]]\n")
+        assert 'id="task-unplanned' not in html
+        assert "data-init-unplanned" not in html
+        assert 'data-init-view="open"' in html
 
     def test_embed_legacy_filter_param(self, wiki_dir):
         """`filter=` is the old name of `view=` and still works; view wins."""

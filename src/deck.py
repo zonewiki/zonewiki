@@ -585,17 +585,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
         limit = max(1, min(99, int(params.get("limit") or params.get("capacity", ""))))
     except ValueError:
         limit = ""  # no limit
-    # `unplanned=1`/`unplanned=0` pins the Open tab's "Unplanned only" filter on
-    # or off for this embed. Omitted, the client uses the stored preference,
-    # which defaults off — so pinning it on gives a planning-queue embed.
-    raw_unplanned = params.get("unplanned", "").strip().lower()
-    if raw_unplanned in ("1", "true", "yes"):
-        unplanned = "1"
-    elif raw_unplanned in ("0", "false", "no"):
-        unplanned = "0"
-    else:
-        unplanned = ""
-
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
     # Every list name in use, for the edit modal's List suggestions.
@@ -605,7 +594,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-unplanned="{unplanned}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
@@ -614,9 +603,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
-      <label class="task-unplanned-toggle" id="task-unplanned-wrap{sfx}" title="Show only tasks with no start date — the queue still awaiting a decision about when to do them. Uncheck to see every open task.">
-        <input type="checkbox" id="task-unplanned{sfx}"> Unplanned
-      </label>
       <button class="btn btn-primary" id="task-add-btn{sfx}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>

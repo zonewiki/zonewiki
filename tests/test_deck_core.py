@@ -39,24 +39,27 @@ class TestDates:
 
 
 
-class TestIsUnplanned:
-    """Open tab's "Unplanned only" filter: work with no decided day."""
+class TestOrders:
+    def _sorted(self, fn, tasks):
+        return run_core(f"{json.dumps(tasks)}.sort(DeckCore.{fn}).map(t => t.id)")
 
-    def test_no_dates_is_unplanned(self):
-        assert run_core("DeckCore.isUnplanned({title: 'x'})") is True
+    def test_open_order_unsorted_newest_first_then_sorted(self):
+        assert self._sorted("byOpenOrder", [
+            {"id": "s1", "sort_order": 1},
+            {"id": "old", "created_at": "2026-07-25T09:00"},
+            {"id": "s0", "sort_order": 0, "focus_order": 3},
+            {"id": "new", "created_at": "2026-07-26T09:00"},
+        ]) == ["new", "old", "s0", "s1"]
 
-    def test_due_date_alone_is_still_unplanned(self):
-        # A deadline is not a decision about when to do the work.
-        t = {"due_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is True
-
-    def test_start_date_makes_it_planned(self):
-        t = {"start_date": "2026-08-01"}
-        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
-
-    def test_past_start_date_still_counts_as_planned(self):
-        t = {"start_date": "2026-01-01"}
-        assert run_core(f"DeckCore.isUnplanned({json.dumps(t)})") is False
+    def test_focus_order_pinned_then_open_order_then_oldest(self):
+        assert self._sorted("byFocusOrder", [
+            {"id": "new", "created_at": "2026-07-26T09:00"},
+            {"id": "old", "created_at": "2026-07-25T09:00"},
+            {"id": "open1", "sort_order": 1},
+            {"id": "pin1", "focus_order": 1, "sort_order": 0},
+            {"id": "open0", "sort_order": 0},
+            {"id": "pin0", "focus_order": 0},
+        ]) == ["pin0", "pin1", "open0", "open1", "old", "new"]
 
 
 class TestIsFocus:
@@ -144,6 +147,32 @@ class TestBoardBuckets:
         assert day_sections[0]["key"] == TODAY
         assert day_sections[0]["label"] == "Today"
         assert day_sections[1]["label"] == "Tomorrow"
+
+    def test_days_and_later_follow_open_order(self):
+        # Every section but Overdue lists tasks in Open's order: Unsorted
+        # newest first, then Sorted. focus_order (Focus's own order) is ignored.
+        later = "2026-09-01"
+        by_key = self._by_key([
+            {"id": "t-sorted1", "start_date": TODAY, "sort_order": 1, "focus_order": 0},
+            {"id": "t-sorted0", "start_date": TODAY, "sort_order": 0},
+            {"id": "t-old", "start_date": TODAY, "created_at": "2026-07-20T09:00"},
+            {"id": "t-new", "start_date": TODAY, "created_at": "2026-07-25T09:00"},
+            {"id": "m-sorted", "start_date": "2026-07-28", "sort_order": 0},
+            {"id": "m-new", "start_date": "2026-07-28", "created_at": "2026-07-25T09:00"},
+            {"id": "l-sorted", "start_date": later, "sort_order": 0},
+            {"id": "l-new", "start_date": "2026-10-01", "created_at": "2026-07-25T09:00"},
+        ])
+        assert by_key[TODAY] == ["t-new", "t-old", "t-sorted0", "t-sorted1"]
+        assert by_key["2026-07-28"] == ["m-new", "m-sorted"]
+        assert by_key["later"] == ["l-new", "l-sorted"]
+
+    def test_unplanned_deadlines_then_open_order(self):
+        by_key = self._by_key([
+            {"id": "sorted", "sort_order": 0},
+            {"id": "unsorted", "created_at": "2026-07-25T09:00"},
+            {"id": "deadline", "due_date": "2026-08-10", "sort_order": 5},
+        ])
+        assert by_key["unplanned"] == ["deadline", "unsorted", "sorted"]
 
     def test_empty_later_and_unplanned_still_offered_as_drop_targets(self):
         # Regression: they used to be omitted when empty, so once every task

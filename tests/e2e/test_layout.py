@@ -213,8 +213,7 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     page.wait_for_function("scrollY > 0")
 
 
-DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search",
-                     "#task-unplanned-wrap", "#task-add-btn"]
+DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
 
 
 def deck_header_rows(pg) -> int:
@@ -228,7 +227,7 @@ def deck_header_rows(pg) -> int:
 @pytest.mark.parametrize("ctx,rows", [({"viewport": DESKTOP}, 1), (TOUCH_PHONE, 2)],
                          ids=["desktop", "phone"])
 def test_deck_all_tab_header_is_compact(new_page, wiki, ctx, rows):
-    # Tabs + search + sort + "Unplanned" + New: one line on desktop, two on a
+    # Tabs + search + New: one line on desktop, two on a
     # phone (it used to be two and five).
     pg = new_page(**ctx)
     seed(wiki, pg)
