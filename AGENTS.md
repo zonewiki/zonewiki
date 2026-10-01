@@ -427,6 +427,7 @@ The edit modal's "Days before due" is just another way to enter the start date (
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
+| `history` | `[{ at, event, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`HISTORY_LIMIT`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`. `at` is `YYYY-MM-DDTHH:MM`. See History. |
 
 ### Views
 
@@ -457,6 +458,12 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 - **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice. A newly created task is flashed the same way when the view shows it.
 - **Rejected writes** show the server's error as a toast (`showNotice`).
 - **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
+
+### History
+
+The server logs events on the task (`_log` in `deck.py`): `created` (create and recurring spawn; a new task's first dates are not changes), `start`/`due` whenever the date actually changes (`_apply_task_fields`), `done` (also for a keep task, whose cleared start date is part of it), `reopened`, `wontdo` and `skipped`. Only these; title, tag or order edits are not logged. Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `deck.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`_clean_history` validates it), replacing what that request logged. Restore snapshots keep it too. Reopen-undo and bulk-complete-undo go through `batch-complete` and do log (`done`/`reopened`).
+
+The edit modal shows it in a closed **History** section (newest first, with a count), next to **List** on one line while both are closed (`.task-edit-extras`; an opened one takes a full-width line below). Creation is the oldest entry; tasks from before the log get one from `created_at`. There is no separate "Created:" line.
 
 ### Keep tasks
 

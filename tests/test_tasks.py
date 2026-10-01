@@ -2029,3 +2029,85 @@ class TestEmbedLabels:
     def test_labels_are_escaped(self, client, wiki_dir):
         tabs = self._tabs(client, wiki_dir, "[[deck labels=<b>x</b>]]")
         assert tabs[0] == ("open", "&lt;b&gt;x&lt;/b&gt;")
+
+
+# ---------- Task history ----------
+
+
+class TestHistory:
+    """Each task logs what happened to it: created, start/due changes,
+    done, reopened, won't do, skipped. Undo restores the old log."""
+
+    def _events(self, task):
+        return [(e["event"], e.get("from"), e.get("to")) if e["event"] in ("start", "due")
+                else e["event"] for e in task["history"]]
+
+    def test_create_logs_only_created(self, client):
+        task = create_task(client, start_date=_future(1), due_date=_future(3)).get_json()
+        assert self._events(task) == ["created"]
+        assert len(task["history"][0]["at"]) == 16          # YYYY-MM-DDTHH:MM
+
+    def test_date_changes_are_logged_with_from_and_to(self, client):
+        tid = create_task(client).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"start_date": _future(1)})
+        client.put(f"/api/deck/{tid}", json={"start_date": _future(1), "title": "Same date"})
+        task = client.put(f"/api/deck/{tid}", json={"due_date": _future(5), "start_date": None}).get_json()
+        assert self._events(task) == [
+            "created", ("start", None, _future(1)), ("due", None, _future(5)), ("start", _future(1), None)]
+
+    def test_completion_events(self, client):
+        tid = create_task(client).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        client.put(f"/api/deck/{tid}", json={"completed": False})
+        client.put(f"/api/deck/{tid}", json={"wont_do": True})
+        task = client.put(f"/api/deck/{tid}", json={"wont_do": False}).get_json()
+        assert self._events(task) == ["created", "done", "reopened", "wontdo", "reopened"]
+
+    def test_batch_complete_and_keep_log_done(self, client):
+        a = create_task(client).get_json()["id"]
+        k = create_task(client, keep=True, start_date=date.today().isoformat()).get_json()["id"]
+        client.post("/api/deck/batch-complete", json={"ids": [a, k], "completed": True})
+        keep = next(t for t in client.get("/api/deck").get_json() if t["id"] == k)
+        assert self._events(keep) == ["created", "done"]    # the cleared start is part of "done"
+        done = client.get("/api/deck/completed").get_json()[0]
+        assert self._events(done) == ["created", "done"]
+
+    def test_skip_and_spawn(self, client):
+        tid = create_task(client, due_date=_future(1), rec_type="daily").get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"skip": True})
+        skipped = client.get("/api/deck/completed").get_json()[0]
+        assert self._events(skipped) == ["created", "skipped"]
+        spawned = client.get("/api/deck").get_json()[0]
+        assert self._events(spawned) == ["created"]
+
+    def test_undo_sends_the_old_history_back(self, client):
+        task = create_task(client).get_json()
+        tid = task["id"]
+        client.put(f"/api/deck/{tid}", json={"start_date": _future(1)})
+        undone = client.put(f"/api/deck/{tid}", json={
+            "start_date": None, "history": task["history"]}).get_json()
+        assert undone["history"] == task["history"]
+
+    def test_history_from_requests_is_validated(self, client):
+        tid = create_task(client).get_json()["id"]
+        task = client.put(f"/api/deck/{tid}", json={"history": [
+            {"at": "2026-01-01T10:00", "event": "start", "from": "bad", "to": "2026-01-02"},
+            {"at": "2026-01-01T10:00", "event": "hacked"}, "junk",
+        ]}).get_json()
+        assert task["history"] == [
+            {"at": "2026-01-01T10:00", "event": "start", "from": None, "to": "2026-01-02"}]
+
+    def test_history_is_capped(self, client):
+        tid = create_task(client).get_json()["id"]
+        for i in range(40):
+            client.put(f"/api/deck/{tid}", json={"due_date": _future(i + 1)})
+        task = next(t for t in client.get("/api/deck").get_json() if t["id"] == tid)
+        assert len(task["history"]) == 30
+        assert self._events(task)[-1] == ("due", _future(39), _future(40))
+
+    def test_restore_keeps_history(self, client):
+        tid = create_task(client).get_json()["id"]
+        task = client.put(f"/api/deck/{tid}", json={"start_date": _future(2)}).get_json()
+        client.delete(f"/api/deck/{tid}")
+        restored = client.post("/api/deck/restore", json={"tasks": [task]}).get_json()[0]
+        assert restored["history"] == task["history"]

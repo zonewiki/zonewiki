@@ -568,7 +568,8 @@
   // makes the server keep it rather than clear it with the start date.
   function keepSnapshot(t) {
     return { start_date: t.start_date || null, due_date: t.due_date || null,
-             focus_order: t.focus_order ?? null, last_done: t.last_done || null };
+             focus_order: t.focus_order ?? null, last_done: t.last_done || null,
+             history: t.history || [] };
   }
 
   async function completeTasks(ids, completed) {
@@ -603,24 +604,31 @@
 
   // ── Card actions (shared by buttons, the ⋯ menu and the keyboard) ────────
 
+  // Undo sends the task's old history back with the old fields (the server
+  // replaces what the undone change logged), so the log shows no trace of it.
+  const oldHistory = id => tasks.find(t => t.id === id)?.history || [];
+
   function markWontDo(id) {
+    const history = oldHistory(id);
     updateTask(id, { wont_do: true });
-    showUndo("Marked won't do", () => updateTask(id, { wont_do: false }));
+    showUndo("Marked won't do", () => updateTask(id, { wont_do: false, history }));
   }
 
   function skipOccurrence(id) {
+    const history = oldHistory(id);
     updateTask(id, { skip: true });
-    showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false }));
+    showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false, history }));
   }
 
   function setStart(id, startDate) {
     const task = tasks.find(t => t.id === id);
     const prev = task?.start_date ?? null;
     const prevFocus = task?.focus_order ?? null;
+    const history = oldHistory(id);
     updateTask(id, { start_date: startDate });
     const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
     // A move can clear the task's place on Focus; undo puts it back.
-    showUndo(msg, () => updateTask(id, { start_date: prev, focus_order: prevFocus }));
+    showUndo(msg, () => updateTask(id, { start_date: prev, focus_order: prevFocus, history }));
   }
 
   // Confirm, delete, and offer undo that restores the full snapshots (ids and
@@ -2027,6 +2035,31 @@
   }
   linksDetails.addEventListener('input', syncLinksSummary);
 
+  // The modal's History section: the task's logged events, newest first
+  // (deck.py _log), with its creation as the oldest. Closed on every open;
+  // hidden for a new task. Tasks from before the log existed get their
+  // creation from created_at.
+  const historyDetails = document.getElementById('task-edit-history' + sfx);
+  const HISTORY_TEXT = {
+    created: () => 'Created', done: () => 'Done', reopened: () => 'Reopened',
+    wontdo: () => "Won't do", skipped: () => 'Skipped',
+    start: e => `Start ${historyDate(e.from)} → ${historyDate(e.to)}`,
+    due: e => `Due ${historyDate(e.from)} → ${historyDate(e.to)}`,
+  };
+  function historyDate(d) { return d ? shortDate(d) : '—'; }
+  function renderHistory(task) {
+    const entries = (task?.history || []).filter(e => HISTORY_TEXT[e.event]);
+    if (task?.created_at && !entries.some(e => e.event === 'created')) {
+      entries.unshift({ at: task.created_at.slice(0, 16), event: 'created' });
+    }
+    historyDetails.hidden = !entries.length;
+    historyDetails.open = false;
+    document.getElementById('task-edit-history-count' + sfx).textContent = entries.length || '';
+    document.getElementById('task-edit-history-list' + sfx).innerHTML = entries.slice().reverse().map(e =>
+      `<li><span class="task-history-at">${esc(shortDate(e.at.slice(0, 10)))} ${esc(e.at.slice(11, 16))}</span> ` +
+      `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
+  }
+
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
@@ -2043,15 +2076,9 @@
     // summary shows the value.
     linksDetails.open = false;
     syncLinksSummary();
+    renderHistory(task);
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
-    const createdEl = document.getElementById('task-edit-created' + sfx);
-    if (task && task.created_at) {
-      createdEl.textContent = `Created: ${task.created_at.slice(0, 16).replace('T', ' ')}`;
-      createdEl.style.display = '';
-    } else {
-      createdEl.style.display = 'none';
-    }
     keepCb.checked = task ? !!task.keep : initKeep;
     const recType = task?.recurrence?.type || '';
     recTypeSelect.value = recType;

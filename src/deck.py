@@ -398,6 +398,7 @@ def _new_task(**overrides) -> dict:
         "spawned_from": None,
         "keep": False,
         "last_done": None,
+        "history": [],
     }
     task.update(overrides)
     return task
@@ -487,7 +488,7 @@ def _spawn_recurring(task: dict) -> dict | None:
         # No date at all: the series gets a due date (API-created only; the
         # edit modal requires a date before it offers Repeat).
         new_due, new_start = next_date, None
-    return _new_task(
+    spawned = _new_task(
         title=task["title"],
         description=task.get("description", ""),
         tags=task.get("tags", []),
@@ -498,6 +499,8 @@ def _spawn_recurring(task: dict) -> dict | None:
         list=task.get("list"),
         spawned_from=task["id"],
     )
+    _log(spawned, "created")
+    return spawned
 
 
 def _parse_date(val) -> date | None:
@@ -507,11 +510,43 @@ def _parse_date(val) -> date | None:
         return None
 
 
+# A task's history: what happened to it and when, newest last, capped.
+# Events: created, start / due (with from/to dates), done, reopened, wontdo,
+# skipped. Undo sends the old history back with the old fields, so an undone
+# change leaves no trace (_apply_history).
+HISTORY_EVENTS = ("created", "start", "due", "done", "reopened", "wontdo", "skipped")
+HISTORY_LIMIT = 30
+
+
+def _log(task: dict, event: str, frm=None, to=None) -> None:
+    entry = {"at": datetime.now().strftime("%Y-%m-%dT%H:%M"), "event": event}
+    if event in ("start", "due"):
+        entry["from"], entry["to"] = frm, to
+    task["history"] = (task.get("history") or [])[-(HISTORY_LIMIT - 1):] + [entry]
+
+
+def _clean_history(val) -> list[dict]:
+    """Validate a history list from a request or snapshot; bad entries go."""
+    out = []
+    for e in val if isinstance(val, list) else []:
+        if not (isinstance(e, dict) and e.get("event") in HISTORY_EVENTS
+                and isinstance(e.get("at"), str)):
+            continue
+        entry = {"at": e["at"][:16], "event": e["event"]}
+        if e["event"] in ("start", "due"):
+            for k in ("from", "to"):
+                v = e.get(k)
+                entry[k] = v if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else None
+        out.append(entry)
+    return out[-HISTORY_LIMIT:]
+
+
 def _keep_done(task: dict) -> None:
     """Complete a keep task. It is never archived: done means "back to the
     pool". It returns to Open with no start date (so it leaves Focus and its
     Lineup), its deadline is dropped (it was this round's), and the day is
     recorded in ``last_done``. Undo is a plain update restoring those fields."""
+    _log(task, "done")
     task["last_done"] = date.today().isoformat()
     task["start_date"] = None
     task["due_date"] = None
@@ -522,6 +557,7 @@ def _complete_task(task: dict, now: str | None = None) -> dict | None:
     """Stamp task as completed; return the spawned recurring instance, if any."""
     task["completed_at"] = now or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     task["wont_do"] = False
+    _log(task, "done")
     return _spawn_recurring(task)
 
 
@@ -548,6 +584,7 @@ def _uncomplete_task(task: dict, active: list[dict],
             )]
     task["completed_at"] = None
     task["wont_do"] = False
+    _log(task, "reopened")
     return active
 
 
@@ -705,6 +742,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
       <input type="checkbox" id="task-edit-keep{sfx}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
     </label>
+    <div class="task-edit-extras">
     <details class="task-edit-links" id="task-edit-links{sfx}">
       <summary>List<span class="task-edit-links-summary" id="task-edit-links-summary{sfx}"></span></summary>
       <div class="task-field" title="A task in a list shows only where [[deck list=…]] embeds that list, not in the main deck">
@@ -713,7 +751,11 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
         <datalist id="task-edit-lists{sfx}">{list_options}</datalist>
       </div>
     </details>
-    <div class="task-edit-created" id="task-edit-created{sfx}" style="display:none"></div>
+    <details class="task-edit-links task-edit-history" id="task-edit-history{sfx}" hidden>
+      <summary>History<span class="task-edit-links-summary" id="task-edit-history-count{sfx}"></span></summary>
+      <ul class="task-history" id="task-edit-history-list{sfx}"></ul>
+    </details>
+    </div>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
       <button type="button" class="btn" id="task-edit-cancel{sfx}">Cancel</button>
@@ -925,6 +967,8 @@ def api_create_deck_item():
         abort(400, description="Title cannot be empty")
     task = _new_task()
     _apply_task_fields(task, data)
+    task["history"] = []          # its first dates are not changes
+    _log(task, "created")
     active = _read_deck_strict()
     active.append(task)
     _write_deck(active, "Create deck task")
@@ -945,6 +989,8 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["tags"] = _clean_tags(_as_str_list(data["tags"] or [], "tags"))
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
+        if task["due_date"] != old_due_date:
+            _log(task, "due", old_due_date, task["due_date"])
     if "sort_order" in data:
         task["sort_order"] = _as_order(data["sort_order"], "sort_order")
     if "focus_order" in data:
@@ -959,6 +1005,8 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     old_rec = task.get("recurrence") or {}
     if "start_date" in data:
         task["start_date"] = _validate_date(data["start_date"])
+        if task["start_date"] != old_start_date:
+            _log(task, "start", old_start_date, task["start_date"])
     # focus_order is the task's place in Focus's arrangement. It is cleared
     # when the task is unplanned or planned (null→value or value→null), and
     # when it moves to a day after today: it then comes back unarranged on
@@ -1030,6 +1078,7 @@ def api_update_deck_item(task_id):
         spawned = _spawn_recurring(task)
         task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         task["wont_do"] = True
+        _log(task, "skipped")
         active = [t for t in active if t["id"] != task_id]
         completed_list.append(task)
         if spawned:
@@ -1041,6 +1090,7 @@ def api_update_deck_item(task_id):
             # task should not perpetuate the series (use skip for that).
             task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             task["wont_do"] = True
+            _log(task, "wontdo")
             active = [t for t in active if t["id"] != task_id]
             completed_list.append(task)
         elif not data["wont_do"] and task.get("completed_at"):
@@ -1065,6 +1115,11 @@ def api_update_deck_item(task_id):
             active = _uncomplete_task(task, active)
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
+
+    # Undo sends the task's old history back with its old fields: it replaces
+    # whatever this request logged, so an undone change leaves no entry.
+    if "history" in data:
+        task["history"] = _clean_history(data["history"])
 
     if did_skip:
         msg = "Skip deck task"
@@ -1137,6 +1192,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))
     task["keep"] = bool(snap.get("keep"))
+    task["history"] = _clean_history(snap.get("history"))
     rec = snap.get("recurrence")
     if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
         task["recurrence"] = {

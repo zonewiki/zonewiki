@@ -1894,6 +1894,15 @@ body.editor-page main {
 .task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
 .task-edit-links[open] > summary { margin-bottom: .5rem; }
 .task-edit-links-summary { font-weight: 400; margin-left: .6rem; }
+/* List and History share one line while closed; an opened one takes the
+   full width on a line of its own below. */
+.task-edit-extras { display: flex; flex-wrap: wrap; gap: .3rem 1.5rem; align-items: baseline; }
+.task-edit-extras > details[open] { flex-basis: 100%; order: 1; }
+/* History: the task's logged events, newest first. */
+.task-edit-history[hidden] { display: none; }
+.task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }
+.task-history li { padding: .1rem 0; }
+.task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
 .task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
@@ -1910,7 +1919,6 @@ body.editor-page main {
   padding: .75rem 0 1.5rem; background: var(--bg);
   border-top: 1px solid var(--border);
 }
-.task-edit-created { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
 .task-edit-actions .btn-danger { margin-left: auto; background: #fecaca; color: #991b1b; border: none; }
 .task-edit-actions .btn-danger:hover { background: #fca5a5; }
 
@@ -1986,6 +1994,5 @@ body.editor-page main {
   .task-row-dates .task-field-lead { grid-column: 1 / -1; }
   /* Repeat | Every N | From done */
   .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
-  .task-edit-created { margin-top: 0; }
 }
 

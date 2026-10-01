@@ -1068,3 +1068,50 @@ def test_filter_excludes_tags(page, wiki):
     page.wait_for_timeout(400)   # the filter is debounced
     expect(card(page, "Untagged")).to_have_count(0)
     expect(card(page, "Plan trip")).to_be_visible()
+
+
+def test_history_in_edit_modal_and_undo_leaves_no_trace(page, wiki):
+    tid = page.request.post("/api/deck", data={"title": "Report"}).json()["id"]
+    page.request.put(f"/api/deck/{tid}", data={"due_date": tomorrow()})
+    page.goto("/deck?view=open")
+
+    # Start today from the ⋯ menu; its undo puts the old log back.
+    card(page, "Report").locator(".task-menu-btn").click()
+    page.get_by_role("menuitem", name="Start today").click()
+    wait_for_field(page, "Report", "start_date", date.today().isoformat())
+    page.locator(".task-undo-btn").click()
+    wait_for_field(page, "Report", "start_date", None)
+    assert [e["event"] for e in task_by_title(page, "Report")["history"]] == ["created", "due"]
+
+    card(page, "Report").click()
+    page.keyboard.press("Enter")
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    history = page.locator("#task-edit-history")
+    expect(history).to_be_visible()
+    expect(history.locator("summary")).to_contain_text("2")
+    # Closed, List and History share one line; the old "Created:" line is gone.
+    list_box = page.locator("#task-edit-links summary").bounding_box()
+    hist_box = history.locator("summary").bounding_box()
+    assert abs(list_box["y"] - hist_box["y"]) < 4 and hist_box["x"] > list_box["x"]
+    history.locator("summary").click()
+    # Opened: on a line of its own below List (the modal re-centres as it
+    # grows, so compare against List's new position).
+    list_y = page.locator("#task-edit-links summary").bounding_box()["y"]
+    assert history.locator("summary").bounding_box()["y"] > list_y + 4
+    expect(history.locator("li")).to_have_count(2)
+    expect(history.locator("li").first).to_contain_text("Due — →")   # newest first
+    expect(history.locator("li").last).to_contain_text("Created")
+
+
+def test_history_of_a_task_from_before_the_log(page, wiki):
+    # No history field yet: the modal still shows when it was created.
+    import json
+    (wiki.root / "_deck.json").write_text(json.dumps([{
+        "id": "old-1", "title": "Ancient", "created_at": "2025-03-04T09:15:00"}]))
+    page.goto("/deck?view=open")
+    card(page, "Ancient").click()
+    page.keyboard.press("Enter")
+    history = page.locator("#task-edit-history")
+    expect(history.locator("summary")).to_contain_text("1")
+    history.locator("summary").click()
+    expect(history.locator("li")).to_have_text("Mar 4, 2025 09:15 Created")
