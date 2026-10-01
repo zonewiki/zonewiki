@@ -700,7 +700,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
       <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>
     </div>
     <div class="task-field">
-      <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(comma-separated, no spaces)</span></label>
+      <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(Tab completes, comma adds)</span></label>
       <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
     </div>
     <div class="task-field-row task-row-dates">

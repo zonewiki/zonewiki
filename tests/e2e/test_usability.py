@@ -37,6 +37,15 @@ def seed_deck(page, wiki, embed="[[deck]]"):
 
 # ── 4. One filter field: text plus #tags ─────────────────────────────────────
 
+def filter_chips(page):
+    """The filter field's chips (completed tag words), as their labels."""
+    return page.locator(".tasks-toolbar .tag-chip-label")
+
+
+def tag_chips(page):
+    """The edit modal Tags field's chips."""
+    return page.locator("#task-edit-modal .tag-chip-label")
+
 def test_filter_field_text_and_tags(page, wiki):
     seed_deck(page, wiki)
     field = page.locator("#task-filter-search")
@@ -57,7 +66,8 @@ def test_filter_field_tag_autocomplete(page, wiki):
     ac = page.locator(".tag-ac-dropdown")
     expect(ac.locator(".tag-ac-item")).to_have_text(["#home"])
     field.press("Enter")   # the first (best) match is preselected
-    expect(field).to_have_value("fix #home ")
+    expect(filter_chips(page)).to_have_text(["#home"])   # a completed tag becomes a chip
+    expect(field).to_have_value("fix ")
     expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
     # Tags already in the filter are not suggested again.
     field.press_sequentially("#")
@@ -74,7 +84,8 @@ def test_tag_suggestions_after_free_text(page, wiki):
     field.press_sequentially("some text #ho")
     expect(page.locator(".tag-ac-dropdown .tag-ac-item")).to_have_text(["#home"])
     field.press("Enter")
-    expect(field).to_have_value("some text #home ")
+    expect(filter_chips(page)).to_have_text(["#home"])
+    expect(field).to_have_value("some text ")
     # Other tag words still narrow them: with #home set, only #work remains
     # (it co-occurs with home), and home itself isn't offered twice.
     field.press_sequentially("#")
@@ -92,7 +103,8 @@ def test_hash_key_starts_a_tag_word(page, wiki):
 
 def test_embed_tag_param_lands_in_filter_field(page, wiki):
     seed_deck(page, wiki, "[[deck tag=home,work]]")
-    expect(page.locator("#task-filter-search")).to_have_value("#home #work")
+    expect(filter_chips(page)).to_have_text(["#home", "#work"])
+    expect(page.locator("#task-filter-search")).to_have_value("")
     expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
 
 
@@ -101,7 +113,8 @@ def test_new_task_takes_tags_from_filter(page, wiki):
     page.locator("#task-filter-search").fill("#work|home #urgent text")
     page.get_by_role("button", name="New task").click()
     # Only unambiguous (single-tag) words become default tags.
-    expect(page.locator("#task-edit-tags")).to_have_value("urgent")
+    expect(tag_chips(page)).to_have_text(["#urgent"])
+    expect(page.locator("#task-edit-tags")).to_have_value("")
 
 
 # ── 5. Commit as a word on the meta line ─────────────────────────────────────
@@ -315,7 +328,8 @@ def test_filter_tab_completes_to_best_match(page, wiki):
     expect(items).to_have_text(["#work", "#wood", "#workshop"])
     expect(items.first).to_have_class(re.compile(r"\bselected\b"))
     field.press("Tab")
-    expect(field).to_have_value("#work ")
+    expect(filter_chips(page)).to_have_text(["#work"])
+    expect(field).to_have_value("")
     expect(field).to_be_focused()
 
 
@@ -349,18 +363,19 @@ def test_edit_modal_tags_complete_and_chain(page, wiki):
     tags = modal.locator("#task-edit-tags")
     tags.click()
     tags.press_sequentially("wo")
-    tags.press("Enter")                      # completes; does not save
-    expect(tags).to_have_value("work, ")
+    tags.press("Enter")                      # completes to a chip; does not save
+    expect(tag_chips(page)).to_have_text(["#work"])
+    expect(tags).to_have_value("")           # no ", " after it
     expect(modal).to_be_visible()
     tags.press_sequentially("ho")
     tags.press("Tab")
-    expect(tags).to_have_value("work, home, ")
+    expect(tag_chips(page)).to_have_text(["#work", "#home"])
     # Esc with the dropdown open closes the dropdown, not the dialog.
     tags.press_sequentially("wo")
     tags.press("Escape")
     expect(page.locator(".tag-ac-dropdown")).to_have_count(0)
     expect(modal).to_be_visible()
-    tags.fill("work, home, ")
+    tags.fill("")
     modal.get_by_role("button", name="Save").click()
     expect(page.locator(".task-item").filter(has_text="Chained")).to_be_visible()
     t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Chained")
@@ -407,7 +422,7 @@ def test_tag_with_space_is_findable_in_filter(page, wiki):
     field.click()
     field.press_sequentially("#locallm")
     field.press("Tab")
-    expect(field).to_have_value("#locallm-xxx ")
+    expect(filter_chips(page)).to_have_text(["#locallm-xxx"])
     expect(page.locator(".task-item .task-title")).to_have_text(["Try models"])
 
 
@@ -419,17 +434,21 @@ def test_tag_fields_do_not_take_spaces(page, wiki):
     tags.click()
     tags.press_sequentially("local llm")
     expect(tags).to_have_value("local-llm")
-    tags.press_sequentially(", x y")
-    expect(tags).to_have_value("local-llm, x-y")
-    # Paste goes through the same cleaning.
+    tags.press_sequentially(",")             # a comma makes it a chip
+    expect(tag_chips(page)).to_have_text(["#local-llm"])
+    tags.press_sequentially("x y")
+    expect(tags).to_have_value("x-y")
+    # Paste goes through the same cleaning; the part after the last comma
+    # stays to be typed on, and Save takes it too.
     tags.fill("")
     tags.evaluate("el => { el.value = 'a b ,  c'; el.dispatchEvent(new Event('input')); }")
-    expect(tags).to_have_value("a-b, c")
+    expect(tag_chips(page)).to_have_text(["#local-llm", "#a-b"])
+    expect(tags).to_have_value("c")
     modal.locator("#task-edit-title").fill("Spaced")
     modal.get_by_role("button", name="Save").click()
     expect(page.locator(".task-item").filter(has_text="Spaced")).to_be_visible()
     t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Spaced")
-    assert t["tags"] == ["a-b", "c"]
+    assert t["tags"] == ["local-llm", "a-b", "c"]
 
     # The bulk tag dialog (a single tag) too.
     card = page.locator(".task-item").filter(has=page.get_by_text("E", exact=True))
@@ -441,30 +460,22 @@ def test_tag_fields_do_not_take_spaces(page, wiki):
 
 
 def test_backspace_in_tags_field(page, wiki):
-    # Regression: the cleanup re-added the space after a comma, so Backspace
-    # could not get past ", ".
+    # A chip can't be edited: one Backspace at the start of the field removes
+    # it whole. Inside the typed text, Backspace deletes characters as usual.
     seed_tags(page, wiki)
     page.locator("#task-add-btn").click()
     tags = page.locator("#task-edit-tags")
     tags.click()
-    tags.press_sequentially("zz,")
-    expect(tags).to_have_value("zz, ")
+    tags.press_sequentially("zz,yy,")
+    expect(tag_chips(page)).to_have_text(["#zz", "#yy"])
     tags.press("Backspace")
-    expect(tags).to_have_value("zz,")
-    tags.press("Backspace")
-    expect(tags).to_have_value("zz")
+    expect(tag_chips(page)).to_have_text(["#zz"])
     tags.press_sequentially("a b")
-    expect(tags).to_have_value("zza-b")
+    expect(tags).to_have_value("a-b")
     for _ in range(2):
         tags.press("Backspace")
-    expect(tags).to_have_value("zza")
-    # Deleting in the middle keeps the caret where it was.
-    tags.fill("")
-    tags.press_sequentially("one, two")
-    for _ in range(3):
-        tags.press("ArrowLeft")
-    tags.press("Backspace")
-    tags.press("Backspace")
-    expect(tags).to_have_value("onetwo")
-    tags.press_sequentially("-")
-    expect(tags).to_have_value("one-two")
+    expect(tags).to_have_value("a")
+    expect(tag_chips(page)).to_have_text(["#zz"])
+    # The × removes a chip too.
+    page.locator("#task-edit-modal .tag-chip-x").click()
+    expect(tag_chips(page)).to_have_count(0)

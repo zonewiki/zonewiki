@@ -1435,6 +1435,32 @@ body.editor-page main {
 }
 /* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
 .tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
+/* A field with tag chips (chipField in deck.js): the box looks like the
+   field, the input inside it has no frame of its own. Element-qualified to
+   outrank `.tasks-toolbar input` and `.task-field input`. */
+div.chip-input {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .2rem; min-width: 0;
+  padding: .15rem .3rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); cursor: text;
+}
+div.chip-input:focus-within { border-color: var(--link); }
+.tasks-toolbar div.chip-input { flex: 1 1 0; min-width: 5rem; }
+.task-field div.chip-input { padding: .3rem .4rem; min-height: 2.15rem; }   /* as tall as the fields around it */
+div.chip-input > input {
+  flex: 1 1 4rem; min-width: 3rem; border: none; outline: none; background: transparent;
+  padding: .1rem .2rem;
+}
+.tag-chip {
+  display: inline-flex; align-items: center; font-size: .75rem; line-height: 1.4;
+  padding: 0 0 0 .4rem; border-radius: 3px; background: var(--code-bg); color: var(--fg);
+  white-space: nowrap;
+}
+.tag-chip-x {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: .85rem; line-height: 1; padding: .1rem .3rem;
+}
+.tag-chip-x:hover { color: var(--fg); }
+@media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
 .tasks-toolbar .btn { flex: none; }
 
 /* Completed is not a tab (it is rarely needed): a quiet link under the list

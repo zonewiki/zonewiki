@@ -791,7 +791,7 @@
 
   // `query` defaults to the filter field; the tag autocomplete passes the
   // field minus the word being typed.
-  function filterTasks(query = filterSearch?.value || '') {
+  function filterTasks(query = filterQuery()) {
     const today = todayStr();
     let filtered = tasks;
 
@@ -1771,7 +1771,7 @@
   function syncCompletedLink() {
     if (!completedLink) return;
     let matches = null;
-    const f = parseFilter(filterSearch?.value || '');
+    const f = parseFilter(filterQuery());
     const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
     if (filtering) {
       if (!completedLoaded) { fetchCompleted(); }
@@ -1821,6 +1821,12 @@
     if (activeFilter === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
   });
 
+  // The filter: its chips (completed tag words) plus the text typed after them.
+  const filterChips = filterSearch && chipField(filterSearch, { onChange: () => render() });
+  function filterQuery() {
+    return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
+  }
+
   if (filterSearch) {
     // Debounced — render() rebuilds the whole list, too heavy per keystroke.
     let searchTimer = null;
@@ -1832,6 +1838,59 @@
     filterSearch.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
     });
+  }
+
+  // ── Tag chips ──────────────────────────────────────────────────────────────
+  // A completed tag becomes a chip in front of the field's text: it can't be
+  // edited, only removed (its × or Backspace at the start of the field). The
+  // input is wrapped in a .chip-input box that looks like the field. Used by
+  // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
+  // modal's Tags field (chips are tag names, shown as #name).
+  function chipField(input, { label = w => w, onChange } = {}) {
+    const box = document.createElement('div');
+    box.className = 'chip-input';
+    input.parentNode.insertBefore(box, input);
+    box.appendChild(input);
+    let words = [];
+    function draw() {
+      box.querySelectorAll('.tag-chip').forEach(c => c.remove());
+      words.forEach((w, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'tag-chip';
+        const text = document.createElement('span');
+        text.className = 'tag-chip-label';
+        text.textContent = label(w);
+        chip.appendChild(text);
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'tag-chip-x';
+        x.tabIndex = -1;
+        x.textContent = '×';
+        x.setAttribute('aria-label', `Remove ${label(w)}`);
+        x.addEventListener('mousedown', e => e.preventDefault());   // keep the caret in the field
+        x.addEventListener('click', e => { e.stopPropagation(); remove(i); input.focus(); });
+        chip.appendChild(x);
+        box.insertBefore(chip, input);
+      });
+    }
+    function set(list, silent) {
+      const seen = new Set();
+      words = list.filter(w => w && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()));
+      draw();
+      if (!silent) onChange?.();
+    }
+    function remove(i) { words.splice(i, 1); draw(); onChange?.(); }
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && words.length && !e.defaultPrevented &&
+          input.selectionStart === 0 && input.selectionEnd === 0) {
+        e.preventDefault();
+        remove(words.length - 1);
+      }
+    });
+    box.addEventListener('mousedown', e => {
+      if (e.target === box) { e.preventDefault(); input.focus(); }
+    });
+    return { words: () => [...words], add: w => set([...words, w]), set };
   }
 
   // ── Tag autocomplete ───────────────────────────────────────────────────────
@@ -1874,11 +1933,13 @@
       });
       // Inside the field's parent (not <body>): in the edit modal the dropdown
       // must be in the dialog's top layer to be visible at all.
-      const parent = input.parentElement;
+      // A chip field's dropdown hangs under the whole box, not the input.
+      const anchor = input.closest('.chip-input') || input;
+      const parent = anchor.parentElement;
       if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-      el.style.top = input.offsetTop + input.offsetHeight + 'px';
-      el.style.left = input.offsetLeft + 'px';
-      el.style.width = input.offsetWidth + 'px';
+      el.style.top = anchor.offsetTop + anchor.offsetHeight + 'px';
+      el.style.left = anchor.offsetLeft + 'px';
+      el.style.width = anchor.offsetWidth + 'px';
       parent.appendChild(el);
       highlight(0);
     }
@@ -1952,7 +2013,7 @@
     word: () => hashWordAtCaret(filterSearch),
     suggest: w => {
       const val = filterSearch.value;
-      const rest = val.slice(0, w.start) + val.slice(w.end);
+      const rest = [...filterChips.words(), val.slice(0, w.start) + val.slice(w.end)].join(' ');
       const otherTags = rest.split(/\s+/).filter(word => /^-?#/.test(word)).join(' ');
       const restFilter = parseFilter(rest);
       const used = [...restFilter.tagGroups.flat(), ...restFilter.excludeTags];
@@ -1960,35 +2021,59 @@
       for (const tag of Object.keys(counts)) if (used.includes(tag.toLowerCase())) delete counts[tag];
       return rankTags(w.partial, counts, w.partial ? 8 : 12);
     },
-    accept: (tag, w) => { insertHashTag(filterSearch, tag, w); render(); },
+    // The completed word (with its '-' and any OR parts) becomes a chip.
+    accept: (tag, w) => {
+      const val = filterSearch.value;
+      const start = val[w.start - 1] === '-' ? w.start - 1 : w.start;
+      const chip = val.slice(start, w.partStart) + (w.partStart === w.start ? '#' : '') + tag;
+      filterSearch.value = (val.slice(0, start) + val.slice(w.end).replace(/^ +/, '')).replace(/ {2,}/g, ' ');
+      filterSearch.focus();
+      filterSearch.setSelectionRange(start, start);
+      filterChips.add(chip);
+    },
   });
   // A new task starts with the tags the filter requires (single-tag words;
   // an OR word doesn't say which one), so it shows up in the current view.
   function filterDefaultTags() {
-    return parseFilter(filterSearch?.value).tagGroups.filter(g => g.length === 1).map(g => g[0]).join(', ');
+    return parseFilter(filterQuery()).tagGroups.filter(g => g.length === 1).map(g => g[0]);
   }
 
-  // Edit modal Tags field (comma-separated): completes the last entry and
-  // adds ", " so the next tag can follow straight away.
+  // Edit modal Tags field: each tag is a chip; the input holds the one being
+  // typed. Completing it (Tab/Enter on a suggestion) or typing a comma makes
+  // it a chip; Backspace at the start removes the last chip.
   const editTagsInput = document.getElementById('task-edit-tags' + sfx);
-  if (editTagsInput) noSpacesInTags(editTagsInput, true);
+  const cleanTag = t => t.trim().replace(/^#+/, '').replace(/\s+/g, '-');
+  const editChips = editTagsInput && chipField(editTagsInput, { label: t => '#' + t });
+  if (editTagsInput) {
+    // A comma (typed or pasted) commits everything before it as chips.
+    // Registered before noSpacesInTags, which would turn ", " into "-".
+    editTagsInput.addEventListener('input', () => {
+      const parts = editTagsInput.value.split(',');
+      if (parts.length < 2) return;
+      const last = parts.pop();
+      editChips.set([...editChips.words(), ...parts.map(cleanTag).filter(Boolean)], true);
+      editTagsInput.value = last.trimStart();
+    });
+    noSpacesInTags(editTagsInput, false);
+  }
+  // Every tag in the field: the chips plus a half-typed one (Save takes it too).
+  function editTags() {
+    return [...editChips.words(), cleanTag(editTagsInput.value)].filter(Boolean);
+  }
   const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
     word: () => {
-      const val = editTagsInput.value;
-      const comma = val.lastIndexOf(',');
-      const partial = (comma >= 0 ? val.slice(comma + 1) : val).trim();
-      return partial ? { comma, partial } : null;
+      const partial = editTagsInput.value.trim();
+      return partial ? { partial } : null;
     },
     suggest: w => {
-      const committed = editTagsInput.value.slice(0, Math.max(w.comma, 0))
-        .split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      const committed = editChips.words().map(t => t.toLowerCase());
       const counts = tagCounts(tasks);
       for (const tag of Object.keys(counts)) if (committed.includes(tag.toLowerCase())) delete counts[tag];
       return rankTags(w.partial, counts);
     },
-    accept: (tag, w) => {
-      const val = editTagsInput.value;
-      editTagsInput.value = (w.comma >= 0 ? val.slice(0, w.comma + 1) + ' ' : '') + tag + ', ';
+    accept: tag => {
+      editChips.add(tag);
+      editTagsInput.value = '';
       editTagsInput.focus();
     },
   });
@@ -2068,7 +2153,10 @@
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
-    document.getElementById('task-edit-tags' + sfx).value = task ? (task.tags || []).join(', ') : (defaultTags || filterDefaultTags());
+    const startTags = task ? task.tags || []
+      : defaultTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
+    editChips.set(startTags, true);
+    editTagsInput.value = '';
     // A new task in a [[deck list=…]] embed belongs to that list; otherwise
     // it would vanish from the embed as soon as it is saved.
     document.getElementById('task-edit-list' + sfx).value = task ? task.list || '' : initList;
@@ -2190,7 +2278,7 @@
       description: document.getElementById('task-edit-desc' + sfx).value.trim(),
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
       start_date: document.getElementById('task-edit-start' + sfx).value || null,
-      tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
+      tags: editTags(),
       rec_type: keepCb.checked ? null : recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
@@ -2548,7 +2636,11 @@
   // Apply URL-param pre-filtering
   // [[deck tag=…]] / ?tag= and ?search= all land in the one filter field.
   const initSearch = urlParams.get('search') || '';
-  if (filterSearch) filterSearch.value = [tagParamToQuery(initTag), initSearch].filter(Boolean).join(' ');
+  // ?tag= / [[deck tag=…]] arrive as chips, ?search= as text.
+  if (filterSearch) {
+    filterChips.set(tagParamToQuery(initTag).split(' ').filter(Boolean), true);
+    filterSearch.value = initSearch || '';
+  }
   // Precedence: URL ?view= > embed view (always wins when specified) >
   // tab remembered this session > Focus default. So a [[deck view=…]] embed
   // always opens on its configured tab; a plain [[deck]] remembers the tab the
