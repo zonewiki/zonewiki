@@ -1354,11 +1354,16 @@
       // A keep task's last completion, e.g. when the milk was last bought.
       const lastDoneDisplay = task.keep && task.last_done && !task.completed_at
         ? `<span class="task-last-done" title="Last done">✓ ${shortDate(task.last_done)}</span>` : '';
-      const focusToday = task.start_date === dateOffset(0);
-      const focusTmrw  = task.start_date === dateOffset(1);
-      const focusMon   = task.start_date === nextMonday();
-      const focusClass = focusToday ? ' task-marked-today' : focusTmrw ? ' task-marked-tmrw' : focusMon ? ' task-marked-mon' : '';
-      const focusMetaClass = focusToday ? 'focus-today' : focusTmrw ? 'focus-tmrw' : focusMon ? 'focus-mon' : '';
+      // A planned task is either in Focus already (start today or earlier) or
+      // planned for later; the card's left edge and its 📅 date say which, the
+      // same on every tab.
+      const planned = !task.completed_at && task.start_date
+        ? (task.start_date <= todayStr() ? 'now' : 'later') : '';
+      const focusClass = planned ? ` task-planned-${planned}` : '';
+      // A past start date reads "since Sep 21" in the plain meta colour, never
+      // as a warning, so only today's date is coloured amber.
+      const focusMetaClass = planned === 'later' ? 'focus-later'
+        : planned && task.start_date === todayStr() ? 'focus-now' : '';
       const dueDisplay = !task.completed_at
         ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
         : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
@@ -2186,14 +2191,6 @@
     d.setDate(d.getDate() + days);
     return dateToStr(d);
   }
-  function nextMonday() {
-    const d = new Date();
-    const day = d.getDay();
-    const add = day === 0 ? 1 : 8 - day;
-    d.setDate(d.getDate() + add);
-    return dateToStr(d);
-  }
-
   // Every N / From done are only meaningful with a repeat type — disable them
   // (rather than hide, which would shift the row) when Repeat is "—".
   function syncRecFields() {

@@ -1749,13 +1749,13 @@ div.chip-input > input {
   padding: .2rem .5rem; cursor: pointer; font-size: .75rem;
 }
 .deck-datepicker .dp-foot button:hover { background: var(--code-bg); }
-.task-item.task-marked-today:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #f59e0b; }
-.task-item.task-marked-tmrw:not(.task-urg-overdue):not(.task-urg-today)  { border-left: 3px solid #60a5fa; }
-.task-item.task-marked-mon:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #a78bfa; }
-
-.task-focus-info.focus-today { color: #f59e0b !important; }
-.task-focus-info.focus-tmrw  { color: #60a5fa !important; }
-.task-focus-info.focus-mon   { color: #a78bfa !important; }
+/* Planned tasks (deck.js taskHTML): in Focus already (start today or
+   earlier) amber, planned later blue, the same on every tab. A due/overdue
+   urgency colour wins. */
+.task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
+.task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #60a5fa; }
+.task-focus-info.focus-now   { color: #f59e0b !important; }
+.task-focus-info.focus-later { color: #60a5fa !important; }
 
 
 .focus-stale-bar {
@@ -1857,9 +1857,11 @@ div.chip-input > input {
 
 
 
-.task-item.task-inbox {
+/* Open's Unsorted cards: dashed. The grey background only without a deadline
+   colour, which must look the same on every tab (it used to paint over it). */
+.task-item.task-inbox { border-style: dashed; }
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
   background: var(--code-bg);
-  border-style: dashed;
 }
 
 .tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }

@@ -1116,3 +1116,44 @@ def test_history_of_a_task_from_before_the_log(page, wiki):
     expect(history.locator("summary")).to_contain_text("1")
     history.locator("summary").click()
     expect(history.locator("li")).to_have_text("Mar 4, 2025 09:15 Created")
+
+
+def test_planned_tasks_are_marked_on_every_tab(page, wiki):
+    # A planned task gets a coloured left edge, the same on every tab: amber
+    # when it is in Focus already (start today or earlier, also "since" a past
+    # day), blue when planned later. Unplanned tasks get none.
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    in_week = (date.today() + timedelta(days=4)).isoformat()
+    for title, start in (("Since yesterday", yesterday), ("Thursday-ish", in_week), ("Undecided", None)):
+        page.request.post("/api/deck", data={"title": title, "start_date": start})
+    page.goto("/deck?view=open")
+    expect(card(page, "Since yesterday")).to_have_class(re.compile(r"\btask-planned-now\b"))
+    expect(card(page, "Thursday-ish")).to_have_class(re.compile(r"\btask-planned-later\b"))
+    expect(card(page, "Undecided")).not_to_have_class(re.compile(r"task-planned"))
+    edge = lambda title: card(page, title).evaluate("el => getComputedStyle(el).borderLeftColor")
+    assert edge("Since yesterday") != edge("Thursday-ish") != edge("Undecided")
+    # The 📅 date: blue for later; a past start ("since …") stays plain.
+    expect(card(page, "Thursday-ish").locator(".task-focus-info")).to_have_class(re.compile(r"\bfocus-later\b"))
+    expect(card(page, "Since yesterday").locator(".task-focus-info")).not_to_have_class(re.compile(r"\bfocus-(now|later)\b"))
+
+    open_tab(page, "focus")
+    expect(card(page, "Since yesterday")).to_have_class(re.compile(r"\btask-planned-now\b"))
+    open_tab(page, "due")
+    expect(card(page, "Thursday-ish")).to_have_class(re.compile(r"\btask-planned-later\b"))
+
+
+def test_due_colour_is_the_same_on_every_tab(page, wiki):
+    # Regression: Open's Unsorted cards had a grey background that painted
+    # over the deadline colour, so a task due today looked different on Open
+    # than on Focus.
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Due now", "due_date": today, "start_date": today})
+    page.goto("/deck?view=open")
+    looks = lambda: card(page, "Due now").evaluate(
+        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopColor]; }")
+    expect(card(page, "Due now")).to_have_class(re.compile(r"\btask-inbox\b"))   # in Unsorted
+    on_open = looks()
+    for tab in ("focus", "due"):
+        open_tab(page, tab)
+        expect(card(page, "Due now")).to_be_visible()
+        assert looks() == on_open, tab
