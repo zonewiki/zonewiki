@@ -2039,7 +2039,7 @@ class TestHistory:
     done, reopened, won't do, skipped. Undo restores the old log."""
 
     def _events(self, task):
-        return [(e["event"], e.get("from"), e.get("to")) if e["event"] in ("start", "due")
+        return [(e["event"], e.get("from"), e.get("to")) if e["event"] in ("start", "due", "repeat")
                 else e["event"] for e in task["history"]]
 
     def test_create_logs_only_created(self, client):
@@ -2078,7 +2078,24 @@ class TestHistory:
         skipped = client.get("/api/deck/completed").get_json()[0]
         assert self._events(skipped) == ["created", "skipped"]
         spawned = client.get("/api/deck").get_json()[0]
-        assert self._events(spawned) == ["created"]
+        # The next occurrence carries the series' history on.
+        assert self._events(spawned) == ["created", "skipped", ("repeat", None, _future(2))]
+
+    def test_next_occurrence_carries_the_series_history(self, client):
+        # Regression: ticking off a repeating task left the next occurrence
+        # with only "created"; the series' history stayed with the archived one.
+        today = date.today().isoformat()
+        tid = create_task(client, rec_type="daily", start_date=today).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"due_date": _future(1)})
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        nxt = client.get("/api/deck").get_json()[0]
+        assert self._events(nxt) == [
+            "created", ("due", None, _future(1)), "done", ("repeat", None, _future(2))]
+        # Ticked off again: the history keeps growing on the series.
+        client.put(f"/api/deck/{nxt['id']}", json={"completed": True})
+        third = client.get("/api/deck").get_json()[0]
+        assert self._events(third)[-2:] == ["done", ("repeat", None, _future(3))]
+        assert len(self._events(third)) == 6
 
     def test_undo_sends_the_old_history_back(self, client):
         task = create_task(client).get_json()

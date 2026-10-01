@@ -499,7 +499,10 @@ def _spawn_recurring(task: dict) -> dict | None:
         list=task.get("list"),
         spawned_from=task["id"],
     )
-    _log(spawned, "created")
+    # The next occurrence carries the series' history on (with the "done" or
+    # "skipped" just logged), then notes its own date.
+    spawned["history"] = list(task.get("history") or [])
+    _log(spawned, "repeat", None, spawned["due_date"] or spawned["start_date"])
     return spawned
 
 
@@ -512,15 +515,17 @@ def _parse_date(val) -> date | None:
 
 # A task's history: what happened to it and when, newest last, capped.
 # Events: created, start / due (with from/to dates), done, reopened, wontdo,
-# skipped. Undo sends the old history back with the old fields, so an undone
+# skipped, repeat (a recurring task's next occurrence, `to` = its date; the
+# occurrence carries the series' history on, so it reads as one). Undo sends the old history back with the old fields, so an undone
 # change leaves no trace (_apply_history).
-HISTORY_EVENTS = ("created", "start", "due", "done", "reopened", "wontdo", "skipped")
+HISTORY_EVENTS = ("created", "start", "due", "done", "reopened", "wontdo", "skipped", "repeat")
+_DATED_EVENTS = ("start", "due", "repeat")
 HISTORY_LIMIT = 30
 
 
 def _log(task: dict, event: str, frm=None, to=None) -> None:
     entry = {"at": datetime.now().strftime("%Y-%m-%dT%H:%M"), "event": event}
-    if event in ("start", "due"):
+    if event in _DATED_EVENTS:
         entry["from"], entry["to"] = frm, to
     task["history"] = (task.get("history") or [])[-(HISTORY_LIMIT - 1):] + [entry]
 
@@ -533,7 +538,7 @@ def _clean_history(val) -> list[dict]:
                 and isinstance(e.get("at"), str)):
             continue
         entry = {"at": e["at"][:16], "event": e["event"]}
-        if e["event"] in ("start", "due"):
+        if e["event"] in _DATED_EVENTS:
             for k in ("from", "to"):
                 v = e.get(k)
                 entry[k] = v if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else None
@@ -1075,10 +1080,10 @@ def api_update_deck_item(task_id):
         # Skip this occurrence: archive it as won't-do but DO spawn the next
         # instance — the series continues, unlike a plain won't-do which ends
         # it. On a non-recurring task this degrades to a plain won't-do.
+        _log(task, "skipped")      # before the spawn, which carries the history on
         spawned = _spawn_recurring(task)
         task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         task["wont_do"] = True
-        _log(task, "skipped")
         active = [t for t in active if t["id"] != task_id]
         completed_list.append(task)
         if spawned:

@@ -2124,6 +2124,7 @@
     wontdo: () => "Won't do", skipped: () => 'Skipped',
     start: e => `Start ${historyDate(e.from)} → ${historyDate(e.to)}`,
     due: e => `Due ${historyDate(e.from)} → ${historyDate(e.to)}`,
+    repeat: e => `Repeats: next ${historyDate(e.to)}`,
   };
   function historyDate(d) { return d ? shortDate(d) : '—'; }
   function renderHistory(task) {

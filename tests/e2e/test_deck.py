@@ -1176,3 +1176,19 @@ def test_due_date_does_not_affect_order(page, wiki):
     assert _open_titles(page, "sorted") == ["Ranked first", "Ranked second, due"]
     open_tab(page, "focus")
     expect(_focus_titles(page)).to_have_text(["Ranked first", "Ranked second, due", "Old, due", "New"])
+
+
+def test_history_of_a_repeating_task_continues(page, wiki):
+    today = date.today().isoformat()
+    tid = page.request.post("/api/deck", data={"title": "Water plants", "rec_type": "daily",
+                                               "start_date": today}).json()["id"]
+    page.request.put(f"/api/deck/{tid}", data={"completed": True})
+    page.goto("/deck?view=open")
+    card(page, "Water plants").click()
+    page.keyboard.press("Enter")
+    history = page.locator("#task-edit-history")
+    history.locator("summary").click()
+    expect(history.locator("li")).to_have_count(3)
+    expect(history.locator("li").nth(0)).to_contain_text("Repeats: next")   # newest first
+    expect(history.locator("li").nth(1)).to_contain_text("Done")
+    expect(history.locator("li").nth(2)).to_contain_text("Created")
