@@ -847,7 +847,7 @@
   function focusTasks() {
     const today = todayStr();
     return [...tasks]
-      .filter(t => !t.completed_at && isFocus(t, today) && !isDueNow(t, today))
+      .filter(t => !t.completed_at && isFocus(t, today))
       .sort(TAB_SORT.focus);
   }
   // Every task in the tab's manual order, including ones the filter hides.
@@ -859,7 +859,7 @@
   function sectionList() {
     const s = SECTIONS[activeFilter];
     const byId = new Map(tasks.map(t => [t.id, t]));
-    const ids = visibleItems().filter(el => !el.dataset.duePinned).map(el => el.dataset.id);
+    const ids = visibleItems().map(el => el.dataset.id);
     const manual = ids.filter(id => byId.get(id)[s.field] != null);
     const fixed = ids.filter(id => byId.get(id)[s.field] == null);
     return s.orderedTop
@@ -1303,19 +1303,14 @@
     const filtered = filterTasks();
 
 
-    // Focus pins "due now" at the top: the Due section holds exactly what the
-    // due badge counts (overdue + due today), so the badge's number is visible
-    // where its link lands. Then both Open and Focus have two sections
-    // (SECTIONS): Open's Unsorted (newTasks) above Sorted (orderedTasks), and
-    // Focus's Lineup (orderedTasks) above Others (unarrangedTasks, in Open's
-    // order via TAB_SORT.focus). Open has no Due section: a due task keeps its
-    // place in the order, and its urgency colour marks it.
-    let dueTasks = [], orderedTasks, newTasks = [], unarrangedTasks = [];
+    // Open and Focus have two sections each (SECTIONS): Open's Unsorted
+    // (newTasks) above Sorted (orderedTasks), and Focus's Lineup (orderedTasks)
+    // above Others (unarrangedTasks, in Open's order via TAB_SORT.focus). A
+    // due task has no section of its own on either tab: it keeps its place in
+    // the order, and its urgency colour marks it.
+    let orderedTasks, newTasks = [], unarrangedTasks = [];
     if (activeFilter === 'focus') {
-      const today = todayStr();
-      dueTasks = filtered.filter(t => isDueNow(t, today))
-                         .sort((a, b) => a.due_date.localeCompare(b.due_date));
-      const sorted = sortTasks(filtered.filter(t => !isDueNow(t, today)));
+      const sorted = sortTasks(filtered);
       orderedTasks    = sorted.filter(t => t.focus_order != null);
       unarrangedTasks = sorted.filter(t => t.focus_order == null);
     } else if (activeFilter === 'open') {
@@ -1330,7 +1325,7 @@
     }
 
     if (activeFilter !== 'due' &&
-        dueTasks.length === 0 && orderedTasks.length === 0 && newTasks.length === 0 &&
+        orderedTasks.length === 0 && newTasks.length === 0 &&
         unarrangedTasks.length === 0) {
       if (activeFilter === 'focus') {
         listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
@@ -1395,9 +1390,8 @@
         ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
         : '';
       const dragAttr = draggable ? 'draggable="true" data-drag' : '';
-      const duePinnedAttr = draggable ? '' : 'data-due-pinned="true"';
       return `
-        <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}" data-id="${task.id}" ${dragAttr} ${duePinnedAttr}>
+        <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}" data-id="${task.id}" ${dragAttr}>
           <label class="task-checkbox">
             <input type="checkbox" ${checked} data-id="${task.id}">
           </label>
@@ -1438,13 +1432,8 @@
       return;
     }
 
-    // Due now section (overdue + due today) pinned at the top of Focus
-    if (dueTasks.length > 0) {
-      html += '<li class="task-inbox-divider task-inbox-divider--only">Due</li>';
-      html += dueTasks.map(t => taskHTML(t, false)).join('');
-    }
     if (activeFilter === 'focus') {
-      const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
+      const inFocus = orderedTasks.length + unarrangedTasks.length;
       if (LIMIT && inFocus >= LIMIT) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
           `<span>⚠ ${inFocus} tasks in ${esc(tabLabel('focus'))} (limit: ${LIMIT})</span></li>`;

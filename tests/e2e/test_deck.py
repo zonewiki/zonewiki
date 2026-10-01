@@ -128,10 +128,10 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     expect(page.locator(".review-panel")).to_have_count(0)
 
 
-def test_due_badge_count_matches_focus_due_section(page, wiki):
-    # The badge counts deadlines (overdue + due today) and links to Focus,
-    # which also lists started tasks; its Due section shows exactly the
-    # counted ones, so the number is visible where the link lands.
+def test_due_badge_links_to_focus_with_the_due_tasks(page, wiki):
+    # The badge counts deadlines (overdue + due today) and links to Focus.
+    # There is no Due section: the counted tasks sit in Focus's order like
+    # any other, marked by their deadline colour.
     d = lambda n: (date.today() + timedelta(days=n)).isoformat()
     page.request.post("/api/deck", data={"title": "Overdue", "due_date": d(-2)})
     page.request.post("/api/deck", data={"title": "Due today", "due_date": d(0)})
@@ -146,12 +146,11 @@ def test_due_badge_count_matches_focus_due_section(page, wiki):
     badge.click()
     expect(page).to_have_url(re.compile(r"/deck\?view=focus$"))
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
-    pinned = page.locator(".task-item[data-due-pinned]")
-    expect(pinned).to_have_count(2)
-    expect(pinned.locator(".task-title")).to_have_text(["Overdue", "Due today"])
-    expect(page.locator(".task-inbox-divider--only").first).to_have_text("Due")
-    expect(card(page, "Started")).to_be_visible()
-    expect(card(page, "Started, due later")).to_be_visible()
+    expect(page.locator(".task-inbox-divider--only")).to_have_count(0)   # no Due section
+    # All in Others, in Open's order (never sorted: oldest first).
+    expect(_focus_titles(page)).to_have_text(["Overdue", "Due today", "Started", "Started, due later"])
+    expect(card(page, "Overdue")).to_have_class(re.compile(r"\btask-urg-overdue\b"))
+    expect(card(page, "Due today")).to_have_class(re.compile(r"\btask-urg-today\b"))
 
 
 def test_deck_page_opens_linked_task_and_lists(page, wiki):
@@ -556,7 +555,7 @@ def test_moving_task_out_of_list_removes_it(page, wiki):
 
 
 def _focus_titles(page):
-    return page.locator(".task-item:not([data-due-pinned]) .task-title")
+    return page.locator(".task-item .task-title")
 
 
 def _by_order(page, field):
@@ -710,30 +709,34 @@ def test_focus_not_arranged_follows_open_order(page, wiki):
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
 
 
-def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
+def test_focus_keyboard_crosses_the_sections(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/deck", data={"title": "Deadline", "due_date": today})
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Bravo", "Alpha")]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
-    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
+    # Others in Open's order; the never-sorted due task last, like any other.
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Deadline"])
     # Others can't be reordered: ↓ does nothing, ↑ lines the task up (at the end
     # of the Lineup), even when it is not the first of Others.
     card(page, "Alpha").click()
     page.keyboard.press("Control+Shift+ArrowDown")
-    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Deadline"])
     page.keyboard.press("Control+Shift+ArrowUp")
-    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
+    expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo", "Deadline"])
     wait_for_field(page, "Alpha", "focus_order", 0)
-    page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
+    page.keyboard.press("Control+Shift+ArrowUp")  # already first
     assert _arranged(page) == ["Alpha"]
     # ↓ on the last task of the Lineup takes it out.
     page.keyboard.press("Control+Shift+ArrowDown")
     wait_for_field(page, "Alpha", "focus_order", None)
-    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
-    expect(page.locator(".task-item[data-due-pinned] .task-title")).to_have_text(["Deadline"])
-    assert task_by_title(page, "Deadline")["focus_order"] is None
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Deadline"])
+    # A due task lines up like any other (there is no Due section).
+    card(page, "Deadline").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    wait_for_field(page, "Deadline", "focus_order", 0)
+    expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
 
 
 def test_focus_limit_is_off_unless_set(page, wiki):
@@ -839,7 +842,6 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
     # Unsorted: newest first. No Due section on Open: a due task sits in its section.
     assert _open_titles(page, "unsorted") == ["Overdue", "Fresh", "Old new"]
     assert _open_titles(page, "sorted") == ["Alpha", "Bravo"]
-    expect(page.locator(".task-item[data-due-pinned]")).to_have_count(0)
     # No sort menu, no "Move to New" checkbox.
     expect(page.locator("#task-sort")).to_have_count(0)
     card(page, "Alpha").dblclick()
@@ -1157,3 +1159,20 @@ def test_due_colour_is_the_same_on_every_tab(page, wiki):
         open_tab(page, tab)
         expect(card(page, "Due now")).to_be_visible()
         assert looks() == on_open, tab
+
+
+def test_due_date_does_not_affect_order(page, wiki):
+    # A deadline marks a task (its colour), it never moves it: Open's Unsorted
+    # stays newest first, Sorted and Focus's Others stay in Open's order.
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Old, due", "due_date": "2020-01-01", "start_date": today})
+    page.request.post("/api/deck", data={"title": "New", "start_date": today})
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today,
+                                                "due_date": due}).json()["id"]
+           for t, due in (("Ranked first", None), ("Ranked second, due", today))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=open")
+    assert _open_titles(page, "unsorted") == ["New", "Old, due"]
+    assert _open_titles(page, "sorted") == ["Ranked first", "Ranked second, due"]
+    open_tab(page, "focus")
+    expect(_focus_titles(page)).to_have_text(["Ranked first", "Ranked second, due", "Old, due", "New"])
