@@ -574,10 +574,10 @@ def test_focus_starts_from_open_order_without_new_section(page, wiki):
     # Open's order (Charlie, Bravo, Alpha), never-ordered tasks after it.
     expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha", "Unordered"])
     expect(page.locator(".task-inbox-divider--only", has_text="New")).to_have_count(0)
-    # Nothing arranged yet: an empty Pinned section, everything Others.
-    expect(_section(page, "pinned")).to_have_text(re.compile("Pinned"))
+    # Nothing arranged yet: an empty Lineup, everything Others.
+    expect(_section(page, "lineup")).to_have_text(re.compile("Lineup"))
     expect(_section(page, "others")).to_have_text(re.compile("Others"))
-    expect(_section(page, "pinned")).to_have_class(re.compile(r"\bboard-day--empty\b"))
+    expect(_section(page, "lineup")).to_have_class(re.compile(r"\bboard-day--empty\b"))
     expect(_section(page, "others").locator(".board-day-count")).to_have_text("4")
 
 
@@ -597,8 +597,8 @@ def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo", "Charlie"])
 
-    # Onto the (empty) Pinned heading: only the dragged task is arranged.
-    card(page, "Charlie").drag_to(_section(page, "pinned"))
+    # Onto the (empty) Lineup heading: only the dragged task is arranged.
+    card(page, "Charlie").drag_to(_section(page, "lineup"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
     wait_for_field(page, "Charlie", "focus_order", 0)
     assert _arranged(page) == ["Charlie"]
@@ -615,12 +615,12 @@ def test_focus_drag_between_arranged_and_not_arranged(page, wiki):
     assert _arranged(page) == ["Alpha", "Charlie"]
     assert task_by_title(page, "Bravo")["focus_order"] is None
 
-    # Onto the Others heading from below: appended to Pinned.
+    # Onto the Others heading from below: appended to the Lineup.
     card(page, "Bravo").drag_to(_section(page, "others"))
     wait_for_field(page, "Bravo", "focus_order", 2)
     expect(_section(page, "others")).to_have_class(re.compile(r"\bboard-day--empty\b"))
 
-    # From Pinned onto the Others heading: back to unarranged.
+    # From the Lineup onto the Others heading: back to unarranged.
     card(page, "Alpha").drag_to(_section(page, "others"))
     expect(_focus_titles(page)).to_have_text(["Charlie", "Bravo", "Alpha"])
     wait_for_field(page, "Alpha", "focus_order", None)
@@ -718,8 +718,8 @@ def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
-    # Others can't be reordered: ↓ does nothing, ↑ pins the task (at the end
-    # of Pinned), even when it is not the first of Others.
+    # Others can't be reordered: ↓ does nothing, ↑ lines the task up (at the end
+    # of the Lineup), even when it is not the first of Others.
     card(page, "Alpha").click()
     page.keyboard.press("Control+Shift+ArrowDown")
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
@@ -728,7 +728,7 @@ def test_focus_keyboard_crosses_the_sections_and_skips_due_pinned(page, wiki):
     wait_for_field(page, "Alpha", "focus_order", 0)
     page.keyboard.press("Control+Shift+ArrowUp")  # already first below Due
     assert _arranged(page) == ["Alpha"]
-    # ↓ on the last pinned task unpins it.
+    # ↓ on the last task of the Lineup takes it out.
     page.keyboard.press("Control+Shift+ArrowDown")
     wait_for_field(page, "Alpha", "focus_order", None)
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
@@ -765,7 +765,7 @@ def test_task_added_on_focus_lands_at_the_end(page, wiki):
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.goto("/deck?view=focus")
-    card(page, "Bravo").drag_to(_section(page, "pinned"))  # arrange part of the day
+    card(page, "Bravo").drag_to(_section(page, "lineup"))  # arrange part of the day
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Old unordered"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
@@ -932,7 +932,7 @@ def test_completed_matches_survive_the_load_race(page, wiki):
     expect(page.locator("#task-completed-link")).to_have_text("✓ 1 match in Completed →")
 
 
-def test_focus_pin_all_appends_others_to_pinned(page, wiki):
+def test_focus_line_up_all_appends_others_to_lineup(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/deck", data={"title": t, "start_date": today, "tags": tag}).json()["id"]
            for t, tag in (("Alpha", "x"), ("Bravo", "x"), ("Charlie", "x"), ("Hidden", "y"))]
@@ -940,10 +940,10 @@ def test_focus_pin_all_appends_others_to_pinned(page, wiki):
     page.request.post("/api/deck/reorder", data={"order": [ids[2]], "field": "focus_order"})
     page.goto("/deck?view=focus&tag=x")
     expect(_focus_titles(page)).to_have_text(["Charlie", "Alpha", "Bravo"])
-    pin_all = _section(page, "others").get_by_role("button", name="Pin all")
-    pin_all.click()
+    line_up_all = _section(page, "others").get_by_role("button", name="Line up all")
+    line_up_all.click()
     # Appended in Others' order; the task hidden by the filter stays in Others.
     wait_until(lambda: _arranged(page) == ["Charlie", "Alpha", "Bravo"])
     assert task_by_title(page, "Hidden")["focus_order"] is None
     expect(_section(page, "others")).to_have_class(re.compile(r"\bboard-day--empty\b"))
-    expect(pin_all).to_have_count(0)  # nothing left to pin
+    expect(line_up_all).to_have_count(0)  # nothing left to line up

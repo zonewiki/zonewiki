@@ -42,7 +42,7 @@
     return a.sort_order - b.sort_order;
   }
 
-  // Focus's order: Pinned (focus_order) first, then Others in Open's sorted
+  // Focus's order: the Lineup (focus_order) first, then Others in Open's sorted
   // order. Never-sorted tasks come last, oldest first, so a task added during
   // the day lands at the end.
   function byFocusOrder(a, b) {

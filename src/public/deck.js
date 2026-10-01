@@ -785,7 +785,7 @@
   // Per-tab sort comparators. Open sorts with DeckCore.byOpenOrder in
   // render(), and Plan with DeckCore.boardBuckets.
   const TAB_SORT = {
-    focus:     byFocusOrder,  // Pinned (focus_order), then Open's order
+    focus:     byFocusOrder,  // Lineup (focus_order), then Open's order
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
   };
 
@@ -796,14 +796,14 @@
   // Open and Focus each have two sections under a heading (sectionHTML): one
   // in a manual order, one in a fixed order.
   //   Open:  Unsorted (no sort_order, newest first) · Sorted (sort_order)
-  //   Focus: Pinned (focus_order) · Others (no focus_order, in Open's order)
+  //   Focus: Lineup (focus_order) · Others (no focus_order, in Open's order)
   // A move works on the visible list with both headings as slots in it
   // (sectionList): the side of the second heading a task lands on decides its
   // section. So dropping on that heading moves a task across it, and moves
   // within the fixed-order section change nothing.
   const SECTIONS = {
     open:  { field: 'sort_order',  top: 'unsorted', bottom: 'sorted', orderedTop: false },
-    focus: { field: 'focus_order', top: 'pinned',   bottom: 'others', orderedTop: true },
+    focus: { field: 'focus_order', top: 'lineup',   bottom: 'others', orderedTop: true },
   };
   const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
   function focusTasks() {
@@ -897,16 +897,17 @@
 
   // A section heading on Open and Focus. It looks like a Plan-board day
   // heading and, like one, takes drops: an empty section is only this row.
-  // `action` is an optional button in the heading (Others: Pin all).
+  // `action` is an optional button in the heading (Others: Line up all).
   function sectionHTML(zone, label, count, action = '') {
     const empty = count ? '' : ' board-day--empty';
     return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
       `<span class="board-day-label">${label}</span>${action}<span class="board-day-count">${count}</span></li>`;
   }
 
-  // Others' "Pin all": every visible task of Others goes to the end of Pinned,
-  // in the order they are listed. Tasks hidden by the filter stay in Others.
-  function pinAll() {
+  // Others' "Line up all": every visible task of Others goes to the end of
+  // the Lineup, in the order they are listed. Tasks hidden by the filter stay
+  // in Others.
+  function lineUpAll() {
     const list = sectionList();
     const others = list.slice(list.indexOf(sectionKey('others')) + 1);
     const rest = list.filter(id => !others.includes(id));
@@ -1268,7 +1269,7 @@
     // due badge counts (overdue + due today), so the badge's number is visible
     // where its link lands. Then both Open and Focus have two sections
     // (SECTIONS): Open's Unsorted (newTasks) above Sorted (orderedTasks), and
-    // Focus's Pinned (orderedTasks) above Others (unarrangedTasks, in Open's
+    // Focus's Lineup (orderedTasks) above Others (unarrangedTasks, in Open's
     // order via TAB_SORT.focus). Open has no Due section: a due task keeps its
     // place in the order, and its urgency colour marks it.
     let dueTasks = [], orderedTasks, newTasks = [], unarrangedTasks = [];
@@ -1420,12 +1421,12 @@
       html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
     }
     const focusSections = activeFilter === 'focus' && (orderedTasks.length || unarrangedTasks.length);
-    if (focusSections) html += sectionHTML('pinned', 'Pinned', orderedTasks.length);
+    if (focusSections) html += sectionHTML('lineup', 'Lineup', orderedTasks.length);
     html += displayTasks.map(t => taskHTML(t)).join('');
-    const pinAllBtn = unarrangedTasks.length
-      ? '<button type="button" class="section-action" data-section-action="pin-all" title="Append all of these to Pinned">Pin all</button>'
+    const lineUpAllBtn = unarrangedTasks.length
+      ? '<button type="button" class="section-action" data-section-action="line-up-all" title="Append all of these to the Lineup">Line up all</button>'
       : '';
-    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length, pinAllBtn);
+    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length, lineUpAllBtn);
     html += unarrangedTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
@@ -1434,7 +1435,7 @@
     wireListHandlers();
 
     function wireListHandlers() {
-    listEl.querySelector('[data-section-action="pin-all"]')?.addEventListener('click', pinAll);
+    listEl.querySelector('[data-section-action="line-up-all"]')?.addEventListener('click', lineUpAll);
     listEl.querySelectorAll('.task-menu-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();

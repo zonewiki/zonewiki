@@ -629,7 +629,7 @@ class TestReorder:
         assert tasks[0]["sort_order"] is None
 
     def test_reorder_updates_can_clear_the_field(self, client):
-        """Dragging a task out of a manual order (Focus's Pinned, Open's
+        """Dragging a task out of a manual order (Focus's Lineup, Open's
         Sorted) clears the field (null) in the same request that renumbers
         the rest."""
         t1 = create_task(client, title="First").get_json()

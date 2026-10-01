@@ -51,7 +51,7 @@ class TestOrders:
             {"id": "new", "created_at": "2026-07-26T09:00"},
         ]) == ["new", "old", "s0", "s1"]
 
-    def test_focus_order_pinned_then_open_order_then_oldest(self):
+    def test_focus_order_lineup_then_open_order_then_oldest(self):
         assert self._sorted("byFocusOrder", [
             {"id": "new", "created_at": "2026-07-26T09:00"},
             {"id": "old", "created_at": "2026-07-25T09:00"},

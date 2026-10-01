@@ -449,7 +449,7 @@ def test_touch_drag_across_focus_sections(new_page, wiki):
         pg.request.post("/api/deck", data={"title": t, "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/deck?view=focus")
-    arranged = pg.locator(".list-section[data-section='pinned']")
+    arranged = pg.locator(".list-section[data-section='lineup']")
     unarranged = pg.locator(".list-section[data-section='others']")
     touch_drag(pg, card(pg, "Bravo"), arranged)
     wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] == 0)

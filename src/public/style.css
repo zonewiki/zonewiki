@@ -1470,7 +1470,7 @@ body.editor-page main {
 .board-day-divider:first-child { margin-top: 0; }
 .board-day-label { flex: 1; }
 .board-day-count { font-weight: 700; color: var(--muted); }
-/* A button in a section heading (Others: Pin all), link-like so the heading
+/* A button in a section heading (Others: Line up all), link-like so the heading
    stays a quiet row. */
 .section-action {
   font: inherit; letter-spacing: inherit; text-transform: inherit;

@@ -1173,7 +1173,7 @@ def api_reorder_deck():
         task_id = u.get("id")
         val = u.get(field)
         # null clears the field: the task leaves the manual order (Open's
-        # Sorted section, Focus's Pinned section).
+        # Sorted section, Focus's Lineup).
         if val is None and task_id in id_map:
             id_map[task_id][field] = None
             continue
