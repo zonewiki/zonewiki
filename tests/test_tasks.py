@@ -3,6 +3,7 @@
 import sys
 import os
 import json
+import re
 import tempfile
 import threading
 from pathlib import Path
@@ -455,9 +456,9 @@ class TestRecurring:
         assert spawned["due_date"] == "2099-02-28"
         assert spawned["start_date"] == "2099-02-25"
 
-    def test_overdue_series_catches_up_with_start_in_past(self, client):
-        # The due date catches up to >= today; the carried start date may then
-        # lie before today, which just means "available since".
+    def test_overdue_series_catches_up_with_start_not_in_past(self, client):
+        # The due date catches up to >= today; the carried start date is then
+        # never before today (the gap is remembered for the next instance).
         task = create_task(client, title="Weekly",
                            due_date=(date.today() - timedelta(days=21)).isoformat(),
                            start_date=(date.today() - timedelta(days=27)).isoformat(),
@@ -466,7 +467,7 @@ class TestRecurring:
         spawned = client.get("/api/deck").get_json()[0]
         due = date.fromisoformat(spawned["due_date"])
         assert date.today() <= due < date.today() + timedelta(days=7)
-        assert date.fromisoformat(spawned["start_date"]) == due - timedelta(days=6)
+        assert date.fromisoformat(spawned["start_date"]) == max(due - timedelta(days=6), date.today())
 
     def test_undated_series_gets_a_due_date(self, client):
         task = create_task(client, title="API-made",
@@ -1875,3 +1876,156 @@ class TestLists:
         tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
         hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
         assert hit["href"] == f"/deck?task={tid}&view=open&list=groceries"
+
+
+# ---------- Keep tasks ----------
+
+
+class TestKeep:
+    """A keep task is never archived: completing it sends it back to Open
+    (no start date, no deadline, out of the Lineup) and records last_done."""
+
+    def _keep_task(self, client, **kw):
+        today = date.today().isoformat()
+        task = create_task(client, title="Milk", keep=True, start_date=today,
+                           due_date=_future(2), **kw).get_json()
+        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        return task
+
+    def test_new_task_defaults(self, client):
+        task = create_task(client).get_json()
+        assert task["keep"] is False and task["last_done"] is None
+
+    def test_completing_keeps_it_open(self, client):
+        tid = self._keep_task(client)["id"]
+        done = client.put(f"/api/deck/{tid}", json={"completed": True}).get_json()
+        assert done["completed_at"] is None
+        assert done["start_date"] is None and done["due_date"] is None
+        assert done["focus_order"] is None
+        assert done["last_done"] == date.today().isoformat()
+        assert [t["id"] for t in client.get("/api/deck").get_json()] == [tid]
+        assert client.get("/api/deck/completed").get_json() == []
+
+    def test_undo_restores_the_fields(self, client):
+        task = self._keep_task(client)
+        tid = task["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        back = client.put(f"/api/deck/{tid}", json={
+            "start_date": task["start_date"], "due_date": task["due_date"],
+            "focus_order": 0, "last_done": None}).get_json()
+        assert back["start_date"] == task["start_date"] and back["due_date"] == task["due_date"]
+        assert back["focus_order"] == 0      # sent explicitly, so not cleared with the date
+        assert back["last_done"] is None
+
+    def test_batch_complete_keeps_keep_tasks_open(self, client):
+        keep_id = self._keep_task(client)["id"]
+        other_id = create_task(client, title="Candles").get_json()["id"]
+        updated = client.post("/api/deck/batch-complete",
+                              json={"ids": [keep_id, other_id], "completed": True}).get_json()
+        assert {t["id"] for t in updated} == {keep_id, other_id}
+        active = client.get("/api/deck").get_json()
+        assert [t["id"] for t in active] == [keep_id]
+        assert active[0]["last_done"] == date.today().isoformat()
+        assert [t["id"] for t in client.get("/api/deck/completed").get_json()] == [other_id]
+
+    def test_keep_never_repeats(self, client):
+        task = create_task(client, keep=True, due_date=_future(1), rec_type="weekly").get_json()
+        assert task["recurrence"] is None
+        tid = create_task(client, due_date=_future(1), rec_type="weekly").get_json()["id"]
+        assert client.put(f"/api/deck/{tid}", json={"keep": True}).get_json()["recurrence"] is None
+
+    def test_wont_do_retires_a_keep_task(self, client):
+        tid = self._keep_task(client)["id"]
+        client.put(f"/api/deck/{tid}", json={"wont_do": True})
+        assert client.get("/api/deck").get_json() == []
+        assert client.get("/api/deck/completed").get_json()[0]["wont_do"] is True
+
+    def test_restore_keeps_keep_and_last_done(self, client):
+        tid = self._keep_task(client)["id"]
+        task = client.put(f"/api/deck/{tid}", json={"completed": True}).get_json()
+        client.delete(f"/api/deck/{tid}")
+        restored = client.post("/api/deck/restore", json={"tasks": [task]}).get_json()[0]
+        assert restored["keep"] is True and restored["last_done"] == task["last_done"]
+
+    def test_bad_last_done_is_rejected(self, client):
+        tid = create_task(client, keep=True).get_json()["id"]
+        assert client.put(f"/api/deck/{tid}", json={"last_done": "soon"}).status_code == 400
+
+    def test_embed_keep_param(self, client, wiki_dir):
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries keep=1]]\n", encoding="utf-8")
+        body = client.get("/page/shop").get_data(as_text=True)
+        assert 'data-init-keep="1"' in body
+        assert 'id="task-edit-keep"' in body
+        (wiki_dir / "plain.md").write_text("# Plain\n\n[[deck]]\n", encoding="utf-8")
+        assert 'data-init-keep=""' in client.get("/page/plain").get_data(as_text=True)
+
+
+# ---------- Recurring: the next start is never in the past ----------
+
+
+class TestRecurringStartNotInPast:
+    """Regression: a daily task with start and due dates (start 3 days ago,
+    due yesterday) came back after completion as "since 2 days ago"."""
+
+    def _d(self, n):
+        return (date.today() + timedelta(days=n)).isoformat()
+
+    def _complete(self, client, tid):
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        return next(t for t in client.get("/api/deck").get_json() if t["spawned_from"] == tid)
+
+    def test_daily_start_is_clamped_to_today(self, client):
+        tid = create_task(client, rec_type="daily", start_date=self._d(-3),
+                          due_date=self._d(-1)).get_json()["id"]
+        new = self._complete(client, tid)
+        assert new["due_date"] == self._d(0)
+        assert new["start_date"] == self._d(0)
+        assert new["recurrence"]["lead"] == 2
+
+    def test_gap_comes_back_on_the_next_instance(self, client):
+        # Weekly, start 3 days before due, completed late: this week's start
+        # would be yesterday, so it is today; next week's is 3 days before due again.
+        tid = create_task(client, rec_type="weekly", start_date=self._d(-8),
+                          due_date=self._d(-5)).get_json()["id"]
+        first = self._complete(client, tid)
+        assert (first["start_date"], first["due_date"]) == (self._d(0), self._d(2))
+        second = self._complete(client, first["id"])
+        assert (second["start_date"], second["due_date"]) == (self._d(6), self._d(9))
+        assert "lead" not in second["recurrence"]
+
+    def test_unclamped_series_stores_no_lead(self, client):
+        tid = create_task(client, rec_type="weekly", start_date=self._d(1),
+                          due_date=self._d(3)).get_json()["id"]
+        new = self._complete(client, tid)
+        assert (new["start_date"], new["due_date"]) == (self._d(8), self._d(10))
+        assert "lead" not in new["recurrence"]
+
+    def test_editing_a_date_forgets_the_lead(self, client):
+        tid = create_task(client, rec_type="daily", start_date=self._d(-3),
+                          due_date=self._d(-1)).get_json()["id"]
+        new = self._complete(client, tid)
+        same = client.put(f"/api/deck/{new['id']}", json={
+            "rec_type": "daily", "start_date": new["start_date"],
+            "due_date": new["due_date"]}).get_json()
+        assert same["recurrence"]["lead"] == 2           # modal re-save, nothing changed
+        moved = client.put(f"/api/deck/{new['id']}", json={"due_date": self._d(4)}).get_json()
+        assert "lead" not in moved["recurrence"]
+
+
+class TestEmbedLabels:
+    def _tabs(self, client, wiki_dir, directive):
+        (wiki_dir / "shop.md").write_text(f"# Shop\n\n{directive}\n", encoding="utf-8")
+        body = client.get("/page/shop").get_data(as_text=True)
+        return re.findall(r'role="tab" data-filter="(\w+)" aria-selected="false">([^<]*)</button>', body)
+
+    def test_default_labels(self, client, wiki_dir):
+        assert self._tabs(client, wiki_dir, "[[deck]]") == [
+            ("open", "Open"), ("due", "Plan"), ("focus", "Focus")]
+
+    def test_custom_labels_keep_the_views(self, client, wiki_dir):
+        assert self._tabs(client, wiki_dir, "[[deck labels=Catalogue,,Shopping_list]]") == [
+            ("open", "Catalogue"), ("due", "Plan"), ("focus", "Shopping list")]
+
+    def test_labels_are_escaped(self, client, wiki_dir):
+        tabs = self._tabs(client, wiki_dir, "[[deck labels=<b>x</b>]]")
+        assert tabs[0] == ("open", "&lt;b&gt;x&lt;/b&gt;")

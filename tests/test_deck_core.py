@@ -190,13 +190,17 @@ class TestFilterField:
     """The deck's single filter field: text plus #tag words."""
 
     @pytest.mark.parametrize("q,expected", [
-        ("", {"text": "", "tagGroups": []}),
-        ("fix bug", {"text": "fix bug", "tagGroups": []}),
-        ("#Work", {"text": "", "tagGroups": [["work"]]}),
-        ("fix  #work #home bug", {"text": "fix bug", "tagGroups": [["work"], ["home"]]}),
-        ("#a|b", {"text": "", "tagGroups": [["a", "b"]]}),
-        ("#a|#b", {"text": "", "tagGroups": [["a", "b"]]}),
-        ("#", {"text": "", "tagGroups": []}),            # a bare '#' while typing
+        ("", {"text": "", "tagGroups": [], "excludeTags": []}),
+        ("fix bug", {"text": "fix bug", "tagGroups": [], "excludeTags": []}),
+        ("#Work", {"text": "", "tagGroups": [["work"]], "excludeTags": []}),
+        ("fix  #work #home bug", {"text": "fix bug", "tagGroups": [["work"], ["home"]], "excludeTags": []}),
+        ("#a|b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": []}),
+        ("#a|#b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": []}),
+        ("#", {"text": "", "tagGroups": [], "excludeTags": []}),            # a bare '#' while typing
+        ("#work -#Mary", {"text": "", "tagGroups": [["work"]], "excludeTags": ["mary"]}),
+        ("-#a|b -#c", {"text": "", "tagGroups": [], "excludeTags": ["a", "b", "c"]}),
+        ("-#", {"text": "", "tagGroups": [], "excludeTags": []}),           # a bare '-#' while typing
+        ("pre-fix", {"text": "pre-fix", "tagGroups": [], "excludeTags": []}),
     ])
     def test_parse(self, q, expected):
         assert run_core(f"DeckCore.parseFilter({json.dumps(q)})") == expected
@@ -216,6 +220,11 @@ class TestFilterField:
         ("fix #home", ["3"]),
         ("#WORK", ["1", "3"]),
         ("#nope", []),
+        ("-#home", ["1"]),                # exclusion
+        ("#work -#home", ["1"]),
+        ("-#work|home", []),              # excludes either
+        ("-#nope", ["1", "2", "3"]),
+        ("fix -#WORK", []),
     ])
     def test_matches(self, q, ids):
         expr = (f"{json.dumps(self.TASKS)}.filter(t => DeckCore.matchesFilter(t, "
@@ -224,6 +233,7 @@ class TestFilterField:
 
     @pytest.mark.parametrize("raw,q", [
         ("", ""), ("work", "#work"), ("a, b", "#a #b"), ("a|b", "#a|b"),
+        ("work,-mary", "#work -#mary"),
     ])
     def test_tag_param_to_query(self, raw, q):
         # [[deck tag=…]] keeps its old syntax: comma = all, pipe = any.
@@ -336,3 +346,24 @@ class TestSanitizeTagInput:
         # Typing "," between a and b: the caret lands before b, after the new space.
         assert self.clean("a,b", caret=2) == {"value": "a, b", "caret": 3}
         assert self.clean("local llm", caret=5) == {"value": "local-llm", "caret": 5}
+
+
+class TestDescChecks:
+    """Checkbox items in a task's notes, toggled by index from the card."""
+
+    def _toggle(self, text, idx):
+        return run_core(f"DeckCore.toggleDescCheck({json.dumps(text)}, {idx})")
+
+    def test_toggles_the_nth_item_only(self):
+        text = "Shop:\n- [ ] eggs\n* [x] flour\n  + [ ] salt"
+        assert self._toggle(text, 0) == "Shop:\n- [x] eggs\n* [x] flour\n  + [ ] salt"
+        assert self._toggle(text, 1) == "Shop:\n- [ ] eggs\n* [ ] flour\n  + [ ] salt"
+        assert self._toggle(text, 2) == "Shop:\n- [ ] eggs\n* [x] flour\n  + [x] salt"
+
+    def test_plain_lines_and_brackets_in_prose_are_not_items(self):
+        text = "- plain item\nsee [ ] later\n- [ ]\n- [X] Done"
+        # "- [ ]" without text is not an item, so "- [X] Done" is item 0.
+        assert self._toggle(text, 0) == "- plain item\nsee [ ] later\n- [ ]\n- [ ] Done"
+
+    def test_out_of_range_changes_nothing(self):
+        assert self._toggle("- [ ] eggs", 3) == "- [ ] eggs"

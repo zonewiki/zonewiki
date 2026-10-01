@@ -700,7 +700,10 @@ if (textarea && previewPane) {
           .finally(() => { window.location.href = `/page/${targetSlug}`; });
         return;
       }
-      continueList(e);
+      if (continueList(textarea, e)) {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(fetchPreview, 300);
+      }
     }
   });
 
@@ -1048,10 +1051,14 @@ document.addEventListener('selectionchange', () => {
 
 // ── List continuation ─────────────────────────────────────────────────────────
 
-function continueList(e) {
-  const pos = textarea.selectionStart;
-  if (pos !== textarea.selectionEnd) return;
-  const val = textarea.value;
+// Enter at the end of a list item starts the next one (a checkbox item gets
+// an unchecked box, a number counts up); Enter on an empty item ends the
+// list. Returns true when it handled the key. Shared with the deck's task
+// notes (deck.js), so it takes the textarea.
+function continueList(ta, e) {
+  const pos = ta.selectionStart;
+  if (pos !== ta.selectionEnd) return false;
+  const val = ta.value;
   const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
   const line = val.slice(lineStart, pos);
 
@@ -1067,7 +1074,7 @@ function continueList(e) {
   if (cbEmpty || ocbEmpty) {
     // Empty checkbox item → exit list
     e.preventDefault();
-    textarea.setSelectionRange(lineStart, pos);
+    ta.setSelectionRange(lineStart, pos);
     document.execCommand('insertText', false, '\n');
   } else if (cb) {
     e.preventDefault();
@@ -1078,7 +1085,7 @@ function continueList(e) {
   } else if (ulEmpty || olEmpty) {
     // Empty list item → exit list
     e.preventDefault();
-    textarea.setSelectionRange(lineStart, pos);
+    ta.setSelectionRange(lineStart, pos);
     document.execCommand('insertText', false, '\n');
   } else if (ul) {
     e.preventDefault();
@@ -1087,11 +1094,11 @@ function continueList(e) {
     e.preventDefault();
     document.execCommand('insertText', false, '\n' + ol[1] + (parseInt(ol[2]) + 1) + '. ');
   } else {
-    return;
+    return false;
   }
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(fetchPreview, 300);
+  return true;
 }
+window.continueList = continueList;
 
 function wikilinkAtCursor() {
   const pos    = textarea.selectionStart;

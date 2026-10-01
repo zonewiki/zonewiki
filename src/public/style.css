@@ -1613,9 +1613,14 @@ body.editor-page main {
   white-space: pre-line; padding-top: .2rem;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
+/* A checkbox item in the notes ("- [ ] milk"), ticked in place. */
+.task-desc-check { display: inline-flex; align-items: baseline; gap: .1rem; cursor: pointer; }
+.task-desc-check input { margin: 0 .2rem 0 0; accent-color: var(--btn-primary); cursor: pointer; }
+.task-desc-check input:checked + span { color: var(--muted); text-decoration: line-through; }
 
 .task-due { font-size: .75rem; color: var(--muted); }
 .task-date-info { font-size: .75rem; color: var(--muted); }
+.task-last-done { font-size: .75rem; color: var(--muted); }  /* keep task: "✓ Sep 21" */
 .task-due.task-overdue { color: #dc2626; font-weight: 600; }
 .task-due.task-due-today { color: var(--btn-primary); font-weight: 600; }
 
@@ -1879,6 +1884,12 @@ body.editor-page main {
 .date-trigger:hover { background: var(--code-bg); }
 .date-trigger.date-trigger--set { color: var(--fg); }
 .task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+/* "Keep after done": a checkbox line of its own, not a field. */
+.task-edit-keep {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer;
+}
+.task-edit-keep input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--btn-primary); cursor: pointer; }
 /* List: usually set by the embed, so collapsed; the summary shows the value. */
 .task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
 .task-edit-links[open] > summary { margin-bottom: .5rem; }

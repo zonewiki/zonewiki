@@ -142,10 +142,10 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201). |
-| PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. |
+| PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, keep, last_done, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. `completed: true` on a keep task does not archive it (see Keep tasks). |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204. |
 | POST   | `/api/deck/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204. |
-| POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup. |
+| POST   | `/api/deck/batch-complete` | Complete/uncomplete multiple tasks; body `{ ids: [...], completed: bool }`; returns JSON array of updated tasks. Handles recurring spawn/cleanup; keep tasks stay open (see Keep tasks). |
 | POST   | `/api/deck/restore`   | Re-insert full task snapshots (undo after delete); body `{ tasks: [...] }`. Snapshots keep their original id/created_at/completion state; unknown fields are dropped, existing ids skipped. Returns restored tasks (201). |
 | POST   | `/api/deck/reorder`   | Update sort order. `field` is `sort_order` (default) or `focus_order`. Body `{ order: [id1, id2, …] }` densely renumbers the given ids to `0..n-1`; Open and Focus always send their whole manual order this way, tasks hidden by a filter included (see Sections). Body `{ updates: [{ id, <field> }, …] }` sets specific ids to specific (possibly fractional) values without touching any other task; a `null` value clears the field, taking the task out of the manual order. Both may be sent together. |
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
@@ -238,10 +238,12 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR. |
+| `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). |
 | `view` | `focus`, `open`, `plan`, `completed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Old names are still accepted via `_FILTER_ALIASES` (`upcoming`, `today`, `all`, `backlog`, `due`, `done`), as is `filter` for `view`. |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/deck`; `capacity` is an old alias. |
 | `list` | list name | — | Makes the embed a separate list (see Deck → Separate lists). Cleaned like tags, lowercased (`_clean_list`). |
+| `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. |
+| `labels` | up to 3 comma-separated names | `Open,Plan,Focus` | The embed's own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Plan,Shopping` for a shopping list. Only the words change: views, `view=` values and links keep their names. An empty entry keeps the default, `_` stands for a space (params split on whitespace). Rendered into the tab buttons by `_build_deck_embed`; `deck.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip. |
 
 ```markdown
 [[deck]]
@@ -249,6 +251,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 [[deck view=open]]
 [[deck list=groceries tag=weekly]]
 [[deck view=focus limit=5]]
+[[deck list=groceries keep=1 labels=Catalogue,Plan,Shopping]]
 ```
 
 **Implementation** (all in `deck.py`): `_DECK_RE` finds the directive and `_parse_tasks_params()` parses its `key=value` pairs. `process_deck_embeds()` swaps each one for a numbered placeholder before rendering, and `inject_deck_embeds()` replaces each `<p>PLACEHOLDER</p>` with `_build_deck_embed()`'s HTML afterwards. The embed passes its params as `data-init-*` attributes and loads `deck-core.js` then `deck.js` (`defer`, in that order: deck.js reads `window.DeckCore`). Element ids get a `-<n>` suffix after the first embed, so a page can hold several. `deck.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL.
@@ -281,7 +284,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
 ### Editor smart helpers
 
 - **Wikilink autocomplete** — typing `[[` opens a dropdown of existing page slugs filtered as you type. Arrow keys navigate, Enter or Tab inserts `[[slug]]`, Escape closes. Slugs are fetched once from `/api/pages` on load.
-- **List continuation** — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
+- **List continuation** (`continueList(textarea, e)`, also used by the deck's task notes) — pressing Enter at the end of a list item (`- `, `* `, `1. `) inserts the next marker automatically (incrementing the number for ordered lists). Pressing Enter on an empty list item exits the list.
 - **File paste and drag & drop** — pasting a file from the clipboard or dropping files onto the editor textarea uploads them via `POST /api/upload`. Images insert as `![name](url)`, other files as `[name](url)`.
 - **URL paste** (`pasteUrlAsLink` in `leaf.js`, also used by the deck's task notes): pasting a bare URL over selected text makes `[selection](url)`; otherwise a prompt asks for a label (none, or cancel, inserts the plain URL, which autolinks on render). The insert goes through `execCommand('insertText')`, so Ctrl+Z undoes it; it once assigned `textarea.value` and wiped the undo history.
 - **Snippets** — typing a trigger word then pressing Tab expands it inline. Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`. Add more by extending the `snippets` object in `leaf.js`.
@@ -402,7 +405,7 @@ A task has two independent dates; changing one never moves the other.
 - **`due_date`**: the deadline. Only a past due date makes a task overdue.
 - **`start_date`**: the day the task becomes available, and the commitment to work on it. Having one makes a task *planned*. A past start date is not overdue, it means "available since" (cards show "since Sep 21").
 
-The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored. Recurring instances keep the gap between the two dates.
+The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored. Recurring instances keep the gap between the two dates, but a new instance's start date is never before today (it can't have been available before the previous one was done); when that clamps it, the series remembers the gap in `recurrence.lead` for the next instance.
 
 ### Task fields
 
@@ -410,7 +413,7 @@ The edit modal's "Days before due" is just another way to enter the start date (
 |-------|------|-------------|
 | `id` | UUID string | |
 | `title` | string | Required |
-| `description` | string | Notes (inline markdown) |
+| `description` | string | Notes (inline markdown; `- [ ] item` lines render as checkboxes, see Interaction) |
 | `tags` | string[] | One word each. `_clean_tags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`DeckCore.sanitizeTagInput`), leaving deletions alone. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
@@ -418,10 +421,12 @@ The edit modal's "Days before due" is just another way to enter the start date (
 | `completed_at` | ISO datetime / `null` | |
 | `sort_order` | number / `null` | Position in Open's Sorted section; `null` = Unsorted |
 | `focus_order` | number / `null` | Position in Focus's Lineup; `null` = Others |
-| `recurrence` | `{ type, interval, from, day? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`. Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless type or primary date changes. |
+| `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`. Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless type or primary date changes. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
 | `list` | string / `null` | Separate list; `null` = main deck |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
+| `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
+| `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
 
 ### Views
 
@@ -430,7 +435,7 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 - **Open**: every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order). Open has no filter for unplanned tasks (an "Unplanned" toggle was removed): those are the Plan board's Unplanned section, where dragging to a day plans them. So Unsorted means "not yet ranked" and Unplanned "not yet scheduled", each with one home. A leftover `unplanned=` embed param is ignored.
 - **Plan** (`due`): a day board grouped by `DeckCore.bucketKey`: Overdue (`due_date < today`, display-only), Today, Tomorrow, the next weekdays, Later, Unplanned (no start date; nearest deadline first). Later and Unplanned always show. Dropping a card on a day sets its start date, on Unplanned clears it, on Later opens a date picker (min today+7). An empty section is only its dashed header row (min 1.9rem, 2.5rem on coarse pointers), which takes the drop; nothing grows when a drag starts. Day headers show a count and turn amber at the limit. The board only decides the day: inside a section tasks are in Open's order (`DeckCore.byOpenOrder`, shared with Open), except Overdue (by deadline) and Unplanned (nearest deadline first, then Open's order). A drop within a task's own section, on a task or on its heading, does nothing; to reorder, use Open (or Focus for today). The one exception is Later's heading, which opens the date picker to choose another later date. Plan's Today and Focus can list tasks in a different order: Focus puts the Lineup first and never-sorted tasks last, while Open puts new tasks first. Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
 - **Focus**: what you're working on now (`DeckCore.isFocus`: `start_date <= today`, or due today/overdue; the board's Overdue + Today). A **Due** section on top holds overdue and due-today tasks, exactly what the due badge counts. Below it the **Lineup** (`focus_order`, the order you tackle tasks in) and **Others** (in Open's order, never-sorted tasks last, oldest first; `DeckCore.byFocusOrder`). Others' heading has **Line up all** (`lineUpAll`), appending its visible tasks to the Lineup. The Lineup persists across days. The server clears `focus_order` when a task gains or loses a start date or its start moves past today, unless the request itself sends `focus_order` (used by undo). With a limit, a warning shows when Focus reaches it. Empty Focus says "Nothing planned for today" and links to Plan. New tasks created here get today as start date.
-- **Completed** is not a tab but a link under the list (`#task-completed-link`, `✓ Completed (N) →`, count from `/api/deck/completed-count`, refreshed after every write). In Completed, the link reads `← Back to open tasks`. While filtering another view it counts the matching completed tasks instead (`✓ 2 matches in Completed →`, no number while loading). `/api/deck` returns open tasks only, so completed tasks are fetched on demand (`fetchCompleted`, one request at a time); `deckGen` refetches if `fetchDeck` replaced the list meanwhile.
+- **Completed** is not a tab but a link under the list (`#task-completed-link`, `✓ Completed (N) →`, count from `/api/deck/completed-count`, refreshed after every write). In Completed, the link reads `← Back to <tab>`, naming the tab it returns to. While filtering another view it counts the matching completed tasks instead (`✓ 2 matches in Completed →`, no number while loading). `/api/deck` returns open tasks only, so completed tasks are fetched on demand (`fetchCompleted`, one request at a time); `deckGen` refetches if `fetchDeck` replaced the list meanwhile.
 
 **Sections** (Open and Focus; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): each tab has a manual-order section (Sorted, Lineup) and a fixed-order one (Unsorted, Others). Moves treat both headings as slots in the visible list (`sectionList`, `applySectionList`): which side of the second heading a task lands on decides its section; dropping on the manual section's heading moves the task to that end; reordering within the fixed section does nothing; leaving the manual order sets the field to `null`. Ctrl+Shift+↑/↓ moves one slot, headings counting. Every save renumbers the tab's whole manual order densely, keeping the slots of tasks hidden by the filter.
 
@@ -438,10 +443,11 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `DeckCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), the rest searches title and notes. `/` focuses it, `#` focuses it and starts a tag. Typing a `#word` suggests tags of the tasks the other tag words leave visible (free text is ignored for this). Embed `tag=`/`?tag=` become a query via `DeckCore.tagParamToQuery`. New tasks get the filter's single tags.
+- **Filter field** (`#task-filter-search`, `DeckCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), the rest searches title and notes. `/` focuses it, `#` focuses it and starts a tag. Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this). Embed `tag=`/`?tag=` become a query via `DeckCore.tagParamToQuery`. New tasks get the filter's single tags.
 - **Tag completion** (`attachTagAc`: filter, Tags field, title `#tag` shorthand, bulk tag dialog `t`/`T`): ranked by `DeckCore.rankTags` (exact, prefix, substring, in-order letters; then usage count, then A–Z). The best match is pre-highlighted so Tab/Enter completes it; Esc closes only the dropdown. Keys are handled in the capture phase. The dropdown is appended to the field's parent, since in a `<dialog>` only the top layer is visible.
 - **Quick-add** (new tasks only, `DeckCore.parseQuickAdd`): trailing shorthand like `Call Bob tomorrow #work due:fri`. Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter. Only trailing words count, and shorthand that would empty the title is ignored. `#task-edit-quick` previews the result; shorthand wins over the date fields.
-- **Completing**: the checkbox completes after a cancellable grace period. Completing a recurring task spawns the next instance, stepping from the previous primary date (or today with `from: completion`) until ≥ today; month steps clamp to the month's last day. Un-completing removes the spawned instance.
+- **Completing**: the checkbox completes after a cancellable grace period. Completing a recurring task spawns the next instance, stepping from the previous primary date (or today with `from: completion`) until ≥ today, with its start date not before today (see Dates); month steps clamp to the month's last day. Un-completing removes the spawned instance.
+- **Checkboxes in notes**: a `- [ ] item` line (`*`/`+` too, `[x]` ticked) renders as a real checkbox in the card's notes (`renderDesc`). Ticking it flips the line in the description and saves (`DeckCore.toggleDescCheck`, which numbers items with the same `DESC_CHECK_RE` the renderer uses). The task's own checkbox is `.task-checkbox input`, so the two never mix. In the edit modal's notes, Enter continues a list exactly as in the page editor (`continueList`, shared from `leaf.js` like `pasteUrlAsLink`): after `- [x] eggs` it starts `- [ ] `, and Enter on an empty item ends the list.
 - **Won't do** (✗ button, ⋯ menu) archives without spawning; **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance. Both show an undo toast; reopening a skipped entry removes its spawn.
 - **Delete** (`deleteWithUndo()`, from keyboard, modal or menu) confirms, then offers undo via `/api/deck/restore` with full snapshots.
 - **Inline dates**: the ⏰ (due) and 📅 (start) chips open a date picker. **f** starts the selected task today, **F** tomorrow (again clears).
@@ -451,6 +457,10 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 - **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice. A newly created task is flashed the same way when the view shows it.
 - **Rejected writes** show the server's error as a toast (`showNotice`).
 - **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
+
+### Keep tasks
+
+A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool". It suits a shopping list used with the deck's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open. Completing a keep task (`_keep_done`, in `PUT` and in `batch-complete`) clears its start date, its deadline and its Lineup place, and sets `last_done` to today; it stays in `_deck.json` with the same id, tags, notes and place in Open's order, and Completed stays empty. Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`; `focus_order` is sent explicitly so it isn't cleared). **Won't do** and **Delete** retire a staple. Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked. Cards mark keep tasks with ⟲ (`.task-keep`). `[[deck keep=1]]` makes new tasks keep tasks.
 
 ### Separate lists
 

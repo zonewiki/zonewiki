@@ -55,29 +55,50 @@
     return (a.created_at || '').localeCompare(b.created_at || '');
   }
 
+  // Checkbox items in a task's notes: a line "- [ ] text" (or "* ", "+ ",
+  // indented or not; "[x]" when ticked). Shared by the card renderer, which
+  // numbers them in order, and toggleDescCheck, so the numbering matches.
+  const DESC_CHECK_RE = /^(\s*[-*+] \[)([ xX])(\] )(.*)$/;
+
+  // Flip the idx-th checkbox item (0-based) in a task's notes.
+  function toggleDescCheck(text, idx) {
+    let n = -1;
+    return (text || '').split('\n').map(line => {
+      const m = line.match(DESC_CHECK_RE);
+      if (!m || ++n !== idx) return line;
+      return m[1] + (m[2] === ' ' ? 'x' : ' ') + m[3] + m[4];
+    }).join('\n');
+  }
+
   // The deck's single filter field: words starting with '#' filter by tag, the
   // rest is a text search over title + description. Separate tag words must
   // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
-  // Returns { text, tagGroups } — every group must have at least one match.
+  // A word starting with '-#' excludes its tags (`-#mary`, `-#a|b`: neither).
+  // Returns { text, tagGroups, excludeTags } — every group must have at least
+  // one match, and no excluded tag may be present.
   function parseFilter(q) {
     const words = (q || '').trim().split(/\s+/).filter(Boolean);
     const tagGroups = [];
+    const excludeTags = [];
     const text = [];
+    const tagsOf = w => w.split('|').map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
     for (const w of words) {
-      if (w.startsWith('#')) {
-        const group = w.split('|').map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
+      if (w.startsWith('-#')) excludeTags.push(...tagsOf(w.slice(1)));
+      else if (w.startsWith('#')) {
+        const group = tagsOf(w);
         if (group.length) tagGroups.push(group);
       } else {
         text.push(w);
       }
     }
-    return { text: text.join(' ').toLowerCase(), tagGroups };
+    return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags };
   }
 
   function matchesFilter(t, f) {
     if (f.text && !(t.title || '').toLowerCase().includes(f.text) &&
         !(t.description || '').toLowerCase().includes(f.text)) return false;
     const tags = (t.tags || []).map(tg => tg.toLowerCase());
+    if ((f.excludeTags || []).some(tag => tags.includes(tag))) return false;
     return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));
   }
 
@@ -86,7 +107,9 @@
     raw = (raw || '').trim();
     if (!raw) return '';
     if (raw.includes('|')) return '#' + raw.split('|').map(s => s.trim()).filter(Boolean).join('|');
-    return raw.split(',').map(s => s.trim()).filter(Boolean).map(t => '#' + t).join(' ');
+    // A leading '-' excludes the tag (`tag=work,-mary`).
+    return raw.split(',').map(s => s.trim()).filter(Boolean)
+      .map(t => t.startsWith('-') ? '-#' + t.slice(1) : '#' + t).join(' ');
   }
 
   function tagMatchScore(q, tag) {
@@ -251,7 +274,7 @@
 
   const DeckCore = {
     dateToStr, addDays, isOverdue, isFocus, byOpenOrder, byFocusOrder, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
-    parseFilter, matchesFilter, tagParamToQuery,
+    parseFilter, matchesFilter, tagParamToQuery, DESC_CHECK_RE, toggleDescCheck,
     bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   };
 

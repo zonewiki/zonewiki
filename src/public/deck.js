@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isFocus, byOpenOrder, byFocusOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = window.DeckCore;
+  const { dateToStr, addDays, isFocus, byOpenOrder, byFocusOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -58,6 +58,7 @@
   const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
   const deleteBtn = document.getElementById('task-edit-delete' + sfx);
   const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
+  const keepCb = document.getElementById('task-edit-keep' + sfx);
   const deleteModal = document.getElementById('task-delete-modal' + sfx);
   const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
   const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -119,6 +120,16 @@
     }
     else if (div.dataset.dropDay) updateTask(id, { start_date: div.dataset.dropDay });
   }
+
+  // A checkbox item in a card's notes ("- [ ] milk"): ticking it edits the
+  // notes (DeckCore.toggleDescCheck) and saves them.
+  listEl.addEventListener('change', e => {
+    const cb = e.target.closest('input[data-desc-check]');
+    if (!cb) return;
+    const id = cb.closest('.task-item')?.dataset.id;
+    const task = tasks.find(t => t.id === id);
+    if (task) updateTask(id, { description: toggleDescCheck(task.description, +cb.dataset.descCheck) });
+  });
 
   // Touch: a tap on a card opens the editor (double-click, the desktop
   // gesture, is unreliable on phones). Mouse clicks keep selecting cards.
@@ -312,6 +323,11 @@
   // embed shows only the tasks in no list. ?list= opens a list in the main
   // deck when no page embeds it (/deck redirects there).
   const initList = cleanList(appEl?.dataset.initList || urlParams.get('list'));
+  // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
+  // into the tab buttons by deck.py, so they are read back from there).
+  const tabLabel = view => tabsEl.querySelector(`[data-filter="${view}"]`)?.textContent.trim() || view;
+  // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
+  const initKeep = appEl?.dataset.initKeep === '1';
   function cleanList(name) {
     return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
       .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
@@ -518,14 +534,20 @@
   }
 
   function beginComplete(id, li) {
-    const cb = li?.querySelector('input[type=checkbox]');
+    const cb = li?.querySelector('.task-checkbox input');
     if (cb) cb.checked = true;
     if (li) li.classList.add('task-completing');
     if (pendingCompletions.has(id)) clearTimeout(pendingCompletions.get(id));
     const tid = setTimeout(() => {
       pendingCompletions.delete(id);
       if (li) li.classList.add('task-completing-out');
-      setTimeout(() => updateTask(id, { completed: true }), 400);
+      setTimeout(async () => {
+        const task = tasks.find(t => t.id === id);
+        const before = task?.keep && keepSnapshot(task);
+        const done = await updateTask(id, { completed: true });
+        // A keep task is not archived, so Completed can't reopen it: offer undo.
+        if (done && before) showUndo(`“${task.title}” done`, () => updateTask(id, before));
+      }, 400);
     }, 4600);
     pendingCompletions.set(id, tid);
   }
@@ -536,9 +558,17 @@
     pendingCompletions.delete(id);
     const li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (li) li.classList.remove('task-completing', 'task-completing-out');
-    const cb = li?.querySelector('input[type=checkbox]');
+    const cb = li?.querySelector('.task-checkbox input');
     if (cb) cb.checked = false;
     return true;
+  }
+
+  // What completing a keep task changes (mirrors _keep_done in deck.py), so
+  // undo can put it back. focus_order is sent explicitly, which
+  // makes the server keep it rather than clear it with the start date.
+  function keepSnapshot(t) {
+    return { start_date: t.start_date || null, due_date: t.due_date || null,
+             focus_order: t.focus_order ?? null, last_done: t.last_done || null };
   }
 
   async function completeTasks(ids, completed) {
@@ -759,7 +789,7 @@
 
     // Filter field: text search plus '#tag' words (DeckCore.parseFilter).
     const f = parseFilter(query);
-    if (f.text || f.tagGroups.length) filtered = filtered.filter(t => matchesFilter(t, f));
+    if (f.text || f.tagGroups.length || f.excludeTags.length) filtered = filtered.filter(t => matchesFilter(t, f));
 
     // Tab filter
     if (activeFilter === 'focus') {
@@ -1311,7 +1341,11 @@
       const urgClass = urgencyClass(task);
       const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
       const tagsHtml = tags ? `<div class="task-tags-right">${tags}</div>` : '';
-      const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>' : '';
+      const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
+        : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(tabLabel('open'))} when ticked off">⟲</span>` : '';
+      // A keep task's last completion, e.g. when the milk was last bought.
+      const lastDoneDisplay = task.keep && task.last_done && !task.completed_at
+        ? `<span class="task-last-done" title="Last done">✓ ${shortDate(task.last_done)}</span>` : '';
       const focusToday = task.start_date === dateOffset(0);
       const focusTmrw  = task.start_date === dateOffset(1);
       const focusMon   = task.start_date === nextMonday();
@@ -1336,10 +1370,10 @@
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-        task.completed_at);
+        task.keep || task.completed_at);
       const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1400,7 +1434,7 @@
       const inFocus = dueTasks.length + orderedTasks.length + unarrangedTasks.length;
       if (LIMIT && inFocus >= LIMIT) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
-          `<span>⚠ ${inFocus} tasks in focus (limit: ${LIMIT})</span></li>`;
+          `<span>⚠ ${inFocus} tasks in ${esc(tabLabel('focus'))} (limit: ${LIMIT})</span></li>`;
       }
     }
     // No tab is highlighted in Completed, so the list says where you are.
@@ -1453,7 +1487,7 @@
     }
 
     // Attach event listeners
-    listEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    listEl.querySelectorAll('.task-checkbox input').forEach(cb => {
       cb.addEventListener('change', e => {
         const id = e.target.dataset.id;
         const completed = e.target.checked;
@@ -1568,6 +1602,15 @@
     h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
     // Inline code
     h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Checkbox items ("- [ ] milk") become real checkboxes, numbered in order
+    // like DeckCore.toggleDescCheck counts them; ticking one edits the notes.
+    let n = 0;
+    h = h.split('\n').map(line => {
+      const m = line.match(DESC_CHECK_RE);
+      if (!m) return line;
+      const checked = m[2] !== ' ' ? ' checked' : '';
+      return `<label class="task-desc-check"><input type="checkbox" data-desc-check="${n++}"${checked}> <span>${m[4]}</span></label>`;
+    }).join('\n');
     // Line breaks
     h = h.replace(/\n/g, '<br>');
     return h;
@@ -1695,6 +1738,13 @@
   // Pasting a URL into the notes makes a markdown link (pasteUrlAsLink,
   // shared from leaf.js, undoable).
   descTextarea?.addEventListener('paste', e => window.pasteUrlAsLink(descTextarea, e));
+  // Enter in the notes continues a list as in the page editor: "- [ ] eggs"
+  // + Enter starts "- [ ] " (continueList, shared from leaf.js). Registered
+  // after setupNoteAc, so an Enter that picked a link suggestion is skipped.
+  descTextarea?.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing || e.defaultPrevented) return;
+    window.continueList?.(descTextarea, e);
+  });
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   // Segmented control: one button per view, data-filter = the view's name.
@@ -1714,7 +1764,7 @@
     if (!completedLink) return;
     let matches = null;
     const f = parseFilter(filterSearch?.value || '');
-    const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length);
+    const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
     if (filtering) {
       if (!completedLoaded) { fetchCompleted(); }
       else {
@@ -1722,7 +1772,7 @@
       }
     }
     completedLink.classList.toggle('has-matches', matches > 0);
-    completedLink.textContent = activeFilter === 'completed' ? '← Back to open tasks'
+    completedLink.textContent = activeFilter === 'completed' ? `← Back to ${tabLabel(lastTab)}`
       : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
       : matches === 0 ? '✓ No matches in Completed →'
       : filtering ? '✓ Completed →'
@@ -1859,12 +1909,14 @@
     });
   }
 
-  // The word under the caret, if it starts with '#'. Inside an OR word (#a|b)
-  // only the part after the last pipe is being completed.
+  // The word under the caret, if it starts with '#' (or '-#', an exclusion:
+  // the word then starts after the '-'). Inside an OR word (#a|b) only the
+  // part after the last pipe is being completed.
   function hashWordAtCaret(input) {
     const val = input.value;
     const caret = input.selectionStart ?? val.length;
-    const start = val.lastIndexOf(' ', caret - 1) + 1;
+    let start = val.lastIndexOf(' ', caret - 1) + 1;
+    if (val.startsWith('-#', start) && caret > start) start++;
     let end = val.indexOf(' ', caret);
     if (end < 0) end = val.length;
     const w = val.slice(start, end);
@@ -1893,8 +1945,9 @@
     suggest: w => {
       const val = filterSearch.value;
       const rest = val.slice(0, w.start) + val.slice(w.end);
-      const otherTags = rest.split(/\s+/).filter(word => word.startsWith('#')).join(' ');
-      const used = parseFilter(rest).tagGroups.flat();
+      const otherTags = rest.split(/\s+/).filter(word => /^-?#/.test(word)).join(' ');
+      const restFilter = parseFilter(rest);
+      const used = [...restFilter.tagGroups.flat(), ...restFilter.excludeTags];
       const counts = tagCounts(filterTasks(otherTags));
       for (const tag of Object.keys(counts)) if (used.includes(tag.toLowerCase())) delete counts[tag];
       return rankTags(w.partial, counts, w.partial ? 8 : 12);
@@ -1999,6 +2052,7 @@
     } else {
       createdEl.style.display = 'none';
     }
+    keepCb.checked = task ? !!task.keep : initKeep;
     const recType = task?.recurrence?.type || '';
     recTypeSelect.value = recType;
     document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
@@ -2030,7 +2084,7 @@
   function syncRecFields() {
     // Sub-controls are only active when Repeat is both enabled and set.
     const on = !recTypeSelect.disabled && !!recTypeSelect.value;
-    const subHint = on ? '' : (recTypeSelect.disabled ? 'Set a due or start date first' : 'Select a repeat type first');
+    const subHint = on ? '' : (recTypeSelect.disabled ? recTypeSelect.closest('.task-field').title : 'Select a repeat type first');
     const intervalEl = document.getElementById('task-edit-rec-interval' + sfx);
     intervalEl.disabled = !on;
     intervalEl.closest('.task-field').title = subHint;
@@ -2086,12 +2140,15 @@
     // Only meaningful relative to a due date.
     leadEl.disabled = !dueEl.value;
     refreshDateTriggers();
-    // Repeat requires at least one date to be meaningful.
+    // Repeat requires at least one date to be meaningful, and a keep task
+    // never repeats (Keep and Repeat both say what happens after done).
     const noDate = !dueEl.value && !startEl.value;
-    recTypeSelect.disabled = noDate;
-    recTypeSelect.closest('.task-field').title = noDate ? 'Set a due or start date first' : '';
+    recTypeSelect.disabled = noDate || keepCb.checked;
+    recTypeSelect.closest('.task-field').title = keepCb.checked ? 'A keep task does not repeat'
+      : noDate ? 'Set a due or start date first' : '';
     syncRecFields();
   }
+  keepCb.addEventListener('change', () => syncDates('keep'));
   document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => syncDates('lead'));
 
   cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
@@ -2107,10 +2164,11 @@
       due_date: document.getElementById('task-edit-due' + sfx).value || null,
       start_date: document.getElementById('task-edit-start' + sfx).value || null,
       tags: document.getElementById('task-edit-tags' + sfx).value.split(',').map(t => t.trim()).filter(Boolean),
-      rec_type: recTypeSelect.value || null,
+      rec_type: keepCb.checked ? null : recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
       list: cleanList(document.getElementById('task-edit-list' + sfx).value) || null,
+      keep: keepCb.checked,
     };
     // Shorthand in a new task's title wins over the fields (the preview said so).
     const quick = !id && quickParse();
@@ -2381,9 +2439,21 @@
         const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
                   || items.find(el => !selectedIds.has(el.dataset.id));
         setSelected(next?.dataset.id || null);
+        // Keep tasks stay open when completed; undo restores their fields
+        // instead of reopening them from Completed.
+        const kept = completing
+          ? ids.map(id => tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
+               .map(t => [t.id, keepSnapshot(t)])
+          : [];
         await completeTasks(ids, completing);
         const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
-        showUndo(label, () => completeTasks(ids, !completing));
+        showUndo(label, async () => {
+          const keptIds = new Set(kept.map(([id]) => id));
+          const others = ids.filter(id => !keptIds.has(id));
+          if (kept.length) await Promise.all(kept.map(([id, before]) => putTask(id, before)));
+          if (others.length) await completeTasks(others, !completing);
+          else await afterBatchWrite();
+        });
       } else {
         const task = tasks.find(t => t.id === selectedId);
         if (!task) return;

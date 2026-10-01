@@ -396,6 +396,8 @@ def _new_task(**overrides) -> dict:
         "recurrence": None,
         "list": None,
         "spawned_from": None,
+        "keep": False,
+        "last_done": None,
     }
     task.update(overrides)
     return task
@@ -454,7 +456,13 @@ def _spawn_recurring(task: dict) -> dict | None:
     it: ``"due"`` (default) steps from that date; ``"completion"`` steps from
     today. The next date is caught up until >= today. When the task has both
     dates, the start date moves with the due date, keeping the gap between
-    them ("start 3 days before due" carries over to every instance)."""
+    them ("start 3 days before due" carries over to every instance).
+
+    The new start is never before today: the next instance can't have been
+    available before the previous one was done (a daily task with a 2-day
+    gap would otherwise come back "since 2 days ago"). A clamped start would
+    shrink the gap for good, so the series then remembers it in
+    ``recurrence.lead`` (like ``day``) and the next spawn uses that."""
     rec = task.get("recurrence")
     if not rec:
         return None
@@ -463,9 +471,16 @@ def _spawn_recurring(task: dict) -> dict | None:
     primary = due or start
     anchored = primary is not None and rec.get("from") != "completion"
     next_date, next_rec = _next_occurrence(rec, primary if anchored else today, anchored, today)
+    next_rec.pop("lead", None)
     if due:
         new_due = next_date
-        new_start = next_date - (due - start) if start else None
+        new_start = None
+        if start:
+            lead = rec.get("lead", (due - start).days)
+            new_start = next_date - timedelta(days=lead)
+            if new_start < today:
+                new_start = today
+                next_rec["lead"] = lead
     elif start:
         new_due, new_start = None, next_date
     else:
@@ -490,6 +505,17 @@ def _parse_date(val) -> date | None:
         return datetime.strptime(val, "%Y-%m-%d").date() if val else None
     except (TypeError, ValueError):
         return None
+
+
+def _keep_done(task: dict) -> None:
+    """Complete a keep task. It is never archived: done means "back to the
+    pool". It returns to Open with no start date (so it leaves Focus and its
+    Lineup), its deadline is dropped (it was this round's), and the day is
+    recorded in ``last_done``. Undo is a plain update restoring those fields."""
+    task["last_done"] = date.today().isoformat()
+    task["start_date"] = None
+    task["due_date"] = None
+    task["focus_order"] = None
 
 
 def _complete_task(task: dict, now: str | None = None) -> dict | None:
@@ -585,6 +611,19 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
         limit = max(1, min(99, int(params.get("limit") or params.get("capacity", ""))))
     except ValueError:
         limit = ""  # no limit
+    # `labels=Catalogue,Plan,Shopping`: this embed's own names for the tabs, in
+    # on-screen order (Open, Plan, Focus). Only the words change; views and
+    # links (`view=open` …) stay the same. An empty entry keeps the default;
+    # `_` stands for a space, since params are split on whitespace.
+    tab_labels = ["Open", "Plan", "Focus"]
+    for i, name in enumerate(params.get("labels", "").split(",")[:3]):
+        name = name.replace("_", " ").strip()[:30]
+        if name:
+            tab_labels[i] = name
+    open_label, plan_label, focus_label = (html.escape(n) for n in tab_labels)
+    # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
+    # staples); the edit modal's checkbox still turns it off per task.
+    keep = "1" if params.get("keep", "").strip().lower() in ("1", "true", "yes") else ""
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
     # Every list name in use, for the edit modal's List suggestions.
@@ -594,15 +633,15 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
-      <button type="button" role="tab" data-filter="open" aria-selected="false">Open</button>
-      <button type="button" role="tab" data-filter="due" aria-selected="false">Plan</button>
-      <button type="button" role="tab" data-filter="focus" aria-selected="false">Focus</button>
+      <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>
+      <button type="button" role="tab" data-filter="due" aria-selected="false">{plan_label}</button>
+      <button type="button" role="tab" data-filter="focus" aria-selected="false">{focus_label}</button>
     </div>
     <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either" autocomplete="off">
+      <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
       <button class="btn btn-primary" id="task-add-btn{sfx}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
@@ -663,6 +702,9 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
         <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
       </div>
     </div>
+    <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
+      <input type="checkbox" id="task-edit-keep{sfx}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
+    </label>
     <details class="task-edit-links" id="task-edit-links{sfx}">
       <summary>List<span class="task-edit-links-summary" id="task-edit-links-summary{sfx}"></span></summary>
       <div class="task-field" title="A task in a list shows only where [[deck list=…]] embeds that list, not in the main deck">
@@ -909,6 +951,10 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["focus_order"] = _as_order(data["focus_order"], "focus_order")
     if "list" in data:
         task["list"] = _clean_list(_as_str(data["list"] or "", "list"))
+    if "keep" in data:
+        task["keep"] = bool(data["keep"])
+    if "last_done" in data:
+        task["last_done"] = _validate_date(data["last_done"])
     old_start_date = task.get("start_date")
     old_rec = task.get("recurrence") or {}
     if "start_date" in data:
@@ -941,8 +987,23 @@ def _apply_task_fields(task: dict, data: dict) -> None:
             if (old_rec.get("day") and old_rec.get("type") == rec_type
                     and new_primary == old_primary):
                 task["recurrence"]["day"] = old_rec["day"]
+            # Likewise the remembered start→due gap of a clamped start
+            # (_spawn_recurring), while neither date changed.
+            if (old_rec.get("lead") is not None and task.get("due_date") == old_due_date
+                    and task.get("start_date") == old_start_date):
+                task["recurrence"]["lead"] = old_rec["lead"]
         else:
             task["recurrence"] = None
+    # A date changed by hand defines the gap from now on: forget a remembered
+    # one (see _spawn_recurring).
+    rec = task.get("recurrence")
+    if rec and "lead" in rec and (task.get("due_date") != old_due_date
+                                  or task.get("start_date") != old_start_date):
+        del rec["lead"]
+    # Keep and Repeat are two answers to "what happens after done?": a keep
+    # task never repeats.
+    if task.get("keep"):
+        task["recurrence"] = None
 
 
 @bp.put("/api/deck/<task_id>")
@@ -990,7 +1051,9 @@ def api_update_deck_item(task_id):
             completed_list = [t for t in completed_list if t["id"] != task_id]
             active.append(task)
     elif "completed" in data:
-        if data["completed"] and not task.get("completed_at"):
+        if data["completed"] and task.get("keep") and not task.get("completed_at"):
+            _keep_done(task)   # stays open, back in the pool
+        elif data["completed"] and not task.get("completed_at"):
             # Complete: move active → completed
             spawned = _complete_task(task)
             active = [t for t in active if t["id"] != task_id]
@@ -1055,7 +1118,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
     task["tags"] = _clean_tags(snap.get("tags") if isinstance(snap.get("tags"), list) else [])
-    for field in ("due_date", "start_date"):
+    for field in ("due_date", "start_date", "last_done"):
         val = snap.get(field)
         if isinstance(val, str):
             try:
@@ -1073,6 +1136,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     if isinstance(snap.get("sort_order"), int):
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))
+    task["keep"] = bool(snap.get("keep"))
     rec = snap.get("recurrence")
     if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
         task["recurrence"] = {
@@ -1083,6 +1147,10 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
         }
         if isinstance(rec.get("day"), int) and 1 <= rec["day"] <= 31:
             task["recurrence"]["day"] = rec["day"]
+        if isinstance(rec.get("lead"), int) and not isinstance(rec["lead"], bool) and rec["lead"] >= 0:
+            task["recurrence"]["lead"] = rec["lead"]
+    if task["keep"]:
+        task["recurrence"] = None
     return task
 
 
@@ -1128,14 +1196,20 @@ def api_batch_complete_deck():
     updated = []
 
     if mark_completed:
-        moving = [t for t in active if t["id"] in id_set and not t.get("completed_at")]
+        for task in active:
+            if task["id"] in id_set and task.get("keep") and not task.get("completed_at"):
+                _keep_done(task)   # stays open, back in the pool
+                updated.append(task)
+        moving = [t for t in active if t["id"] in id_set
+                  and not t.get("completed_at") and not t.get("keep")]
+        moving_ids = {t["id"] for t in moving}
         spawned_tasks = []
         for task in moving:
             spawned = _complete_task(task, now)
             if spawned:
                 spawned_tasks.append(spawned)
             updated.append(task)
-        active = [t for t in active if t["id"] not in id_set] + spawned_tasks
+        active = [t for t in active if t["id"] not in moving_ids] + spawned_tasks
         completed_list = completed_list + moving
     else:
         moving = [t for t in completed_list if t["id"] in id_set and t.get("completed_at")]

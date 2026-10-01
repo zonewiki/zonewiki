@@ -386,7 +386,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     expect(page.locator(".task-inbox-divider--only")).to_have_text("Completed")
     expect(card(page, "Done one")).to_be_visible()
     expect(card(page, "Open one")).to_have_count(0)
-    expect(link).to_have_text("← Back to open tasks")
+    expect(link).to_have_text("← Back to Plan")   # names the tab it returns to
 
     # Back returns to the tab it came from.
     link.click()
@@ -418,7 +418,7 @@ def test_embed_filter_completed_still_opens_completed(page, wiki):
     wiki.write("log", "# Log\n\n[[deck view=completed]]\n")
     page.goto("/page/log")
     expect(card(page, "Old work")).to_be_visible()
-    expect(page.locator("#task-completed-link")).to_have_text("← Back to open tasks")
+    expect(page.locator("#task-completed-link")).to_have_text("← Back to Focus")
 
 
 def test_filter_points_to_matches_in_completed(page, wiki):
@@ -749,7 +749,7 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     expect(page.locator(".board-day--over")).to_have_count(0)
     # ?limit= (the /deck page) turns it on; the count includes Others.
     page.goto("/deck?view=focus&limit=5")
-    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in focus (limit: 5)")
+    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in Focus (limit: 5)")
     open_tab(page, "due")
     expect(page.locator(".board-day--over")).to_have_count(1)
     # [[deck limit=N]] in an embed.
@@ -947,3 +947,124 @@ def test_focus_line_up_all_appends_others_to_lineup(page, wiki):
     assert task_by_title(page, "Hidden")["focus_order"] is None
     expect(_section(page, "others")).to_have_class(re.compile(r"\bboard-day--empty\b"))
     expect(line_up_all).to_have_count(0)  # nothing left to line up
+
+
+def test_keep_task_goes_back_to_open_with_undo(page, wiki):
+    # Ticking off a keep task (a staple on a shopping list) takes it off
+    # Focus and back to Open, shows when it was last done, and can be undone.
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Milk", "keep": True, "start_date": today})
+    page.clock.install()
+    page.goto("/deck?view=focus")
+    expect(card(page, "Milk").locator(".task-keep")).to_be_visible()
+    card(page, "Milk").locator("input[type=checkbox]").check()
+    page.clock.run_for(5500)   # completion grace period + fade-out
+    expect(card(page, "Milk")).to_have_count(0)
+    wait_for_field(page, "Milk", "start_date", None)
+    assert task_by_title(page, "Milk")["completed_at"] is None
+    expect(page.locator(".task-undo-toast")).to_contain_text("“Milk” done")
+
+    page.locator(".task-undo-btn").click()
+    wait_for_field(page, "Milk", "start_date", today)
+    expect(card(page, "Milk")).to_be_visible()
+    assert task_by_title(page, "Milk")["last_done"] is None
+
+    # Done again, it waits on Open with the day it was last done.
+    card(page, "Milk").locator("input[type=checkbox]").check()
+    page.clock.run_for(5500)
+    wait_for_field(page, "Milk", "last_done", today)
+    open_tab(page, "open")
+    expect(card(page, "Milk").locator(".task-last-done")).to_be_visible()
+
+
+def test_keep_checkbox_in_modal(page, wiki):
+    # keep=1 makes new tasks keep tasks; a keep task can't repeat.
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries keep=1 view=open]]\n")
+    page.goto("/page/shop")
+    page.locator("#task-add-btn").click()
+    keep = page.locator("#task-edit-keep")
+    expect(keep).to_be_checked()
+    page.locator("#task-edit-title").fill("Bread")
+    page.locator("#task-edit-form button[type=submit]").click()
+    expect(card(page, "Bread")).to_be_visible()
+    wait_for_field(page, "Bread", "keep", True)
+
+    expect(card(page, "Bread")).to_have_class(re.compile(r"\btask-selected\b"))  # a new task is selected
+    page.keyboard.press("Enter")
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    expect(keep).to_be_checked()
+    expect(page.locator("#task-edit-rec-type")).to_be_disabled()
+    keep.uncheck()
+    page.locator("#task-edit-form button[type=submit]").click()
+    wait_for_field(page, "Bread", "keep", False)
+
+
+def test_checkboxes_in_task_notes(page, wiki):
+    # "- [ ] item" lines in the notes are real checkboxes; ticking one edits
+    # the notes and leaves the task itself alone.
+    page.request.post("/api/deck", data={"title": "Bake", "description": "Need:\n- [ ] eggs\n- [x] flour"})
+    page.goto("/deck?view=open")
+    checks = card(page, "Bake").locator(".task-desc input[type=checkbox]")
+    expect(checks).to_have_count(2)
+    expect(checks.nth(0)).not_to_be_checked()
+    expect(checks.nth(1)).to_be_checked()
+    expect(card(page, "Bake").locator(".task-desc")).not_to_contain_text("[ ]")
+
+    checks.nth(0).check()
+    wait_for_field(page, "Bake", "description", "Need:\n- [x] eggs\n- [x] flour")
+    expect(page.locator("#task-edit-modal")).to_be_hidden()
+    assert task_by_title(page, "Bake")["completed_at"] is None
+    expect(card(page, "Bake").locator(".task-checkbox input")).not_to_be_checked()
+
+
+def test_notes_continue_checkbox_list_on_enter(page, wiki):
+    # As in the page editor: Enter after a checkbox item starts the next one,
+    # Enter on an empty item ends the list.
+    page.goto("/deck?view=open")
+    page.locator("#task-add-btn").click()
+    notes = page.locator("#task-edit-desc")
+    notes.click()
+    page.keyboard.type("- [x] eggs")
+    page.keyboard.press("Enter")
+    expect(notes).to_have_value("- [x] eggs\n- [ ] ")
+    page.keyboard.type("flour")
+    page.keyboard.press("Enter")
+    page.keyboard.press("Enter")
+    expect(notes).to_have_value("- [x] eggs\n- [ ] flour\n\n")
+    expect(page.locator("#task-edit-modal")).to_be_visible()   # Enter never submits from the notes
+
+
+def test_embed_labels_rename_the_tabs(page, wiki):
+    # labels= changes only the words: tabs, the back link, tooltips. Views
+    # and links keep their names.
+    page.request.post("/api/deck", data={"title": "Milk", "list": "groceries", "keep": True})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
+    page.goto("/page/shop?view=open")
+    expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Plan", "Shopping list"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text("Catalogue")
+    expect(card(page, "Milk").locator(".task-keep")).to_have_attribute(
+        "title", "Keep: back to Catalogue when ticked off")
+    open_tab(page, "completed")
+    expect(page.locator("#task-completed-link")).to_have_text("← Back to Catalogue")
+
+
+def test_filter_excludes_tags(page, wiki):
+    # -#tag hides tasks with that tag; its suggestions work like #tag's.
+    for title, tags in (("Plan trip", "tags,gernot"), ("Call vet", "tags,mary"), ("Untagged", "")):
+        page.request.post("/api/deck", data={"title": title, "tags": tags})
+    page.goto("/deck?view=open")
+    field = page.locator("#task-filter-search")
+    field.click()
+    page.keyboard.type("-#ma")
+    expect(page.locator(".tag-ac-item").first).to_have_text("#mary")
+    page.keyboard.press("Enter")
+    expect(field).to_have_value("-#mary ")
+    expect(card(page, "Call vet")).to_have_count(0)
+    expect(card(page, "Plan trip")).to_be_visible()
+    expect(card(page, "Untagged")).to_be_visible()
+
+    page.keyboard.type("#tags")
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(400)   # the filter is debounced
+    expect(card(page, "Untagged")).to_have_count(0)
+    expect(card(page, "Plan trip")).to_be_visible()
