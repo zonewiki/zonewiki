@@ -205,3 +205,39 @@ class TestExcerpt:
         ex = search.make_excerpt("some leading content", "nomatchword")
         assert "some leading content" in ex
         assert "<mark>" not in ex
+
+    def test_marks_inflected_form(self):
+        # Regression: "running" matched "runs" by stem but highlighted nothing.
+        ex = search.make_excerpt("He runs every morning", "running")
+        assert "<mark>runs</mark>" in ex
+
+    def test_whole_words_only(self):
+        # Regression: "art" marked the inside of "restart".
+        ex = search.make_excerpt("restart the art show", "art")
+        assert ex == "restart the <mark>art</mark> show"
+
+    def test_marks_prefix_match(self):
+        ex = search.make_excerpt("set up the database", "data")
+        assert "<mark>database</mark>" in ex
+
+    def test_marks_typo_match(self):
+        ex = search.make_excerpt("notes on the kubernetes cluster", "kubernets")
+        assert "<mark>kubernetes</mark>" in ex
+
+    def test_marks_accented_word_for_plain_query(self):
+        ex = search.make_excerpt("Termin mit Herrn Müller", "muller")
+        assert "<mark>Müller</mark>" in ex
+
+    def test_phrase_ignores_case(self):
+        ex = search.make_excerpt("one two. Alpha Beta here", "alpha beta")
+        assert "<mark>Alpha Beta</mark>" in ex
+
+    def test_marks_every_match_in_window(self):
+        ex = search.make_excerpt("a cat and another cat", "cat")
+        assert ex.count("<mark>cat</mark>") == 2
+
+    def test_window_centres_on_first_match(self):
+        text = "x " * 200 + "needle" + " y" * 200
+        ex = search.make_excerpt(text, "needle")
+        assert ex.startswith("…") and ex.endswith("…")
+        assert "<mark>needle</mark>" in ex

@@ -168,41 +168,63 @@ class SearchIndex:
         return scored[:limit]
 
 
+def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
+    """Character spans of the words in ``text`` that the query matched, the
+    way the index matches them: same stem, a stem the query is a prefix of,
+    or (only when neither occurs) a close fuzzy match. A query of several
+    words that appears as a phrase (case and accents ignored) is one span,
+    and is the only one, so the excerpt centres on it."""
+    words = [(m.start(), m.end(), fold(m.group())) for m in _WORD_RE.finditer(text)]
+    q_words = [fold(w) for w in _WORD_RE.findall(query)]
+    if not words or not q_words:
+        return []
+    n = len(q_words)
+    if n > 1:
+        for i in range(len(words) - n + 1):
+            if all(words[i + k][2] == q_words[k] for k in range(n)):
+                return [(words[i][0], words[i + n - 1][1])]
+    terms = {stem(w) for w in q_words}
+    stems = [stem(w[2]) for w in words]
+
+    def exact_or_prefix(s: str) -> bool:
+        return any(s == t or (len(t) >= 3 and s.startswith(t)) for t in terms)
+
+    spans = [(w[0], w[1]) for w, s in zip(words, stems) if exact_or_prefix(s)]
+    if spans:
+        return spans
+    fuzzy_terms = [t for t in terms if len(t) >= 4]
+    close = {}
+    for s in stems:
+        if s not in close:
+            close[s] = any(
+                difflib.SequenceMatcher(None, s, t).ratio() >= 0.8 for t in fuzzy_terms
+            )
+    return [(w[0], w[1]) for w, s in zip(words, stems) if close[s]]
+
+
 def make_excerpt(text: str, query: str, before: int = 60, after: int = 90) -> str:
     """Build an HTML-escaped snippet around the first match, bolded via <mark>.
 
-    Prefers the full query phrase if it appears verbatim; otherwise falls back to
-    the earliest individual query word (matched as a substring, so partial words
-    highlight too). Returns a leading excerpt if nothing matches.
+    Matches are whole words found as the index finds them (see _match_spans):
+    "running" marks "runs", a typo marks the word it stands for, and "art"
+    does not mark the inside of "start". Every match inside the window is
+    marked. Returns a leading excerpt if nothing matches.
     """
-    tl = text.lower()
-    ql = query.lower().strip()
-
-    match_at = -1
-    match_len = 0
-    if ql and ql in tl:
-        match_at = tl.find(ql)
-        match_len = len(ql)
-    else:
-        for w in _WORD_RE.findall(ql):
-            i = tl.find(w)
-            if i != -1 and (match_at == -1 or i < match_at):
-                match_at = i
-                match_len = len(w)
-
-    if match_at == -1:
+    spans = _match_spans(text, query)
+    if not spans:
         head = text[:150].replace("\n", " ").strip()
         return html.escape(head) + ("…" if len(text) > 150 else "")
 
-    start = max(0, match_at - before)
-    end = min(len(text), match_at + match_len + after)
-    snippet = text[start:end].replace("\n", " ")
-    rel = match_at - start
-    pre = html.escape(snippet[:rel])
-    mid = html.escape(snippet[rel : rel + match_len])
-    post = html.escape(snippet[rel + match_len :])
-    return (
-        ("…" if start > 0 else "")
-        + f"{pre}<mark>{mid}</mark>{post}"
-        + ("…" if end < len(text) else "")
-    )
+    first_start, first_end = spans[0]
+    start = max(0, first_start - before)
+    end = min(len(text), first_end + after)
+    out, pos = [], start
+    for a, b in spans:
+        if a < start or b > end:
+            continue
+        out.append(html.escape(text[pos:a]))
+        out.append(f"<mark>{html.escape(text[a:b])}</mark>")
+        pos = b
+    out.append(html.escape(text[pos:end]))
+    snippet = "".join(out).replace("\n", " ")
+    return ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else "")

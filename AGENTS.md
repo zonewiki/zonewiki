@@ -380,7 +380,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - **Stemming** (`search.stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
 - **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
 - **Title boost**: title tokens are folded into the document token bag `TITLE_WEIGHT` (3) extra times, so title matches rank higher.
-- Excerpt (`search.make_excerpt`) shows a window around the first match — the full query phrase if present, else the earliest query word — bolded via `<mark>`, HTML-escaped.
+- Excerpt (`search.make_excerpt`) shows a window around the first match, HTML-escaped, with every match in it marked (`<mark>`). Matches are whole words found the way the index finds them (`_match_spans`: same stem, prefix, else fuzzy), so `running` marks "runs" and `art` never marks the inside of "restart". A multi-word query found as a phrase (case and accents ignored) is marked as one span instead.
 - **Performance**: page documents are tokenized once and cached in `server._search_doc_cache` keyed by slug, invalidated per-file on `mtime` change (so on-disk edits stay reflected). Deck task docs come from `deck.task_search_docs()`.
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive. Returns up to 15 results (pages + tasks combined).
