@@ -985,7 +985,10 @@ def task_search_docs() -> list[dict]:
     for task in _read_all() + _read_archived():
         title = task.get("title", "")
         desc = task.get("description", "")
-        text = search.strip_link_targets(f"{title} {desc}".strip())
+        # Tags as "#tag" words, so a page's tag pill (/search?q=<tag>) finds
+        # the tasks with that tag too, and the excerpt can show the match.
+        tags = " ".join(f"#{t}" for t in task.get("tags") or [])
+        text = search.strip_link_targets(f"{title} {desc} {tags}".strip())
         docs.append({
             "slug": "_deck",
             "title": f"[Task] {title}",

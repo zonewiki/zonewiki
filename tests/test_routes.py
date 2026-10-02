@@ -671,6 +671,14 @@ class TestSearch:
         results = client.get("/api/search?q=zzqhost", headers=HOST).get_json()
         assert results == []
 
+    def test_task_found_by_tag(self, client, wiki_dir):
+        # Regression: tasks were indexed by title and notes only, so a page's
+        # tag pill (/search?q=<tag>) never listed the tasks with that tag.
+        client.post("/api/deck", json={"title": "Call Bob", "tags": ["zzqtag"]})
+        results = client.get("/api/search?q=zzqtag", headers=HOST).get_json()
+        assert [r["title"] for r in results] == ["[Task] Call Bob"]
+        assert "<mark>zzqtag</mark>" in results[0]["excerpt"]
+
     def test_search_includes_task_results(self, client, wiki_dir):
         client.post("/api/deck", json={"title": "unique_task_token_abc"})
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)
