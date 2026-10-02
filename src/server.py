@@ -2125,11 +2125,26 @@ def _page_search_docs() -> list[dict]:
     return docs
 
 
+# The BM25 index over the current docs, rebuilt only when a doc changes.
+# Both doc caches hand back the same dict objects until their file changes,
+# so the docs' identities are the key (the cached index keeps them alive, so
+# an id can't be reused while it is the key).
+_search_index_cache: dict = {"key": None, "index": None}
+
+
+def _search_index() -> search.SearchIndex:
+    docs = _page_search_docs() + deck_module.task_search_docs()
+    key = tuple(map(id, docs))
+    if _search_index_cache["key"] != key:
+        _search_index_cache["index"] = search.SearchIndex(docs)
+        _search_index_cache["key"] = key
+    return _search_index_cache["index"]
+
+
 def do_search(q: str) -> list[dict]:
     if not q.strip():
         return []
-    docs = _page_search_docs() + deck_module.task_search_docs()
-    index = search.SearchIndex(docs)
+    index = _search_index()
     results = []
     for _score, d in index.search(q, limit=15):
         r = {

@@ -195,6 +195,11 @@ class TestFuzzy:
         # Typing a truncated word should still match via prefix expansion.
         assert _ranked_slugs(docs, "datab") == ["db"]
 
+    def test_prefix_expansion_finds_exactly_the_words_with_that_prefix(self):
+        docs = [_doc("a", "A", "databank"), _doc("b", "B", "datum dat"),
+                _doc("c", "C", "database"), _doc("d", "D", "update")]
+        assert sorted(_ranked_slugs(docs, "data")) == ["a", "c"]
+
     def test_word_variation_matches_via_stem(self):
         docs = [
             _doc("r", "Notes", "I was running in the park"),

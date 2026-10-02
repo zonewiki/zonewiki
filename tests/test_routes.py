@@ -702,6 +702,23 @@ class TestSearch:
         assert resp.status_code == 200
         assert [r["slug"] for r in resp.get_json()] == ["fine"]
 
+    def test_index_is_reused_until_something_changes(self, client, wiki_dir):
+        path = write_page(wiki_dir, "cached", "# Cached\n\nzzqold\n")
+        first = server._search_index()
+        assert server._search_index() is first
+        path.write_text("# Cached\n\nzzqnew\n", encoding="utf-8")
+        os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 5))
+        assert server._search_index() is not first
+        assert [r["slug"] for r in client.get("/api/search?q=zzqnew", headers=HOST).get_json()] == ["cached"]
+        assert client.get("/api/search?q=zzqold", headers=HOST).get_json() == []
+
+    def test_new_task_and_new_page_reach_the_cached_index(self, client, wiki_dir):
+        client.get("/api/search?q=warm", headers=HOST)
+        client.post("/api/deck", json={"title": "zzqtask"})
+        assert client.get("/api/search?q=zzqtask", headers=HOST).get_json()
+        write_page(wiki_dir, "later", "# Later\n\nzzqpage\n")
+        assert client.get("/api/search?q=zzqpage", headers=HOST).get_json()
+
     def test_search_includes_task_results(self, client, wiki_dir):
         client.post("/api/deck", json={"title": "unique_task_token_abc"})
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)

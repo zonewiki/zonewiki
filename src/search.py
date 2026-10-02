@@ -14,6 +14,7 @@ Design notes:
   in the document's token bag, which naturally raises their BM25 term frequency.
 """
 
+import bisect
 import difflib
 import html
 import math
@@ -129,7 +130,7 @@ class SearchIndex:
         self.idf = {
             t: math.log(1 + (self.n - n + 0.5) / (n + 0.5)) for t, n in df.items()
         }
-        self.vocab = list(df)
+        self.vocab = sorted(df)
 
     def _expand(self, q_tokens: list[str]) -> list[tuple[str, float]]:
         """Map query tokens to (term, weight) pairs, keeping the best weight.
@@ -150,10 +151,13 @@ class SearchIndex:
                 bump(t, 1.0)
                 matched = True
             if len(t) >= 3:
-                for v in self.vocab:
-                    if v != t and v.startswith(t):
-                        bump(v, _PREFIX_WEIGHT)
+                # The vocabulary is sorted: words starting with t are one run.
+                i = bisect.bisect_left(self.vocab, t)
+                while i < len(self.vocab) and self.vocab[i].startswith(t):
+                    if self.vocab[i] != t:
+                        bump(self.vocab[i], _PREFIX_WEIGHT)
                         matched = True
+                    i += 1
             if not matched and len(t) >= 4:
                 for c in difflib.get_close_matches(t, self.vocab, n=3, cutoff=0.8):
                     bump(c, _FUZZY_WEIGHT)
