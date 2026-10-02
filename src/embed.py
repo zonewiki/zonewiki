@@ -1,0 +1,560 @@
+"""Semantic search: embeddings of page sections, searched by meaning.
+
+Opt-in via LEAF_EMBEDDINGS (see from_env). Each page is split into sections
+(chunk_page), each section is turned into a vector by an embedding model, and
+a query is compared against every vector (cosine similarity, brute force).
+That is plenty fast at wiki scale, so there is no vector database: the
+vectors live in memory and in a rebuildable cache file, _index/embeddings.json
+in the wiki directory (kept out of git via .git/info/exclude).
+
+Vectors are content-addressed: a section's vector is keyed by a hash of its
+text, so editing one section re-embeds only that section, and a page renamed
+or touched without changes re-embeds nothing. Embedding runs in a background
+thread (SemanticIndex.start); requests only poke it and query whatever is
+ready, so a slow model never blocks a page view.
+
+server.py fuses these results with BM25 (search.fuse) and shows each page's
+nearest neighbours as "Related" pages.
+
+Run `python3 embed.py --prepare` to install and download the model named by
+LEAF_EMBEDDINGS ahead of time (the Containerfile does this at build time).
+"""
+
+import base64
+import hashlib
+import json
+import math
+import operator
+import os
+import re
+import subprocess
+import sys
+import threading
+import urllib.request
+from array import array
+from pathlib import Path
+from typing import Callable, Iterable
+
+# German and English, also mixed (0.64 GB). On a test wiki it separated real
+# hits from noise far better than the small multilingual MiniLM (which covers
+# ~50 languages and is a third the size) or the English-only bge-small.
+DEFAULT_FASTEMBED_MODEL = "jinaai/jina-embeddings-v2-base-de"
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+
+# Similarity floors per model, (search, related):
+# - search: a query↔section similarity below this is not a hit. Vector search
+#   always has a "nearest" page, so without a floor every query, even
+#   gibberish, would fill the results. LEAF_EMBED_MIN_SCORE overrides it.
+# - related: pages less similar than this (page↔page, each page the mean of
+#   its sections) are not listed as related.
+# Measured on a test wiki: the floor sits above what nonsense queries and
+# unrelated pages score, below what the right page scores. Models differ a
+# lot (bge-small scores even nonsense at 0.55), so an unlisted model gets a
+# guess; tune LEAF_EMBED_MIN_SCORE for it.
+THRESHOLDS = {
+    "jinaai/jina-embeddings-v2-base-de": (0.25, 0.25),
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": (0.4, 0.3),
+}
+DEFAULT_THRESHOLDS = (0.4, 0.4)
+
+# Sections longer than this are split at paragraphs. Small models only read
+# the first ~128–512 tokens of an input, so a long section's tail would be lost.
+MAX_CHUNK_CHARS = 800
+
+CACHE_VERSION = 1
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_LINK_TARGET_RE = re.compile(r"(!?\[[^\]]*\])\([^)]*\)")
+
+
+def log(msg: str) -> None:
+    print(f"[semantic] {msg}", file=sys.stderr, flush=True)
+
+
+# ── Chunking ─────────────────────────────────────────────────────────────────
+
+def _split_long(text: str, max_chars: int) -> list[str]:
+    """Split text at blank lines into pieces of at most max_chars (a single
+    longer paragraph is cut at whitespace)."""
+    pieces, cur = [], ""
+    for para in re.split(r"\n\s*\n", text):
+        para = para.strip()
+        if not para:
+            continue
+        while len(para) > max_chars:
+            cut = para.rfind(" ", 0, max_chars)
+            cut = cut if cut > max_chars // 2 else max_chars
+            if cur:
+                pieces.append(cur)
+                cur = ""
+            pieces.append(para[:cut].strip())
+            para = para[cut:].strip()
+        if cur and len(cur) + 2 + len(para) > max_chars:
+            pieces.append(cur)
+            cur = ""
+        cur = f"{cur}\n\n{para}" if cur else para
+    if cur:
+        pieces.append(cur)
+    return pieces
+
+
+def chunk_page(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
+    """Split a page body into sections at its headings (outside code fences),
+    long sections further at paragraphs. Each chunk starts with its heading,
+    so a hit's excerpt shows where in the page it is. Link targets are
+    dropped (the link text stays), as in the BM25 index."""
+    return [f"{heading}\n{body}" if heading else body
+            for heading, body in chunk_sections(text, max_chars)]
+
+
+def chunk_key(title: str, chunk: str) -> str:
+    """A chunk's identity: the hash its vector is stored under. Retrieval
+    (server.py) uses it to match keyword hits with semantic ones."""
+    return _hash(f"{title}\n{chunk}") if chunk else _hash(title)
+
+
+def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str]]:
+    """chunk_page's pieces as (heading, body); heading is "" before the first."""
+    sections: list[list[str]] = [[]]
+    fence = None
+    for line in text.split("\n"):
+        m = _FENCE_RE.match(line)
+        if m:
+            marker = m.group(1)
+            if fence is None:
+                fence = marker[0]
+            elif marker[0] == fence:
+                fence = None
+        elif fence is None and _HEADING_RE.match(line):
+            sections.append([])
+        sections[-1].append(line)
+    chunks = []
+    for lines in sections:
+        heading = ""
+        m = _HEADING_RE.match(lines[0]) if lines else None
+        if m:
+            heading = m.group(2)
+            lines = lines[1:]
+        body = _LINK_TARGET_RE.sub(r"\1", "\n".join(lines)).strip()
+        if not body:
+            continue
+        for piece in _split_long(body, max_chars):
+            chunks.append((heading, piece))
+    return chunks
+
+
+# ── Vectors ──────────────────────────────────────────────────────────────────
+
+def _normalize(vec: Iterable[float]) -> array:
+    v = array("f", vec)
+    norm = math.sqrt(sum(x * x for x in v)) or 1.0
+    return array("f", (x / norm for x in v))
+
+
+def _dot(a: array, b: array) -> float:
+    return sum(map(operator.mul, a, b))
+
+
+def _mean(vecs: list[array]) -> array | None:
+    if not vecs:
+        return None
+    acc = [0.0] * len(vecs[0])
+    for v in vecs:
+        for i, x in enumerate(v):
+            acc[i] += x
+    return _normalize(acc)
+
+
+def _encode(vec: array) -> str:
+    return base64.b64encode(vec.tobytes()).decode("ascii")
+
+
+def _decode(text: str) -> array:
+    v = array("f")
+    v.frombytes(base64.b64decode(text))
+    return v
+
+
+def _hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+# ── Embedders ────────────────────────────────────────────────────────────────
+# An embedder has a `name` (cache files are per model) and two methods:
+# embed_docs(texts) and embed_query(text), returning plain float sequences.
+# Some models want different prefixes for the two; fastembed adds them.
+
+class FastEmbedder:
+    """A local ONNX model via fastembed. Loaded on first use (seconds)."""
+
+    def __init__(self, model: str = DEFAULT_FASTEMBED_MODEL):
+        self.name = f"fastembed:{model}"
+        self.model_name = model
+        self._model = None
+        self._lock = threading.Lock()
+
+    def _load(self):
+        with self._lock:
+            if self._model is None:
+                from fastembed import TextEmbedding
+                self._model = TextEmbedding(self.model_name,
+                                            cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
+            return self._model
+
+    def embed_docs(self, texts: list[str]) -> list:
+        return [list(v) for v in self._load().passage_embed(texts)]
+
+    def embed_query(self, text: str) -> list:
+        return list(next(iter(self._load().query_embed([text]))))
+
+
+class OllamaEmbedder:
+    """A model served by Ollama (POST /api/embed); no Python dependencies.
+    From inside the container the host's Ollama is at
+    http://host.containers.internal:11434 (OLLAMA_URL)."""
+
+    def __init__(self, model: str, url: str = DEFAULT_OLLAMA_URL):
+        self.name = f"ollama:{model}"
+        self.model_name = model
+        self.url = url.rstrip("/")
+
+    def _embed(self, texts: list[str]) -> list:
+        body = json.dumps({"model": self.model_name, "input": texts}).encode()
+        req = urllib.request.Request(f"{self.url}/api/embed", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return json.load(resp)["embeddings"]
+
+    def embed_docs(self, texts: list[str]) -> list:
+        return self._embed(texts)
+
+    def embed_query(self, text: str) -> list:
+        return self._embed([text])[0]
+
+
+def embedder_from_spec(spec: str):
+    """`fastembed`, `fastembed:<model>` or `ollama:<model>`; None when empty."""
+    spec = spec.strip()
+    if not spec or spec.lower() in ("0", "off", "false", "no"):
+        return None
+    kind, _, model = spec.partition(":")
+    kind = kind.lower()
+    if kind in ("fastembed", "1", "true", "yes", "on"):
+        return FastEmbedder(model.strip() or DEFAULT_FASTEMBED_MODEL)
+    if kind == "ollama" and model.strip():
+        return OllamaEmbedder(model.strip(), os.environ.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL)
+    raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed[:model] or ollama:<model>, got {spec!r}")
+
+
+# ── The index ────────────────────────────────────────────────────────────────
+
+class SemanticIndex:
+    """Section vectors of every page, kept fresh by a background worker.
+
+    pages_fn() lists the current pages as (slug, path); prepare(content, slug)
+    turns a file into (title, body text). Both come from server.py. A page's
+    sections are embedded as "title\\nsection", so each carries its page's
+    topic along.
+    """
+
+    def __init__(self, embedder, cache_path: Path,
+                 pages_fn: Callable[[], Iterable[tuple[str, Path]]],
+                 prepare: Callable[[str, str], tuple[str, str]],
+                 min_score: float | None = None,
+                 related_min_score: float | None = None):
+        self.embedder = embedder
+        self.cache_path = cache_path
+        self.pages_fn = pages_fn
+        self.prepare = prepare
+        search_floor, related_floor = THRESHOLDS.get(getattr(embedder, "model_name", ""),
+                                                     DEFAULT_THRESHOLDS)
+        self.min_score = search_floor if min_score is None else min_score
+        self.related_min_score = related_floor if related_min_score is None else related_min_score
+        self._lock = threading.Lock()      # guards the state below
+        self._sync_lock = threading.Lock()  # one sync at a time
+        # slug -> {"mtime", "chunks": [[hash, text], …]}
+        self._pages: dict[str, dict] = {}
+        self._vecs: dict[str, array] = {}   # chunk hash -> unit vector
+        self._page_vecs: dict[str, array] = {}  # slug -> mean of its chunks
+        self._queries: dict[str, array] = {}    # small cache of query vectors
+        self._wake = threading.Event()
+        self._worker: threading.Thread | None = None
+        self._failed = False
+        self.ready = False
+        self._load_cache()
+
+    # Persistence
+
+    def _load_cache(self) -> None:
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if data.get("version") != CACHE_VERSION or data.get("model") != self.embedder.name:
+            return
+        try:
+            self._vecs = {h: _decode(v) for h, v in data["vectors"].items()}
+            self._pages = data["pages"]
+        except (KeyError, TypeError, ValueError):
+            self._vecs, self._pages = {}, {}
+            return
+        self._page_vecs = {s: v for s, p in self._pages.items()
+                           if (v := self._mean_of(p)) is not None}
+        self.ready = bool(self._pages)
+
+    def _save_cache(self) -> None:
+        data = {
+            "version": CACHE_VERSION,
+            "model": self.embedder.name,
+            "pages": self._pages,
+            "vectors": {h: _encode(v) for h, v in self._vecs.items()},
+        }
+        try:
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.cache_path.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            os.replace(tmp, self.cache_path)
+        except OSError as e:
+            log(f"could not write {self.cache_path}: {e}")
+
+    def _mean_of(self, page: dict) -> array | None:
+        return _mean([self._vecs[h] for h, _t in page["chunks"] if h in self._vecs])
+
+    # Keeping up with the pages
+
+    def sync(self) -> bool:
+        """Bring the vectors in line with the pages on disk: embed new and
+        changed sections, drop deleted pages. Returns whether anything changed."""
+        with self._sync_lock:
+            return self._sync()
+
+    def _sync(self) -> bool:
+        current = {}
+        for slug, path in self.pages_fn():
+            try:
+                current[slug] = (path, path.stat().st_mtime)
+            except OSError:
+                continue
+        pages = {s: p for s, p in self._pages.items() if s in current}
+        changed = len(pages) != len(self._pages)
+        todo: dict[str, str] = {}   # hash -> text to embed
+        for slug, (path, mtime) in current.items():
+            old = pages.get(slug)
+            if old and old["mtime"] == mtime:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            title, body = self.prepare(content, slug)
+            chunks = [[chunk_key(title, c), c] for c in chunk_page(body)]
+            if not chunks and title:
+                chunks = [[chunk_key(title, ""), ""]]
+            for h, c in chunks:
+                if h not in self._vecs:
+                    todo[h] = f"{title}\n{c}".strip()
+            pages[slug] = {"mtime": mtime, "chunks": chunks}
+            changed = True
+        new_vecs: dict[str, array] = {}
+        if todo:
+            hashes = list(todo)
+            try:
+                for i in range(0, len(hashes), 64):
+                    batch = hashes[i:i + 64]
+                    for h, v in zip(batch, self.embedder.embed_docs([todo[h] for h in batch])):
+                        new_vecs[h] = _normalize(v)
+                if self._failed:
+                    log("embedding works again")
+                    self._failed = False
+            except Exception as e:  # model missing, Ollama down, …: keep BM25 working
+                if not self._failed:
+                    log(f"embedding failed, search falls back to keywords: {e}")
+                    self._failed = True
+                # Pages whose sections couldn't be embedded are retried next time.
+                for slug, p in list(pages.items()):
+                    if any(h not in self._vecs and h not in new_vecs for h, _ in p["chunks"]):
+                        if slug in self._pages:
+                            pages[slug] = self._pages[slug]
+                        else:
+                            del pages[slug]
+        if not changed and not new_vecs:
+            return False
+        used = {h for p in pages.values() for h, _ in p["chunks"]}
+        vecs = {h: v for h, v in {**self._vecs, **new_vecs}.items() if h in used}
+        page_vecs = {}
+        for slug, p in pages.items():
+            if slug in self._page_vecs and self._pages.get(slug) is p:
+                page_vecs[slug] = self._page_vecs[slug]
+            else:
+                m = _mean([vecs[h] for h, _ in p["chunks"] if h in vecs])
+                if m is not None:
+                    page_vecs[slug] = m
+        with self._lock:
+            self._pages, self._vecs, self._page_vecs = pages, vecs, page_vecs
+            self.ready = True
+        self._save_cache()
+        return True
+
+    def start(self) -> None:
+        """Run sync in a daemon thread, now and after every poke()."""
+        if self._worker:
+            return
+
+        def run():
+            first = True
+            while True:
+                try:
+                    self.sync()
+                    if first:
+                        log(f"{len(self._pages)} pages, {len(self._vecs)} sections indexed")
+                except Exception as e:
+                    log(f"sync failed: {e}")
+                first = False
+                self._wake.wait()
+                self._wake.clear()
+
+        self._worker = threading.Thread(target=run, name="leaf-semantic", daemon=True)
+        self._worker.start()
+
+    def poke(self) -> None:
+        """Ask the worker to check for changed pages (non-blocking)."""
+        self._wake.set()
+
+    # Queries
+
+    def _query_vec(self, query: str) -> array | None:
+        key = query.strip().lower()
+        v = self._queries.get(key)
+        if v is None:
+            try:
+                v = _normalize(self.embedder.embed_query(query))
+            except Exception as e:
+                if not self._failed:
+                    log(f"query embedding failed, search falls back to keywords: {e}")
+                    self._failed = True
+                return None
+            if len(self._queries) >= 128:
+                self._queries.clear()
+            self._queries[key] = v
+        return v
+
+    def _chunk_scores(self, query: str, known: Iterable[str] | None):
+        """(slug, chunk key, score, text) of every section at least min_score
+        similar to the query, in no particular order."""
+        if not self.ready or not query.strip():
+            return []
+        q = self._query_vec(query)
+        if q is None:
+            return []
+        known = set(known) if known is not None else None
+        with self._lock:
+            pages, vecs = self._pages, self._vecs
+        hits = []
+        for slug, p in pages.items():
+            if known is not None and slug not in known:
+                continue
+            for h, text in p["chunks"]:
+                v = vecs.get(h)
+                if v is not None and (s := _dot(q, v)) >= self.min_score:
+                    hits.append((slug, h, s, text))
+        return hits
+
+    def search(self, query: str, known: Iterable[str] | None = None,
+               limit: int = 30) -> list[tuple[str, float, str]]:
+        """Pages whose best section is at least min_score similar to the query,
+        best first, as (slug, score, that section's text)."""
+        best: dict[str, tuple[float, str]] = {}
+        for slug, _h, s, text in self._chunk_scores(query, known):
+            if s > best.get(slug, (-1.0, ""))[0]:
+                best[slug] = (s, text)
+        ranked = sorted(best.items(), key=lambda kv: -kv[1][0])[:limit]
+        return [(slug, s, text) for slug, (s, text) in ranked]
+
+    def search_chunks(self, query: str, known: Iterable[str] | None = None,
+                      limit: int = 30) -> list[str]:
+        """Keys of the sections most similar to the query, best first; several
+        may come from one page (retrieval for an LLM wants the passages)."""
+        hits = sorted(self._chunk_scores(query, known), key=lambda x: -x[2])
+        return [h for _slug, h, _s, _t in hits[:limit]]
+
+    def related(self, slug: str, known: Iterable[str] | None = None,
+                exclude: Iterable[str] = (), limit: int = 5) -> list[tuple[str, float]]:
+        """The pages most similar to slug (by their mean vectors), best first."""
+        with self._lock:
+            page_vecs = self._page_vecs
+        me = page_vecs.get(slug)
+        if me is None:
+            return []
+        known = set(known) if known is not None else None
+        skip = set(exclude) | {slug}
+        scored = []
+        for other, v in page_vecs.items():
+            if other in skip or (known is not None and other not in known):
+                continue
+            s = _dot(me, v)
+            if s >= self.related_min_score:
+                scored.append((other, s))
+        scored.sort(key=lambda x: -x[1])
+        return scored[:limit]
+
+
+def exclude_from_git(wiki_dir: Path, entry: str = "/_index/") -> None:
+    """List the cache dir in .git/info/exclude (not .gitignore, which would
+    itself show up as an uncommitted change)."""
+    info = wiki_dir / ".git" / "info"
+    if not info.parent.is_dir():
+        return
+    exclude = info / "exclude"
+    try:
+        text = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+        if entry not in text.split("\n"):
+            info.mkdir(exist_ok=True)
+            exclude.write_text(text + ("" if not text or text.endswith("\n") else "\n")
+                               + entry + "\n", encoding="utf-8")
+    except OSError as e:
+        log(f"could not update {exclude}: {e}")
+
+
+def from_env(wiki_dir: Path, pages_fn, prepare) -> SemanticIndex | None:
+    """The SemanticIndex LEAF_EMBEDDINGS asks for, or None (keywords only).
+    A missing dependency or a bad setting is logged, not fatal."""
+    try:
+        embedder = embedder_from_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
+    except ValueError as e:
+        log(str(e))
+        return None
+    if embedder is None:
+        return None
+    if isinstance(embedder, FastEmbedder):
+        try:
+            import fastembed  # noqa: F401
+        except ImportError:
+            log("LEAF_EMBEDDINGS is set but fastembed is not installed "
+                "(pip install fastembed); using keyword search only")
+            return None
+    min_score = None
+    if os.environ.get("LEAF_EMBED_MIN_SCORE"):
+        try:
+            min_score = float(os.environ["LEAF_EMBED_MIN_SCORE"])
+        except ValueError:
+            log("LEAF_EMBED_MIN_SCORE is not a number; using the default")
+    exclude_from_git(wiki_dir)
+    log(f"semantic search on, model {embedder.name}")
+    return SemanticIndex(embedder, wiki_dir / "_index" / "embeddings.json",
+                         pages_fn, prepare, min_score=min_score)
+
+
+def prepare_model() -> None:
+    """Install fastembed and download LEAF_EMBEDDINGS' model (build time)."""
+    embedder = embedder_from_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
+    if not isinstance(embedder, FastEmbedder):
+        return
+    subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
+                    "--no-cache-dir", "-q", "fastembed"], check=True)
+    embedder.embed_query("warm up")
+    print(f"Downloaded {embedder.model_name}")
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["--prepare"]:
+    prepare_model()

@@ -22,6 +22,8 @@ from mdit_py_plugins.gfm_autolink import gfm_autolink_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
 import deck as deck_module
+import embed
+import mcp_server
 import search
 
 app = Flask(__name__, static_folder=None)
@@ -50,6 +52,8 @@ def _source_build(root: Path = Path(__file__).resolve().parent.parent) -> str:
 LEAF_BUILD = os.environ.get("LEAF_BUILD") or _source_build()
 
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
+# Bearer token for /mcp (see mcp_endpoint); needed there when LEAF_PASSWORD is set.
+LEAF_MCP_TOKEN = os.environ.get("LEAF_MCP_TOKEN", "")
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
@@ -91,7 +95,8 @@ def check_origin():
 def check_auth():
     if not LEAF_PASSWORD:
         return
-    if request.endpoint in ("login", "logout", "serve_public"):
+    # /mcp checks its own bearer token: an MCP client can't log in.
+    if request.endpoint in ("login", "logout", "serve_public", "mcp_endpoint"):
         return
     if not session.get("authenticated"):
         next_url = request.path
@@ -1146,6 +1151,27 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
     return bl_html, bl_chip
 
 
+def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
+    """The "Related" section: the pages most similar in meaning (semantic
+    search only). Pages already linked either way are left out; the point is
+    connections you haven't written down."""
+    if not SEMANTIC:
+        return ""
+    SEMANTIC.poke()
+    pages = {s: p for p, s in iter_pages()}
+    _, outgoing = _page_meta(path, slug)
+    exclude = outgoing | {b["slug"] for b in backlinks}
+    related = SEMANTIC.related(slug, known=pages, exclude=exclude)
+    if not related:
+        return ""
+    items = "".join(
+        f'<li><a href="/page/{html.escape(other)}">'
+        f'{html.escape(_page_meta(pages[other], other)[0])}</a></li>'
+        for other, _score in related
+    )
+    return f'<section class="backlinks" id="related"><h3>Related</h3><ul>{items}</ul></section>'
+
+
 def _build_delete_dialog(slug: str, title: str) -> str:
     """Return delete-confirmation dialog HTML, or empty string for the index page."""
     if is_protected(slug):
@@ -1566,7 +1592,9 @@ def view_page(slug):
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    bl_html, bl_chip = _build_backlinks_html(slug, find_backlinks(slug), find_task_backlinks(slug))
+    backlinks = find_backlinks(slug)
+    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, find_task_backlinks(slug))
+    bl_html += _build_related_html(slug, path, backlinks)
     delete_dialog = _build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
 
@@ -2141,16 +2169,54 @@ def _search_index() -> search.SearchIndex:
     return _search_index_cache["index"]
 
 
+# ── Semantic search (opt-in, see embed.py) ───────────────────────────────────
+
+def _semantic_text(content: str, slug: str) -> tuple[str, str]:
+    """A page as (title, body) for embedding: the tldr and tags lead, the
+    frontmatter block and the H1 (the title already) are dropped."""
+    meta, body = parse_frontmatter(content)
+    lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
+    body = strip_h1(body)
+    return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
+
+
+# None unless LEAF_EMBEDDINGS is set: then search is hybrid (BM25 fused with
+# vector similarity) and pages list their nearest neighbours as Related.
+SEMANTIC = embed.from_env(WIKI_DIR, lambda: [(s, p) for p, s in iter_pages()], _semantic_text)
+if SEMANTIC:
+    SEMANTIC.start()
+
+# How deep each ranking goes into the fusion; the fused list is cut to 15.
+FUSE_DEPTH = 30
+
+
+def _ranked_docs(q: str, index: search.SearchIndex) -> tuple[list[dict], dict[str, str]]:
+    """The 15 best docs for q, plus each semantic hit's best section (slug ->
+    text) for its excerpt. Keyword ranking only, unless semantic search is on
+    and ready: then BM25 and vector similarity are fused (search.fuse)."""
+    bm25 = [d for _s, d in index.search(q, limit=FUSE_DEPTH if SEMANTIC else 15)]
+    if not SEMANTIC:
+        return bm25, {}
+    SEMANTIC.poke()
+    pages = {d["slug"]: d for d in index.docs if d.get("type") != "task"}
+    hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
+    if not hits:
+        return bm25[:15], {}
+    fused = search.fuse([bm25, [pages[slug] for slug, _s, _t in hits]])
+    return fused[:15], {slug: text for slug, _s, text in hits}
+
+
 def do_search(q: str) -> list[dict]:
     if not q.strip():
         return []
-    index = _search_index()
+    docs, sections = _ranked_docs(q, _search_index())
     results = []
-    for _score, d in index.search(q, limit=15):
+    for d in docs:
+        section = sections.get(d["slug"]) if d.get("type") != "task" else None
         r = {
             "slug": d["slug"],
             "title": d["title"],
-            "excerpt": search.make_excerpt(d["excerpt_text"], q),
+            "excerpt": search.make_excerpt(d["excerpt_text"], q, fallback=section),
         }
         for k in ("type", "task_id", "status", "list", "year"):
             if d.get(k) is not None:
@@ -2158,6 +2224,175 @@ def do_search(q: str) -> list[dict]:
         r["href"] = _result_href(r)
         results.append(r)
     return results
+
+
+# ── Retrieval for LLMs (the MCP server) ───────────────────────────────────────
+# Like search, but it returns sections rather than pages, with their full
+# text: an LLM needs the passages, and the best ones may share a page. BM25
+# runs over sections here, fused with semantic section hits when that is on.
+
+_chunk_doc_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _page_chunk_docs() -> list[dict]:
+    """Every page's sections (embed.chunk_sections) as BM25 documents,
+    cached per page by mtime like _search_doc_cache. A section's `key` is
+    the one its vector has in the semantic index."""
+    docs, seen = [], set()
+    for md_file, slug in iter_pages():
+        try:
+            mtime = md_file.stat().st_mtime
+        except OSError:
+            continue
+        cached = _chunk_doc_cache.get(slug)
+        if not cached or cached[0] != mtime:
+            try:
+                content = md_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            title, body = _semantic_text(content, slug)
+            chunks = []
+            for heading, text in embed.chunk_sections(body) or [("", "")]:
+                chunk = f"{heading}\n{text}" if heading else text
+                chunks.append({
+                    "slug": slug, "title": title, "heading": heading, "text": text,
+                    "key": embed.chunk_key(title, chunk),
+                    "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT,
+                })
+            cached = _chunk_doc_cache[slug] = (mtime, chunks)
+        seen.add(slug)
+        docs.extend(cached[1])
+    for stale in [s for s in _chunk_doc_cache if s not in seen]:
+        del _chunk_doc_cache[stale]
+    return docs
+
+
+_chunk_index_cache: dict = {"key": None, "index": None}
+
+
+def _chunk_index() -> search.SearchIndex:
+    docs = _page_chunk_docs()
+    key = tuple(map(id, docs))
+    if _chunk_index_cache["key"] != key:
+        _chunk_index_cache["index"] = search.SearchIndex(docs)
+        _chunk_index_cache["key"] = key
+    return _chunk_index_cache["index"]
+
+
+def retrieve(q: str, limit: int = 8) -> list[dict]:
+    """The sections most relevant to q, best first (dicts with slug, title,
+    heading, text)."""
+    if not q.strip():
+        return []
+    index = _chunk_index()
+    ranked = [d for _s, d in index.search(q, limit=FUSE_DEPTH)]
+    if SEMANTIC:
+        SEMANTIC.poke()
+        by_key = {d["key"]: d for d in index.docs}
+        keys = SEMANTIC.search_chunks(q, known={d["slug"] for d in index.docs}, limit=FUSE_DEPTH)
+        hits = [by_key[k] for k in keys if k in by_key]
+        if hits:
+            ranked = search.fuse([ranked, hits])
+    return ranked[:limit]
+
+
+def _mcp_int(args: dict, name: str, default: int, top: int) -> int:
+    value = args.get(name, default)
+    if isinstance(value, str) and value.strip().isdigit():
+        value = int(value)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise mcp_server.ToolError(f"{name} must be a whole number")
+    return max(1, min(value, top))
+
+
+def _mcp_page_slug(raw: str) -> str | None:
+    """The existing page a slug-ish string names: a slug, '/page/<slug>', a
+    full URL, '<slug>.md', or the page's name ('Git Remote')."""
+    raw = raw.strip()
+    if "/page/" in raw:
+        raw = raw.split("/page/", 1)[1]
+    raw = raw.split("#", 1)[0].strip("/")
+    if raw.endswith(".md"):
+        raw = raw[:-3]
+    for slug in (raw, to_slug(raw)):
+        path = safe_path(slug) if slug else None
+        if path is not None and path.is_file():
+            return slug
+    return None
+
+
+def _mcp_call_tool(name: str, args: dict) -> str:
+    base = request.host_url.rstrip("/")
+    if name == "search_wiki":
+        query = args.get("query")
+        if not isinstance(query, str) or not query.strip():
+            raise mcp_server.ToolError("query must be a non-empty string")
+        hits = retrieve(query, _mcp_int(args, "limit", 8, 20))
+        if not hits:
+            return "No matching sections. Try other words, or list_pages to browse."
+        out = []
+        for i, d in enumerate(hits, 1):
+            anchor = f"#{_heading_id(_plain_heading(d['heading']))}" if d["heading"] else ""
+            where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
+            out.append(f"[{i}] {where}\nslug: {d['slug']}\nurl: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")
+        return "\n\n---\n\n".join(out)
+    if name == "read_page":
+        raw = args.get("slug")
+        if not isinstance(raw, str) or not raw.strip():
+            raise mcp_server.ToolError("slug must be a non-empty string")
+        slug = _mcp_page_slug(raw)
+        if slug is None:
+            raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
+        content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
+        return f"slug: {slug}\nurl: {base}/page/{slug}\n\n{content}"
+    if name == "list_pages":
+        limit = _mcp_int(args, "limit", 100, 1000)
+        pages = []
+        for md_file, slug in iter_pages():
+            try:
+                mtime = md_file.stat().st_mtime
+            except OSError:
+                continue
+            pages.append((mtime, slug, _page_meta(md_file, slug)[0]))
+        pages.sort(reverse=True)
+        lines = [f"{slug} | {title} | edited {fmt_date(mtime)}" for mtime, slug, title in pages[:limit]]
+        shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
+        return f"Pages, most recently edited first ({shown}); slug | title | last edit:\n" + "\n".join(lines)
+    raise mcp_server.ToolError(f"Unknown tool: {name}")
+
+
+def _mcp_authorized() -> bool:
+    """With LEAF_MCP_TOKEN set, /mcp needs it as a bearer token. Without
+    one it is as open as the wiki's pages are, so a LEAF_PASSWORD-protected
+    wiki keeps /mcp closed until a token is set."""
+    if LEAF_MCP_TOKEN:
+        auth = request.headers.get("Authorization", "")
+        return auth.startswith("Bearer ") and hmac.compare_digest(
+            auth[len("Bearer "):].strip().encode(), LEAF_MCP_TOKEN.encode())
+    return not LEAF_PASSWORD
+
+
+@app.route("/mcp", methods=["GET", "POST", "DELETE"])
+def mcp_endpoint():
+    """MCP over HTTP (see mcp_server.py): one JSON-RPC message per POST,
+    answered with JSON. GET (a server-sent event stream) and DELETE (ending
+    a session) aren't offered: there are no notifications and no sessions."""
+    if not _mcp_authorized():
+        hint = ("set LEAF_MCP_TOKEN and send it as 'Authorization: Bearer <token>'"
+                if not LEAF_MCP_TOKEN else "wrong or missing bearer token")
+        return jsonify({"error": f"Unauthorized: {hint}"}), 401, {"WWW-Authenticate": "Bearer"}
+    if request.method != "POST":
+        return "", 405, {"Allow": "POST"}
+    try:
+        message = json.loads(request.get_data(as_text=True))
+    except ValueError:
+        return jsonify({"jsonrpc": "2.0", "id": None,
+                        "error": {"code": -32700, "message": "Parse error"}}), 400
+    if isinstance(message, list):  # a batch (protocol 2025-03-26)
+        replies = [r for m in message if (r := mcp_server.handle(m, _mcp_call_tool, VERSION))]
+        return (jsonify(replies), 200) if replies else ("", 202)
+    reply = mcp_server.handle(message, _mcp_call_tool, VERSION)
+    return (jsonify(reply), 200) if reply else ("", 202)
 
 
 @app.get("/api/search")

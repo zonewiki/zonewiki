@@ -106,6 +106,31 @@ def tokenize(text: str) -> list[str]:
     return [stem(m.group()) for m in _WORD_RE.finditer(fold(text))]
 
 
+# English and German function words, folded. Left out of a query (never out
+# of the index) when it has other words: in a small wiki "the" or "in" is not
+# in every page, so BM25 gives them weight, and a question like "when is the
+# car going to the mechanic" ranked pages by its filler words. Words that are
+# also nouns or names (may, will, it, man, art) are not in the list.
+STOPWORDS = frozenset("""
+a an and are as at be been but by can could did do does for from had has have
+how i if in into is me my of on or our so than that the their them then there
+these they this those to was we were what when where which who whom why with
+would you your about after before over under up down out
+aber als am an auf aus bei bin bis bist da dann das dass dem den der des die
+dies diese dieser doch du ein eine einem einen einer er es fur hab habe hat
+hatte ich ihr im in ist ja mich mir mit nach nicht noch nur ob oder sich sie
+sind so uber um und uns von vor war waren was welche welcher wenn wer wie wir
+wo zu zum zur
+""".split())
+
+
+def query_words(query: str) -> list[str]:
+    """The folded words of a query that count: all but the stopwords, unless
+    that leaves nothing ("what is this" still searches)."""
+    words = _WORD_RE.findall(fold(query))
+    return [w for w in words if w not in STOPWORDS] or words
+
+
 class SearchIndex:
     """In-memory BM25 index over a list of pre-tokenized documents."""
 
@@ -165,7 +190,7 @@ class SearchIndex:
 
     def search(self, query: str, limit: int = 15) -> list[tuple[float, dict]]:
         """Return up to ``limit`` (score, doc) pairs ranked most-relevant first."""
-        q_tokens = tokenize(query)
+        q_tokens = [stem(w) for w in query_words(query)]
         if not q_tokens or self.n == 0:
             return []
         weighted = self._expand(q_tokens)
@@ -204,7 +229,7 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
         for i in range(len(words) - n + 1):
             if all(words[i + k][2] == q_words[k] for k in range(n)):
                 return [(words[i][0], words[i + n - 1][1])]
-    terms = {stem(w) for w in q_words}
+    terms = {stem(w) for w in query_words(query)}
     stems = [stem(w[2]) for w in words]
 
     def exact_or_prefix(s: str) -> bool:
@@ -223,16 +248,20 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
     return [(w[0], w[1]) for w, s in zip(words, stems) if close[s]]
 
 
-def make_excerpt(text: str, query: str, before: int = 60, after: int = 90) -> str:
+def make_excerpt(text: str, query: str, before: int = 60, after: int = 90,
+                 fallback: str | None = None) -> str:
     """Build an HTML-escaped snippet around the first match, bolded via <mark>.
 
     Matches are whole words found as the index finds them (see _match_spans):
     "running" marks "runs", a typo marks the word it stands for, and "art"
     does not mark the inside of "start". Every match inside the window is
-    marked. Returns a leading excerpt if nothing matches.
+    marked. Returns a leading excerpt if nothing matches: of ``fallback`` when
+    given (the section a semantic hit came from), else of the text.
     """
     spans = _match_spans(text, query)
     if not spans:
+        if fallback:
+            text = fallback
         head = text[:150].replace("\n", " ").strip()
         return html.escape(head) + ("…" if len(text) > 150 else "")
 
@@ -249,3 +278,24 @@ def make_excerpt(text: str, query: str, before: int = 60, after: int = 90) -> st
     out.append(html.escape(text[pos:end]))
     snippet = "".join(out).replace("\n", " ")
     return ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else "")
+
+
+# Reciprocal rank fusion: each list adds 1/(RRF_K + rank) for every item in it.
+# It needs only the ranks, so BM25 scores and cosine similarities, which are
+# on unrelated scales, can be merged without normalising either.
+RRF_K = 60
+
+
+def fuse(rankings: list[list], key=id) -> list:
+    """Merge ranked lists (best first) into one by reciprocal rank fusion.
+    Items are identified by key(item); an item high in several lists beats
+    one high in a single list. Ties keep the order items were first seen in,
+    so the first list (BM25) wins them."""
+    scores: dict = {}
+    items: dict = {}
+    for ranking in rankings:
+        for rank, item in enumerate(ranking):
+            k = key(item)
+            scores[k] = scores.get(k, 0.0) + 1.0 / (RRF_K + rank + 1)
+            items.setdefault(k, item)
+    return sorted(items.values(), key=lambda item: -scores[key(item)])

@@ -265,3 +265,29 @@ class TestExcerpt:
         ex = search.make_excerpt(text, "needle")
         assert ex.startswith("…") and ex.endswith("…")
         assert "<mark>needle</mark>" in ex
+
+
+# ── Stopwords ──────────────────────────────────────────────────────────────
+
+
+class TestStopwords:
+    def test_filler_words_dropped_from_query(self):
+        assert search.query_words("When is the car going to the Werkstatt?") == ["car", "going", "werkstatt"]
+
+    def test_german_folded(self):
+        assert search.query_words("Termin für das Auto") == ["termin", "auto"]
+
+    def test_all_stopwords_kept(self):
+        assert search.query_words("what is this") == ["what", "is", "this"]
+
+    def test_filler_words_dont_rank(self):
+        docs = [_doc("filler", "Notes", "the the is to the in"), _doc("car", "Car", "car repair")]
+        assert _ranked_slugs(docs, "the car") == ["car"]
+
+    def test_filler_words_not_marked(self):
+        out = search.make_excerpt("Holiday plans in Italy, in August.", "holiday in august")
+        assert "<mark>in</mark>" not in out and "<mark>August</mark>" in out
+
+    def test_phrase_still_marked_whole(self):
+        out = search.make_excerpt("Two weeks of holiday in Italy.", "holiday in italy")
+        assert "<mark>holiday in Italy</mark>" in out

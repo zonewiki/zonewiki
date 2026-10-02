@@ -29,7 +29,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | Syntax highlight    | `highlight.js` (loaded client-side from CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | BM25 in `search.py`; search modal (Ctrl+P) and `/search` |
+| Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
 | Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck*.json`) |
 | Container           | Podman (Ubuntu 26.04 LTS base image)        |
 
@@ -50,7 +50,9 @@ No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constrain
     ├── requirements.txt
     ├── server.py           # Flask server — wiki routes, rendering, shell
     ├── deck.py             # Deck module — task API, [[deck]] embed, storage
-    ├── search.py           # BM25 search ranking (stemming, fuzzy, excerpts)
+    ├── search.py           # BM25 search ranking (stemming, fuzzy, excerpts), rank fusion
+    ├── embed.py            # Optional semantic search: section embeddings, Related pages
+    ├── mcp_server.py       # MCP protocol (JSON-RPC) for /mcp: wiki tools for LLM clients
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
@@ -72,7 +74,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ### Files
 
 - **`Containerfile`** — Ubuntu 26.04 LTS base, installs Python + pip via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`. Built with `podman build` (podman reads `Containerfile` by default).
-- **`run.sh`** — convenience script driving `podman build` and `podman run` directly (no Compose dependency). It reads `WIKI_DATA` and the optional env vars (`LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`, `TZ`) from `.env`, mounts `$WIKI_DATA` to `/wiki-data`, and passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives. `up` uses `--replace`, so re-running it rebuilds and restarts the existing container. The container gets the host's timezone (`podman run --tz local`; a `TZ` in `.env`, e.g. `Europe/Berlin`, overrides it), so "today" on the server (due badge, deck dates, scratch-note names, "Last changed") is the user's day, not UTC. Without `/etc/localtime` on the host and no `TZ`, it stays UTC.
+- **`run.sh`** — convenience script driving `podman build` and `podman run` directly (no Compose dependency). It reads `WIKI_DATA` and the optional env vars (`LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`, `TZ`, `LEAF_EMBEDDINGS`, `LEAF_EMBED_MIN_SCORE`, `OLLAMA_URL`, `LEAF_MCP_TOKEN`) from `.env`, mounts `$WIKI_DATA` to `/wiki-data`, and passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives. `up` uses `--replace`, so re-running it rebuilds and restarts the existing container. The container gets the host's timezone (`podman run --tz local`; a `TZ` in `.env`, e.g. `Europe/Berlin`, overrides it), so "today" on the server (due badge, deck dates, scratch-note names, "Last changed") is the user's day, not UTC. Without `/etc/localtime` on the host and no `TZ`, it stays UTC.
 - **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically; `run.sh` only passes an explicit `--user UID:GID` when podman runs rootful. When SELinux is enforcing, the volume is mounted with `:Z` relabelling.
 
 ### Commands
@@ -136,6 +138,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI)     |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
+| POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
 | GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
@@ -167,6 +170,7 @@ Every page view includes:
 - **Breadcrumb** — a small green leaf logo plus `Leaf › Page Title` above the page header, with the branded home link leading back to the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`leaf.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the home link, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen deck edit modal's buttons off-screen.
 - **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
 - **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the top right of the breadcrumb. On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section. Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `leaf.js`) instead of scrolling down. A second tap or a tap elsewhere closes it. The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
+- **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`_build_related_html`). Absent when none clears the similarity floor.
 - **Linked tasks** — open deck tasks whose title/description link to the page. Each entry is a single link to that task in the deck (`/deck?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `_task_href()`); links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
 
 ---
@@ -389,7 +393,36 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - **Performance**: page documents are tokenized once and cached in `server._search_doc_cache` keyed by slug, invalidated per-file on `mtime` change (so on-disk edits stay reflected). The BM25 index itself is cached too (`server._search_index()`), keyed by the identities of the cached docs, so it is rebuilt only when a page or the deck changed. Prefix expansion bisects the sorted vocabulary. Deck task docs come from `deck.task_search_docs()`: title, notes and tags (as `#tag` words, so a page's tag pill finds tasks with that tag too).
 - `GET /search?q=...` renders a full results page for direct links / no-JS fallback.
 - Search is case-insensitive. Returns up to 15 results (pages + tasks combined).
+- **Semantic search (opt-in, `src/embed.py`)**: set `LEAF_EMBEDDINGS` in `.env` to `fastembed` (local ONNX model, default `jinaai/jina-embeddings-v2-base-de`, German + English), `fastembed:<model>`, or `ollama:<model>` (no Python deps; from the container the host's Ollama is `OLLAMA_URL=http://host.containers.internal:11434`). Unset, Leaf is keyword-only and nothing below runs. With a fastembed model, `run.sh` passes the setting as a build arg and the `Containerfile` runs `embed.py --prepare`, which installs fastembed and bakes the model into the image (`FASTEMBED_CACHE_PATH=/opt/fastembed`): the image grows by about 1 GB, and the first search doesn't wait for a download. A missing dependency, a bad setting or a failing model is logged (`[semantic] …`) and search falls back to keywords.
+  - **Chunks**: each page is split at its headings outside code fences (`chunk_page`), long sections further at paragraphs (`MAX_CHUNK_CHARS`). Each chunk is embedded as `title\nheading\nbody`; `server._semantic_text` drops the frontmatter block and the H1 and puts tldr and tags first. Deck tasks are keyword-only.
+  - **Storage**: no vector database. Vectors are in memory and cached in `$WIKI_DATA/_index/embeddings.json` (rebuildable, listed in `.git/info/exclude` so it never shows as uncommitted; `iter_pages` skips `_*` dirs). The cache is content-addressed (chunk text hash → vector) and per model: editing one section re-embeds only that section, a model change starts over.
+  - **Freshness**: a background thread (`SemanticIndex.start`) syncs at startup and whenever a search or page view pokes it; requests never wait for embedding, they query what is ready. A deleted page is filtered out by the caller (`known=`) before the worker catches up.
+  - **Query**: brute-force cosine similarity in plain Python (no NumPy, ~35 ms for 3000 chunks), a page scoring as its best chunk. Hits below a per-model floor (`embed.THRESHOLDS`, measured on a test wiki; `LEAF_EMBED_MIN_SCORE` overrides) are dropped, since vector search otherwise "finds" something for any query.
+  - **Hybrid ranking**: `server._ranked_docs` merges the BM25 list and the semantic list by reciprocal rank fusion (`search.fuse`, `RRF_K = 60`, ranks only, so the two score scales never need normalising; ties go to BM25). A page found only by meaning gets its best section as excerpt (`make_excerpt(..., fallback=)`), since it has no word to mark.
+  - **Related pages**: each page's vector is the mean of its chunks; `SemanticIndex.related` lists the nearest above the related floor.
 - **Selecting a task result** (search modal or `/search` page) opens `/deck?task=<id>&view=<open|completed>` (plus `&list=<name>` for a task in a separate list, so it opens that list) (plus `&year=YYYY` for a task in an earlier year's archive) on the tab matching the task's state, with that task selected, scrolled into view and briefly highlighted (`.task-flash`) — rather than the bare `_deck` storage slug. The link is by id, not title: titles can repeat or contain a `#word` the filter field would read as a tag. Built by `_result_href()` in `server.py` (the search modal uses the result's `href`). A page's "Linked tasks" entries use the same link.
+
+- **Stopwords** (`search.STOPWORDS`, `query_words`): English and German function words ("the", "is", "in", "und", "für") are dropped from the **query**, never from the index, unless that leaves nothing ("what is this" still searches). In a small wiki they aren't in every page, so BM25 gave them weight: a question phrased as a sentence ranked pages by its filler words. Words that are also nouns or names (may, will, it, man) are not in the list. Excerpts don't mark them either; a phrase match still marks the whole phrase.
+
+---
+
+## MCP server
+
+`POST /mcp` lets an LLM client (any MCP client) read the wiki through tools. Protocol in `src/mcp_server.py` (JSON-RPC, no Flask), route and tools in `server.py` (`mcp_endpoint`, `_mcp_call_tool`). MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions. `initialize` echoes the client's protocol version when it is in `PROTOCOL_VERSIONS`, else the newest, and sends `instructions` telling the model what Leaf is.
+
+Register `http://localhost:5000/mcp` with your MCP client (HTTP transport) and the header `Authorization: Bearer <LEAF_MCP_TOKEN>`.
+
+Tools, all read-only (`readOnlyHint`). A tool failure the model can fix (bad slug, empty query) is a result with `isError`, not a protocol error:
+
+| Tool | Does |
+|------|------|
+| `search_wiki(query, limit=8)` | The most relevant **sections**, full text, best first, each with title › heading, slug and a URL with the heading anchor. Several may come from one page. |
+| `read_page(slug)` | A page's raw markdown, frontmatter included. Accepts a slug, `/page/<slug>`, a full URL, `<slug>.md` or the page name (`_mcp_page_slug`); `safe_path` keeps it inside the wiki. |
+| `list_pages(limit=100)` | `slug \| title \| edited date`, most recently edited first. |
+
+**Retrieval** (`server.retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page. BM25 runs over sections (`_page_chunk_docs`, the same `embed.chunk_sections` split, cached per page by mtime; `_chunk_index`), fused with `SEMANTIC.search_chunks` when semantic search is on (sections match by `embed.chunk_key`). Without semantic search it is keyword-only and still works. Deck tasks are not exposed.
+
+**Auth**: `/mcp` is exempt from the session login (`check_auth`), since an MCP client can't log in, and checks its own: with `LEAF_MCP_TOKEN` set, every request needs `Authorization: Bearer <token>`; without one, `/mcp` is as open as the pages are, so a wiki with `LEAF_PASSWORD` keeps it closed (401) until a token is set. The Host and cross-site Origin checks apply as everywhere.
 
 ---
 
@@ -531,6 +564,10 @@ pytest tests/test_section_editing.py -v              # Run section-editing tests
 
 `tests/test_git.py` initializes a real git repo in the temp wiki dir and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules point `WIKI_DIR` at a plain temp dir, so git calls there are silent no-ops.
 
+`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, and the three tools (with and without the fake semantic index from `test_semantic.py`).
+
+`tests/test_semantic.py` covers semantic search with a fake embedder (words mapped to a few "concept" axes), so it needs neither fastembed nor a model: chunking, the content-addressed cache, failure fallback, the worker, rank fusion, hybrid `/api/search` and the Related section. It swaps `server.SEMANTIC` for an index over the temp wiki.
+
 To run the suite without a local venv: `./run.sh test` (runs inside the app image with the repo mounted).
 
 ### Browser tests (`tests/e2e/`)
@@ -564,6 +601,8 @@ mdit-py-plugins>=0.4
 ```
 
 `highlight.js` is loaded from a CDN in the HTML shell — no pip install needed.
+
+Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with a local model. It is not in `requirements.txt`; the `Containerfile` installs it only when `LEAF_EMBEDDINGS` names a fastembed model (`embed.py --prepare`). Locally: `pip install fastembed`.
 
 ---
 

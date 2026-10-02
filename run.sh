@@ -52,7 +52,10 @@ LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/
 if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
   LEAF_BUILD="$LEAF_BUILD +dirty"
 fi
-BUILD_ARGS=(--build-arg "LEAF_BUILD=${LEAF_BUILD:-unknown}")
+# Semantic search (see src/embed.py): the image installs the model at build
+# time, so the setting is a build arg as well as an env var.
+LEAF_EMBEDDINGS=$(env_val LEAF_EMBEDDINGS)
+BUILD_ARGS=(--build-arg "LEAF_BUILD=${LEAF_BUILD:-unknown}" --build-arg "LEAF_EMBEDDINGS=${LEAF_EMBEDDINGS}")
 
 # Give the container the host's timezone, so "today" (due badge, deck
 # dates, scratch-note names, "Last changed") matches the user's day instead
@@ -99,6 +102,10 @@ case "${1:-up}" in
       -e "SECRET_KEY=$(env_val SECRET_KEY)" \
       -e "GIT_REMOTE=$(env_val GIT_REMOTE)" \
       -e "ALLOW_REMOTE=${ALLOW_REMOTE}" \
+      -e "LEAF_EMBEDDINGS=${LEAF_EMBEDDINGS}" \
+      -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" \
+      -e "OLLAMA_URL=$(env_val OLLAMA_URL)" \
+      -e "LEAF_MCP_TOKEN=$(env_val LEAF_MCP_TOKEN)" \
       "$IMAGE"
     echo "Leaf running at http://localhost:5000"
     echo "Leaf data: $WIKI_DATA"
