@@ -83,6 +83,23 @@ def stem(word: str) -> str:
     return word
 
 
+# The "(target)" of a markdown link or image, with an optional "title" and
+# one level of parentheses inside the URL (Wikipedia-style). The link text
+# stays; the target is left out of the index and excerpts, or every page with
+# a /page/… link would match "page".
+_LINK_TARGET_RE = re.compile(
+    r'\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+"[^"]*")?\)'
+)
+# Reference-style link definitions: "[id]: https://… "title"".
+_LINK_DEF_RE = re.compile(r"(?m)^( {0,3}\[[^\]]+\]:)\s+\S+.*$")
+
+
+def strip_link_targets(text: str) -> str:
+    """Markdown with link/image targets removed, link text kept. Bare URLs
+    in the text stay, so a pasted domain can still be found."""
+    return _LINK_DEF_RE.sub(r"\1", _LINK_TARGET_RE.sub("]", text))
+
+
 def tokenize(text: str) -> list[str]:
     """Fold case and accents, split on non-alphanumerics, and stem each token."""
     return [stem(m.group()) for m in _WORD_RE.finditer(fold(text))]

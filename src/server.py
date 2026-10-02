@@ -2102,11 +2102,12 @@ def _page_search_docs() -> list[dict]:
             continue
         content = md_file.read_text(encoding="utf-8")
         title = page_title(content, slug)
+        text = search.strip_link_targets(content)
         doc = {
             "slug": slug,
             "title": title,
-            "excerpt_text": content,
-            "tokens": search.tokenize(content)
+            "excerpt_text": text,
+            "tokens": search.tokenize(text)
             + search.tokenize(title) * search.TITLE_WEIGHT,
         }
         _search_doc_cache[slug] = (mtime, doc)

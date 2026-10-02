@@ -377,6 +377,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 - `GET /api/search?q=...` collects every `.md` file in `pages/` **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, type? }]`. `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
 - **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
 - **Words in any script**: `search.tokenize` splits on runs of letters/digits (`[^\W_]+`), so "Müller" is one word, and folds case and accents (`search.fold`: ü→u, é→e, ß→ss), so `muller`, `MÜLLER` and `Müller` match each other.
+- **Link targets are not indexed** (`search.strip_link_targets`, pages and tasks): the `(url)` of `[text](url)`/`![alt](url)` and the URL of `[id]: url` definitions are dropped before tokenizing and excerpting, the link text stays. Otherwise every page with a `/page/…` link matched `page`. Bare URLs in the text stay searchable.
 - **Stemming** (`search.stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
 - **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
 - **Title boost**: title tokens are folded into the document token bag `TITLE_WEIGHT` (3) extra times, so title matches rank higher.

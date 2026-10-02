@@ -86,6 +86,25 @@ class TestStem:
         assert search.tokenize("Running Tests, quickly!") == ["run", "test", "quickly"]
 
 
+class TestStripLinkTargets:
+    def test_inline_link_keeps_text(self):
+        assert search.strip_link_targets("See [Foo](/page/foo).") == "See [Foo]."
+
+    def test_image_with_title(self):
+        assert search.strip_link_targets('![pic](/_assets/a.png "A")') == "![pic]"
+
+    def test_url_with_parentheses(self):
+        text = "[W](https://en.wikipedia.org/wiki/A_(b)) after"
+        assert search.strip_link_targets(text) == "[W] after"
+
+    def test_reference_definition(self):
+        assert search.strip_link_targets('[ref]: https://x.org "T"') == "[ref]:"
+
+    def test_bare_url_and_wikilink_kept(self):
+        text = "go to https://example.com or [[some page|Label]]"
+        assert search.strip_link_targets(text) == text
+
+
 class TestUnicode:
     def test_umlaut_word_stays_whole(self):
         # Regression: [a-z0-9]+ split "Müller" into "m" + "ller".

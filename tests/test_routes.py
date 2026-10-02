@@ -653,6 +653,24 @@ class TestSearch:
         assert results
         assert "<mark>" in results[0]["excerpt"]
 
+    def test_link_targets_are_not_indexed(self, client, wiki_dir):
+        # Regression: every page with a /page/… link matched "page".
+        write_page(wiki_dir, "linker", "# Linker\n\nSee [the notes](/page/zzqtarget).\n")
+        results = client.get("/api/search?q=zzqtarget", headers=HOST).get_json()
+        assert not any(r["slug"] == "linker" for r in results)
+        results = client.get("/api/search?q=notes", headers=HOST).get_json()
+        assert any(r["slug"] == "linker" for r in results)
+
+    def test_bare_urls_stay_searchable(self, client, wiki_dir):
+        write_page(wiki_dir, "bare", "# Bare\n\nsee https://zzqdomain.example/x\n")
+        results = client.get("/api/search?q=zzqdomain", headers=HOST).get_json()
+        assert any(r["slug"] == "bare" for r in results)
+
+    def test_task_link_targets_are_not_indexed(self, client, wiki_dir):
+        client.post("/api/deck", json={"title": "Read", "description": "[doc](https://zzqhost.example)"})
+        results = client.get("/api/search?q=zzqhost", headers=HOST).get_json()
+        assert results == []
+
     def test_search_includes_task_results(self, client, wiki_dir):
         client.post("/api/deck", json={"title": "unique_task_token_abc"})
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)
