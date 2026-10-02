@@ -18,6 +18,7 @@ import difflib
 import html
 import math
 import re
+import unicodedata
 
 # Include title tokens this many extra times so title matches rank higher.
 TITLE_WEIGHT = 3
@@ -30,7 +31,17 @@ _B = 0.75
 _PREFIX_WEIGHT = 0.8
 _FUZZY_WEIGHT = 0.5
 
-_WORD_RE = re.compile(r"[a-z0-9]+")
+# Runs of letters and digits in any script (\w without the underscore), so
+# "Müller" stays one word instead of splitting into "m" + "ller".
+_WORD_RE = re.compile(r"[^\W_]+")
+
+
+def fold(text: str) -> str:
+    """Lowercase and strip accents so "Müller", "MÜLLER" and "muller" match:
+    ü→u, é→e, and ß→ss (via casefold). Letters with no ASCII base (e.g. ø,
+    Cyrillic) are kept as they are."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
 def stem(word: str) -> str:
@@ -63,8 +74,8 @@ def stem(word: str) -> str:
 
 
 def tokenize(text: str) -> list[str]:
-    """Lowercase, split on non-alphanumerics, and stem each token."""
-    return [stem(m.group()) for m in _WORD_RE.finditer(text.lower())]
+    """Fold case and accents, split on non-alphanumerics, and stem each token."""
+    return [stem(m.group()) for m in _WORD_RE.finditer(fold(text))]
 
 
 class SearchIndex:

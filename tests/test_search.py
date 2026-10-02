@@ -58,6 +58,35 @@ class TestStem:
         assert search.tokenize("Running Tests, quickly!") == ["run", "test", "quickly"]
 
 
+class TestUnicode:
+    def test_umlaut_word_stays_whole(self):
+        # Regression: [a-z0-9]+ split "Müller" into "m" + "ller".
+        assert search.tokenize("Müller") == ["muller"]
+
+    def test_accents_and_case_fold(self):
+        assert search.tokenize("Café MÜLLER") == search.tokenize("cafe muller")
+
+    def test_sharp_s_folds_to_ss(self):
+        assert search.tokenize("Straße") == search.tokenize("strasse")
+
+    def test_underscore_still_separates(self):
+        assert search.tokenize("foo_bar") == ["foo", "bar"]
+
+    def test_partial_umlaut_word_matches(self):
+        docs = [_doc("a", "A", "Notizen zur Größe"), _doc("b", "B", "other text")]
+        assert _ranked_slugs(docs, "grö") == ["a"]
+        assert _ranked_slugs(docs, "gro") == ["a"]
+
+    def test_fragment_no_longer_matches(self):
+        # "Straße" used to index a stray "e" that any query "e" hit.
+        docs = [_doc("a", "A", "Die Straße"), _doc("b", "B", "other text")]
+        assert _ranked_slugs(docs, "e") == []
+
+    def test_unaccented_query_finds_accented_word(self):
+        docs = [_doc("a", "A", "Ein Besuch im Café"), _doc("b", "B", "other text")]
+        assert _ranked_slugs(docs, "cafe") == ["a"]
+
+
 # ── Ranking ─────────────────────────────────────────────────────────────────
 
 
