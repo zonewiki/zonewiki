@@ -321,6 +321,15 @@ main {
 .page-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .875rem; }
 .page-content th, .page-content td { padding: .45rem .75rem; border: 1px solid var(--border); text-align: left; }
 .page-content th { background: var(--code-bg); font-weight: 600; }
+/* Sortable tables (leaf.js): the arrow shows the sort; a faint ↕ on hover
+   says the header can be clicked. */
+.sortable-table thead th { cursor: pointer; user-select: none; }
+.sortable-table thead th::after { content: ''; margin-left: .35em; font-size: .8em; color: var(--muted); }
+.sortable-table thead th[aria-sort="ascending"]::after  { content: '▲'; }
+.sortable-table thead th[aria-sort="descending"]::after { content: '▼'; }
+@media (hover: hover) {
+  .sortable-table thead th[aria-sort="none"]:hover::after { content: '↕'; }
+}
 
 /* ── Links ─────────────────────────────────────────────────────────────────── */
 

@@ -1465,6 +1465,68 @@ function showCheckboxToast(msg, undo) {
   setTimeout(() => el.remove(), 6000);
 }
 
+// ── Sortable tables ───────────────────────────────────────────────────────────
+
+// Clicking a column header of a table in a page's article sorts its rows:
+// ascending, descending, then back to the file's order. View only — the file
+// is never touched. Tables with merged cells (raw HTML) are left alone. Click
+// handling is delegated, so cloned presentation slides sort too.
+const tableCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+function tableCellNumber(text) {
+  const t = text.replace(/[\s%€$£]/g, '');
+  if (!/^[-+]?(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/.test(t)) return null;
+  return parseFloat(t.replace(/,/g, ''));
+}
+
+function sortTableBy(th) {
+  const table = th.closest('table');
+  const tbody = table.tBodies[0];
+  const col = th.cellIndex;
+  const next = { none: 'ascending', ascending: 'descending', descending: 'none' };
+  const dir = next[th.getAttribute('aria-sort') || 'none'];
+  table.querySelectorAll('thead th').forEach(h => h.setAttribute('aria-sort', 'none'));
+  th.setAttribute('aria-sort', dir);
+
+  const rows = Array.from(tbody.rows);
+  const text = r => (r.cells[col]?.textContent || '').trim();
+  // A column sorts as numbers only when every non-empty cell is one
+  const numeric = rows.every(r => !text(r) || tableCellNumber(text(r)) !== null);
+  const sign = dir === 'descending' ? -1 : 1;
+  rows.sort((a, b) => {
+    if (dir === 'none') return a.dataset.sortIdx - b.dataset.sortIdx;
+    const ta = text(a), tb = text(b);
+    if (!ta || !tb) return (!ta) - (!tb);  // empty cells last either way
+    const c = numeric ? tableCellNumber(ta) - tableCellNumber(tb) : tableCollator.compare(ta, tb);
+    return sign * c || a.dataset.sortIdx - b.dataset.sortIdx;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+document.querySelectorAll('article.page-content table').forEach(table => {
+  if (!table.tHead || table.tBodies.length !== 1 || table.tBodies[0].rows.length < 2) return;
+  if (table.querySelector('[colspan], [rowspan]')) return;
+  table.classList.add('sortable-table');
+  Array.from(table.tBodies[0].rows).forEach((r, i) => { r.dataset.sortIdx = i; });
+  table.querySelectorAll('thead th').forEach(th => {
+    th.tabIndex = 0;
+    th.setAttribute('aria-sort', 'none');
+  });
+});
+
+document.addEventListener('click', e => {
+  const th = e.target.closest('table.sortable-table thead th');
+  if (!th || e.target.closest('a') || getSelection().toString()) return;
+  sortTableBy(th);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const th = e.target.closest?.('table.sortable-table thead th');
+  if (!th) return;
+  e.preventDefault();
+  sortTableBy(th);
+});
+
 // ── Presentation mode ─────────────────────────────────────────────────────────
 
 (function () {
