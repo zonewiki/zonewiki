@@ -679,6 +679,29 @@ class TestSearch:
         assert [r["title"] for r in results] == ["[Task] Call Bob"]
         assert "<mark>zzqtag</mark>" in results[0]["excerpt"]
 
+    def test_non_utf8_page_does_not_break_search(self, client, wiki_dir):
+        # Regression: one undecodable file made every search a 500.
+        (wiki_dir / "latin1.md").write_bytes("# Latin\n\nzzqword Gr\xf6\xdfe\n".encode("latin-1"))
+        write_page(wiki_dir, "fine", "# Fine\n\nzzqword here\n")
+        resp = client.get("/api/search?q=zzqword", headers=HOST)
+        assert resp.status_code == 200
+        assert {r["slug"] for r in resp.get_json()} == {"latin1", "fine"}
+
+    def test_page_vanishing_mid_search_is_skipped(self, client, wiki_dir, monkeypatch):
+        write_page(wiki_dir, "gone", "# Gone\n\nzzqword\n")
+        write_page(wiki_dir, "fine", "# Fine\n\nzzqword here\n")
+        real = Path.read_text
+
+        def flaky(self, *a, **kw):
+            if self.name == "gone.md":
+                raise FileNotFoundError(self)
+            return real(self, *a, **kw)
+
+        monkeypatch.setattr(Path, "read_text", flaky)
+        resp = client.get("/api/search?q=zzqword", headers=HOST)
+        assert resp.status_code == 200
+        assert [r["slug"] for r in resp.get_json()] == ["fine"]
+
     def test_search_includes_task_results(self, client, wiki_dir):
         client.post("/api/deck", json={"title": "unique_task_token_abc"})
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)

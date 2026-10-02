@@ -2100,7 +2100,14 @@ def _page_search_docs() -> list[dict]:
         if cached and cached[0] == mtime:
             docs.append(cached[1])
             continue
-        content = md_file.read_text(encoding="utf-8")
+        # One bad file must not fail every search: a page deleted meanwhile
+        # is skipped, one that isn't UTF-8 is searched with stand-ins for
+        # the undecodable bytes.
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            seen.discard(slug)
+            continue
         title = page_title(content, slug)
         text = search.strip_link_targets(content)
         doc = {
