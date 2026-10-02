@@ -50,13 +50,23 @@ def stem(word: str) -> str:
     Not a full Porter stemmer — just the common inflections, with doubled-final-
     consonant collapse (running -> runn -> run) so -ing/-ed forms line up with
     their base. Kept deliberately shallow to avoid surprising collisions.
+
+    Porter's guards keep real words intact: the base must contain a vowel
+    (string, spring stay whole), "-eed" is not a suffix (speed, agreed), and
+    a doubled l/s/z stays doubled (called -> call, passed -> pass), as does
+    any double that would leave fewer than three letters (added -> add).
     """
     if len(word) <= 3:
         return word
     for suf in ("ing", "ed"):
         if word.endswith(suf) and len(word) - len(suf) >= 3:
             base = word[: -len(suf)]
-            if len(base) >= 2 and base[-1] == base[-2] and base[-1] not in "aeiou":
+            if suf == "ed" and base.endswith("e"):
+                break
+            if not any(c in "aeiouy" for c in base):
+                break
+            if (len(base) >= 4 and base[-1] == base[-2]
+                    and base[-1] not in "aeioulsz"):
                 base = base[:-1]
             return base
     # Plural handling (Porter step 1a style): databases -> database, ponies ->

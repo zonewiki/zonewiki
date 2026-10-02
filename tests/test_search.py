@@ -13,6 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import pytest
+
 import search
 
 
@@ -53,6 +55,32 @@ class TestStem:
 
     def test_double_s_not_stripped(self):
         assert search.stem("class") == "class"
+
+    def test_doubled_l_s_z_stay(self):
+        # Regression: called -> "cal" and passed -> "pas" no longer matched
+        # call/pass exactly.
+        for base, forms in [("call", ["called", "calling"]),
+                            ("pass", ["passed", "passes"]),
+                            ("fill", ["filled"]), ("buzz", ["buzzing"])]:
+            for f in forms:
+                assert search.stem(f) == search.stem(base) == base
+
+    def test_double_kept_when_base_would_be_two_letters(self):
+        assert search.stem("added") == search.stem("add") == "add"
+
+    def test_vowelless_base_is_not_a_stem(self):
+        # Regression: string -> "str" while strings -> "string".
+        assert search.stem("string") == search.stem("strings") == "string"
+        assert search.stem("spring") == "spring"
+
+    def test_eed_is_not_a_suffix(self):
+        assert search.stem("speed") == search.stem("speeds") == "speed"
+
+    def test_inflection_matches_base_at_full_weight(self):
+        docs = [_doc("a", "A", "We called him"), _doc("b", "B", "call me maybe")]
+        index = search.SearchIndex(docs)
+        scores = {d["slug"]: sc for sc, d in index.search("call")}
+        assert scores["a"] == pytest.approx(scores["b"], rel=0.2)
 
     def test_tokenize_splits_and_stems(self):
         assert search.tokenize("Running Tests, quickly!") == ["run", "test", "quickly"]
