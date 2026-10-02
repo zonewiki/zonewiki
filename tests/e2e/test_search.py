@@ -49,6 +49,28 @@ def test_content_matches_appear_after_debounce(page, wiki):
     expect(cards.first.locator("mark").first).to_have_text("Tomatoes", ignore_case=True)
 
 
+def test_clearing_the_filter_drops_a_pending_content_search(page, wiki):
+    # Regression: a /api/search still in flight when the filter was cleared
+    # brought its "Content matches" back under the empty filter.
+    seed(wiki)
+    held = []
+    page.route("**/api/search*", lambda route: held.append(route))
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomatoes")
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "content search never started"
+    page.locator("#modal-filter").fill("")
+    held[0].continue_()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(200)
+    expect(page.locator("#modal-content-matches .search-result-card")).to_have_count(0)
+    expect(page.locator("#modal-content-matches")).to_be_hidden()
+
+
 def test_enter_opens_highlighted_and_arrows_move(page, wiki):
     seed(wiki)
     page.goto("/page/index")

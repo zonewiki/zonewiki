@@ -399,6 +399,9 @@ function applyModalControls() {
   if (q.length >= 2) {
     modalCMTimer = setTimeout(() => fetchModalContentMatches(q), 300);
   } else {
+    // Drop a request still in flight, or its results would come back
+    // under the now (nearly) empty filter.
+    modalCMSeq++;
     modalCM.innerHTML = '';
     modalCM.classList.add('hidden');
   }
