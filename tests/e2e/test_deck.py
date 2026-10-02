@@ -1192,3 +1192,89 @@ def test_history_of_a_repeating_task_continues(page, wiki):
     expect(history.locator("li").nth(0)).to_contain_text("Repeats: next")   # newest first
     expect(history.locator("li").nth(1)).to_contain_text("Done")
     expect(history.locator("li").nth(2)).to_contain_text("Created")
+
+
+def test_board_drop_past_deadline_moves_deadline_too(page, wiki):
+    """Regression: dropping an overdue task on a day set its start date but
+    left the card in Overdue (the deadline decides there), so the drop seemed
+    to do nothing and the task started after it was due. Now it asks to move
+    the deadline along; Cancel changes nothing."""
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    today = date.today().isoformat()
+    soon = (date.today() + timedelta(days=5)).isoformat()
+    page.request.post("/api/deck", data={"title": "Late task", "due_date": yesterday})
+    page.request.post("/api/deck", data={"title": "Due today", "due_date": today})
+    page.request.post("/api/deck", data={"title": "Due soon", "due_date": soon})
+    page.goto("/deck?view=plan")
+    tomorrow_div = page.locator(f".board-day-divider[data-drop-day='{tomorrow()}']")
+    dialog = page.locator("#task-deadline-modal")
+
+    # Before the deadline: no question, just planned.
+    card(page, "Due soon").drag_to(tomorrow_div)
+    wait_for_field(page, "Due soon", "start_date", tomorrow())
+    expect(dialog).not_to_be_visible()
+
+    # Cancel: nothing is written.
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
+    card(page, "Due today").drag_to(tomorrow_div)
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("“Due today” is due today. Starting it tomorrow")
+    page.locator("#task-deadline-cancel").click()
+    expect(dialog).not_to_be_visible()
+    page.wait_for_timeout(300)
+    assert writes == []
+
+    # Move deadline: both dates move, the card leaves Overdue for Tomorrow.
+    card(page, "Late task").drag_to(tomorrow_div)
+    expect(dialog).to_contain_text("is due yesterday")
+    page.locator("#task-deadline-confirm").click()
+    wait_for_field(page, "Late task", "due_date", tomorrow())
+    assert task_by_title(page, "Late task")["start_date"] == tomorrow()
+    expect(page.locator(".task-undo-toast")).to_contain_text("Starts and due Tomorrow")
+    day = card(page, "Late task").evaluate(
+        "el => { let li = el; while (li && !li.classList.contains('board-day-divider'))"
+        " li = li.previousElementSibling; return li && li.dataset.dropDay; }")
+    assert day == tomorrow()
+
+    # Undo restores both dates.
+    page.locator(".task-undo-btn").click()
+    wait_for_field(page, "Late task", "due_date", yesterday)
+    assert task_by_title(page, "Late task")["start_date"] is None
+
+
+def test_completed_shows_earlier_years(page, wiki):
+    """Earlier years' completed tasks (the yearly archives) are one click
+    away in Completed, and a search link to one opens its year."""
+    year = date.today().year
+    (wiki.root / f"_deck_completed-{year-1}.json").write_text(
+        '[{"id": "old", "title": "Old done", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1),
+        encoding="utf-8")
+    tid = page.request.post("/api/deck", data={"title": "New done"}).json()["id"]
+    page.request.put(f"/api/deck/{tid}", data={"completed": True})
+
+    page.goto("/deck?view=focus")
+    page.locator("#task-completed-link").click()
+    years = page.locator(".completed-years button")
+    expect(years).to_have_text([str(year), str(year - 1)])
+    expect(years.first).to_have_attribute("aria-pressed", "true")
+    expect(card(page, "New done")).to_be_visible()
+    expect(card(page, "Old done")).to_have_count(0)
+
+    years.nth(1).click()
+    expect(card(page, "Old done")).to_be_visible()
+    expect(card(page, "New done")).to_have_count(0)
+
+    # Back to a tab and to Completed again: this year.
+    page.locator("#task-completed-link").click()
+    page.locator("#task-completed-link").click()
+    expect(card(page, "New done")).to_be_visible()
+    expect(card(page, "Old done")).to_have_count(0)
+
+    # The search result's link opens the task in its year.
+    href = next(r["href"] for r in page.request.get("/api/search?q=old+done").json()
+                if r.get("task_id") == "old")
+    page.goto(href)
+    expect(page.locator(".task-item[data-id='old']")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(page.get_by_text("That task is no longer in the deck.")).to_have_count(0)

@@ -2129,7 +2129,7 @@ def do_search(q: str) -> list[dict]:
             "title": d["title"],
             "excerpt": search.make_excerpt(d["excerpt_text"], q),
         }
-        for k in ("type", "task_id", "status", "list"):
+        for k in ("type", "task_id", "status", "list", "year"):
             if d.get(k) is not None:
                 r[k] = d[k]
         r["href"] = _result_href(r)
@@ -2174,12 +2174,16 @@ def deck_page():
     return shell(title, body)
 
 
-def _task_href(task_id: str, tab: str, list_name: str | None) -> str:
-    """Link that opens one task in the deck (or its list's page) on `tab`."""
+def _task_href(task_id: str, tab: str, list_name: str | None,
+               year: str | None = None) -> str:
+    """Link that opens one task in the deck (or its list's page) on `tab`;
+    `year` is the Completed year of a task in an earlier year's archive."""
     from urllib.parse import urlencode
     params = {"task": task_id, "view": tab}
     if list_name:
         params["list"] = list_name
+    if year:
+        params["year"] = year
     return "/deck?" + urlencode(params)
 
 
@@ -2190,7 +2194,7 @@ def _result_href(r: dict) -> str:
     slug. By id, not title: titles can repeat or contain #words."""
     if r.get("type") == "task":
         tab = "completed" if r.get("status") == "done" else "open"
-        return _task_href(r["task_id"], tab, r.get("list"))
+        return _task_href(r["task_id"], tab, r.get("list"), r.get("year"))
     return f"/page/{r['slug']}"
 
 

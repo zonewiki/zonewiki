@@ -159,7 +159,8 @@ def _normalize_task(task: dict) -> bool:
     task has. Tags are cleaned (_clean_tags): older decks allowed spaces.
     The ``page`` field (a linked page slug) is gone: a wikilink in the notes
     does the same, so the slug becomes ``[[slug]]`` there unless the title or
-    notes already link to it."""
+    notes already link to it. A stale Lineup place (focus_order on a task
+    outside Focus) is dropped."""
     changed = False
     if "page" in task:
         slug = task.pop("page")
@@ -186,6 +187,13 @@ def _normalize_task(task: dict) -> bool:
     tags = task.get("tags")
     if isinstance(tags, list) and _clean_tags(tags) != tags:
         task["tags"] = _clean_tags(tags)
+        changed = True
+    # A Lineup place outside Focus is stale: older versions kept it when a
+    # deadline change took the task out of Focus. Time only moves tasks into
+    # Focus, never out, so such a place can't be current.
+    if (task.get("focus_order") is not None and not task.get("completed_at")
+            and not _in_focus(task, date.today().isoformat())):
+        task["focus_order"] = None
         changed = True
     return changed
 
@@ -215,7 +223,7 @@ def _migrate_deck_files() -> None:
                 _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
                 changed.append(path)
         if changed and GIT_ENABLED and _git_commit_fn:
-            _git_commit_fn(changed, "Normalize deck files (date model, tags, page links)")
+            _git_commit_fn(changed, "Normalize deck files (date model, tags, page links, Lineup)")
 
 
 def _read_deck_strict() -> list[dict]:
@@ -247,13 +255,97 @@ def _read_completed() -> list[dict]:
     return _read_list_lenient(_completed_path())
 
 
+_ARCHIVE_NAME_RE = re.compile(r"_deck_completed-(\d{4})\.json")
+
+
 def _archive_glob() -> list[Path]:
     """Per-year archive files, e.g. _deck_completed-2025.json (sorted)."""
-    return sorted(DECK_FILE.parent.glob("_deck_completed-*.json"))
+    return sorted(p for p in DECK_FILE.parent.glob("_deck_completed-*.json")
+                  if _ARCHIVE_NAME_RE.fullmatch(p.name))
+
+
+def _archive_path(year: str) -> Path:
+    return DECK_FILE.parent / f"_deck_completed-{year}.json"
+
+
+def _completed_year(task: dict) -> str:
+    """The year a completed task belongs to ("" when its date is unusable)."""
+    year = (task.get("completed_at") or "")[:4]
+    return year if re.fullmatch(r"\d{4}", year) else ""
+
+
+def _past_year(task: dict, current: str | None = None) -> str | None:
+    """The task's completion year when it is before this one (it belongs in
+    that year's archive), else None (the current completed file)."""
+    year = _completed_year(task)
+    return year if year and year < (current or str(date.today().year)) else None
+
+
+def _read_completed_all_strict() -> list[dict]:
+    """Every completed task, this year's file and the yearly archives, for
+    the write path: a task from an earlier year can be edited, reopened or
+    deleted like any other. _write_completed puts each back by year. The
+    archives come first, so tasks moving into one land after its own."""
+    tasks = []
+    for path in _archive_glob():
+        tasks.extend(_read_list_strict(path))
+    return tasks + _read_list_strict(_completed_path())
+
+
+def _write_completed(completed: list[dict]) -> list[Path]:
+    """Write completed tasks split by year: this year's into _deck_completed.json,
+    earlier years' into _deck_completed-YYYY.json. Only files whose content
+    changes are written; returns their paths (for the commit)."""
+    current = str(date.today().year)
+    by_path: dict[Path, list[dict]] = {_completed_path(): []}
+    for path in _archive_glob():
+        by_path[path] = []
+    for t in completed:
+        year = _past_year(t, current)
+        by_path.setdefault(_archive_path(year) if year else _completed_path(), []).append(t)
+    changed = []
+    for path, tasks in by_path.items():
+        try:
+            if json.loads(path.read_text(encoding="utf-8")) == tasks:
+                continue
+        except (OSError, ValueError):
+            pass
+        _atomic_write(path, json.dumps(tasks, indent=2, ensure_ascii=False))
+        changed.append(path)
+    return changed
+
+
+def _completed_in_year(year: str) -> list[dict]:
+    """The Completed view of one year: tasks completed in it (this year's
+    view also takes tasks without a usable date)."""
+    current = str(date.today().year)
+    with _LOCK:
+        tasks = _read_completed()
+        if year != current:
+            tasks = tasks + _read_list_lenient(_archive_path(year))
+    if year == current:
+        return [t for t in tasks if not _past_year(t, current)]
+    return [t for t in tasks if _completed_year(t) == year]
+
+
+def completed_years(list_name: str | None) -> list[str]:
+    """Years with completed tasks in scope (of list_name, or the main deck),
+    newest first; this year is always included."""
+    current = str(date.today().year)
+    years = {current}
+    with _LOCK:
+        for t in _read_completed():
+            if in_list(t, list_name) and _past_year(t, current):
+                years.add(_completed_year(t))
+        for path in _archive_glob():
+            if any(in_list(t, list_name) for t in _read_list_lenient(path)):
+                years.add(_ARCHIVE_NAME_RE.fullmatch(path.name).group(1))
+    return sorted(years, reverse=True)
 
 
 def _read_archived() -> list[dict]:
-    """Completed tasks rolled into per-year archives — searched, not shown."""
+    """Completed tasks rolled into per-year archives (search; the Completed
+    view shows them by year)."""
     tasks: list[dict] = []
     for path in _archive_glob():
         tasks.extend(_read_list_lenient(path))
@@ -263,31 +355,18 @@ def _read_archived() -> list[dict]:
 def _archive_old_completed() -> None:
     """Roll completed tasks from previous years into _deck_completed-YYYY.json.
 
-    Runs at startup so the hot completed file (what the Completed tab loads)
-    stays small forever. Archived tasks remain in the search index via
-    _read_archived(). Skips silently if the hot file is unreadable — archiving
-    is an optimization, never worth failing startup over."""
+    Runs at startup so the current completed file stays small; every write
+    also files tasks by year (_write_completed), so this only matters after
+    a year change without writes. Skips silently if a file is unreadable —
+    archiving is an optimization, never worth failing startup over."""
     with _LOCK:
-        completed = _read_completed()
-        current_year = str(date.today().year)
-        keep, old_by_year = [], {}
-        for t in completed:
-            year = (t.get("completed_at") or "")[:4]
-            if year and year < current_year:
-                old_by_year.setdefault(year, []).append(t)
-            else:
-                keep.append(t)
-        if not old_by_year:
+        try:
+            completed = _read_completed_all_strict()
+        except _DeckCorrupt:
             return
-        changed = []
-        for year, tasks in old_by_year.items():
-            path = DECK_FILE.parent / f"_deck_completed-{year}.json"
-            merged = _read_list_lenient(path) + tasks
-            _atomic_write(path, json.dumps(merged, indent=2, ensure_ascii=False))
-            changed.append(path)
-        _atomic_write(_completed_path(), json.dumps(keep, indent=2, ensure_ascii=False))
-        if GIT_ENABLED and _git_commit_fn:
-            _git_commit_fn(changed + [_completed_path()], "Archive completed deck tasks")
+        changed = _write_completed(completed)
+        if changed and GIT_ENABLED and _git_commit_fn:
+            _git_commit_fn(changed, "Archive completed deck tasks")
 
 
 def _read_all() -> list[dict]:
@@ -308,12 +387,12 @@ def _write_deck(tasks: list[dict], message: str = "Update deck") -> None:
 
 
 def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
-    """Write both files and commit them together in a single git commit."""
-    completed_file = _completed_path()
+    """Write the open tasks and every completed task (all of them, as read by
+    _read_completed_all_strict; filed by year) in a single git commit."""
     _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
-    _atomic_write(completed_file, json.dumps(completed, indent=2, ensure_ascii=False))
+    changed = _write_completed(completed)
     if GIT_ENABLED and _git_commit_fn:
-        _git_commit_fn([DECK_FILE, completed_file], message)
+        _git_commit_fn([DECK_FILE, *changed], message)
 
 
 def _json_object() -> dict:
@@ -776,6 +855,14 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     <button type="button" class="btn" id="task-delete-cancel{sfx}">Cancel</button>
   </div>
 </dialog>
+<dialog id="task-deadline-modal{sfx}" class="task-edit-modal scratch-modal">
+  <div class="scratch-label">Move the deadline too?</div>
+  <div id="task-deadline-text{sfx}" class="task-delete-title"></div>
+  <div class="task-edit-actions">
+    <button type="button" class="btn btn-primary" id="task-deadline-confirm{sfx}">Move deadline</button>
+    <button type="button" class="btn" id="task-deadline-cancel{sfx}">Cancel</button>
+  </div>
+</dialog>
 <script src="/public/deck-core.js" defer></script>
 <script src="/public/deck.js" defer></script>"""
 
@@ -821,8 +908,10 @@ def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
     their paths so the caller includes them in the rename commit."""
     with _LOCK:
         changed = []
-        for path, tasks in ((DECK_FILE, _read_deck_strict()),
-                            (_completed_path(), _read_completed_strict())):
+        files = [(DECK_FILE, _read_deck_strict()),
+                 (_completed_path(), _read_completed_strict())]
+        files += [(p, _read_list_strict(p)) for p in _archive_glob()]
+        for path, tasks in files:
             dirty = False
             for t in tasks:
                 for field in ("title", "description"):
@@ -907,6 +996,7 @@ def task_search_docs() -> list[dict]:
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",
             "list": task.get("list"),
+            "year": _past_year(task) if task.get("completed_at") else None,
         })
     _task_docs_cache["key"] = key
     _task_docs_cache["docs"] = docs
@@ -935,17 +1025,34 @@ def api_get_deck():
     return jsonify(_read_deck())
 
 
+def _year_arg() -> str:
+    """?year=YYYY (a year of the Completed view), default this year."""
+    year = request.args.get("year") or str(date.today().year)
+    if not re.fullmatch(r"\d{4}", year):
+        abort(400, description="year must be YYYY")
+    return year
+
+
 @bp.get("/api/deck/completed")
 def api_get_deck_completed():
-    return jsonify(_read_completed())
+    """Completed tasks of ?year= (default this year; earlier years come from
+    their archive file)."""
+    return jsonify(_completed_in_year(_year_arg()))
+
+
+@bp.get("/api/deck/completed-years")
+def api_deck_completed_years():
+    """Years the Completed view can show for ?list= (or the main deck)."""
+    return jsonify({"years": completed_years(_clean_list(request.args.get("list")))})
 
 
 @bp.get("/api/deck/completed-count")
 def api_deck_completed_count():
     """How many tasks the Completed view would list (for its link's label):
-    those of list ?list=, or without one for the main deck."""
+    this year's, of list ?list=, or without one for the main deck."""
     name = _clean_list(request.args.get("list"))
-    return jsonify({"count": sum(in_list(t, name) for t in _read_completed())})
+    tasks = _completed_in_year(str(date.today().year))
+    return jsonify({"count": sum(in_list(t, name) for t in tasks)})
 
 
 @bp.get("/api/deck/due-count")
@@ -980,9 +1087,17 @@ def api_create_deck_item():
     return jsonify(task), 201
 
 
+def _in_focus(task: dict, today: str) -> bool:
+    """Whether the task is on the Focus tab: started, or due today or earlier
+    (mirrors DeckCore.isFocus)."""
+    start, due = task.get("start_date"), task.get("due_date")
+    return bool((start and start <= today) or (due and due <= today))
+
+
 def _apply_task_fields(task: dict, data: dict) -> None:
     """Apply non-completion field updates from request data onto task in place."""
     old_due_date = task.get("due_date")
+    was_focus = _in_focus(task, date.today().isoformat())
     if "title" in data:
         title = _as_str(data["title"], "title").strip()
         if not title:
@@ -1012,17 +1127,14 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["start_date"] = _validate_date(data["start_date"])
         if task["start_date"] != old_start_date:
             _log(task, "start", old_start_date, task["start_date"])
-    # focus_order is the task's place in Focus's arrangement. It is cleared
-    # when the task is unplanned or planned (null→value or value→null), and
-    # when it moves to a day after today: it then comes back unarranged on
-    # that day. Moving it to today or an earlier day keeps its place, and so
-    # does leaving it alone (an unfinished arrangement carries over). An
-    # explicit focus_order in the same request (undo of a move) wins.
-    new_start_date = task.get("start_date")
-    planned_or_unplanned = (old_start_date is None) != (new_start_date is None)
-    moved_later = ("start_date" in data and new_start_date
-                   and new_start_date > date.today().isoformat())
-    if "focus_order" not in data and (planned_or_unplanned or moved_later):
+    # focus_order is the task's place in Focus's Lineup. It only lasts while
+    # the task stays in Focus (_in_focus, the same rule as DeckCore.isFocus):
+    # a write that takes it out, or brings it in, clears it, so it comes back
+    # unarranged. Edits that keep it in Focus keep its place, and so does
+    # leaving it alone (an unfinished Lineup carries over). An explicit
+    # focus_order in the same request (undo of a move) wins.
+    today = date.today().isoformat()
+    if "focus_order" not in data and not (was_focus and _in_focus(task, today)):
         task["focus_order"] = None
     if "rec_type" in data:
         rec_type = data["rec_type"]
@@ -1064,7 +1176,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
 def api_update_deck_item(task_id):
     data = _json_object()
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
 
     task = next((t for t in active if t["id"] == task_id), None)
     in_completed = task is None
@@ -1142,7 +1254,7 @@ def api_update_deck_item(task_id):
 @_locked
 def api_delete_deck_item(task_id):
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
     active = [t for t in active if t["id"] != task_id]
     completed_list = [t for t in completed_list if t["id"] != task_id]
     _write_both(active, completed_list, "Delete deck task")
@@ -1158,7 +1270,7 @@ def api_batch_delete_deck():
         abort(400)
     id_set = set(ids)
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
     active = [t for t in active if t["id"] not in id_set]
     completed_list = [t for t in completed_list if t["id"] not in id_set]
     _write_both(active, completed_list, "Delete deck tasks")
@@ -1225,7 +1337,7 @@ def api_restore_deck_items():
     if not snaps or not isinstance(snaps, list):
         abort(400)
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
     existing = {t["id"] for t in active} | {t["id"] for t in completed_list}
     restored = []
     for snap in snaps:
@@ -1252,7 +1364,7 @@ def api_batch_complete_deck():
         abort(400)
     id_set = set(ids)
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     updated = []
 
@@ -1334,7 +1446,7 @@ def api_batch_tag_deck():
         abort(400)
     id_set = set(ids)
     active = _read_deck_strict()
-    completed_list = _read_completed_strict()
+    completed_list = _read_completed_all_strict()
     updated = []
     for task in active + completed_list:
         if task["id"] not in id_set:

@@ -63,6 +63,8 @@
   const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
   const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
   const deleteTitleEl = document.getElementById('task-delete-title' + sfx);
+  const deadlineModal = document.getElementById('task-deadline-modal' + sfx);
+  const deadlineTextEl = document.getElementById('task-deadline-text' + sfx);
 
   if (!listEl) return;
 
@@ -116,9 +118,23 @@
     if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
     else if (div.dataset.dropBucket === 'later') {
       // "Later" is a range, not a day — ask which date (min: beyond this week).
-      openDatePicker('', d => { if (d) updateTask(id, { start_date: d }); }, div, dateOffset(7));
+      openDatePicker('', d => { if (d) planOnDay(id, d); }, div, dateOffset(7));
     }
-    else if (div.dataset.dropDay) updateTask(id, { start_date: div.dataset.dropDay });
+    else if (div.dataset.dropDay) planOnDay(id, div.dataset.dropDay);
+  }
+
+  // Start a task on `day` from the board. A day after its deadline would
+  // leave an overdue (or due-today) card where it is, so that drop asks to
+  // move the deadline along; cancelling changes nothing. Undo restores both.
+  async function planOnDay(id, day) {
+    const task = tasks.find(t => t.id === id);
+    if (!task || !task.due_date || day <= task.due_date) return updateTask(id, { start_date: day });
+    if (!await confirmDeadlineMove(task, day)) return;
+    const old = { start_date: task.start_date ?? null, due_date: task.due_date,
+                  focus_order: task.focus_order ?? null, history: oldHistory(id) };
+    if (await updateTask(id, { start_date: day, due_date: day })) {
+      showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
+    }
   }
 
   // A checkbox item in a card's notes ("- [ ] milk"): ticking it edits the
@@ -143,6 +159,10 @@
     const card = e.target.closest('.task-item[data-drag]');
     if (card) card.draggable = e.pointerType !== 'touch';
   }, true);
+  listEl.addEventListener('click', e => {
+    const yearBtn = e.target.closest('[data-completed-year]');
+    if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
+  });
   listEl.addEventListener('click', e => {
     if (lastPointerType !== 'touch') return;
     const card = e.target.closest('.task-item');
@@ -337,6 +357,12 @@
   const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
   const embedFilter = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
   const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
+  // The year Completed shows: '' is this year, an earlier one ('2025', from
+  // ?year= or the year switcher) comes from that year's archive.
+  const thisYear = String(new Date().getFullYear());
+  let completedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
+    ? urlParams.get('year') : '';
+  let completedYears = [];   // years Completed can show (/api/deck/completed-years)
 
   // Remember the active tab per page + embed instance for the current tab only
   // (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
@@ -443,9 +469,10 @@
     // matches). If fetchDeck replaced `tasks` meanwhile, merging into it would
     // be lost: fetch again. This race made the match count flip between
     // reloads.
+    loadCompletedYears();
     do {
       gen = deckGen;
-      const res = await fetch('/api/deck/completed');
+      const res = await fetch('/api/deck/completed' + (completedYear ? `?year=${completedYear}` : ''));
       completed = (await res.json()).filter(inScope);
     } while (gen !== deckGen);
     const existingIds = new Set(tasks.map(t => t.id));
@@ -453,6 +480,27 @@
       if (!existingIds.has(t.id)) tasks.push(t);
     }
     completedLoaded = true;
+    render();
+  }
+
+  async function loadCompletedYears() {
+    try {
+      const res = await fetch('/api/deck/completed-years' + (initList ? `?list=${encodeURIComponent(initList)}` : ''));
+      if (res.ok) { completedYears = (await res.json()).years; if (activeFilter === 'completed') render(); }
+    } catch (_) {}
+  }
+
+  // Show another year in Completed: drop the loaded completed tasks (the
+  // match count in the other views counts whatever is loaded) and fetch that
+  // year's. deckGen tells a load in flight that its year is gone.
+  function setCompletedYear(year) {
+    year = year === thisYear ? '' : year;
+    if (year === completedYear) return;
+    completedYear = year;
+    tasks = tasks.filter(t => !t.completed_at);
+    deckGen++;
+    completedLoaded = false;
+    if (activeFilter === 'completed') fetchCompleted();
     render();
   }
 
@@ -759,27 +807,44 @@
   deleteCancelBtn?.addEventListener('click', () => deleteModal.close());
 
   function confirmDelete(title, count = 1) {
+    const labelEl = deleteModal.querySelector('.scratch-label');
+    if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
+    deleteTitleEl.textContent = count > 1 ? '' : title;
+    return confirmModal(deleteModal, deleteConfirmBtn, deleteCancelBtn);
+  }
+
+  // Plan board: a start date after the task's deadline would leave the card
+  // where the deadline puts it (Overdue, or Today when due today), so the
+  // drop would seem to do nothing, and the task would start after it is due.
+  function confirmDeadlineMove(task, day) {
+    const when = d => ({ Today: 'today', Tomorrow: 'tomorrow', Yesterday: 'yesterday' })[formatDate(d)] || shortDate(d);
+    deadlineTextEl.textContent =
+      `“${task.title}” is due ${when(task.due_date)}. Starting it ${when(day)} moves the deadline to that day too.`;
+    return confirmModal(deadlineModal,
+      document.getElementById('task-deadline-confirm' + sfx),
+      document.getElementById('task-deadline-cancel' + sfx));
+  }
+
+  // Show a confirmation <dialog>; resolves true for OK, false for Cancel/Esc.
+  function confirmModal(dialog, okBtn, cancelBtn) {
     return new Promise(resolve => {
-      const labelEl = deleteModal.querySelector('.scratch-label');
-      if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
-      deleteTitleEl.textContent = count > 1 ? '' : title;
-      deleteModal.showModal();
+      dialog.showModal();
       let resolved = false;
       const finish = ok => {
         if (resolved) return;
         resolved = true;
-        deleteConfirmBtn.removeEventListener('click', onOk);
-        deleteCancelBtn.removeEventListener('click', onCancel);
-        deleteModal.removeEventListener('close', onClose);
-        deleteModal.close();
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        dialog.removeEventListener('close', onClose);
+        dialog.close();
         resolve(ok);
       };
       const onOk     = () => finish(true);
       const onCancel = () => finish(false);
       const onClose  = () => finish(false);
-      deleteConfirmBtn.addEventListener('click', onOk);
-      deleteCancelBtn.addEventListener('click', onCancel);
-      deleteModal.addEventListener('close', onClose, { once: true });
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      dialog.addEventListener('close', onClose, { once: true });
     });
   }
 
@@ -1441,7 +1506,14 @@
     }
     // No tab is highlighted in Completed, so the list says where you are.
     if (activeFilter === 'completed') {
-      html += '<li class="task-inbox-divider task-inbox-divider--only">Completed</li>';
+      // Earlier years (the yearly archives) are one click away.
+      const shown = completedYear || thisYear;
+      const years = completedYears.includes(shown) ? completedYears : [...completedYears, shown].sort().reverse();
+      const yearBtns = years.length > 1
+        ? `<span class="completed-years">${years.map(y =>
+            `<button type="button" data-completed-year="${y}" aria-pressed="${y === shown}">${y}</button>`).join('')}</span>`
+        : '';
+      html += `<li class="task-inbox-divider task-inbox-divider--only completed-heading">Completed${yearBtns}</li>`;
     }
     // Limit completed tab display
     let displayTasks = orderedTasks;
@@ -1794,6 +1866,8 @@
     if (!VIEWS.includes(filter)) return;
     if (filter !== 'completed') lastTab = filter;
     activeFilter = filter;
+    // Back from an earlier year: the other views count this year's matches.
+    if (filter !== 'completed' && completedYear) setCompletedYear('');
     markActiveTab(filter);   // Completed has no tab: none is marked
     syncCompletedLink();
     // Keyboard focus follows the active view (Tab-cycling from a focused tab
@@ -2446,7 +2520,7 @@
 
     // Ctrl+Z undo — works everywhere except inside the edit modal
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
-      if (modal.open || deleteModal.open) return;
+      if (modal.open || deleteModal.open || deadlineModal.open) return;
       const focus = document.activeElement;
       if (focus && focus.closest('textarea, [contenteditable]')) return;
       e.preventDefault();
@@ -2606,7 +2680,7 @@
   // the middle of something the re-render would destroy: a drag or swipe, a
   // completion's grace period, an inline title edit, the ⋯ menu or the editor.
   function refreshIfIdle() {
-    const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open ||
+    const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open || deadlineModal.open ||
       listEl.querySelector('.task-inline-input');
     if (!busy) refresh();
   }
@@ -2656,7 +2730,7 @@
   const initTaskId = urlParams.get('task') || '';
   function revealTask(id) {
     if (!tasks.some(t => t.id === id)) {
-      // Deleted, or rolled into a previous-year archive. One notice per page.
+      // Deleted (or in another list). One notice per page.
       if (instanceId === '0') showNotice('That task is no longer in the deck.');
       return;
     }

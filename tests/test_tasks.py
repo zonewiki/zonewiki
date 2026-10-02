@@ -633,8 +633,9 @@ class TestReorder:
         """Dragging a task out of a manual order (Focus's Lineup, Open's
         Sorted) clears the field (null) in the same request that renumbers
         the rest."""
-        t1 = create_task(client, title="First").get_json()
-        t2 = create_task(client, title="Second").get_json()
+        today = date.today().isoformat()   # on Focus, where a Lineup place lasts
+        t1 = create_task(client, title="First", start_date=today).get_json()
+        t2 = create_task(client, title="Second", start_date=today).get_json()
         client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]]})
         client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]], "field": "focus_order"})
         resp = client.post("/api/deck/reorder", json={
@@ -717,6 +718,42 @@ class TestFocusOrderReset:
         assert self.focus_order_after(client, tid, start_date=None) is None
         assert self.focus_order_after(client, tid, start_date=date.today().isoformat(),
                                       focus_order=0) == 0
+
+    def test_starting_a_due_task_keeps_its_place(self, client):
+        """Regression: a task due today (no start date) in the Lineup lost its
+        place when started today, though it never left Focus."""
+        today = date.today().isoformat()
+        task = create_task(client, title="Due", due_date=today).get_json()
+        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        assert self.focus_order_after(client, task["id"], start_date=today) == 0
+
+    def test_moving_start_later_keeps_it_while_due(self, client):
+        # Still due today, so still on Focus: the place stays.
+        today = date.today()
+        task = create_task(client, title="Due", start_date=today.isoformat(),
+                           due_date=today.isoformat()).get_json()
+        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        tomorrow = (today + timedelta(days=1)).isoformat()
+        assert self.focus_order_after(client, task["id"], start_date=tomorrow) == 0
+
+    def test_deadline_moving_out_of_focus_clears_it(self, client):
+        """Regression: a lined-up task (no start date) whose deadline moved
+        to next week kept its place and came back to it later."""
+        today = date.today()
+        task = create_task(client, title="Due", due_date=today.isoformat()).get_json()
+        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        later = (today + timedelta(days=7)).isoformat()
+        assert self.focus_order_after(client, task["id"], due_date=later) is None
+
+    def test_stale_place_outside_focus_is_dropped_on_read(self, client, wiki_dir):
+        later = (date.today() + timedelta(days=7)).isoformat()
+        (wiki_dir / "_deck.json").write_text(json.dumps([
+            {"id": "s", "title": "Stale", "due_date": later, "focus_order": 3},
+            {"id": "f", "title": "Focus", "start_date": date.today().isoformat(), "focus_order": 1},
+        ]), encoding="utf-8")
+        by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert by_id["s"]["focus_order"] is None
+        assert by_id["f"]["focus_order"] == 1
 
 
 # ---------- Completed Count ----------
@@ -1678,6 +1715,127 @@ class TestCompletedArchive:
         deck_module._archive_old_completed()
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
+
+
+class TestCompletedByYear:
+    """Earlier years' completed tasks (the yearly archives) are shown by year
+    in Completed and can be changed like any other completed task."""
+
+    def _seed(self, wiki_dir):
+        year = date.today().year
+        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(json.dumps([
+            {"id": "old", "title": "Last year", "completed_at": f"{year-1}-05-01T10:00:00"},
+        ]), encoding="utf-8")
+        (wiki_dir / "_deck_completed.json").write_text(json.dumps([
+            {"id": "new", "title": "This year", "completed_at": f"{year}-01-02T10:00:00"},
+        ]), encoding="utf-8")
+        return year
+
+    def _ids(self, path):
+        return [t["id"] for t in json.loads(path.read_text(encoding="utf-8"))]
+
+    def test_completed_by_year(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        assert [t["id"] for t in client.get("/api/deck/completed").get_json()] == ["new"]
+        got = client.get(f"/api/deck/completed?year={year-1}").get_json()
+        assert [t["id"] for t in got] == ["old"]
+        assert client.get("/api/deck/completed?year=abc").status_code == 400
+
+    def test_completed_view_and_count_leave_out_unarchived_old_tasks(self, client, wiki_dir):
+        # A year change without a restart: last year's task is still in the
+        # current file, but belongs to last year's view.
+        year = date.today().year
+        (wiki_dir / "_deck_completed.json").write_text(json.dumps([
+            {"id": "old", "title": "Old", "completed_at": f"{year-1}-12-31T10:00:00"},
+            {"id": "new", "title": "New", "completed_at": f"{year}-01-01T10:00:00"},
+        ]), encoding="utf-8")
+        assert [t["id"] for t in client.get("/api/deck/completed").get_json()] == ["new"]
+        assert client.get("/api/deck/completed-count").get_json()["count"] == 1
+        assert [t["id"] for t in client.get(f"/api/deck/completed?year={year-1}").get_json()] == ["old"]
+        assert client.get("/api/deck/completed-years").get_json()["years"] == [str(year), str(year-1)]
+
+    def test_completed_years_per_list(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        assert client.get("/api/deck/completed-years").get_json()["years"] == [str(year), str(year-1)]
+        assert client.get("/api/deck/completed-years?list=groceries").get_json()["years"] == [str(year)]
+
+    def test_edit_keeps_task_in_its_archive(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        resp = client.put("/api/deck/old", json={"title": "Renamed"})
+        assert resp.status_code == 200
+        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        assert self._ids(arch) == ["old"]
+        assert json.loads(arch.read_text(encoding="utf-8"))[0]["title"] == "Renamed"
+        assert self._ids(wiki_dir / "_deck_completed.json") == ["new"]
+
+    def test_reopen_moves_task_out_of_archive(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        assert client.put("/api/deck/old", json={"completed": False}).status_code == 200
+        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
+        assert [t["id"] for t in client.get("/api/deck").get_json()] == ["old"]
+        # Completed again now, it belongs to this year.
+        client.put("/api/deck/old", json={"completed": True})
+        assert self._ids(wiki_dir / "_deck_completed.json") == ["new", "old"]
+
+    def test_batch_reopen_and_tag_reach_archives(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        tagged = client.post("/api/deck/batch-tag", json={"ids": ["old"], "add": ["x"]}).get_json()
+        assert tagged[0]["tags"] == ["x"]
+        done = client.post("/api/deck/batch-complete", json={"ids": ["old"], "completed": False}).get_json()
+        assert [t["id"] for t in done] == ["old"]
+        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
+
+    def test_delete_and_restore_archived_task(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        snapshot = json.loads(arch.read_text(encoding="utf-8"))[0]
+        assert client.delete("/api/deck/old").status_code == 204
+        assert self._ids(arch) == []
+        # Undo puts it back into its own year, not this year's file.
+        assert client.post("/api/deck/restore", json={"tasks": [snapshot]}).status_code == 201
+        assert self._ids(arch) == ["old"]
+        assert self._ids(wiki_dir / "_deck_completed.json") == ["new"]
+
+    def test_batch_delete_reaches_archives(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        client.post("/api/deck/batch-delete", json={"ids": ["old", "new"]})
+        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_deck_completed.json") == []
+
+    def test_unchanged_archives_are_not_rewritten(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        raw = '[{"id": "old", "title": "Last year", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1)
+        arch.write_text(raw, encoding="utf-8")
+        create_task(client, title="Unrelated")
+        client.put("/api/deck/new", json={"title": "Edited"})
+        assert arch.read_text(encoding="utf-8") == raw
+
+    def test_other_files_are_not_archives(self, client, wiki_dir):
+        # Only _deck_completed-YYYY.json is an archive: anything else that
+        # matches the prefix is left alone by the year split.
+        self._seed(wiki_dir)
+        other = wiki_dir / "_deck_completed-backup.json"
+        other.write_text(json.dumps([{"id": "b", "title": "B", "completed_at": "2001-01-01T00:00:00"}]),
+                         encoding="utf-8")
+        client.put("/api/deck/new", json={"title": "Edited"})
+        assert self._ids(other) == ["b"]
+
+    def test_search_links_archived_task_to_its_year(self, client, wiki_dir):
+        year = date.today().year
+        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(json.dumps([
+            {"id": "old", "title": "Zephyrscale audit", "completed_at": f"{year-1}-05-01T10:00:00"},
+        ]), encoding="utf-8")
+        results = client.get("/api/search?q=zephyrscale").get_json()
+        task = next(r for r in results if r.get("type") == "task")
+        assert task["href"] == f"/deck?task=old&view=completed&year={year-1}"
+
+    def test_search_link_of_this_years_task_has_no_year(self, client, wiki_dir):
+        self._seed(wiki_dir)
+        client.put("/api/deck/new", json={"title": "Quillfeather done"})
+        results = client.get("/api/search?q=quillfeather").get_json()
+        task = next(r for r in results if r.get("type") == "task")
+        assert task["href"] == "/deck?task=new&view=completed"
 
 
 class TestMalformedInput:
