@@ -432,6 +432,8 @@ main {
 .search-result-card:hover { box-shadow: var(--shadow); }
 .search-result-card a { text-decoration: none; color: var(--link); font-weight: 600; font-size: 1rem; }
 .search-result-card p { margin: .3rem 0 0; font-size: .875rem; color: var(--muted); }
+.search-more { display: block; margin: .4rem 0 .2rem; font-size: .875rem; text-align: right; }
+.search-count { color: var(--muted); font-size: .875rem; margin: 0 0 .75rem; }
 /* Folder and edit date (task: list and status), to tell alike titles apart. */
 .search-result-card .result-meta {
   display: block;

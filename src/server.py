@@ -2273,29 +2273,32 @@ def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None)
             if (keep is None or keep(d)) and _accepts(query, d)][:depth]
 
 
-def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None) -> list[dict]:
-    """The 15 best docs for the query. Keyword ranking only, unless semantic
+def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
+                 limit: int = 15) -> list[dict]:
+    """The `limit` best docs for the query. Keyword ranking only, unless semantic
     search is on and ready: then BM25 and vector similarity are fused
     (search.fuse). Docs that fail the query's filters, or `keep` when
     given, take no part."""
     q = query.ranking_text
     if not q.strip():
         return []
-    bm25 = _bm25(index, query, FUSE_DEPTH if SEMANTIC else 15, keep)
+    # Each ranking goes as deep as the fused list must be long.
+    depth = max(FUSE_DEPTH, limit) if SEMANTIC else limit
+    bm25 = _bm25(index, query, depth, keep)
     if not SEMANTIC:
-        return _phrase_first(bm25, query, index, keep)[:15]
+        return _phrase_first(bm25, query, index, keep)[:limit]
     SEMANTIC.poke()
     allowed = [d for d in index.docs if (keep is None or keep(d))
                and (not query.has_filters or _accepts(query, d))]
     pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
     tasks = {d["task_id"]: d for d in allowed if d.get("type") == "task"}
-    hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
-    task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
+    hits = SEMANTIC.search(q, known=pages, limit=depth)
+    task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=depth)
     if not hits and not task_hits:
-        return _phrase_first(bm25, query, index, keep)[:15]
+        return _phrase_first(bm25, query, index, keep)[:limit]
     semantic = _by_similarity([(pages[slug], sc) for slug, sc, _t in hits],
                               [(tasks[i], sc) for i, sc in task_hits])
-    return _phrase_first(search.fuse([bm25, semantic[:FUSE_DEPTH]]), query, index, keep)[:15]
+    return _phrase_first(search.fuse([bm25, semantic[:depth]]), query, index, keep)[:limit]
 
 
 def _best_sections(query: search.Query, slugs: set[str]) -> dict[str, dict]:
@@ -2341,9 +2344,15 @@ def _result_meta(d: dict) -> str:
     return f"{folder} · {edited}" if folder else edited
 
 
-def do_search(raw: str, unlinked: bool = False) -> list[dict]:
-    """Search results for the browser. `unlinked` keeps only pages no other
-    page links to (the search modal's "Unlinked only"), no tasks."""
+SEARCH_LIMIT = 15       # results in the search modal (/api/search default)
+SEARCH_PAGE_LIMIT = 50  # results on the /search page ("All results")
+SEARCH_MAX_LIMIT = 100
+
+
+def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT) -> list[dict]:
+    """Search results for the browser, at most `limit`. `unlinked` keeps
+    only pages no other page links to (the search modal's "Unlinked
+    only"), no tasks."""
     if not raw.strip():
         return []
     query = search.Query(raw)
@@ -2352,7 +2361,7 @@ def do_search(raw: str, unlinked: bool = False) -> list[dict]:
     if unlinked:
         linked = {slug for slug, n in all_backlink_counts().items() if n > 0}
         keep = lambda d: d.get("type") != "task" and d["slug"] not in linked  # noqa: E731
-    docs = _ranked_docs(query, _search_index(), keep)
+    docs = _ranked_docs(query, _search_index(), keep, limit)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
     for d in docs:
@@ -2700,7 +2709,9 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1"))
+    limit = request.args.get("limit", SEARCH_LIMIT, type=int)
+    limit = max(1, min(limit, SEARCH_MAX_LIMIT))
+    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1", limit=limit))
 
 
 # ── The deck page ─────────────────────────────────────────────────────────────
@@ -2759,10 +2770,14 @@ def _result_href(r: dict) -> str:
 @app.get("/search")
 def search_page():
     q = request.args.get("q", "").strip()
-    results = do_search(q) if q else []
+    unlinked = request.args.get("unlinked") == "1"
+    results = do_search(q, unlinked=unlinked, limit=SEARCH_PAGE_LIMIT) if q else []
 
     if results:
-        cards = "".join(
+        shown = (f"The first {len(results)} results" if len(results) == SEARCH_PAGE_LIMIT
+                 else f"{len(results)} result" + ("" if len(results) == 1 else "s"))
+        scope = " · unlinked pages only" if unlinked else ""
+        cards = f'<p class="search-count">{shown}{scope}</p>' + "".join(
             f"""<div class="search-result-card">
   <a href="{html.escape(r['href'])}">{html.escape(r['title'])}</a>
   <span class="result-meta">{html.escape(r['meta'])}</span>

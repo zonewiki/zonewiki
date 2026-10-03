@@ -106,6 +106,28 @@ def test_content_matches_show_folder_and_date(page, wiki):
     expect(meta.first).to_have_text(re.compile(r"^conversations/alex · edited \d{4}-\d\d-\d\d$"))
 
 
+def test_all_results_link_when_there_are_more(page, wiki):
+    for i in range(17):
+        wiki.write(f"walrus-{i}", f"# Walrus {i}\n\nwalrus notes\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("walrus")
+    expect(page.locator("#modal-content-matches .search-result-card")).to_have_count(15)
+    page.locator("#modal-content-matches .search-more").click()
+    page.wait_for_url("**/search?q=walrus")
+    expect(page.locator(".search-results .search-result-card")).to_have_count(17)
+    expect(page.locator(".search-count")).to_have_text("17 results")
+
+
+def test_no_all_results_link_when_everything_is_shown(page, wiki):
+    seed(wiki)
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomatoes")
+    expect(page.locator("#modal-content-matches .search-result-card")).to_have_count(2)
+    expect(page.locator("#modal-content-matches .search-more")).to_have_count(0)
+
+
 def test_unlinked_only_filters_content_matches(page, wiki):
     # Regression: the checkbox narrowed the title list but not the content
     # matches below it.

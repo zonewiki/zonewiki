@@ -748,6 +748,28 @@ class TestSearch:
         results = client.get(href, headers=HOST).get_data(as_text=True)
         assert "Runbook" in results and "Rotate keys" in results and "Notes" not in results
 
+    def test_limit(self, client, wiki_dir):
+        for i in range(20):
+            write_page(wiki_dir, f"walrus-{i}", f"# Walrus {i}\n\nwalrus\n")
+        get = lambda qs: client.get(f"/api/search?q=walrus{qs}", headers=HOST).get_json()  # noqa: E731
+        assert len(get("")) == 15
+        assert len(get("&limit=16")) == 16
+        assert len(get("&limit=1000")) == 20      # clamped to 100, only 20 exist
+        assert len(get("&limit=0")) == 1          # at least one
+        assert len(get("&limit=lots")) == 15      # not a number: the default
+
+    def test_search_page_shows_more_with_a_count(self, client, wiki_dir):
+        for i in range(20):
+            write_page(wiki_dir, f"walrus-{i}", f"# Walrus {i}\n\nwalrus\n")
+        page = client.get("/search?q=walrus", headers=HOST).get_data(as_text=True)
+        assert page.count('class="search-result-card"') == 20
+        assert '<p class="search-count">20 results</p>' in page
+        for i in range(20, 60):
+            write_page(wiki_dir, f"walrus-{i}", f"# Walrus {i}\n\nwalrus\n")
+        page = client.get("/search?q=walrus&unlinked=1", headers=HOST).get_data(as_text=True)
+        assert page.count('class="search-result-card"') == 50
+        assert "The first 50 results · unlinked pages only" in page
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")

@@ -477,21 +477,26 @@ function applyModalControls() {
   }
 }
 
+const MODAL_RESULTS = 15;  // server.py SEARCH_LIMIT
+
 async function fetchModalContentMatches(q) {
   const seq = ++modalCMSeq;
   try {
     // "Unlinked only" applies to content matches too: the server filters
     // before it cuts the list, so the 15 results are all unlinked pages.
     const unlinked = modalUnlinked.checked ? '&unlinked=1' : '';
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${unlinked}`);
+    // One more than shown: if it comes back, there are more for /search.
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${unlinked}&limit=${MODAL_RESULTS + 1}`);
     if (seq !== modalCMSeq) return;  // stale response — discard
     const results = await res.json();
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
+    const more = results.length > MODAL_RESULTS
+      ? `<a class="search-more" href="/search?q=${encodeURIComponent(q)}${unlinked}">All results →</a>` : '';
     modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
-      results.map(r =>
+      results.slice(0, MODAL_RESULTS).map(r =>
         `<a class="search-result-card" href="${he(r.href)}"><span class="result-title">${he(r.title)}</span>` +
         `<span class="result-meta">${he(r.meta || '')}</span><p>${r.excerpt}</p></a>`
-      ).join('');
+      ).join('') + more;
     modalCM.classList.remove('hidden');
     // Re-clamp active index now that content cards are in the pool
     if (modalActiveIdx >= 0) setModalActive(modalActiveIdx);
