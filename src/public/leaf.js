@@ -358,6 +358,25 @@ function queryWords(raw) {
     .map(m => m[2] ?? m[3]).join(' ').trim();
 }
 
+// How well q matches a page in the title list: the better of its title and
+// its file name (the slug's last part, scored on its own, so a file name
+// starting with the query counts as a match at the start). A match that
+// only reaches into folder names (".../2026-05-26_alex-1on1/prep") is
+// weaker, so it scores FOLDER_PENALTY less. `field` says which was matched
+// ('title' or 'slug'), `indices` where in it, for the highlighting.
+const FOLDER_PENALTY = 6;
+
+function titleMatch(q, p) {
+  const ts = fuzzyScore(q, p.title);
+  const file = p.slug.slice(p.slug.lastIndexOf('/') + 1);
+  const fs = fuzzyScore(q, file);
+  if (ts && (!fs || ts.score >= fs.score)) return { ...ts, field: 'title' };
+  const offset = p.slug.length - file.length;
+  if (fs) return { score: fs.score, indices: fs.indices.map(i => i + offset), field: 'slug' };
+  const ss = fuzzyScore(q, p.slug);
+  return ss ? { ...ss, score: ss.score - FOLDER_PENALTY, field: 'slug' } : null;
+}
+
 // Equal fuzzy scores are common: every title starting with the query gets
 // the same one. Then the page most likely meant comes first, not the
 // alphabetical order: scratch notes last (temporary, often titled by their
@@ -389,10 +408,7 @@ function applyModalControls() {
     const scored = [];
     for (const p of (q ? modalPages : [])) {
       if (unlinked && p.links !== 0) continue;
-      const ts = fuzzyScore(q, p.title);
-      const ss = fuzzyScore(q, p.slug);
-      const best = ts && (!ss || ts.score >= ss.score) ? { ...ts, field: 'title' }
-                 : ss ? { ...ss, field: 'slug' } : null;
+      const best = titleMatch(q, p);
       if (!best) continue;
       scored.push({ p, ...best, ...tieBreak(p, best.field) });
     }

@@ -201,3 +201,18 @@ def test_equal_title_scores_prefer_the_main_page(page, wiki):
     assert slugs.evaluate_all("els => els.map(e => e.dataset.slug)") == [
         "alex-morgan", "conversations/people/alex",
         "conversations/situations/alex-1on1/prep", "2026-07-09_06-12-09_alex_prep"]
+
+
+def test_file_name_counts_like_the_title(page, wiki):
+    # A file name starting with the query ("team/people/alex") beats a match
+    # only in a folder name ("alex-notes/prep"), even though that page sits
+    # in fewer folders; the file name part is what gets highlighted.
+    wiki.write("alex-notes/prep", "# Prep for the talk\n\nx\n")
+    wiki.write("team/people/alex", "# Profile\n\nx\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("alex")
+    items = page.locator("#modal-page-list .page-list-item")
+    expect(items).to_have_count(2)
+    assert items.evaluate_all("els => els.map(e => e.dataset.slug)") == ["team/people/alex", "alex-notes/prep"]
+    expect(items.first.locator(".page-slug mark")).to_have_text("alex")
