@@ -199,6 +199,11 @@ class TestSearchWiki:
         assert "slug: tagged" in text and "Task: git push the backup" in text
         assert "slug: git-remote" not in text
 
+    def test_exact_phrase_ranks_first(self, client, pages):  # noqa: F811
+        write_page(pages, "prep", "# Zebra prep\n\nZebra, zebra, zebra. Then crossing, crossing.\n")
+        write_page(pages, "exact", "# Notes\n\nAt the zebra   crossing.\n")
+        assert call(client, "search_wiki", query="zebra crossing")[0].startswith("[1] Notes\nslug: exact")
+
     def test_found_by_file_name(self, client, pages):  # noqa: F811
         write_page(pages, "messages/2026-06-18_update-alex-robin", "# Roof status\n\nRevised timeline.\n")
         assert "slug: messages/2026-06-18_update-alex-robin" in call(client, "search_wiki", query="robin")[0]

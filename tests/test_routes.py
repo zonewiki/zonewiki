@@ -693,6 +693,22 @@ class TestSearch:
         write_page(wiki_dir, "a", "# A\n\ngit.\n")
         assert client.get("/api/search?q=-git", headers=HOST).get_json() == []
 
+    def test_exact_phrase_ranks_first(self, client, wiki_dir):
+        # Regression: "alex again" put a note with both words apart (and
+        # more often) above the one saying "Alex again".
+        write_page(wiki_dir, "prep", "# Alex prep\n\nAlex, Alex and Alex. Ask again, again.\n")
+        write_page(wiki_dir, "situation", "# Situation\n\n## Context\n\nCalm.\n\n"
+                                          "## The ask\n\nThen Alex   again pushed back.\n")
+        results = client.get("/api/search?q=alex+again", headers=HOST).get_json()
+        assert [r["slug"] for r in results] == ["situation", "prep"]
+        assert results[0]["href"] == "/page/situation#the-ask"
+        assert "<mark>Alex   again</mark>" in results[0]["excerpt"]
+
+    def test_single_word_has_no_phrase_boost(self, client, wiki_dir):
+        write_page(wiki_dir, "once", "# Once\n\nzebra.\n")
+        write_page(wiki_dir, "often", "# Zebra\n\nzebra zebra.\n")
+        assert client.get("/api/search?q=zebra", headers=HOST).get_json()[0]["slug"] == "often"
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")

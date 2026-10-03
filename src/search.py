@@ -138,7 +138,7 @@ def query_words(query: str) -> list[str]:
 _QUERY_PART_RE = re.compile(r'(-?)(?:"([^"]+)"|(\S+))')
 
 
-def _squash(text: str) -> str:
+def squash(text: str) -> str:
     """Folded text with runs of whitespace as one space, for phrase checks."""
     return " ".join(fold(text).split())
 
@@ -161,9 +161,9 @@ class Query:
                 if not quoted.strip():
                     continue
                 if negative:
-                    self.exclude_phrases.append(_squash(quoted))
+                    self.exclude_phrases.append(squash(quoted))
                 else:
-                    self.phrases.append(_squash(quoted))
+                    self.phrases.append(squash(quoted))
                     phrases.append(quoted.strip())
             elif plain.startswith("#") and len(plain.strip("#")) > 0:
                 (self.exclude_tags if negative else self.tags).add(plain.lstrip("#").lower())
@@ -172,6 +172,15 @@ class Query:
             else:
                 words.append(plain)
         self.text = " ".join(phrases + words)
+
+    @property
+    def phrase(self) -> str | None:
+        """The query's words as one phrase (squashed), when there are at
+        least two: a document containing it is what was meant, so it ranks
+        first ("alex again" finds the note saying "Alex again"). Stopwords
+        stay in, as they are part of the wording."""
+        words = self.text.split()
+        return squash(self.text) if len(words) >= 2 else None
 
     @property
     def has_filters(self) -> bool:
@@ -193,7 +202,7 @@ class Query:
         if self.exclude_stems and self.exclude_stems & set(tokens):
             return False
         if self.phrases or self.exclude_phrases:
-            squashed = _squash(text)
+            squashed = squash(text)
             if not all(p in squashed for p in self.phrases):
                 return False
             if any(p in squashed for p in self.exclude_phrases):

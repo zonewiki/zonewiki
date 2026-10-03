@@ -2224,10 +2224,38 @@ def _page_tags(content: str) -> list[str]:
     return [t.lower() for t in parse_frontmatter(content)[0].get("tags", [])]
 
 
+def _doc_text(d: dict) -> str:
+    """A page, section or task doc's searchable text."""
+    return d["excerpt_text"] if "excerpt_text" in d else f"{d['title']}\n{d['heading']}\n{d['text']}"
+
+
 def _accepts(query: search.Query, d: dict) -> bool:
     """Whether a page, section or task doc passes the query's filters."""
-    text = d["excerpt_text"] if "excerpt_text" in d else f"{d['title']}\n{d['heading']}\n{d['text']}"
-    return query.accepts(text, d["tokens"], d.get("tags"))
+    return query.accepts(_doc_text(d), d["tokens"], d.get("tags"))
+
+
+def _has_phrase(d: dict, phrase: str) -> bool:
+    # The squashed text is cached on the doc, which lives until its file changes.
+    if "_squashed" not in d:
+        d["_squashed"] = search.squash(_doc_text(d))
+    return phrase in d["_squashed"]
+
+
+def _phrase_first(ranked: list[dict], query: search.Query, index: search.SearchIndex,
+                  keep=None) -> list[dict]:
+    """ranked with the docs containing the query as a phrase moved to the
+    front (in BM25 order), including ones the ranking had cut off: a page
+    saying exactly what was typed beats one that has the words apart."""
+    phrase = query.phrase
+    if not phrase:
+        return ranked
+    hits = [d for _s, d in index.search(query.ranking_text, limit=len(index.docs))
+            if (keep is None or keep(d)) and (not query.has_filters or _accepts(query, d))
+            and _has_phrase(d, phrase)]
+    if not hits:
+        return ranked
+    first = {id(d) for d in hits}
+    return hits + [d for d in ranked if id(d) not in first]
 
 
 def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None) -> list[dict]:
@@ -2249,7 +2277,7 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex) -> list[dict]:
         return []
     bm25 = _bm25(index, query, FUSE_DEPTH if SEMANTIC else 15)
     if not SEMANTIC:
-        return bm25
+        return _phrase_first(bm25, query, index)[:15]
     SEMANTIC.poke()
     allowed = [d for d in index.docs if not query.has_filters or _accepts(query, d)]
     pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
@@ -2257,25 +2285,30 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex) -> list[dict]:
     hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
     task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
     if not hits and not task_hits:
-        return bm25[:15]
+        return _phrase_first(bm25, query, index)[:15]
     semantic = _by_similarity([(pages[slug], sc) for slug, sc, _t in hits],
                               [(tasks[i], sc) for i, sc in task_hits])
-    return search.fuse([bm25, semantic[:FUSE_DEPTH]])[:15]
+    return _phrase_first(search.fuse([bm25, semantic[:FUSE_DEPTH]]), query, index)[:15]
 
 
-def _best_sections(q: str, slugs: set[str]) -> dict[str, dict]:
-    """For each page in slugs, the section a result should open: the best
-    BM25-scored section whose own text has a query word, else, for a page
-    found by meaning, its most similar section. A page matched only by its
-    title gets none (every section would match equally), so its link opens
-    the top of the page."""
+def _best_sections(query: search.Query, slugs: set[str]) -> dict[str, dict]:
+    """For each page in slugs, the section a result should open: one whose
+    own text has the query as a phrase, else the best BM25-scored section
+    whose own text has a query word, else, for a page found by meaning, its
+    most similar section. A page matched only by its title gets none (every
+    section would match equally), so its link opens the top of the page."""
+    q = query.ranking_text
     index = _chunk_index()
+    ranked = [d for _s, d in index.search(q, limit=len(index.docs))
+              if d.get("type") != "task" and d.get("slug") in slugs]
     best: dict[str, dict] = {}
-    for _s, d in index.search(q, limit=len(index.docs)):
-        slug = d.get("slug")
-        if (d.get("type") != "task" and slug in slugs and slug not in best
-                and search.matches(f"{d['heading']}\n{d['text']}", q)):
-            best[slug] = d
+    if query.phrase:
+        for d in ranked:
+            if d["slug"] not in best and query.phrase in search.squash(f"{d['heading']}\n{d['text']}"):
+                best[d["slug"]] = d
+    for d in ranked:
+        if d["slug"] not in best and search.matches(f"{d['heading']}\n{d['text']}", q):
+            best[d["slug"]] = d
     if SEMANTIC and len(best) < len(slugs):
         rest = slugs - set(best)
         by_key = {d["key"]: d for d in index.docs if d.get("type") != "task" and d["slug"] in rest}
@@ -2291,7 +2324,7 @@ def do_search(raw: str) -> list[dict]:
     query = search.Query(raw)
     q = query.ranking_text  # what excerpts mark: the words, without operators
     docs = _ranked_docs(query, _search_index())
-    sections = _best_sections(q, {d["slug"] for d in docs if d.get("type") != "task"})
+    sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
     for d in docs:
         section = sections.get(d["slug"]) if d.get("type") != "task" else None
@@ -2423,7 +2456,7 @@ def retrieve(raw: str, limit: int = 8, under: str | None = None) -> list[dict]:
             task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
         if hits or task_hits:
             ranked = search.fuse([ranked, _by_similarity(hits, task_hits)[:FUSE_DEPTH]])
-    return ranked[:limit]
+    return _phrase_first(ranked, query, index, keep)[:limit]
 
 
 def _mcp_int(args: dict, name: str, default: int, top: int) -> int:
