@@ -44,6 +44,8 @@ TOOLS = [
                 "query": {"type": "string", "description": "What to look for: words or a question."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 8,
                           "description": "How many sections to return."},
+                "under": {"type": "string",
+                          "description": "Only pages in this folder and its subfolders, without tasks, e.g. 'tickets' or 'projects' (the slug part before a '/')."},
             },
             "required": ["query"],
         },
@@ -89,11 +91,14 @@ TOOLS = [
     {
         "name": "list_pages",
         "title": "List pages",
-        "description": "List the wiki's pages (slug, title, last edited), most recently edited first.",
+        "description": ("List the wiki's pages (slug, title, last edited), most recently edited "
+                        "first; with `under`, one folder's. Slugs show the folder structure."),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
+                "under": {"type": "string",
+                          "description": "Only pages in this folder and its subfolders, e.g. 'tickets' or 'projects' (the slug part before a '/')."},
             },
         },
         "annotations": _READ_ONLY,

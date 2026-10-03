@@ -2287,16 +2287,40 @@ def _chunk_index() -> search.SearchIndex:
     return _chunk_index_cache["index"]
 
 
-def retrieve(q: str, limit: int = 8) -> list[dict]:
+def _in_folder(slug: str, folder: str | None) -> bool:
+    """Whether slug is the page `folder` or below it (case ignored)."""
+    if not folder:
+        return True
+    slug, folder = slug.lower(), folder.lower()
+    return slug == folder or slug.startswith(folder + "/")
+
+
+def _clean_folder(raw) -> str | None:
+    """A folder argument as a slug prefix: '/page/tickets/', 'tickets/' and
+    'tickets' all become 'tickets'. Empty means the whole wiki."""
+    if not isinstance(raw, str):
+        raise mcp_server.ToolError("under must be a string")
+    raw = raw.strip()
+    if "/page/" in raw:
+        raw = raw.split("/page/", 1)[1]
+    return raw.strip("/") or None
+
+
+def retrieve(q: str, limit: int = 8, under: str | None = None) -> list[dict]:
     """The sections and tasks most relevant to q, best first: section dicts
-    (slug, title, heading, text) and task docs (type "task", with the task)."""
+    (slug, title, heading, text) and task docs (type "task", with the task).
+    With `under`, only sections of pages in that folder, and no tasks."""
     if not q.strip():
         return []
     index = _chunk_index()
-    ranked = [d for _s, d in index.search(q, limit=FUSE_DEPTH)]
+    if under:
+        ranked = [d for _s, d in index.search(q, limit=len(index.docs))
+                  if d.get("type") != "task" and _in_folder(d["slug"], under)][:FUSE_DEPTH]
+    else:
+        ranked = [d for _s, d in index.search(q, limit=FUSE_DEPTH)]
     if SEMANTIC:
         SEMANTIC.poke()
-        sections = [d for d in index.docs if d.get("type") != "task"]
+        sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)]
         by_key = {d["key"]: d for d in sections}
         keys = SEMANTIC.search_chunks(q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH)
         hits = [by_key[k] for k in keys if k in by_key]
@@ -2414,7 +2438,11 @@ def _mcp_call_tool(name: str, args: dict) -> str:
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
             raise mcp_server.ToolError("query must be a non-empty string")
-        hits = retrieve(query, _mcp_int(args, "limit", 8, 20))
+        under = _clean_folder(args.get("under", ""))
+        if under and not any(_in_folder(slug, under) for _p, slug in iter_pages()):
+            raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs, "
+                                       "whose folders are the part before the last '/'.")
+        hits = retrieve(query, _mcp_int(args, "limit", 8, 20), under)
         if not hits:
             return "No matching sections or tasks. Try other words, or list_pages to browse."
         out = []
@@ -2440,8 +2468,11 @@ def _mcp_call_tool(name: str, args: dict) -> str:
         return f"slug: {slug}\nurl: {base}/page/{slug}\n\n{content}"
     if name == "list_pages":
         limit = _mcp_int(args, "limit", 100, 1000)
+        under = _clean_folder(args.get("under", ""))
         pages = []
         for md_file, slug in iter_pages():
+            if not _in_folder(slug, under):
+                continue
             try:
                 mtime = md_file.stat().st_mtime
             except OSError:
@@ -2449,8 +2480,11 @@ def _mcp_call_tool(name: str, args: dict) -> str:
             pages.append((mtime, slug, _page_meta(md_file, slug)[0]))
         pages.sort(reverse=True)
         lines = [f"{slug} | {title} | edited {fmt_date(mtime)}" for mtime, slug, title in pages[:limit]]
+        if not pages:
+            return f"No pages under {under!r}." if under else "The wiki has no pages."
         shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
-        return f"Pages, most recently edited first ({shown}); slug | title | last edit:\n" + "\n".join(lines)
+        where = f" under {under}/" if under else ""
+        return f"Pages{where}, most recently edited first ({shown}); slug | title | last edit:\n" + "\n".join(lines)
     raise mcp_server.ToolError(f"Unknown tool: {name}")
 
 

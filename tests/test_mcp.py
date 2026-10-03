@@ -236,6 +236,43 @@ def entries(text):
     return [part.split("\n")[0] for part in text.split("\n\n---\n\n")]
 
 
+class TestFolders:
+    @pytest.fixture()
+    def tree(self, pages):  # noqa: F811
+        write_page(pages, "tickets/BUG-1_push", "# BUG-1\n\nThe git push failed on the server.\n")
+        write_page(pages, "tickets/old/BUG-0", "# BUG-0\n\nAn old git issue.\n")
+        write_page(pages, "ticketsarchive", "# Archive\n\nMore git notes.\n")
+        return pages
+
+    def test_search_under_a_folder(self, client, tree):  # noqa: F811
+        task(client, title="git chores")
+        text, err = call(client, "search_wiki", query="git", under="tickets")
+        assert not err
+        slugs = [line[6:] for line in text.splitlines() if line.startswith("slug: ")]
+        assert set(slugs) == {"tickets/BUG-1_push", "tickets/old/BUG-0"}  # not ticketsarchive
+        assert "Task:" not in text
+
+    @pytest.mark.parametrize("under", ["tickets/", "/page/tickets", "TICKETS", "tickets/old"])
+    def test_folder_spellings(self, client, tree, under):  # noqa: F811
+        text, err = call(client, "search_wiki", query="git", under=under)
+        assert not err and "slug: tickets/old/BUG-0" in text
+
+    def test_unknown_folder_is_an_error(self, client, tree):  # noqa: F811
+        text, err = call(client, "search_wiki", query="git", under="nope")
+        assert err and "list_pages" in text
+
+    def test_empty_under_means_everything(self, client, tree):  # noqa: F811
+        assert "slug: ticketsarchive" in call(client, "search_wiki", query="git", under="")[0]
+
+    def test_list_pages_under(self, client, tree):  # noqa: F811
+        text, _ = call(client, "list_pages", under="tickets")
+        assert text.splitlines()[0].startswith("Pages under tickets/, most recently edited first (all 2)")
+        assert call(client, "list_pages", under="nope")[0] == "No pages under 'nope'."
+
+    def test_bad_type(self, client, tree):  # noqa: F811
+        assert call(client, "search_wiki", query="git", under=3)[1] is True
+
+
 class TestTasksInSearchWiki:
     def test_task_is_a_result_with_its_facts(self, client, pages):  # noqa: F811
         t = task(client, title="Fix the leaf importer", tags=["leaf"], due_date="2026-10-10",
