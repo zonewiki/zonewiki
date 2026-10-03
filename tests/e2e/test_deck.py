@@ -1278,3 +1278,83 @@ def test_completed_shows_earlier_years(page, wiki):
     page.goto(href)
     expect(page.locator(".task-item[data-id='old']")).to_have_class(re.compile(r"\btask-selected\b"))
     expect(page.get_by_text("That task is no longer in the deck.")).to_have_count(0)
+
+
+# ── Start after the deadline ─────────────────────────────────────────────────
+
+def _day(offset: int) -> str:
+    return (date.today() + timedelta(days=offset)).isoformat()
+
+
+def _pick(page, d: str):
+    """Click date `d` in the open date picker, paging forward if needed."""
+    picker = page.locator(".deck-datepicker")
+    for _ in range(3):
+        cell = picker.locator(f".dp-day[data-date='{d}']")
+        if cell.count():
+            cell.click()
+            return
+        picker.locator(".dp-nav[data-nav='1']").click()
+    raise AssertionError(f"{d} not in the picker")
+
+
+def test_modal_warns_when_start_is_after_due_and_offers_a_fix(page, wiki):
+    page.request.post("/api/deck", data={"title": "Report", "due_date": _day(2)})
+    page.goto("/deck?view=open")
+    modal = open_edit(page, "Report")
+    warn = modal.locator("#task-edit-date-warn")
+    expect(warn).to_be_hidden()
+
+    # Start after due: the hint offers to move the deadline (the other date).
+    modal.locator("[data-date-trigger='task-edit-start']").click()
+    _pick(page, _day(5))
+    expect(warn).to_be_visible()
+    expect(warn).to_contain_text("Starts after its deadline")
+    warn.get_by_role("button", name=re.compile("^Move deadline to")).click()
+    expect(modal.locator("#task-edit-due")).to_have_value(_day(5))
+    expect(warn).to_be_hidden()
+
+    # Due moved before start: the fix moves the start instead.
+    modal.locator("[data-date-trigger='task-edit-due']").click()
+    _pick(page, _day(3))
+    expect(warn.get_by_role("button", name=re.compile("^Move start to"))).to_be_visible()
+    warn.get_by_role("button", name=re.compile("^Move start to")).click()
+    expect(modal.locator("#task-edit-start")).to_have_value(_day(3))
+
+    # Only a hint: a late task may start after its deadline on purpose.
+    modal.locator("[data-date-trigger='task-edit-start']").click()
+    _pick(page, _day(6))
+    expect(warn).to_be_visible()
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Report", "start_date", _day(6))
+    assert task_by_title(page, "Report")["due_date"] == _day(3)
+
+
+def test_quick_start_after_the_deadline_asks(page, wiki):
+    page.request.post("/api/deck", data={"title": "Due today", "due_date": _day(0)})
+    page.request.post("/api/deck", data={"title": "Late task", "due_date": _day(-1)})
+    page.goto("/deck?view=open")
+    dialog = page.locator("#task-deadline-modal")
+
+    # ⋯ Start tomorrow on a task due today: asks; Cancel changes nothing.
+    card(page, "Due today").locator(".task-menu-btn").click()
+    page.get_by_role("menuitem", name="Start tomorrow").click()
+    expect(dialog).to_be_visible()
+    page.locator("#task-deadline-cancel").click()
+    page.wait_for_timeout(300)
+    assert task_by_title(page, "Due today")["start_date"] is None
+
+    # F (start tomorrow) on the selected card: Move deadline moves both.
+    card(page, "Due today").locator(".task-title").click()
+    page.keyboard.press("F")
+    expect(dialog).to_be_visible()
+    page.locator("#task-deadline-confirm").click()
+    wait_for_field(page, "Due today", "due_date", _day(1))
+    assert task_by_title(page, "Due today")["start_date"] == _day(1)
+
+    # An overdue task started today: catching up, no question.
+    card(page, "Late task").locator(".task-menu-btn").click()
+    page.get_by_role("menuitem", name="Start today").click()
+    wait_for_field(page, "Late task", "start_date", _day(0))
+    expect(dialog).to_be_hidden()
+    assert task_by_title(page, "Late task")["due_date"] == _day(-1)

@@ -1594,6 +1594,13 @@ div.chip-input > input {
 .deck-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
 .task-quick-preview[hidden] { display: none; }
+/* Start after Due in the edit modal (syncDateWarning in deck.js). */
+.task-date-warning {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem;
+  margin: -.25rem 0 .75rem; font-size: .85rem; color: #b45309;
+}
+.task-date-warning[hidden] { display: none; }
+.task-date-warning .btn { padding: .2rem .55rem; font-size: .8rem; }
 /* Batch mode (Make task with several lines): the titles instead of the field. */
 .task-edit-batch-list { margin: .1rem 0 .35rem; padding-left: 1.2rem; max-height: 10rem; overflow-y: auto; }
 .task-edit-batch-list li { margin: .1rem 0; }

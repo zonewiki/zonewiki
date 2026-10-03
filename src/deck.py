@@ -812,6 +812,10 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
         <input type="number" id="task-edit-lead{sfx}" min="0" placeholder="—">
       </div>
     </div>
+    <div class="task-date-warning" id="task-edit-date-warn{sfx}" hidden>
+      <span id="task-edit-date-warn-text{sfx}"></span>
+      <button type="button" class="btn" id="task-edit-date-warn-fix{sfx}"></button>
+    </div>
     <div class="task-field-row task-row-repeat">
       <div class="task-field">
         <label for="task-edit-rec-type{sfx}">Repeat</label>

@@ -485,6 +485,8 @@ A task has two independent dates; changing one never moves the other.
 - **`due_date`**: the deadline. Only a past due date makes a task overdue.
 - **`start_date`**: the day the task becomes available, and the commitment to work on it. Having one makes a task *planned*. A past start date is not overdue, it means "available since" (cards show "since Sep 21").
 
+**A start after the deadline** is usually a slip, but not always (a late task planned for next week), so it is never forbidden, only questioned. Every quick way to set a start date (the Plan board, ⋯ Start today/tomorrow and Pick start date, the card's 📅 picker, **f**/**F**; `setStart` and the picker go through `startsAfterDeadline` → `planOnDay`) asks "Move the deadline too?" (`confirmDeadlineMove`): Move deadline sets both dates, with undo; Cancel writes nothing. Outside the board, an overdue task started today doesn't ask: that is catching up on a missed deadline (swiping right never asks for that reason). The board does ask then, since the card would otherwise stay in Overdue. The edit modal shows a hint under the dates instead (`syncDateWarning`): "Starts after its deadline", with a button that moves the other date (the deadline, or the start when Due was moved before it). It doesn't block saving.
+
 The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored. Recurring instances keep the gap between the two dates, but a new instance's start date is never before today (it can't have been available before the previous one was done); when that clamps it, the series remembers the gap in `recurrence.lead` for the next instance.
 
 ### Task fields

@@ -128,6 +128,17 @@
   // Start a task on `day` from the board. A day after its deadline would
   // leave an overdue (or due-today) card where it is, so that drop asks to
   // move the deadline along; cancelling changes nothing. Undo restores both.
+  // A start date after the deadline is usually a slip, so setting one asks
+  // whether the deadline moves too (confirmDeadlineMove), on the board and
+  // everywhere else a start date is set (setStart, the 📅 picker, f/F). The
+  // exception, outside the board: an overdue task started today, the normal
+  // way to catch up on a missed deadline.
+  function startsAfterDeadline(task, day) {
+    if (!day || !task?.due_date || day <= task.due_date) return false;
+    const today = todayStr();
+    return !(task.due_date < today && day === today);
+  }
+
   async function planOnDay(id, day) {
     const task = tasks.find(t => t.id === id);
     if (!task || !task.due_date || day <= task.due_date) return updateTask(id, { start_date: day });
@@ -672,6 +683,7 @@
 
   function setStart(id, startDate) {
     const task = tasks.find(t => t.id === id);
+    if (startsAfterDeadline(task, startDate)) return planOnDay(id, startDate);
     const prev = task?.start_date ?? null;
     const prevFocus = task?.focus_order ?? null;
     const history = oldHistory(id);
@@ -1584,7 +1596,10 @@
         const field = el.dataset.field;
         const task = tasks.find(t => t.id === id);
         if (!task) return;
-        openDatePicker(task[field] || '', d => updateTask(id, { [field]: d }), el, todayStr());
+        openDatePicker(task[field] || '', d => {
+          if (field === 'start_date' && startsAfterDeadline(task, d)) planOnDay(id, d);
+          else updateTask(id, { [field]: d });
+        }, el, todayStr());
       });
     });
 
@@ -2359,6 +2374,7 @@
     }
     // Only meaningful relative to a due date.
     leadEl.disabled = !dueEl.value;
+    syncDateWarning(changed);
     refreshDateTriggers();
     // Repeat requires at least one date to be meaningful, and a keep task
     // never repeats (Keep and Repeat both say what happens after done).
@@ -2369,6 +2385,34 @@
     syncRecFields();
   }
   keepCb.addEventListener('change', () => syncDates('keep'));
+
+  // Start after Due: a hint under the dates with a one-click fix that moves
+  // the date not just changed (the deadline, or the start when Due was moved
+  // before it). It doesn't block saving: a late task may well start later.
+  const dateWarn = document.getElementById('task-edit-date-warn' + sfx);
+  const dateWarnFix = document.getElementById('task-edit-date-warn-fix' + sfx);
+  let dateWarnMove = null;   // 'due' | 'start'
+  function syncDateWarning(changed) {
+    if (!dateWarn) return;
+    const due = document.getElementById('task-edit-due' + sfx).value;
+    const start = document.getElementById('task-edit-start' + sfx).value;
+    const late = !!(due && start && start > due);
+    dateWarn.hidden = !late;
+    if (!late) return;
+    if (changed === 'open') dateWarnMove = null;
+    if (changed === 'due' || changed === 'start') dateWarnMove = changed === 'due' ? 'start' : 'due';
+    if (!dateWarnMove) dateWarnMove = 'due';
+    document.getElementById('task-edit-date-warn-text' + sfx).textContent =
+      `Starts after its deadline (${formatDate(due)}).`;
+    dateWarnFix.textContent = dateWarnMove === 'due'
+      ? `Move deadline to ${formatDate(start)}` : `Move start to ${formatDate(due)}`;
+  }
+  dateWarnFix?.addEventListener('click', () => {
+    const due = document.getElementById('task-edit-due' + sfx);
+    const start = document.getElementById('task-edit-start' + sfx);
+    if (dateWarnMove === 'due') due.value = start.value; else start.value = due.value;
+    syncDates(dateWarnMove);
+  });
   document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => syncDates('lead'));
 
   cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
@@ -2637,7 +2681,8 @@
       const task = tasks.find(t => t.id === selectedId);
       if (task && !task.completed_at) {
         const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
-        updateTask(task.id, { start_date: task.start_date === target ? null : target });
+        if (task.start_date !== target && startsAfterDeadline(task, target)) planOnDay(task.id, target);
+        else updateTask(task.id, { start_date: task.start_date === target ? null : target });
       }
       return;
     }
