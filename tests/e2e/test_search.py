@@ -203,7 +203,7 @@ def test_empty_query_pins_built_in_pages_first(page, wiki):
 def test_phone_reaches_scratch_list_in_two_taps(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    phone.locator(".mobile-search").tap()
+    phone.locator(".action-search").tap()
     phone.locator("#modal-page-list .page-list-special a", has_text="Scratch").tap()
     phone.wait_for_url("**/page/_scratch")
 

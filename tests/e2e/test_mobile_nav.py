@@ -1,4 +1,4 @@
-"""Phone search button, status badges on phones, and the compact Plan board."""
+"""Action buttons (phone and desktop), status badges on phones, and the compact Plan board."""
 
 import re
 from datetime import date
@@ -17,12 +17,10 @@ def _overlap(a, b) -> bool:
 # ── Phone search button ──────────────────────────────────────────────────────
 # Search is otherwise Ctrl+P, which a phone doesn't have.
 
-def test_search_button_only_on_phones(page, new_page, wiki):
-    page.goto("/page/index")
-    expect(page.locator(".mobile-search")).to_be_hidden()
+def test_search_button_on_phones(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    btn = phone.locator(".mobile-search")
+    btn = phone.locator(".action-search")
     expect(btn).to_be_visible()
     box = btn.bounding_box()
     assert box["width"] >= 44 and box["height"] >= 44
@@ -32,16 +30,16 @@ def test_search_button_only_on_phones(page, new_page, wiki):
 def test_search_button_opens_search_and_steps_aside_while_typing(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    phone.locator(".mobile-search").tap()
+    phone.locator(".action-search").tap()
     expect(phone.locator("#search-modal")).to_be_visible()
     # The search field has focus (keyboard up), so the button steps aside.
-    expect(phone.locator(".mobile-search")).to_be_hidden()
+    expect(phone.locator(".action-search")).to_be_hidden()
 
 
 def test_no_action_buttons_in_editor(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/edit/index")
-    expect(phone.locator(".mobile-actions")).to_have_count(0)
+    expect(phone.locator(".action-buttons")).to_have_count(0)
 
 
 def test_page_end_not_hidden_behind_search_button(new_page, wiki):
@@ -50,18 +48,16 @@ def test_page_end_not_hidden_behind_search_button(new_page, wiki):
     phone.goto("/page/long")
     phone.evaluate("scrollTo(0, document.body.scrollHeight)")
     last = phone.get_by_text("The last line.").bounding_box()
-    assert last["y"] + last["height"] <= phone.locator(".mobile-search").bounding_box()["y"]
+    assert last["y"] + last["height"] <= phone.locator(".action-search").bounding_box()["y"]
 
 
 # ── Phone new-note button ────────────────────────────────────────────────────
 # Next to search: `c s` (a new scratch note) for a phone.
 
-def test_new_note_button_sits_left_of_search_on_phones(page, new_page, wiki):
-    page.goto("/page/index")
-    expect(page.locator(".mobile-note")).to_be_hidden()
+def test_new_note_button_sits_left_of_search_on_phones(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    note, search = phone.locator(".mobile-note"), phone.locator(".mobile-search")
+    note, search = phone.locator(".action-note"), phone.locator(".action-search")
     expect(note).to_be_visible()
     nb, sb = note.bounding_box(), search.bounding_box()
     assert nb["width"] >= 44 and nb["height"] >= 44
@@ -71,13 +67,62 @@ def test_new_note_button_sits_left_of_search_on_phones(page, new_page, wiki):
 def test_new_note_button_creates_a_scratch_note(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/deck")
-    phone.locator(".mobile-note").tap()
+    phone.locator(".action-note").tap()
     expect(phone.locator("#scratch-modal")).to_be_visible()
     # The title field has focus (keyboard up), so the buttons step aside.
-    expect(phone.locator(".mobile-actions")).to_be_hidden()
+    expect(phone.locator(".action-buttons")).to_be_hidden()
     phone.locator("#scratch-title").fill("Shopping idea")
     phone.locator("#scratch-title").press("Enter")
     expect(phone).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
+
+
+# ── Action buttons on desktop ────────────────────────────────────────────────
+# The same two buttons, smaller, for mouse users who don't know the shortcuts.
+
+def test_action_buttons_on_desktop(page, wiki):
+    page.goto("/page/index")
+    note, search = page.locator(".action-note"), page.locator(".action-search")
+    expect(note).to_be_visible()
+    expect(search).to_be_visible()
+    nb, sb = note.bounding_box(), search.bounding_box()
+    vw, vh = page.viewport_size["width"], page.viewport_size["height"]
+    assert sb["x"] + sb["width"] > vw - 40 and sb["y"] + sb["height"] > vh - 40  # bottom right
+    assert nb["x"] + nb["width"] < sb["x"] and abs(nb["y"] - sb["y"]) < 1
+    assert sb["width"] < 48   # smaller than the phone's finger-sized ones
+
+
+def test_desktop_buttons_open_search_and_scratch(page, wiki):
+    page.goto("/page/index")
+    page.locator(".action-search").click()
+    expect(page.locator("#search-modal")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#search-modal")).to_be_hidden()
+    page.locator(".action-note").click()
+    expect(page.locator("#scratch-modal")).to_be_visible()
+
+
+def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
+    page.request.post("/login", form={"password": "pw"})
+    page.goto("/page/index")
+    signout = page.get_by_role("button", name="Sign out")
+    expect(signout).to_be_visible()
+    assert not _overlap(signout.bounding_box(), page.locator(".action-buttons").bounding_box())
+
+
+def test_desktop_toast_clear_of_the_buttons(page, wiki):
+    wiki.write("todo", "# Todo\n\n- [ ] Call the plumber\n")
+    page.goto("/page/todo")
+    page.locator(".task-list-item-checkbox").check()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_be_visible()
+    assert not _overlap(toast.bounding_box(), page.locator(".action-buttons").bounding_box())
+
+
+def test_no_action_buttons_in_desktop_editor(page, wiki):
+    page.goto("/edit/index")
+    expect(page.locator(".action-buttons")).to_have_count(0)
 
 
 # ── Status badges on phones ──────────────────────────────────────────────────
@@ -150,6 +195,6 @@ def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     phone.goto("/page/index")
     signout = phone.get_by_role("button", name="Sign out")
     expect(signout).to_be_visible()
-    s, a = signout.bounding_box(), phone.locator(".mobile-actions").bounding_box()
+    s, a = signout.bounding_box(), phone.locator(".action-buttons").bounding_box()
     assert s["x"] + s["width"] <= a["x"] or s["y"] + s["height"] <= a["y"], (s, a)
     assert s["x"] >= 0 and s["y"] + s["height"] <= 844

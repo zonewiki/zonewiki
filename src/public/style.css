@@ -99,7 +99,28 @@ body {
 
 /* Shown only on small screens (see the 640px media query) */
 .mobile-only { display: none; }
-.mobile-actions { display: none; }
+
+/* Action buttons (see ACTION_BUTTONS in server.py): New note (`c s`) and
+   Search (Ctrl+P) as round buttons in the bottom-right corner, search in the
+   corner itself. Small and quiet on desktop; phones make them finger-sized. */
+.action-buttons {
+  display: flex; gap: .5rem;
+  position: fixed; z-index: 300;
+  right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+.action-buttons button {
+  display: flex; align-items: center; justify-content: center;
+  width: 2.5rem; height: 2.5rem; padding: 0;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: var(--nav-bg); color: var(--muted); cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  transition: color .15s, box-shadow .15s;
+}
+.action-buttons button:hover { color: var(--fg); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+/* Keep the toasts clear of the buttons. */
+body:has(.action-buttons) .raw-toast { bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
+/* Sign out takes the other corner. */
+body:has(.action-buttons) .signout-form { right: auto; left: 1rem; }
 
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
@@ -1283,27 +1304,18 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
-  /* Phone action buttons (see MOBILE_ACTIONS in server.py): the touch
-     stand-ins for `c s` and Ctrl+P, round buttons in the bottom-right corner
-     within thumb reach; search sits in the corner itself. */
-  .mobile-actions {
-    display: flex; gap: .75rem;
-    position: fixed; z-index: 300;
-    right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom));
-  }
-  .mobile-actions button {
-    display: flex; align-items: center; justify-content: center;
-    width: 3.25rem; height: 3.25rem; padding: 0;
-    border: 1px solid var(--border); border-radius: 50%;
-    background: var(--nav-bg); color: var(--fg); cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  /* Phone action buttons: finger-sized, within thumb reach. */
+  .action-buttons { gap: .75rem; }
+  .action-buttons button {
+    width: 3.25rem; height: 3.25rem;
+    color: var(--fg); box-shadow: 0 4px 14px rgba(0,0,0,.18);
   }
   /* Keep the end of the page and the toasts clear of the buttons. */
-  body:has(.mobile-actions) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
-  body:has(.mobile-actions) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  body:has(.action-buttons) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
   /* While typing, the on-screen keyboard owns the bottom of the screen; the
      buttons would otherwise ride on top of it. */
-  body:has(:is(input, textarea, select, [contenteditable]):focus) :is(.mobile-actions, .signout-form) { display: none; }
+  body:has(:is(input, textarea, select, [contenteditable]):focus) :is(.action-buttons, .signout-form) { display: none; }
   /* Sign out moves to the other corner: the bottom right holds the action
      buttons. Level with them, in the space main keeps clear at the bottom. */
   .signout-form { right: auto; left: 1rem; bottom: calc(1.65rem + env(safe-area-inset-bottom)); }

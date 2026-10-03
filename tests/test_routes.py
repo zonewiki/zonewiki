@@ -109,9 +109,9 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/deck"):
             body = client.get(url, headers=HOST).data.decode()
-            assert 'class="mobile-note"' in body and 'class="mobile-search"' in body
+            assert 'class="action-note"' in body and 'class="action-search"' in body
         # The editor has its own toolbar and the keyboard owns the bottom edge.
-        assert 'class="mobile-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
+        assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
     def test_missing_page_redirects_to_editor(self, client):
         resp = client.get("/page/does-not-exist", headers=HOST)
@@ -1100,7 +1100,7 @@ class TestAuth:
         server.LEAF_PASSWORD = old_pw
 
     def test_login_page_has_no_action_buttons(self, auth_client):
-        assert 'class="mobile-actions"' not in auth_client.get("/login", headers=HOST).data.decode()
+        assert 'class="action-buttons"' not in auth_client.get("/login", headers=HOST).data.decode()
 
     def test_unauthenticated_redirects_to_login(self, auth_client):
         resp = auth_client.get("/page/index", headers=HOST)

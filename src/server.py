@@ -1242,23 +1242,23 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
 _SVG = ('<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
         'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
 
-# Phone action buttons: the touch stand-ins for keyboard shortcuts a phone
-# doesn't have. New note = `c s` (openScratch), search = Ctrl+P
-# (openSearchModal); leaf.js wires them. Shown at ≤640px only, see style.css.
-MOBILE_ACTIONS = (
-    '<div class="mobile-actions">'
-    f'<button type="button" class="mobile-note" aria-label="New note" title="New note">{_SVG}'
+# Action buttons: clickable stand-ins for keyboard shortcuts (and the only way
+# on a phone, which has no keyboard). New note = `c s` (openScratch), search =
+# Ctrl+P (openSearchModal); leaf.js wires them. Styled in style.css.
+ACTION_BUTTONS = (
+    '<div class="action-buttons">'
+    f'<button type="button" class="action-note" aria-label="New note" title="New note (c s)">{_SVG}'
     '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/>'
     '<polyline points="9.5 1.5 9.5 5 13 5"/><line x1="8" y1="7.5" x2="8" y2="12"/>'
     '<line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/></svg></button>'
-    f'<button type="button" class="mobile-search" aria-label="Search" title="Search">{_SVG}'
+    f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
     '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg></button>'
     '</div>')
 
 
 def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
           extra_head: str | None = None, action_buttons: bool = True) -> str:
-    """Wrap body in the page skeleton. `action_buttons=False` drops the phone
+    """Wrap body in the page skeleton. `action_buttons=False` drops the
     action buttons, new note and search (the editor has its own toolbar; the
     login page has nothing to search or write)."""
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
@@ -1395,7 +1395,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <main>
     {body}
   </main>
-  {MOBILE_ACTIONS if action_buttons and not editor else ""}
+  {ACTION_BUTTONS if action_buttons and not editor else ""}
 </body>
 </html>"""
 

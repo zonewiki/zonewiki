@@ -574,8 +574,8 @@ function openNewPage() {
 // ── Phone action buttons ──────────────────────────────────────────────────────
 // The touch stand-ins for `c s` (new scratch note) and Ctrl+P (search).
 
-document.querySelector('.mobile-note')?.addEventListener('click', openScratch);
-document.querySelector('.mobile-search')?.addEventListener('click', openSearchModal);
+document.querySelector('.action-note')?.addEventListener('click', openScratch);
+document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 

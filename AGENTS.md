@@ -339,7 +339,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
 
 ## Scratch
 
-- There is no nav bar; navigation is via keyboard shortcuts. Phones have no keyboard, so at ≤640px two round **action buttons** (`MOBILE_ACTIONS` in `server.py`, `.mobile-actions`) sit in the bottom-right corner: **New note** (`.mobile-note`) opens the scratch-note dialog (`openScratch`, the `c s` action), and **Search** (`.mobile-search`, in the corner itself) opens the search modal (`openSearchModal`, the Ctrl+P action). `shell(..., action_buttons=False)` omits them, and the editor and the login page leave them out. They are hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then. `main` and the toasts get extra bottom space so the buttons never cover them.
+- There is no nav bar; navigation is via keyboard shortcuts. For mouse users, and for phones, which have no keyboard, two round **action buttons** (`ACTION_BUTTONS` in `server.py`, `.action-buttons`) sit in the bottom-right corner: **New note** (`.action-note`) opens the scratch-note dialog (`openScratch`, the `c s` action), and **Search** (`.action-search`, in the corner itself) opens the search modal (`openSearchModal`, the Ctrl+P action). On desktop they are small and muted (2.5rem, full colour on hover); at ≤640px they are finger-sized. `shell(..., action_buttons=False)` omits them, and the editor and the login page leave them out. The toasts sit above them and Sign out moves to the bottom-left corner. On phones they are hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then, and `main` gets extra bottom space so the buttons never cover the page's end.
 - **Status badges** (`.top-badges`: remote 🌐, deck due count, uncommitted count) are fixed at the top-left on desktop. At ≤640px they join the page flow above the breadcrumb, so they no longer cover it, and 🌐 is hidden, since on a phone remote access is a given.
 - **Keybinding:** **c** then **s** creates a scratch note (see Keyboard Shortcuts).
 - User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
@@ -554,7 +554,7 @@ A task's `list` field puts it in a named list shown only in `[[deck list=<name>]
 - Font: system font stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`).
 - Monospace: `"JetBrains Mono", "Fira Code", monospace`.
 - Light/dark mode via `prefers-color-scheme` media query.
-- No nav bar (keyboard shortcuts); on phones floating New note and Search buttons (see the Scratch section).
+- No nav bar (keyboard shortcuts); floating New note and Search buttons in the bottom-right corner (see the Scratch section).
 - No external CSS frameworks — keep `style.css` self-contained.
 - Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, larger touch targets. The editor is fully usable on phones — see "Mobile editor" in the In-Browser Editor section.
 
@@ -628,7 +628,7 @@ Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with 
 ## Key Constraints
 
 - Do not use a database. Files are the only storage.
-- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-right corner when auth is enabled; on phones (≤640px) it moves to the bottom-left, since the bottom-right holds the New note/Search buttons, and like them it is hidden while typing.
+- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-left corner when auth is enabled (the bottom-right holds the New note/Search buttons; bottom-right only on pages without them); on phones, like them, it is hidden while typing.
 - Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
 - `ALLOW_REMOTE` is the single knob for network access. When unset, `run.sh` sets `BIND_ADDR=127.0.0.1` so podman only exposes port 5000 on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` sets `BIND_ADDR=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. The port mapping passed to `podman run` is `-p ${BIND_ADDR}:5000:5000`.
 - A `before_request` hook in `server.py` validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks. Set `ALLOW_REMOTE=1` in `.env` to skip this check and allow access from any host.
