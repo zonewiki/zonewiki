@@ -102,9 +102,22 @@ def _edit_with_cursor(page, wiki, text, at, end=None):
     page.wait_for_function("() => window.DeckCore")
 
 
-def test_make_task_from_the_current_line(page, wiki):
+def _save_modal(page):
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+
+
+def test_make_task_from_the_current_line_opens_the_deck_modal(page, wiki):
     _edit_with_cursor(page, wiki, "Action items:\n- [ ] Call Bob tomorrow #work\nend", 20)
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    modal = page.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    expect(page.locator("#task-edit-title")).to_have_value("Call Bob tomorrow #work")
+    expect(page.locator("#task-edit-title")).to_be_focused()
+    expect(page.locator("#task-edit-desc")).to_have_value("From [[notes]]")
+    # The modal's quick-add preview reads the shorthand, as in the deck.
+    expect(page.locator("#task-edit-quick")).to_be_visible()
+    page.keyboard.press("Enter")                     # Enter saves, as in the deck
+    expect(modal).to_be_hidden()
     expect(page.locator(".task-undo-toast")).to_contain_text("Task “Call Bob” created")
     [t] = _open_tasks(wiki)
     assert t["title"] == "Call Bob" and t["tags"] == ["work"]
@@ -131,6 +144,8 @@ def test_make_tasks_from_selected_lines(page, wiki):
 def test_make_task_from_a_selection_inside_a_sentence(page, wiki):
     _edit_with_cursor(page, wiki, "We agreed: send the slides. Done.", 11, 27)
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator("#task-edit-title")).to_have_value("send the slides.")
+    _save_modal(page)
     expect(page.locator(".task-undo-toast")).to_be_visible()
     [t] = _open_tasks(wiki)
     assert t["title"] == "send the slides."
@@ -141,6 +156,7 @@ def test_make_task_from_a_selection_inside_a_sentence(page, wiki):
 def test_make_task_undo_deletes_the_task_and_restores_the_text(page, wiki):
     _edit_with_cursor(page, wiki, "- [ ] Water plants", 3)
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    _save_modal(page)
     expect(page.locator(".task-undo-toast")).to_be_visible()
     assert len(_open_tasks(wiki)) == 1
     page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
@@ -151,8 +167,39 @@ def test_make_task_undo_deletes_the_task_and_restores_the_text(page, wiki):
 def test_made_task_shows_as_a_chip_after_done(page, wiki):
     _edit_with_cursor(page, wiki, "- [ ] Renew passport", 3)
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    _save_modal(page)
     expect(page.locator(".task-undo-toast")).to_be_visible()
     page.keyboard.press("Control+s")
     expect(page).to_have_url(re.compile(r"/page/notes$"))
     expect(page.locator(".task-ref-item .task-ref")).to_contain_text("Renew passport")
     expect(page.locator("#task-backlinks")).to_have_count(0)   # shown inline, not repeated
+
+
+def test_make_task_modal_takes_more_fields_and_cancel_changes_nothing(page, wiki):
+    _edit_with_cursor(page, wiki, "- [ ] Water plants", 3)
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    page.keyboard.press("Escape")
+    expect(page.locator("#task-edit-modal")).to_be_hidden()
+    expect(page.locator("#editor-textarea")).to_have_value("# Notes\n\n- [ ] Water plants")
+    assert _open_tasks(wiki) == []
+    # Again, this time with a field only the modal has.
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    page.locator("#task-edit-title").fill("Water plants today")
+    page.locator("#task-edit-keep").check()
+    _save_modal(page)
+    expect(page.locator(".task-undo-toast")).to_be_visible()
+    [t] = _open_tasks(wiki)
+    assert t["title"] == "Water plants" and t["keep"] is True
+    assert t["start_date"] == date.today().isoformat()
+    expect(page.locator("#editor-textarea")).to_have_value(f"# Notes\n\n- [[task:{t['id'][:8]}]]")
+
+
+def test_hidden_deck_does_not_take_the_editors_keys(page, wiki):
+    wiki.write("notes", "# Notes\n\n")
+    page.goto("/edit/notes")
+    page.wait_for_function("() => window.openDeckEdit")
+    page.keyboard.press("Control+End")
+    page.keyboard.type("n/#")   # the deck's new task / filter keys
+    expect(page.locator("#task-edit-modal")).to_be_hidden()
+    expect(page.locator("#editor-textarea")).to_have_value("# Notes\n\nn/#")
+    expect(page.locator(".tasks-app")).to_be_hidden()

@@ -227,7 +227,10 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **Linked tasks** leaves out tasks the page shows inline (`page_task_refs`).
 - **Search** indexes a reference as its task's title (`_task_refs_as_titles`, also in `_semantic_text`); a page with references is re-indexed when the deck files change (the page doc cache keeps the deck's mtimes). Embeddings and MCP section docs are cached by page mtime, so they catch up with a renamed task when the page changes.
 - **MCP `read_page`** keeps the raw markdown and appends what each reference stands for (title, status, dates, link; `_mcp_task_refs`).
-- **Make task** (formatting bar, `makeTasks` in `leaf.js`): turns text in the editor into deck tasks and replaces it with their references, e.g. action items in meeting notes. A selection within one line becomes one task and an inline reference. Otherwise each non-empty line the selection touches (or the cursor's line) becomes a task, keeping its list marker and dropping a checklist's `[ ]` (`- [ ] Call Bob` → `- [[task:…]]`); lines that are already a reference stay. Trailing quick-add shorthand works as in the deck (`DeckCore.parseQuickAdd`; the editor loads `deck-core.js`), and each task's notes say `From [[<page>]]`. Tasks are created one by one via `POST /api/deck`; if one fails, or the text changed meanwhile, the created ones are deleted again and nothing is replaced. The undo toast deletes the tasks (`batch-delete`) and puts the text back.
+- **Make task** (formatting bar, `makeTasks` in `leaf.js`): turns text in the editor into deck tasks and replaces it with their references, e.g. action items in meeting notes. A selection within one line becomes one task and an inline reference. Otherwise each non-empty line the selection touches (or the cursor's line) becomes a task, keeping its list marker and dropping a checklist's `[ ]` (`- [ ] Call Bob` → `- [[task:…]]`); lines that are already a reference stay. Each task's notes say `From [[<page>]]`.
+  - **One item opens the deck's edit modal** to review it first: the editor page carries a hidden deck app (`_build_deck_embed(…, headless=True)`: `data-headless`, `display:none`; `deck.js` then ignores the deck's keyboard shortcuts and the "moved to another list" notice), and `window.openDeckEdit(null, { title, description, start_date: null, onCreated })` opens it with the text as title (its quick-add preview shows the shorthand) and no start date. Save (Enter) creates the task and `onCreated` puts the reference in; Cancel/Esc changes nothing. The same modal serves `c t` in the editor.
+  - **Several lines** are created right away, one `POST /api/deck` each, with the deck's quick-add shorthand (`DeckCore.parseQuickAdd`, `deck-core.js` comes with the hidden deck app). If one fails, or the text changed meanwhile, the created ones are deleted again and nothing is replaced.
+  - The undo toast (both ways) deletes the tasks (`batch-delete`) and puts the text back.
 
 ### Image sizing
 
@@ -283,6 +286,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 [[deck view=focus limit=5]]
 [[deck list=groceries keep=1 labels=Catalogue,Plan,Shopping]]
 ```
+
+**Headless instance**: `_build_deck_embed(params, headless=True)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references). `openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback.
 
 **Implementation** (all in `deck.py`): `_DECK_RE` finds the directive and `_parse_tasks_params()` parses its `key=value` pairs. `process_deck_embeds()` swaps each one for a numbered placeholder before rendering, and `inject_deck_embeds()` replaces each `<p>PLACEHOLDER</p>` with `_build_deck_embed()`'s HTML afterwards. The embed passes its params as `data-init-*` attributes and loads `deck-core.js` then `deck.js` (`defer`, in that order: deck.js reads `window.DeckCore`). Element ids get a `-<n>` suffix after the first embed, so a page can hold several. `deck.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL.
 
@@ -600,7 +605,7 @@ pytest tests/test_section_editing.py -v              # Run section-editing tests
 
 `tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, and the four tools (tasks created through `/api/deck`) (with and without the fake semantic index from `test_semantic.py`).
 
-`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges, done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`. `tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (line, lines, inline selection, undo).
+`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges, done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`. `tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, several lines at once, inline selection, undo, the hidden deck leaving the editor's keys alone).
 
 `tests/test_semantic.py` covers semantic search with a fake embedder (words mapped to a few "concept" axes), so it needs neither fastembed nor a model: chunking, the content-addressed cache, failure fallback, the worker, rank fusion, hybrid `/api/search` and the Related section. It swaps `server.SEMANTIC` for an index over the temp wiki.
 

@@ -716,10 +716,13 @@ def in_list(task: dict, name: str | None) -> bool:
     return (task.get("list") or None) == (name or None)
 
 
-def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
+def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False) -> str:
     """Render the full interactive deck app HTML for embedding in a wiki page.
 
-    instance_id differentiates multiple embeds on the same page.
+    instance_id differentiates multiple embeds on the same page. `headless`
+    hides the app and keeps only what its edit modal needs (the editor's
+    Make task opens it, window.openDeckEdit); deck.js then skips the deck's
+    keyboard shortcuts.
     """
     tag_val = params.get("tag", "")
     list_val = _clean_list(params.get("list")) or ""
@@ -754,7 +757,8 @@ def _build_deck_embed(params: dict, instance_id: int = 0) -> str:
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
-    return f"""<div class="tasks-app" id="tasks-app{sfx}" data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
+    hide = ' data-headless="1" style="display:none"' if headless else ""
+    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>

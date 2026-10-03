@@ -1929,9 +1929,10 @@ def edit_page(slug):
     <div id="editor-preview" class="page-content"></div>
   </div>
 </div>"""
-    # deck-core.js: the deck's quick-add parser for "Make task" (leaf.js).
-    return shell(f"Edit — {title}", body, editor=True,
-                 extra_head='<script src="/public/deck-core.js" defer></script>')
+    # A hidden deck app: Make task (leaf.js) opens its edit modal, and uses
+    # the deck's quick-add parser (deck-core.js) for several lines at once.
+    body += deck_module._build_deck_embed({}, headless=True)
+    return shell(f"Edit — {title}", body, editor=True)
 
 
 def _splice_section(full: str | None, file_hash: str, start_char: int,

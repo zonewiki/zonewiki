@@ -65,6 +65,8 @@
   const deleteTitleEl = document.getElementById('task-delete-title' + sfx);
   const deadlineModal = document.getElementById('task-deadline-modal' + sfx);
   const deadlineTextEl = document.getElementById('task-deadline-text' + sfx);
+  // Hidden on the editor page, which only uses its edit modal (Make task).
+  const headless = appEl.dataset.headless === '1';
 
   if (!listEl) return;
 
@@ -513,7 +515,7 @@
     if (res.ok) {
       const task = await res.json();
       if (inScope(task)) tasks.push(task);
-      else showNotice(listMovedNotice(task));
+      else if (!headless) showNotice(listMovedNotice(task));
       render();
       window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
@@ -2214,14 +2216,20 @@
       `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
   }
 
+  // opts (new tasks): `tags` (comma-separated), and from the editor's Make
+  // task a starting `title` and `description`, a `start_date` (null: none,
+  // instead of Focus's today) and `onCreated(task)`, called once it is saved.
+  let onCreated = null;
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
+    onCreated = !task && opts?.onCreated || null;
     document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
-    document.getElementById('task-edit-title' + sfx).value = task ? task.title : '';
-    document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : '';
+    document.getElementById('task-edit-title' + sfx).value = task ? task.title : opts?.title || '';
+    document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : opts?.description || '';
     document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
-    document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
+    document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
+      : opts && 'start_date' in opts ? opts.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     const startTags = task ? task.tags || []
       : defaultTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
     editChips.set(startTags, true);
@@ -2328,6 +2336,8 @@
   document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => syncDates('lead'));
 
   cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
+  // Closed without saving (Cancel, Esc): no callback later by mistake.
+  modal.addEventListener('close', () => { onCreated = null; });
 
   modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
 
@@ -2355,9 +2365,14 @@
       data.tags = [...new Set([...data.tags, ...quick.tags])];
     }
     if (!data.title) { document.getElementById('task-edit-title' + sfx).focus(); return; }
+    const created = onCreated;
+    onCreated = null;
     modal.close();
     if (id) {
       await updateTask(id, data);
+    } else if (created) {
+      const task = await createTask(data);
+      if (task) created(task);
     } else {
       // Select the new task so it is easy to find wherever the view sorts it
       // (on Focus it lands at the end, possibly below the fold). A view that
@@ -2515,6 +2530,7 @@
   document.addEventListener('keydown', async e => {
     // Only the active instance handles keyboard events (multi-embed safety)
     if (allApps.length > 1 && activeDeckInstance !== instanceId) return;
+    if (headless) return;
     // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
     if (taskMenu) return;
 

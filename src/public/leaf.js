@@ -1044,11 +1044,12 @@ if (textarea && previewPane) {
 
   // Make task: the selected text, or the current line, becomes a deck task,
   // and the text is replaced by its [[task:…]] reference, so the page shows
-  // the live task where the text was. Several selected lines make one task
-  // each (a list of action items), keeping their list markers; a checklist
-  // item's `[ ]` goes, the chip has its own checkbox. Trailing quick-add
-  // shorthand works as in the deck (`tomorrow #work due:fri`), and the
-  // task's notes link back to this page.
+  // the live task where the text was. One item opens the deck's edit modal
+  // (from the page's hidden deck app) to review it first; several selected
+  // lines make one task each right away (a list of action items), keeping
+  // their list markers. A checklist item's `[ ]` goes, the chip has its own
+  // checkbox. Trailing quick-add shorthand works as in the deck (`tomorrow
+  // #work due:fri`), and the task's notes link back to this page.
   const LIST_PREFIX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])\s+)(?:\[[ xX]\]\s+)?/;
   const TASK_REF_ONLY_RE = /^\[\[task:[^\]]*\]\]$/;
   const pageSlug = (document.getElementById('editor-form')?.getAttribute('action') || '')
@@ -1079,14 +1080,47 @@ if (textarea && previewPane) {
     }
     const todo = items.filter(it => it.text && !TASK_REF_ONLY_RE.test(it.text));
     if (!todo.length) { showCheckboxToast('Nothing to make a task from'); return; }
+    const description = pageSlug ? `From [[${pageSlug}]]` : '';
+    const ref = it => `[[task:${it.id.slice(0, 8)}]]`;
+    const replaceWithRefs = created => {
+      const text = inline ? ref(items[0])
+        : items.map(it => (it.id ? it.prefix + ref(it) : it.line)).join('\n');
+      const original = v.slice(start, end);
+      replaceRange(start, end, text, text.length, text.length);
+      const msg = created.length === 1 ? `Task “${todo[0].title}” created` : `${created.length} tasks created`;
+      showCheckboxToast(msg, async () => {
+        await fetch('/api/deck/batch-delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: created }),
+        });
+        if (textarea.value.slice(start, start + text.length) === text) {
+          replaceRange(start, start + text.length, original, original.length, original.length);
+        }
+      });
+    };
+
+    if (todo.length === 1 && window.openDeckEdit) {
+      const it = todo[0];
+      window.openDeckEdit(null, {
+        title: it.text, description, start_date: null,
+        onCreated: task => {
+          it.id = task.id;
+          it.title = task.title;
+          if (textarea.value !== v) {   // can't happen while the modal is up, but
+            showCheckboxToast(`Task “${task.title}” created; the text changed, so no reference was added`);
+            return;
+          }
+          replaceWithRefs([task.id]);
+        },
+      });
+      return;
+    }
 
     const today = localToday();
     const created = [];
     for (const it of todo) {
       const q = window.DeckCore?.parseQuickAdd(it.text, today)
         || { title: it.text, tags: [], start_date: null, due_date: null };
-      const body = { title: q.title, tags: q.tags, start_date: q.start_date, due_date: q.due_date,
-                     description: pageSlug ? `From [[${pageSlug}]]` : '' };
+      const body = { title: q.title, tags: q.tags, start_date: q.start_date, due_date: q.due_date, description };
       const res = await fetch('/api/deck', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).catch(() => null);
@@ -1106,18 +1140,7 @@ if (textarea && previewPane) {
       return;
     }
 
-    const ref = it => `[[task:${it.id.slice(0, 8)}]]`;
-    const text = inline ? ref(items[0])
-      : items.map(it => (it.id ? it.prefix + ref(it) : it.line)).join('\n');
-    const original = v.slice(start, end);
-    replaceRange(start, end, text, text.length, text.length);
-    const msg = created.length === 1 ? `Task “${todo[0].title}” created` : `${created.length} tasks created`;
-    showCheckboxToast(msg, async () => {
-      await deleteCreated();
-      if (textarea.value.slice(start, start + text.length) === text) {
-        replaceRange(start, start + text.length, original, original.length, original.length);
-      }
-    });
+    replaceWithRefs(created);
   }
 
   const attachInput = document.getElementById('fmt-attach-input');
