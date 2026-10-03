@@ -1580,6 +1580,8 @@ div.chip-input > input {
   font: inherit; font-size: .85rem; line-height: 1; padding: .1rem .3rem;
 }
 .tag-chip-x:hover { color: var(--fg); }
+/* Set by the embed (list= and tag= filter words, a list's tag on a task): no ×. */
+.tag-chip-locked { padding-right: .4rem; font-weight: 600; }
 @media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
 .tasks-toolbar .btn { flex: none; }
 
@@ -1592,6 +1594,16 @@ div.chip-input > input {
 }
 .deck-completed-link:hover { color: var(--link); text-decoration: underline; }
 .deck-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
+/* Main deck: "Show separate lists", left of the Completed link. */
+.deck-show-lists {
+  order: -1; margin-right: auto; display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .8rem; color: var(--muted); cursor: pointer; padding: .3rem .2rem;
+}
+.deck-show-lists[hidden] { display: none; }
+.deck-show-lists input { margin: 0; }
+@media (pointer: coarse) { .deck-show-lists { padding: .6rem .2rem; } .deck-show-lists input { width: 1.1rem; height: 1.1rem; } }
+/* /deck?list=…: where the list comes from. */
+.deck-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
 .task-quick-preview[hidden] { display: none; }
 /* Start after Due in the edit modal (syncDateWarning in deck.js). */
@@ -2058,14 +2070,11 @@ div.chip-input > input {
   font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer;
 }
 .task-edit-keep input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--btn-primary); cursor: pointer; }
-/* List: usually set by the embed, so collapsed; the summary shows the value. */
+/* History: collapsed; the summary shows the count. */
 .task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
 .task-edit-links[open] > summary { margin-bottom: .5rem; }
 .task-edit-links-summary { font-weight: 400; margin-left: .6rem; }
-/* List and History share one line while closed; an opened one takes the
-   full width on a line of its own below. */
 .task-edit-extras { display: flex; flex-wrap: wrap; gap: .3rem 1.5rem; align-items: baseline; }
-.task-edit-extras > details[open] { flex-basis: 100%; order: 1; }
 /* History: the task's logged events, newest first. */
 .task-edit-history[hidden] { display: none; }
 .task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }

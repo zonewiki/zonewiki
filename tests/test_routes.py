@@ -756,7 +756,8 @@ class TestSearch:
         os.utime(path, (1_000_000_000, 1_000_000_000))
         write_page(wiki_dir, "quokka", "# Quokka\n\nquokka\n")
         open_ = client.post("/api/deck", json={"title": "quokka open"}, headers=HOST).get_json()
-        done = client.post("/api/deck", json={"title": "quokka done", "list": "zoo"}, headers=HOST).get_json()
+        write_page(wiki_dir, "zoo", "# Zoo\n\n[[deck list=zoo]]\n")
+        done = client.post("/api/deck", json={"title": "quokka done", "tags": ["zoo"]}, headers=HOST).get_json()
         client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
         meta = {r["title"]: r["meta"] for r in client.get("/api/search?q=quokka", headers=HOST).get_json()}
         assert meta["Alex Debrief"] == "conversations/2026-07-08_alex · edited 2001-09-09"
@@ -1587,7 +1588,8 @@ class TestDeckPage:
 
     def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        tid = client.post("/api/deck", json={"title": "Seeds for [[Garden]]", "list": "shop"},
+        write_page(wiki_dir, "shopping", "# Shopping\n\n[[deck list=shop]]\n")
+        tid = client.post("/api/deck", json={"title": "Seeds for [[Garden]]", "tags": ["shop"]},
                           headers=HOST).get_json()["id"]
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert f'href="/deck?task={tid}&amp;view=open&amp;list=shop"' in body

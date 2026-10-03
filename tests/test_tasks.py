@@ -1389,7 +1389,7 @@ class TestCreateFieldParity:
         resp = create_task(
             client, title="  Full  ", description=" notes ", tags=[" a ", "", "b"],
             due_date="2026-08-01",
-            start_date="2026-08-01", list="  Some List ",
+            start_date="2026-08-01",
             rec_type="weekly", rec_interval=3,
         )
         assert resp.status_code == 201
@@ -1399,7 +1399,6 @@ class TestCreateFieldParity:
         assert t["tags"] == ["a", "b"]
         assert t["due_date"] == "2026-08-01"
         assert t["start_date"] == "2026-08-01"
-        assert t["list"] == "some-list"
         assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
         assert t["sort_order"] is None
         assert t["completed_at"] is None
@@ -1508,7 +1507,7 @@ class TestRestore:
     def test_restore_roundtrips_all_fields(self, client):
         task = create_task(client, title="Full", description="notes",
                            tags=["a"], due_date="2026-09-01",
-                           start_date="2026-08-30", list="some-list",
+                           start_date="2026-08-30",
                            rec_type="weekly", rec_interval=2).get_json()
         client.delete(f"/api/deck/{task['id']}")
         assert client.get("/api/deck").get_json() == []
@@ -1518,7 +1517,7 @@ class TestRestore:
         assert restored["id"] == task["id"]
         assert restored["created_at"] == task["created_at"]
         for field in ("title", "description", "tags", "due_date",
-                      "start_date", "list", "recurrence"):
+                      "start_date", "recurrence"):
             assert restored[field] == task[field]
 
     def test_restore_keeps_yearly_recurrence(self, client):
@@ -1757,8 +1756,14 @@ class TestCompletedByYear:
 
     def test_completed_years_per_list(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        assert client.get("/api/deck/completed-years").get_json()["years"] == [str(year), str(year-1)]
-        assert client.get("/api/deck/completed-years?list=groceries").get_json()["years"] == [str(year)]
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries]]\n", encoding="utf-8")
+        arch = wiki_dir / "_deck" / f"completed-{year-2}.json"
+        arch.write_text(json.dumps([{"id": "g", "title": "Milk", "tags": ["groceries"],
+                                     "completed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
+        years = lambda q: client.get("/api/deck/completed-years" + q).get_json()["years"]  # noqa: E731
+        assert years("") == [str(year), str(year-1)]
+        assert years("?list=groceries") == [str(year), str(year-2)]
+        assert years("?all=1") == [str(year), str(year-1), str(year-2)]
 
     def test_edit_keeps_task_in_its_archive(self, client, wiki_dir):
         year = self._seed(wiki_dir)
@@ -1865,7 +1870,6 @@ class TestMalformedInput:
         {"title": "T", "due_date": 20990101},
         {"title": "T", "start_date": 20990101},
         {"title": "T", "rec_type": "daily", "rec_interval": "often"},
-        {"title": "T", "list": 3},
     ])
     def test_bad_field_types_are_400(self, client, payload):
         resp = client.post("/api/deck", json=payload)
@@ -1983,58 +1987,89 @@ class TestTagCleaning:
 
 
 class TestLists:
-    """Tasks with a `list` live only in their [[deck list=…]] embed: the main
-    deck, due badge and completed count leave them out."""
+    """A separate list is a tag some page declares with [[deck list=<tag>]]:
+    its tasks stay out of the main deck, the due badge and the main Completed
+    count, and links to them open /deck?list=<tag>."""
 
-    def test_list_is_cleaned_and_cleared(self, client):
-        task = create_task(client, list="  #Grocery Run ").get_json()
-        assert task["list"] == "grocery-run"
-        resp = client.put(f"/api/deck/{task['id']}", json={"list": ""})
-        assert resp.get_json()["list"] is None
+    @pytest.fixture()
+    def shop(self, wiki_dir):
+        (wiki_dir / "shop.md").write_text(
+            "# Shop\n\n[[deck list=Groceries keep=1 labels=Catalogue,,Shopping]]\n", encoding="utf-8")
 
-    def test_list_must_be_string(self, client):
-        assert create_task(client, list=5).status_code == 400
+    def test_declared_by_pages_outside_code(self, client, wiki_dir, shop):
+        (wiki_dir / "code.md").write_text("# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
+                                          encoding="utf-8")
+        lists = server._deck_lists()
+        assert set(lists) == {"groceries"}
+        assert lists["groceries"]["slug"] == "shop"
+        assert lists["groceries"]["params"]["keep"] == "1"
 
-    def test_new_task_has_no_list(self, client):
-        assert create_task(client).get_json()["list"] is None
+    def test_first_page_is_the_home(self, client, wiki_dir, shop):
+        (wiki_dir / "a-list.md").write_text("# A\n\n[[deck list=groceries]]\n", encoding="utf-8")
+        assert server._deck_lists()["groceries"]["slug"] == "a-list"
 
-    def test_due_count_ignores_list_tasks(self, client):
+    def test_task_list_is_its_first_list_tag(self, client, wiki_dir, shop):
+        (wiki_dir / "home.md").write_text("# Home\n\n[[deck list=chores]]\n", encoding="utf-8")
+        assert deck_module.task_list({"tags": ["work"]}) is None
+        assert deck_module.task_list({"tags": ["GROCERIES"]}) == "groceries"
+        assert deck_module.task_list({"tags": ["groceries", "chores"]}) == "chores"
+
+    def test_tag_without_a_page_is_no_list(self, client):
         today = date.today().isoformat()
-        create_task(client, due_date=today)
-        create_task(client, due_date=today, list="groceries")
+        create_task(client, due_date=today, tags=["groceries"])
         assert client.get("/api/deck/due-count").get_json()["count"] == 1
 
-    def test_completed_count_per_list(self, client):
-        for lst in (None, "groceries", "groceries"):
-            tid = create_task(client, list=lst).get_json()["id"]
+    def test_due_count_ignores_list_tasks(self, client, shop):
+        today = date.today().isoformat()
+        create_task(client, due_date=today)
+        create_task(client, due_date=today, tags=["groceries"])
+        assert client.get("/api/deck/due-count").get_json()["count"] == 1
+
+    def test_completed_count_per_scope(self, client, shop):
+        for tags in ([], ["groceries"], ["Groceries", "x"]):
+            tid = create_task(client, tags=tags).get_json()["id"]
             client.put(f"/api/deck/{tid}", json={"completed": True})
-        assert client.get("/api/deck/completed-count").get_json()["count"] == 1
-        assert client.get("/api/deck/completed-count?list=Groceries").get_json()["count"] == 2
+        count = lambda q: client.get("/api/deck/completed-count" + q).get_json()["count"]  # noqa: E731
+        assert count("") == 1
+        assert count("?list=Groceries") == 2
+        assert count("?all=1") == 3
 
-    def test_recurring_spawn_keeps_list(self, client):
-        tid = create_task(client, list="chores", due_date=date.today().isoformat(),
-                          rec_type="weekly").get_json()["id"]
-        client.put(f"/api/deck/{tid}", json={"completed": True})
-        spawned = [t for t in client.get("/api/deck").get_json() if t["spawned_from"] == tid]
-        assert spawned and spawned[0]["list"] == "chores"
+    def test_list_field_is_gone(self, client):
+        task = create_task(client, list="groceries").get_json()
+        assert "list" not in task
+        assert "list" not in client.put(f"/api/deck/{task['id']}", json={"list": "x"}).get_json()
 
-    def test_restore_keeps_list(self, client):
-        task = create_task(client, list="chores").get_json()
-        client.delete(f"/api/deck/{task['id']}")
-        restored = client.post("/api/deck/restore", json={"tasks": [task]}).get_json()
-        assert restored[0]["list"] == "chores"
-
-    def test_embed_carries_list_and_suggestions(self, client, wiki_dir):
-        create_task(client, list="books")
-        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=Groceries]]\n", encoding="utf-8")
+    def test_embed_carries_list_and_declared_lists(self, client, wiki_dir, shop):
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body
-        assert '<option value="books">' in body
+        assert 'data-lists="[&quot;groceries&quot;]"' in body
+        assert 'id="task-edit-list"' not in body
+        assert 'id="task-show-lists"' in body
 
-    def test_search_links_to_list(self, client):
-        tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
+    def test_deck_list_page_uses_the_declaring_embed(self, client, shop):
+        body = client.get("/deck?list=groceries").get_data(as_text=True)
+        assert 'data-init-list="groceries"' in body and 'data-init-keep="1"' in body
+        assert ">Catalogue</button>" in body and ">Shopping</button>" in body
+        assert 'href="/page/shop">Shop</a>' in body
+
+    def test_deck_list_page_without_declaration(self, client):
+        body = client.get("/deck?list=books").get_data(as_text=True)
+        assert 'data-init-list="books"' in body
+        assert "also show in the main deck" in body
+
+    def test_search_links_to_list(self, client, shop):
+        tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]
         hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
         assert hit["href"] == f"/deck?task={tid}&view=open&list=groceries"
+        assert hit["meta"].startswith("Deck › groceries")
+
+    def test_list_follows_the_page(self, client, wiki_dir, shop):
+        """Declarations are read live: editing the page away ends the list."""
+        tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]
+        (wiki_dir / "shop.md").write_text("# Shop\n\nNothing.\n", encoding="utf-8")
+        os.utime(wiki_dir / "shop.md", (1, 1))   # a new mtime even within the same tick
+        hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
+        assert hit["href"] == f"/deck?task={tid}&view=open"
 
 
 # ---------- Keep tasks ----------

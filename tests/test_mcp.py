@@ -391,10 +391,11 @@ class TestSearchTasks:
         text, _ = call(client, "search_tasks", query="importer", tag="leaf")
         assert "1 matching tasks" in text and "Write the importer" in text
 
-    def test_list_filter_and_label(self, client, wiki_dir):  # noqa: F811
-        task(client, title="Milk", list="groceries")
+    def test_list_label_and_link(self, client, wiki_dir):  # noqa: F811
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries]]\n", encoding="utf-8")
+        task(client, title="Milk", tags=["groceries"])
         task(client, title="Main deck task")
-        text, _ = call(client, "search_tasks", list="Groceries")
+        text, _ = call(client, "search_tasks", tag="groceries")
         assert "Task: Milk" in text and "list: groceries" in text and "Main deck" not in text
         assert "list=groceries" in text
 

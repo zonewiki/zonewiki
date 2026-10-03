@@ -138,7 +138,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/`                   | Redirects to `/page/index`                      |
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
-| GET    | `/deck`               | The built-in deck page (`deck_page()`): the full main deck, independent of the wiki's pages. `?list=<name>` shows that separate list instead; `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the deck" goes here (due badge, search results, Linked tasks, `g d`, `c t`). |
+| GET    | `/deck`               | The built-in deck page (`deck_page()`): the full main deck, independent of the wiki's pages. `?list=<name>` shows that separate list instead, with the params of the page that declares it (keep, labels, limit, …) and a line linking to that page; `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the deck" goes here (due badge, search results, Linked tasks, `g d`, `c t`). |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `pages/<slug>.md`        |
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
@@ -163,8 +163,8 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/deck/batch-tag` | Add/remove tags from multiple tasks; body `{ ids: [...], add: [...], remove: [...] }` |
 | GET    | `/api/deck/due-count` | Count tasks due today + overdue |
 | GET    | `/api/deck/completed` | Completed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
-| GET    | `/api/deck/completed-years` | `{ years }`: years with completed tasks, newest first, this year always included (Completed's year switcher). `?list=<name>` as for the count. |
-| GET    | `/api/deck/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link. `?list=<name>` counts that list's; without it, tasks in no list. |
+| GET    | `/api/deck/completed-years` | `{ years }`: years with completed tasks, newest first, this year always included (Completed's year switcher). `?list=<name>`/`?all=1` as for the count. |
+| GET    | `/api/deck/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it), `?all=1` every task; without either, the main deck's (tasks in no list). |
 | POST   | `/api/scratch`    | Create a new scratch note (`<timestamp>_<slug>.md`); returns `{ slug }` |
 | GET    | `/page/_scratch`        | Auto-generated index of all scratch notes, newest first |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
@@ -231,7 +231,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - **MCP `read_page`** keeps the raw markdown and appends what each reference stands for (title, status, dates, link; `_mcp_task_refs`).
 - **Make task** (formatting bar, `makeTasks` in `leaf.js`): turns text in the editor into deck tasks and replaces it with their references, e.g. action items in meeting notes. A selection within one line becomes one task and an inline reference. Otherwise each non-empty line the selection touches (or the cursor's line) becomes a task, keeping its list marker and dropping a checklist's `[ ]` (`- [ ] Call Bob` → `- [[task:…]]`); blank lines, headings and lines that are already a reference stay. Each task's notes say `From [[<page>]]`.
   - **One item opens the deck's edit modal** to review it first: the editor page carries a hidden deck app (`_build_deck_embed(…, headless=True)`: `data-headless`, `display:none`; `deck.js` then ignores the deck's keyboard shortcuts and the "moved to another list" notice), and `window.openDeckEdit(null, { title, description, start_date: null, onCreated })` opens it with the text as title (its quick-add preview shows the shorthand) and no start date. Save (Enter) creates the task and `onCreated` puts the reference in; Cancel/Esc changes nothing. The same modal serves `c t` in the editor.
-  - **Several lines** open the same modal in batch mode (`openDeckEdit(null, { titles, … })`, `setBatch` in `deck.js`): the titles are listed instead of the title field (each with its shorthand preview), focus starts in Tags, and the fields (notes, tags, dates, repeat, keep, list) apply to every task. A line's own shorthand adds to them: its tags join the shared ones, its dates win over the shared ones. Save creates them one by one (`createTask`) and `onCreated` gets them all; if one fails, or the text changed meanwhile, the created ones are deleted again and nothing is replaced. Should the deck app be missing, the editor creates them right away with `DeckCore.parseQuickAdd`.
+  - **Several lines** open the same modal in batch mode (`openDeckEdit(null, { titles, … })`, `setBatch` in `deck.js`): the titles are listed instead of the title field (each with its shorthand preview), focus starts in Tags, and the fields (notes, tags, dates, repeat, keep) apply to every task. A line's own shorthand adds to them: its tags join the shared ones, its dates win over the shared ones. Save creates them one by one (`createTask`) and `onCreated` gets them all; if one fails, or the text changed meanwhile, the created ones are deleted again and nothing is replaced. Should the deck app be missing, the editor creates them right away with `DeckCore.parseQuickAdd`.
   - The undo toast (both ways) deletes the tasks (`batch-delete`) and puts the text back.
 
 ### Image sizing
@@ -273,10 +273,10 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). |
+| `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
 | `view` | `focus`, `open`, `plan`, `completed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Old names are still accepted via `_FILTER_ALIASES` (`upcoming`, `today`, `all`, `backlog`, `due`, `done`), as is `filter` for `view`. |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/deck`; `capacity` is an old alias. |
-| `list` | list name | — | Makes the embed a separate list (see Deck → Separate lists). Cleaned like tags, lowercased (`_clean_list`). |
+| `list` | a tag | — | Makes the embed a separate list: it shows the tasks with that tag, the tag is locked there, and the main deck leaves them out (see Deck → Separate lists). Cleaned like tags, lowercased (`_clean_list`). |
 | `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. |
 | `labels` | up to 3 comma-separated names | `Open,Plan,Focus` | The embed's own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Plan,Shopping` for a shopping list. Only the words change: views, `view=` values and links keep their names. An empty entry keeps the default, `_` stands for a space (params split on whitespace). Rendered into the tab buttons by `_build_deck_embed`; `deck.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip. |
 
@@ -455,7 +455,7 @@ Tools, all read-only (`readOnlyHint`). A tool failure the model can fix (bad slu
 | Tool | Does |
 |------|------|
 | `search_wiki(query, limit=8, under)` | The most relevant **sections**, full text, best first, each with title › heading, slug, the page's last edit date (`edited:`, so the model can tell current notes from stale ones) and a URL with the heading anchor. Several may come from one page. Matching deck tasks are results too, ranked with the sections. `under` restricts it to a folder: pages whose slug is that prefix or below it (`_in_folder`, case ignored; `tickets`, `tickets/` and `/page/tickets` alike, `_clean_folder`), and no tasks. A folder without pages is a tool error, so the model corrects it. |
-| `search_tasks(tag, status="open", query, list, limit=50)` | Deck tasks filtered by tag (comma = all must match, case-insensitive), status (`open`, `done` = completed or won't do, `all`) and separate list, all lists included unless `list` is given. With a query, ranked by BM25 within the filter; without, open tasks by deadline, then start date, then title, done ones newest first. Starts with "Today is …" so the model can tell overdue from upcoming. |
+| `search_tasks(tag, status="open", query, limit=50)` | Deck tasks filtered by tag (comma = all must match, case-insensitive; a list is its tag) and status (`open`, `done` = completed or won't do, `all`), separate lists included. With a query, ranked by BM25 within the filter; without, open tasks by deadline, then start date, then title, done ones newest first. Starts with "Today is …" so the model can tell overdue from upcoming. |
 | `read_page(slug)` | A page's raw markdown, frontmatter included, plus a list of the deck tasks its `[[task:…]]` references stand for. Accepts a slug, `/page/<slug>`, a full URL, `<slug>.md` or the page name (`_mcp_page_slug`); `safe_path` keeps it inside the wiki. |
 | `list_pages(limit=100, under)` | `slug \| title \| edited date`, most recently edited first; `under` lists one folder. |
 
@@ -506,7 +506,6 @@ The edit modal's "Days before due" is just another way to enter the start date (
 | `sort_order` | number / `null` | Position in Open's Sorted section; `null` = Unsorted |
 | `focus_order` | number / `null` | Position in Focus's Lineup; `null` = Others |
 | `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`. Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless type or primary date changes. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
-| `list` | string / `null` | Separate list; `null` = main deck |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
@@ -549,7 +548,7 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 
 The server logs events on the task (`_log` in `deck.py`): `created` (create and recurring spawn; a new task's first dates are not changes), `start`/`due` whenever the date actually changes (`_apply_task_fields`), `done` (also for a keep task, whose cleared start date is part of it), `reopened`, `wontdo` and `skipped`. A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own. Only these; title, tag or order edits are not logged. Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `deck.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`_clean_history` validates it), replacing what that request logged. Restore snapshots keep it too. Reopen-undo and bulk-complete-undo go through `batch-complete` and do log (`done`/`reopened`).
 
-The edit modal shows it in a closed **History** section (newest first, with a count), next to **List** on one line while both are closed (`.task-edit-extras`; an opened one takes a full-width line below). Creation is the oldest entry; tasks from before the log get one from `created_at`. There is no separate "Created:" line.
+The edit modal shows it in a closed **History** section (newest first, with a count), (`.task-edit-extras`). Creation is the oldest entry; tasks from before the log get one from `created_at`. There is no separate "Created:" line.
 
 ### Keep tasks
 
@@ -557,7 +556,13 @@ A task with `keep: true` is never archived: ticking it off means "done for now, 
 
 ### Separate lists
 
-A task's `list` field puts it in a named list shown only in `[[deck list=<name>]]` embeds and at `/deck?list=<name>`. List tasks are kept out of the main deck, tag embeds, the due badge and the main Completed count. `deck.js` drops out-of-scope tasks right after fetching (`inScope`), so suggestions, counts and reordering only see the list's own tasks. Storage is still `_deck/tasks.json`; the edit modal's List field (suggestions from `known_lists()`) moves tasks between lists. Search results and Linked tasks link to `/deck?…&list=<name>`.
+A separate list is a tag that a page declares with `[[deck list=<tag>]]`. There is no `list` field (an old stored one is ignored); a task is in a list by carrying its tag, and the page is the list's home.
+
+- **Declarations** (`server._deck_lists`, installed as `deck.LISTS_FN`): every page is scanned for `[[deck list=…]]` outside code (`_page_deck_lists`, kept in `_page_meta_cache`, so by mtime), giving `{name: {slug, params}}`. When several pages declare one, the first slug A–Z is its home. A tag no page declares is an ordinary tag (`/deck?list=<tag>` still shows its tasks, with a note saying they also show in the main deck). Editing the declaration away ends the list at once.
+- **A task's list** (`deck.task_list`, mirrored by `taskList` in `deck.js`): the first (A–Z) of its tags that is a declared list. Links to a list task (search, Linked tasks, task chips, MCP) carry `&list=<name>`, and `/deck?list=<name>` renders with the declaring embed's params, so the list looks the same everywhere.
+- **Scopes** (`deck.in_scope`, `inScope` in `deck.js`): a list view shows its tag's tasks; the **main deck** (an embed with neither `list=` nor `tag=`, including `/deck`, URL `?tag=` notwithstanding) leaves list tasks out, as do the due badge and the main Completed count; a `tag=` embed shows them like any task (a `#task #sam` task belongs on a Sam page whatever lists exist).
+- **Locked tag**: in a list view the list's tag is a filter chip without × (`chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so new tasks get it, and the edit modal's Tags field holds it the same way. A `tag=` embed's chips are locked in the filter too (`embedFilterWords`; a URL `?tag=`, e.g. `g t`, stays removable), but not on the task: removing `#sam` on Sam's page is a normal edit, and a save that makes a task fail the filter says "Saved; it no longer shows here." (`noticeIfFilteredOut`). Bulk untag (`T`) refuses it there. Adding a list's tag to a task in the main deck removes it from view with "Saved to list “…”." (`listMovedNotice`).
+- **Show separate lists** (`#task-show-lists`, main deck only, hidden when no list is declared): a checkbox under the list, left of Completed, with the number of hidden open tasks; checked, the main deck shows every task and the Completed count/years use `?all=1`. Remembered per browser (`localStorage` `leaf-deck-show-lists`). The due badge and links don't change.
 
 ### Touch
 

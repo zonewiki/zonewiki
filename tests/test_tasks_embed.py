@@ -83,11 +83,10 @@ class TestTasksLinkRender:
         assert "tasks-list" in html
         assert "deck.js" in html
 
-    def test_edit_modal_has_list_field(self, wiki_dir):
+    def test_show_lists_checkbox_per_instance(self, wiki_dir):
         html = server.render_md("[[deck]]\n[[deck]]\n")
-        assert 'id="task-edit-list"' in html and 'list="task-edit-lists"' in html
-        assert 'id="task-edit-list-1"' in html and 'list="task-edit-lists-1"' in html
-        assert "task-edit-page" not in html
+        assert 'id="task-show-lists-input"' in html and 'id="task-show-lists-input-1"' in html
+        assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""

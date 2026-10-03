@@ -352,10 +352,21 @@
   // WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
   // set: [[deck limit=N]], or ?limit=N (the built-in /deck page has no embed).
   const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
-  // [[deck list=…]] shows one separate list and nothing else; every other
-  // embed shows only the tasks in no list. ?list= opens a list in the main
-  // deck when no page embeds it (/deck redirects there).
-  const initList = cleanList(appEl?.dataset.initList || urlParams.get('list'));
+  // Separate lists: a list is a tag that a page declares with
+  // [[deck list=<tag>]]. That embed (and /deck?list=<tag>) shows the tasks
+  // carrying the tag, which is locked there: its filter chip can't be
+  // removed, new tasks get it, and the edit modal can't drop it. The main
+  // deck (no list=, no tag=) leaves list tasks out unless "Show separate
+  // lists" is checked; a tag embed shows them like any other task.
+  const initList = cleanList(appEl?.dataset.initList);
+  let declaredLists = [];
+  try { declaredLists = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
+  const listSet = new Set(declaredLists);
+  const isMainDeck = !initList && !appEl?.dataset.initTag;
+  const SHOW_LISTS_KEY = 'leaf-deck-show-lists';
+  let showLists = false;
+  try { showLists = localStorage.getItem(SHOW_LISTS_KEY) === '1'; } catch (_) {}
+  let hiddenListCount = 0;   // open list tasks the main deck leaves out
   // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
   // into the tab buttons by deck.py, so they are read back from there).
   const tabLabel = view => tabsEl.querySelector(`[data-filter="${view}"]`)?.textContent.trim() || view;
@@ -365,7 +376,20 @@
     return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
       .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
   }
-  function inScope(t) { return (t.list || '') === initList; }
+  const lowerTags = t => (t.tags || []).map(x => x.toLowerCase());
+  // The separate list a task belongs to (deck.py task_list): the first A–Z
+  // of its tags that is a declared list.
+  function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0] || null; }
+  function inScope(t) {
+    if (initList) return lowerTags(t).includes(initList);
+    if (isMainDeck && !showLists) return !taskList(t);
+    return true;
+  }
+  // The scope of the server's completed counts, matching inScope.
+  function scopeQuery() {
+    if (initList) return `?list=${encodeURIComponent(initList)}`;
+    return isMainDeck && !showLists ? '' : '?all=1';
+  }
   // ?view= / [[deck view=…]] pick the tab; ?filter= is the old name, still accepted.
   const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
   const embedFilter = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
@@ -443,7 +467,10 @@
   let deckGen = 0;
   async function fetchDeck() {
     const res = await fetch('/api/deck');
-    tasks = (await res.json()).filter(inScope);
+    const all = await res.json();
+    tasks = all.filter(inScope);
+    hiddenListCount = isMainDeck ? all.filter(t => taskList(t)).length : 0;
+    syncShowLists();
     deckGen++;
     completedLoaded = false;
     render();
@@ -457,7 +484,7 @@
   let completedCount = null;
   async function refreshCompletedCount() {
     try {
-      const res = await fetch('/api/deck/completed-count' + (initList ? `?list=${encodeURIComponent(initList)}` : ''));
+      const res = await fetch('/api/deck/completed-count' + scopeQuery());
       if (res.ok) { completedCount = (await res.json()).count; syncCompletedLink(); }
     } catch (_) {}
   }
@@ -498,7 +525,7 @@
 
   async function loadCompletedYears() {
     try {
-      const res = await fetch('/api/deck/completed-years' + (initList ? `?list=${encodeURIComponent(initList)}` : ''));
+      const res = await fetch('/api/deck/completed-years' + scopeQuery());
       if (res.ok) { completedYears = (await res.json()).years; if (activeFilter === 'completed') render(); }
     } catch (_) {}
   }
@@ -525,7 +552,7 @@
     });
     if (res.ok) {
       const task = await res.json();
-      if (inScope(task)) tasks.push(task);
+      if (inScope(task)) { tasks.push(task); noticeIfFilteredOut(null, task); }
       else if (!headless) showNotice(listMovedNotice(task));
       render();
       window.refreshDueBadge?.(); refreshCompletedCount();
@@ -546,7 +573,7 @@
       const updated = await res.json();
       const idx = tasks.findIndex(t => t.id === id);
       if (idx !== -1) {
-        if (inScope(updated)) tasks[idx] = updated;
+        if (inScope(updated)) { noticeIfFilteredOut(tasks[idx], updated); tasks[idx] = updated; }
         else { tasks.splice(idx, 1); showNotice(listMovedNotice(updated)); }
       }
       // Completion/skip/reopen of a recurring task spawns or removes an
@@ -564,10 +591,38 @@
     return null;
   }
 
-  // A task saved into another list leaves this view; say where it went.
+  // A task saved into a separate list leaves the main deck; say where it went.
   function listMovedNotice(task) {
-    return task.list ? `Saved to list “${task.list}”.` : 'Moved to the main deck.';
+    const name = taskList(task);
+    return name ? `Saved to list “${name}”.` : 'Saved; it no longer shows here.';
   }
+
+  // A save that makes a task fail the filter (e.g. #sam removed on Sam's
+  // page) would hide it without a word: say so. `before` null: a new task.
+  function noticeIfFilteredOut(before, after) {
+    if (headless) return;
+    const f = parseFilter(filterQuery());
+    if ((!before || matchesFilter(before, f)) && !matchesFilter(after, f)) {
+      showNotice('Saved; it no longer shows here.');
+    }
+  }
+
+  // "Show separate lists" (main deck only): also show the tasks of declared
+  // lists. Remembered per browser; the due badge and links don't change.
+  const showListsLabel = document.getElementById('task-show-lists' + sfx);
+  const showListsInput = document.getElementById('task-show-lists-input' + sfx);
+  function syncShowLists() {
+    if (!showListsLabel) return;
+    showListsLabel.hidden = !isMainDeck || headless || !declaredLists.length;
+    showListsInput.checked = showLists;
+    document.getElementById('task-show-lists-count' + sfx).textContent =
+      hiddenListCount ? ` (${hiddenListCount})` : '';
+  }
+  showListsInput?.addEventListener('change', () => {
+    showLists = showListsInput.checked;
+    try { localStorage.setItem(SHOW_LISTS_KEY, showLists ? '1' : '0'); } catch (_) {}
+    fetchDeck();
+  });
 
   async function deleteTask(id) {
     const res = await fetch(`/api/deck/${id}`, { method: 'DELETE' });
@@ -1082,6 +1137,10 @@
       const tag = input.value.trim();
       if (!tag) return;
       close();
+      if (removing && initList && cleanTag(tag).toLowerCase() === initList) {
+        showNotice(`“${initList}” is this list's tag: it can't be removed here.`);
+        return;
+      }
       try {
         const body = removing ? { ids, remove: [tag] } : { ids, add: [tag] };
         const res = await fetch('/api/deck/batch-tag', {
@@ -1091,10 +1150,14 @@
         });
         if (res.ok) {
           const updated = await res.json();
+          let moved = null;
           for (const u of updated) {
             const idx = tasks.findIndex(t => t.id === u.id);
-            if (idx !== -1) tasks[idx] = u;
+            if (idx === -1) continue;
+            if (inScope(u)) { noticeIfFilteredOut(tasks[idx], u); tasks[idx] = u; }
+            else { tasks.splice(idx, 1); moved = u; }
           }
+          if (moved) showNotice(listMovedNotice(moved));
           render();
           refreshOtherInstances(instanceId);
         }
@@ -1907,7 +1970,14 @@
   });
 
   // The filter: its chips (completed tag words) plus the text typed after them.
-  const filterChips = filterSearch && chipField(filterSearch, { onChange: () => render() });
+  // The embed's own filter words (list= and tag=) are locked: the page says
+  // what it shows. A URL ?tag= (e.g. g t) gives ordinary chips.
+  const embedFilterWords = [
+    ...(initList ? ['#' + initList] : []),
+    ...tagParamToQuery(appEl?.dataset.initTag || '').split(' ').filter(Boolean),
+  ];
+  const filterChips = filterSearch && chipField(filterSearch, {
+    onChange: () => render(), locked: embedFilterWords });
   function filterQuery() {
     return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
   }
@@ -1930,8 +2000,11 @@
   // edited, only removed (its × or Backspace at the start of the field). The
   // input is wrapped in a .chip-input box that looks like the field. Used by
   // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
-  // modal's Tags field (chips are tag names, shown as #name).
-  function chipField(input, { label = w => w, onChange } = {}) {
+  // modal's Tags field (chips are tag names, shown as #name). `locked` words
+  // (a list's tag, case ignored) are always there and have no ×.
+  function chipField(input, { label = w => w, onChange, locked = [] } = {}) {
+    const lockedSet = new Set(locked.map(w => w.toLowerCase()));
+    const isLocked = w => lockedSet.has(w.toLowerCase());
     const box = document.createElement('div');
     box.className = 'chip-input';
     input.parentNode.insertBefore(box, input);
@@ -1946,6 +2019,12 @@
         text.className = 'tag-chip-label';
         text.textContent = label(w);
         chip.appendChild(text);
+        if (isLocked(w)) {
+          chip.classList.add('tag-chip-locked');
+          chip.title = 'Set by this page';
+          box.insertBefore(chip, input);
+          return;
+        }
         const x = document.createElement('button');
         x.type = 'button';
         x.className = 'tag-chip-x';
@@ -1961,15 +2040,21 @@
     function set(list, silent) {
       const seen = new Set();
       words = list.filter(w => w && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()));
+      words.unshift(...locked.filter(w => !seen.has(w.toLowerCase())));
       draw();
       if (!silent) onChange?.();
     }
-    function remove(i) { words.splice(i, 1); draw(); onChange?.(); }
+    function remove(i) {
+      if (i < 0 || isLocked(words[i])) return;
+      words.splice(i, 1); draw(); onChange?.();
+    }
     input.addEventListener('keydown', e => {
-      if (e.key === 'Backspace' && words.length && !e.defaultPrevented &&
+      if (e.key === 'Backspace' && !e.defaultPrevented &&
           input.selectionStart === 0 && input.selectionEnd === 0) {
+        const i = words.findLastIndex(w => !isLocked(w));
+        if (i === -1) return;
         e.preventDefault();
-        remove(words.length - 1);
+        remove(i);
       }
     });
     box.addEventListener('mousedown', e => {
@@ -2128,7 +2213,8 @@
   // it a chip; Backspace at the start removes the last chip.
   const editTagsInput = document.getElementById('task-edit-tags' + sfx);
   const cleanTag = t => t.trim().replace(/^#+/, '').replace(/\s+/g, '-');
-  const editChips = editTagsInput && chipField(editTagsInput, { label: t => '#' + t });
+  const editChips = editTagsInput && chipField(editTagsInput, {
+    label: t => '#' + t, locked: initList ? [initList] : [] });
   if (editTagsInput) {
     // A comma (typed or pasted) commits everything before it as chips.
     // Registered before noSpacesInTags, which would turn ", " into "-".
@@ -2231,13 +2317,6 @@
   }
   titleInput.addEventListener('input', syncQuickPreview);
 
-  const linksDetails = document.getElementById('task-edit-links' + sfx);
-  const linksSummary = document.getElementById('task-edit-links-summary' + sfx);
-  function syncLinksSummary() {
-    linksSummary.textContent = document.getElementById('task-edit-list' + sfx).value.trim();
-  }
-  linksDetails.addEventListener('input', syncLinksSummary);
-
   // The modal's History section: the task's logged events, newest first
   // (deck.py _log), with its creation as the oldest. Closed on every open;
   // hidden for a new task. Tasks from before the log existed get their
@@ -2285,13 +2364,6 @@
       : defaultTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
     editChips.set(startTags, true);
     editTagsInput.value = '';
-    // A new task in a [[deck list=…]] embed belongs to that list; otherwise
-    // it would vanish from the embed as soon as it is saved.
-    document.getElementById('task-edit-list' + sfx).value = task ? task.list || '' : initList;
-    // The embed usually sets it, so it sits in a closed section whose
-    // summary shows the value.
-    linksDetails.open = false;
-    syncLinksSummary();
     renderHistory(task);
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
@@ -2433,7 +2505,6 @@
       rec_type: keepCb.checked ? null : recTypeSelect.value || null,
       rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
       rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
-      list: cleanList(document.getElementById('task-edit-list' + sfx).value) || null,
       keep: keepCb.checked,
     };
     if (batchTitles && !id) {

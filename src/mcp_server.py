@@ -59,7 +59,7 @@ TOOLS = [
         "name": "search_tasks",
         "title": "Search tasks",
         "description": (
-            "List the user's deck tasks, filtered by tag, status and list, each with "
+            "List the user's deck tasks, filtered by tag and status, each with "
             "status, tags, start and due dates, repeat, notes and a link. Without a "
             "query, open tasks come by deadline, then start date; done ones newest "
             "first. With a query, by relevance. Starts with today's date."
@@ -74,7 +74,6 @@ TOOLS = [
                 "query": {"type": "string", "description": (
                     'Words to look for in title, notes and tags; "exact phrase", -word and '
                     'edited:/after:/before: (last activity, e.g. after:2026-09-01) work too.')},
-                "list": {"type": "string", "description": "Only tasks in this separate list, e.g. 'groceries'."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
             },
         },

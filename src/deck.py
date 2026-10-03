@@ -363,17 +363,18 @@ def _completed_in_year(year: str) -> list[dict]:
     return [t for t in tasks if _completed_year(t) == year]
 
 
-def completed_years(list_name: str | None) -> list[str]:
-    """Years with completed tasks in scope (of list_name, or the main deck),
-    newest first; this year is always included."""
+def completed_years(scope: str | None) -> list[str]:
+    """Years with completed tasks in scope (see in_scope), newest first; this
+    year is always included."""
     current = str(date.today().year)
     years = {current}
+    names = list_names()
     with _LOCK:
         for t in _read_completed():
-            if in_list(t, list_name) and _past_year(t, current):
+            if in_scope(t, scope, names) and _past_year(t, current):
                 years.add(_completed_year(t))
         for path in _archive_glob():
-            if any(in_list(t, list_name) for t in _read_list_lenient(path)):
+            if any(in_scope(t, scope, names) for t in _read_list_lenient(path)):
                 years.add(_ARCHIVE_NAME_RE.fullmatch(path.name).group(1))
     return sorted(years, reverse=True)
 
@@ -508,7 +509,6 @@ def _new_task(**overrides) -> dict:
         "focus_order": None,
         "sort_order": None,
         "recurrence": None,
-        "list": None,
         "spawned_from": None,
         "keep": False,
         "last_done": None,
@@ -610,7 +610,6 @@ def _spawn_recurring(task: dict) -> dict | None:
         start_date=new_start.isoformat() if new_start else None,
         sort_order=task.get("sort_order", 0),
         recurrence=next_rec,
-        list=task.get("list"),
         spawned_from=task["id"],
     )
     # The next occurrence carries the series' history on (with the "done" or
@@ -740,15 +739,45 @@ _FILTER_ALIASES = {
 }
 
 
-def known_lists() -> list[str]:
-    """Names of every list some task (open or completed) belongs to."""
-    return sorted({t["list"] for t in _read_all() if t.get("list")})
+# Separate lists. A list is a tag that a page declares with [[deck list=<tag>]]:
+# that page shows the tasks carrying the tag, and the main deck leaves them
+# out. The server scans pages for the declarations (server._deck_lists) and
+# installs the lookup here, since deck.py doesn't read pages itself.
+# LISTS_FN() returns {name: {"slug": declaring page, "params": its embed's
+# params}}; names are lowercase.
+LISTS_FN = lambda: {}
 
 
-def in_list(task: dict, name: str | None) -> bool:
-    """Whether task belongs to the view of list `name` (None: the main deck,
-    which holds exactly the tasks that are in no list)."""
-    return (task.get("list") or None) == (name or None)
+def list_names() -> set[str]:
+    """Every declared list name."""
+    return set(LISTS_FN())
+
+
+def task_list(task: dict, names: set[str] | None = None) -> str | None:
+    """The separate list a task belongs to: the first (A–Z) of its tags that
+    is a declared list, or None for the main deck."""
+    names = list_names() if names is None else names
+    hits = sorted({t.lower() for t in task.get("tags") or []} & names)
+    return hits[0] if hits else None
+
+
+def in_scope(task: dict, scope: str | None, names: set[str]) -> bool:
+    """Whether a task belongs to a deck view: scope is a list name (tasks
+    tagged with it), "" for the main deck (tasks in no list) or None for
+    every task (tag embeds, the main deck showing separate lists)."""
+    if scope is None:
+        return True
+    if scope:
+        return scope in {t.lower() for t in task.get("tags") or []}
+    return task_list(task, names) is None
+
+
+def _scope_arg() -> str | None:
+    """The view a completed-count/-years request is for: ?list=<name>, ?all=1
+    (every task) or neither (the main deck)."""
+    if request.args.get("all"):
+        return None
+    return _clean_list(request.args.get("list")) or ""
 
 
 def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False) -> str:
@@ -785,15 +814,14 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     keep = "1" if params.get("keep", "").strip().lower() in ("1", "true", "yes") else ""
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
-    # Every list name in use, for the edit modal's List suggestions.
-    list_options = "".join(f'<option value="{html.escape(n)}">'
-                           for n in known_lists())
+    # Every declared list: the main deck leaves their tasks out (deck.js).
+    lists_json = html.escape(json.dumps(sorted(list_names())))
 
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
     hide = ' data-headless="1" style="display:none"' if headless else ""
-    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>
@@ -808,6 +836,9 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
   <ul class="tasks-list" id="tasks-list{sfx}"></ul>
   <div class="deck-footer">
     <button type="button" class="deck-completed-link" id="task-completed-link{sfx}">✓ Completed</button>
+    <label class="deck-show-lists" id="task-show-lists{sfx}" hidden title="Also show the tasks of separate lists ([[deck list=…]] pages)">
+      <input type="checkbox" id="task-show-lists-input{sfx}"> Show separate lists<span class="deck-show-lists-count" id="task-show-lists-count{sfx}"></span>
+    </label>
   </div>
 </div>
 <dialog id="task-edit-modal{sfx}" class="task-edit-modal">
@@ -875,14 +906,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
       <input type="checkbox" id="task-edit-keep{sfx}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
     </label>
     <div class="task-edit-extras">
-    <details class="task-edit-links" id="task-edit-links{sfx}">
-      <summary>List<span class="task-edit-links-summary" id="task-edit-links-summary{sfx}"></span></summary>
-      <div class="task-field" title="A task in a list shows only where [[deck list=…]] embeds that list, not in the main deck">
-        <label for="task-edit-list{sfx}">List <span class="field-hint">(separate list; empty = main deck)</span></label>
-        <input type="text" id="task-edit-list{sfx}" name="list" list="task-edit-lists{sfx}" autocomplete="off" placeholder="—">
-        <datalist id="task-edit-lists{sfx}">{list_options}</datalist>
-      </div>
-    </details>
     <details class="task-edit-links task-edit-history" id="task-edit-history{sfx}" hidden>
       <summary>History<span class="task-edit-links-summary" id="task-edit-history-count{sfx}"></span></summary>
       <ul class="task-history" id="task-edit-history-list{sfx}"></ul>
@@ -995,7 +1018,7 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
                     break
         if found:
             results.append({"id": task["id"], "title": task.get("title", ""),
-                            "list": task.get("list")})
+                            "list": task_list(task)})
     return results
 
 
@@ -1103,7 +1126,6 @@ def task_search_docs() -> list[dict]:
             "type": "task",
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",
-            "list": task.get("list"),
             "year": _past_year(task) if task.get("completed_at") else None,
             "tags": [t.lower() for t in task.get("tags") or []],  # for #tag queries
             "edited": _last_activity(task),  # for edited:/after:/before: queries
@@ -1153,17 +1175,18 @@ def api_get_deck_completed():
 
 @bp.get("/api/deck/completed-years")
 def api_deck_completed_years():
-    """Years the Completed view can show for ?list= (or the main deck)."""
-    return jsonify({"years": completed_years(_clean_list(request.args.get("list")))})
+    """Years the Completed view can show for ?list=, ?all=1 or the main deck."""
+    return jsonify({"years": completed_years(_scope_arg())})
 
 
 @bp.get("/api/deck/completed-count")
 def api_deck_completed_count():
     """How many tasks the Completed view would list (for its link's label):
-    this year's, of list ?list=, or without one for the main deck."""
-    name = _clean_list(request.args.get("list"))
+    this year's, of list ?list=, of every task with ?all=1, else of the main
+    deck (tasks in no list)."""
+    scope, names = _scope_arg(), list_names()
     tasks = _completed_in_year(str(date.today().year))
-    return jsonify({"count": sum(in_list(t, name) for t in tasks)})
+    return jsonify({"count": sum(in_scope(t, scope, names) for t in tasks)})
 
 
 @bp.get("/api/deck/due-count")
@@ -1171,9 +1194,10 @@ def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
     tasks = _read_deck()
+    names = list_names()
     for t in tasks:
         # Tasks in a separate list stay on their list's page, out of the badge.
-        if not t.get("due_date") or t.get("list"):
+        if not t.get("due_date") or task_list(t, names):
             continue
         if t["due_date"] < today:
             overdue += 1
@@ -1226,8 +1250,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["sort_order"] = _as_order(data["sort_order"], "sort_order")
     if "focus_order" in data:
         task["focus_order"] = _as_order(data["focus_order"], "focus_order")
-    if "list" in data:
-        task["list"] = _clean_list(_as_str(data["list"] or "", "list"))
     if "keep" in data:
         task["keep"] = bool(data["keep"])
     if "last_done" in data:
@@ -1414,8 +1436,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     for field in ("created_at", "completed_at", "spawned_from"):
         if isinstance(snap.get(field), str) and snap[field]:
             task[field] = snap[field]
-    if isinstance(snap.get("list"), str):
-        task["list"] = _clean_list(snap["list"])
     if isinstance(snap.get("sort_order"), int):
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))

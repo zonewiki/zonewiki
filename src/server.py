@@ -755,7 +755,8 @@ def _task_ref_html(ref: str, task: dict | None, today: str) -> str:
     title = html.escape(_plain_task_title(task.get("title", "")))
     done, wont = bool(task.get("completed_at")), bool(task.get("wont_do"))
     year = deck_module._past_year(task) if done else None
-    href = html.escape(_task_href(task["id"], "completed" if done else "open", task.get("list"), year))
+    list_name = deck_module.task_list(task)
+    href = html.escape(_task_href(task["id"], "completed" if done else "open", list_name, year))
     cls, badges = "task-ref", []
     if done:
         cls += " task-ref-wontdo" if wont else " task-ref-done"
@@ -777,8 +778,8 @@ def _task_ref_html(ref: str, task: dict | None, today: str) -> str:
         if task.get("keep"):
             last = f" ✓ {_short_date(task['last_done'], today)}" if task.get("last_done") else ""
             badges.append(f'<span class="task-ref-badge" title="Keep task: stays after done">⟲{last}</span>')
-    if task.get("list"):
-        badges.append(f'<span class="task-ref-badge task-ref-list">{html.escape(task["list"])}</span>')
+    if list_name:
+        badges.append(f'<span class="task-ref-badge task-ref-list">{html.escape(list_name)}</span>')
     checked = " checked" if done and not wont else ""
     disabled = " disabled" if wont else ""
     return (f'<span class="{cls}" data-task-id="{html.escape(task["id"])}">'
@@ -1117,24 +1118,60 @@ def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | Non
 # Same invalidation model as _search_doc_cache: re-derived when the on-disk
 # mtime changes, so edits made outside the app stay reflected. Link targets are
 # cached unfiltered; both consumers only ever look up slugs that exist, so
-# filtering against the known-slug set is unnecessary.
-_page_meta_cache: dict[str, tuple[float, str, set[str]]] = {}
+# filtering against the known-slug set is unnecessary. The last item is the
+# separate lists the page declares (_page_deck_lists).
+_page_meta_cache: dict[str, tuple[float, str, set[str], list]] = {}
+
+
+def _page_deck_lists(content: str) -> list[tuple[str, dict]]:
+    """(list name, embed params) of each [[deck list=…]] on a page, outside
+    code."""
+    masked, _ = _mask_code(content)
+    out = []
+    for m in deck_module._DECK_RE.finditer(masked):
+        params = deck_module._parse_tasks_params(m.group(1) or "")
+        name = deck_module._clean_list(params.get("list"))
+        if name:
+            out.append((name, params))
+    return out
+
+
+def _page_meta_entry(md_file: Path, slug: str) -> tuple[float, str, set[str], list]:
+    """The page's _page_meta_cache entry, re-derived when its mtime changed."""
+    # Every page is scanned for list declarations (search, the due badge), so
+    # one that vanished meanwhile or isn't UTF-8 must not break anything.
+    try:
+        mtime = md_file.stat().st_mtime
+        cached = _page_meta_cache.get(slug)
+        if cached and cached[0] == mtime:
+            return cached
+        content = md_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return 0.0, slug_display_name(slug), set(), []
+    entry = (mtime, page_title(content, slug), _page_link_targets(content, slug),
+             _page_deck_lists(content))
+    _page_meta_cache[slug] = entry
+    return entry
 
 
 def _page_meta(md_file: Path, slug: str) -> tuple[str, set[str]]:
     """Return (title, outgoing link targets) for a page, cached by mtime."""
-    try:
-        mtime = md_file.stat().st_mtime
-    except OSError:
-        return slug_display_name(slug), set()
-    cached = _page_meta_cache.get(slug)
-    if cached and cached[0] == mtime:
-        return cached[1], cached[2]
-    content = md_file.read_text(encoding="utf-8")
-    title = page_title(content, slug)
-    targets = _page_link_targets(content, slug)
-    _page_meta_cache[slug] = (mtime, title, targets)
+    _, title, targets, _ = _page_meta_entry(md_file, slug)
     return title, targets
+
+
+def _deck_lists() -> dict[str, dict]:
+    """Every separate list some page declares with [[deck list=<name>]]:
+    {name: {"slug": the page, "params": its embed's params}}. When several
+    pages declare one, the first slug A–Z is its home."""
+    out: dict[str, dict] = {}
+    for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
+        for name, params in _page_meta_entry(md_file, slug)[3]:
+            out.setdefault(name, {"slug": slug, "params": params})
+    return out
+
+
+deck_module.LISTS_FN = _deck_lists
 
 
 def all_backlink_counts() -> dict[str, int]:
@@ -2527,7 +2564,8 @@ def _result_meta(d: dict) -> str:
         status = _task_status(task)
         if status != "open":
             status += f" {task['completed_at'][:10]}"
-        where = f"Deck › {task['list']}" if task.get("list") else "Deck"
+        list_name = deck_module.task_list(task)
+        where = f"Deck › {list_name}" if list_name else "Deck"
         return f"{where} · {status}"
     folder = d["slug"].rpartition("/")[0]
     edited = f"edited {fmt_date(d['mtime'])}"
@@ -2554,6 +2592,7 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT) -> li
     docs = _ranked_docs(query, _search_index(), keep, limit)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
+    names = deck_module.list_names()
     for d in docs:
         section = sections.get(d["slug"]) if d.get("type") != "task" else None
         text = f"{section['heading']}\n{section['text']}".strip() if section else d["excerpt_text"]
@@ -2562,9 +2601,11 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT) -> li
             "title": d["title"],
             "excerpt": search.make_excerpt(text, q),
         }
-        for k in ("type", "task_id", "status", "list", "year"):
+        for k in ("type", "task_id", "status", "year"):
             if d.get(k) is not None:
                 r[k] = d[k]
+        if d.get("type") == "task" and (list_name := deck_module.task_list(d["task"], names)):
+            r["list"] = list_name
         r["meta"] = _result_meta(d)
         r["href"] = _result_href(r)
         if d.get("type") != "task":
@@ -2746,11 +2787,12 @@ def _mcp_task_text(task: dict, base: str) -> str:
     if task.get("keep"):
         facts.append("keep task (back to the list when done"
                      + (f", last done {task['last_done']})" if task.get("last_done") else ")"))
-    if task.get("list"):
-        facts.append(f"list: {task['list']}")
+    list_name = deck_module.task_list(task)
+    if list_name:
+        facts.append(f"list: {list_name}")
     done = status != "open"
     year = deck_module._past_year(task) if done else None
-    url = base + _task_href(task["id"], "completed" if done else "open", task.get("list"), year)
+    url = base + _task_href(task["id"], "completed" if done else "open", list_name, year)
     text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
     notes = (task.get("description") or "").strip()
     return f"{text}\n\n{notes}" if notes else text
@@ -2773,30 +2815,27 @@ def _mcp_task_refs(content: str, base: str) -> str:
         facts = [_task_status(task)]
         facts += [f"{k} {task[k + '_date']}" for k in ("start", "due") if task.get(k + "_date")]
         done = bool(task.get("completed_at"))
-        url = base + _task_href(task["id"], "completed" if done else "open", task.get("list"),
+        url = base + _task_href(task["id"], "completed" if done else "open", deck_module.task_list(task),
                                 deck_module._past_year(task) if done else None)
         lines.append(f"- [[task:{ref}]]: {task.get('title', '')} ({', '.join(facts)}) {url}")
     return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + "\n".join(lines)
 
 
 def _mcp_search_tasks(args: dict, base: str) -> str:
-    """Deck tasks filtered by tag, status and list, ranked by the query when
-    there is one, else open ones by deadline and start date, done ones newest
+    """Deck tasks filtered by tag and status, ranked by the query when there
+    is one, else open ones by deadline and start date, done ones newest
     first."""
-    query, tag, list_name = (args.get(k, "") for k in ("query", "tag", "list"))
-    if not all(isinstance(v, str) for v in (query, tag, list_name)):
-        raise mcp_server.ToolError("query, tag and list must be strings")
+    query, tag = (args.get(k, "") for k in ("query", "tag"))
+    if not all(isinstance(v, str) for v in (query, tag)):
+        raise mcp_server.ToolError("query and tag must be strings")
     status = args.get("status", "open")
     if status not in ("open", "done", "all"):
         raise mcp_server.ToolError("status must be open, done or all")
     limit = _mcp_int(args, "limit", 50, 200)
     want = {t.strip().lstrip("#").lower() for t in tag.split(",") if t.strip().lstrip("#")}
-    list_name = deck_module._clean_list(list_name) if list_name.strip() else None
 
     def matches(task: dict) -> bool:
         if status != "all" and (status == "open") == bool(task.get("completed_at")):
-            return False
-        if list_name and task.get("list") != list_name:
             return False
         return want <= {t.lower() for t in task.get("tags") or []}
 
@@ -2938,21 +2977,35 @@ def api_search():
 @app.get("/deck")
 def deck_page():
     list_name = deck_module._clean_list(request.args.get("list"))
-    embed = deck_module._build_deck_embed({"list": list_name} if list_name else {})
     sep = '<span class="breadcrumb-sep">›</span>'
     if list_name:
+        # A list looks the same here as on the page that declares it: that
+        # embed's params (keep, labels, limit, view, tag) apply.
+        home = deck_module.LISTS_FN().get(list_name)
+        params = dict(home["params"]) if home else {}
+        params["list"] = list_name
+        embed = deck_module._build_deck_embed(params)
         title = f"{list_name} · Deck"
         crumbs = [HOME_LINK, '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
         heading = html.escape(list_name)
+        if home:
+            page_link = (f'<a href="/page/{html.escape(home["slug"])}">'
+                         f'{html.escape(_page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
+            note = f'<p class="deck-list-home">A separate list, from {page_link}.</p>'
+        else:
+            note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>, '
+                    f'so these tasks also show in the main deck.</p>')
     else:
+        embed = deck_module._build_deck_embed({})
         title = "Deck"
         crumbs = [HOME_LINK, "<span>Deck</span>"]
         heading = "Deck"
+        note = ""
     # data-slug keys the navigation trail (leaf.js); no page has this slug.
     key = "/deck" + (f"?list={list_name}" if list_name else "")
     body = f"""<div class="breadcrumb" data-slug="{html.escape(key)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>
 <header class="page-header"><h1>{heading}</h1></header>
-<article class="page-content">{embed}</article>"""
+<article class="page-content">{note}{embed}</article>"""
     return shell(title, body)
 
 

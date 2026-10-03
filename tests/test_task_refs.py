@@ -82,7 +82,8 @@ class TestRendering:
         soon = task(client, title="Soon", start_date=day(3), due_date=day(0))
         keep = task(client, title="Milk", keep=True, tags=["shop"])
         put(client, keep["id"], completed=True)          # keep: stays open, ✓ today
-        listed = task(client, title="Eggs", list="groceries")
+        write_page(wiki_dir, "shopping", "# Shopping\n\n[[deck list=groceries]]\n")
+        listed = task(client, title="Eggs", tags=["groceries"])
         write_page(wiki_dir, "notes", "# N\n\n" + " ".join(
             f"[[task:{t['id'][:8]}]]" for t in (late, soon, keep, listed)) + "\n")
         body = view(client)

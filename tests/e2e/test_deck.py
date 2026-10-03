@@ -156,8 +156,9 @@ def test_due_badge_links_to_focus_with_the_due_tasks(page, wiki):
 def test_deck_page_opens_linked_task_and_lists(page, wiki):
     # /deck is one built-in main deck, whatever embeds the wiki's pages have.
     wiki.write("deck", "# Deck\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     tid = page.request.post("/api/deck", data={"title": "Untagged"}).json()["id"]
-    page.request.post("/api/deck", data={"title": "Milk", "list": "groceries"})
+    page.request.post("/api/deck", data={"title": "Milk", "tags": "groceries"})
     page.goto(f"/deck?task={tid}&view=open")
     expect(page.locator(".tasks-app")).to_have_count(1)
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
@@ -348,23 +349,21 @@ def test_task_link_to_missing_task_says_so(page, wiki):
     expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()
 
 
-# The edit modal's List field.
+# Adding a list's tag in the main deck moves the task into that list.
 
-def test_list_field_moves_task_into_list(page, wiki):
+def test_list_tag_moves_task_out_of_main_deck(page, wiki):
     page.request.post("/api/deck", data={"title": "Prune"})
+    wiki.write("garden", "# Garden\n\n[[deck list=garden]]\n")
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=open")
     modal = open_edit(page, "Prune")
-    # Usually set by the embed, so tucked into a closed section.
-    expect(modal.locator("#task-edit-list")).to_be_hidden()
-    modal.locator("#task-edit-links summary").click()
-    modal.locator("#task-edit-list").fill("Garden")
-    expect(modal.locator("#task-edit-links-summary")).to_have_text("Garden")
+    expect(modal.locator("#task-edit-list")).to_have_count(0)   # no List field any more
+    modal.locator("#task-edit-tags").fill("garden,")
     modal.get_by_role("button", name="Save").click()
     # It leaves the main deck and says where it went.
     expect(card(page, "Prune")).to_have_count(0)
     expect(page.get_by_text("Saved to list “garden”.")).to_be_visible()
-    wait_for_field(page, "Prune", "list", "garden")
+    wait_for_field(page, "Prune", "tags", ["garden"])
 
 
 # Completed: a link under the list instead of a tab.
@@ -511,7 +510,7 @@ def test_quick_add_is_not_applied_when_editing(page, wiki):
 
 def test_list_embed_shows_only_its_tasks(page, wiki):
     page.request.post("/api/deck", data={"title": "Main task"})
-    page.request.post("/api/deck", data={"title": "Oat milk", "list": "groceries"})
+    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
 
@@ -527,31 +526,103 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     expect(card(page, "Main task")).to_have_count(0)
 
 
-def test_new_task_in_list_embed_joins_list(page, wiki):
+def test_tag_embed_shows_list_tasks(page, wiki):
+    # Only the main deck leaves list tasks out; a tag view shows them.
+    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries,sam"})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    wiki.write("sam", "# Sam\n\n[[deck tag=sam]]\n")
+    page.goto("/page/sam?view=open")
+    expect(card(page, "Oat milk")).to_be_visible()
+    expect(page.locator("#task-show-lists")).to_be_hidden()
+
+
+def test_tag_embed_filter_is_locked_and_says_when_a_task_leaves(page, wiki):
+    # tag= chips are locked like a list's, but a task's tags are not: taking
+    # #sam off a task on Sam's page is a normal edit, and it says so.
+    page.request.post("/api/deck", data={"title": "Review PR", "tags": "task,sam"})
+    wiki.write("sam", "# Sam\n\n[[deck tag=sam]]\n")
+    page.goto("/page/sam?view=open")
+    filt = page.locator(".tasks-toolbar .tag-chip")
+    expect(filt).to_have_text(["#sam"])
+    expect(filt.locator(".tag-chip-x")).to_have_count(0)
+    page.locator("#task-filter-search").click()
+    page.keyboard.press("Backspace")
+    expect(filt).to_have_text(["#sam"])
+    modal = open_edit(page, "Review PR")
+    expect(modal.locator(".tag-chip .tag-chip-x")).to_have_count(2)   # #task and #sam removable
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.press("Backspace")      # drops #sam
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Review PR")).to_have_count(0)
+    expect(page.get_by_text("Saved; it no longer shows here.")).to_be_visible()
+    wait_for_field(page, "Review PR", "tags", ["task"])
+
+
+def test_url_tag_chip_stays_removable(page, wiki):
+    page.goto("/deck?tag=task&view=open")
+    filt = page.locator(".tasks-toolbar .tag-chip")
+    expect(filt.locator(".tag-chip-label")).to_have_text(["#task"])
+    expect(filt.locator(".tag-chip-x")).to_have_count(1)
+
+
+def test_show_separate_lists_checkbox(page, wiki):
+    page.request.post("/api/deck", data={"title": "Main task"})
+    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
+    done = page.request.post("/api/deck", data={"title": "Bread", "tags": "groceries"}).json()
+    page.request.put(f"/api/deck/{done['id']}", data={"completed": True})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    page.goto("/deck?view=open")
+    box = page.locator("#task-show-lists")
+    expect(box).to_contain_text("Show separate lists (1)")
+    expect(card(page, "Oat milk")).to_have_count(0)
+    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (0) →")
+    box.locator("input").check()
+    expect(card(page, "Oat milk")).to_be_visible()
+    expect(card(page, "Main task")).to_be_visible()
+    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (1) →")
+    # Remembered in this browser.
+    page.reload()
+    expect(box.locator("input")).to_be_checked()
+    expect(card(page, "Oat milk")).to_be_visible()
+    box.locator("input").uncheck()
+    expect(card(page, "Oat milk")).to_have_count(0)
+    # The list page itself has no such box.
+    page.goto("/page/shop?view=open")
+    expect(page.locator("#task-show-lists")).to_be_hidden()
+
+
+def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     page.goto("/page/shop?view=open")
+    filt = page.locator(".tasks-toolbar .tag-chip")
+    expect(filt).to_have_text(["#groceries"])
+    expect(filt.locator(".tag-chip-x")).to_have_count(0)
+    page.locator("#task-filter-search").click()
+    page.keyboard.press("Backspace")      # a locked chip stays
+    expect(filt).to_have_text(["#groceries"])
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
-    expect(modal.locator("#task-edit-list")).to_have_value("groceries")
-    expect(modal.locator("#task-edit-links-summary")).to_have_text("groceries")
+    chips = modal.locator(".tag-chip")
+    expect(chips).to_have_text(["#groceries"])
+    expect(chips.locator(".tag-chip-x")).to_have_count(0)
     modal.locator("#task-edit-title").fill("Bread")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Bread")).to_be_visible()
-    wait_for_field(page, "Bread", "list", "groceries")
+    wait_for_field(page, "Bread", "tags", ["groceries"])
 
 
-def test_moving_task_out_of_list_removes_it(page, wiki):
-    page.request.post("/api/deck", data={"title": "Oat milk", "list": "groceries"})
+def test_list_tag_cannot_be_removed_in_the_list(page, wiki):
+    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries,dairy"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     page.goto("/page/shop?view=open")
-    card(page, "Oat milk").dblclick()
-    modal = page.locator("#task-edit-modal")
-    modal.locator("#task-edit-links summary").click()
-    modal.locator("#task-edit-list").fill("")
+    modal = open_edit(page, "Oat milk")
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.press("Backspace")      # removes #dairy
+    page.keyboard.press("Backspace")      # #groceries is locked
+    expect(modal.locator(".tag-chip")).to_have_text(["#groceries"])
     modal.get_by_role("button", name="Save").click()
-    expect(card(page, "Oat milk")).to_have_count(0)
-    expect(page.get_by_text("Moved to the main deck.")).to_be_visible()
-    wait_for_field(page, "Oat milk", "list", None)
+    expect(card(page, "Oat milk")).to_be_visible()
+    wait_for_field(page, "Oat milk", "tags", ["groceries"])
 
 
 def _focus_titles(page):
@@ -1039,7 +1110,7 @@ def test_notes_continue_checkbox_list_on_enter(page, wiki):
 def test_embed_labels_rename_the_tabs(page, wiki):
     # labels= changes only the words: tabs, the back link, tooltips. Views
     # and links keep their names.
-    page.request.post("/api/deck", data={"title": "Milk", "list": "groceries", "keep": True})
+    page.request.post("/api/deck", data={"title": "Milk", "tags": "groceries", "keep": True})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
     page.goto("/page/shop?view=open")
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Plan", "Shopping list"])
@@ -1092,15 +1163,7 @@ def test_history_in_edit_modal_and_undo_leaves_no_trace(page, wiki):
     history = page.locator("#task-edit-history")
     expect(history).to_be_visible()
     expect(history.locator("summary")).to_contain_text("2")
-    # Closed, List and History share one line; the old "Created:" line is gone.
-    list_box = page.locator("#task-edit-links summary").bounding_box()
-    hist_box = history.locator("summary").bounding_box()
-    assert abs(list_box["y"] - hist_box["y"]) < 4 and hist_box["x"] > list_box["x"]
     history.locator("summary").click()
-    # Opened: on a line of its own below List (the modal re-centres as it
-    # grows, so compare against List's new position).
-    list_y = page.locator("#task-edit-links summary").bounding_box()["y"]
-    assert history.locator("summary").bounding_box()["y"] > list_y + 4
     expect(history.locator("li")).to_have_count(2)
     expect(history.locator("li").first).to_contain_text("Due — →")   # newest first
     expect(history.locator("li").last).to_contain_text("Created")
