@@ -1044,10 +1044,10 @@ if (textarea && previewPane) {
 
   // Make task: the selected text, or the current line, becomes a deck task,
   // and the text is replaced by its [[task:…]] reference, so the page shows
-  // the live task where the text was. One item opens the deck's edit modal
-  // (from the page's hidden deck app) to review it first; several selected
-  // lines make one task each right away (a list of action items), keeping
-  // their list markers. A checklist item's `[ ]` goes, the chip has its own
+  // the live task where the text was. It opens the deck's edit modal (from
+  // the page's hidden deck app) to review first; several selected lines make
+  // one task each (a list of action items), the modal's fields shared by
+  // all, and keep their list markers. A checklist item's `[ ]` goes, the chip has its own
   // checkbox. Trailing quick-add shorthand works as in the deck (`tomorrow
   // #work due:fri`), and the task's notes link back to this page.
   const LIST_PREFIX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])\s+)(?:\[[ xX]\]\s+)?/;
@@ -1078,7 +1078,9 @@ if (textarea && previewPane) {
         return { line, prefix, text: line.slice(m ? m[0].length : prefix.length).trim() };
       });
     }
-    const todo = items.filter(it => it.text && !TASK_REF_ONLY_RE.test(it.text));
+    // Blank lines, headings and existing references stay as they are.
+    const todo = items.filter(it => it.text && !TASK_REF_ONLY_RE.test(it.text)
+                                    && !(it.line && /^\s*#{1,6}\s/.test(it.line)));
     if (!todo.length) { showCheckboxToast('Nothing to make a task from'); return; }
     const description = pageSlug ? `From [[${pageSlug}]]` : '';
     const ref = it => `[[task:${it.id.slice(0, 8)}]]`;
@@ -1098,23 +1100,33 @@ if (textarea && previewPane) {
       });
     };
 
-    if (todo.length === 1 && window.openDeckEdit) {
-      const it = todo[0];
+    if (window.openDeckEdit) {
+      // One item: the modal with its text as title. Several: the modal in
+      // batch mode, its fields (tags, dates, …) for all of them.
       window.openDeckEdit(null, {
-        title: it.text, description, start_date: null,
-        onCreated: task => {
-          it.id = task.id;
-          it.title = task.title;
-          if (textarea.value !== v) {   // can't happen while the modal is up, but
-            showCheckboxToast(`Task “${task.title}” created; the text changed, so no reference was added`);
+        ...(todo.length === 1 ? { title: todo[0].text } : { titles: todo.map(it => it.text) }),
+        description, start_date: null,
+        onCreated: made => {
+          const tasks = Array.isArray(made) ? made : [made];
+          if (tasks.some(t => !t) || textarea.value !== v) {
+            const ids = tasks.filter(Boolean).map(t => t.id);
+            if (ids.length) {
+              fetch('/api/deck/batch-delete', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+              });
+            }
+            showCheckboxToast(tasks.some(t => !t) ? 'Could not create the tasks'
+                                                   : 'The text changed meanwhile; try again');
             return;
           }
-          replaceWithRefs([task.id]);
+          tasks.forEach((t, i) => { todo[i].id = t.id; todo[i].title = t.title; });
+          replaceWithRefs(tasks.map(t => t.id));
         },
       });
       return;
     }
 
+    // Without the deck app (it failed to load): create right away.
     const today = localToday();
     const created = [];
     for (const it of todo) {

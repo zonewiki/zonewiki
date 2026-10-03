@@ -127,18 +127,49 @@ def test_make_task_from_the_current_line_opens_the_deck_modal(page, wiki):
         f"# Notes\n\nAction items:\n- [[task:{t['id'][:8]}]]\nend")
 
 
-def test_make_tasks_from_selected_lines(page, wiki):
+def test_make_tasks_from_selected_lines_shares_the_modal_fields(page, wiki):
     existing = _task(page, title="Already a task")
-    text = (f"- [ ] First thing\n\n1. Second thing\n- [[task:{existing['id'][:8]}]]\nPlain line")
+    text = (f"## Action items\n- [ ] First thing\n\n1. Second thing tomorrow #home\n"
+            f"- [[task:{existing['id'][:8]}]]\nPlain line")
     _edit_with_cursor(page, wiki, text, 0, len(text))
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    batch = page.locator("#task-edit-batch")
+    expect(batch).to_be_visible()
+    expect(page.locator("#task-edit-title")).to_be_hidden()
+    expect(page.locator("#task-edit-batch-label")).to_have_text("3 tasks")
+    expect(page.locator("#task-edit-batch-list li")).to_have_count(3)
+    expect(page.locator("#task-edit-batch-list li").nth(1)).to_contain_text("Second thing")
+    expect(page.locator("#task-edit-batch-list li").nth(1)).to_contain_text("#home")
+    expect(page.locator("#task-edit-tags")).to_be_focused()
+    page.keyboard.type("work,")                   # one tag for all of them
+    _save_modal(page)
     expect(page.locator(".task-undo-toast")).to_contain_text("3 tasks created")
     by_title = {t["title"]: t for t in _open_tasks(wiki)}
     assert set(by_title) == {"Already a task", "First thing", "Second thing", "Plain line"}
+    assert by_title["First thing"]["tags"] == ["work"]
+    assert by_title["Plain line"]["tags"] == ["work"]
+    assert sorted(by_title["Second thing"]["tags"]) == ["home", "work"]
+    assert by_title["Second thing"]["start_date"] == (date.today() + timedelta(days=1)).isoformat()
+    assert by_title["First thing"]["start_date"] is None
+    assert all(by_title[t]["description"] == "From [[notes]]" for t in ("First thing", "Plain line"))
     ref = lambda title: f"[[task:{by_title[title]['id'][:8]}]]"
     expect(page.locator("#editor-textarea")).to_have_value(
-        f"# Notes\n\n- {ref('First thing')}\n\n1. {ref('Second thing')}\n"
+        f"# Notes\n\n## Action items\n- {ref('First thing')}\n\n1. {ref('Second thing')}\n"
         f"- [[task:{existing['id'][:8]}]]\n{ref('Plain line')}")
+
+
+def test_batch_modal_then_single_modal_shows_the_title_again(page, wiki):
+    text = "one\ntwo"
+    _edit_with_cursor(page, wiki, text, 0, len(text))
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator("#task-edit-batch")).to_be_visible()
+    page.keyboard.press("Escape")
+    assert _open_tasks(wiki) == []
+    expect(page.locator("#editor-textarea")).to_have_value("# Notes\n\none\ntwo")
+    page.locator("#editor-textarea").evaluate("ta => ta.setSelectionRange(ta.value.length, ta.value.length)")
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator("#task-edit-batch")).to_be_hidden()
+    expect(page.locator("#task-edit-title")).to_have_value("two")
 
 
 def test_make_task_from_a_selection_inside_a_sentence(page, wiki):

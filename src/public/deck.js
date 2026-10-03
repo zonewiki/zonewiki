@@ -2171,15 +2171,48 @@
     const q = parseQuickAdd(titleInput.value, todayStr());
     return q.found ? q : null;
   }
-  function syncQuickPreview() {
-    const q = quickParse();
-    quickPreview.hidden = !q;
-    if (!q) return;
-    quickPreview.textContent = [
+  function quickText(q) {
+    return [
       q.start_date && `📅 start ${formatDate(q.start_date)}`,
       q.due_date && `⏰ due ${formatDate(q.due_date)}`,
       ...q.tags.map(t => '#' + t),
     ].filter(Boolean).join(' · ');
+  }
+
+  // Batch mode (the editor's Make task with several lines): the modal makes
+  // one task per title. The titles are listed instead of the title field,
+  // and the fields apply to all of them; shorthand on a line adds to them.
+  let batchTitles = null;
+  const titleField = titleInput.closest('.task-field');
+  const batchField = document.getElementById('task-edit-batch' + sfx);
+  function setBatch(titles) {
+    batchTitles = titles?.length ? titles : null;
+    titleField.style.display = batchTitles ? 'none' : '';
+    titleInput.required = !batchTitles;
+    if (!batchField) return;
+    batchField.style.display = batchTitles ? '' : 'none';
+    if (!batchTitles) return;
+    document.getElementById('task-edit-batch-label' + sfx).textContent = `${batchTitles.length} tasks`;
+    const list = document.getElementById('task-edit-batch-list' + sfx);
+    list.replaceChildren(...batchTitles.map(t => {
+      const q = parseQuickAdd(t, todayStr());
+      const li = document.createElement('li');
+      li.textContent = q.title;
+      if (q.found) {
+        const extra = document.createElement('span');
+        extra.className = 'task-quick-preview';
+        extra.textContent = ' ' + quickText(q);
+        li.append(extra);
+      }
+      return li;
+    }));
+  }
+
+  function syncQuickPreview() {
+    const q = !batchTitles && quickParse();
+    quickPreview.hidden = !q;
+    if (!q) return;
+    quickPreview.textContent = quickText(q);
   }
   titleInput.addEventListener('input', syncQuickPreview);
 
@@ -2219,11 +2252,14 @@
   // opts (new tasks): `tags` (comma-separated), and from the editor's Make
   // task a starting `title` and `description`, a `start_date` (null: none,
   // instead of Focus's today) and `onCreated(task)`, called once it is saved.
+  // `titles` instead of `title` makes one task per title (batch mode), and
+  // onCreated gets them all (a null where creating failed, then it stops).
   let onCreated = null;
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
     onCreated = !task && opts?.onCreated || null;
+    setBatch(!task && opts?.titles);
     document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
     document.getElementById('task-edit-title' + sfx).value = task ? task.title : opts?.title || '';
     document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : opts?.description || '';
@@ -2254,7 +2290,7 @@
     deleteBtn.style.display = task ? '' : 'none';
     syncDates('open');
     modal.showModal();
-    document.getElementById('task-edit-title' + sfx).focus();
+    (batchTitles ? editTagsInput : titleInput).focus();
   }
 
   // Relative-date helpers (used by card rendering and focus defaults).
@@ -2356,6 +2392,24 @@
       list: cleanList(document.getElementById('task-edit-list' + sfx).value) || null,
       keep: keepCb.checked,
     };
+    if (batchTitles && !id) {
+      const titles = batchTitles, created = onCreated;
+      onCreated = null;
+      modal.close();
+      const today = todayStr(), made = [];
+      for (const title of titles) {
+        const q = parseQuickAdd(title, today);
+        const task = await createTask({
+          ...data, title: q.title,
+          start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
+          tags: [...new Set([...data.tags, ...q.tags])],
+        });
+        made.push(task);
+        if (!task) break;
+      }
+      created?.(made);
+      return;
+    }
     // Shorthand in a new task's title wins over the fields (the preview said so).
     const quick = !id && quickParse();
     if (quick) {

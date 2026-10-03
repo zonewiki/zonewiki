@@ -783,6 +783,11 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
       <input type="text" id="task-edit-title{sfx}" name="title" required autocomplete="off">
       <div class="task-quick-preview" id="task-edit-quick{sfx}" hidden></div>
     </div>
+    <div class="task-field task-edit-batch" id="task-edit-batch{sfx}" style="display:none">
+      <label id="task-edit-batch-label{sfx}">Tasks</label>
+      <ul class="task-edit-batch-list" id="task-edit-batch-list{sfx}"></ul>
+      <span class="field-hint">One task per line; the fields below apply to all of them.</span>
+    </div>
     <div class="task-field">
       <label for="task-edit-desc{sfx}">Notes</label>
       <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>

@@ -1594,6 +1594,9 @@ div.chip-input > input {
 .deck-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
 .task-quick-preview[hidden] { display: none; }
+/* Batch mode (Make task with several lines): the titles instead of the field. */
+.task-edit-batch-list { margin: .1rem 0 .35rem; padding-left: 1.2rem; max-height: 10rem; overflow-y: auto; }
+.task-edit-batch-list li { margin: .1rem 0; }
 .deck-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
 @media (pointer: coarse) { .deck-completed-link { padding: .6rem .4rem; } }
 
