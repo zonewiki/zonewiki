@@ -925,13 +925,15 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def _render_tags_pills_html(tags: list[str]) -> str:
-    """Render a list of tags as clickable pills linking to search."""
+    """Render a list of tags as clickable pills linking to search. A pill
+    searches `#tag`, the pages and tasks with that tag (search.Query), not
+    every page that happens to use the word; a tag with a space in it can't
+    be written as #tag, so it stays a word search."""
     if not tags:
         return ''
-    from urllib.parse import urlencode
-
     pills = ''.join(
-        f'<a class="task-tag page-tag" href="/search?{urlencode({"q": t})}">{html.escape(t)}</a>'
+        f'<a class="task-tag page-tag" href="/search?{urlencode({"q": t if any(c.isspace() for c in t) else "#" + t})}">'
+        f'{html.escape(t)}</a>'
         for t in tags
     )
     return f'<div class="page-tags">{pills}</div>'

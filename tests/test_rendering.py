@@ -215,8 +215,11 @@ class TestRenderTagsPillsHtml:
     def test_renders_pills_with_search_links(self):
         result = _render_tags_pills_html(["work", "urgent"])
         assert 'class="task-tag page-tag"' in result
-        assert 'href="/search?q=work"' in result
-        assert 'href="/search?q=urgent"' in result
+        assert 'href="/search?q=%23work"' in result
+        assert 'href="/search?q=%23urgent"' in result
+
+    def test_tag_with_a_space_stays_a_word_search(self):
+        assert 'href="/search?q=my+tag"' in _render_tags_pills_html(["my tag"])
 
 
 class TestRenderFrontmatterHtml:
@@ -231,8 +234,8 @@ class TestRenderFrontmatterHtml:
     def test_tags_rendered_as_linked_pills(self):
         result = _render_frontmatter_html({"tags": ["work", "urgent"]})
         assert 'class="task-tag page-tag"' in result
-        assert 'href="/search?q=work"' in result
-        assert 'href="/search?q=urgent"' in result
+        assert 'href="/search?q=%23work"' in result
+        assert 'href="/search?q=%23urgent"' in result
 
     def test_tldr_html_escaped(self):
         result = _render_frontmatter_html({"tldr": "<script>alert(1)</script>"})

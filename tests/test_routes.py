@@ -736,6 +736,18 @@ class TestSearch:
         page = client.get("/search?q=quokka", headers=HOST).get_data(as_text=True)
         assert '<span class="result-meta">conversations/2026-07-08_alex · edited 2001-09-09</span>' in page
 
+    def test_tag_pill_lists_exactly_the_tagged(self, client, wiki_dir):
+        # Regression: a pill searched the tag as a word, so it listed every
+        # page mentioning "ops", tagged or not.
+        write_page(wiki_dir, "tagged", "---\ntags: [ops]\n---\n# Runbook\n\nRestart steps.\n")
+        write_page(wiki_dir, "mentions", "# Notes\n\nAsk the ops team.\n")
+        client.post("/api/deck", json={"title": "Rotate keys", "tags": ["ops"]}, headers=HOST)
+        page = client.get("/page/tagged", headers=HOST).get_data(as_text=True)
+        href = re.search(r'class="task-tag page-tag" href="([^"]+)"', page).group(1)
+        assert href == "/search?q=%23ops"
+        results = client.get(href, headers=HOST).get_data(as_text=True)
+        assert "Runbook" in results and "Rotate keys" in results and "Notes" not in results
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")
