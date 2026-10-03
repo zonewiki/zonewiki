@@ -1,8 +1,8 @@
 # Tests on every push and pull request; on main (and v* tags) the image is
 # then built and pushed to this Forgejo's container registry.
 #
-# Needs a runner with the `docker` label whose job containers get the host's
-# docker/podman socket (DooD), plus two repo settings:
+# Needs a runner with the `docker` label whose job containers get the
+# docker socket (`container.docker_host: automount`), plus two repo settings:
 #   secret   REGISTRY_TOKEN  access token with package write scope
 #   variable REGISTRY_USER   (optional) its owner, default: the repo owner
 name: CI
@@ -21,7 +21,8 @@ concurrency:
 jobs:
   test:
     # Same base and packages as the app image; nodejs runs actions/checkout
-    # and tests/test_deck_core.py.
+    # and tests/test_deck_core.py. No ca-certificates: the runner mounts the
+    # host's CA bundle (it trusts git.example.org), and dpkg can't replace it.
     runs-on: docker
     container:
       image: ubuntu:26.04
@@ -29,7 +30,7 @@ jobs:
       - name: Install system packages
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3 python3-pip git nodejs ca-certificates
+          apt-get install -y --no-install-recommends python3 python3-pip git nodejs
       - uses: actions/checkout@v4
       - name: Install Python packages
         run: pip install --break-system-packages -r src/requirements.txt pytest
