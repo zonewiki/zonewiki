@@ -552,8 +552,9 @@
     });
     if (res.ok) {
       const task = await res.json();
-      if (inScope(task)) { tasks.push(task); noticeIfFilteredOut(null, task); }
-      else if (!headless) showNotice(listMovedNotice(task));
+      const msg = leftViewMessage(null, task);
+      if (inScope(task)) tasks.push(task);
+      if (msg && !headless) showNotice(msg);
       render();
       window.refreshDueBadge?.(); refreshCompletedCount();
       refreshOtherInstances(instanceId);
@@ -573,8 +574,11 @@
       const updated = await res.json();
       const idx = tasks.findIndex(t => t.id === id);
       if (idx !== -1) {
-        if (inScope(updated)) { noticeIfFilteredOut(tasks[idx], updated); tasks[idx] = updated; }
-        else { tasks.splice(idx, 1); showNotice(listMovedNotice(updated)); }
+        const before = tasks[idx];
+        const msg = leftViewMessage(before, updated);
+        if (inScope(updated)) tasks[idx] = updated;
+        else tasks.splice(idx, 1);
+        if (msg) offerUndoLeave(msg, [[id, editSnapshot(before)]]);
       }
       // Completion/skip/reopen of a recurring task spawns or removes an
       // instance server-side — re-fetch to pick it up.
@@ -597,14 +601,50 @@
     return name ? `Saved to list “${name}”.` : 'Saved; it no longer shows here.';
   }
 
-  // A save that makes a task fail the filter (e.g. #sam removed on Sam's
-  // page) would hide it without a word: say so. `before` null: a new task.
-  function noticeIfFilteredOut(before, after) {
-    if (headless) return;
+  // Why a saved task left this view, or null if it still shows: it went
+  // into a separate list (or out of this one), or it no longer passes the
+  // filter (e.g. #sam removed on Sam's page). `before` null: a new task.
+  function leftViewMessage(before, after) {
+    if (!inScope(after)) return listMovedNotice(after);
     const f = parseFilter(filterQuery());
     if ((!before || matchesFilter(before, f)) && !matchesFilter(after, f)) {
-      showNotice('Saved; it no longer shows here.');
+      return 'Saved; it no longer shows here.';
     }
+    return null;
+  }
+
+  // Everything an edit-modal save can change, as PUT fields: undoing a save
+  // restores the task as it was, not just the field that moved it. The old
+  // history goes too, so the undo leaves no trace.
+  function editSnapshot(t) {
+    const rec = t.recurrence;
+    return {
+      title: t.title, description: t.description || '', tags: t.tags || [],
+      due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
+      rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
+      last_done: t.last_done || null, sort_order: t.sort_order ?? null,
+      focus_order: t.focus_order ?? null, history: t.history || [],
+    };
+  }
+
+  // A save took tasks out of this view: say where they went, with an undo
+  // that PUTs each [id, fields] back. The tasks are no longer in `tasks`, so
+  // the deck reloads to bring them back.
+  function offerUndoLeave(msg, restores) {
+    if (headless) return;
+    showUndo(msg, async () => {
+      for (const [id, fields] of restores) {
+        const res = await fetch(`/api/deck/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fields),
+        });
+        if (!res.ok) { await noticeFromResponse(res, 'Undo failed'); break; }
+      }
+      await fetchDeck();
+      window.refreshDueBadge?.();
+      refreshOtherInstances(instanceId);
+    });
   }
 
   // "Show separate lists" (main deck only): also show the tasks of declared
@@ -1146,14 +1186,25 @@
         });
         if (res.ok) {
           const updated = await res.json();
-          let moved = null;
+          // Only the tags changed, so an undo puts back only the tags.
+          const gone = [];
           for (const u of updated) {
             const idx = tasks.findIndex(t => t.id === u.id);
             if (idx === -1) continue;
-            if (inScope(u)) { noticeIfFilteredOut(tasks[idx], u); tasks[idx] = u; }
-            else { tasks.splice(idx, 1); moved = u; }
+            const before = tasks[idx];
+            const msg = leftViewMessage(before, u);
+            if (inScope(u)) tasks[idx] = u;
+            else tasks.splice(idx, 1);
+            if (msg) gone.push({ id: u.id, tags: before.tags || [], msg, list: !inScope(u) && taskList(u) });
           }
-          if (moved) showNotice(listMovedNotice(moved));
+          if (gone.length) {
+            const lists = new Set(gone.map(g => g.list));
+            const one = lists.size === 1 && [...lists][0];   // all went into one list
+            const msg = gone.length === 1 ? gone[0].msg
+              : one ? `${gone.length} tasks saved to list “${one}”.` : `${gone.length} tasks no longer show here.`;
+            offerUndoLeave(msg,
+                           gone.map(g => [g.id, { tags: g.tags }]));
+          }
           render();
           refreshOtherInstances(instanceId);
         }

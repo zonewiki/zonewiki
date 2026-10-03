@@ -565,6 +565,66 @@ def test_url_tag_chip_stays_removable(page, wiki):
     expect(filt.locator(".tag-chip-x")).to_have_count(1)
 
 
+def test_undo_a_move_to_another_list(page, wiki):
+    # Undo restores the whole save, not just the tags, and leaves no trace.
+    page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries",
+                                         "due_date": "2099-01-10"})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
+    page.goto("/page/shop?view=open")
+    modal = open_edit(page, "Screws")
+    modal.locator("#task-edit-lead").fill("3")       # a start date too (logged)
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.press("Backspace")
+    page.keyboard.type("hardware,")
+    modal.get_by_role("button", name="Save").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("Saved to list “hardware”.")
+    expect(card(page, "Screws")).to_have_count(0)
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Screws")).to_be_visible()
+    wait_for_field(page, "Screws", "tags", ["groceries"])
+    t = task_by_title(page, "Screws")
+    assert t["start_date"] is None
+    assert [e["event"] for e in t["history"]] == ["created"]
+
+
+def test_undo_removing_the_tag_on_a_tag_page(page, wiki):
+    page.request.post("/api/deck", data={"title": "Review PR", "tags": "task,sam"})
+    wiki.write("sam", "# Sam\n\n[[deck tag=sam]]\n")
+    page.goto("/page/sam?view=open")
+    modal = open_edit(page, "Review PR")
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.press("Backspace")      # drops #sam
+    modal.get_by_role("button", name="Save").click()
+    expect(card(page, "Review PR")).to_have_count(0)
+    page.locator(".task-undo-btn").click()
+    expect(card(page, "Review PR")).to_be_visible()
+    wait_for_field(page, "Review PR", "tags", ["task", "sam"])
+
+
+def test_undo_a_bulk_retag(page, wiki):
+    # Bulk tag (t) moving tasks into a list: one toast, one undo for all.
+    for title in ("Nails", "Glue"):
+        page.request.post("/api/deck", data={"title": title, "tags": "misc"})
+    wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
+    page.goto("/deck?view=open")
+    card(page, "Glue").locator(".task-title").click()     # newest first: Glue, Nails
+    page.keyboard.press("Shift+ArrowDown")
+    page.keyboard.press("t")
+    page.locator("#bulk-tag-input").fill("hardware")
+    page.keyboard.press("Enter")
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks saved to list “hardware”.")
+    expect(card(page, "Nails")).to_have_count(0)
+    expect(card(page, "Glue")).to_have_count(0)
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Nails")).to_be_visible()
+    expect(card(page, "Glue")).to_be_visible()
+    wait_for_field(page, "Nails", "tags", ["misc"])
+    wait_for_field(page, "Glue", "tags", ["misc"])
+
+
 def test_show_separate_lists_checkbox(page, wiki):
     page.request.post("/api/deck", data={"title": "Main task"})
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
