@@ -1079,12 +1079,52 @@ body.editor-page main {
 }
 .save-dot.unsaved { color: var(--muted); }
 
+/* Formatting bar (FORMAT_BAR in server.py, applyFormat in leaf.js): one
+   line of quiet buttons above the textarea; on a narrow screen it scrolls
+   sideways instead of wrapping. */
+.format-bar {
+  display: flex;
+  align-items: center;
+  gap: .15rem;
+  padding: .35rem .75rem 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.format-bar::-webkit-scrollbar { display: none; }
+.fmt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 .4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: .95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.fmt-btn:hover { color: var(--fg); background: var(--nav-bg); border-color: var(--border); }
+.fmt-btn:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.fmt-wiki { font-family: var(--mono); font-size: .75rem; letter-spacing: -.05em; }
+.fmt-sep { flex-shrink: 0; width: 1px; height: 1.1rem; margin: 0 .3rem; background: var(--border); }
+@media (pointer: coarse) {
+  .fmt-btn { min-width: 2.6rem; height: 2.6rem; }
+}
+
 .editor-pane form {
   flex: 1;
   display: flex;
   padding: .75rem;
   min-height: 0;
 }
+/* The formatting bar already spaces the textarea from the toolbar. */
+.editor-pane .format-bar + form { padding-top: .2rem; }
 
 #editor-textarea {
   flex: 1;

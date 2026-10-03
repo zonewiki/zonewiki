@@ -687,6 +687,7 @@ document.addEventListener('keydown', e => {
 const textarea = document.getElementById('editor-textarea');
 const previewPane = document.getElementById('editor-preview');
 let previewTimer = null;
+let applyFormat = () => {};   // set up with the editor's formatting bar
 
 if (textarea && previewPane) {
   // Auto-show preview on wide screens
@@ -723,19 +724,11 @@ if (textarea && previewPane) {
       return;
     }
 
-    // Ctrl/Cmd+B → bold (wrap selection or insert **)
-    if (e.key === 'b' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    // Ctrl/Cmd+B / I / K → bold / italic / link (same as the formatting bar)
+    const fmtKey = { b: 'bold', i: 'italic', k: 'link' }[e.key.toLowerCase()];
+    if (fmtKey && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
-      const s = textarea.selectionStart, end = textarea.selectionEnd;
-      const selected = textarea.value.slice(s, end);
-      document.execCommand('insertText', false, `**${selected}**`);
-      if (s === end) {
-        textarea.setSelectionRange(s + 2, s + 2); // cursor between **|**
-      } else {
-        textarea.setSelectionRange(s, textarea.selectionStart); // re-select replacement
-      }
-      clearTimeout(previewTimer);
-      previewTimer = setTimeout(fetchPreview, 300);
+      applyFormat(fmtKey);
       return;
     }
 
@@ -898,6 +891,191 @@ if (textarea && previewPane) {
     for (const file of files) {
       await uploadFileAtCursor(file);
     }
+  });
+
+  // ── Formatting bar ──────────────────────────────────────────────────────────
+  // Buttons above the textarea (FORMAT_BAR in server.py) and Ctrl+B/I/K. Every
+  // change goes through execCommand('insertText'), so Ctrl+Z undoes it in one
+  // step and the input event drives preview and auto-save as typing does.
+
+  function replaceRange(start, end, text, selStart, selEnd) {
+    textarea.focus();
+    textarea.setSelectionRange(start, end);
+    if (text) document.execCommand('insertText', false, text);
+    else if (start !== end) document.execCommand('delete');
+    textarea.setSelectionRange(start + selStart, start + selEnd);
+    updateAcDropdown();   // e.g. `[[` or `[text](` just inserted: offer pages
+  }
+
+  // Wrap the selection in `mark`, or unwrap it when it is wrapped already
+  // (markers inside or just outside the selection). Surrounding spaces stay
+  // outside: `**word **` would not render bold.
+  function toggleWrap(mark) {
+    const v = textarea.value, n = mark.length;
+    let s = textarea.selectionStart, e = textarea.selectionEnd;
+    if (s >= n && v.slice(s - n, s) === mark && v.slice(e, e + n) === mark) {
+      replaceRange(s - n, e + n, v.slice(s, e), 0, e - s);
+      return;
+    }
+    const sel = v.slice(s, e);
+    if (sel.length >= 2 * n && sel.startsWith(mark) && sel.endsWith(mark)) {
+      const inner = sel.slice(n, -n);
+      replaceRange(s, e, inner, 0, inner.length);
+      return;
+    }
+    const lead = sel.length - sel.trimStart().length;
+    const trail = sel.length - sel.trimEnd().length;
+    if (lead < sel.length) { s += lead; e -= trail; }
+    const text = v.slice(s, e);
+    replaceRange(s, e, mark + text + mark, n, n + text.length);
+  }
+
+  // The full lines the selection touches (a selection ending right at the
+  // start of a line doesn't include that line).
+  function selectedLines() {
+    const v = textarea.value, s = textarea.selectionStart;
+    let e = textarea.selectionEnd;
+    if (e > s && v[e - 1] === '\n') e--;
+    const start = v.lastIndexOf('\n', s - 1) + 1;
+    let end = v.indexOf('\n', e);
+    if (end === -1) end = v.length;
+    return { start, end, lines: v.slice(start, end).split('\n') };
+  }
+
+  // Put the new lines in place: one line keeps the cursor at its end (where
+  // you continue typing), several stay selected so a second click undoes.
+  function replaceLines({ start, end }, lines) {
+    const text = lines.join('\n');
+    if (lines.length === 1) replaceRange(start, end, text, text.length, text.length);
+    else replaceRange(start, end, text, 0, text.length);
+  }
+
+  const LIST_KINDS = {
+    task: /^(\s*)[-*+] \[[ xX]\] /,
+    ul:   /^(\s*)[-*+] (?!\[[ xX]\] )/,
+    ol:   /^(\s*)\d+[.)] /,
+  };
+
+  // Make the lines a list of `kind`, replacing another list marker; when they
+  // all are one already, remove the markers. Blank lines in a selection stay.
+  function toggleList(kind) {
+    const range = selectedLines();
+    const items = range.lines.filter(l => l.trim() || range.lines.length === 1);
+    const remove = items.every(l => LIST_KINDS[kind].test(l));
+    let num = 0;
+    const lines = range.lines.map(l => {
+      if (!l.trim() && range.lines.length > 1) return l;
+      let indent = l.match(/^\s*/)[0], rest = l.slice(indent.length);
+      for (const re of Object.values(LIST_KINDS)) {
+        const m = l.match(re);
+        if (m) { indent = m[1]; rest = l.slice(m[0].length); break; }
+      }
+      if (remove) return indent + rest;
+      const marker = kind === 'task' ? '- [ ] ' : kind === 'ol' ? `${++num}. ` : '- ';
+      return indent + marker + rest;
+    });
+    replaceLines(range, lines);
+  }
+
+  function toggleQuote() {
+    const range = selectedLines();
+    const remove = range.lines.every(l => l.startsWith('>'));
+    replaceLines(range, range.lines.map(l =>
+      remove ? l.replace(/^> ?/, '') : (l ? '> ' + l : '>')));
+  }
+
+  // Cycle the line through ## → ### → plain. The page title is the H1, so
+  // the bar starts at ##; any other level goes to ##.
+  function cycleHeading() {
+    const v = textarea.value;
+    const start = v.lastIndexOf('\n', textarea.selectionStart - 1) + 1;
+    let end = v.indexOf('\n', start);
+    if (end === -1) end = v.length;
+    const line = v.slice(start, end);
+    const m = line.match(/^(#{1,6})\s+/);
+    const rest = m ? line.slice(m[0].length) : line;
+    const prefix = !m ? '## ' : m[1] === '##' ? '### ' : m[1] === '###' ? '' : '## ';
+    replaceLines({ start, end }, [prefix + rest]);
+  }
+
+  // `[text](url)`: a selected URL becomes the target (type the text), other
+  // selected text the label (type or pick a page for the target).
+  function insertLink() {
+    const v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
+    const sel = v.slice(s, e);
+    if (/^(https?:\/\/|www\.)\S+$/.test(sel.trim())) replaceRange(s, e, `[](${sel.trim()})`, 1, 1);
+    else if (sel) replaceRange(s, e, `[${sel}]()`, sel.length + 3, sel.length + 3);
+    else replaceRange(s, e, '[]()', 1, 1);
+  }
+
+  function wikilinkFormat() {
+    const s = textarea.selectionStart, e = textarea.selectionEnd;
+    const sel = textarea.value.slice(s, e);
+    // Bare `[[` opens the page autocomplete, which closes the link itself.
+    if (sel) replaceRange(s, e, `[[${sel}]]`, sel.length + 4, sel.length + 4);
+    else replaceRange(s, e, '[[', 2, 2);
+  }
+
+  // A fenced block around the selected lines (empty: a block to type into).
+  function insertCodeBlock() {
+    const range = selectedLines();
+    const body = range.lines.join('\n');
+    if (!body.trim()) {
+      replaceRange(range.start, range.end, '```\n\n```', 4, 4);
+      return;
+    }
+    replaceRange(range.start, range.end, '```\n' + body + '\n```', 4, 4 + body.length);
+  }
+
+  // A two-column table on its own lines after the current one, header
+  // selected so typing names the first column.
+  function insertTable() {
+    const v = textarea.value;
+    let at = v.indexOf('\n', textarea.selectionEnd);
+    if (at === -1) at = v.length;
+    const lineStart = v.lastIndexOf('\n', at - 1) + 1;
+    const blankLine = !v.slice(lineStart, at).trim();
+    const pos = blankLine ? lineStart : at;
+    const before = blankLine ? '' : (v[pos - 1] === '\n' ? '\n' : '\n\n');
+    const table = '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |';
+    const end = blankLine ? at : pos;
+    replaceRange(pos, end, before + table, before.length + 2, before.length + 10);
+  }
+
+  const attachInput = document.getElementById('fmt-attach-input');
+  attachInput?.addEventListener('change', async () => {
+    const files = Array.from(attachInput.files);
+    attachInput.value = '';
+    textarea.focus();
+    for (const file of files) await uploadFileAtCursor(file);
+  });
+
+  const FORMATS = {
+    bold: () => toggleWrap('**'),
+    italic: () => toggleWrap('_'),
+    strike: () => toggleWrap('~~'),
+    code: () => toggleWrap('`'),
+    heading: cycleHeading,
+    ul: () => toggleList('ul'),
+    ol: () => toggleList('ol'),
+    task: () => toggleList('task'),
+    quote: toggleQuote,
+    codeblock: insertCodeBlock,
+    table: insertTable,
+    link: insertLink,
+    wikilink: wikilinkFormat,
+    attach: () => attachInput?.click(),
+  };
+  applyFormat = kind => FORMATS[kind]?.();
+
+  const formatBar = document.getElementById('format-bar');
+  // Pressing a button must not take focus (and the selection) from the
+  // textarea; on a phone that would also close the keyboard.
+  formatBar?.addEventListener('pointerdown', e => { if (e.target.closest('.fmt-btn')) e.preventDefault(); });
+  formatBar?.addEventListener('mousedown', e => { if (e.target.closest('.fmt-btn')) e.preventDefault(); });
+  formatBar?.addEventListener('click', e => {
+    const btn = e.target.closest('.fmt-btn');
+    if (btn) applyFormat(btn.dataset.fmt);
   });
 
   textarea.focus();

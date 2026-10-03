@@ -1256,6 +1256,53 @@ ACTION_BUTTONS = (
     '</div>')
 
 
+# Editor formatting bar: one button per markdown construct, applied to the
+# selection by leaf.js (`data-fmt`, see applyFormat). Line icons, not
+# letters: a letter's height depends on the font. `None` = a separator.
+_FMT_ICON = ('<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+             'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
+_FORMAT_BUTTONS = (
+    ("bold", "Bold (Ctrl+B)", _FMT_ICON.replace('1.4', '2') + '<path d="M4.5 2.5h4.25a2.75 2.75 0 0 1 0 5.5H4.5z"/>'
+     '<path d="M4.5 8h5a2.75 2.75 0 0 1 0 5.5h-5z"/></svg>'),
+    ("italic", "Italic (Ctrl+I)", _FMT_ICON + '<line x1="6.5" y1="2.5" x2="12.5" y2="2.5"/>'
+     '<line x1="3.5" y1="13.5" x2="9.5" y2="13.5"/><line x1="9.75" y1="2.5" x2="6.25" y2="13.5"/></svg>'),
+    ("strike", "Strikethrough", _FMT_ICON + '<path d="M10.7 2.7H6.3a2.2 2.2 0 0 0-1.6 3.7"/>'
+     '<path d="M9.3 8a2.7 2.7 0 0 1 0 5.3H4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg>'),
+    ("heading", "Heading (## / ### / none)", _FMT_ICON + '<line x1="4" y1="8" x2="12" y2="8"/>'
+     '<line x1="4" y1="2.7" x2="4" y2="13.3"/><line x1="12" y1="2.7" x2="12" y2="13.3"/></svg>'),
+    None,
+    ("ul", "Bulleted list", _FMT_ICON + '<line x1="6" y1="4" x2="14" y2="4"/><line x1="6" y1="8" x2="14" y2="8"/>'
+     '<line x1="6" y1="12" x2="14" y2="12"/><circle cx="2.5" cy="4" r=".6" fill="currentColor"/>'
+     '<circle cx="2.5" cy="8" r=".6" fill="currentColor"/><circle cx="2.5" cy="12" r=".6" fill="currentColor"/></svg>'),
+    ("ol", "Numbered list", _FMT_ICON + '<line x1="6" y1="4" x2="14" y2="4"/><line x1="6" y1="8" x2="14" y2="8"/>'
+     '<line x1="6" y1="12" x2="14" y2="12"/><path d="M1.8 2.8 2.8 2.2v3.3"/><path d="M1.8 10.4c.3-.5 1.7-.6 1.7.4 0 .7-1.7 1.4-1.7 2.2h1.8"/></svg>'),
+    ("task", "Checklist (Ctrl+Shift+X ticks)", _FMT_ICON + '<rect x="1.5" y="2.5" width="4" height="4" rx=".8"/>'
+     '<path d="m2.4 4.5 1 1 1.4-2"/><rect x="1.5" y="9.5" width="4" height="4" rx=".8"/>'
+     '<line x1="8" y1="4.5" x2="14.5" y2="4.5"/><line x1="8" y1="11.5" x2="14.5" y2="11.5"/></svg>'),
+    ("quote", "Quote", _FMT_ICON + '<line x1="2.5" y1="3" x2="2.5" y2="13"/><line x1="6" y1="5" x2="14" y2="5"/>'
+     '<line x1="6" y1="8" x2="14" y2="8"/><line x1="6" y1="11" x2="11" y2="11"/></svg>'),
+    None,
+    ("code", "Inline code", _FMT_ICON + '<polyline points="5 4.5 1.5 8 5 11.5"/><polyline points="11 4.5 14.5 8 11 11.5"/></svg>'),
+    ("codeblock", "Code block", _FMT_ICON + '<rect x="1.5" y="2" width="13" height="12" rx="1.5"/>'
+     '<polyline points="6 6 4 8 6 10"/><polyline points="10 6 12 8 10 10"/></svg>'),
+    ("table", "Table", _FMT_ICON + '<rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><line x1="1.5" y1="6.2" x2="14.5" y2="6.2"/>'
+     '<line x1="1.5" y1="9.9" x2="14.5" y2="9.9"/><line x1="8" y1="2.5" x2="8" y2="13.5"/></svg>'),
+    None,
+    ("link", "Link (Ctrl+K)", _FMT_ICON + '<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/>'
+     '<path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8A3 3 0 0 0 7.2 13l.9-.9"/></svg>'),
+    ("wikilink", "Link to a wiki page", '<span class="fmt-wiki">[[ ]]</span>'),
+    ("attach", "Attach a file or image", _FMT_ICON + '<path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l5.6-5.6a2.3 2.3 0 0 1 3.3 3.3L6.3 11.3a1.2 1.2 0 0 1-1.7-1.7L9.8 4.4"/></svg>'),
+)
+FORMAT_BAR = (
+    '<div class="format-bar" id="format-bar" role="toolbar" aria-label="Formatting">'
+    + "".join('<span class="fmt-sep" aria-hidden="true"></span>' if b is None else
+              f'<button type="button" class="fmt-btn" data-fmt="{b[0]}" title="{b[1]}" '
+              f'aria-label="{b[1]}">{b[2]}</button>'
+              for b in _FORMAT_BUTTONS)
+    + '<input type="file" id="fmt-attach-input" multiple hidden>'
+    '</div>')
+
+
 def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
           extra_head: str | None = None, action_buttons: bool = True) -> str:
     """Wrap body in the page skeleton. `action_buttons=False` drops the
@@ -1336,7 +1383,8 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
       <tr><td><kbd>Ctrl+S</kbd></td><td>Done / go to page view (editor)</td></tr>
-      <tr><td><kbd>Ctrl+B</kbd></td><td>Bold (editor)</td></tr>
+      <tr><td><kbd>Ctrl+B</kbd> / <kbd>Ctrl+I</kbd></td><td>Bold / italic (editor)</td></tr>
+      <tr><td><kbd>Ctrl+K</kbd></td><td>Link (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
       <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
@@ -1774,6 +1822,7 @@ def edit_page(slug):
     </div>
     {delete_form}
     {rename_bar}
+    {FORMAT_BAR}
     <form id="editor-form" method="post" action="{form_action}">
       {section_hidden_fields}
       <textarea id="editor-textarea" name="content" data-new="{'1' if is_new else ''}"

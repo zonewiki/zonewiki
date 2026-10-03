@@ -57,7 +57,7 @@ No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constrain
     ├── mcp_server.py       # MCP protocol (JSON-RPC) for /mcp: wiki tools for LLM clients
     └── public/
         ├── style.css       # All styling
-        ├── leaf.js         # Client-side JS (editor toggle, live preview, search UI, image paste)
+        ├── leaf.js         # Client-side JS (editor toggle, formatting bar, live preview, search UI, image paste)
         ├── deck-core.js    # Pure deck logic (no DOM) — shared by deck.js and Node-run tests
         ├── deck.js         # Deck (task management) app JS, loaded via [[deck]] embed
         ├── favicon.svg     # Browser tab icon
@@ -284,6 +284,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
 - `/edit/<slug>` renders a split-pane view: `<textarea>` on the left, live preview on the right.
 - Live preview updates as the user types (debounced, ~300ms) by calling `POST /api/preview`, which returns rendered HTML.
 - **Toolbar** — one line on every screen: the slug label shrinks with an ellipsis (full slug in its tooltip) and the buttons keep their size, so a long slug never pushes Done off-screen.
+- **Formatting bar** (`FORMAT_BAR` in `server.py`, `applyFormat` in `leaf.js`): one line of buttons between the toolbar and the textarea, not WYSIWYG, just markdown help: bold (`**`), italic (`_`), strikethrough, heading (cycles `##` → `###` → none on the cursor's line; the H1 is the title), bulleted/numbered/checklist (on all selected lines, replacing another list marker; all of that kind already → removed; blank lines kept), quote, inline code, code block (fences the selected lines), table (a 2-column template after the current line), link (selected text → `[text]()` with the page autocomplete open; a selected URL → `[](url)`), wikilink (`[[selection]]`, or a bare `[[` that opens the autocomplete), attach (file picker → the same upload as paste/drop, `uploadFileAtCursor`). Wraps toggle (markers inside or just outside the selection are removed) and keep surrounding spaces outside. **Ctrl+B / Ctrl+I / Ctrl+K** do bold, italic, link. Every change goes through `execCommand('insertText')` (`replaceRange`), so one Ctrl+Z undoes it and preview/auto-save follow as for typing. Buttons `preventDefault` on pointer/mouse down so the textarea keeps focus and selection (on a phone, the keyboard stays up). On narrow screens the bar scrolls sideways; under `(pointer: coarse)` the buttons are finger-sized.
 - **Mobile editor** — on screens ≤640px the editor is not hidden; it becomes a full-screen stacked layout (textarea on top, preview below when toggled). The toolbar gains a **Preview** button (`#mobile-preview-btn`, class `mobile-only`) that calls the same `togglePreview()` as F2. The textarea font is 16px on mobile so iOS Safari doesn't zoom in on focus. Rename… and Delete move into a **⋯ dropdown** (`#editor-more-btn`, `.editor-more`) so the toolbar fits on one line; on wider screens `.editor-more` is `display: contents`, so the buttons stay inline.
 - The editor textarea preserves tabs and disables spell-check.
 - The textarea receives focus automatically on page load.
@@ -296,7 +297,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
   - After each auto-save, the server returns updated `{ file_hash, start_char, end_char }` so the next auto-save uses fresh offsets.
   - The section's trailing blank lines are preserved on every splice (the editor loads the section with them stripped), including the conflict banner's "Save my version" (`force_section`), so the next heading never gets glued onto the section's last line.
   - This design avoids re-splitting the file on every save and eliminates the old index-based merge logic that could silently lose sections.
-- **Undo** — all programmatic text insertions (list continuation, bold, snippets, wikilink autocomplete, etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
+- **Undo** — all programmatic text insertions (list continuation, formatting bar, snippets, wikilink autocomplete, etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
 
 ### Editor smart helpers
 
@@ -365,6 +366,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **c** then **s/t** | anywhere | Create: scratch note / task-tagged deck item |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
+| **Ctrl/⌘+B / I / K** | editor | Bold / italic / link (see Formatting bar) |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
 | **e** | page view | Navigate to edit mode |
@@ -594,7 +596,7 @@ To run the suite without a local venv: `./run.sh test` (runs inside the app imag
 End-to-end tests drive the real app in headless Chromium via Playwright. They run in a separate test image (`Containerfile.e2e`, based on Microsoft's Playwright image) so the app image stays browser-free and the app still has no build step or npm. `./run.sh e2e` builds that image (cached) and runs them with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k deck`). Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 
 - `conftest.py` serves `server.app` on a background thread (werkzeug `make_server`, random port) and points it at a fresh temp wiki with its own git repo per test; each test gets a fresh browser context. All non-local requests (the highlight.js CDN) are aborted to keep runs offline and deterministic. Uncaught page JS errors fail the test.
-- Coverage: editor (auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter), deck (Plan-board drag to a day and to Unplanned, touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, long press is not a tap), board grouping by start date, modal "Days before due", Plan board in Open's order with in-section drops ignored, view tabs, start-date Today, touch: tap-to-edit, ⋯ menu/bottom sheet, target sizes, editor scrolling/compact phone layout, date picker placement), sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview), layout (no horizontal page scroll at 390px phone width on page/editor/deck views, mobile Preview button, tldr toggle geometry).
+- Coverage: editor (formatting bar and Ctrl+B/I/K, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter), deck (Plan-board drag to a day and to Unplanned, touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, long press is not a tap), board grouping by start date, modal "Days before due", Plan board in Open's order with in-section drops ignored, view tabs, start-date Today, touch: tap-to-edit, ⋯ menu/bottom sheet, target sizes, editor scrolling/compact phone layout, date picker placement), sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview), layout (no horizontal page scroll at 390px phone width on page/editor/deck views, mobile Preview button, tldr toggle geometry).
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
 - `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review. It asserts nothing about appearance.
 - Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).

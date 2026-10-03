@@ -113,6 +113,17 @@ class TestViewPage:
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
+    def test_editor_has_formatting_bar_page_view_not(self, client, wiki_dir):
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        body = client.get("/edit/my-page", headers=HOST).data.decode()
+        assert 'id="format-bar" role="toolbar"' in body
+        for fmt in ("bold", "italic", "ul", "ol", "task", "link", "wikilink", "table", "attach"):
+            assert f'data-fmt="{fmt}"' in body
+        # Icon-only buttons need a name for screen readers.
+        assert body.count('class="fmt-btn"') == body.count('class="fmt-btn" data-fmt="') \
+            == len(re.findall(r'class="fmt-btn" data-fmt="\w+" title="[^"]+" aria-label="[^"]+"', body))
+        assert 'id="format-bar"' not in client.get("/page/my-page", headers=HOST).data.decode()
+
     def test_missing_page_redirects_to_editor(self, client):
         resp = client.get("/page/does-not-exist", headers=HOST)
         assert resp.status_code in (301, 302)
