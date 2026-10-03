@@ -33,14 +33,23 @@ def parse_spec(spec: str) -> tuple[str, str] | None:
     raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed[:model] or ollama:<model>, got {spec!r}")
 
 
-def prepare() -> None:
-    """Install fastembed and download LEAF_EMBEDDINGS' model into
-    FASTEMBED_CACHE_PATH (build time). Nothing to do for Ollama or when off."""
-    parsed = parse_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
-    if not parsed or parsed[0] != "fastembed":
-        return
+def _pip_install(package: str) -> None:
     subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
-                    "--no-cache-dir", "-q", "fastembed"], check=True)
+                    "--no-cache-dir", "-q", package], check=True)
+
+
+def prepare() -> None:
+    """Install what LEAF_EMBEDDINGS needs (build time): fastembed and its
+    model (into FASTEMBED_CACHE_PATH), or for Ollama just NumPy, which
+    scores a query against all vectors at once (embed.py works without it,
+    about 25x slower). Nothing when off."""
+    parsed = parse_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
+    if not parsed:
+        return
+    if parsed[0] == "ollama":
+        _pip_install("numpy")
+        return
+    _pip_install("fastembed")  # brings NumPy along
     from fastembed import TextEmbedding
     model = TextEmbedding(parsed[1], cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
     list(model.query_embed(["warm up"]))

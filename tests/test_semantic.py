@@ -378,12 +378,28 @@ class TestConfig:
         assert embed_setup.parse_spec("fastembed") == ("fastembed", embed.DEFAULT_FASTEMBED_MODEL)
         assert embed_setup.parse_spec(" Ollama: nomic ") == ("ollama", "nomic")
 
-    @pytest.mark.parametrize("spec", ["", "off", "ollama:nomic-embed-text"])
-    def test_setup_installs_nothing_without_fastembed(self, spec, monkeypatch):
+    @pytest.mark.parametrize("spec", ["", "off"])
+    def test_setup_installs_nothing_when_off(self, spec, monkeypatch):
         monkeypatch.setenv("LEAF_EMBEDDINGS", spec)
         monkeypatch.setattr(embed_setup.subprocess, "run",
                             lambda *a, **k: pytest.fail("nothing to install"))
         embed_setup.prepare()
+
+    def test_setup_installs_numpy_for_ollama(self, monkeypatch):
+        installed = []
+        monkeypatch.setenv("LEAF_EMBEDDINGS", "ollama:nomic-embed-text")
+        monkeypatch.setattr(embed_setup.subprocess, "run", lambda cmd, **k: installed.append(cmd[-1]))
+        embed_setup.prepare()
+        assert installed == ["numpy"]
+
+    def test_scoring_without_numpy_matches(self, semantic, monkeypatch):
+        # The plain-Python fallback (Ollama without NumPy) scores the same.
+        with_np = semantic.search("car repair")
+        monkeypatch.setattr(embed, "np", None)
+        semantic._rows_gen = -1          # rebuild rows without matrices
+        semantic._scores.clear()
+        assert [(s, round(sc, 5)) for s, sc, _t in semantic.search("car repair")] == \
+            [(s, round(sc, 5)) for s, sc, _t in with_np]
 
     def test_setup_downloads_the_model(self, monkeypatch):
         import sys

@@ -16,6 +16,7 @@ Design notes:
 
 import bisect
 import difflib
+import functools
 import html
 import math
 import re
@@ -241,15 +242,19 @@ class SearchIndex:
         self.b = b
         self._tf: list[dict[str, int]] = []
         self._len: list[int] = []
+        # Inverted index: term -> [(doc index, term frequency)], so a search
+        # scores only the docs containing its terms, not every doc.
+        self._postings: dict[str, list[tuple[int, int]]] = {}
         df: dict[str, int] = {}
-        for d in docs:
+        for i, d in enumerate(docs):
             tf: dict[str, int] = {}
             for t in d.get("tokens", ()):
                 tf[t] = tf.get(t, 0) + 1
             self._tf.append(tf)
             self._len.append(sum(tf.values()))
-            for t in tf:
+            for t, f in tf.items():
                 df[t] = df.get(t, 0) + 1
+                self._postings.setdefault(t, []).append((i, f))
         self.n = len(docs)
         self.avgdl = (sum(self._len) / self.n) if self.n else 0.0
         self.df = df
@@ -297,22 +302,41 @@ class SearchIndex:
         weighted = self._expand(q_tokens)
         if not weighted:
             return []
-        scored: list[tuple[float, dict]] = []
-        for i, d in enumerate(self.docs):
-            tf = self._tf[i]
-            dl = self._len[i]
-            s = 0.0
-            for term, w in weighted:
-                f = tf.get(term, 0)
-                if not f:
-                    continue
-                idf = self.idf.get(term, 0.0)
-                denom = f + self.k1 * (1 - self.b + self.b * dl / self.avgdl)
-                s += w * idf * (f * (self.k1 + 1) / denom)
-            if s > 0:
-                scored.append((s, d))
-        scored.sort(key=lambda x: -x[0])
-        return scored[:limit]
+        scores: dict[int, float] = {}
+        for term, w in weighted:
+            idf = self.idf.get(term, 0.0)
+            for i, f in self._postings.get(term, ()):
+                denom = f + self.k1 * (1 - self.b + self.b * self._len[i] / self.avgdl)
+                scores[i] = scores.get(i, 0.0) + w * idf * (f * (self.k1 + 1) / denom)
+        # Ties keep the docs' order, as when every doc was scored in turn.
+        ranked = sorted((i for i, s in scores.items() if s > 0), key=lambda i: (-scores[i], i))
+        return [(scores[i], self.docs[i]) for i in ranked[:limit]]
+
+
+@functools.lru_cache(maxsize=1 << 16)
+def _fold_stem(word: str) -> tuple[str, str]:
+    """A word's folded form and stem; words repeat across pages, so cached."""
+    folded = fold(word)
+    return folded, stem(folded)
+
+
+@functools.lru_cache(maxsize=4096)
+def _analyze(text: str):
+    """A text's words as (start, end, folded), their stems, the distinct stems
+    sorted (prefix matches by bisection) and grouped by length (fuzzy
+    candidates). Cached: the same page or section text is matched against
+    query after query, and splitting and stemming it was most of a search's
+    time."""
+    words, stems = [], []
+    for m in _WORD_RE.finditer(text):
+        folded, st = _fold_stem(m.group())
+        words.append((m.start(), m.end(), folded))
+        stems.append(st)
+    distinct = sorted(set(stems))
+    by_len: dict[int, list[str]] = {}
+    for st in distinct:
+        by_len.setdefault(len(st), []).append(st)
+    return words, stems, distinct, by_len
 
 
 def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
@@ -321,7 +345,7 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
     or (only when neither occurs) a close fuzzy match. A query of several
     words that appears as a phrase (case and accents ignored) is one span,
     and is the only one, so the excerpt centres on it."""
-    words = [(m.start(), m.end(), fold(m.group())) for m in _WORD_RE.finditer(text)]
+    words, stems, distinct, by_len = _analyze(text)
     q_words = [fold(w) for w in _WORD_RE.findall(query)]
     if not words or not q_words:
         return []
@@ -331,22 +355,24 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
             if all(words[i + k][2] == q_words[k] for k in range(n)):
                 return [(words[i][0], words[i + n - 1][1])]
     terms = {stem(w) for w in query_words(query)}
-    stems = [stem(w[2]) for w in words]
-
-    def exact_or_prefix(s: str) -> bool:
-        return any(s == t or (len(t) >= 3 and s.startswith(t)) for t in terms)
-
-    spans = [(w[0], w[1]) for w, s in zip(words, stems) if exact_or_prefix(s)]
-    if spans:
-        return spans
-    fuzzy_terms = [t for t in terms if len(t) >= 4]
-    close = {}
-    for s in stems:
-        if s not in close:
-            close[s] = any(
-                difflib.SequenceMatcher(None, s, t).ratio() >= 0.8 for t in fuzzy_terms
-            )
-    return [(w[0], w[1]) for w, s in zip(words, stems) if close[s]]
+    hits: set[str] = set()
+    for t in terms:
+        i = bisect.bisect_left(distinct, t)
+        if i < len(distinct) and distinct[i] == t:
+            hits.add(t)
+        if len(t) >= 3:  # stems the term is a prefix of: one sorted run
+            while i < len(distinct) and distinct[i].startswith(t):
+                hits.add(distinct[i])
+                i += 1
+    if not hits:
+        # Close fuzzy matches (ratio >= 0.8). That needs a length within
+        # 2/3 to 3/2 of the term's, so only those stems are candidates.
+        for t in terms:
+            if len(t) >= 4:
+                lo, hi = -(-2 * len(t) // 3), 3 * len(t) // 2
+                cands = [c for n in range(lo, hi + 1) for c in by_len.get(n, ())]
+                hits.update(difflib.get_close_matches(t, cands, n=len(cands) or 1, cutoff=0.8))
+    return [(w[0], w[1]) for w, s in zip(words, stems) if s in hits]
 
 
 def matched_words(text: str, query: str, limit: int = 10) -> list[str]:

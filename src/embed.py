@@ -34,6 +34,11 @@ from array import array
 from pathlib import Path
 from typing import Callable, Iterable
 
+try:  # comes with fastembed; scoring a query is then one matrix product
+    import numpy as np
+except ImportError:  # e.g. Ollama without NumPy: plain Python, ~25x slower
+    np = None
+
 from embed_setup import DEFAULT_FASTEMBED_MODEL, parse_spec  # noqa: F401 (re-exported)
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
@@ -302,6 +307,14 @@ class SemanticIndex:
         self._page_vecs: dict[str, array] = {}  # slug -> mean of its chunks
         self._tasks: dict[str, str] = {}        # task id -> hash of its text
         self._queries: dict[str, array] = {}    # small cache of query vectors
+        # Scoring: rows and (with NumPy) matrices per index generation, and
+        # the scores of recent queries, so one search scores each vector once.
+        self._gen = 0
+        self._rows_gen = -1
+        self._chunk_rows: list[tuple[str, str, str]] = []  # (slug, hash, text)
+        self._task_rows: list[tuple[str, str]] = []        # (task id, hash)
+        self._chunk_mat = self._task_mat = None
+        self._scores: dict[str, tuple[int, list[float], list[float]]] = {}
         self._wake = threading.Event()
         self._worker: threading.Thread | None = None
         self._failed = False
@@ -428,6 +441,7 @@ class SemanticIndex:
                     page_vecs[slug] = m
         with self._lock:
             self._pages, self._vecs, self._page_vecs, self._tasks = pages, vecs, page_vecs, tasks
+            self._gen += 1
             self.ready = True
         self._save_cache()
         return True
@@ -477,26 +491,53 @@ class SemanticIndex:
             self._queries[key] = v
         return v
 
+    def _scored(self, query: str):
+        """(chunk rows, their scores, task rows, their scores) for the query,
+        scoring every vector once per query and index generation: a search
+        asks several times (pages, tasks, sections for the links)."""
+        key = query.strip().lower()
+        with self._lock:
+            gen, pages, vecs, tasks = self._gen, self._pages, self._vecs, self._tasks
+            if self._rows_gen != gen:
+                self._chunk_rows = [(slug, h, text) for slug, p in pages.items()
+                                    for h, text in p["chunks"] if h in vecs]
+                self._task_rows = [(i, h) for i, h in tasks.items() if h in vecs]
+                if np is not None:
+                    self._chunk_mat = np.array([vecs[h] for _s, h, _t in self._chunk_rows] or
+                                               np.zeros((0, 0)), dtype=np.float32)
+                    self._task_mat = np.array([vecs[h] for _i, h in self._task_rows] or
+                                              np.zeros((0, 0)), dtype=np.float32)
+                self._rows_gen, self._scores = gen, {}
+            chunk_rows, task_rows = self._chunk_rows, self._task_rows
+            chunk_mat, task_mat = self._chunk_mat, self._task_mat
+            cached = self._scores.get(key)
+        if cached and cached[0] == gen:
+            return chunk_rows, cached[1], task_rows, cached[2]
+        q = self._query_vec(query)
+        if q is None:
+            return [], [], [], []
+        if np is not None:
+            qv = np.asarray(q, dtype=np.float32)
+            chunk_scores = (chunk_mat @ qv).tolist() if len(chunk_rows) else []
+            task_scores = (task_mat @ qv).tolist() if len(task_rows) else []
+        else:
+            chunk_scores = [_dot(q, vecs[h]) for _s, h, _t in chunk_rows]
+            task_scores = [_dot(q, vecs[h]) for _i, h in task_rows]
+        with self._lock:
+            if len(self._scores) >= 32:
+                self._scores.clear()
+            self._scores[key] = (gen, chunk_scores, task_scores)
+        return chunk_rows, chunk_scores, task_rows, task_scores
+
     def _chunk_scores(self, query: str, known: Iterable[str] | None):
         """(slug, chunk key, score, text) of every section at least min_score
         similar to the query, in no particular order."""
         if not self.ready or not query.strip():
             return []
-        q = self._query_vec(query)
-        if q is None:
-            return []
+        rows, scores, _tr, _ts = self._scored(query)
         known = set(known) if known is not None else None
-        with self._lock:
-            pages, vecs = self._pages, self._vecs
-        hits = []
-        for slug, p in pages.items():
-            if known is not None and slug not in known:
-                continue
-            for h, text in p["chunks"]:
-                v = vecs.get(h)
-                if v is not None and (s := _dot(q, v)) >= self.min_score:
-                    hits.append((slug, h, s, text))
-        return hits
+        return [(slug, h, sc, text) for (slug, h, text), sc in zip(rows, scores)
+                if sc >= self.min_score and (known is None or slug in known)]
 
     def search(self, query: str, known: Iterable[str] | None = None,
                limit: int = 30) -> list[tuple[str, float, str]]:
@@ -515,19 +556,10 @@ class SemanticIndex:
         the query, best first."""
         if not self.ready or not query.strip():
             return []
-        q = self._query_vec(query)
-        if q is None:
-            return []
+        _cr, _cs, rows, scores = self._scored(query)
         known = set(known) if known is not None else None
-        with self._lock:
-            tasks, vecs = self._tasks, self._vecs
-        hits = []
-        for task_id, h in tasks.items():
-            if known is not None and task_id not in known:
-                continue
-            v = vecs.get(h)
-            if v is not None and (s := _dot(q, v)) >= self.task_min_score:
-                hits.append((s, task_id))
+        hits = [(sc, task_id) for (task_id, _h), sc in zip(rows, scores)
+                if sc >= self.task_min_score and (known is None or task_id in known)]
         hits.sort(key=lambda x: -x[0])
         return [(task_id, s) for s, task_id in hits[:limit]]
 

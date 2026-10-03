@@ -439,12 +439,18 @@ def is_scratch(slug: str) -> bool:
 
 
 def iter_pages():
-    """Yield (path, slug) for all pages, skipping _* subdirectories."""
-    for md_file in PAGES_DIR.rglob("*.md"):
-        rel = md_file.relative_to(PAGES_DIR)
-        if any(part.startswith('_') for part in rel.parts[:-1]):
-            continue
-        yield md_file, str(rel.with_suffix(''))
+    """Yield (path, slug) for all pages, skipping _* subdirectories (assets,
+    the semantic index) and hidden ones. It prunes them instead of walking
+    them: rglob went through every object in .git on each call, and a search
+    lists the pages several times."""
+    root = str(PAGES_DIR)
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(('_', '.'))]
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        prefix = "" if rel_dir == "." else rel_dir + "/"
+        for name in filenames:
+            if name.endswith(".md"):
+                yield Path(dirpath, name), prefix + name[:-3]
 
 
 def all_slugs() -> list[str]:

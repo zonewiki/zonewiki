@@ -618,6 +618,16 @@ class TestApiPagesList:
 # search
 # ===========================================================================
 
+class TestIterPages:
+    def test_skips_underscore_and_hidden_folders(self, wiki_dir):
+        write_page(wiki_dir, "top", "# Top\n")
+        write_page(wiki_dir, "a/b/deep", "# Deep\n")
+        for skipped in ("_assets/x", "_index/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"):
+            write_page(wiki_dir, skipped, "# no\n")
+        assert sorted(slug for _p, slug in server.iter_pages()) == ["a/b/deep", "index", "top"]
+        assert all(p.is_file() and p.suffix == ".md" for p, _s in server.iter_pages())
+
+
 class TestSearch:
 
     def test_api_search_returns_results(self, client, wiki_dir):

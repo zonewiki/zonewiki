@@ -356,3 +356,20 @@ class TestDateFilters:
         assert ok("before:2026-08-15", "2026-08-14") and not ok("before:2026-08-15", "2026-08-15")
         assert not ok("edited:2026", None)   # undated docs don't pass a date filter
         assert ok("anything", None)          # nor need a date without one
+
+
+
+class TestIndexInternals:
+    def test_only_docs_with_a_query_term_are_returned(self):
+        docs = [_doc("a", "A", "apple pie"), _doc("b", "B", "banana"), _doc("c", "C", "apple tart")]
+        assert _ranked_slugs(docs, "apple") == ["a", "c"]
+
+    def test_ties_keep_document_order(self):
+        docs = [_doc(s, "T", "same words here") for s in "xyz"]
+        assert _ranked_slugs(docs, "words") == ["x", "y", "z"]
+
+    def test_fuzzy_excerpt_still_finds_close_words(self):
+        # Only stems of a plausible length are fuzzy candidates now.
+        out = search.make_excerpt("Notes on the database migration.", "databse")
+        assert "<mark>database</mark>" in out
+        assert search.matched_words("Two runs, one ran, many reruns.", "running") == ["runs"]

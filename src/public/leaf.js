@@ -469,7 +469,8 @@ function applyModalControls() {
   // Content matches get the raw query: the server applies the operators.
   clearTimeout(modalCMTimer);
   if (raw.length >= 2) {
-    modalCMTimer = setTimeout(() => fetchModalContentMatches(raw), 300);
+    // Short: the server answers in a few tens of ms, so the wait is what you feel.
+    modalCMTimer = setTimeout(() => fetchModalContentMatches(raw), 150);
   } else {
     // Drop a request still in flight, or its results would come back
     // under the now (nearly) empty filter.
