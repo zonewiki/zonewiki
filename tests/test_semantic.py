@@ -446,6 +446,11 @@ class TestHybridSearch:
         r = next(r for r in _search(client, "drawer") if r["slug"] == "golf")
         assert r["href"] == "/page/golf#papers"
 
+    def test_filters_apply_to_meaning_hits(self, client, semantic):  # noqa: F811
+        assert _search(client, "car repair")[0]["slug"] == "golf"
+        assert _search(client, "car repair -bremsen") == []      # golf mentions Bremsen
+        assert _search(client, 'car repair "no such phrase"') == []
+
     def test_search_page_uses_it_too(self, client, semantic):  # noqa: F811
         html = client.get("/search", query_string={"q": "car repair"}, headers=HOST).get_data(as_text=True)
         assert "/page/golf" in html

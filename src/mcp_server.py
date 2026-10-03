@@ -41,7 +41,9 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "What to look for: words or a question."},
+                "query": {"type": "string", "description": (
+                    'What to look for: words or a question. Also: "exact phrase", -word to '
+                    'leave out, #tag for pages (frontmatter tags) and tasks with a tag, -#tag.')},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 8,
                           "description": "How many sections to return."},
                 "under": {"type": "string",
@@ -67,7 +69,8 @@ TOOLS = [
                         "description": "Only tasks with this tag; several comma-separated tags must all match, e.g. 'leaf' or 'work,urgent'."},
                 "status": {"type": "string", "enum": ["open", "done", "all"], "default": "open",
                            "description": "open, done (completed or won't do), or all."},
-                "query": {"type": "string", "description": "Words to look for in title, notes and tags."},
+                "query": {"type": "string", "description": (
+                    'Words to look for in title, notes and tags; "exact phrase" and -word work too.')},
                 "list": {"type": "string", "description": "Only tasks in this separate list, e.g. 'groceries'."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
             },

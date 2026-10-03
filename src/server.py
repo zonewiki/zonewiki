@@ -1328,6 +1328,13 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
       <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
     </table>
+    <p class="scratch-label">Search syntax</p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>"exact phrase"</kbd></td><td>Words in this order</td></tr>
+      <tr><td><kbd>-word</kbd></td><td>Leave out results with it (also <kbd>-"phrase"</kbd>)</td></tr>
+      <tr><td><kbd>#tag</kbd></td><td>Only pages and tasks with this tag</td></tr>
+      <tr><td><kbd>-#tag</kbd></td><td>None with this tag</td></tr>
+    </table>
     <p class="leaf-version">{APP_NAME} {VERSION}{f" · {html.escape(LEAF_BUILD)}" if LEAF_BUILD != "unknown" else ""}</p>
   </dialog>
   <dialog id="url-name-modal" class="scratch-modal">
@@ -2145,6 +2152,7 @@ def _page_search_docs() -> list[dict]:
         doc = {
             "slug": slug,
             "title": title,
+            "tags": _page_tags(content),
             "excerpt_text": text,
             "tokens": search.tokenize(text)
             + search.tokenize(title) * search.TITLE_WEIGHT,
@@ -2206,15 +2214,41 @@ def _by_similarity(*hit_lists: list[tuple[dict, float]]) -> list[dict]:
     return [d for d, _s in sorted((h for hits in hit_lists for h in hits), key=lambda h: -h[1])]
 
 
-def _ranked_docs(q: str, index: search.SearchIndex) -> list[dict]:
-    """The 15 best docs for q. Keyword ranking only, unless semantic search is
-    on and ready: then BM25 and vector similarity are fused (search.fuse)."""
-    bm25 = [d for _s, d in index.search(q, limit=FUSE_DEPTH if SEMANTIC else 15)]
+def _page_tags(content: str) -> list[str]:
+    """A page's frontmatter tags, lowercased, for #tag queries."""
+    return [t.lower() for t in parse_frontmatter(content)[0].get("tags", [])]
+
+
+def _accepts(query: search.Query, d: dict) -> bool:
+    """Whether a page, section or task doc passes the query's filters."""
+    text = d["excerpt_text"] if "excerpt_text" in d else f"{d['title']}\n{d['heading']}\n{d['text']}"
+    return query.accepts(text, d["tokens"], d.get("tags"))
+
+
+def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None) -> list[dict]:
+    """The best `depth` docs by BM25 for the query's ranking text, among those
+    that pass its filters (and `keep`, when given)."""
+    text = query.ranking_text
+    if not query.has_filters and keep is None:
+        return [d for _s, d in index.search(text, limit=depth)]
+    return [d for _s, d in index.search(text, limit=len(index.docs))
+            if (keep is None or keep(d)) and _accepts(query, d)][:depth]
+
+
+def _ranked_docs(query: search.Query, index: search.SearchIndex) -> list[dict]:
+    """The 15 best docs for the query. Keyword ranking only, unless semantic
+    search is on and ready: then BM25 and vector similarity are fused
+    (search.fuse). Docs that fail the query's filters take no part."""
+    q = query.ranking_text
+    if not q.strip():
+        return []
+    bm25 = _bm25(index, query, FUSE_DEPTH if SEMANTIC else 15)
     if not SEMANTIC:
         return bm25
     SEMANTIC.poke()
-    pages = {d["slug"]: d for d in index.docs if d.get("type") != "task"}
-    tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"}
+    allowed = [d for d in index.docs if not query.has_filters or _accepts(query, d)]
+    pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
+    tasks = {d["task_id"]: d for d in allowed if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
     task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
     if not hits and not task_hits:
@@ -2246,10 +2280,12 @@ def _best_sections(q: str, slugs: set[str]) -> dict[str, dict]:
     return best
 
 
-def do_search(q: str) -> list[dict]:
-    if not q.strip():
+def do_search(raw: str) -> list[dict]:
+    if not raw.strip():
         return []
-    docs = _ranked_docs(q, _search_index())
+    query = search.Query(raw)
+    q = query.ranking_text  # what excerpts mark: the words, without operators
+    docs = _ranked_docs(query, _search_index())
     sections = _best_sections(q, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
     for d in docs:
@@ -2304,12 +2340,13 @@ def _page_chunk_docs() -> list[dict]:
             except OSError:
                 continue
             title, body = _semantic_text(content, slug)
+            tags = _page_tags(content)
             chunks = []
             for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
                 chunk = f"{heading}\n{text}" if heading else text
                 chunks.append({
                     "slug": slug, "title": title, "heading": heading, "text": text,
-                    "anchor": _section_anchor(heading, level),
+                    "anchor": _section_anchor(heading, level), "tags": tags,
                     "mtime": mtime, "key": embed.chunk_key(title, chunk),
                     "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT,
                 })
@@ -2354,27 +2391,29 @@ def _clean_folder(raw) -> str | None:
     return raw.strip("/") or None
 
 
-def retrieve(q: str, limit: int = 8, under: str | None = None) -> list[dict]:
-    """The sections and tasks most relevant to q, best first: section dicts
-    (slug, title, heading, text) and task docs (type "task", with the task).
-    With `under`, only sections of pages in that folder, and no tasks."""
+def retrieve(raw: str, limit: int = 8, under: str | None = None) -> list[dict]:
+    """The sections and tasks most relevant to the query, best first: section
+    dicts (slug, title, heading, text) and task docs (type "task", with the
+    task). The query syntax applies (search.Query). With `under`, only
+    sections of pages in that folder, and no tasks."""
+    query = search.Query(raw)
+    q = query.ranking_text
     if not q.strip():
         return []
     index = _chunk_index()
-    if under:
-        ranked = [d for _s, d in index.search(q, limit=len(index.docs))
-                  if d.get("type") != "task" and _in_folder(d["slug"], under)][:FUSE_DEPTH]
-    else:
-        ranked = [d for _s, d in index.search(q, limit=FUSE_DEPTH)]
+    keep = (lambda d: d.get("type") != "task" and _in_folder(d["slug"], under)) if under else None
+    ranked = _bm25(index, query, FUSE_DEPTH, keep)
     if SEMANTIC:
         SEMANTIC.poke()
-        sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)]
+        sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)
+                    and (not query.has_filters or _accepts(query, d))]
         by_key = {d["key"]: d for d in sections}
         hits = [(by_key[k], sc) for k, sc in SEMANTIC.search_chunks(
             q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH) if k in by_key]
         task_hits = []
         if not under:
-            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"}
+            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"
+                     and (not query.has_filters or _accepts(query, d))}
             task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
         if hits or task_hits:
             ranked = search.fuse([ranked, _by_similarity(hits, task_hits)[:FUSE_DEPTH]])
@@ -2465,13 +2504,15 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
             return False
         return want <= {t.lower() for t in task.get("tags") or []}
 
-    docs = [d for d in deck_module.task_search_docs() if matches(d["task"])]
-    if query.strip():
-        ranked = [d for _s, d in search.SearchIndex(docs).search(query, limit=max(len(docs), 1))]
+    parsed = search.Query(query)
+    docs = [d for d in deck_module.task_search_docs()
+            if matches(d["task"]) and (not parsed.has_filters or _accepts(parsed, d))]
+    if parsed.text.strip():
+        ranked = [d for _s, d in search.SearchIndex(docs).search(parsed.text, limit=max(len(docs), 1))]
         if SEMANTIC:
             SEMANTIC.poke()
             by_id = {d["task_id"]: d for d in docs}
-            hits = [by_id[i] for i, _sc in SEMANTIC.search_tasks(query, known=by_id, limit=len(by_id) or 1)]
+            hits = [by_id[i] for i, _sc in SEMANTIC.search_tasks(parsed.text, known=by_id, limit=len(by_id) or 1)]
             ranked = search.fuse([ranked, hits])
         docs = ranked
     else:

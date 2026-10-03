@@ -291,3 +291,42 @@ class TestStopwords:
     def test_phrase_still_marked_whole(self):
         out = search.make_excerpt("Two weeks of holiday in Italy.", "holiday in italy")
         assert "<mark>holiday in Italy</mark>" in out
+
+
+# ── Query syntax ───────────────────────────────────────────────────────────
+
+
+class TestQuery:
+    def test_plain_words(self):
+        q = search.Query("git push")
+        assert q.text == "git push" and not q.has_filters
+
+    def test_operators(self):
+        q = search.Query('"holiday in italy" -rome #Travel -#old -"bad idea" cheap')
+        assert q.text == "holiday in italy cheap"
+        assert q.phrases == ["holiday in italy"] and q.exclude_phrases == ["bad idea"]
+        assert q.exclude_stems == {"rome"}
+        assert q.tags == {"travel"} and q.exclude_tags == {"old"}
+
+    def test_only_tags_rank_by_the_tag_word(self):
+        q = search.Query("#leaf")
+        assert q.text == "" and q.ranking_text == "leaf"
+
+    def test_only_exclusions_rank_nothing(self):
+        assert search.Query("-foo").ranking_text == ""
+
+    def test_unclosed_quote_is_text(self):
+        q = search.Query('say "hello')
+        assert not q.has_filters and q.text == 'say "hello'
+
+    def test_lone_dash_and_hash_are_text(self):
+        assert not search.Query("a - b #").has_filters
+
+    def test_accepts(self):
+        q = search.Query('"Hello  World" -spam #a -#b')
+        tokens = search.tokenize("hello world eggs")
+        assert q.accepts("Héllo world, eggs", tokens, ["A"])
+        assert not q.accepts("hello there world", tokens, ["a"])             # no phrase
+        assert not q.accepts("hello world", search.tokenize("hello world spams"), ["a"])  # stem
+        assert not q.accepts("hello world", tokens, [])                      # tag missing
+        assert not q.accepts("hello world", tokens, ["a", "B"])              # excluded tag

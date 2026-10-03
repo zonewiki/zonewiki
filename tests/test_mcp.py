@@ -190,6 +190,15 @@ class TestSearchWiki:
         text, _ = call(client, "search_wiki", query="when is the git push")
         assert "Filler" not in text
 
+    def test_query_syntax(self, client, pages):  # noqa: F811
+        text, _ = call(client, "search_wiki", query='"git push" -remote')
+        assert text.startswith("No matching")      # the git-remote page has "remote"
+        write_page(pages, "tagged", "---\ntags: ops\n---\n# Ops\n\nRun git push to back up.\n")
+        task(client, title="git push the backup", tags=["ops"])
+        text, _ = call(client, "search_wiki", query="git push #ops")
+        assert "slug: tagged" in text and "Task: git push the backup" in text
+        assert "slug: git-remote" not in text
+
     def test_no_match(self, client, pages):  # noqa: F811
         text, err = call(client, "search_wiki", query="xqzt")
         assert not err and text.startswith("No matching sections")
@@ -381,6 +390,12 @@ class TestSearchTasks:
         text, _ = call(client, "search_tasks")
         assert "start: 2026-10-04 · due: 2026-10-06 · repeats every 2 weeks" in text
         assert "keep task (back to the list when done)" in text
+
+    def test_query_syntax(self, client, wiki_dir):  # noqa: F811
+        task(client, title="Write the importer docs")
+        task(client, title="Write the importer")
+        text, _ = call(client, "search_tasks", query="importer -docs")
+        assert "1 matching tasks" in text and "Task: Write the importer\n" in text
 
     def test_limit_and_none(self, client, wiki_dir):  # noqa: F811
         for i in range(3):

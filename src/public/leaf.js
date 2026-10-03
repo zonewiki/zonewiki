@@ -349,16 +349,27 @@ function highlightIndices(str, indices) {
   return out;
 }
 
+// The words of a search query (search.Query in search.py): phrases lose their
+// quotes; -word, -"phrase", #tag and -#tag are filters on content, which a
+// title can't be checked against, so the title filter leaves them out.
+function queryWords(raw) {
+  return [...raw.matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
+    .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].length > 1))
+    .map(m => m[2] ?? m[3]).join(' ').trim();
+}
+
 function applyModalControls() {
   if (!modalPages) return;
-  const q = modalFilter.value.trim();
+  const raw = modalFilter.value.trim();
+  const q = queryWords(raw);
   const sort = modalSort.value;
   const unlinked = modalUnlinked.checked;
 
-  if (q) {
-    // Fuzzy mode: score, rank by quality, render with highlights
+  if (raw) {
+    // Fuzzy mode: score, rank by quality, render with highlights. A query
+    // of only filters (#tag, -word) has no words for titles: no title hits.
     const scored = [];
-    for (const p of modalPages) {
+    for (const p of (q ? modalPages : [])) {
       if (unlinked && p.links !== 0) continue;
       const ts = fuzzyScore(q, p.title);
       const ss = fuzzyScore(q, p.slug);
@@ -393,11 +404,12 @@ function applyModalControls() {
     renderModalList([...special, ...sorted.slice(0, 200)]);
   }
 
-  setModalActive(q ? 0 : -1);
+  setModalActive(raw ? 0 : -1);
 
+  // Content matches get the raw query: the server applies the operators.
   clearTimeout(modalCMTimer);
-  if (q.length >= 2) {
-    modalCMTimer = setTimeout(() => fetchModalContentMatches(q), 300);
+  if (raw.length >= 2) {
+    modalCMTimer = setTimeout(() => fetchModalContentMatches(raw), 300);
   } else {
     // Drop a request still in flight, or its results would come back
     // under the now (nearly) empty filter.

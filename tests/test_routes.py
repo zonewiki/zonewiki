@@ -657,6 +657,42 @@ class TestSearch:
         write_page(wiki_dir, "long", "# Long\n\n## Setup\n\nInstall the wombat.\n")
         assert b'href="/page/long#setup"' in client.get("/search?q=wombat", headers=HOST).data
 
+    def test_exact_phrase(self, client, wiki_dir):
+        write_page(wiki_dir, "near", "# Near\n\nThe push to git happened.\n")
+        write_page(wiki_dir, "exact", "# Exact\n\nWe git push daily.\n")
+        slugs = [r["slug"] for r in client.get('/api/search?q="git push"', headers=HOST).get_json()]
+        assert slugs == ["exact"]
+
+    def test_phrase_marked_in_excerpt(self, client, wiki_dir):
+        write_page(wiki_dir, "trip", "# Trip\n\nTwo weeks of holiday in Italy.\n")
+        r = client.get('/api/search?q="holiday in italy"', headers=HOST).get_json()[0]
+        assert "<mark>holiday in Italy</mark>" in r["excerpt"]
+
+    def test_exclude_word(self, client, wiki_dir):
+        write_page(wiki_dir, "a", "# A\n\ngit and docker.\n")
+        write_page(wiki_dir, "b", "# B\n\ngit only.\n")
+        slugs = [r["slug"] for r in client.get("/api/search?q=git+-dockers", headers=HOST).get_json()]
+        assert slugs == ["b"]
+
+    def test_tag_filter_pages_and_tasks(self, client, wiki_dir):
+        write_page(wiki_dir, "tagged", "---\ntags: [Leaf, ui]\n---\n# Tagged\n\nThe date picker.\n")
+        write_page(wiki_dir, "untagged", "# Untagged\n\nThe date picker again.\n")
+        client.post("/api/deck", json={"title": "Fix date picker", "tags": ["leaf"]}, headers=HOST)
+        client.post("/api/deck", json={"title": "Date picker elsewhere"}, headers=HOST)
+        results = client.get("/api/search?q=date+picker+%23leaf", headers=HOST).get_json()
+        assert {r["title"] for r in results} == {"Tagged", "[Task] Fix date picker"}
+        results = client.get("/api/search?q=date+picker+-%23leaf", headers=HOST).get_json()
+        assert {r["title"] for r in results} == {"Untagged", "[Task] Date picker elsewhere"}
+
+    def test_tag_only_query(self, client, wiki_dir):
+        write_page(wiki_dir, "tagged", "---\ntags: leaf\n---\n# Tagged\n\nNotes.\n")
+        write_page(wiki_dir, "mentions", "# Mentions\n\nA leaf fell.\n")
+        assert [r["slug"] for r in client.get("/api/search?q=%23leaf", headers=HOST).get_json()] == ["tagged"]
+
+    def test_only_exclusions_find_nothing(self, client, wiki_dir):
+        write_page(wiki_dir, "a", "# A\n\ngit.\n")
+        assert client.get("/api/search?q=-git", headers=HOST).get_json() == []
+
     def test_api_search_empty_query(self, client):
         resp = client.get("/api/search?q=", headers=HOST)
         assert resp.status_code == 200

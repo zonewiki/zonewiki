@@ -1000,6 +1000,7 @@ def task_search_docs() -> list[dict]:
             "status": "done" if task.get("completed_at") else "open",
             "list": task.get("list"),
             "year": _past_year(task) if task.get("completed_at") else None,
+            "tags": [t.lower() for t in task.get("tags") or []],  # for #tag queries
             "task": task,  # the whole task, for the MCP tools' dates and tags
         })
     _task_docs_cache["key"] = key

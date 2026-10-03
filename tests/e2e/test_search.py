@@ -163,3 +163,22 @@ def test_task_result_opens_the_deck_page(page, wiki):
     page.wait_for_url(f"**/deck?task={tid}&view=open")
     expect(page.locator(f".task-item[data-id='{tid}']")).to_have_class(
         re.compile(r"\btask-selected\b"))
+
+
+def test_query_syntax_in_the_modal(page, wiki):
+    # Titles match the query's words only; content matches get the whole
+    # query, operators and all, which the server applies.
+    wiki.write("tomato-notes", "---\ntags: veg\n---\n# Tomato notes\n\nTomatoes need sun.\n")
+    wiki.write("tomato-sauce", "# Tomato sauce\n\nTomatoes and garlic.\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomato -garlic")
+    titles = page.locator("#modal-page-list .page-list-item")
+    expect(titles).to_have_count(2)  # both titles match "tomato"
+    cards = page.locator("#modal-content-matches .search-result-card")
+    expect(cards).to_have_count(1)
+    expect(cards.first).to_contain_text("Tomato notes")
+    page.locator("#modal-filter").fill("#veg")
+    expect(titles).to_have_count(0)  # nothing to match titles against
+    expect(cards).to_have_count(1)
+    expect(cards.first).to_contain_text("Tomato notes")

@@ -131,6 +131,76 @@ def query_words(query: str) -> list[str]:
     return [w for w in words if w not in STOPWORDS] or words
 
 
+# ── Query syntax ─────────────────────────────────────────────────────────────
+# "exact phrase", -word, -"phrase", #tag and -#tag, the same in the browser
+# search and the MCP tools. An unclosed quote is just text.
+
+_QUERY_PART_RE = re.compile(r'(-?)(?:"([^"]+)"|(\S+))')
+
+
+def _squash(text: str) -> str:
+    """Folded text with runs of whitespace as one space, for phrase checks."""
+    return " ".join(fold(text).split())
+
+
+class Query:
+    """A parsed query. `text` is what ranks and is marked in excerpts (the
+    words and phrases, without operators); the rest are filters that a
+    document must pass (`accepts`)."""
+
+    def __init__(self, raw: str):
+        words, phrases = [], []
+        self.phrases: list[str] = []
+        self.exclude_phrases: list[str] = []
+        self.exclude_stems: set[str] = set()
+        self.tags: set[str] = set()
+        self.exclude_tags: set[str] = set()
+        for m in _QUERY_PART_RE.finditer(raw or ""):
+            negative, quoted, plain = m.group(1) == "-", m.group(2), m.group(3)
+            if quoted is not None:
+                if not quoted.strip():
+                    continue
+                if negative:
+                    self.exclude_phrases.append(_squash(quoted))
+                else:
+                    self.phrases.append(_squash(quoted))
+                    phrases.append(quoted.strip())
+            elif plain.startswith("#") and len(plain.strip("#")) > 0:
+                (self.exclude_tags if negative else self.tags).add(plain.lstrip("#").lower())
+            elif negative:
+                self.exclude_stems.update(tokenize(plain))
+            else:
+                words.append(plain)
+        self.text = " ".join(phrases + words)
+
+    @property
+    def has_filters(self) -> bool:
+        return bool(self.phrases or self.exclude_phrases or self.exclude_stems
+                    or self.tags or self.exclude_tags)
+
+    @property
+    def ranking_text(self) -> str:
+        """What to rank by: the words and phrases, or for a query of only
+        tags, the tag words (a page with a tag usually mentions it)."""
+        return self.text or " ".join(sorted(self.tags))
+
+    def accepts(self, text: str, tokens, tags) -> bool:
+        """Whether a document passes the filters: its searchable text, its
+        (stemmed) tokens and its tags."""
+        tags = {t.lower() for t in tags or ()}
+        if not self.tags <= tags or self.exclude_tags & tags:
+            return False
+        if self.exclude_stems and self.exclude_stems & set(tokens):
+            return False
+        if self.phrases or self.exclude_phrases:
+            squashed = _squash(text)
+            if not all(p in squashed for p in self.phrases):
+                return False
+            if any(p in squashed for p in self.exclude_phrases):
+                return False
+        return True
+
+
 class SearchIndex:
     """In-memory BM25 index over a list of pre-tokenized documents."""
 
