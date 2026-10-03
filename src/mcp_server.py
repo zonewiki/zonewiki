@@ -33,7 +33,8 @@ TOOLS = [
         "title": "Search the wiki",
         "description": (
             "Search the user's wiki and return the most relevant page sections with "
-            "their full text, best first, each with its page and a link. Several "
+            "their full text, best first, each with its page, the page's last edit "
+            "date (to tell current notes from stale ones) and a link. Several "
             "sections may come from the same page. Deck tasks that match are "
             "results too, with their status, tags, dates and notes."
         ),

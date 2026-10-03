@@ -2262,7 +2262,7 @@ def _page_chunk_docs() -> list[dict]:
                 chunk = f"{heading}\n{text}" if heading else text
                 chunks.append({
                     "slug": slug, "title": title, "heading": heading, "text": text,
-                    "key": embed.chunk_key(title, chunk),
+                    "mtime": mtime, "key": embed.chunk_key(title, chunk),
                     "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT,
                 })
             cached = _chunk_doc_cache[slug] = (mtime, chunks)
@@ -2424,7 +2424,8 @@ def _mcp_call_tool(name: str, args: dict) -> str:
                 continue
             anchor = f"#{_heading_id(_plain_heading(d['heading']))}" if d["heading"] else ""
             where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
-            out.append(f"[{i}] {where}\nslug: {d['slug']}\nurl: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")
+            out.append(f"[{i}] {where}\nslug: {d['slug']}\nedited: {fmt_date(d['mtime'])}\n"
+                       f"url: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")
         return "\n\n---\n\n".join(out)
     if name == "search_tasks":
         return _mcp_search_tasks(args, base)

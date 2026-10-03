@@ -172,6 +172,11 @@ class TestSearchWiki:
         assert "url: http://localhost:5000/page/git-remote#pushing" in first
         assert first.endswith("Run git push to back up.")
 
+    def test_last_edit_date(self, client, pages):  # noqa: F811
+        os.utime(pages / "git-remote.md", (1_000_000_000, 1_000_000_000))
+        first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]
+        assert "\nslug: git-remote\nedited: 2001-09-0" in first
+
     def test_several_sections_of_one_page(self, client, pages):  # noqa: F811
         text, _ = call(client, "search_wiki", query="git")
         assert "Git remote › Setup" in text and "Git remote › Pushing" in text

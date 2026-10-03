@@ -416,7 +416,7 @@ Tools, all read-only (`readOnlyHint`). A tool failure the model can fix (bad slu
 
 | Tool | Does |
 |------|------|
-| `search_wiki(query, limit=8)` | The most relevant **sections**, full text, best first, each with title › heading, slug and a URL with the heading anchor. Several may come from one page. Matching deck tasks are results too, ranked with the sections. |
+| `search_wiki(query, limit=8)` | The most relevant **sections**, full text, best first, each with title › heading, slug, the page's last edit date (`edited:`, so the model can tell current notes from stale ones) and a URL with the heading anchor. Several may come from one page. Matching deck tasks are results too, ranked with the sections. |
 | `search_tasks(tag, status="open", query, list, limit=50)` | Deck tasks filtered by tag (comma = all must match, case-insensitive), status (`open`, `done` = completed or won't do, `all`) and separate list, all lists included unless `list` is given. With a query, ranked by BM25 within the filter; without, open tasks by deadline, then start date, then title, done ones newest first. Starts with "Today is …" so the model can tell overdue from upcoming. |
 | `read_page(slug)` | A page's raw markdown, frontmatter included. Accepts a slug, `/page/<slug>`, a full URL, `<slug>.md` or the page name (`_mcp_page_slug`); `safe_path` keeps it inside the wiki. |
 | `list_pages(limit=100)` | `slug \| title \| edited date`, most recently edited first. |
