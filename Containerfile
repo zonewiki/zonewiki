@@ -12,11 +12,13 @@ RUN pip install --break-system-packages -r requirements.txt
 # Semantic search (opt-in): with LEAF_EMBEDDINGS set in .env, run.sh passes
 # it here and fastembed plus the model are baked into the image, so the first
 # search doesn't wait for a download and Leaf works offline. Without it, or
-# with an ollama: model, this step does nothing.
+# with an ollama: model, this step does nothing. Only the small, stable
+# embed_setup.py is copied first, so this layer (0.64 GB) is rebuilt when the
+# model setting changes, not on every change to the search code.
 ARG LEAF_EMBEDDINGS=
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed
-COPY src/embed.py .
-RUN python3 embed.py --prepare
+COPY src/embed_setup.py .
+RUN python3 embed_setup.py
 
 COPY src/ .
 

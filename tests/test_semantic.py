@@ -19,6 +19,7 @@ import pytest
 from tests.test_routes import HOST, client, wiki_dir, write_page  # noqa: F401  (fixtures; sets sys.path)
 import deck as deck_module
 import embed
+import embed_setup
 import search
 import server
 
@@ -371,6 +372,50 @@ class TestConfig:
         idx = embed.SemanticIndex(e, wiki_dir / "c.json", lambda: [], server._semantic_text)
         assert (idx.min_score, idx.related_min_score, idx.task_min_score) == \
             embed.THRESHOLDS[embed.DEFAULT_FASTEMBED_MODEL]
+
+    def test_setup_parses_like_the_server(self):
+        assert embed_setup.parse_spec("") is None
+        assert embed_setup.parse_spec("fastembed") == ("fastembed", embed.DEFAULT_FASTEMBED_MODEL)
+        assert embed_setup.parse_spec(" Ollama: nomic ") == ("ollama", "nomic")
+
+    @pytest.mark.parametrize("spec", ["", "off", "ollama:nomic-embed-text"])
+    def test_setup_installs_nothing_without_fastembed(self, spec, monkeypatch):
+        monkeypatch.setenv("LEAF_EMBEDDINGS", spec)
+        monkeypatch.setattr(embed_setup.subprocess, "run",
+                            lambda *a, **k: pytest.fail("nothing to install"))
+        embed_setup.prepare()
+
+    def test_setup_downloads_the_model(self, monkeypatch):
+        import sys
+        import types
+        calls = []
+        fake = types.ModuleType("fastembed")
+
+        class TextEmbedding:
+            def __init__(self, name, cache_dir=None):
+                calls.append(("load", name, cache_dir))
+
+            def query_embed(self, texts):
+                calls.append(("embed", texts))
+                return iter([[0.0]])
+
+        fake.TextEmbedding = TextEmbedding
+        monkeypatch.setitem(sys.modules, "fastembed", fake)
+        monkeypatch.setattr(embed_setup.subprocess, "run", lambda cmd, **k: calls.append(("pip", cmd[-1])))
+        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed:BAAI/bge-small-en-v1.5")
+        monkeypatch.setenv("FASTEMBED_CACHE_PATH", "/opt/fastembed")
+        embed_setup.prepare()
+        assert calls == [("pip", "fastembed"), ("load", "BAAI/bge-small-en-v1.5", "/opt/fastembed"),
+                         ("embed", ["warm up"])]
+
+    def test_containerfile_copies_only_the_setup_before_the_download(self):
+        # The model layer must not depend on embed.py, or every change to the
+        # search code downloads the model again.
+        from pathlib import Path
+        text = (Path(__file__).parent.parent / "Containerfile").read_text()
+        before = text[:text.index("RUN python3 embed_setup.py")]
+        assert "COPY src/embed_setup.py ." in before
+        assert "COPY src/ ." not in before and "embed.py ." not in before
 
     def test_off_by_default(self, monkeypatch, wiki_dir):  # noqa: F811
         monkeypatch.delenv("LEAF_EMBEDDINGS", raising=False)

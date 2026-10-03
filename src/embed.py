@@ -16,8 +16,8 @@ ready, so a slow model never blocks a page view.
 server.py fuses these results with BM25 (search.fuse) and shows each page's
 nearest neighbours as "Related" pages.
 
-Run `python3 embed.py --prepare` to install and download the model named by
-LEAF_EMBEDDINGS ahead of time (the Containerfile does this at build time).
+The model choice and its download live in embed_setup.py (run at image
+build time), so editing this file doesn't re-download the model.
 """
 
 import base64
@@ -27,7 +27,6 @@ import math
 import operator
 import os
 import re
-import subprocess
 import sys
 import threading
 import urllib.request
@@ -35,10 +34,8 @@ from array import array
 from pathlib import Path
 from typing import Callable, Iterable
 
-# German and English, also mixed (0.64 GB). On a test wiki it separated real
-# hits from noise far better than the small multilingual MiniLM (which covers
-# ~50 languages and is a third the size) or the English-only bge-small.
-DEFAULT_FASTEMBED_MODEL = "jinaai/jina-embeddings-v2-base-de"
+from embed_setup import DEFAULT_FASTEMBED_MODEL, parse_spec  # noqa: F401 (re-exported)
+
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
 # Similarity floors per model, (search, related, tasks):
@@ -255,17 +252,15 @@ class OllamaEmbedder:
 
 
 def embedder_from_spec(spec: str):
-    """`fastembed`, `fastembed:<model>` or `ollama:<model>`; None when empty."""
-    spec = spec.strip()
-    if not spec or spec.lower() in ("0", "off", "false", "no"):
+    """`fastembed`, `fastembed:<model>` or `ollama:<model>` (embed_setup.parse_spec);
+    None when empty."""
+    parsed = parse_spec(spec)
+    if parsed is None:
         return None
-    kind, _, model = spec.partition(":")
-    kind = kind.lower()
-    if kind in ("fastembed", "1", "true", "yes", "on"):
-        return FastEmbedder(model.strip() or DEFAULT_FASTEMBED_MODEL)
-    if kind == "ollama" and model.strip():
-        return OllamaEmbedder(model.strip(), os.environ.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL)
-    raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed[:model] or ollama:<model>, got {spec!r}")
+    kind, model = parsed
+    if kind == "fastembed":
+        return FastEmbedder(model)
+    return OllamaEmbedder(model, os.environ.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL)
 
 
 # ── The index ────────────────────────────────────────────────────────────────
@@ -614,18 +609,3 @@ def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex 
     log(f"semantic search on, model {embedder.name}")
     return SemanticIndex(embedder, wiki_dir / "_index" / "embeddings.json",
                          pages_fn, prepare, tasks_fn=tasks_fn, min_score=min_score)
-
-
-def prepare_model() -> None:
-    """Install fastembed and download LEAF_EMBEDDINGS' model (build time)."""
-    embedder = embedder_from_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
-    if not isinstance(embedder, FastEmbedder):
-        return
-    subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
-                    "--no-cache-dir", "-q", "fastembed"], check=True)
-    embedder.embed_query("warm up")
-    print(f"Downloaded {embedder.model_name}")
-
-
-if __name__ == "__main__" and sys.argv[1:] == ["--prepare"]:
-    prepare_model()
