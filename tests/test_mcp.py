@@ -204,6 +204,12 @@ class TestSearchWiki:
         write_page(pages, "exact", "# Notes\n\nAt the zebra   crossing.\n")
         assert call(client, "search_wiki", query="zebra crossing")[0].startswith("[1] Notes\nslug: exact")
 
+    def test_date_filter(self, client, pages):  # noqa: F811
+        os.utime(pages / "golf.md", (1_000_000_000, 1_000_000_000))   # 2001-09-09
+        text, _ = call(client, "search_wiki", query="werkstatt edited:2001")
+        assert "slug: golf" in text
+        assert call(client, "search_wiki", query="werkstatt after:2002")[0].startswith("No matching")
+
     def test_found_by_file_name(self, client, pages):  # noqa: F811
         write_page(pages, "messages/2026-06-18_update-alex-robin", "# Roof status\n\nRevised timeline.\n")
         assert "slug: messages/2026-06-18_update-alex-robin" in call(client, "search_wiki", query="robin")[0]

@@ -136,6 +136,8 @@ def query_words(query: str) -> list[str]:
 # search and the MCP tools. An unclosed quote is just text.
 
 _QUERY_PART_RE = re.compile(r'(-?)(?:"([^"]+)"|(\S+))')
+# edited:2026-09, after:2026-07-01, before:2026: a year, month or day.
+_DATE_FILTER_RE = re.compile(r"(?i)(edited|after|before):(\d{4}(?:-\d{2}(?:-\d{2})?)?)")
 
 
 def squash(text: str) -> str:
@@ -155,6 +157,7 @@ class Query:
         self.exclude_stems: set[str] = set()
         self.tags: set[str] = set()
         self.exclude_tags: set[str] = set()
+        self.dates: list[tuple[str, str]] = []  # (edited|not-edited|after|before, date prefix)
         for m in _QUERY_PART_RE.finditer(raw or ""):
             negative, quoted, plain = m.group(1) == "-", m.group(2), m.group(3)
             if quoted is not None:
@@ -165,6 +168,11 @@ class Query:
                 else:
                     self.phrases.append(squash(quoted))
                     phrases.append(quoted.strip())
+            elif d := _DATE_FILTER_RE.fullmatch(plain):
+                kind = d.group(1).lower()
+                if negative:  # -after:X is before:X, -edited:X "not then"
+                    kind = {"after": "before", "before": "after", "edited": "not-edited"}[kind]
+                self.dates.append((kind, d.group(2)))
             elif plain.startswith("#") and len(plain.strip("#")) > 0:
                 (self.exclude_tags if negative else self.tags).add(plain.lstrip("#").lower())
             elif negative:
@@ -185,7 +193,7 @@ class Query:
     @property
     def has_filters(self) -> bool:
         return bool(self.phrases or self.exclude_phrases or self.exclude_stems
-                    or self.tags or self.exclude_tags)
+                    or self.tags or self.exclude_tags or self.dates)
 
     @property
     def ranking_text(self) -> str:
@@ -193,9 +201,23 @@ class Query:
         tags, the tag words (a page with a tag usually mentions it)."""
         return self.text or " ".join(sorted(self.tags))
 
-    def accepts(self, text: str, tokens, tags) -> bool:
+    def accepts(self, text: str, tokens, tags, date: str | None = None) -> bool:
         """Whether a document passes the filters: its searchable text, its
-        (stemmed) tokens and its tags."""
+        (stemmed) tokens, its tags and its date ("YYYY-MM-DD", for the date
+        filters: edited: is a prefix, after: on or after, before: strictly
+        before; partial dates compare as prefixes, so before:2026-08 is July
+        and earlier)."""
+        for kind, value in self.dates:
+            if not date:
+                return False
+            if kind == "edited" and not date.startswith(value):
+                return False
+            if kind == "not-edited" and date.startswith(value):
+                return False
+            if kind == "after" and date < value:
+                return False
+            if kind == "before" and date[:len(value)] >= value:
+                return False
         tags = {t.lower() for t in tags or ()}
         if not self.tags <= tags or self.exclude_tags & tags:
             return False

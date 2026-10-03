@@ -43,7 +43,9 @@ TOOLS = [
             "properties": {
                 "query": {"type": "string", "description": (
                     'What to look for: words or a question. Also: "exact phrase", -word to '
-                    'leave out, #tag for pages (frontmatter tags) and tasks with a tag, -#tag.')},
+                    'leave out, #tag for pages (frontmatter tags) and tasks with a tag, -#tag, '
+                    'and edited:2026-09 / after:2026-07-01 / before:2026-08 for when a page was '
+                    'last edited (a task: its last activity).')},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 8,
                           "description": "How many sections to return."},
                 "under": {"type": "string",
@@ -70,7 +72,8 @@ TOOLS = [
                 "status": {"type": "string", "enum": ["open", "done", "all"], "default": "open",
                            "description": "open, done (completed or won't do), or all."},
                 "query": {"type": "string", "description": (
-                    'Words to look for in title, notes and tags; "exact phrase" and -word work too.')},
+                    'Words to look for in title, notes and tags; "exact phrase", -word and '
+                    'edited:/after:/before: (last activity, e.g. after:2026-09-01) work too.')},
                 "list": {"type": "string", "description": "Only tasks in this separate list, e.g. 'groceries'."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
             },

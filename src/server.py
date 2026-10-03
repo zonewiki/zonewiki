@@ -1338,6 +1338,8 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>-word</kbd></td><td>Leave out results with it (also <kbd>-"phrase"</kbd>)</td></tr>
       <tr><td><kbd>#tag</kbd></td><td>Only pages and tasks with this tag</td></tr>
       <tr><td><kbd>-#tag</kbd></td><td>None with this tag</td></tr>
+      <tr><td><kbd>edited:2026-09</kbd></td><td>Last edited then (year, month or day); alone: all of it, newest first</td></tr>
+      <tr><td><kbd>after:</kbd> / <kbd>before:</kbd></td><td>Edited on or after / before a day, month or year</td></tr>
     </table>
     <p class="leaf-version">{APP_NAME} {VERSION}{f" · {html.escape(LEAF_BUILD)}" if LEAF_BUILD != "unknown" else ""}</p>
   </dialog>
@@ -2234,9 +2236,15 @@ def _doc_text(d: dict) -> str:
     return d["excerpt_text"] if "excerpt_text" in d else f"{d['title']}\n{d['heading']}\n{d['text']}"
 
 
+def _doc_date(d: dict) -> str | None:
+    """A doc's day for the date filters: a page's (or section's) last edit,
+    a task's last activity."""
+    return fmt_date(d["mtime"]) if "mtime" in d else d.get("edited")
+
+
 def _accepts(query: search.Query, d: dict) -> bool:
     """Whether a page, section or task doc passes the query's filters."""
-    return query.accepts(_doc_text(d), d["tokens"], d.get("tags"))
+    return query.accepts(_doc_text(d), d["tokens"], d.get("tags"), _doc_date(d))
 
 
 def _has_phrase(d: dict, phrase: str) -> bool:
@@ -2281,7 +2289,12 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
     given, take no part."""
     q = query.ranking_text
     if not q.strip():
-        return []
+        if not query.dates:
+            return []
+        # Only date filters ("edited:2026-09"): everything that passes,
+        # newest first. There are no words to rank by.
+        docs = [d for d in index.docs if (keep is None or keep(d)) and _accepts(query, d)]
+        return sorted(docs, key=lambda d: _doc_date(d) or "", reverse=True)[:limit]
     # Each ranking goes as deep as the fused list must be long.
     depth = max(FUSE_DEPTH, limit) if SEMANTIC else limit
     bm25 = _bm25(index, query, depth, keep)

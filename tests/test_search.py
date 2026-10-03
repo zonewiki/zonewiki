@@ -330,3 +330,29 @@ class TestQuery:
         assert not q.accepts("hello world", search.tokenize("hello world spams"), ["a"])  # stem
         assert not q.accepts("hello world", tokens, [])                      # tag missing
         assert not q.accepts("hello world", tokens, ["a", "B"])              # excluded tag
+
+
+class TestDateFilters:
+    def test_parsed_and_kept_out_of_the_text(self):
+        q = search.Query("alex edited:2026-09 AFTER:2026-09-10 before:2027")
+        assert q.text == "alex"
+        assert q.dates == [("edited", "2026-09"), ("after", "2026-09-10"), ("before", "2027")]
+        assert q.has_filters
+
+    def test_negated(self):
+        q = search.Query("-edited:2026-09 -after:2026-10 -before:2026-01")
+        assert q.dates == [("not-edited", "2026-09"), ("before", "2026-10"), ("after", "2026-01")]
+        assert not q.exclude_stems   # not the words "edited", "2026"
+
+    def test_invalid_dates_stay_text(self):
+        q = search.Query("edited:soon after:26-9")
+        assert not q.dates and q.text == "edited:soon after:26-9"
+
+    def test_boundaries(self):
+        ok = lambda query, day: search.Query(query).accepts("", [], [], day)  # noqa: E731
+        assert ok("edited:2026-09", "2026-09-30") and not ok("edited:2026-09", "2026-10-01")
+        assert ok("after:2026-07", "2026-07-01") and not ok("after:2026-07", "2026-06-30")
+        assert ok("before:2026-08", "2026-07-31") and not ok("before:2026-08", "2026-08-01")
+        assert ok("before:2026-08-15", "2026-08-14") and not ok("before:2026-08-15", "2026-08-15")
+        assert not ok("edited:2026", None)   # undated docs don't pass a date filter
+        assert ok("anything", None)          # nor need a date without one

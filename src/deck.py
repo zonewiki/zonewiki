@@ -968,6 +968,15 @@ def _deck_mtimes() -> tuple:
     return tuple((str(p), mt(p)) for p in paths)
 
 
+def _last_activity(task: dict) -> str | None:
+    """The day a task last changed, as far as it records: its completion,
+    else its latest history event, else its creation ("YYYY-MM-DD")."""
+    stamps = [task.get("completed_at"), task.get("created_at")]
+    stamps += [e.get("at") for e in task.get("history") or [] if isinstance(e, dict)]
+    days = [str(t)[:10] for t in stamps if t and re.match(r"\d{4}-\d{2}-\d{2}", str(t))]
+    return max(days) if days else None
+
+
 def task_search_docs() -> list[dict]:
     """Return all tasks as search documents for the shared BM25 index.
 
@@ -1001,6 +1010,7 @@ def task_search_docs() -> list[dict]:
             "list": task.get("list"),
             "year": _past_year(task) if task.get("completed_at") else None,
             "tags": [t.lower() for t in task.get("tags") or []],  # for #tag queries
+            "edited": _last_activity(task),  # for edited:/after:/before: queries
             "task": task,  # the whole task, for the MCP tools' dates and tags
         })
     _task_docs_cache["key"] = key

@@ -2286,3 +2286,16 @@ class TestHistory:
         client.delete(f"/api/deck/{tid}")
         restored = client.post("/api/deck/restore", json={"tasks": [task]}).get_json()[0]
         assert restored["history"] == task["history"]
+
+
+
+class TestLastActivity:
+    def test_completion_history_creation(self):
+        import deck
+        assert deck._last_activity({"created_at": "2026-01-02T10:00:00"}) == "2026-01-02"
+        assert deck._last_activity({"created_at": "2026-01-02T10:00:00",
+                                    "history": [{"at": "2026-03-04T09:00", "event": "start"}]}) == "2026-03-04"
+        assert deck._last_activity({"created_at": "2026-01-02T10:00:00",
+                                    "completed_at": "2026-05-06T08:00:00",
+                                    "history": [{"at": "2026-03-04T09:00"}, "junk"]}) == "2026-05-06"
+        assert deck._last_activity({}) is None

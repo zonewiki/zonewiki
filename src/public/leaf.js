@@ -350,11 +350,13 @@ function highlightIndices(str, indices) {
 }
 
 // The words of a search query (search.Query in search.py): phrases lose their
-// quotes; -word, -"phrase", #tag and -#tag are filters on content, which a
-// title can't be checked against, so the title filter leaves them out.
+// quotes; -word, -"phrase", #tag, -#tag and the date filters (edited:,
+// after:, before:) are filters on content, which a title can't be checked
+// against, so the title filter leaves them out.
 function queryWords(raw) {
   return [...raw.matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
-    .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].length > 1))
+    .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].length > 1)
+                 && !(m[3] && /^(edited|after|before):\d{4}(-\d\d(-\d\d)?)?$/i.test(m[3])))
     .map(m => m[2] ?? m[3]).join(' ').trim();
 }
 

@@ -128,6 +128,17 @@ def test_no_all_results_link_when_everything_is_shown(page, wiki):
     expect(page.locator("#modal-content-matches .search-more")).to_have_count(0)
 
 
+def test_date_filters_stay_out_of_the_title_list(page, wiki):
+    seed(wiki)
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomatoes after:2000")
+    expect(page.locator("#modal-page-list .page-list-item")).to_have_count(0)   # no title has "tomatoes"
+    expect(page.locator("#modal-content-matches .search-result-card")).to_have_count(2)
+    page.locator("#modal-filter").fill("garage after:2000")
+    expect(page.locator("#modal-page-list .page-list-item[data-slug='garage']")).to_have_count(1)
+
+
 def test_unlinked_only_filters_content_matches(page, wiki):
     # Regression: the checkbox narrowed the title list but not the content
     # matches below it.

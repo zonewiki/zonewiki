@@ -770,6 +770,34 @@ class TestSearch:
         assert page.count('class="search-result-card"') == 50
         assert "The first 50 results · unlinked pages only" in page
 
+    def test_date_filters(self, client, wiki_dir):
+        import os
+        for slug, day in [("july", 1_783_000_000), ("sept", 1_789_000_000), ("oct", 1_791_000_000)]:
+            os.utime(write_page(wiki_dir, slug, f"# {slug}\n\nyak notes\n"), (day, day))
+        # july: 2026-07-02, sept: 2026-09-10, oct: 2026-10-02 (UTC; any zone keeps the months)
+        slugs = lambda q: sorted(r["slug"] for r in client.get(  # noqa: E731
+            "/api/search", query_string={"q": q}, headers=HOST).get_json())
+        assert slugs("yak edited:2026-09") == ["sept"]
+        assert slugs("yak after:2026-09") == ["oct", "sept"]
+        assert slugs("yak before:2026-09") == ["july"]
+        assert slugs("yak -edited:2026-09") == ["july", "oct"]
+
+    def test_only_dates_list_newest_first(self, client, wiki_dir):
+        import os
+        for slug, day in [("july", 1_783_000_000), ("sept", 1_789_000_000), ("oct", 1_791_000_000)]:
+            os.utime(write_page(wiki_dir, slug, f"# {slug}\n\nnotes\n"), (day, day))
+        os.utime(wiki_dir / "index.md", (1_000_000_000, 1_000_000_000))  # the fixture's, 2001
+        results = client.get("/api/search", query_string={"q": "after:2026-07"}, headers=HOST).get_json()
+        assert [r["slug"] for r in results] == ["oct", "sept", "july"]
+
+    def test_tasks_dated_by_last_activity(self, client, wiki_dir):
+        from datetime import date
+        task = client.post("/api/deck", json={"title": "yak shaving"}, headers=HOST).get_json()
+        today = date.today().isoformat()
+        hits = client.get("/api/search", query_string={"q": f"yak edited:{today}"}, headers=HOST).get_json()
+        assert [r.get("task_id") for r in hits] == [task["id"]]
+        assert client.get("/api/search", query_string={"q": "yak before:2000"}, headers=HOST).get_json() == []
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")
