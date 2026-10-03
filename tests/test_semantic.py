@@ -17,6 +17,7 @@ import time
 import pytest
 
 from tests.test_routes import HOST, client, wiki_dir, write_page  # noqa: F401  (fixtures; sets sys.path)
+import deck as deck_module
 import embed
 import search
 import server
@@ -64,7 +65,10 @@ def make_index(wiki, embedder=None, **kw):
         wiki / "_index" / "embeddings.json",
         lambda: [(s, p) for p, s in server.iter_pages()],
         server._semantic_text,
+        tasks_fn=kw.pop("tasks_fn", lambda: [(d["task_id"], d["excerpt_text"])
+                                             for d in deck_module.task_search_docs()]),
         min_score=kw.pop("min_score", 0.5),
+        task_min_score=kw.pop("task_min_score", 0.5),
         related_min_score=kw.pop("related_min_score", 0.5),
         # The test pages are short; tests of the thin-page rule pass their own.
         related_min_chars=kw.pop("related_min_chars", 0),
@@ -303,6 +307,59 @@ def _wait(cond, timeout=5.0):
         time.sleep(0.02)
 
 
+class TestTaskVectors:
+    TASKS = {"t1": "Book the Werkstatt", "t2": "Buy milk", "t3": "Evening routine: bed early"}
+
+    def index(self, wiki_dir, tasks, **kw):
+        return make_index(wiki_dir, tasks_fn=lambda: list(tasks.items()), **kw)
+
+    def test_tasks_found_by_meaning(self, wiki_dir):  # noqa: F811
+        idx = self.index(wiki_dir, self.TASKS)
+        idx.sync()
+        assert [i for i, _s in idx.search_tasks("car repair")] == ["t1"]
+        assert idx.search_tasks("xqzt") == []
+        assert idx.search_tasks("car repair", known={"t2"}) == []
+
+    def test_only_changed_tasks_reembedded(self, wiki_dir):  # noqa: F811
+        tasks = dict(self.TASKS)
+        idx = self.index(wiki_dir, tasks)
+        idx.sync()
+        idx.embedder.calls.clear()
+        tasks["t2"] = "Buy oat milk"
+        del tasks["t3"]
+        assert idx.sync() is True
+        assert idx.embedder.calls == ["Buy oat milk"]
+        assert set(idx._tasks) == {"t1", "t2"}
+
+    def test_unchanged_tasks_cost_nothing(self, wiki_dir):  # noqa: F811
+        idx = self.index(wiki_dir, self.TASKS)
+        idx.sync()
+        idx.embedder.calls.clear()
+        assert idx.sync() is False and idx.embedder.calls == []
+
+    def test_cached_across_restarts(self, wiki_dir):  # noqa: F811
+        self.index(wiki_dir, self.TASKS).sync()
+        fresh = self.index(wiki_dir, self.TASKS)
+        assert fresh.sync() is False and fresh.embedder.calls == []
+        assert [i for i, _s in fresh.search_tasks("car repair")] == ["t1"]
+
+    def test_own_floor(self, wiki_dir):  # noqa: F811
+        idx = self.index(wiki_dir, {"t1": "Werkstatt and milk and bed"}, task_min_score=0.9)
+        idx.sync()
+        assert idx.search_tasks("car repair") == []    # similar, but under the task floor
+        assert idx.task_min_score == 0.9 and idx.min_score == 0.5
+
+    def test_failed_task_retried(self, wiki_dir):  # noqa: F811
+        idx = self.index(wiki_dir, self.TASKS)
+        idx.embedder.fail = True
+        idx.sync()
+        assert idx.search_tasks("car repair") == []
+        idx.embedder.fail = False
+        idx._queries.clear()
+        idx.sync()
+        assert [i for i, _s in idx.search_tasks("car repair")] == ["t1"]
+
+
 class TestConfig:
     def test_spec_parsing(self):
         assert embed.embedder_from_spec("") is None
@@ -322,7 +379,8 @@ class TestConfig:
         e = FakeEmbedder()
         e.model_name = embed.DEFAULT_FASTEMBED_MODEL
         idx = embed.SemanticIndex(e, wiki_dir / "c.json", lambda: [], server._semantic_text)
-        assert (idx.min_score, idx.related_min_score) == embed.THRESHOLDS[embed.DEFAULT_FASTEMBED_MODEL]
+        assert (idx.min_score, idx.related_min_score, idx.task_min_score) == \
+            embed.THRESHOLDS[embed.DEFAULT_FASTEMBED_MODEL]
 
     def test_off_by_default(self, monkeypatch, wiki_dir):  # noqa: F811
         monkeypatch.delenv("LEAF_EMBEDDINGS", raising=False)
@@ -383,6 +441,12 @@ class TestHybridSearch:
         monkeypatch.setattr(server, "SEMANTIC", None)
         assert _search(client, "car repair") == []
         assert _search(client, "werkstatt")[0]["slug"] == "golf"
+
+    def test_task_found_by_meaning(self, client, semantic):  # noqa: F811
+        client.post("/api/deck", json={"title": "Book the Werkstatt"}, headers=HOST)
+        semantic.sync()
+        results = _search(client, "car repair")
+        assert any(r.get("type") == "task" and r["title"] == "[Task] Book the Werkstatt" for r in results)
 
     def test_search_page_uses_it_too(self, client, semantic):  # noqa: F811
         html = client.get("/search", query_string={"q": "car repair"}, headers=HOST).get_data(as_text=True)

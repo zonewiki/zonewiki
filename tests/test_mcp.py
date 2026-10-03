@@ -304,6 +304,32 @@ class TestTasksInSearchWiki:
         assert "Task: Call the mechaniker" in text and "Golf › Werkstatt" in text
 
 
+class TestTasksByMeaning:
+    @pytest.fixture()
+    def semantic_on(self, pages, monkeypatch):  # noqa: F811
+        idx = make_index(pages)
+        monkeypatch.setattr(server, "SEMANTIC", idx)
+        return idx
+
+    def test_search_wiki_finds_task_by_meaning(self, client, semantic_on):  # noqa: F811
+        task(client, title="Book the Werkstatt")
+        semantic_on.sync()
+        assert "Task: Book the Werkstatt" in call(client, "search_wiki", query="car repair")[0]
+
+    def test_not_under_a_folder(self, client, semantic_on, pages):  # noqa: F811
+        write_page(pages, "tickets/car", "# Car\n\nMechaniker.\n")
+        task(client, title="Book the Werkstatt")
+        semantic_on.sync()
+        assert "Task:" not in call(client, "search_wiki", query="car repair", under="tickets")[0]
+
+    def test_search_tasks_query_by_meaning_within_the_filter(self, client, semantic_on):  # noqa: F811
+        task(client, title="Book the Werkstatt", tags=["home"])
+        task(client, title="Mechaniker for the van", tags=["work"])
+        semantic_on.sync()
+        text, _ = call(client, "search_tasks", query="car repair", tag="home")
+        assert "1 matching tasks" in text and "Book the Werkstatt" in text
+
+
 class TestSearchTasks:
     def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):  # noqa: F811
         task(client, title="Later", tags=["leaf"], due_date="2026-12-01")

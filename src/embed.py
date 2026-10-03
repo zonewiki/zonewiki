@@ -41,21 +41,24 @@ from typing import Callable, Iterable
 DEFAULT_FASTEMBED_MODEL = "jinaai/jina-embeddings-v2-base-de"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
-# Similarity floors per model, (search, related):
+# Similarity floors per model, (search, related, tasks):
 # - search: a query↔section similarity below this is not a hit. Vector search
 #   always has a "nearest" page, so without a floor every query, even
 #   gibberish, would fill the results. LEAF_EMBED_MIN_SCORE overrides it.
 # - related: pages less similar than this (page↔page, each page the mean of
 #   its sections) are not listed as related.
+# - tasks: as search, for deck tasks. Their texts are a few words, and short
+#   texts let nonsense score higher ("xqzt blorf" reached 0.27 against a task
+#   title, 0.17 against page sections), so the floor sits higher.
 # Measured on a test wiki: the floor sits above what nonsense queries and
 # unrelated pages score, below what the right page scores. Models differ a
 # lot (bge-small scores even nonsense at 0.55), so an unlisted model gets a
 # guess; tune LEAF_EMBED_MIN_SCORE for it.
 THRESHOLDS = {
-    "jinaai/jina-embeddings-v2-base-de": (0.25, 0.25),
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": (0.4, 0.3),
+    "jinaai/jina-embeddings-v2-base-de": (0.25, 0.25, 0.3),
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": (0.4, 0.3, 0.4),  # tasks: not measured
 }
-DEFAULT_THRESHOLDS = (0.4, 0.4)
+DEFAULT_THRESHOLDS = (0.4, 0.4, 0.4)
 
 # A page with less prose than this neither gets a Related list nor appears
 # in one; search still finds it. Prose is the letters and digits outside
@@ -272,30 +275,36 @@ class SemanticIndex:
     pages_fn() lists the current pages as (slug, path); prepare(content, slug)
     turns a file into (title, body text). Both come from server.py. A page's
     sections are embedded as "title\\nsection", so each carries its page's
-    topic along.
+    topic along. tasks_fn(), when given, lists deck tasks as (id, text); each
+    task is one vector, found by search_tasks.
     """
 
     def __init__(self, embedder, cache_path: Path,
                  pages_fn: Callable[[], Iterable[tuple[str, Path]]],
                  prepare: Callable[[str, str], tuple[str, str]],
+                 tasks_fn: Callable[[], Iterable[tuple[str, str]]] | None = None,
                  min_score: float | None = None,
                  related_min_score: float | None = None,
-                 related_min_chars: int = RELATED_MIN_CHARS):
+                 related_min_chars: int = RELATED_MIN_CHARS,
+                 task_min_score: float | None = None):
         self.embedder = embedder
         self.cache_path = cache_path
         self.pages_fn = pages_fn
         self.prepare = prepare
-        search_floor, related_floor = THRESHOLDS.get(getattr(embedder, "model_name", ""),
-                                                     DEFAULT_THRESHOLDS)
+        self.tasks_fn = tasks_fn
+        search_floor, related_floor, task_floor = THRESHOLDS.get(
+            getattr(embedder, "model_name", ""), DEFAULT_THRESHOLDS)
         self.min_score = search_floor if min_score is None else min_score
         self.related_min_score = related_floor if related_min_score is None else related_min_score
         self.related_min_chars = related_min_chars
+        self.task_min_score = task_floor if task_min_score is None else task_min_score
         self._lock = threading.Lock()      # guards the state below
         self._sync_lock = threading.Lock()  # one sync at a time
         # slug -> {"mtime", "chunks": [[hash, text], …]}
         self._pages: dict[str, dict] = {}
         self._vecs: dict[str, array] = {}   # chunk hash -> unit vector
         self._page_vecs: dict[str, array] = {}  # slug -> mean of its chunks
+        self._tasks: dict[str, str] = {}        # task id -> hash of its text
         self._queries: dict[str, array] = {}    # small cache of query vectors
         self._wake = threading.Event()
         self._worker: threading.Thread | None = None
@@ -315,8 +324,9 @@ class SemanticIndex:
         try:
             self._vecs = {h: _decode(v) for h, v in data["vectors"].items()}
             self._pages = data["pages"]
+            self._tasks = dict(data.get("tasks") or {})
         except (KeyError, TypeError, ValueError):
-            self._vecs, self._pages = {}, {}
+            self._vecs, self._pages, self._tasks = {}, {}, {}
             return
         self._page_vecs = {s: v for s, p in self._pages.items()
                            if (v := self._mean_of(p)) is not None}
@@ -327,6 +337,7 @@ class SemanticIndex:
             "version": CACHE_VERSION,
             "model": self.embedder.name,
             "pages": self._pages,
+            "tasks": self._tasks,
             "vectors": {h: _encode(v) for h, v in self._vecs.items()},
         }
         try:
@@ -375,6 +386,15 @@ class SemanticIndex:
                     todo[h] = f"{title}\n{c}".strip()
             pages[slug] = {"mtime": mtime, "chunks": chunks}
             changed = True
+        # Tasks are short, so they are simply re-hashed each time: a changed
+        # task gets a new hash and only that one is embedded.
+        tasks: dict[str, str] = {}
+        for task_id, text in (self.tasks_fn() if self.tasks_fn else ()):
+            if text.strip():
+                tasks[task_id] = h = _hash(text)
+                if h not in self._vecs:
+                    todo[h] = text
+        changed = changed or tasks != self._tasks
         new_vecs: dict[str, array] = {}
         if todo:
             hashes = list(todo)
@@ -399,7 +419,8 @@ class SemanticIndex:
                             del pages[slug]
         if not changed and not new_vecs:
             return False
-        used = {h for p in pages.values() for h, _ in p["chunks"]}
+        # A task whose embedding failed keeps its hash and is retried next time.
+        used = {h for p in pages.values() for h, _ in p["chunks"]} | set(tasks.values())
         vecs = {h: v for h, v in {**self._vecs, **new_vecs}.items() if h in used}
         page_vecs = {}
         for slug, p in pages.items():
@@ -410,7 +431,7 @@ class SemanticIndex:
                 if m is not None:
                     page_vecs[slug] = m
         with self._lock:
-            self._pages, self._vecs, self._page_vecs = pages, vecs, page_vecs
+            self._pages, self._vecs, self._page_vecs, self._tasks = pages, vecs, page_vecs, tasks
             self.ready = True
         self._save_cache()
         return True
@@ -426,7 +447,9 @@ class SemanticIndex:
                 try:
                     self.sync()
                     if first:
-                        log(f"{len(self._pages)} pages, {len(self._vecs)} sections indexed")
+                        sections = sum(len(p["chunks"]) for p in self._pages.values())
+                        log(f"{len(self._pages)} pages ({sections} sections) and "
+                            f"{len(self._tasks)} tasks indexed")
                 except Exception as e:
                     log(f"sync failed: {e}")
                 first = False
@@ -490,12 +513,34 @@ class SemanticIndex:
         ranked = sorted(best.items(), key=lambda kv: -kv[1][0])[:limit]
         return [(slug, s, text) for slug, (s, text) in ranked]
 
+    def search_tasks(self, query: str, known: Iterable[str] | None = None,
+                     limit: int = 30) -> list[tuple[str, float]]:
+        """(task id, score) of the tasks at least task_min_score similar to
+        the query, best first."""
+        if not self.ready or not query.strip():
+            return []
+        q = self._query_vec(query)
+        if q is None:
+            return []
+        known = set(known) if known is not None else None
+        with self._lock:
+            tasks, vecs = self._tasks, self._vecs
+        hits = []
+        for task_id, h in tasks.items():
+            if known is not None and task_id not in known:
+                continue
+            v = vecs.get(h)
+            if v is not None and (s := _dot(q, v)) >= self.task_min_score:
+                hits.append((s, task_id))
+        hits.sort(key=lambda x: -x[0])
+        return [(task_id, s) for s, task_id in hits[:limit]]
+
     def search_chunks(self, query: str, known: Iterable[str] | None = None,
-                      limit: int = 30) -> list[str]:
-        """Keys of the sections most similar to the query, best first; several
-        may come from one page (retrieval for an LLM wants the passages)."""
+                      limit: int = 30) -> list[tuple[str, float]]:
+        """(key, score) of the sections most similar to the query, best first;
+        several may come from one page (retrieval for an LLM wants passages)."""
         hits = sorted(self._chunk_scores(query, known), key=lambda x: -x[2])
-        return [h for _slug, h, _s, _t in hits[:limit]]
+        return [(h, s) for _slug, h, s, _t in hits[:limit]]
 
     def _has_content(self, page: dict | None) -> bool:
         return bool(page) and sum(prose_chars(t) for _h, t in page["chunks"]) >= self.related_min_chars
@@ -541,7 +586,7 @@ def exclude_from_git(wiki_dir: Path, entry: str = "/_index/") -> None:
         log(f"could not update {exclude}: {e}")
 
 
-def from_env(wiki_dir: Path, pages_fn, prepare) -> SemanticIndex | None:
+def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex | None:
     """The SemanticIndex LEAF_EMBEDDINGS asks for, or None (keywords only).
     A missing dependency or a bad setting is logged, not fatal."""
     try:
@@ -567,7 +612,7 @@ def from_env(wiki_dir: Path, pages_fn, prepare) -> SemanticIndex | None:
     exclude_from_git(wiki_dir)
     log(f"semantic search on, model {embedder.name}")
     return SemanticIndex(embedder, wiki_dir / "_index" / "embeddings.json",
-                         pages_fn, prepare, min_score=min_score)
+                         pages_fn, prepare, tasks_fn=tasks_fn, min_score=min_score)
 
 
 def prepare_model() -> None:

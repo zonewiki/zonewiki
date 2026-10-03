@@ -2188,12 +2188,22 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
 
 # None unless LEAF_EMBEDDINGS is set: then search is hybrid (BM25 fused with
 # vector similarity) and pages list their nearest neighbours as Related.
-SEMANTIC = embed.from_env(WIKI_DIR, lambda: [(s, p) for p, s in iter_pages()], _semantic_text)
+SEMANTIC = embed.from_env(
+    WIKI_DIR, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
+    # A task is embedded as its search text: title, notes and #tags.
+    tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deck_module.task_search_docs()])
 if SEMANTIC:
     SEMANTIC.start()
 
 # How deep each ranking goes into the fusion; the fused list is cut to 15.
 FUSE_DEPTH = 30
+
+
+def _by_similarity(*hit_lists: list[tuple[dict, float]]) -> list[dict]:
+    """One semantic ranking from several (doc, similarity) lists, e.g. page
+    sections and tasks: all come from the same model, so their cosine
+    similarities compare directly."""
+    return [d for d, _s in sorted((h for hits in hit_lists for h in hits), key=lambda h: -h[1])]
 
 
 def _ranked_docs(q: str, index: search.SearchIndex) -> tuple[list[dict], dict[str, str]]:
@@ -2205,10 +2215,14 @@ def _ranked_docs(q: str, index: search.SearchIndex) -> tuple[list[dict], dict[st
         return bm25, {}
     SEMANTIC.poke()
     pages = {d["slug"]: d for d in index.docs if d.get("type") != "task"}
+    tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
-    if not hits:
+    task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
+    if not hits and not task_hits:
         return bm25[:15], {}
-    fused = search.fuse([bm25, [pages[slug] for slug, _s, _t in hits]])
+    semantic = _by_similarity([(pages[slug], sc) for slug, sc, _t in hits],
+                              [(tasks[i], sc) for i, sc in task_hits])
+    fused = search.fuse([bm25, semantic[:FUSE_DEPTH]])
     return fused[:15], {slug: text for slug, _s, text in hits}
 
 
@@ -2322,10 +2336,14 @@ def retrieve(q: str, limit: int = 8, under: str | None = None) -> list[dict]:
         SEMANTIC.poke()
         sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)]
         by_key = {d["key"]: d for d in sections}
-        keys = SEMANTIC.search_chunks(q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH)
-        hits = [by_key[k] for k in keys if k in by_key]
-        if hits:
-            ranked = search.fuse([ranked, hits])
+        hits = [(by_key[k], sc) for k, sc in SEMANTIC.search_chunks(
+            q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH) if k in by_key]
+        task_hits = []
+        if not under:
+            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"}
+            task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
+        if hits or task_hits:
+            ranked = search.fuse([ranked, _by_similarity(hits, task_hits)[:FUSE_DEPTH]])
     return ranked[:limit]
 
 
@@ -2415,7 +2433,13 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
 
     docs = [d for d in deck_module.task_search_docs() if matches(d["task"])]
     if query.strip():
-        docs = [d for _s, d in search.SearchIndex(docs).search(query, limit=max(len(docs), 1))]
+        ranked = [d for _s, d in search.SearchIndex(docs).search(query, limit=max(len(docs), 1))]
+        if SEMANTIC:
+            SEMANTIC.poke()
+            by_id = {d["task_id"]: d for d in docs}
+            hits = [by_id[i] for i, _sc in SEMANTIC.search_tasks(query, known=by_id, limit=len(by_id) or 1)]
+            ranked = search.fuse([ranked, hits])
+        docs = ranked
     else:
         open_ = sorted((d for d in docs if not d["task"].get("completed_at")),
                        key=lambda d: (d["task"].get("due_date") or "9999",
