@@ -695,12 +695,15 @@ def test_list_tag_comes_first_and_bold(page, wiki):
 
 
 def test_filter_shows_only_list_tags_bold(page, wiki):
+    page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries,weekly,hardware,dairy"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries tag=weekly]]\n")
     wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
     page.goto("/page/shop?view=open")
     filt = page.locator("#task-filter-search")
     filt.click()
-    page.keyboard.type("#hardware #dairy ")
+    for partial in ("#hard", "#dai"):           # chips come from completion
+        page.keyboard.type(partial)
+        page.keyboard.press("Enter")
     chips = page.locator(".tasks-toolbar .tag-chip")
     expect(chips.locator(".tag-chip-label")).to_have_text(
         ["#groceries", "#hardware", "#weekly", "#dairy"])
