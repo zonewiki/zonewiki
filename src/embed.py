@@ -57,6 +57,23 @@ THRESHOLDS = {
 }
 DEFAULT_THRESHOLDS = (0.4, 0.4)
 
+# A page with less prose than this neither gets a Related list nor appears
+# in one; search still finds it. Prose is the letters and digits outside
+# links (prose_chars): a page that is only a title, or a hub that is only a
+# list of links, has a vector that is little more than its title or an
+# average of everything it links to, so its "nearest" pages were noise.
+RELATED_MIN_CHARS = 100
+
+# What doesn't count as prose: [[wikilinks]], [labels] (chunks keep a link's
+# label, its target is already gone), image alts, and bare URLs.
+_LINKISH_RE = re.compile(r"\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://\S+|www\.\S+")
+_PROSE_CHAR_RE = re.compile(r"[^\W_]")
+
+
+def prose_chars(text: str) -> int:
+    """Letters and digits in text outside links (see RELATED_MIN_CHARS)."""
+    return len(_PROSE_CHAR_RE.findall(_LINKISH_RE.sub(" ", text)))
+
 # Sections longer than this are split at paragraphs. Small models only read
 # the first ~128–512 tokens of an input, so a long section's tail would be lost.
 MAX_CHUNK_CHARS = 800
@@ -262,7 +279,8 @@ class SemanticIndex:
                  pages_fn: Callable[[], Iterable[tuple[str, Path]]],
                  prepare: Callable[[str, str], tuple[str, str]],
                  min_score: float | None = None,
-                 related_min_score: float | None = None):
+                 related_min_score: float | None = None,
+                 related_min_chars: int = RELATED_MIN_CHARS):
         self.embedder = embedder
         self.cache_path = cache_path
         self.pages_fn = pages_fn
@@ -271,6 +289,7 @@ class SemanticIndex:
                                                      DEFAULT_THRESHOLDS)
         self.min_score = search_floor if min_score is None else min_score
         self.related_min_score = related_floor if related_min_score is None else related_min_score
+        self.related_min_chars = related_min_chars
         self._lock = threading.Lock()      # guards the state below
         self._sync_lock = threading.Lock()  # one sync at a time
         # slug -> {"mtime", "chunks": [[hash, text], …]}
@@ -478,19 +497,25 @@ class SemanticIndex:
         hits = sorted(self._chunk_scores(query, known), key=lambda x: -x[2])
         return [h for _slug, h, _s, _t in hits[:limit]]
 
+    def _has_content(self, page: dict | None) -> bool:
+        return bool(page) and sum(prose_chars(t) for _h, t in page["chunks"]) >= self.related_min_chars
+
     def related(self, slug: str, known: Iterable[str] | None = None,
                 exclude: Iterable[str] = (), limit: int = 5) -> list[tuple[str, float]]:
-        """The pages most similar to slug (by their mean vectors), best first."""
+        """The pages most similar to slug (by their mean vectors), best first.
+        Pages with little prose (related_min_chars) take no part, either way."""
         with self._lock:
-            page_vecs = self._page_vecs
+            pages, page_vecs = self._pages, self._page_vecs
         me = page_vecs.get(slug)
-        if me is None:
+        if me is None or not self._has_content(pages.get(slug)):
             return []
         known = set(known) if known is not None else None
         skip = set(exclude) | {slug}
         scored = []
         for other, v in page_vecs.items():
             if other in skip or (known is not None and other not in known):
+                continue
+            if not self._has_content(pages.get(other)):
                 continue
             s = _dot(me, v)
             if s >= self.related_min_score:

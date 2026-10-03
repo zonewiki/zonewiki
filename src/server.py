@@ -2177,10 +2177,12 @@ def _search_index() -> search.SearchIndex:
 
 def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     """A page as (title, body) for embedding: the tldr and tags lead, the
-    frontmatter block and the H1 (the title already) are dropped."""
+    frontmatter block and the H1 (the title already) are dropped, and so are
+    [[deck …]] and [[toc]] directives. Those are markup, not content: pages
+    holding nothing but a deck embed came out as each other's closest match."""
     meta, body = parse_frontmatter(content)
     lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
-    body = strip_h1(body)
+    body = _TOC_RE.sub("", deck_module._DECK_RE.sub("", strip_h1(body)))
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
 
 

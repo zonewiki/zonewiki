@@ -66,6 +66,8 @@ def make_index(wiki, embedder=None, **kw):
         server._semantic_text,
         min_score=kw.pop("min_score", 0.5),
         related_min_score=kw.pop("related_min_score", 0.5),
+        # The test pages are short; tests of the thin-page rule pass their own.
+        related_min_chars=kw.pop("related_min_chars", 0),
         **kw,
     )
 
@@ -116,6 +118,16 @@ class TestChunkPage:
 
 
 class TestSemanticText:
+    def test_deck_and_toc_directives_dropped(self):
+        # Pages holding only a deck embed were each other's closest match.
+        title, body = server._semantic_text(
+            "# Leaf\n\n[[toc]]\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
+        assert "deck" not in body.lower() and "toc" not in body
+        assert "Notes  here." in body
+
+    def test_only_a_deck_embed_leaves_no_body(self):
+        assert server._semantic_text("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf")[1].strip() == ""
+
     def test_frontmatter_and_h1_dropped_tldr_and_tags_lead(self):
         title, body = server._semantic_text(
             "---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")
@@ -237,6 +249,37 @@ class TestSemanticIndex:
         semantic.sync()
         assert [s for s, _ in semantic.related("golf")] == ["brakes"]
         assert semantic.related("golf", exclude={"brakes"}) == []
+
+    def test_thin_pages_take_no_part_in_related(self, wiki_dir):  # noqa: F811
+        long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
+        write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")
+        write_page(wiki_dir, "brakes", f"# Brakes\n\n{long}\n")
+        write_page(wiki_dir, "garage", "# Garage\n\nMechaniker.\n")   # thin, same topic
+        idx = make_index(wiki_dir, related_min_chars=100)
+        idx.sync()
+        assert [s for s, _ in idx.related("golf")] == ["brakes"]    # garage is not offered
+        assert idx.related("garage") == []                         # and gets no list
+        assert idx.search("car repair")                            # but search finds them all
+        assert "garage" in {s for s, _sc, _t in idx.search("car repair")}
+
+    def test_link_hubs_take_no_part_in_related(self, wiki_dir):  # noqa: F811
+        long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
+        write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")
+        write_page(wiki_dir, "brakes", f"# Brakes\n\n{long}\n")
+        hub = "\n".join(f"- [[Werkstatt Mechaniker {i}]]\n- [Bremsen {i}](golf-{i}.md)" for i in range(10))
+        write_page(wiki_dir, "index", f"# Home\n\n{hub}\n- https://example.com/werkstatt/mechaniker\n")
+        idx = make_index(wiki_dir, related_min_chars=100)
+        idx.sync()
+        assert idx.related("index") == []
+        assert [s for s, _ in idx.related("golf")] == ["brakes"]
+
+    def test_prose_chars(self):
+        assert embed.prose_chars("- [[People and Teams]]\n- [Projects]\n- ![img]\n- https://x.org/a") == 0
+        assert embed.prose_chars("See [[State]] for the plan, ok?") == len("Seefortheplanok")
+        assert embed.prose_chars("Werkstatt_2026") == len("Werkstatt2026")
+
+    def test_default_cut_off(self, wiki_dir):  # noqa: F811
+        assert make_index(wiki_dir, related_min_chars=embed.RELATED_MIN_CHARS).related_min_chars == 100
 
     def test_worker_picks_up_changes(self, wiki_dir):  # noqa: F811
         idx = make_index(wiki_dir)
@@ -377,6 +420,16 @@ class TestRelated:
 
     def test_absent_when_nothing_similar(self, client, semantic):  # noqa: F811
         assert _related(client, "evening") is None
+
+    def test_absent_on_a_page_that_is_only_a_deck_embed(self, client, wiki_dir, monkeypatch):  # noqa: F811
+        long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
+        write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")
+        write_page(wiki_dir, "car-tasks", "# Golf tasks\n\n[[deck tag=golf]]\n")
+        idx = make_index(wiki_dir, related_min_chars=embed.RELATED_MIN_CHARS)
+        idx.sync()
+        monkeypatch.setattr(server, "SEMANTIC", idx)
+        assert _related(client, "car-tasks") is None
+        assert _related(client, "golf") is None  # car-tasks isn't offered either
 
     def test_absent_without_semantic(self, client, semantic, wiki_dir, monkeypatch):  # noqa: F811
         write_page(wiki_dir, "brakes", "# Brakes\n\nBremsen beim Mechaniker.\n")
