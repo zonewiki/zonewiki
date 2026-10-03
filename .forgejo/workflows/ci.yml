@@ -5,6 +5,7 @@
 # docker socket (`container.docker_host: automount`), plus two repo settings:
 #   secret   REGISTRY_TOKEN  access token with package write scope
 #   variable REGISTRY_USER   (optional) its owner, default: the repo owner
+#   variable REGISTRY        (optional) registry host, default: git.example.org
 name: CI
 
 on:
@@ -73,8 +74,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Image name and tags
         id: meta
+        env:
+          # Forgejo's public address: the host's engine logs in and pushes,
+          # and GITHUB_SERVER_URL is the runner's internal one (http://web:3000).
+          REGISTRY: ${{ vars.REGISTRY || 'git.example.org' }}
         run: |
-          registry="${GITHUB_SERVER_URL#*://}"
+          registry="$REGISTRY"
           image="$registry/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           sha=$(git rev-parse --short HEAD)
           tags="$image:$sha"
