@@ -40,8 +40,8 @@ def wiki_dir(tmp_path):
     server.WIKI_DIR = tmp_path
     server.UPLOADS_DIR = tmp_path / "_assets"
     server.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    deck_module.DECK_FILE = tmp_path / "_deck.json"
-    server.DECK_FILE = tmp_path / "_deck.json"
+    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
+    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
     server._search_doc_cache.clear()
     server._page_meta_cache.clear()
     deck_module._task_docs_cache["key"] = None
@@ -1535,7 +1535,7 @@ class TestRenameUpdatesAllReferences:
     def test_rename_without_deck_files_does_not_create_them(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         self.rename(client, "old", "new")
-        assert not (wiki_dir / "_deck.json").exists()
+        assert not (wiki_dir / "_deck" / "tasks.json").exists()
 
 
 # ===========================================================================

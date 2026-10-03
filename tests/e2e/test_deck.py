@@ -1109,7 +1109,7 @@ def test_history_in_edit_modal_and_undo_leaves_no_trace(page, wiki):
 def test_history_of_a_task_from_before_the_log(page, wiki):
     # No history field yet: the modal still shows when it was created.
     import json
-    (wiki.root / "_deck.json").write_text(json.dumps([{
+    (wiki.root / "_deck" / "tasks.json").write_text(json.dumps([{
         "id": "old-1", "title": "Ancient", "created_at": "2025-03-04T09:15:00"}]))
     page.goto("/deck?view=open")
     card(page, "Ancient").click()
@@ -1248,7 +1248,7 @@ def test_completed_shows_earlier_years(page, wiki):
     """Earlier years' completed tasks (the yearly archives) are one click
     away in Completed, and a search link to one opens its year."""
     year = date.today().year
-    (wiki.root / f"_deck_completed-{year-1}.json").write_text(
+    (wiki.root / "_deck" / f"completed-{year-1}.json").write_text(
         '[{"id": "old", "title": "Old done", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1),
         encoding="utf-8")
     tid = page.request.post("/api/deck", data={"title": "New done"}).json()["id"]

@@ -13,7 +13,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in `pages/` are the wiki content. Deliberate exception: Deck tasks live in `_deck.json`/`_deck_completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+- **Markdown is the source of truth** — `.md` files in `pages/` are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -30,7 +30,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
-| Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck*.json`) |
+| Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck/*.json`) |
 | Container           | Podman (Ubuntu 26.04 LTS base image)        |
 
 No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
@@ -121,6 +121,8 @@ WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$WIKI_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$WIKI_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
+- `$WIKI_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Deck → Storage)
+- `$WIKI_DATA/_index/` — the semantic search cache (rebuildable, not in git)
 
 Uploaded image URLs use `/_assets/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
 
@@ -150,7 +152,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
-| GET    | `/api/deck`           | JSON list of all tasks from `_deck.json` |
+| GET    | `/api/deck`           | JSON list of all open tasks (`_deck/tasks.json`) |
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201). |
 | PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, keep, last_done, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. `completed: true` on a keep task does not archive it (see Keep tasks). |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204. |
@@ -473,7 +475,7 @@ Several embeds per page work: each instance keeps its own task array, and a writ
 
 ### Storage
 
-- Open tasks live in `_deck.json`, completed ones in `_deck_completed.json` (flat JSON arrays, committed to git on change). Completed tasks from earlier years live in `_deck_completed-YYYY.json` (only that exact name is an archive). Write routes read every completed file (`_read_completed_all_strict`) and `_write_completed` files each task by its completion year, writing only files whose content changed; startup does the same split (`_archive_old_completed`) for a year change without writes. So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
+- The deck's files live in the `_deck/` folder (`deck.DECK_FILE` and paths derived from it): open tasks in `tasks.json`, completed ones in `completed.json` (flat JSON arrays, committed to git on change). Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive). Until 2026-10 the files sat in the wiki's root as `_deck/tasks.json`, `_deck_completed.json` and `_deck_completed-YYYY.json`; on startup `_move_into_deck_dir()` moves them into `_deck/` in one commit (git sees renames, `--follow` keeps the history), leaving a file in place if its new name is taken. `_atomic_write` creates the folder, so a new wiki gets it on the first write. Write routes read every completed file (`_read_completed_all_strict`) and `_write_completed` files each task by its completion year, writing only files whose content changed; startup does the same split (`_archive_old_completed`) for a year change without writes. So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
 - All mutations go through a module lock (`_LOCK`) and atomic writes (temp file + `os.replace`); the dev server is threaded. Write paths use a strict reader that raises `_DeckCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - Request bodies are validated (`_json_object`, `_as_str`, `_as_int`, `_as_str_list`, `_id_list`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
 - `_normalize_task()` upgrades legacy fields on every read and restore (`focus_date` → `start_date`, `defer_days`, `recurrence.anchor`, `page`); `_migrate_deck_files()` rewrites the files once at startup in its own commit.
@@ -551,11 +553,11 @@ The edit modal shows it in a closed **History** section (newest first, with a co
 
 ### Keep tasks
 
-A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool". It suits a shopping list used with the deck's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open. Completing a keep task (`_keep_done`, in `PUT` and in `batch-complete`) clears its start date, its deadline and its Lineup place, and sets `last_done` to today; it stays in `_deck.json` with the same id, tags, notes and place in Open's order, and Completed stays empty. Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`; `focus_order` is sent explicitly so it isn't cleared). **Won't do** and **Delete** retire a staple. Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked. Cards mark keep tasks with ⟲ (`.task-keep`). `[[deck keep=1]]` makes new tasks keep tasks.
+A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool". It suits a shopping list used with the deck's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open. Completing a keep task (`_keep_done`, in `PUT` and in `batch-complete`) clears its start date, its deadline and its Lineup place, and sets `last_done` to today; it stays in `_deck/tasks.json` with the same id, tags, notes and place in Open's order, and Completed stays empty. Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`; `focus_order` is sent explicitly so it isn't cleared). **Won't do** and **Delete** retire a staple. Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked. Cards mark keep tasks with ⟲ (`.task-keep`). `[[deck keep=1]]` makes new tasks keep tasks.
 
 ### Separate lists
 
-A task's `list` field puts it in a named list shown only in `[[deck list=<name>]]` embeds and at `/deck?list=<name>`. List tasks are kept out of the main deck, tag embeds, the due badge and the main Completed count. `deck.js` drops out-of-scope tasks right after fetching (`inScope`), so suggestions, counts and reordering only see the list's own tasks. Storage is still `_deck.json`; the edit modal's List field (suggestions from `known_lists()`) moves tasks between lists. Search results and Linked tasks link to `/deck?…&list=<name>`.
+A task's `list` field puts it in a named list shown only in `[[deck list=<name>]]` embeds and at `/deck?list=<name>`. List tasks are kept out of the main deck, tag embeds, the due badge and the main Completed count. `deck.js` drops out-of-scope tasks right after fetching (`inScope`), so suggestions, counts and reordering only see the list's own tasks. Storage is still `_deck/tasks.json`; the edit modal's List field (suggestions from `known_lists()`) moves tasks between lists. Search results and Linked tasks link to `/deck?…&list=<name>`.
 
 ### Touch
 

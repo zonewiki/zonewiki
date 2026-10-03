@@ -1,7 +1,8 @@
 """Deck — task management module for Leaf wiki.
 
 Provides:
-- Task CRUD operations and storage (_deck.json for active, _deck_completed.json for completed)
+- Task CRUD operations and storage, in the _deck/ folder: tasks.json (open),
+  completed.json (completed this year), completed-YYYY.json (earlier years)
 - [[deck]] embed HTML generation
 - Task backlink resolution
 - API route registration via Blueprint
@@ -45,30 +46,63 @@ def _locked(fn):
 
 # These are set by init_deck() from server.py
 WIKI_DIR: Path = Path(".")
-DECK_FILE: Path = Path("_deck.json")
+DECK_FILE: Path = Path("_deck/tasks.json")   # the open tasks; the rest sit beside it
+DECK_DIR_NAME = "_deck"
 GIT_ENABLED: bool = False
 _git_commit_fn = None  # type: ignore
 
 
 def _completed_path() -> Path:
     """Derive the completed-tasks file path from DECK_FILE (same directory)."""
-    return DECK_FILE.parent / "_deck_completed.json"
+    return DECK_FILE.parent / "completed.json"
 
 
 def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     """Initialize module-level state from the main server."""
     global WIKI_DIR, DECK_FILE, GIT_ENABLED, _git_commit_fn
     WIKI_DIR = wiki_dir
-    DECK_FILE = wiki_dir / "_deck.json"
+    DECK_FILE = wiki_dir / DECK_DIR_NAME / "tasks.json"
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
+    _move_into_deck_dir()
     _migrate_completed_split()
     _migrate_deck_files()
     _archive_old_completed()
 
 
+# Before the _deck/ folder, the files sat in the wiki's root.
+_OLD_ROOT_FILES_RE = re.compile(r"_deck(?:_completed(?:-(\d{4}))?)?\.json")
+
+
+def _move_into_deck_dir() -> None:
+    """One-time move of the deck files from the wiki's root into _deck/
+    (_deck.json → tasks.json, _deck_completed.json → completed.json,
+    _deck_completed-YYYY.json → completed-YYYY.json), in one commit, so git
+    sees renames and each file keeps its history. A file whose new name is
+    taken already stays where it is."""
+    moves = []
+    for old in sorted(WIKI_DIR.glob("_deck*.json")):
+        m = _OLD_ROOT_FILES_RE.fullmatch(old.name)
+        if not m:
+            continue
+        name = ("tasks.json" if old.name == "_deck.json"
+                else f"completed-{m.group(1)}.json" if m.group(1) else "completed.json")
+        new = DECK_FILE.parent / name
+        if new.exists():
+            print(f"[deck] {old.name} not moved: {new} exists", flush=True)
+            continue
+        moves.append((old, new))
+    if not moves:
+        return
+    DECK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    for old, new in moves:
+        os.replace(old, new)
+    if GIT_ENABLED and _git_commit_fn:
+        _git_commit_fn([p for move in moves for p in move], "Move deck files into _deck/")
+
+
 def _migrate_completed_split() -> None:
-    """One-time migration: move completed tasks from _deck.json into _deck_completed.json."""
+    """One-time migration: move completed tasks from tasks.json into completed.json."""
     completed_file = _completed_path()
     if completed_file.exists() or not DECK_FILE.exists():
         return
@@ -101,6 +135,7 @@ def _atomic_write(path: Path, text: str) -> None:
     sees either the complete old file or the complete new file — never the
     zero-length window that ``open('w')`` exposes between truncate and write.
     """
+    path.parent.mkdir(parents=True, exist_ok=True)   # _deck/ in a new wiki
     tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}-{threading.get_ident()}")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
@@ -255,17 +290,17 @@ def _read_completed() -> list[dict]:
     return _read_list_lenient(_completed_path())
 
 
-_ARCHIVE_NAME_RE = re.compile(r"_deck_completed-(\d{4})\.json")
+_ARCHIVE_NAME_RE = re.compile(r"completed-(\d{4})\.json")
 
 
 def _archive_glob() -> list[Path]:
-    """Per-year archive files, e.g. _deck_completed-2025.json (sorted)."""
-    return sorted(p for p in DECK_FILE.parent.glob("_deck_completed-*.json")
+    """Per-year archive files, e.g. completed-2025.json (sorted)."""
+    return sorted(p for p in DECK_FILE.parent.glob("completed-*.json")
                   if _ARCHIVE_NAME_RE.fullmatch(p.name))
 
 
 def _archive_path(year: str) -> Path:
-    return DECK_FILE.parent / f"_deck_completed-{year}.json"
+    return DECK_FILE.parent / f"completed-{year}.json"
 
 
 def _completed_year(task: dict) -> str:
@@ -293,8 +328,8 @@ def _read_completed_all_strict() -> list[dict]:
 
 
 def _write_completed(completed: list[dict]) -> list[Path]:
-    """Write completed tasks split by year: this year's into _deck_completed.json,
-    earlier years' into _deck_completed-YYYY.json. Only files whose content
+    """Write completed tasks split by year: this year's into completed.json,
+    earlier years' into completed-YYYY.json. Only files whose content
     changes are written; returns their paths (for the commit)."""
     current = str(date.today().year)
     by_path: dict[Path, list[dict]] = {_completed_path(): []}
@@ -353,7 +388,7 @@ def _read_archived() -> list[dict]:
 
 
 def _archive_old_completed() -> None:
-    """Roll completed tasks from previous years into _deck_completed-YYYY.json.
+    """Roll completed tasks from previous years into completed-YYYY.json.
 
     Runs at startup so the current completed file stays small; every write
     also files tasks by year (_write_completed), so this only matters after

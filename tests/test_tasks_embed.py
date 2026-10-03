@@ -25,8 +25,9 @@ def wiki_dir(tmp_path):
     orig_deck = deck_module.DECK_FILE
     server.WIKI_DIR = tmp_path
     server.PAGES_DIR = tmp_path
-    deck_module.DECK_FILE = tmp_path / "_deck.json"
-    server.DECK_FILE = tmp_path / "_deck.json"
+    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
+    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
+    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
     (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
     yield tmp_path
     server.WIKI_DIR = orig_wiki
@@ -236,7 +237,7 @@ class TestPageFieldRemoved:
         assert resp.status_code == 200 and "page" not in resp.get_json()
 
     def test_stored_page_becomes_wikilink(self, client, wiki_dir):
-        (wiki_dir / "_deck.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
             {"id": "a", "title": "Prune", "description": "Roses", "page": "garden"},
             {"id": "b", "title": "Bare", "page": "garden"},
             {"id": "c", "title": "Water [[Garden]]", "page": "garden"},
@@ -253,13 +254,13 @@ class TestPageFieldRemoved:
 
     def test_migrated_task_is_linked_task(self, client, wiki_dir):
         (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
-        (wiki_dir / "_deck.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
             {"id": "a", "title": "Prune", "page": "garden"}]), encoding="utf-8")
         body = client.get("/page/garden").get_data(as_text=True)
         assert 'id="task-backlinks"' in body and "Prune" in body
 
     def test_startup_migration_rewrites_file(self, wiki_dir):
-        path = wiki_dir / "_deck.json"
+        path = wiki_dir / "_deck" / "tasks.json"
         path.write_text(json.dumps([{"id": "a", "title": "P", "page": "garden"}]), encoding="utf-8")
         deck_module._migrate_deck_files()
         stored = json.loads(path.read_text(encoding="utf-8"))

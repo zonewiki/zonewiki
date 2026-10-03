@@ -17,8 +17,8 @@ def _task(page, **fields):
 
 def _deck_task(wiki, task_id):
     """The task as stored, open or completed (None if neither)."""
-    for name in ("_deck.json", "_deck_completed.json"):
-        path = wiki.root / name
+    for name in ("tasks.json", "completed.json"):
+        path = wiki.root / "_deck" / name
         if path.exists():
             for t in json.loads(path.read_text()):
                 if t["id"] == task_id:
@@ -89,7 +89,7 @@ def test_format_bar_button_starts_a_task_reference(page, wiki):
 # ── Make task (from the editor) ──────────────────────────────────────────────
 
 def _open_tasks(wiki):
-    path = wiki.root / "_deck.json"
+    path = wiki.root / "_deck" / "tasks.json"
     return json.loads(path.read_text()) if path.exists() else []
 
 

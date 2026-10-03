@@ -56,9 +56,10 @@ def wiki(tmp_path, monkeypatch, base_url):
     monkeypatch.setattr(server, "WIKI_DIR", tmp_path)
     monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
     monkeypatch.setattr(server, "UPLOADS_DIR", tmp_path / "_assets")
-    monkeypatch.setattr(server, "DECK_FILE", tmp_path / "_deck.json")
+    monkeypatch.setattr(server, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
     monkeypatch.setattr(server, "GIT_REMOTE", "")
-    monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck.json")
+    monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
+    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
     monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
     server._search_doc_cache.clear()
     server._page_meta_cache.clear()

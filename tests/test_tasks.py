@@ -27,8 +27,9 @@ def wiki_dir(tmp_path):
     orig_deck = deck_module.DECK_FILE
     server.WIKI_DIR = tmp_path
     server.PAGES_DIR = tmp_path
-    deck_module.DECK_FILE = tmp_path / "_deck.json"
-    server.DECK_FILE = tmp_path / "_deck.json"
+    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
+    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
+    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
     server._page_meta_cache.clear()
     deck_module._task_docs_cache["key"] = None
     deck_module._task_docs_cache["docs"] = []
@@ -747,7 +748,7 @@ class TestFocusOrderReset:
 
     def test_stale_place_outside_focus_is_dropped_on_read(self, client, wiki_dir):
         later = (date.today() + timedelta(days=7)).isoformat()
-        (wiki_dir / "_deck.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
             {"id": "s", "title": "Stale", "due_date": later, "focus_order": 3},
             {"id": "f", "title": "Focus", "start_date": date.today().isoformat(), "focus_order": 1},
         ]), encoding="utf-8")
@@ -884,36 +885,36 @@ class TestDateModelMigration:
         assert t["recurrence"] == {"type": "weekly", "interval": 1, "from": "due"}
 
     def test_read_normalizes(self, client, wiki_dir):
-        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
         [t] = client.get("/api/deck").get_json()
         self._assert_new(t)
 
     def test_write_persists_normalized(self, client, wiki_dir):
-        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
         client.put("/api/deck/old-1", json={"title": "Renamed"})
-        [t] = json.loads((wiki_dir / "_deck.json").read_text(encoding="utf-8"))
+        [t] = json.loads((wiki_dir / "_deck" / "tasks.json").read_text(encoding="utf-8"))
         self._assert_new(t)
 
     def test_startup_migration_rewrites_every_file(self, client, wiki_dir):
         done = {**self.OLD, "id": "old-2", "completed_at": "2026-02-01T00:00:00"}
-        (wiki_dir / "_deck.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
-        (wiki_dir / "_deck_completed.json").write_text(json.dumps([done]), encoding="utf-8")
-        (wiki_dir / "_deck_completed-2025.json").write_text(json.dumps([done]), encoding="utf-8")
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
+        (wiki_dir / "_deck" / "completed.json").write_text(json.dumps([done]), encoding="utf-8")
+        (wiki_dir / "_deck" / "completed-2025.json").write_text(json.dumps([done]), encoding="utf-8")
         deck_module._migrate_deck_files()
-        for name in ("_deck.json", "_deck_completed.json", "_deck_completed-2025.json"):
-            [t] = json.loads((wiki_dir / name).read_text(encoding="utf-8"))
+        for name in ("tasks.json", "completed.json", "completed-2025.json"):
+            [t] = json.loads((wiki_dir / "_deck" / name).read_text(encoding="utf-8"))
             self._assert_new(t)
 
     def test_startup_migration_leaves_new_files_untouched(self, client, wiki_dir):
         create_task(client, title="New", start_date="2027-01-01")
-        path = wiki_dir / "_deck.json"
+        path = wiki_dir / "_deck" / "tasks.json"
         before = path.stat().st_mtime_ns
         deck_module._migrate_deck_files()
         assert path.stat().st_mtime_ns == before
 
     def test_old_recurring_task_carries_gap(self, client, wiki_dir):
         old = {**self.OLD, "due_date": "2099-01-10", "focus_date": "2099-01-07"}
-        (wiki_dir / "_deck.json").write_text(json.dumps([old]), encoding="utf-8")
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([old]), encoding="utf-8")
         client.put("/api/deck/old-1", json={"completed": True})
         [spawned] = client.get("/api/deck").get_json()
         assert spawned["due_date"] == "2099-01-17"
@@ -922,7 +923,7 @@ class TestDateModelMigration:
     def test_old_plan_anchored_series_steps_start_date(self, client, wiki_dir):
         old = {**self.OLD, "due_date": None, "defer_days": None, "focus_date": "2099-01-07",
                "recurrence": {"type": "weekly", "interval": 1, "from": "due", "anchor": "plan"}}
-        (wiki_dir / "_deck.json").write_text(json.dumps([old]), encoding="utf-8")
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([old]), encoding="utf-8")
         client.put("/api/deck/old-1", json={"completed": True})
         [spawned] = client.get("/api/deck").get_json()
         assert spawned["start_date"] == "2099-01-14"
@@ -1134,7 +1135,7 @@ class TestCompletedMigration:
     """Coverage for _migrate_completed_split() (one-time startup migration)."""
 
     def _completed_file(self):
-        return deck_module.DECK_FILE.parent / "_deck_completed.json"
+        return deck_module.DECK_FILE.parent / "completed.json"
 
     def test_migration_splits_mixed_file(self, wiki_dir):
         import json
@@ -1292,7 +1293,7 @@ class TestConcurrentWriteSafety:
         """A zero-length _deck.json (a torn write) must not be treated as an
         empty list and clobbered — the create is refused with 503."""
         create_task(client, title="Keeper")
-        deck_file = wiki_dir / "_deck.json"
+        deck_file = wiki_dir / "_deck" / "tasks.json"
         deck_file.write_text("", encoding="utf-8")  # simulate a torn write
         resp = create_task(client, title="Would clobber")
         assert resp.status_code == 503
@@ -1301,7 +1302,7 @@ class TestConcurrentWriteSafety:
 
     def test_corrupt_deck_file_is_not_overwritten(self, client, wiki_dir):
         create_task(client, title="Keeper")
-        deck_file = wiki_dir / "_deck.json"
+        deck_file = wiki_dir / "_deck" / "tasks.json"
         deck_file.write_text("{ this is not json", encoding="utf-8")
         resp = create_task(client, title="Would clobber")
         assert resp.status_code == 503
@@ -1309,7 +1310,7 @@ class TestConcurrentWriteSafety:
 
     def test_genuinely_empty_deck_still_creates(self, client, wiki_dir):
         """An empty deck is stored as '[]', which must still accept new tasks."""
-        deck_file = wiki_dir / "_deck.json"
+        deck_file = wiki_dir / "_deck" / "tasks.json"
         deck_file.write_text("[]", encoding="utf-8")
         resp = create_task(client, title="First")
         assert resp.status_code == 201
@@ -1331,7 +1332,7 @@ class TestConcurrentWriteSafety:
         for t in threads:
             t.join()
 
-        titles = [t["title"] for t in json.loads((wiki_dir / "_deck.json").read_text())]
+        titles = [t["title"] for t in json.loads((wiki_dir / "_deck" / "tasks.json").read_text())]
         assert len(titles) == threads_n * per_thread
         assert len(set(titles)) == threads_n * per_thread
 
@@ -1344,7 +1345,7 @@ class TestConcurrentWriteSafety:
         def reader():
             while not stop.is_set():
                 try:
-                    raw = (wiki_dir / "_deck.json").read_text(encoding="utf-8")
+                    raw = (wiki_dir / "_deck" / "tasks.json").read_text(encoding="utf-8")
                 except FileNotFoundError:
                     continue  # not created yet, before the first write
                 if raw == "":
@@ -1493,7 +1494,7 @@ class TestSpawnedFrom:
         task = create_task(client, title="Legacy", due_date=_future(5),
                            rec_type="daily", rec_interval=1).get_json()
         client.put(f"/api/deck/{task['id']}", json={"completed": True})
-        deck_file = wiki_dir / "_deck.json"
+        deck_file = wiki_dir / "_deck" / "tasks.json"
         data = json.loads(deck_file.read_text(encoding="utf-8"))
         for t in data:
             t.pop("spawned_from", None)
@@ -1668,7 +1669,7 @@ class TestLimitParam:
 
 class TestCompletedArchive:
     def _seed_completed(self, wiki_dir, tasks):
-        (wiki_dir / "_deck_completed.json").write_text(
+        (wiki_dir / "_deck" / "completed.json").write_text(
             json.dumps(tasks), encoding="utf-8")
 
     def test_old_years_rolled_into_archives(self, client, wiki_dir):
@@ -1679,23 +1680,23 @@ class TestCompletedArchive:
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
         deck_module._archive_old_completed()
-        hot = json.loads((wiki_dir / "_deck_completed.json").read_text(encoding="utf-8"))
+        hot = json.loads((wiki_dir / "_deck" / "completed.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in hot] == ["new1"]
-        arch1 = json.loads((wiki_dir / f"_deck_completed-{year-2}.json").read_text(encoding="utf-8"))
-        arch2 = json.loads((wiki_dir / f"_deck_completed-{year-1}.json").read_text(encoding="utf-8"))
+        arch1 = json.loads((wiki_dir / "_deck" / f"completed-{year-2}.json").read_text(encoding="utf-8"))
+        arch2 = json.loads((wiki_dir / "_deck" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch1] == ["old1"]
         assert [t["id"] for t in arch2] == ["old2"]
 
     def test_archive_merges_into_existing_file(self, client, wiki_dir):
         year = date.today().year
-        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(
+        (wiki_dir / "_deck" / f"completed-{year-1}.json").write_text(
             json.dumps([{"id": "prior", "title": "Already archived",
                          "completed_at": f"{year-1}-01-01T10:00:00"}]), encoding="utf-8")
         self._seed_completed(wiki_dir, [
             {"id": "old", "title": "Old", "completed_at": f"{year-1}-06-01T10:00:00"},
         ])
         deck_module._archive_old_completed()
-        arch = json.loads((wiki_dir / f"_deck_completed-{year-1}.json").read_text(encoding="utf-8"))
+        arch = json.loads((wiki_dir / "_deck" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch] == ["prior", "old"]
 
     def test_noop_when_nothing_old(self, client, wiki_dir):
@@ -1704,7 +1705,7 @@ class TestCompletedArchive:
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
         deck_module._archive_old_completed()
-        assert not list(wiki_dir.glob("_deck_completed-*.json"))
+        assert not list((wiki_dir / "_deck").glob("completed-*.json"))
 
     def test_archived_tasks_stay_searchable(self, client, wiki_dir):
         year = date.today().year
@@ -1723,10 +1724,10 @@ class TestCompletedByYear:
 
     def _seed(self, wiki_dir):
         year = date.today().year
-        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / f"completed-{year-1}.json").write_text(json.dumps([
             {"id": "old", "title": "Last year", "completed_at": f"{year-1}-05-01T10:00:00"},
         ]), encoding="utf-8")
-        (wiki_dir / "_deck_completed.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "completed.json").write_text(json.dumps([
             {"id": "new", "title": "This year", "completed_at": f"{year}-01-02T10:00:00"},
         ]), encoding="utf-8")
         return year
@@ -1745,7 +1746,7 @@ class TestCompletedByYear:
         # A year change without a restart: last year's task is still in the
         # current file, but belongs to last year's view.
         year = date.today().year
-        (wiki_dir / "_deck_completed.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "completed.json").write_text(json.dumps([
             {"id": "old", "title": "Old", "completed_at": f"{year-1}-12-31T10:00:00"},
             {"id": "new", "title": "New", "completed_at": f"{year}-01-01T10:00:00"},
         ]), encoding="utf-8")
@@ -1763,19 +1764,19 @@ class TestCompletedByYear:
         year = self._seed(wiki_dir)
         resp = client.put("/api/deck/old", json={"title": "Renamed"})
         assert resp.status_code == 200
-        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        arch = wiki_dir / "_deck" / f"completed-{year-1}.json"
         assert self._ids(arch) == ["old"]
         assert json.loads(arch.read_text(encoding="utf-8"))[0]["title"] == "Renamed"
-        assert self._ids(wiki_dir / "_deck_completed.json") == ["new"]
+        assert self._ids(wiki_dir / "_deck" / "completed.json") == ["new"]
 
     def test_reopen_moves_task_out_of_archive(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         assert client.put("/api/deck/old", json={"completed": False}).status_code == 200
-        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_deck" / f"completed-{year-1}.json") == []
         assert [t["id"] for t in client.get("/api/deck").get_json()] == ["old"]
         # Completed again now, it belongs to this year.
         client.put("/api/deck/old", json={"completed": True})
-        assert self._ids(wiki_dir / "_deck_completed.json") == ["new", "old"]
+        assert self._ids(wiki_dir / "_deck" / "completed.json") == ["new", "old"]
 
     def test_batch_reopen_and_tag_reach_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
@@ -1783,28 +1784,28 @@ class TestCompletedByYear:
         assert tagged[0]["tags"] == ["x"]
         done = client.post("/api/deck/batch-complete", json={"ids": ["old"], "completed": False}).get_json()
         assert [t["id"] for t in done] == ["old"]
-        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_deck" / f"completed-{year-1}.json") == []
 
     def test_delete_and_restore_archived_task(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        arch = wiki_dir / "_deck" / f"completed-{year-1}.json"
         snapshot = json.loads(arch.read_text(encoding="utf-8"))[0]
         assert client.delete("/api/deck/old").status_code == 204
         assert self._ids(arch) == []
         # Undo puts it back into its own year, not this year's file.
         assert client.post("/api/deck/restore", json={"tasks": [snapshot]}).status_code == 201
         assert self._ids(arch) == ["old"]
-        assert self._ids(wiki_dir / "_deck_completed.json") == ["new"]
+        assert self._ids(wiki_dir / "_deck" / "completed.json") == ["new"]
 
     def test_batch_delete_reaches_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         client.post("/api/deck/batch-delete", json={"ids": ["old", "new"]})
-        assert self._ids(wiki_dir / f"_deck_completed-{year-1}.json") == []
-        assert self._ids(wiki_dir / "_deck_completed.json") == []
+        assert self._ids(wiki_dir / "_deck" / f"completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_deck" / "completed.json") == []
 
     def test_unchanged_archives_are_not_rewritten(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / f"_deck_completed-{year-1}.json"
+        arch = wiki_dir / "_deck" / f"completed-{year-1}.json"
         raw = '[{"id": "old", "title": "Last year", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1)
         arch.write_text(raw, encoding="utf-8")
         create_task(client, title="Unrelated")
@@ -1815,7 +1816,7 @@ class TestCompletedByYear:
         # Only _deck_completed-YYYY.json is an archive: anything else that
         # matches the prefix is left alone by the year split.
         self._seed(wiki_dir)
-        other = wiki_dir / "_deck_completed-backup.json"
+        other = wiki_dir / "_deck" / "completed-backup.json"
         other.write_text(json.dumps([{"id": "b", "title": "B", "completed_at": "2001-01-01T00:00:00"}]),
                          encoding="utf-8")
         client.put("/api/deck/new", json={"title": "Edited"})
@@ -1823,7 +1824,7 @@ class TestCompletedByYear:
 
     def test_search_links_archived_task_to_its_year(self, client, wiki_dir):
         year = date.today().year
-        (wiki_dir / f"_deck_completed-{year-1}.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / f"completed-{year-1}.json").write_text(json.dumps([
             {"id": "old", "title": "Zephyrscale audit", "completed_at": f"{year-1}-05-01T10:00:00"},
         ]), encoding="utf-8")
         results = client.get("/api/search?q=zephyrscale").get_json()
@@ -1914,7 +1915,7 @@ class TestNoTaskLinking:
 
     def test_legacy_blocked_by_does_not_hide_from_due_count(self, client, wiki_dir):
         past = (date.today() - timedelta(days=1)).isoformat()
-        (wiki_dir / "_deck.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
             {"id": "a", "title": "Blocker", "created_at": "2026-01-01T00:00:00"},
             {"id": "b", "title": "Was blocked", "due_date": past, "blocked_by": ["a"],
              "created_at": "2026-01-01T00:00:00"},
@@ -1923,7 +1924,7 @@ class TestNoTaskLinking:
 
     def test_legacy_blocked_by_survives_untouched_on_delete(self, client, wiki_dir):
         # Deleting a task no longer rewrites other tasks' dependency lists.
-        (wiki_dir / "_deck.json").write_text(json.dumps([
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
             {"id": "a", "title": "A", "created_at": "2026-01-01T00:00:00"},
             {"id": "b", "title": "B", "blocked_by": ["a"], "created_at": "2026-01-01T00:00:00"},
         ]), encoding="utf-8")
@@ -1966,7 +1967,7 @@ class TestTagCleaning:
     def test_old_file_is_cleaned_on_read_and_migrated_once(self, client, wiki_dir):
         old = {"id": "old-tags", "title": "Old", "tags": ["locallm xxx", "x"],
                "created_at": "2026-01-01T00:00:00"}
-        path = wiki_dir / "_deck.json"
+        path = wiki_dir / "_deck" / "tasks.json"
         path.write_text(json.dumps([old]), encoding="utf-8")
         [t] = client.get("/api/deck").get_json()
         assert t["tags"] == ["locallm-xxx", "x"]
