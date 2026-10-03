@@ -54,6 +54,10 @@ LEAF_BUILD = os.environ.get("LEAF_BUILD") or _source_build()
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
 # Bearer token for /mcp (see mcp_endpoint); needed there when LEAF_PASSWORD is set.
 LEAF_MCP_TOKEN = os.environ.get("LEAF_MCP_TOKEN", "")
+# Leaf's address as the user's browser knows it, for links Leaf hands to an
+# LLM (MCP tools). Unset, links use the address the request came in on,
+# which for a client in a container is e.g. host.containers.internal.
+LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
@@ -2322,7 +2326,7 @@ def _mcp_page_slug(raw: str) -> str | None:
 
 
 def _mcp_call_tool(name: str, args: dict) -> str:
-    base = request.host_url.rstrip("/")
+    base = LEAF_BASE_URL or request.host_url.rstrip("/")
     if name == "search_wiki":
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():

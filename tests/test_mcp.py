@@ -215,6 +215,22 @@ class TestSearchWiki:
         assert call(client, "search_wiki", query="car repair")[0].startswith("No matching")
 
 
+class TestBaseUrl:
+    def test_links_use_request_address_by_default(self, client, pages, monkeypatch):  # noqa: F811
+        monkeypatch.setattr(server, "LEAF_BASE_URL", "")
+        resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
+        assert "url: http://host.containers.internal:5000/page/golf\n" in \
+            resp.get_json()["result"]["content"][0]["text"]
+
+    def test_base_url_wins(self, client, pages, monkeypatch):  # noqa: F811
+        monkeypatch.setattr(server, "LEAF_BASE_URL", "http://wiki.lan:5000")
+        assert "url: http://wiki.lan:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
+        assert "url: http://wiki.lan:5000/page/git-remote#pushing" in \
+            call(client, "search_wiki", query="git push")[0]
+
+
 class TestReadPage:
     @pytest.mark.parametrize("slug", ["golf", "/page/golf", "http://localhost:5000/page/golf#werkstatt",
                                       "golf.md", "Golf"])
