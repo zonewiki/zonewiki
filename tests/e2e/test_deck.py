@@ -602,27 +602,30 @@ def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):
     expect(filt).to_have_text(["#groceries"])
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
-    chips = modal.locator(".tag-chip")
-    expect(chips).to_have_text(["#groceries"])
-    expect(chips.locator(".tag-chip-x")).to_have_count(0)
+    # The task's tags aren't locked: it starts with the list's, removable.
+    expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries"])
+    expect(modal.locator(".tag-chip .tag-chip-x")).to_have_count(1)
     modal.locator("#task-edit-title").fill("Bread")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Bread")).to_be_visible()
     wait_for_field(page, "Bread", "tags", ["groceries"])
 
 
-def test_list_tag_cannot_be_removed_in_the_list(page, wiki):
-    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries,dairy"})
+def test_task_moves_to_another_list(page, wiki):
+    page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
     page.goto("/page/shop?view=open")
-    modal = open_edit(page, "Oat milk")
+    modal = open_edit(page, "Screws")
     modal.locator("#task-edit-tags").click()
-    page.keyboard.press("Backspace")      # removes #dairy
-    page.keyboard.press("Backspace")      # #groceries is locked
-    expect(modal.locator(".tag-chip")).to_have_text(["#groceries"])
+    page.keyboard.press("Backspace")      # drops #groceries
+    page.keyboard.type("hardware,")
     modal.get_by_role("button", name="Save").click()
-    expect(card(page, "Oat milk")).to_be_visible()
-    wait_for_field(page, "Oat milk", "tags", ["groceries"])
+    expect(card(page, "Screws")).to_have_count(0)
+    expect(page.get_by_text("Saved to list “hardware”.")).to_be_visible()
+    wait_for_field(page, "Screws", "tags", ["hardware"])
+    page.goto("/page/diy?view=open")
+    expect(card(page, "Screws")).to_be_visible()
 
 
 def _focus_titles(page):

@@ -1580,7 +1580,7 @@ div.chip-input > input {
   font: inherit; font-size: .85rem; line-height: 1; padding: .1rem .3rem;
 }
 .tag-chip-x:hover { color: var(--fg); }
-/* Set by the embed (list= and tag= filter words, a list's tag on a task): no ×. */
+/* Set by the embed (list= and tag= filter words): no ×. */
 .tag-chip-locked { padding-right: .4rem; font-weight: 600; }
 @media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
 .tasks-toolbar .btn { flex: none; }

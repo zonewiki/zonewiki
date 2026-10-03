@@ -354,8 +354,8 @@
   const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
   // Separate lists: a list is a tag that a page declares with
   // [[deck list=<tag>]]. That embed (and /deck?list=<tag>) shows the tasks
-  // carrying the tag, which is locked there: its filter chip can't be
-  // removed, new tasks get it, and the edit modal can't drop it. The main
+  // carrying the tag, whose filter chip is locked there (new tasks get it;
+  // a task's own tags stay editable, so a task can move to another list). The main
   // deck (no list=, no tag=) leaves list tasks out unless "Show separate
   // lists" is checked; a tag embed shows them like any other task.
   const initList = cleanList(appEl?.dataset.initList);
@@ -1137,10 +1137,6 @@
       const tag = input.value.trim();
       if (!tag) return;
       close();
-      if (removing && initList && cleanTag(tag).toLowerCase() === initList) {
-        showNotice(`“${initList}” is this list's tag: it can't be removed here.`);
-        return;
-      }
       try {
         const body = removing ? { ids, remove: [tag] } : { ids, add: [tag] };
         const res = await fetch('/api/deck/batch-tag', {
@@ -2001,7 +1997,7 @@
   // input is wrapped in a .chip-input box that looks like the field. Used by
   // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
   // modal's Tags field (chips are tag names, shown as #name). `locked` words
-  // (a list's tag, case ignored) are always there and have no ×.
+  // (an embed's filter words, case ignored) are always there and have no ×.
   function chipField(input, { label = w => w, onChange, locked = [] } = {}) {
     const lockedSet = new Set(locked.map(w => w.toLowerCase()));
     const isLocked = w => lockedSet.has(w.toLowerCase());
@@ -2213,8 +2209,7 @@
   // it a chip; Backspace at the start removes the last chip.
   const editTagsInput = document.getElementById('task-edit-tags' + sfx);
   const cleanTag = t => t.trim().replace(/^#+/, '').replace(/\s+/g, '-');
-  const editChips = editTagsInput && chipField(editTagsInput, {
-    label: t => '#' + t, locked: initList ? [initList] : [] });
+  const editChips = editTagsInput && chipField(editTagsInput, { label: t => '#' + t });
   if (editTagsInput) {
     // A comma (typed or pasted) commits everything before it as chips.
     // Registered before noSpacesInTags, which would turn ", " into "-".
