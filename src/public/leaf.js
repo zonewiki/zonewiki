@@ -358,6 +358,24 @@ function queryWords(raw) {
     .map(m => m[2] ?? m[3]).join(' ').trim();
 }
 
+// Equal fuzzy scores are common: every title starting with the query gets
+// the same one. Then the page most likely meant comes first, not the
+// alphabetical order: scratch notes last (temporary, often titled by their
+// file name), then pages in fewer folders (a top-level page is the main page
+// for a name), then the shorter name, which the query covers more of. So
+// "alex" puts "Alex Morgan" before "Alex 1:1 Kickoff" (three folders
+// down) and the scratch note "alex_prep".
+const SCRATCH_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // server.py SCRATCH_RE
+
+function tieBreak(p, field) {
+  const name = p.slug.split('/').pop();
+  return {
+    scratch: SCRATCH_SLUG_RE.test(name) ? 1 : 0,
+    depth: p.slug.split('/').length - 1,
+    len: (field === 'title' ? p.title : p.slug).length,
+  };
+}
+
 function applyModalControls() {
   if (!modalPages) return;
   const raw = modalFilter.value.trim();
@@ -376,9 +394,10 @@ function applyModalControls() {
       const best = ts && (!ss || ts.score >= ss.score) ? { ...ts, field: 'title' }
                  : ss ? { ...ss, field: 'slug' } : null;
       if (!best) continue;
-      scored.push({ p, ...best });
+      scored.push({ p, ...best, ...tieBreak(p, best.field) });
     }
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a, b) => b.score - a.score || a.scratch - b.scratch
+                          || a.depth - b.depth || a.len - b.len);
     modalPageList.innerHTML = scored.slice(0, 200).map(({ p, indices, field }) => {
       const titleHtml = field === 'title' ? highlightIndices(p.title, indices) : he(p.title);
       const slugHtml  = field === 'slug'  ? highlightIndices(p.slug,  indices) : he(p.slug);

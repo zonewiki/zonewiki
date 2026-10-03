@@ -182,3 +182,22 @@ def test_query_syntax_in_the_modal(page, wiki):
     expect(titles).to_have_count(0)  # nothing to match titles against
     expect(cards).to_have_count(1)
     expect(cards.first).to_contain_text("Tomato notes")
+
+
+def test_equal_title_scores_prefer_the_main_page(page, wiki):
+    # Regression: every title starting with "alex" scored the same, and the
+    # alphabetical order put a deep conversation note before the person's
+    # page. Ties now go to non-scratch pages, then fewer folders, then the
+    # shorter name.
+    wiki.write("conversations/situations/alex-1on1/prep", "# Alex 1:1 Kickoff\n\nx\n")
+    wiki.write("conversations/people/alex", "# Alex — People Profile\n\nx\n")
+    wiki.write("2026-07-09_06-12-09_alex_prep", "notes\n")
+    wiki.write("alex-morgan", "# Alex Morgan\n\nx\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("alex")
+    slugs = page.locator("#modal-page-list .page-list-item")
+    expect(slugs).to_have_count(4)
+    assert slugs.evaluate_all("els => els.map(e => e.dataset.slug)") == [
+        "alex-morgan", "conversations/people/alex",
+        "conversations/situations/alex-1on1/prep", "2026-07-09_06-12-09_alex_prep"]
