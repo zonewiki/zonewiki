@@ -87,7 +87,7 @@ class Wiki:
 
     def git(self, *args: str) -> str:
         return subprocess.run(["git", *args], cwd=self.root, capture_output=True,
-                              text=True, check=True).stdout
+                              text=True, check=True, env=server._GIT_ENV).stdout
 
     def head(self) -> str:
         return self.git("rev-parse", "HEAD").strip()

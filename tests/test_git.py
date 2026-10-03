@@ -62,7 +62,8 @@ def client(wiki_dir):
 
 
 def git(wiki_dir: Path, *args: str) -> str:
-    r = subprocess.run(["git", *args], cwd=wiki_dir, capture_output=True, text=True, check=True)
+    r = subprocess.run(["git", *args], cwd=wiki_dir, capture_output=True, text=True, check=True,
+                       env=server._GIT_ENV)  # no detached maintenance: it would linger as a zombie
     return r.stdout
 
 
@@ -566,3 +567,13 @@ class TestHelpers:
     ])
     def test_commit_message(self, filepath, expected):
         assert server._commit_message(filepath) == expected
+
+
+
+class TestGitDoesNotDetach:
+    def test_maintenance_runs_in_the_foreground(self, wiki_dir):
+        # Regression: git (2.47+) detached its auto-maintenance after each
+        # commit; with Leaf as the container's PID 1 nobody reaped it, and
+        # zombies piled up to the PID limit.
+        for key in ("maintenance.autoDetach", "gc.autoDetach"):
+            assert server._git("git", "config", "--get", key).stdout.strip() == "false"

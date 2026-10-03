@@ -1646,7 +1646,7 @@ class TestVersion:
         import subprocess
         def git(*args):
             subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
-                            *args], check=True, capture_output=True)
+                            *args], check=True, capture_output=True, env=server._GIT_ENV)
         git("init", "-q")
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "a.py").write_text("x\n")

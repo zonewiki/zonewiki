@@ -133,8 +133,21 @@ def slug_display_name(slug: str) -> str:
     return slug.split('/')[-1].replace("-", " ").title()
 
 
+# git (2.47+) starts its automatic maintenance after a commit as a detached
+# background process. In the container Leaf is PID 1 and never reaps that
+# orphan, so every commit left a zombie process behind until the PID limit
+# (2048) was reached and nothing could start any more. Not detached, git runs
+# the (usually trivial) maintenance itself and reaps its own children.
+_GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "maintenance.autoDetach", "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "gc.autoDetach", "GIT_CONFIG_VALUE_1": "false",
+}
+
+
 def _git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(list(args), cwd=WIKI_DIR, capture_output=True, text=True)
+    return subprocess.run(list(args), cwd=WIKI_DIR, capture_output=True, text=True, env=_GIT_ENV)
 
 
 def git_setup() -> None:

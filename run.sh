@@ -90,7 +90,9 @@ case "${1:-up}" in
     podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
     # k8s-file (docker's json-file equivalent) so `podman logs -f` works even
     # when the podman default log driver is journald (logs -f is unsupported).
-    podman run -d --name "$CONTAINER" --replace --restart unless-stopped \
+    # --init: a minimal init as PID 1 reaps orphaned processes (Leaf as PID 1
+    # wouldn't, and they would pile up as zombies until the PID limit).
+    podman run -d --init --name "$CONTAINER" --replace --restart unless-stopped \
       --log-driver k8s-file \
       "${USER_FLAGS[@]}" \
       "${TZ_FLAGS[@]}" \
