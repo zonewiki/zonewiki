@@ -709,6 +709,16 @@ class TestSearch:
         write_page(wiki_dir, "often", "# Zebra\n\nzebra zebra.\n")
         assert client.get("/api/search?q=zebra", headers=HOST).get_json()[0]["slug"] == "often"
 
+    def test_unlinked_only(self, client, wiki_dir):
+        write_page(wiki_dir, "hub", "# Hub\n\nSee [[linked]]. Zebra.\n")
+        write_page(wiki_dir, "linked", "# Linked\n\nZebra.\n")
+        write_page(wiki_dir, "orphan", "# Orphan\n\nZebra.\n")
+        client.post("/api/deck", json={"title": "Zebra task"}, headers=HOST)
+        all_ = {r["title"] for r in client.get("/api/search?q=zebra", headers=HOST).get_json()}
+        assert all_ == {"Hub", "Linked", "Orphan", "[Task] Zebra task"}
+        only = [r["slug"] for r in client.get("/api/search?q=zebra&unlinked=1", headers=HOST).get_json()]
+        assert sorted(only) == ["hub", "orphan"]   # nothing links to hub either; no tasks
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")

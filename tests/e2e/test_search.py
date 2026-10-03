@@ -96,6 +96,23 @@ def test_unlinked_only(page, wiki):
     expect(page.locator("#modal-page-list .page-list-item[data-slug='garage']")).to_have_count(1)
 
 
+def test_unlinked_only_filters_content_matches(page, wiki):
+    # Regression: the checkbox narrowed the title list but not the content
+    # matches below it.
+    seed(wiki)
+    wiki.write("hub", "# Hub\n\n[[gardening]]\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomatoes")
+    cards = page.locator("#modal-content-matches .search-result-card")
+    expect(cards).to_have_count(2)  # gardening and recipes
+    page.locator("#modal-unlinked").check()
+    expect(cards).to_have_count(1)
+    expect(cards.first).to_contain_text("Recipes")
+    page.locator("#modal-unlinked").uncheck()
+    expect(cards).to_have_count(2)
+
+
 def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
     import os
     seed(wiki)

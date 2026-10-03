@@ -136,7 +136,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
 | POST   | `/new`                | Create `pages/<slug>.md` and redirect to it     |
 | GET    | `/search?q=...`       | Full-text search results page                   |
-| GET    | `/api/search?q=...`   | JSON search results (used by the search UI)     |
+| GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
@@ -326,7 +326,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
   - **Ties** in the fuzzy score are common (every title starting with the query scores the same), so `tieBreak` orders them: scratch notes last, then fewer folders in the slug, then the shorter name. "alex" lists the top-level `alex-morgan` before notes three folders down and the scratch note `…_alex_prep`, instead of alphabetically.
   - **Sort by** — Recently edited (default, so an empty query works as a quick switcher), Title A–Z, Title Z–A, Most linked. Applies while the query is empty; a sort picked by hand is remembered in `localStorage` (`leaf-search-sort`).
   - **Built-in pages first** — with an empty query, the entries `api_pages_list()` marks `special` (Deck, Scratch, Deleted Pages) are pinned above the pages in that order, whatever the sort, set apart by a stronger rule (`.page-list-special`). On a phone that makes the scratch list two taps away (search button → Scratch). Typing matches them like any other entry; "Unlinked only" leaves them out.
-  - **Unlinked only** checkbox — pages with zero incoming wikilinks.
+  - **Unlinked only** checkbox — pages with zero incoming wikilinks, in the title list and in the Content matches: the modal sends `/api/search?…&unlinked=1`, and the server keeps only such pages, no tasks (`do_search(unlinked=True)`, same counts as the list's, `all_backlink_counts`) before it cuts the results to 15. Toggling it re-runs the content search.
   - First match is highlighted; **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
 
 ---

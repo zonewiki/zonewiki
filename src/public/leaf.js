@@ -480,7 +480,10 @@ function applyModalControls() {
 async function fetchModalContentMatches(q) {
   const seq = ++modalCMSeq;
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    // "Unlinked only" applies to content matches too: the server filters
+    // before it cuts the list, so the 15 results are all unlinked pages.
+    const unlinked = modalUnlinked.checked ? '&unlinked=1' : '';
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${unlinked}`);
     if (seq !== modalCMSeq) return;  // stale response — discard
     const results = await res.json();
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }

@@ -2268,27 +2268,29 @@ def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None)
             if (keep is None or keep(d)) and _accepts(query, d)][:depth]
 
 
-def _ranked_docs(query: search.Query, index: search.SearchIndex) -> list[dict]:
+def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None) -> list[dict]:
     """The 15 best docs for the query. Keyword ranking only, unless semantic
     search is on and ready: then BM25 and vector similarity are fused
-    (search.fuse). Docs that fail the query's filters take no part."""
+    (search.fuse). Docs that fail the query's filters, or `keep` when
+    given, take no part."""
     q = query.ranking_text
     if not q.strip():
         return []
-    bm25 = _bm25(index, query, FUSE_DEPTH if SEMANTIC else 15)
+    bm25 = _bm25(index, query, FUSE_DEPTH if SEMANTIC else 15, keep)
     if not SEMANTIC:
-        return _phrase_first(bm25, query, index)[:15]
+        return _phrase_first(bm25, query, index, keep)[:15]
     SEMANTIC.poke()
-    allowed = [d for d in index.docs if not query.has_filters or _accepts(query, d)]
+    allowed = [d for d in index.docs if (keep is None or keep(d))
+               and (not query.has_filters or _accepts(query, d))]
     pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
     tasks = {d["task_id"]: d for d in allowed if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
     task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
     if not hits and not task_hits:
-        return _phrase_first(bm25, query, index)[:15]
+        return _phrase_first(bm25, query, index, keep)[:15]
     semantic = _by_similarity([(pages[slug], sc) for slug, sc, _t in hits],
                               [(tasks[i], sc) for i, sc in task_hits])
-    return _phrase_first(search.fuse([bm25, semantic[:FUSE_DEPTH]]), query, index)[:15]
+    return _phrase_first(search.fuse([bm25, semantic[:FUSE_DEPTH]]), query, index, keep)[:15]
 
 
 def _best_sections(query: search.Query, slugs: set[str]) -> dict[str, dict]:
@@ -2318,12 +2320,18 @@ def _best_sections(query: search.Query, slugs: set[str]) -> dict[str, dict]:
     return best
 
 
-def do_search(raw: str) -> list[dict]:
+def do_search(raw: str, unlinked: bool = False) -> list[dict]:
+    """Search results for the browser. `unlinked` keeps only pages no other
+    page links to (the search modal's "Unlinked only"), no tasks."""
     if not raw.strip():
         return []
     query = search.Query(raw)
     q = query.ranking_text  # what excerpts mark: the words, without operators
-    docs = _ranked_docs(query, _search_index())
+    keep = None
+    if unlinked:
+        linked = {slug for slug, n in all_backlink_counts().items() if n > 0}
+        keep = lambda d: d.get("type") != "task" and d["slug"] not in linked  # noqa: E731
+    docs = _ranked_docs(query, _search_index(), keep)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
     for d in docs:
@@ -2665,7 +2673,7 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    return jsonify(do_search(q))
+    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1"))
 
 
 # ── The deck page ─────────────────────────────────────────────────────────────
