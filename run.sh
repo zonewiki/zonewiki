@@ -106,7 +106,6 @@ case "${1:-up}" in
       -e "ALLOW_REMOTE=${ALLOW_REMOTE}" \
       -e "LEAF_EMBEDDINGS=${LEAF_EMBEDDINGS}" \
       -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" \
-      -e "OLLAMA_URL=$(env_val OLLAMA_URL)" \
       -e "LEAF_MCP_TOKEN=$(env_val LEAF_MCP_TOKEN)" \
       -e "LEAF_BASE_URL=$(env_val LEAF_BASE_URL)" \
       "$IMAGE"

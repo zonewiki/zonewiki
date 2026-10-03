@@ -3,7 +3,7 @@ ranking in search (search.fuse) and the Related section on page view.
 
 A fake embedder stands in for the model: it maps words to a few "concepts",
 so texts sharing no words can still be similar, deterministically and
-without fastembed or Ollama.
+without fastembed.
 
 Run with:
     pytest tests/test_semantic.py -v
@@ -359,10 +359,8 @@ class TestConfig:
         assert e.model_name == embed.DEFAULT_FASTEMBED_MODEL
         assert embed.embedder_from_spec("1").model_name == embed.DEFAULT_FASTEMBED_MODEL
         assert embed.embedder_from_spec("fastembed:BAAI/bge-small-en-v1.5").model_name == "BAAI/bge-small-en-v1.5"
-        o = embed.embedder_from_spec("ollama:nomic-embed-text")
-        assert (o.name, o.url) == ("ollama:nomic-embed-text", embed.DEFAULT_OLLAMA_URL)
         with pytest.raises(ValueError):
-            embed.embedder_from_spec("ollama")
+            embed.embedder_from_spec("ollama:nomic-embed-text")   # removed: fastembed only
         with pytest.raises(ValueError):
             embed.embedder_from_spec("bogus:x")
 
@@ -375,8 +373,8 @@ class TestConfig:
 
     def test_setup_parses_like_the_server(self):
         assert embed_setup.parse_spec("") is None
-        assert embed_setup.parse_spec("fastembed") == ("fastembed", embed.DEFAULT_FASTEMBED_MODEL)
-        assert embed_setup.parse_spec(" Ollama: nomic ") == ("ollama", "nomic")
+        assert embed_setup.parse_spec("fastembed") == embed.DEFAULT_FASTEMBED_MODEL
+        assert embed_setup.parse_spec(" fastembed: BAAI/bge-small-en-v1.5 ") == "BAAI/bge-small-en-v1.5"
 
     @pytest.mark.parametrize("spec", ["", "off"])
     def test_setup_installs_nothing_when_off(self, spec, monkeypatch):
@@ -385,15 +383,8 @@ class TestConfig:
                             lambda *a, **k: pytest.fail("nothing to install"))
         embed_setup.prepare()
 
-    def test_setup_installs_numpy_for_ollama(self, monkeypatch):
-        installed = []
-        monkeypatch.setenv("LEAF_EMBEDDINGS", "ollama:nomic-embed-text")
-        monkeypatch.setattr(embed_setup.subprocess, "run", lambda cmd, **k: installed.append(cmd[-1]))
-        embed_setup.prepare()
-        assert installed == ["numpy"]
-
     def test_scoring_without_numpy_matches(self, semantic, monkeypatch):
-        # The plain-Python fallback (Ollama without NumPy) scores the same.
+        # The plain-Python fallback (no NumPy, e.g. a local venv) scores the same.
         with_np = semantic.search("car repair")
         monkeypatch.setattr(embed, "np", None)
         semantic._rows_gen = -1          # rebuild rows without matrices

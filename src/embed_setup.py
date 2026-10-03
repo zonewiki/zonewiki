@@ -18,42 +18,31 @@ import sys
 DEFAULT_FASTEMBED_MODEL = "jinaai/jina-embeddings-v2-base-de"
 
 
-def parse_spec(spec: str) -> tuple[str, str] | None:
-    """LEAF_EMBEDDINGS as (kind, model): `fastembed`, `fastembed:<model>` or
-    `ollama:<model>`; None when it is empty or off."""
+def parse_spec(spec: str) -> str | None:
+    """The fastembed model LEAF_EMBEDDINGS names: `fastembed` (the default
+    model) or `fastembed:<model>`; None when it is empty or off."""
     spec = (spec or "").strip()
     if not spec or spec.lower() in ("0", "off", "false", "no"):
         return None
     kind, _, model = spec.partition(":")
-    kind, model = kind.lower(), model.strip()
-    if kind in ("fastembed", "1", "true", "yes", "on"):
-        return "fastembed", model or DEFAULT_FASTEMBED_MODEL
-    if kind == "ollama" and model:
-        return "ollama", model
-    raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed[:model] or ollama:<model>, got {spec!r}")
-
-
-def _pip_install(package: str) -> None:
-    subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
-                    "--no-cache-dir", "-q", package], check=True)
+    if kind.lower() in ("fastembed", "1", "true", "yes", "on"):
+        return model.strip() or DEFAULT_FASTEMBED_MODEL
+    raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed or fastembed:<model>, got {spec!r}")
 
 
 def prepare() -> None:
-    """Install what LEAF_EMBEDDINGS needs (build time): fastembed and its
-    model (into FASTEMBED_CACHE_PATH), or for Ollama just NumPy, which
-    scores a query against all vectors at once (embed.py works without it,
-    about 25x slower). Nothing when off."""
-    parsed = parse_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
-    if not parsed:
+    """Install fastembed (it brings NumPy, which embed.py scores with) and
+    download LEAF_EMBEDDINGS' model into FASTEMBED_CACHE_PATH (build time).
+    Nothing when off."""
+    name = parse_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
+    if not name:
         return
-    if parsed[0] == "ollama":
-        _pip_install("numpy")
-        return
-    _pip_install("fastembed")  # brings NumPy along
+    subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
+                    "--no-cache-dir", "-q", "fastembed"], check=True)
     from fastembed import TextEmbedding
-    model = TextEmbedding(parsed[1], cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
+    model = TextEmbedding(name, cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
     list(model.query_embed(["warm up"]))
-    print(f"Downloaded {parsed[1]}")
+    print(f"Downloaded {name}")
 
 
 if __name__ == "__main__":

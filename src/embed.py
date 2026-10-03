@@ -29,19 +29,17 @@ import os
 import re
 import sys
 import threading
-import urllib.request
 from array import array
 from pathlib import Path
 from typing import Callable, Iterable
 
 try:  # comes with fastembed; scoring a query is then one matrix product
     import numpy as np
-except ImportError:  # e.g. Ollama without NumPy: plain Python, ~25x slower
+except ImportError:  # e.g. a local venv without fastembed: plain Python, ~25x slower
     np = None
 
 from embed_setup import DEFAULT_FASTEMBED_MODEL, parse_spec  # noqa: F401 (re-exported)
 
-DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
 # Similarity floors per model, (search, related, tasks):
 # - search: a query↔section similarity below this is not a hit. Vector search
@@ -232,40 +230,11 @@ class FastEmbedder:
         return list(next(iter(self._load().query_embed([text]))))
 
 
-class OllamaEmbedder:
-    """A model served by Ollama (POST /api/embed); no Python dependencies.
-    From inside the container the host's Ollama is at
-    http://host.containers.internal:11434 (OLLAMA_URL)."""
-
-    def __init__(self, model: str, url: str = DEFAULT_OLLAMA_URL):
-        self.name = f"ollama:{model}"
-        self.model_name = model
-        self.url = url.rstrip("/")
-
-    def _embed(self, texts: list[str]) -> list:
-        body = json.dumps({"model": self.model_name, "input": texts}).encode()
-        req = urllib.request.Request(f"{self.url}/api/embed", data=body,
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            return json.load(resp)["embeddings"]
-
-    def embed_docs(self, texts: list[str]) -> list:
-        return self._embed(texts)
-
-    def embed_query(self, text: str) -> list:
-        return self._embed([text])[0]
-
-
 def embedder_from_spec(spec: str):
-    """`fastembed`, `fastembed:<model>` or `ollama:<model>` (embed_setup.parse_spec);
-    None when empty."""
-    parsed = parse_spec(spec)
-    if parsed is None:
-        return None
-    kind, model = parsed
-    if kind == "fastembed":
-        return FastEmbedder(model)
-    return OllamaEmbedder(model, os.environ.get("OLLAMA_URL") or DEFAULT_OLLAMA_URL)
+    """`fastembed` or `fastembed:<model>` (embed_setup.parse_spec); None when
+    empty or off."""
+    model = parse_spec(spec)
+    return FastEmbedder(model) if model else None
 
 
 # ── The index ────────────────────────────────────────────────────────────────
@@ -415,7 +384,7 @@ class SemanticIndex:
                 if self._failed:
                     log("embedding works again")
                     self._failed = False
-            except Exception as e:  # model missing, Ollama down, …: keep BM25 working
+            except Exception as e:  # model missing, broken, …: keep BM25 working
                 if not self._failed:
                     log(f"embedding failed, search falls back to keywords: {e}")
                     self._failed = True
@@ -624,13 +593,12 @@ def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex 
         return None
     if embedder is None:
         return None
-    if isinstance(embedder, FastEmbedder):
-        try:
-            import fastembed  # noqa: F401
-        except ImportError:
-            log("LEAF_EMBEDDINGS is set but fastembed is not installed "
-                "(pip install fastembed); using keyword search only")
-            return None
+    try:
+        import fastembed  # noqa: F401
+    except ImportError:
+        log("LEAF_EMBEDDINGS is set but fastembed is not installed "
+            "(pip install fastembed); using keyword search only")
+        return None
     min_score = None
     if os.environ.get("LEAF_EMBED_MIN_SCORE"):
         try:
