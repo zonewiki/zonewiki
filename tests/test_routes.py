@@ -627,6 +627,36 @@ class TestSearch:
         results = resp.get_json()
         assert any(r["slug"] == "searchable" for r in results)
 
+    def test_result_links_to_the_matching_section(self, client, wiki_dir):
+        write_page(wiki_dir, "long", "# Long notes\n\nIntro.\n\n## Setup\n\nInstall it.\n\n"
+                                     "## Backing **up** the [[data]]\n\nRun git push nightly.\n")
+        r = client.get("/api/search?q=nightly", headers=HOST).get_json()[0]
+        assert r["href"] == "/page/long#backing-up-the-data"
+        assert "<mark>nightly</mark>" in r["excerpt"] and r["excerpt"].startswith("Backing")
+
+    def test_best_section_wins(self, client, wiki_dir):
+        write_page(wiki_dir, "multi", "# Multi\n\n## One\n\ngit once, and lots of other words here.\n\n"
+                                      "## Two\n\ngit git git.\n")
+        assert client.get("/api/search?q=git", headers=HOST).get_json()[0]["href"] == "/page/multi#two"
+
+    def test_title_only_match_opens_the_top(self, client, wiki_dir):
+        write_page(wiki_dir, "zebra", "# Zebra\n\n## Food\n\nGrass.\n\n## Home\n\nAfrica.\n")
+        assert client.get("/api/search?q=zebra", headers=HOST).get_json()[0]["href"] == "/page/zebra"
+
+    def test_match_before_the_first_heading_opens_the_top(self, client, wiki_dir):
+        write_page(wiki_dir, "intro", "# Intro\n\nThe quokka lives here.\n\n## Later\n\nNothing.\n")
+        assert client.get("/api/search?q=quokka", headers=HOST).get_json()[0]["href"] == "/page/intro"
+
+    def test_no_anchor_for_headings_without_an_id(self, client, wiki_dir):
+        # Only ## and ### headings get ids (anchors_plugin max_level=3).
+        write_page(wiki_dir, "deep", "# Deep\n\n## Top\n\nx\n\n#### Fourth\n\nThe narwhal.\n")
+        r = client.get("/api/search?q=narwhal", headers=HOST).get_json()[0]
+        assert r["href"] == "/page/deep" and r["excerpt"].startswith("Fourth")
+
+    def test_search_page_links_to_the_section(self, client, wiki_dir):
+        write_page(wiki_dir, "long", "# Long\n\n## Setup\n\nInstall the wombat.\n")
+        assert b'href="/page/long#setup"' in client.get("/search?q=wombat", headers=HOST).data
+
     def test_api_search_empty_query(self, client):
         resp = client.get("/api/search?q=", headers=HOST)
         assert resp.status_code == 200

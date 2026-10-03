@@ -125,7 +125,7 @@ def chunk_page(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     so a hit's excerpt shows where in the page it is. Link targets are
     dropped (the link text stays), as in the BM25 index."""
     return [f"{heading}\n{body}" if heading else body
-            for heading, body in chunk_sections(text, max_chars)]
+            for heading, body, _level in chunk_sections(text, max_chars)]
 
 
 def chunk_key(title: str, chunk: str) -> str:
@@ -134,8 +134,9 @@ def chunk_key(title: str, chunk: str) -> str:
     return _hash(f"{title}\n{chunk}") if chunk else _hash(title)
 
 
-def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str]]:
-    """chunk_page's pieces as (heading, body); heading is "" before the first."""
+def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str, int]]:
+    """chunk_page's pieces as (heading, body, heading level); before the first
+    heading that is ("", body, 0)."""
     sections: list[list[str]] = [[]]
     fence = None
     for line in text.split("\n"):
@@ -151,16 +152,16 @@ def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[st
         sections[-1].append(line)
     chunks = []
     for lines in sections:
-        heading = ""
+        heading, level = "", 0
         m = _HEADING_RE.match(lines[0]) if lines else None
         if m:
-            heading = m.group(2)
+            heading, level = m.group(2), len(m.group(1))
             lines = lines[1:]
         body = _LINK_TARGET_RE.sub(r"\1", "\n".join(lines)).strip()
         if not body:
             continue
         for piece in _split_long(body, max_chars):
-            chunks.append((heading, piece))
+            chunks.append((heading, piece, level))
     return chunks
 
 

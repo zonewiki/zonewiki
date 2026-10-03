@@ -2206,42 +2206,66 @@ def _by_similarity(*hit_lists: list[tuple[dict, float]]) -> list[dict]:
     return [d for d, _s in sorted((h for hits in hit_lists for h in hits), key=lambda h: -h[1])]
 
 
-def _ranked_docs(q: str, index: search.SearchIndex) -> tuple[list[dict], dict[str, str]]:
-    """The 15 best docs for q, plus each semantic hit's best section (slug ->
-    text) for its excerpt. Keyword ranking only, unless semantic search is on
-    and ready: then BM25 and vector similarity are fused (search.fuse)."""
+def _ranked_docs(q: str, index: search.SearchIndex) -> list[dict]:
+    """The 15 best docs for q. Keyword ranking only, unless semantic search is
+    on and ready: then BM25 and vector similarity are fused (search.fuse)."""
     bm25 = [d for _s, d in index.search(q, limit=FUSE_DEPTH if SEMANTIC else 15)]
     if not SEMANTIC:
-        return bm25, {}
+        return bm25
     SEMANTIC.poke()
     pages = {d["slug"]: d for d in index.docs if d.get("type") != "task"}
     tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=FUSE_DEPTH)
     task_hits = SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)
     if not hits and not task_hits:
-        return bm25[:15], {}
+        return bm25[:15]
     semantic = _by_similarity([(pages[slug], sc) for slug, sc, _t in hits],
                               [(tasks[i], sc) for i, sc in task_hits])
-    fused = search.fuse([bm25, semantic[:FUSE_DEPTH]])
-    return fused[:15], {slug: text for slug, _s, text in hits}
+    return search.fuse([bm25, semantic[:FUSE_DEPTH]])[:15]
+
+
+def _best_sections(q: str, slugs: set[str]) -> dict[str, dict]:
+    """For each page in slugs, the section a result should open: the best
+    BM25-scored section whose own text has a query word, else, for a page
+    found by meaning, its most similar section. A page matched only by its
+    title gets none (every section would match equally), so its link opens
+    the top of the page."""
+    index = _chunk_index()
+    best: dict[str, dict] = {}
+    for _s, d in index.search(q, limit=len(index.docs)):
+        slug = d.get("slug")
+        if (d.get("type") != "task" and slug in slugs and slug not in best
+                and search.matches(f"{d['heading']}\n{d['text']}", q)):
+            best[slug] = d
+    if SEMANTIC and len(best) < len(slugs):
+        rest = slugs - set(best)
+        by_key = {d["key"]: d for d in index.docs if d.get("type") != "task" and d["slug"] in rest}
+        for key, _sc in SEMANTIC.search_chunks(q, known=rest, limit=len(by_key) or 1):
+            if key in by_key:
+                best.setdefault(by_key[key]["slug"], by_key[key])
+    return best
 
 
 def do_search(q: str) -> list[dict]:
     if not q.strip():
         return []
-    docs, sections = _ranked_docs(q, _search_index())
+    docs = _ranked_docs(q, _search_index())
+    sections = _best_sections(q, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
     for d in docs:
         section = sections.get(d["slug"]) if d.get("type") != "task" else None
+        text = f"{section['heading']}\n{section['text']}".strip() if section else d["excerpt_text"]
         r = {
             "slug": d["slug"],
             "title": d["title"],
-            "excerpt": search.make_excerpt(d["excerpt_text"], q, fallback=section),
+            "excerpt": search.make_excerpt(text, q),
         }
         for k in ("type", "task_id", "status", "list", "year"):
             if d.get(k) is not None:
                 r[k] = d[k]
         r["href"] = _result_href(r)
+        if section:
+            r["href"] += section["anchor"]
         results.append(r)
     return results
 
@@ -2252,6 +2276,15 @@ def do_search(q: str) -> list[dict]:
 # runs over sections here, fused with semantic section hits when that is on.
 
 _chunk_doc_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _section_anchor(heading: str, level: int) -> str:
+    """'#<id>' of a section's heading as the rendered page has it, or "" when
+    there is none: no heading, or one deeper than anchors_plugin's max_level
+    (3), whose heading carries no id."""
+    if not heading or level > 3:
+        return ""
+    return f"#{_heading_id(_plain_heading(heading))}"
 
 
 def _page_chunk_docs() -> list[dict]:
@@ -2272,10 +2305,11 @@ def _page_chunk_docs() -> list[dict]:
                 continue
             title, body = _semantic_text(content, slug)
             chunks = []
-            for heading, text in embed.chunk_sections(body) or [("", "")]:
+            for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
                 chunk = f"{heading}\n{text}" if heading else text
                 chunks.append({
                     "slug": slug, "title": title, "heading": heading, "text": text,
+                    "anchor": _section_anchor(heading, level),
                     "mtime": mtime, "key": embed.chunk_key(title, chunk),
                     "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT,
                 })
@@ -2474,7 +2508,7 @@ def _mcp_call_tool(name: str, args: dict) -> str:
             if d.get("type") == "task":
                 out.append(f"[{i}] " + _mcp_task_text(d["task"], base))
                 continue
-            anchor = f"#{_heading_id(_plain_heading(d['heading']))}" if d["heading"] else ""
+            anchor = d["anchor"]
             where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
             out.append(f"[{i}] {where}\nslug: {d['slug']}\nedited: {fmt_date(d['mtime'])}\n"
                        f"url: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")

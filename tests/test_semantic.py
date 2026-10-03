@@ -159,16 +159,6 @@ class TestFuse:
         assert search.fuse([["x", "y"], ["y"]], key=str) == ["y", "x"]
 
 
-class TestExcerptFallback:
-    def test_fallback_used_without_a_word_match(self):
-        out = search.make_excerpt("Page start.", "zzz", fallback="The matching section")
-        assert out == "The matching section"
-
-    def test_word_match_beats_fallback(self):
-        out = search.make_excerpt("A note about cars.", "cars", fallback="Other text")
-        assert "<mark>cars</mark>" in out
-
-
 # ── The index ────────────────────────────────────────────────────────────────
 
 class TestSemanticIndex:
@@ -413,6 +403,7 @@ class TestHybridSearch:
         results = _search(client, "car repair")
         assert results[0]["slug"] == "golf"
         assert results[0]["excerpt"].startswith("Werkstatt")
+        assert results[0]["href"] == "/page/golf#werkstatt"   # its most similar section
 
     def test_matching_both_ways_beats_keyword_only(self, client, semantic, wiki_dir):  # noqa: F811
         # All three contain "golf"; only "sport" isn't about cars, so it is
@@ -447,6 +438,13 @@ class TestHybridSearch:
         semantic.sync()
         results = _search(client, "car repair")
         assert any(r.get("type") == "task" and r["title"] == "[Task] Book the Werkstatt" for r in results)
+
+    def test_keyword_section_beats_the_similar_one(self, client, semantic, wiki_dir):  # noqa: F811
+        write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nMechaniker, Bremsen.\n\n"
+                                     "## Papers\n\nThe insurance letter is in the drawer.\n")
+        semantic.sync()
+        r = next(r for r in _search(client, "drawer") if r["slug"] == "golf")
+        assert r["href"] == "/page/golf#papers"
 
     def test_search_page_uses_it_too(self, client, semantic):  # noqa: F811
         html = client.get("/search", query_string={"q": "car repair"}, headers=HOST).get_data(as_text=True)

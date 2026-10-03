@@ -248,20 +248,22 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
     return [(w[0], w[1]) for w, s in zip(words, stems) if close[s]]
 
 
-def make_excerpt(text: str, query: str, before: int = 60, after: int = 90,
-                 fallback: str | None = None) -> str:
+def matches(text: str, query: str) -> bool:
+    """Whether text contains a word the query matches, the way the index and
+    the excerpt match words (stem, prefix, else fuzzy)."""
+    return bool(_match_spans(text, query))
+
+
+def make_excerpt(text: str, query: str, before: int = 60, after: int = 90) -> str:
     """Build an HTML-escaped snippet around the first match, bolded via <mark>.
 
     Matches are whole words found as the index finds them (see _match_spans):
     "running" marks "runs", a typo marks the word it stands for, and "art"
     does not mark the inside of "start". Every match inside the window is
-    marked. Returns a leading excerpt if nothing matches: of ``fallback`` when
-    given (the section a semantic hit came from), else of the text.
+    marked. Returns a leading excerpt if nothing matches.
     """
     spans = _match_spans(text, query)
     if not spans:
-        if fallback:
-            text = fallback
         head = text[:150].replace("\n", " ").strip()
         return html.escape(head) + ("…" if len(text) > 150 else "")
 
