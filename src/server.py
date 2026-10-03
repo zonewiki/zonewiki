@@ -2158,6 +2158,7 @@ def _page_search_docs() -> list[dict]:
         doc = {
             "slug": slug,
             "title": title,
+            "mtime": mtime,
             "tags": _page_tags(content),
             "excerpt_text": text,
             "tokens": search.tokenize(text)
@@ -2322,6 +2323,22 @@ def _best_sections(query: search.Query, slugs: set[str]) -> dict[str, dict]:
     return best
 
 
+def _result_meta(d: dict) -> str:
+    """The small line under a result's title, telling apart results whose
+    titles look alike: a page's folder and last edit, a task's list and
+    status ("Deck · done 2026-05-01")."""
+    if d.get("type") == "task":
+        task = d["task"]
+        status = _task_status(task)
+        if status != "open":
+            status += f" {task['completed_at'][:10]}"
+        where = f"Deck › {task['list']}" if task.get("list") else "Deck"
+        return f"{where} · {status}"
+    folder = d["slug"].rpartition("/")[0]
+    edited = f"edited {fmt_date(d['mtime'])}"
+    return f"{folder} · {edited}" if folder else edited
+
+
 def do_search(raw: str, unlinked: bool = False) -> list[dict]:
     """Search results for the browser. `unlinked` keeps only pages no other
     page links to (the search modal's "Unlinked only"), no tasks."""
@@ -2347,6 +2364,7 @@ def do_search(raw: str, unlinked: bool = False) -> list[dict]:
         for k in ("type", "task_id", "status", "list", "year"):
             if d.get(k) is not None:
                 r[k] = d[k]
+        r["meta"] = _result_meta(d)
         r["href"] = _result_href(r)
         if d.get("type") != "task":
             # The page highlights what matched (leaf.js); before the #anchor.
@@ -2745,6 +2763,7 @@ def search_page():
         cards = "".join(
             f"""<div class="search-result-card">
   <a href="{html.escape(r['href'])}">{html.escape(r['title'])}</a>
+  <span class="result-meta">{html.escape(r['meta'])}</span>
   <p>{r['excerpt']}</p>
 </div>"""
             for r in results

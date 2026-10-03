@@ -719,6 +719,23 @@ class TestSearch:
         only = [r["slug"] for r in client.get("/api/search?q=zebra&unlinked=1", headers=HOST).get_json()]
         assert sorted(only) == ["hub", "orphan"]   # nothing links to hub either; no tasks
 
+    def test_result_meta_tells_alike_titles_apart(self, client, wiki_dir):
+        import os
+        path = write_page(wiki_dir, "conversations/2026-07-08_alex/prep", "# Alex Debrief\n\nquokka\n")
+        os.utime(path, (1_000_000_000, 1_000_000_000))
+        write_page(wiki_dir, "quokka", "# Quokka\n\nquokka\n")
+        open_ = client.post("/api/deck", json={"title": "quokka open"}, headers=HOST).get_json()
+        done = client.post("/api/deck", json={"title": "quokka done", "list": "zoo"}, headers=HOST).get_json()
+        client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
+        meta = {r["title"]: r["meta"] for r in client.get("/api/search?q=quokka", headers=HOST).get_json()}
+        assert meta["Alex Debrief"] == "conversations/2026-07-08_alex · edited 2001-09-09"
+        assert meta["Quokka"].startswith("edited 20")
+        assert meta["[Task] quokka open"] == "Deck · open"
+        assert re.fullmatch(r"Deck › zoo · done \d{4}-\d\d-\d\d", meta["[Task] quokka done"])
+        assert open_["id"]
+        page = client.get("/search?q=quokka", headers=HOST).get_data(as_text=True)
+        assert '<span class="result-meta">conversations/2026-07-08_alex · edited 2001-09-09</span>' in page
+
     def test_found_by_file_and_folder_names(self, client, wiki_dir):
         write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
                    "# Roof repair status\n\nRevised timeline.\n")

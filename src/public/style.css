@@ -432,6 +432,16 @@ main {
 .search-result-card:hover { box-shadow: var(--shadow); }
 .search-result-card a { text-decoration: none; color: var(--link); font-weight: 600; font-size: 1rem; }
 .search-result-card p { margin: .3rem 0 0; font-size: .875rem; color: var(--muted); }
+/* Folder and edit date (task: list and status), to tell alike titles apart. */
+.search-result-card .result-meta {
+  display: block;
+  margin-top: .1rem;
+  font-size: .75rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .search-result-card mark,
 .page-list-item a mark { background: none; color: var(--link); font-weight: 600; font-style: normal; }
 

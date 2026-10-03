@@ -489,7 +489,8 @@ async function fetchModalContentMatches(q) {
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     modalCM.innerHTML = '<p class="section-label">Content matches</p>' +
       results.map(r =>
-        `<a class="search-result-card" href="${he(r.href)}"><span class="result-title">${he(r.title)}</span><p>${r.excerpt}</p></a>`
+        `<a class="search-result-card" href="${he(r.href)}"><span class="result-title">${he(r.title)}</span>` +
+        `<span class="result-meta">${he(r.meta || '')}</span><p>${r.excerpt}</p></a>`
       ).join('');
     modalCM.classList.remove('hidden');
     // Re-clamp active index now that content cards are in the pool

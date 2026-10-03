@@ -96,6 +96,16 @@ def test_unlinked_only(page, wiki):
     expect(page.locator("#modal-page-list .page-list-item[data-slug='garage']")).to_have_count(1)
 
 
+def test_content_matches_show_folder_and_date(page, wiki):
+    wiki.write("conversations/alex/prep", "# Alex Debrief\n\nquokka notes\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("quokka")
+    meta = page.locator("#modal-content-matches .search-result-card .result-meta")
+    expect(meta).to_have_count(1)
+    expect(meta.first).to_have_text(re.compile(r"^conversations/alex · edited \d{4}-\d\d-\d\d$"))
+
+
 def test_unlinked_only_filters_content_matches(page, wiki):
     # Regression: the checkbox narrowed the title list but not the content
     # matches below it.
