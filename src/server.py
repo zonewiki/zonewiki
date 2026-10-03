@@ -694,16 +694,103 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True) -> s
 
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
     text, deck_embeds = deck_module.process_deck_embeds(text)
+    text, task_refs = _mask_task_refs(text)
 
     text = _unmask_code(process_wikilinks(text), code_stash)
     result = _apply_img_sizes(md.render(text))
     result = _enable_task_checkboxes(result)
     result = _render_task_dates(result)
+    result = _inject_task_refs(result, task_refs)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     if deck_embeds:
         result = deck_module.inject_deck_embeds(result, deck_embeds)
     return fm_html + result
+
+
+# [[task:<id>]] references (deck.TASK_REF_RE): masked with private-use tokens
+# before rendering, so markdown never touches the chip, then swapped for it.
+_TASK_REF_TOKEN_RE = re.compile('(\\d+)')
+# A reference alone in a list item is a row of its own (a checklist of tasks).
+_TASK_REF_ITEM_RE = re.compile(r'<li>(?=(?:\s|<p>)*\d+(?:\s|</p>)*</li>)')
+
+
+def _mask_task_refs(text: str) -> tuple[str, list[str]]:
+    refs: list[str] = []
+
+    def token(m: re.Match) -> str:
+        refs.append(m.group(1).lower())
+        return f'{len(refs) - 1}'
+    return deck_module.TASK_REF_RE.sub(token, text), refs
+
+
+def _inject_task_refs(html_str: str, refs: list[str]) -> str:
+    if not refs:
+        return html_str
+    tasks = deck_module.resolve_task_refs(refs)
+    today = date.today().isoformat()
+    html_str = _TASK_REF_ITEM_RE.sub('<li class="task-ref-item">', html_str)
+    return _TASK_REF_TOKEN_RE.sub(
+        lambda m: _task_ref_html(refs[int(m.group(1))], tasks[refs[int(m.group(1))]], today),
+        html_str)
+
+
+def _short_date(iso: str, today: str) -> str:
+    """"Oct 5" (this year) or "Oct 5, 2025", as the deck's cards show dates."""
+    try:
+        d = date.fromisoformat(iso[:10])
+    except ValueError:
+        return iso
+    text = f"{d:%b} {d.day}"
+    return text if iso[:4] == today[:4] else f"{text}, {d.year}"
+
+
+def _task_ref_html(ref: str, task: dict | None, today: str) -> str:
+    """A task as an inline chip: its checkbox (completes it in the deck,
+    leaf.js), its title linking to it in the deck, and badges for what the
+    deck card shows at a glance (deadline, a later start, repeat, keep)."""
+    if task is None:
+        return (f'<span class="task-ref task-ref-missing" title="No task with id {html.escape(ref)}">'
+                f'task {html.escape(ref)}?</span>')
+    title = html.escape(_plain_task_title(task.get("title", "")))
+    done, wont = bool(task.get("completed_at")), bool(task.get("wont_do"))
+    year = deck_module._past_year(task) if done else None
+    href = html.escape(_task_href(task["id"], "completed" if done else "open", task.get("list"), year))
+    cls, badges = "task-ref", []
+    if done:
+        cls += " task-ref-wontdo" if wont else " task-ref-done"
+        mark = "✗ won't do" if wont else "✓"
+        badges.append(f'<span class="task-ref-badge">{mark} {_short_date(task["completed_at"], today)}</span>')
+    else:
+        due, start = task.get("due_date"), task.get("start_date")
+        if due:
+            state = " overdue" if due < today else " due-today" if due == today else ""
+            badges.append(f'<span class="task-ref-badge task-ref-due{state}" title="Due {due}">'
+                          f'⏰ {_short_date(due, today)}</span>')
+        if start and start >= today:
+            state = " start-today" if start == today else " start-later"
+            label = "today" if start == today else _short_date(start, today)
+            badges.append(f'<span class="task-ref-badge task-ref-start{state}" title="Start {start}">'
+                          f'📅 {label}</span>')
+        if task.get("recurrence"):
+            badges.append('<span class="task-ref-badge" title="Repeats">↻</span>')
+        if task.get("keep"):
+            last = f" ✓ {_short_date(task['last_done'], today)}" if task.get("last_done") else ""
+            badges.append(f'<span class="task-ref-badge" title="Keep task: stays after done">⟲{last}</span>')
+    if task.get("list"):
+        badges.append(f'<span class="task-ref-badge task-ref-list">{html.escape(task["list"])}</span>')
+    checked = " checked" if done and not wont else ""
+    disabled = " disabled" if wont else ""
+    return (f'<span class="{cls}" data-task-id="{html.escape(task["id"])}">'
+            f'<input type="checkbox" class="task-ref-check" aria-label="Done: {title}"{checked}{disabled}>'
+            f'<a class="task-ref-title" href="{href}">{title}</a>{"".join(badges)}</span>')
+
+
+def page_task_refs(content: str) -> set[str]:
+    """Ids of the tasks a page refers to with [[task:…]], code excluded."""
+    masked, _ = _mask_code(content)
+    refs = [m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)]
+    return {t["id"] for t in deck_module.resolve_task_refs(refs).values() if t}
 
 
 def _iter_fenced_lines(lines: list[str]):
@@ -1291,6 +1378,8 @@ _FORMAT_BUTTONS = (
     ("link", "Link (Ctrl+K)", _FMT_ICON + '<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/>'
      '<path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8A3 3 0 0 0 7.2 13l.9-.9"/></svg>'),
     ("wikilink", "Link to a wiki page", '<span class="fmt-wiki">[[ ]]</span>'),
+    ("taskref", "Link to a deck task", _FMT_ICON + '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/>'
+     '<path d="m4 8 1.5 1.5L8.5 6.5"/><line x1="10" y1="8" x2="12.5" y2="8"/></svg>'),
     ("attach", "Attach a file or image", _FMT_ICON + '<path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l5.6-5.6a2.3 2.3 0 0 1 3.3 3.3L6.3 11.3a1.2 1.2 0 0 1-1.7-1.7L9.8 4.4"/></svg>'),
 )
 FORMAT_BAR = (
@@ -1677,7 +1766,10 @@ def view_page(slug):
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
     backlinks = find_backlinks(slug)
-    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, find_task_backlinks(slug))
+    # Tasks the page shows inline already aren't repeated under Linked tasks.
+    inline = page_task_refs(content)
+    task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
+    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, task_backlinks)
     bl_html += _build_related_html(slug, path, backlinks)
     delete_dialog = _build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
@@ -2194,10 +2286,17 @@ def api_pages_list():
 # ── Search ────────────────────────────────────────────────────────────────────
 
 
-# Cache of tokenized page documents, keyed by slug -> (mtime, doc). Avoids
+# Cache of tokenized page documents, keyed by slug -> (mtime, doc, deck key). Avoids
 # re-reading and re-tokenizing every file on each search; invalidated per-file
 # when the on-disk mtime changes so edits made outside the app stay reflected.
-_search_doc_cache: dict[str, tuple[float, dict]] = {}
+_search_doc_cache: dict[str, tuple[float, dict, tuple]] = {}
+
+
+def _task_refs_as_titles(content: str) -> str:
+    """Page text with each [[task:…]] replaced by its task's title: what
+    the reader sees there, and what search and embeddings should match."""
+    return deck_module.expand_task_refs(
+        content, lambda ref, task: _plain_task_title(task.get("title", "")) if task else "")
 
 
 def _page_search_docs() -> list[dict]:
@@ -2207,6 +2306,7 @@ def _page_search_docs() -> list[dict]:
     without those outranking what the page says."""
     docs = []
     seen = set()
+    deck_key = deck_module._deck_mtimes()
     for md_file, slug in iter_pages():
         seen.add(slug)
         try:
@@ -2214,7 +2314,9 @@ def _page_search_docs() -> list[dict]:
         except OSError:
             continue
         cached = _search_doc_cache.get(slug)
-        if cached and cached[0] == mtime:
+        # A page with [[task:…]] is indexed with the tasks' titles, so it is
+        # stale when the deck changes too.
+        if cached and cached[0] == mtime and (not cached[1]["task_refs"] or cached[2] == deck_key):
             docs.append(cached[1])
             continue
         # One bad file must not fail every search: a page deleted meanwhile
@@ -2226,18 +2328,19 @@ def _page_search_docs() -> list[dict]:
             seen.discard(slug)
             continue
         title = page_title(content, slug)
-        text = search.strip_link_targets(content)
+        text = search.strip_link_targets(_task_refs_as_titles(content))
         doc = {
             "slug": slug,
             "title": title,
             "mtime": mtime,
+            "task_refs": bool(deck_module.TASK_REF_RE.search(content)),
             "tags": _page_tags(content),
             "excerpt_text": text,
             "tokens": search.tokenize(text)
             + search.tokenize(title) * search.TITLE_WEIGHT
             + search.tokenize(slug),
         }
-        _search_doc_cache[slug] = (mtime, doc)
+        _search_doc_cache[slug] = (mtime, doc, deck_key)
         docs.append(doc)
     # Drop cache entries for deleted/renamed pages.
     for stale in [s for s in _search_doc_cache if s not in seen]:
@@ -2268,7 +2371,7 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     frontmatter block and the H1 (the title already) are dropped, and so are
     [[deck …]] and [[toc]] directives. Those are markup, not content: pages
     holding nothing but a deck embed came out as each other's closest match."""
-    meta, body = parse_frontmatter(content)
+    meta, body = parse_frontmatter(_task_refs_as_titles(content))
     lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
     body = _TOC_RE.sub("", deck_module._DECK_RE.sub("", strip_h1(body)))
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
@@ -2647,6 +2750,29 @@ def _mcp_task_text(task: dict, base: str) -> str:
     return f"{text}\n\n{notes}" if notes else text
 
 
+def _mcp_task_refs(content: str, base: str) -> str:
+    """For read_page: what each [[task:…]] on the page stands for, since the
+    raw markdown holds only the id."""
+    masked, _ = _mask_code(content)
+    refs = list(dict.fromkeys(m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)))
+    if not refs:
+        return ""
+    tasks = deck_module.resolve_task_refs(refs)
+    lines = []
+    for ref in refs:
+        task = tasks[ref]
+        if task is None:
+            lines.append(f"- [[task:{ref}]]: no such task (deleted)")
+            continue
+        facts = [_task_status(task)]
+        facts += [f"{k} {task[k + '_date']}" for k in ("start", "due") if task.get(k + "_date")]
+        done = bool(task.get("completed_at"))
+        url = base + _task_href(task["id"], "completed" if done else "open", task.get("list"),
+                                deck_module._past_year(task) if done else None)
+        lines.append(f"- [[task:{ref}]]: {task.get('title', '')} ({', '.join(facts)}) {url}")
+    return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + "\n".join(lines)
+
+
 def _mcp_search_tasks(args: dict, base: str) -> str:
     """Deck tasks filtered by tag, status and list, ranked by the query when
     there is one, else open ones by deadline and start date, done ones newest
@@ -2728,7 +2854,7 @@ def _mcp_call_tool(name: str, args: dict) -> str:
         if slug is None:
             raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
         content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
-        return f"slug: {slug}\nurl: {base}/page/{slug}\n\n{content}"
+        return f"slug: {slug}\nurl: {base}/page/{slug}\n\n{content}" + _mcp_task_refs(content, base)
     if name == "list_pages":
         limit = _mcp_int(args, "limit", 100, 1000)
         under = _clean_folder(args.get("under", ""))

@@ -773,6 +773,44 @@ main {
 .task-list-item { list-style: none; margin-left: -1.25rem; }
 .task-list-item-checkbox { cursor: pointer; margin-right: .4rem; accent-color: var(--link); }
 
+/* ── Task references ([[task:…]], _task_ref_html in server.py) ───────────────── */
+
+/* Inline: a small chip in the sentence. Alone in a list item: a checklist
+   row (no box), so a list of references reads like a checklist. */
+.task-ref {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .1rem .4rem;
+  max-width: 100%;
+  padding: 0 .45rem 0 .3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  vertical-align: baseline;
+}
+.task-ref-check {
+  align-self: center;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--link);
+}
+.task-ref-check:disabled { cursor: default; }
+.page-content .task-ref-title { color: var(--fg); text-decoration: none; min-width: 0; }
+.page-content .task-ref-title:hover { color: var(--link); text-decoration: underline; }
+.task-ref-badge { font-size: .75em; color: var(--muted); white-space: nowrap; }
+.task-ref-due.overdue { color: #dc2626; font-weight: 600; }
+.task-ref-due.due-today { color: var(--btn-primary); font-weight: 600; }
+.task-ref-start.start-today { color: #d97706; }
+.task-ref-start.start-later { color: #3b82f6; }
+.task-ref-list { font-family: var(--mono); }
+.task-ref-done .task-ref-title,
+.task-ref-wontdo .task-ref-title { color: var(--muted); text-decoration: line-through; }
+.task-ref-missing { color: var(--link-missing); border-style: dashed; padding: 0 .45rem; font-size: .9em; }
+.task-ref-item { list-style: none; margin-left: -1.25rem; }
+.task-ref-item .task-ref { padding: 0; border: none; background: none; }
+.task-ref-item .task-ref-check { margin-right: .05rem; }
+
 .task-date {
   display: inline-block;
   margin-left: .5rem;
@@ -1192,6 +1230,12 @@ body.editor-page main {
   color: var(--fg);
   white-space: nowrap;
 }
+
+/* Tasks in the `[[task:` completion: long titles end in "…", the list and
+   deadline follow, smaller. */
+.wikilink-ac { max-width: min(30rem, calc(100vw - 1rem)); }
+.wikilink-ac-item { overflow: hidden; text-overflow: ellipsis; }
+.wikilink-ac-meta { margin-left: .6rem; font-size: .75rem; color: var(--muted); }
 
 .wikilink-ac-item:hover,
 .wikilink-ac-item.selected {

@@ -951,6 +951,54 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
     return results
 
 
+# ── Task references ([[task:<id>]] in pages) ─────────────────────────────────
+
+# A page refers to one task as [[task:<id>]]: the first SHORT_ID_LEN
+# characters of its id (like a short git hash), or the whole id. The server
+# renders it as a live chip (server._task_ref_html).
+TASK_REF_RE = re.compile(r"\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]")
+SHORT_ID_LEN = 8
+
+
+def short_id(task_id: str) -> str:
+    return task_id[:SHORT_ID_LEN]
+
+
+def resolve_task_refs(refs) -> dict[str, dict | None]:
+    """Map each reference (an id prefix, lowercased) to its task, None when
+    no task has that id. An open task wins over a completed one with the
+    same prefix. A completed recurring task stands for its series: the
+    reference follows `spawned_from` to the occurrence that is current now,
+    so ticking it on a page and reloading shows the next one."""
+    refs = {r.lower() for r in refs}
+    if not refs:
+        return {}
+    with _LOCK:
+        active = _read_deck()
+        done = _read_completed() + _read_archived()
+    successor = {t["spawned_from"]: t for t in active + done if t.get("spawned_from")}
+    out = {}
+    for ref in refs:
+        task = (next((t for t in active if t["id"].lower().startswith(ref)), None)
+                or next((t for t in done if t["id"].lower().startswith(ref)), None))
+        seen = set()
+        while task and task.get("completed_at") and task["id"] in successor \
+                and task["id"] not in seen:
+            seen.add(task["id"])
+            task = successor[task["id"]]
+        out[ref] = task
+    return out
+
+
+def expand_task_refs(text: str, fmt) -> str:
+    """Replace every [[task:…]] in text with fmt(ref, task_or_None)."""
+    refs = [m.group(1).lower() for m in TASK_REF_RE.finditer(text)]
+    if not refs:
+        return text
+    tasks = resolve_task_refs(refs)
+    return TASK_REF_RE.sub(lambda m: fmt(m.group(1).lower(), tasks[m.group(1).lower()]), text)
+
+
 # ── Search integration ────────────────────────────────────────────────────────
 
 

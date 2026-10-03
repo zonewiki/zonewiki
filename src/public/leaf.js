@@ -705,7 +705,7 @@ if (textarea && previewPane) {
         const sel = acDropdown.querySelector('.selected');
         if (sel) {
           e.preventDefault();
-          if (acMode === 'mdlink') insertMdLink(sel.textContent); else insertWikilink(sel.textContent);
+          acInsert(sel.dataset.value);
           return;
         }
       }
@@ -1064,6 +1064,12 @@ if (textarea && previewPane) {
     table: insertTable,
     link: insertLink,
     wikilink: wikilinkFormat,
+    taskref: () => {
+      // `[[task:` opens the task autocomplete, which closes the reference.
+      // Inserted after a selection, never over it.
+      const at = textarea.selectionEnd;
+      replaceRange(at, at, '[[task:', 7, 7);
+    },
     attach: () => attachInput?.click(),
   };
   applyFormat = kind => FORMATS[kind]?.();
@@ -1381,7 +1387,7 @@ function wikilinkAtCursor() {
 let wikiPages = [];
 let acDropdown = null;
 let acIndex = 0;
-let acMode = 'wikilink'; // 'wikilink' | 'mdlink'
+let acMode = 'wikilink'; // 'wikilink' | 'mdlink' | 'task'
 
 function getWikilinkQuery() {
   const before = textarea.value.slice(0, textarea.selectionStart);
@@ -1400,8 +1406,42 @@ function getMdLinkQuery() {
   return null;
 }
 
+// Open tasks for `[[task:` completion, fetched when first needed and again
+// when older than a minute (tasks change in other tabs).
+let acTasks = null, acTasksAt = 0, acTasksLoading = false;
+
+function taskAcMatches(query) {
+  if (!acTasks || Date.now() - acTasksAt > 60000) {
+    if (!acTasksLoading) {
+      acTasksLoading = true;
+      fetch('/api/deck').then(r => r.json()).then(tasks => {
+        acTasks = tasks; acTasksAt = Date.now();
+      }).catch(() => {}).finally(() => { acTasksLoading = false; updateAcDropdown(); });
+    }
+    if (!acTasks) return [];
+  }
+  const q = query.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  return acTasks
+    .filter(t => t.id.startsWith(q) || words.every(w => t.title.toLowerCase().includes(w)))
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    .slice(0, 8)
+    .map(t => ({
+      value: t.id.slice(0, 8),
+      label: t.title,
+      meta: [t.list, t.due_date && `⏰ ${t.due_date}`].filter(Boolean).join(' · '),
+    }));
+}
+
 function updateAcDropdown() {
   const wikiQuery = getWikilinkQuery();
+  if (wikiQuery !== null && /^task:/i.test(wikiQuery)) {
+    acMode = 'task';
+    const matches = taskAcMatches(wikiQuery.slice(5));
+    if (!matches.length) { hideAcDropdown(); return; }
+    showAcDropdown(matches);
+    return;
+  }
   if (wikiQuery !== null) {
     acMode = 'wikilink';
     const q = wikiQuery.toLowerCase();
@@ -1457,14 +1497,23 @@ function showAcDropdown(matches) {
     acIndex = 0;
   }
 
+  // An item is a page slug, or { value, label, meta } (tasks).
   acDropdown.innerHTML = '';
-  matches.forEach((page, i) => {
+  matches.forEach((m, i) => {
     const item = document.createElement('div');
     item.className = 'wikilink-ac-item' + (i === acIndex ? ' selected' : '');
-    item.textContent = page;
+    const value = typeof m === 'string' ? m : m.value;
+    item.dataset.value = value;
+    item.textContent = typeof m === 'string' ? m : m.label;
+    if (m.meta) {
+      const meta = document.createElement('span');
+      meta.className = 'wikilink-ac-meta';
+      meta.textContent = m.meta;
+      item.append(meta);
+    }
     item.addEventListener('mousedown', ev => {
       ev.preventDefault();
-      if (acMode === 'mdlink') insertMdLink(page); else insertWikilink(page);
+      acInsert(value);
     });
     acDropdown.appendChild(item);
   });
@@ -1477,7 +1526,7 @@ function showAcDropdown(matches) {
   let left = elRect.left + coords.left;
   // Keep within viewport
   top = Math.min(top, window.innerHeight - 220);
-  left = Math.min(left, window.innerWidth - 200);
+  left = Math.max(4, Math.min(left, window.innerWidth - acDropdown.offsetWidth - 8));
   acDropdown.style.top = top + 'px';
   acDropdown.style.left = left + 'px';
 }
@@ -1492,6 +1541,20 @@ function acMove(dir) {
   items[acIndex].classList.remove('selected');
   acIndex = (acIndex + dir + items.length) % items.length;
   items[acIndex].classList.add('selected');
+}
+
+function acInsert(value) {
+  if (acMode === 'mdlink') insertMdLink(value);
+  else if (acMode === 'task') insertTaskRef(value);
+  else insertWikilink(value);
+}
+
+function insertTaskRef(id) {
+  const pos = textarea.selectionStart;
+  const bracketPos = textarea.value.lastIndexOf('[[', pos);
+  textarea.setSelectionRange(bracketPos, pos);
+  document.execCommand('insertText', false, `[[task:${id}]]`);
+  hideAcDropdown();
 }
 
 function insertWikilink(page) {
@@ -1825,6 +1888,61 @@ function showCheckboxToast(msg, undo) {
   checkboxToast = el;
   setTimeout(() => el.remove(), 6000);
 }
+
+// ── Task references ([[task:…]] chips) ───────────────────────────────────────
+
+// A chip's checkbox completes (or reopens) the task in the deck, through the
+// same API as the deck, so repeating and keep tasks behave as there. The chip
+// is then re-rendered by the server (/api/preview of the reference): a
+// repeating task shows its next occurrence, a keep task its "✓ today".
+async function rerenderTaskRef(chip, id) {
+  try {
+    const res = await fetch('/api/preview', {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `[[task:${id}]]`,
+    });
+    const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').querySelector('.task-ref');
+    if (fresh) { chip.replaceWith(fresh); return fresh; }
+  } catch (_) { /* keep the old chip */ }
+  return chip;
+}
+
+function putTask(id, body) {
+  return fetch(`/api/deck/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+
+document.addEventListener('change', async e => {
+  const cb = e.target;
+  if (!cb.matches('.task-ref-check')) return;
+  let chip = cb.closest('.task-ref');
+  const id = chip.dataset.taskId;
+  const done = cb.checked;
+  // The open task as it is now, for undo: completing a keep task changes
+  // its dates instead of archiving it, and undo must restore them.
+  let before = null;
+  if (done) {
+    try { before = (await (await fetch('/api/deck')).json()).find(t => t.id === id) || null; } catch (_) { /* no undo data */ }
+  }
+  const res = await putTask(id, { completed: done }).catch(() => null);
+  if (!res?.ok) {
+    cb.checked = !done;
+    showCheckboxToast('Could not update the task');
+    return;
+  }
+  const title = chip.querySelector('.task-ref-title')?.textContent || '';
+  const label = title.length > 40 ? title.slice(0, 39) + '…' : title;
+  chip = await rerenderTaskRef(chip, id);
+  showCheckboxToast(`${done ? 'Done' : 'Reopened'} “${label}”`, async () => {
+    const undo = before?.keep
+      ? { start_date: before.start_date, due_date: before.due_date, last_done: before.last_done,
+          focus_order: before.focus_order ?? null, history: before.history }
+      : { completed: !done, ...(before ? { history: before.history } : {}) };
+    const r = await putTask(id, undo).catch(() => null);
+    if (r?.ok) chip = await rerenderTaskRef(chip, id);
+    else showCheckboxToast('Could not undo');
+  });
+});
 
 // ── Sortable tables ───────────────────────────────────────────────────────────
 
