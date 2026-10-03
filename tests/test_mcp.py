@@ -199,6 +199,10 @@ class TestSearchWiki:
         assert "slug: tagged" in text and "Task: git push the backup" in text
         assert "slug: git-remote" not in text
 
+    def test_found_by_file_name(self, client, pages):  # noqa: F811
+        write_page(pages, "messages/2026-06-18_update-alex-robin", "# Roof status\n\nRevised timeline.\n")
+        assert "slug: messages/2026-06-18_update-alex-robin" in call(client, "search_wiki", query="robin")[0]
+
     def test_no_match(self, client, pages):  # noqa: F811
         text, err = call(client, "search_wiki", query="xqzt")
         assert not err and text.startswith("No matching sections")

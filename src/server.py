@@ -2127,6 +2127,10 @@ _search_doc_cache: dict[str, tuple[float, dict]] = {}
 
 
 def _page_search_docs() -> list[dict]:
+    """Every page as a BM25 document: its text, its title (TITLE_WEIGHT extra
+    times) and the words of its slug once, so a page is found by its file
+    and folder names too ("robin" finds .../2026-06-18_update-alex-robin)
+    without those outranking what the page says."""
     docs = []
     seen = set()
     for md_file, slug in iter_pages():
@@ -2155,7 +2159,8 @@ def _page_search_docs() -> list[dict]:
             "tags": _page_tags(content),
             "excerpt_text": text,
             "tokens": search.tokenize(text)
-            + search.tokenize(title) * search.TITLE_WEIGHT,
+            + search.tokenize(title) * search.TITLE_WEIGHT
+            + search.tokenize(slug),
         }
         _search_doc_cache[slug] = (mtime, doc)
         docs.append(doc)
@@ -2348,7 +2353,8 @@ def _page_chunk_docs() -> list[dict]:
                     "slug": slug, "title": title, "heading": heading, "text": text,
                     "anchor": _section_anchor(heading, level), "tags": tags,
                     "mtime": mtime, "key": embed.chunk_key(title, chunk),
-                    "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT,
+                    "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT
+                    + search.tokenize(slug),
                 })
             cached = _chunk_doc_cache[slug] = (mtime, chunks)
         seen.add(slug)

@@ -693,6 +693,19 @@ class TestSearch:
         write_page(wiki_dir, "a", "# A\n\ngit.\n")
         assert client.get("/api/search?q=-git", headers=HOST).get_json() == []
 
+    def test_found_by_file_and_folder_names(self, client, wiki_dir):
+        write_page(wiki_dir, "messages/2026-06-18_roof-update-alex-robin",
+                   "# Roof repair status\n\nRevised timeline.\n")
+        slugs = [r["slug"] for r in client.get("/api/search?q=robin", headers=HOST).get_json()]
+        assert slugs == ["messages/2026-06-18_roof-update-alex-robin"]
+        assert client.get("/api/search?q=messages", headers=HOST).get_json()  # folder name
+
+    def test_file_name_does_not_outrank_content(self, client, wiki_dir):
+        write_page(wiki_dir, "zebra-notes", "# Notes\n\nNothing here.\n")
+        write_page(wiki_dir, "savanna", "# Savanna\n\nThe zebra grazes. A zebra runs.\n")
+        slugs = [r["slug"] for r in client.get("/api/search?q=zebra", headers=HOST).get_json()]
+        assert slugs == ["savanna", "zebra-notes"]
+
     def test_api_search_empty_query(self, client):
         resp = client.get("/api/search?q=", headers=HOST)
         assert resp.status_code == 200
