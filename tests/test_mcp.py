@@ -1,6 +1,6 @@
 """Tests for the MCP server: the protocol handler (src/mcp_server.py), the
-/mcp endpoint with its auth, and the tools (search_wiki, read_page,
-list_pages) backed by section-level retrieval in server.py.
+/mcp endpoint with its auth, and the tools (search_wiki, search_tasks,
+read_page, list_pages) backed by section-level retrieval in server.py.
 
 Run with:
     pytest tests/test_mcp.py -v
@@ -63,7 +63,7 @@ class TestHandle:
     def test_tools_list(self):
         r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, _no_tools, "x")
         tools = r["result"]["tools"]
-        assert [t["name"] for t in tools] == ["search_wiki", "read_page", "list_pages"]
+        assert [t["name"] for t in tools] == ["search_wiki", "search_tasks", "read_page", "list_pages"]
         assert all(t["annotations"]["readOnlyHint"] for t in tools)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
 
@@ -213,6 +213,117 @@ class TestSearchWiki:
     def test_keywords_only_without_semantic(self, client, pages, monkeypatch):  # noqa: F811
         monkeypatch.setattr(server, "SEMANTIC", None)
         assert call(client, "search_wiki", query="car repair")[0].startswith("No matching")
+
+
+def task(client, **fields):  # noqa: F811
+    resp = client.post("/api/deck", json=fields, headers=HOST)
+    assert resp.status_code == 201, resp.get_json()
+    return resp.get_json()
+
+
+def close(client, task_id, **fields):  # noqa: F811
+    resp = client.put(f"/api/deck/{task_id}", json=fields, headers=HOST)
+    assert resp.status_code == 200, resp.get_json()
+
+
+def entries(text):
+    """A search_tasks/search_wiki answer split into its entries' first lines."""
+    return [part.split("\n")[0] for part in text.split("\n\n---\n\n")]
+
+
+class TestTasksInSearchWiki:
+    def test_task_is_a_result_with_its_facts(self, client, pages):  # noqa: F811
+        t = task(client, title="Fix the leaf importer", tags=["leaf"], due_date="2026-10-10",
+                 description="Crashes on empty files.")
+        text, err = call(client, "search_wiki", query="importer")
+        assert not err
+        first = text.split("\n\n---\n\n")[0]
+        assert first.startswith("[1] Task: Fix the leaf importer\nstatus: open · tags: #leaf · due: 2026-10-10\n")
+        assert f"url: http://localhost:5000/deck?task={t['id']}&view=open" in first
+        assert first.endswith("Crashes on empty files.")
+
+    def test_tasks_and_sections_together(self, client, pages):  # noqa: F811
+        task(client, title="Push the git remote again")
+        text, _ = call(client, "search_wiki", query="git push")
+        assert "Task: Push the git remote again" in text and "Git remote › Pushing" in text
+
+    def test_done_task_links_to_completed(self, client, pages):  # noqa: F811
+        t = task(client, title="Renew passport")
+        close(client, t["id"], completed=True)
+        text, _ = call(client, "search_wiki", query="passport")
+        assert "status: done 20" in text and "view=completed" in text
+
+    def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):  # noqa: F811
+        idx = make_index(pages)
+        idx.sync()
+        monkeypatch.setattr(server, "SEMANTIC", idx)
+        task(client, title="Call the mechaniker")
+        text, _ = call(client, "search_wiki", query="mechaniker")
+        assert "Task: Call the mechaniker" in text and "Golf › Werkstatt" in text
+
+
+class TestSearchTasks:
+    def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):  # noqa: F811
+        task(client, title="Later", tags=["leaf"], due_date="2026-12-01")
+        task(client, title="Soon", tags=["leaf", "bug"], due_date="2026-10-05")
+        task(client, title="Undated", tags=["Leaf"])
+        task(client, title="Other project", tags=["kb"], due_date="2026-10-01")
+        text, err = call(client, "search_tasks", tag="leaf")
+        assert not err
+        assert text.startswith("Today is ")
+        assert "3 matching tasks:" in text
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Soon", "Task: Later", "Task: Undated"]
+
+    def test_several_tags_must_all_match(self, client, wiki_dir):  # noqa: F811
+        task(client, title="A", tags=["leaf", "bug"])
+        task(client, title="B", tags=["leaf"])
+        text, _ = call(client, "search_tasks", tag="#leaf, bug")
+        assert "1 matching tasks" in text and "Task: A" in text and "Task: B" not in text
+
+    def test_status(self, client, wiki_dir):  # noqa: F811
+        open_ = task(client, title="Still open", tags=["x"])
+        done = task(client, title="Finished", tags=["x"])
+        dropped = task(client, title="Dropped", tags=["x"])
+        close(client, done["id"], completed=True)
+        close(client, dropped["id"], wont_do=True)
+        assert "Finished" not in call(client, "search_tasks", tag="x")[0]
+        text = call(client, "search_tasks", tag="x", status="done")[0]
+        assert "Still open" not in text and "status: done" in text and "status: won't do" in text
+        text = call(client, "search_tasks", tag="x", status="all")[0]
+        assert text.index("Still open") < text.index("Finished")
+        assert open_["id"]
+
+    def test_query_ranks_within_the_filter(self, client, wiki_dir):  # noqa: F811
+        task(client, title="Write the importer", tags=["leaf"])
+        task(client, title="Importer docs", tags=["kb"])
+        text, _ = call(client, "search_tasks", query="importer", tag="leaf")
+        assert "1 matching tasks" in text and "Write the importer" in text
+
+    def test_list_filter_and_label(self, client, wiki_dir):  # noqa: F811
+        task(client, title="Milk", list="groceries")
+        task(client, title="Main deck task")
+        text, _ = call(client, "search_tasks", list="Groceries")
+        assert "Task: Milk" in text and "list: groceries" in text and "Main deck" not in text
+        assert "list=groceries" in text
+
+    def test_repeat_keep_and_start(self, client, wiki_dir):  # noqa: F811
+        task(client, title="Water plants", start_date="2026-10-04", due_date="2026-10-06",
+             rec_type="weekly", rec_interval=2)
+        task(client, title="Coffee", keep=True)
+        text, _ = call(client, "search_tasks")
+        assert "start: 2026-10-04 · due: 2026-10-06 · repeats every 2 weeks" in text
+        assert "keep task (back to the list when done)" in text
+
+    def test_limit_and_none(self, client, wiki_dir):  # noqa: F811
+        for i in range(3):
+            task(client, title=f"T{i}")
+        text, _ = call(client, "search_tasks", limit=2)
+        assert "3 matching tasks, the first 2 shown" in text
+        assert call(client, "search_tasks", tag="nope")[0].endswith("No matching tasks.")
+
+    def test_bad_arguments(self, client, wiki_dir):  # noqa: F811
+        assert call(client, "search_tasks", status="later")[1] is True
+        assert call(client, "search_tasks", tag=["leaf"])[1] is True
 
 
 class TestBaseUrl:

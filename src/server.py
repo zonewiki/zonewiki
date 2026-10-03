@@ -2275,7 +2275,9 @@ _chunk_index_cache: dict = {"key": None, "index": None}
 
 
 def _chunk_index() -> search.SearchIndex:
-    docs = _page_chunk_docs()
+    """BM25 over page sections and deck tasks (a task is one result, like a
+    section), as the browser search ranks pages and tasks together."""
+    docs = _page_chunk_docs() + deck_module.task_search_docs()
     key = tuple(map(id, docs))
     if _chunk_index_cache["key"] != key:
         _chunk_index_cache["index"] = search.SearchIndex(docs)
@@ -2284,16 +2286,17 @@ def _chunk_index() -> search.SearchIndex:
 
 
 def retrieve(q: str, limit: int = 8) -> list[dict]:
-    """The sections most relevant to q, best first (dicts with slug, title,
-    heading, text)."""
+    """The sections and tasks most relevant to q, best first: section dicts
+    (slug, title, heading, text) and task docs (type "task", with the task)."""
     if not q.strip():
         return []
     index = _chunk_index()
     ranked = [d for _s, d in index.search(q, limit=FUSE_DEPTH)]
     if SEMANTIC:
         SEMANTIC.poke()
-        by_key = {d["key"]: d for d in index.docs}
-        keys = SEMANTIC.search_chunks(q, known={d["slug"] for d in index.docs}, limit=FUSE_DEPTH)
+        sections = [d for d in index.docs if d.get("type") != "task"]
+        by_key = {d["key"]: d for d in sections}
+        keys = SEMANTIC.search_chunks(q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH)
         hits = [by_key[k] for k in keys if k in by_key]
         if hits:
             ranked = search.fuse([ranked, hits])
@@ -2325,6 +2328,84 @@ def _mcp_page_slug(raw: str) -> str | None:
     return None
 
 
+_RECURRENCE_UNITS = {"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}
+
+
+def _task_status(task: dict) -> str:
+    if not task.get("completed_at"):
+        return "open"
+    return "won't do" if task.get("wont_do") else "done"
+
+
+def _mcp_task_text(task: dict, base: str) -> str:
+    """One deck task for an LLM: title, a line of facts (status, tags, dates,
+    repeat, list), its link in the deck, and its notes."""
+    status = _task_status(task)
+    facts = [f"status: {status}" + (f" {task['completed_at'][:10]}" if status != "open" else "")]
+    if task.get("tags"):
+        facts.append("tags: " + " ".join(f"#{t}" for t in task["tags"]))
+    if task.get("start_date"):
+        facts.append(f"start: {task['start_date']}")
+    if task.get("due_date"):
+        facts.append(f"due: {task['due_date']}")
+    rec = task.get("recurrence")
+    if isinstance(rec, dict) and rec.get("type") in _RECURRENCE_UNITS:
+        n = rec.get("interval") or 1
+        every = rec["type"] if n == 1 else f"every {n} {_RECURRENCE_UNITS[rec['type']]}s"
+        facts.append(f"repeats {every}" + (" after completion" if rec.get("from") == "completion" else ""))
+    if task.get("keep"):
+        facts.append("keep task (back to the list when done"
+                     + (f", last done {task['last_done']})" if task.get("last_done") else ")"))
+    if task.get("list"):
+        facts.append(f"list: {task['list']}")
+    done = status != "open"
+    year = deck_module._past_year(task) if done else None
+    url = base + _task_href(task["id"], "completed" if done else "open", task.get("list"), year)
+    text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
+    notes = (task.get("description") or "").strip()
+    return f"{text}\n\n{notes}" if notes else text
+
+
+def _mcp_search_tasks(args: dict, base: str) -> str:
+    """Deck tasks filtered by tag, status and list, ranked by the query when
+    there is one, else open ones by deadline and start date, done ones newest
+    first."""
+    query, tag, list_name = (args.get(k, "") for k in ("query", "tag", "list"))
+    if not all(isinstance(v, str) for v in (query, tag, list_name)):
+        raise mcp_server.ToolError("query, tag and list must be strings")
+    status = args.get("status", "open")
+    if status not in ("open", "done", "all"):
+        raise mcp_server.ToolError("status must be open, done or all")
+    limit = _mcp_int(args, "limit", 50, 200)
+    want = {t.strip().lstrip("#").lower() for t in tag.split(",") if t.strip().lstrip("#")}
+    list_name = deck_module._clean_list(list_name) if list_name.strip() else None
+
+    def matches(task: dict) -> bool:
+        if status != "all" and (status == "open") == bool(task.get("completed_at")):
+            return False
+        if list_name and task.get("list") != list_name:
+            return False
+        return want <= {t.lower() for t in task.get("tags") or []}
+
+    docs = [d for d in deck_module.task_search_docs() if matches(d["task"])]
+    if query.strip():
+        docs = [d for _s, d in search.SearchIndex(docs).search(query, limit=max(len(docs), 1))]
+    else:
+        open_ = sorted((d for d in docs if not d["task"].get("completed_at")),
+                       key=lambda d: (d["task"].get("due_date") or "9999",
+                                      d["task"].get("start_date") or "9999",
+                                      d["task"].get("title", "").lower()))
+        done = sorted((d for d in docs if d["task"].get("completed_at")),
+                      key=lambda d: d["task"]["completed_at"], reverse=True)
+        docs = open_ + done
+    if not docs:
+        return f"Today is {date.today()}. No matching tasks."
+    shown = docs[:limit]
+    count = f"{len(docs)} matching tasks" + (f", the first {limit} shown" if len(docs) > limit else "")
+    body = "\n\n---\n\n".join(_mcp_task_text(d["task"], base) for d in shown)
+    return f"Today is {date.today()}. {count}:\n\n{body}"
+
+
 def _mcp_call_tool(name: str, args: dict) -> str:
     base = LEAF_BASE_URL or request.host_url.rstrip("/")
     if name == "search_wiki":
@@ -2333,13 +2414,18 @@ def _mcp_call_tool(name: str, args: dict) -> str:
             raise mcp_server.ToolError("query must be a non-empty string")
         hits = retrieve(query, _mcp_int(args, "limit", 8, 20))
         if not hits:
-            return "No matching sections. Try other words, or list_pages to browse."
+            return "No matching sections or tasks. Try other words, or list_pages to browse."
         out = []
         for i, d in enumerate(hits, 1):
+            if d.get("type") == "task":
+                out.append(f"[{i}] " + _mcp_task_text(d["task"], base))
+                continue
             anchor = f"#{_heading_id(_plain_heading(d['heading']))}" if d["heading"] else ""
             where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
             out.append(f"[{i}] {where}\nslug: {d['slug']}\nurl: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")
         return "\n\n---\n\n".join(out)
+    if name == "search_tasks":
+        return _mcp_search_tasks(args, base)
     if name == "read_page":
         raw = args.get("slug")
         if not isinstance(raw, str) or not raw.strip():

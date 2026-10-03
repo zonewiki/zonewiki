@@ -408,7 +408,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 
 ## MCP server
 
-`POST /mcp` lets an LLM client (any MCP client) read the wiki through tools. Protocol in `src/mcp_server.py` (JSON-RPC, no Flask), route and tools in `server.py` (`mcp_endpoint`, `_mcp_call_tool`). MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions. `initialize` echoes the client's protocol version when it is in `PROTOCOL_VERSIONS`, else the newest, and sends `instructions` telling the model what Leaf is.
+`POST /mcp` lets an LLM client (any MCP client) read the wiki and the deck through tools. Protocol in `src/mcp_server.py` (JSON-RPC, no Flask), route and tools in `server.py` (`mcp_endpoint`, `_mcp_call_tool`). MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions. `initialize` echoes the client's protocol version when it is in `PROTOCOL_VERSIONS`, else the newest, and sends `instructions` telling the model what Leaf is.
 
 Register `http://localhost:5000/mcp` with your MCP client (HTTP transport) and the header `Authorization: Bearer <LEAF_MCP_TOKEN>`.
 
@@ -416,11 +416,12 @@ Tools, all read-only (`readOnlyHint`). A tool failure the model can fix (bad slu
 
 | Tool | Does |
 |------|------|
-| `search_wiki(query, limit=8)` | The most relevant **sections**, full text, best first, each with title › heading, slug and a URL with the heading anchor. Several may come from one page. |
+| `search_wiki(query, limit=8)` | The most relevant **sections**, full text, best first, each with title › heading, slug and a URL with the heading anchor. Several may come from one page. Matching deck tasks are results too, ranked with the sections. |
+| `search_tasks(tag, status="open", query, list, limit=50)` | Deck tasks filtered by tag (comma = all must match, case-insensitive), status (`open`, `done` = completed or won't do, `all`) and separate list, all lists included unless `list` is given. With a query, ranked by BM25 within the filter; without, open tasks by deadline, then start date, then title, done ones newest first. Starts with "Today is …" so the model can tell overdue from upcoming. |
 | `read_page(slug)` | A page's raw markdown, frontmatter included. Accepts a slug, `/page/<slug>`, a full URL, `<slug>.md` or the page name (`_mcp_page_slug`); `safe_path` keeps it inside the wiki. |
 | `list_pages(limit=100)` | `slug \| title \| edited date`, most recently edited first. |
 
-**Retrieval** (`server.retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page. BM25 runs over sections (`_page_chunk_docs`, the same `embed.chunk_sections` split, cached per page by mtime; `_chunk_index`), fused with `SEMANTIC.search_chunks` when semantic search is on (sections match by `embed.chunk_key`). Without semantic search it is keyword-only and still works. Deck tasks are not exposed.
+**Retrieval** (`server.retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page. BM25 runs over sections (`_page_chunk_docs`, the same `embed.chunk_sections` split, cached per page by mtime; `_chunk_index`), fused with `SEMANTIC.search_chunks` when semantic search is on (sections match by `embed.chunk_key`). Without semantic search it is keyword-only and still works. Deck tasks share that BM25 index (`deck.task_search_docs()`, each doc carrying its `task`), so they rank with sections, as in the browser search; they have no vectors, so they are found by keyword only. A task is shown by `_mcp_task_text`: title, a line of facts (status, tags, start, due, repeat, keep, list), the `/deck?task=…` link (`_task_href`) and its notes.
 
 **Links** in tool results start with `LEAF_BASE_URL` (e.g. `http://localhost:5000`, Leaf's address as your browser knows it) when set, else with the address the request came in on. A client in a container reaches Leaf as `host.containers.internal`, and links with that host don't open in the browser on the host.
 
@@ -566,7 +567,7 @@ pytest tests/test_section_editing.py -v              # Run section-editing tests
 
 `tests/test_git.py` initializes a real git repo in the temp wiki dir and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules point `WIKI_DIR` at a plain temp dir, so git calls there are silent no-ops.
 
-`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, and the three tools (with and without the fake semantic index from `test_semantic.py`).
+`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, and the four tools (tasks created through `/api/deck`) (with and without the fake semantic index from `test_semantic.py`).
 
 `tests/test_semantic.py` covers semantic search with a fake embedder (words mapped to a few "concept" axes), so it needs neither fastembed nor a model: chunking, the content-addressed cache, failure fallback, the worker, rank fusion, hybrid `/api/search` and the Related section. It swaps `server.SEMANTIC` for an index over the temp wiki.
 

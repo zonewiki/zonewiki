@@ -1,7 +1,7 @@
 """MCP (Model Context Protocol) server: lets an LLM client
 read the wiki through tools. Served by server.py at POST /mcp (MCP's
 "Streamable HTTP" transport, answering each request with plain JSON; no
-event stream, no sessions). Read-only: the tools search and read pages.
+event stream, no sessions). Read-only: the tools search and read pages and deck tasks.
 
 This module is the protocol only (JSON-RPC in, JSON-RPC out); server.py
 does authentication and implements the tools through call_tool.
@@ -16,10 +16,13 @@ from typing import Callable
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
 INSTRUCTIONS = (
-    "Leaf is the user's personal wiki: their notes, in markdown. Use search_wiki "
-    "when a question may be answered by something the user wrote down, then "
-    "read_page for a page's full text. Search finds by meaning as well as by "
-    "keyword, so phrase queries the way the notes might. Cite pages by their URL."
+    "Leaf is the user's personal wiki: their notes, in markdown, plus the Deck, "
+    "their task list. Use search_wiki when a question may be answered by something "
+    "the user wrote down (it finds tasks too), then read_page for a page's full "
+    "text. Search finds by meaning as well as by keyword, so phrase queries the "
+    "way the notes might. For questions about their tasks (what's open for a "
+    "project, what's due, what they finished) use search_tasks, which filters by "
+    "tag and status. Cite pages and tasks by their URL."
 )
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
@@ -29,9 +32,10 @@ TOOLS = [
         "name": "search_wiki",
         "title": "Search the wiki",
         "description": (
-            "Search the user's wiki and return the most relevant sections with "
+            "Search the user's wiki and return the most relevant page sections with "
             "their full text, best first, each with its page and a link. Several "
-            "sections may come from the same page."
+            "sections may come from the same page. Deck tasks that match are "
+            "results too, with their status, tags, dates and notes."
         ),
         "inputSchema": {
             "type": "object",
@@ -41,6 +45,29 @@ TOOLS = [
                           "description": "How many sections to return."},
             },
             "required": ["query"],
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "search_tasks",
+        "title": "Search tasks",
+        "description": (
+            "List the user's deck tasks, filtered by tag, status and list, each with "
+            "status, tags, start and due dates, repeat, notes and a link. Without a "
+            "query, open tasks come by deadline, then start date; done ones newest "
+            "first. With a query, by relevance. Starts with today's date."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tag": {"type": "string",
+                        "description": "Only tasks with this tag; several comma-separated tags must all match, e.g. 'leaf' or 'work,urgent'."},
+                "status": {"type": "string", "enum": ["open", "done", "all"], "default": "open",
+                           "description": "open, done (completed or won't do), or all."},
+                "query": {"type": "string", "description": "Words to look for in title, notes and tags."},
+                "list": {"type": "string", "description": "Only tasks in this separate list, e.g. 'groceries'."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
         },
         "annotations": _READ_ONLY,
     },
