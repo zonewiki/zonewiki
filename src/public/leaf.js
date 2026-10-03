@@ -366,14 +366,37 @@ function queryWords(raw) {
 // ('title' or 'slug'), `indices` where in it, for the highlighting.
 const FOLDER_PENALTY = 6;
 
+// fuzzyScore for several query words: each must match within one word of s,
+// and all must match; the scores add up. Matching the whole input as one
+// letter sequence let "alex again" find "A-dd a-l-e-rt e-x-porter t-a-g
+// h-a-ndl-i-n-g" spread over a long title and nothing better.
+function wordsScore(words, s) {
+  const parts = [...s.matchAll(/[\p{L}\p{N}]+/gu)];
+  let score = 0;
+  const indices = new Set();
+  for (const w of words) {
+    let best = null;
+    for (const part of parts) {
+      const m = fuzzyScore(w, part[0]);
+      if (m && (!best || m.score > best.score)) best = { score: m.score, at: part.index, indices: m.indices };
+    }
+    if (!best) return null;
+    score += best.score;
+    best.indices.forEach(i => indices.add(i + best.at));
+  }
+  return { score, indices: [...indices].sort((a, b) => a - b) };
+}
+
 function titleMatch(q, p) {
-  const ts = fuzzyScore(q, p.title);
+  const words = q.match(/[\p{L}\p{N}]+/gu) || [];
+  const match = words.length > 1 ? (s => wordsScore(words, s)) : (s => fuzzyScore(q, s));
+  const ts = match(p.title);
   const file = p.slug.slice(p.slug.lastIndexOf('/') + 1);
-  const fs = fuzzyScore(q, file);
+  const fs = match(file);
   if (ts && (!fs || ts.score >= fs.score)) return { ...ts, field: 'title' };
   const offset = p.slug.length - file.length;
   if (fs) return { score: fs.score, indices: fs.indices.map(i => i + offset), field: 'slug' };
-  const ss = fuzzyScore(q, p.slug);
+  const ss = match(p.slug);
   return ss ? { ...ss, score: ss.score - FOLDER_PENALTY, field: 'slug' } : null;
 }
 

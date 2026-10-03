@@ -216,3 +216,22 @@ def test_file_name_counts_like_the_title(page, wiki):
     expect(items).to_have_count(2)
     assert items.evaluate_all("els => els.map(e => e.dataset.slug)") == ["team/people/alex", "alex-notes/prep"]
     expect(items.first.locator(".page-slug mark")).to_have_text("alex")
+
+
+def test_several_words_match_word_by_word(page, wiki):
+    # Regression: "alex again" fuzzy-matched its letters spread over a long
+    # title ("Add alert exporter tag handling") and listed it first, above the
+    # note that says "Alex again". Each word now matches within one word.
+    wiki.write("bug-10001", "# BUG-10001 - Add alert exporter tag handling\n\nx\n")
+    wiki.write("situation", "# Debrief Sam\n\nThen Alex again pushed back.\n")
+    wiki.write("alex-morgan", "# Alex Morgan\n\nx\n")
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("alex again")
+    expect(page.locator("#modal-content-matches .search-result-card").first).to_contain_text("Debrief Sam")
+    expect(page.locator("#modal-page-list .page-list-item")).to_have_count(0)
+    page.locator("#modal-filter").fill("alex morg")
+    items = page.locator("#modal-page-list .page-list-item")
+    expect(items).to_have_count(1)
+    expect(items.first).to_have_attribute("data-slug", "alex-morgan")
+    expect(items.first.locator("a mark")).to_have_text(["Alex", "Morg"])
