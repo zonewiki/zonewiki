@@ -49,12 +49,16 @@ def test_drag_to_tomorrow_plans_task(page, wiki):
     card(page, "Draggable").drag_to(target)
 
     wait_for_field(page, "Draggable", "start_date", tomorrow())
-    # The card re-renders under the Tomorrow section.
-    expect(card(page, "Draggable")).to_be_visible()
-    section = card(page, "Draggable").evaluate(
-        "el => { let li = el; while (li && !li.classList.contains('board-day-divider'))"
-        " li = li.previousElementSibling; return li && li.dataset.dropDay; }")
-    assert section == tomorrow()
+    # The card re-renders under the Tomorrow section. Looked up afresh on each
+    # poll: the board may re-render again (count refreshes), detaching a card
+    # found earlier.
+    page.wait_for_function(
+        """day => [...document.querySelectorAll('.task-item')].some(el => {
+             if (el.querySelector('.task-title')?.textContent.trim() !== 'Draggable') return false;
+             let li = el;
+             while (li && !li.classList.contains('board-day-divider')) li = li.previousElementSibling;
+             return li?.dataset.dropDay === day;
+           })""", arg=tomorrow(), timeout=5000)
 
 
 def test_drag_to_unplanned_clears_start(page, wiki):
