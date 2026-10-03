@@ -1042,6 +1042,84 @@ if (textarea && previewPane) {
     replaceRange(pos, end, before + table, before.length + 2, before.length + 10);
   }
 
+  // Make task: the selected text, or the current line, becomes a deck task,
+  // and the text is replaced by its [[task:…]] reference, so the page shows
+  // the live task where the text was. Several selected lines make one task
+  // each (a list of action items), keeping their list markers; a checklist
+  // item's `[ ]` goes, the chip has its own checkbox. Trailing quick-add
+  // shorthand works as in the deck (`tomorrow #work due:fri`), and the
+  // task's notes link back to this page.
+  const LIST_PREFIX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])\s+)(?:\[[ xX]\]\s+)?/;
+  const TASK_REF_ONLY_RE = /^\[\[task:[^\]]*\]\]$/;
+  const pageSlug = (document.getElementById('editor-form')?.getAttribute('action') || '')
+    .replace(/^\/edit\//, '');
+
+  function localToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  async function makeTasks() {
+    const v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
+    const sel = v.slice(s, e);
+    let start, end, items, inline = false;
+    if (sel.trim() && !sel.includes('\n')) {
+      inline = true;
+      start = s + (sel.length - sel.trimStart().length);
+      end = e - (sel.length - sel.trimEnd().length);
+      items = [{ text: sel.trim() }];
+    } else {
+      const range = selectedLines();
+      ({ start, end } = range);
+      items = range.lines.map(line => {
+        const m = line.match(LIST_PREFIX_RE);
+        const prefix = m ? m[1] : line.match(/^\s*/)[0];
+        return { line, prefix, text: line.slice(m ? m[0].length : prefix.length).trim() };
+      });
+    }
+    const todo = items.filter(it => it.text && !TASK_REF_ONLY_RE.test(it.text));
+    if (!todo.length) { showCheckboxToast('Nothing to make a task from'); return; }
+
+    const today = localToday();
+    const created = [];
+    for (const it of todo) {
+      const q = window.DeckCore?.parseQuickAdd(it.text, today)
+        || { title: it.text, tags: [], start_date: null, due_date: null };
+      const body = { title: q.title, tags: q.tags, start_date: q.start_date, due_date: q.due_date,
+                     description: pageSlug ? `From [[${pageSlug}]]` : '' };
+      const res = await fetch('/api/deck', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).catch(() => null);
+      if (!res?.ok) break;
+      it.id = (await res.json()).id;
+      it.title = q.title;
+      created.push(it.id);
+    }
+    const deleteCreated = () => created.length && fetch('/api/deck/batch-delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: created }),
+    });
+    // Typed on while the tasks were being created: the range is stale.
+    if (created.length < todo.length || textarea.value !== v) {
+      await deleteCreated();
+      showCheckboxToast(created.length < todo.length ? 'Could not create the task'
+                                                     : 'The text changed meanwhile; try again');
+      return;
+    }
+
+    const ref = it => `[[task:${it.id.slice(0, 8)}]]`;
+    const text = inline ? ref(items[0])
+      : items.map(it => (it.id ? it.prefix + ref(it) : it.line)).join('\n');
+    const original = v.slice(start, end);
+    replaceRange(start, end, text, text.length, text.length);
+    const msg = created.length === 1 ? `Task “${todo[0].title}” created` : `${created.length} tasks created`;
+    showCheckboxToast(msg, async () => {
+      await deleteCreated();
+      if (textarea.value.slice(start, start + text.length) === text) {
+        replaceRange(start, start + text.length, original, original.length, original.length);
+      }
+    });
+  }
+
   const attachInput = document.getElementById('fmt-attach-input');
   attachInput?.addEventListener('change', async () => {
     const files = Array.from(attachInput.files);
@@ -1070,6 +1148,7 @@ if (textarea && previewPane) {
       const at = textarea.selectionEnd;
       replaceRange(at, at, '[[task:', 7, 7);
     },
+    maketask: makeTasks,
     attach: () => attachInput?.click(),
   };
   applyFormat = kind => FORMATS[kind]?.();

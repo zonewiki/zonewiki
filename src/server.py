@@ -1380,6 +1380,9 @@ _FORMAT_BUTTONS = (
     ("wikilink", "Link to a wiki page", '<span class="fmt-wiki">[[ ]]</span>'),
     ("taskref", "Link to a deck task", _FMT_ICON + '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/>'
      '<path d="m4 8 1.5 1.5L8.5 6.5"/><line x1="10" y1="8" x2="12.5" y2="8"/></svg>'),
+    ("maketask", "Make a deck task from the line or selection", _FMT_ICON
+     + '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="8" y1="5.25" x2="8" y2="10.75"/>'
+     '<line x1="5.25" y1="8" x2="10.75" y2="8"/></svg>'),
     ("attach", "Attach a file or image", _FMT_ICON + '<path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l5.6-5.6a2.3 2.3 0 0 1 3.3 3.3L6.3 11.3a1.2 1.2 0 0 1-1.7-1.7L9.8 4.4"/></svg>'),
 )
 FORMAT_BAR = (
@@ -1926,7 +1929,9 @@ def edit_page(slug):
     <div id="editor-preview" class="page-content"></div>
   </div>
 </div>"""
-    return shell(f"Edit — {title}", body, editor=True)
+    # deck-core.js: the deck's quick-add parser for "Make task" (leaf.js).
+    return shell(f"Edit — {title}", body, editor=True,
+                 extra_head='<script src="/public/deck-core.js" defer></script>')
 
 
 def _splice_section(full: str | None, file_hash: str, start_char: int,

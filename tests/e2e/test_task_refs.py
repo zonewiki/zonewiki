@@ -1,8 +1,10 @@
 """Task references in the browser: the chip's checkbox completes the task in
-the deck (with undo), and the editor completes `[[task:` from open tasks."""
+the deck (with undo), the editor completes `[[task:` from open tasks, and
+"Make task" turns a line or selection into a task and its reference."""
 
 import json
-from datetime import date
+import re
+from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
@@ -82,3 +84,75 @@ def test_format_bar_button_starts_a_task_reference(page, wiki):
     expect(page.locator(".wikilink-ac-item")).to_contain_text("Water plants")
     page.locator(".wikilink-ac-item", has_text="Water plants").click()
     expect(page.locator("#editor-textarea")).to_have_value(f"# Notes\n\n[[task:{t['id'][:8]}]]")
+
+
+# ── Make task (from the editor) ──────────────────────────────────────────────
+
+def _open_tasks(wiki):
+    path = wiki.root / "_deck.json"
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def _edit_with_cursor(page, wiki, text, at, end=None):
+    wiki.write("notes", "# Notes\n\n" + text)
+    page.goto("/edit/notes")
+    off = len("# Notes\n\n")
+    page.locator("#editor-textarea").evaluate(
+        f"ta => ta.setSelectionRange({off + at}, {off + (at if end is None else end)})")
+    page.wait_for_function("() => window.DeckCore")
+
+
+def test_make_task_from_the_current_line(page, wiki):
+    _edit_with_cursor(page, wiki, "Action items:\n- [ ] Call Bob tomorrow #work\nend", 20)
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator(".task-undo-toast")).to_contain_text("Task “Call Bob” created")
+    [t] = _open_tasks(wiki)
+    assert t["title"] == "Call Bob" and t["tags"] == ["work"]
+    assert t["start_date"] == (date.today() + timedelta(days=1)).isoformat()
+    assert t["description"] == "From [[notes]]"
+    expect(page.locator("#editor-textarea")).to_have_value(
+        f"# Notes\n\nAction items:\n- [[task:{t['id'][:8]}]]\nend")
+
+
+def test_make_tasks_from_selected_lines(page, wiki):
+    existing = _task(page, title="Already a task")
+    text = (f"- [ ] First thing\n\n1. Second thing\n- [[task:{existing['id'][:8]}]]\nPlain line")
+    _edit_with_cursor(page, wiki, text, 0, len(text))
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator(".task-undo-toast")).to_contain_text("3 tasks created")
+    by_title = {t["title"]: t for t in _open_tasks(wiki)}
+    assert set(by_title) == {"Already a task", "First thing", "Second thing", "Plain line"}
+    ref = lambda title: f"[[task:{by_title[title]['id'][:8]}]]"
+    expect(page.locator("#editor-textarea")).to_have_value(
+        f"# Notes\n\n- {ref('First thing')}\n\n1. {ref('Second thing')}\n"
+        f"- [[task:{existing['id'][:8]}]]\n{ref('Plain line')}")
+
+
+def test_make_task_from_a_selection_inside_a_sentence(page, wiki):
+    _edit_with_cursor(page, wiki, "We agreed: send the slides. Done.", 11, 27)
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator(".task-undo-toast")).to_be_visible()
+    [t] = _open_tasks(wiki)
+    assert t["title"] == "send the slides."
+    expect(page.locator("#editor-textarea")).to_have_value(
+        f"# Notes\n\nWe agreed: [[task:{t['id'][:8]}]] Done.")
+
+
+def test_make_task_undo_deletes_the_task_and_restores_the_text(page, wiki):
+    _edit_with_cursor(page, wiki, "- [ ] Water plants", 3)
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator(".task-undo-toast")).to_be_visible()
+    assert len(_open_tasks(wiki)) == 1
+    page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
+    expect(page.locator("#editor-textarea")).to_have_value("# Notes\n\n- [ ] Water plants")
+    wait_until(page, lambda: _open_tasks(wiki) == [])
+
+
+def test_made_task_shows_as_a_chip_after_done(page, wiki):
+    _edit_with_cursor(page, wiki, "- [ ] Renew passport", 3)
+    page.locator('.fmt-btn[data-fmt="maketask"]').click()
+    expect(page.locator(".task-undo-toast")).to_be_visible()
+    page.keyboard.press("Control+s")
+    expect(page).to_have_url(re.compile(r"/page/notes$"))
+    expect(page.locator(".task-ref-item .task-ref")).to_contain_text("Renew passport")
+    expect(page.locator("#task-backlinks")).to_have_count(0)   # shown inline, not repeated

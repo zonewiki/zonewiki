@@ -157,3 +157,12 @@ class TestMcp:
         assert f"- [[task:{t['id'][:8]}]]: Book flights (open, due 2030-01-02) " in text
         assert f"/deck?task={t['id']}&view=open" in text
         assert "- [[task:deadbeef]]: no such task (deleted)" in text
+
+
+class TestMakeTask:
+    def test_editor_has_the_button_and_the_quick_add_parser(self, client, wiki_dir):  # noqa: F811
+        write_page(wiki_dir, "notes", "# N\n")
+        body = client.get("/edit/notes", headers=HOST).data.decode()
+        assert 'data-fmt="maketask"' in body and 'data-fmt="taskref"' in body
+        # deck-core.js parses `tomorrow #work due:fri` as in the deck.
+        assert '<script src="/public/deck-core.js" defer></script>' in body
