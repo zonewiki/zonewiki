@@ -1,0 +1,104 @@
+# Tests on every push and pull request; on main (and v* tags) the image is
+# then built and pushed to this Forgejo's container registry.
+#
+# Needs a runner with the `docker` label whose job containers get the host's
+# docker/podman socket (DooD), plus two repo settings:
+#   secret   REGISTRY_TOKEN  access token with package write scope
+#   variable REGISTRY_USER   (optional) its owner, default: the repo owner
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Same base and packages as the app image; nodejs runs actions/checkout
+    # and tests/test_deck_core.py.
+    runs-on: docker
+    container:
+      image: ubuntu:26.04
+    steps:
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3 python3-pip git nodejs ca-certificates
+      - uses: actions/checkout@v4
+      - name: Install Python packages
+        run: pip install --break-system-packages -r src/requirements.txt pytest
+      - name: Unit and API tests
+        run: python3 -m pytest -q tests
+
+  e2e:
+    # The environment of Containerfile.e2e (keep the two in sync).
+    runs-on: docker
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.63.0-noble
+      options: --shm-size=1g
+    steps:
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs git
+      - uses: actions/checkout@v4
+      - name: Install Python packages
+        run: pip install --break-system-packages -r src/requirements.txt pytest playwright==1.63.0
+      - name: Browser tests
+        run: python3 -m pytest tests/e2e -v -p no:cacheprovider
+
+  image:
+    needs: [test, e2e]
+    if: github.event_name != 'pull_request'
+    runs-on: docker
+    container:
+      # The official docker CLI image; the build runs on the host's engine
+      # through the mounted socket, so its layer cache survives between runs.
+      image: docker:cli
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install system packages
+        # Alpine: nodejs runs actions/checkout, bash the steps below.
+        shell: sh
+        run: apk add --no-cache nodejs git bash
+      - uses: actions/checkout@v4
+      - name: Image name and tags
+        id: meta
+        run: |
+          registry="${GITHUB_SERVER_URL#*://}"
+          image="$registry/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          sha=$(git rev-parse --short HEAD)
+          tags="$image:$sha"
+          case "$GITHUB_REF" in
+            refs/heads/main) tags="$tags $image:latest" ;;
+            refs/tags/v*)    tags="$tags $image:${GITHUB_REF_NAME#v}" ;;
+          esac
+          # Same format as run.sh and server.py's _source_build().
+          build=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M')
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      - name: Log in to the registry
+        env:
+          REGISTRY_USER: ${{ vars.REGISTRY_USER || github.repository_owner }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: echo "$REGISTRY_TOKEN" | docker login "${{ steps.meta.outputs.registry }}" -u "$REGISTRY_USER" --password-stdin
+      - name: Build
+        run: |
+          tag_args=()
+          for t in ${{ steps.meta.outputs.tags }}; do tag_args+=(-t "$t"); done
+          docker build \
+            --build-arg "LEAF_BUILD=${{ steps.meta.outputs.build }}" \
+            --build-arg LEAF_EMBEDDINGS=fastembed \
+            "${tag_args[@]}" .
+      - name: Push
+        run: |
+          for t in ${{ steps.meta.outputs.tags }}; do docker push "$t"; done

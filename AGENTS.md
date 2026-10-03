@@ -46,6 +46,7 @@ No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constrain
 ├── Containerfile.e2e       # Test-only image: Playwright + Chromium for browser tests, Node for deck-core tests
 ├── run.sh                  # Helper script: build/up/down/logs/test/e2e (drives podman directly)
 ├── .env                    # Host data path configuration
+├── .forgejo/workflows/ci.yml  # Forgejo Actions: tests, e2e, build + push the image
 └── src/
     ├── requirements.txt
     ├── server.py           # Flask server — wiki routes, rendering, shell
@@ -91,6 +92,10 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ```
 
 Leaf is available at **http://localhost:5000** after `./run.sh up`.
+
+### CI (Forgejo Actions)
+
+`.forgejo/workflows/ci.yml` runs on every push and pull request: **test** (unit/API tests plus the Node deck-core tests in an `ubuntu:26.04` job container, the app image's base) and **e2e** (browser tests in the Playwright image, mirroring `Containerfile.e2e`; keep the two in sync, including the version pin). On `main` and `v*` tags, once both pass, **image** builds the `Containerfile` with `LEAF_EMBEDDINGS=fastembed` and the `LEAF_BUILD` string `run.sh` would compute, and pushes it to the Forgejo registry as `<forgejo-host>/<owner>/leaf:<short-sha>`, plus `:latest` (main) or `:<version>` (tag `v1.2.3` → `1.2.3`). Builds run in the official `docker:cli` image (plus `nodejs`, `git`, `bash` from apk) and use plain `docker build`/`docker push` against the host engine through the socket mounted into job containers (runner label `docker`), so layers are cached between runs. Repo settings: secret `REGISTRY_TOKEN` (token with package write scope), optional variable `REGISTRY_USER` (default: the repo owner).
 
 ### Mobile / phone access
 
