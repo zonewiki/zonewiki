@@ -694,6 +694,21 @@ def test_list_tag_comes_first_and_bold(page, wiki):
     expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries", "#hardware", "#dairy"])
 
 
+def test_filter_shows_only_list_tags_bold(page, wiki):
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries tag=weekly]]\n")
+    wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
+    page.goto("/page/shop?view=open")
+    filt = page.locator("#task-filter-search")
+    filt.click()
+    page.keyboard.type("#hardware #dairy ")
+    chips = page.locator(".tasks-toolbar .tag-chip")
+    expect(chips.locator(".tag-chip-label")).to_have_text(
+        ["#groceries", "#hardware", "#weekly", "#dairy"])
+    weights = chips.evaluate_all("cs => cs.map(c => getComputedStyle(c).fontWeight)")
+    assert weights[:2] == ["600", "600"]                     # lists
+    assert all(w != "600" for w in weights[2:])              # locked tag= and typed tag
+
+
 def test_task_moves_to_another_list(page, wiki):
     page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")

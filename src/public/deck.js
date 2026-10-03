@@ -2026,8 +2026,10 @@
     ...(initList ? ['#' + initList] : []),
     ...tagParamToQuery(appEl?.dataset.initTag || '').split(' ').filter(Boolean),
   ];
+  // A chip that is just a separate list's tag (#groceries) is shown bold.
   const filterChips = filterSearch && chipField(filterSearch, {
-    onChange: () => render(), locked: embedFilterWords });
+    onChange: () => render(), locked: embedFilterWords,
+    listWord: w => w.startsWith('#') && listSet.has(w.slice(1).toLowerCase()) });
   function filterQuery() {
     return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
   }

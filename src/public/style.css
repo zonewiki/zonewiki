@@ -1581,7 +1581,7 @@ div.chip-input > input {
 }
 .tag-chip-x:hover { color: var(--fg); }
 /* Set by the embed (list= and tag= filter words): no ×. */
-.tag-chip-locked { padding-right: .4rem; font-weight: 600; }
+.tag-chip-locked { padding-right: .4rem; }
 /* A separate list's tag in the edit modal: first and bold, like the list's filter chip. */
 .tag-chip-list { font-weight: 600; }
 @media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
