@@ -1531,7 +1531,10 @@
       const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
-      const tags = (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
+      // A separate list's tag first and bold, as in the filter and the modal.
+      const isListTag = t => listSet.has(t.toLowerCase());
+      const tags = [...(task.tags || []).filter(isListTag), ...(task.tags || []).filter(t => !isListTag(t))]
+        .map(t => `<span class="task-tag${isListTag(t) ? ' task-tag-list' : ''}">#${esc(t)}</span>`).join('');
       const tagsHtml = tags ? `<div class="task-tags-right">${tags}</div>` : '';
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
         : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(tabLabel('open'))} when ticked off">⟲</span>` : '';

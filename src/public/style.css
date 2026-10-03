@@ -1801,6 +1801,7 @@ div.chip-input > input {
   background: var(--code-bg); border-radius: 3px; color: var(--muted);
 }
 
+.task-tag-list { font-weight: 600; color: var(--fg); }  /* a separate list's tag */
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
