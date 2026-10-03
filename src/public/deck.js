@@ -2049,7 +2049,8 @@
   // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
   // modal's Tags field (chips are tag names, shown as #name). `locked` words
   // (an embed's filter words, case ignored) are always there and have no ×.
-  function chipField(input, { label = w => w, onChange, locked = [] } = {}) {
+  // `listWord(w)` marks a separate list's tag: such chips come first, bold.
+  function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false } = {}) {
     const lockedSet = new Set(locked.map(w => w.toLowerCase()));
     const isLocked = w => lockedSet.has(w.toLowerCase());
     const box = document.createElement('div');
@@ -2066,6 +2067,7 @@
         text.className = 'tag-chip-label';
         text.textContent = label(w);
         chip.appendChild(text);
+        if (listWord(w)) chip.classList.add('tag-chip-list');
         if (isLocked(w)) {
           chip.classList.add('tag-chip-locked');
           chip.title = 'Set by this page';
@@ -2088,6 +2090,7 @@
       const seen = new Set();
       words = list.filter(w => w && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()));
       words.unshift(...locked.filter(w => !seen.has(w.toLowerCase())));
+      words = [...words.filter(w => listWord(w)), ...words.filter(w => !listWord(w))];
       draw();
       if (!silent) onChange?.();
     }
@@ -2260,7 +2263,8 @@
   // it a chip; Backspace at the start removes the last chip.
   const editTagsInput = document.getElementById('task-edit-tags' + sfx);
   const cleanTag = t => t.trim().replace(/^#+/, '').replace(/\s+/g, '-');
-  const editChips = editTagsInput && chipField(editTagsInput, { label: t => '#' + t });
+  const editChips = editTagsInput && chipField(editTagsInput, {
+    label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
   if (editTagsInput) {
     // A comma (typed or pasted) commits everything before it as chips.
     // Registered before noSpacesInTags, which would turn ", " into "-".

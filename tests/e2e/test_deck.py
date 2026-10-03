@@ -671,6 +671,25 @@ def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):
     wait_for_field(page, "Bread", "tags", ["groceries"])
 
 
+def test_list_tag_comes_first_and_bold_in_the_modal(page, wiki):
+    page.request.post("/api/deck", data={"title": "Oat milk", "tags": "dairy,groceries"})
+    wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
+    page.goto("/page/shop?view=open")
+    modal = open_edit(page, "Oat milk")
+    chips = modal.locator(".tag-chip")
+    expect(chips.locator(".tag-chip-label")).to_have_text(["#groceries", "#dairy"])
+    expect(chips.first).to_have_class(re.compile(r"\btag-chip-list\b"))
+    expect(chips.nth(1)).not_to_have_class(re.compile(r"\btag-chip-list\b"))
+    assert chips.first.evaluate("e => getComputedStyle(e).fontWeight") == "600"
+    # A list tag typed in later moves to the front too.
+    wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
+    page.goto("/page/shop?view=open")
+    modal = open_edit(page, "Oat milk")
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.type("hardware,")
+    expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries", "#hardware", "#dairy"])
+
+
 def test_task_moves_to_another_list(page, wiki):
     page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
