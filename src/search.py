@@ -327,6 +327,19 @@ def _match_spans(text: str, query: str) -> list[tuple[int, int]]:
     return [(w[0], w[1]) for w, s in zip(words, stems) if close[s]]
 
 
+def matched_words(text: str, query: str, limit: int = 10) -> list[str]:
+    """The distinct words (or the one phrase) of text that the query matched,
+    as they are written there, whitespace squashed, at most `limit`: what a
+    page opened from a search highlights."""
+    seen: dict[str, str] = {}
+    for a, b in _match_spans(text, query):
+        word = " ".join(text[a:b].split())
+        seen.setdefault(word.casefold(), word)
+        if len(seen) >= limit:
+            break
+    return list(seen.values())
+
+
 def matches(text: str, query: str) -> bool:
     """Whether text contains a word the query matches, the way the index and
     the excerpt match words (stem, prefix, else fuzzy)."""

@@ -1425,6 +1425,107 @@ if (editorMoreBtn && editorMore) {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
 }
 
+// ── Search highlights ─────────────────────────────────────────────────────────
+// A page opened from a search result carries the words that matched as
+// ?hl=… (search.matched_words: as written in the page, stems, typos and
+// phrases already resolved). They are marked in the article, a bar shows
+// "word · 2 of 5" with ↑ ↓ ×, n/N step through them and Esc clears them.
+// Code blocks (highlight.js rewrites them) and deck embeds are left alone.
+
+function initSearchHighlights() {
+  const article = document.querySelector('article.page-content');
+  const params = new URLSearchParams(location.search);
+  const terms = params.getAll('hl').map(t => t.trim()).filter(Boolean);
+  if (!article || !terms.length) return;
+
+  const escape = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const alternatives = [...terms].sort((a, b) => b.length - a.length).map(escape).join('|');
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, 'giu');
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app')
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  const marks = [];
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    const found = [...text.matchAll(re)];
+    if (!found.length) continue;
+    const frag = document.createDocumentFragment();
+    let at = 0;
+    for (const m of found) {
+      frag.append(text.slice(at, m.index));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hl';
+      mark.textContent = m[0];
+      frag.append(mark);
+      marks.push(mark);
+      at = m.index + m[0].length;
+    }
+    frag.append(text.slice(at));
+    node.replaceWith(frag);
+  }
+  if (!marks.length) return;
+
+  const bar = document.createElement('div');
+  bar.className = 'search-hl-bar';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML =
+    `<span class="search-hl-terms"></span><span class="search-hl-count"></span>` +
+    `<button type="button" data-step="-1" title="Previous (N)" aria-label="Previous match">↑</button>` +
+    `<button type="button" data-step="1" title="Next (n)" aria-label="Next match">↓</button>` +
+    `<button type="button" data-clear title="Clear highlights (Esc)" aria-label="Clear highlights">×</button>`;
+  bar.querySelector('.search-hl-terms').textContent = terms.map(t => `“${t}”`).join(' ');
+  document.body.append(bar);
+
+  let current = -1;
+  const show = (i, scroll = true) => {
+    marks[current]?.classList.remove('current');
+    current = (i + marks.length) % marks.length;
+    marks[current].classList.add('current');
+    bar.querySelector('.search-hl-count').textContent = `${current + 1} of ${marks.length}`;
+    if (scroll) marks[current].scrollIntoView({ block: 'center' });
+  };
+  const clear = () => {
+    for (const mark of marks) mark.replaceWith(mark.textContent);
+    article.normalize();
+    bar.remove();
+    window.removeEventListener('keydown', onKey, true);
+    params.delete('hl');
+    const qs = params.toString();
+    history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+  };
+  // In the capture phase, so n doesn't also reach a deck embed's "new task".
+  const onKey = e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open], .presentation-overlay')) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      show(current + (e.key === 'n' ? 1 : -1));
+    } else if (e.key === 'Escape') {
+      clear();
+    }
+  };
+  window.addEventListener('keydown', onKey, true);
+  bar.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.hasAttribute('data-clear')) clear();
+    else show(current + Number(btn.dataset.step));
+  });
+
+  // Start at the first match in the section the link opened (the browser has
+  // already scrolled there), else at the first match, scrolled into view.
+  const target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  const inSection = target
+    ? marks.findIndex(m => target.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) : -1;
+  show(inSection >= 0 ? inSection : 0, inSection < 0);
+}
+
+document.addEventListener('DOMContentLoaded', initSearchHighlights);
+
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -489,7 +489,7 @@ class TestHybridSearch:
                                      "## Papers\n\nThe insurance letter is in the drawer.\n")
         semantic.sync()
         r = next(r for r in _search(client, "drawer") if r["slug"] == "golf")
-        assert r["href"] == "/page/golf#papers"
+        assert r["href"] == "/page/golf?hl=drawer#papers"
 
     def test_filters_apply_to_meaning_hits(self, client, semantic):  # noqa: F811
         assert _search(client, "car repair")[0]["slug"] == "golf"

@@ -11,7 +11,7 @@ import subprocess
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
@@ -1321,6 +1321,8 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
       <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
+      <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search highlight (page opened from search)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Clear search highlights</td></tr>
     </table>
     <p class="scratch-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
     <table class="shortcuts-table">
@@ -2346,6 +2348,11 @@ def do_search(raw: str, unlinked: bool = False) -> list[dict]:
             if d.get(k) is not None:
                 r[k] = d[k]
         r["href"] = _result_href(r)
+        if d.get("type") != "task":
+            # The page highlights what matched (leaf.js); before the #anchor.
+            words = search.matched_words(d["excerpt_text"], q)
+            if words:
+                r["href"] += "?" + urlencode([("hl", w) for w in words])
         if section:
             r["href"] += section["anchor"]
         results.append(r)

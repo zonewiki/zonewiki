@@ -252,3 +252,54 @@ def test_several_words_match_word_by_word(page, wiki):
     expect(items).to_have_count(1)
     expect(items.first).to_have_attribute("data-slug", "alex-morgan")
     expect(items.first.locator("a mark")).to_have_text(["Alex", "Morg"])
+
+
+# ── Highlights on a page opened from search ────────────────────────────────
+
+
+def test_highlights_step_and_clear(page, wiki):
+    wiki.write("notes", "# Notes\n\nThen Alex   again. She runs; it reruns.\n\n"
+                        "```\nruns in code\n```\n\nRUNS at the end.\n")
+    page.goto("/page/notes?hl=Alex+again&hl=runs")
+    marks = page.locator("article mark.search-hl")
+    expect(marks).to_have_text(["Alex   again", "runs", "RUNS"])   # not "reruns", not in code
+    bar = page.locator(".search-hl-bar")
+    expect(bar).to_contain_text("1 of 3")
+    expect(marks.nth(0)).to_have_class("search-hl current")
+    page.keyboard.press("n")
+    expect(bar).to_contain_text("2 of 3")
+    page.keyboard.press("Shift+N")
+    page.keyboard.press("Shift+N")
+    expect(bar).to_contain_text("3 of 3")
+    page.locator(".search-hl-bar button[aria-label='Next match']").click()
+    expect(bar).to_contain_text("1 of 3")
+    page.keyboard.press("Escape")
+    expect(marks).to_have_count(0)
+    expect(bar).to_have_count(0)
+    assert page.url.endswith("/page/notes")
+    expect(page.locator("article")).to_contain_text("Then Alex again.")
+
+
+def test_highlights_start_in_the_linked_section(page, wiki):
+    wiki.write("long", "# Long\n\n## One\n\nzebra here.\n\n## Two\n\nAnother zebra.\n")
+    page.goto("/page/long?hl=zebra#two")
+    expect(page.locator(".search-hl-bar")).to_contain_text("2 of 2")
+
+
+def test_n_does_not_reach_the_deck_while_highlighting(page, wiki):
+    wiki.write("tasks", "# Tasks\n\nzebra notes.\n\n[[deck]]\n")
+    page.goto("/page/tasks?hl=zebra")
+    expect(page.locator(".search-hl-bar")).to_contain_text("1 of 1")
+    page.locator(".tasks-app").wait_for()
+    page.keyboard.press("n")
+    expect(page.locator("dialog[open]")).to_have_count(0)
+
+
+def test_search_result_opens_highlighted(page, wiki):
+    seed(wiki)
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("tomatoes")
+    page.locator("#modal-content-matches .search-result-card", has_text="Recipes").click()
+    page.wait_for_url("**/page/recipes?hl=*")
+    expect(page.locator("article mark.search-hl")).to_have_text(["tomatoes"])

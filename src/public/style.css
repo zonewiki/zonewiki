@@ -2043,3 +2043,57 @@ div.chip-input > input {
   .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
 }
 
+
+/* ── Search highlights (page opened from a search result, ?hl=…) ─────────── */
+mark.search-hl {
+  background: color-mix(in srgb, #facc15 45%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 .05em;
+}
+mark.search-hl.current {
+  background: #f59e0b;
+  color: #111;
+  outline: 2px solid #f59e0b;
+}
+.search-hl-bar {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  max-width: calc(100% - 2rem);
+  padding: .35rem .5rem .35rem .8rem;
+  background: var(--nav-bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  font-size: .85rem;
+}
+.search-hl-terms {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.search-hl-count { color: var(--muted); white-space: nowrap; }
+.search-hl-bar button {
+  border: 0;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border-radius: 999px;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: none;
+  cursor: pointer;
+  font-size: .95rem;
+}
+.search-hl-bar button:hover { background: var(--border); }
+@media (max-width: 640px) {
+  /* The bottom corners hold the New note/Search buttons and Sign out. */
+  .search-hl-bar { top: .5rem; bottom: auto; width: calc(100% - 1rem); max-width: none; }
+}
