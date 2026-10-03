@@ -26,7 +26,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 |---------------------|----------------------------------------------|
 | Server              | Python + Flask                               |
 | Markdown render     | `markdown-it-py` (server renders to HTML)    |
-| Syntax highlight    | `highlight.js` (loaded client-side from CDN) |
+| Syntax highlight    | `highlight.js` (vendored in `src/public/vendor/`, no CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
@@ -62,7 +62,8 @@ No build step. No database. Auth is optional (`LEAF_PASSWORD`, see Key Constrain
         ├── deck.js         # Deck (task management) app JS, loaded via [[deck]] embed
         ├── favicon.svg     # Browser tab icon
         ├── icon.svg        # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
-        └── manifest.json   # Web app manifest (Add to home screen)
+        ├── manifest.json   # Web app manifest (Add to home screen)
+        └── vendor/highlight/  # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
@@ -185,7 +186,7 @@ Every page view includes:
 
 - `server.py` reads `pages/<slug>.md`, converts it to HTML using `markdown-it-py`, and injects it into a shared HTML shell (Python f-string in `server.py` — not a separate template file).
 - The HTML shell includes: status badges, breadcrumb, page header (title, Edit/History/Present), content area, backlinks, and the search/shortcut/scratch modals. There is no nav bar (see Scratch).
-- `highlight.js` auto-highlights fenced code blocks client-side after load.
+- `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
 - The shared shell renders the product brand as `Leaf`, with a small green inline SVG leaf logo in the breadcrumb home link.
 
 ### Autolinks and callouts
@@ -595,7 +596,7 @@ To run the suite without a local venv: `./run.sh test` (runs inside the app imag
 
 End-to-end tests drive the real app in headless Chromium via Playwright. They run in a separate test image (`Containerfile.e2e`, based on Microsoft's Playwright image) so the app image stays browser-free and the app still has no build step or npm. `./run.sh e2e` builds that image (cached) and runs them with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k deck`). Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 
-- `conftest.py` serves `server.app` on a background thread (werkzeug `make_server`, random port) and points it at a fresh temp wiki with its own git repo per test; each test gets a fresh browser context. All non-local requests (the highlight.js CDN) are aborted to keep runs offline and deterministic. Uncaught page JS errors fail the test.
+- `conftest.py` serves `server.app` on a background thread (werkzeug `make_server`, random port) and points it at a fresh temp wiki with its own git repo per test; each test gets a fresh browser context. A request to any other host is aborted (offline, deterministic) and fails the test: Leaf loads nothing from a CDN. Uncaught page JS errors fail the test.
 - Coverage: editor (formatting bar and Ctrl+B/I/K, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter), deck (Plan-board drag to a day and to Unplanned, touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, long press is not a tap), board grouping by start date, modal "Days before due", Plan board in Open's order with in-section drops ignored, view tabs, start-date Today, touch: tap-to-edit, ⋯ menu/bottom sheet, target sizes, editor scrolling/compact phone layout, date picker placement), sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview), layout (no horizontal page scroll at 390px phone width on page/editor/deck views, mobile Preview button, tldr toggle geometry).
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
 - `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review. It asserts nothing about appearance.
@@ -621,7 +622,7 @@ markdown-it-py>=3.0
 mdit-py-plugins>=0.4
 ```
 
-`highlight.js` is loaded from a CDN in the HTML shell — no pip install needed.
+`highlight.js` 11.9.0 (script plus the `github`/`github-dark` themes) is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm, no build step. Pages load nothing from other hosts. To update it, replace the three files with a newer release's.
 
 Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with a local model. It is not in `requirements.txt`; the `Containerfile` installs it only when `LEAF_EMBEDDINGS` names a fastembed model (`embed_setup.py`); NumPy comes with it (fast vector scoring; `embed.py` falls back to plain Python without it, e.g. in a local venv). Locally: `pip install fastembed`.
 

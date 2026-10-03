@@ -1323,10 +1323,10 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <link rel="manifest" href="/public/manifest.json">
   <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Leaf">
+  <link rel="stylesheet" href="/public/vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/public/style.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="/public/vendor/highlight/highlight.min.js" defer></script>
   <script src="/public/leaf.js" defer></script>
   {extra_head_html}
 </head>

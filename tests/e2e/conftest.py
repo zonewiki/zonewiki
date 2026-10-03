@@ -116,15 +116,23 @@ def browser():
 def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **context_opts):
     ctx = browser.new_context(base_url=base_url, viewport=viewport, color_scheme=color_scheme,
                               **context_opts)
-    # Keep tests offline and deterministic: the shell pulls highlight.js from a
-    # CDN, and every use of it is guarded by `window.hljs`.
+    # Leaf loads nothing from other hosts (no CDN; highlight.js is vendored).
+    # Such a request is blocked, keeping runs offline, and fails the test.
     host = base_url.split("//", 1)[1]
-    ctx.route("**/*", lambda route: route.continue_()
-              if route.request.url.split("//", 1)[1].startswith(host) else route.abort())
+    external = []
+
+    def route(r):
+        if r.request.url.split("//", 1)[1].startswith(host):
+            r.continue_()
+        else:
+            external.append(r.request.url)
+            r.abort()
+    ctx.route("**/*", route)
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     page.js_errors = errors
+    page.external_requests = external
     return ctx, page
 
 
@@ -134,6 +142,7 @@ def page(browser, base_url, wiki):
     yield pg
     ctx.close()
     assert pg.js_errors == [], f"uncaught JS errors: {pg.js_errors}"
+    assert pg.external_requests == [], f"requests to other hosts: {pg.external_requests}"
 
 
 @pytest.fixture()
@@ -151,3 +160,4 @@ def new_page(browser, base_url, wiki):
     for ctx, pg in opened:
         ctx.close()
         assert pg.js_errors == [], f"uncaught JS errors: {pg.js_errors}"
+        assert pg.external_requests == [], f"requests to other hosts: {pg.external_requests}"

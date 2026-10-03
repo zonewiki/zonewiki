@@ -292,3 +292,13 @@ def test_desktop_keeps_the_full_breadcrumb_trail(page, wiki):
         page.goto(f"/page/p{i}")
     page.goto("/deck")
     expect(page.locator(".breadcrumb a")).to_have_count(6)  # home, 5 pages (current is text)
+
+
+def test_code_block_padding_survives_the_highlight_theme(page, wiki):
+    # Regression: highlight.js's theme pads `pre code.hljs` by 1em, on top
+    # of the pre's own padding.
+    wiki.write("code", "# Code\n\n```python\nprint('hi')\n```\n")
+    page.goto("/page/code")
+    code = page.locator(".page-content pre code")
+    expect(code).to_have_class(re.compile(r"\bhljs\b"))   # highlighted, from the local copy
+    assert code.evaluate("c => getComputedStyle(c).paddingTop") == "0px"

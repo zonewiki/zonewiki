@@ -390,6 +390,9 @@ main {
   padding: 0;
   font-size: .8125rem;
 }
+/* The highlight.js theme pads `pre code.hljs` by 1em, on top of the pre's
+   own padding. */
+.page-content pre code.hljs { padding: 0; }
 
 /* ── Table of contents ─────────────────────────────────────────────────────── */
 

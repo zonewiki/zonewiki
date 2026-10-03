@@ -113,6 +113,16 @@ class TestViewPage:
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
+    def test_pages_load_nothing_from_other_hosts(self, client, wiki_dir):
+        # No CDN: highlight.js is vendored and served from /public/.
+        write_page(wiki_dir, "my-page", "# My Page\n\n```py\nx = 1\n```\n")
+        for url in ("/page/my-page", "/edit/my-page", "/deck", "/search?q=page"):
+            head = client.get(url, headers=HOST).data.decode()
+            assert not re.search(r'<(?:script|link)\b[^>]*(?:src|href)="(?:https?:)?//', head), url
+        for f in ("highlight.min.js", "github.min.css", "github-dark.min.css"):
+            r = client.get(f"/public/vendor/highlight/{f}", headers=HOST)
+            assert r.status_code == 200 and len(r.data) > 1000, f
+
     def test_editor_has_formatting_bar_page_view_not(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
         body = client.get("/edit/my-page", headers=HOST).data.decode()
