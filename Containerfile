@@ -14,11 +14,14 @@ RUN pip install --break-system-packages -r requirements.txt
 # search doesn't wait for a download and Leaf works offline. Without it,
 # this step does nothing. Only the small, stable
 # embed_setup.py is copied first, so this layer (0.64 GB) is rebuilt when the
-# model setting changes, not on every change to the search code.
+# model setting changes, not on every change to the search code. The model
+# cache is made world-readable: the download leaves some files root-only
+# (0600), and the container may run as another user.
 ARG LEAF_EMBEDDINGS=
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed
 COPY src/embed_setup.py .
-RUN python3 embed_setup.py
+RUN python3 embed_setup.py && \
+    if [ -d /opt/fastembed ]; then chmod -R a+rX /opt/fastembed; fi
 
 COPY src/ .
 
