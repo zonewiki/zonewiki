@@ -47,19 +47,13 @@ class TestOrders:
         assert self._sorted("byOpenOrder", [
             {"id": "s1", "sort_order": 1},
             {"id": "old", "created_at": "2026-07-25T09:00"},
-            {"id": "s0", "sort_order": 0, "focus_order": 3},
+            {"id": "s0", "sort_order": 0},
             {"id": "new", "created_at": "2026-07-26T09:00"},
         ]) == ["new", "old", "s0", "s1"]
 
-    def test_focus_order_lineup_then_open_order_then_oldest(self):
-        assert self._sorted("byFocusOrder", [
-            {"id": "new", "created_at": "2026-07-26T09:00"},
-            {"id": "old", "created_at": "2026-07-25T09:00"},
-            {"id": "open1", "sort_order": 1},
-            {"id": "pin1", "focus_order": 1, "sort_order": 0},
-            {"id": "open0", "sort_order": 0},
-            {"id": "pin0", "focus_order": 0},
-        ]) == ["pin0", "pin1", "open0", "open1", "old", "new"]
+    def test_no_focus_order(self):
+        # Focus uses Open's order; there is no comparator of its own.
+        assert run_core("typeof DeckCore.byFocusOrder") == "undefined"
 
 
 class TestIsFocus:
@@ -150,10 +144,10 @@ class TestBoardBuckets:
 
     def test_days_and_later_follow_open_order(self):
         # Every section but Overdue lists tasks in Open's order: Unsorted
-        # newest first, then Sorted. focus_order (Focus's own order) is ignored.
+        # newest first, then Sorted.
         later = "2026-09-01"
         by_key = self._by_key([
-            {"id": "t-sorted1", "start_date": TODAY, "sort_order": 1, "focus_order": 0},
+            {"id": "t-sorted1", "start_date": TODAY, "sort_order": 1},
             {"id": "t-sorted0", "start_date": TODAY, "sort_order": 0},
             {"id": "t-old", "start_date": TODAY, "created_at": "2026-07-20T09:00"},
             {"id": "t-new", "start_date": TODAY, "created_at": "2026-07-25T09:00"},

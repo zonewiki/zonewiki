@@ -449,13 +449,13 @@ def test_touch_drag_across_focus_sections(new_page, wiki):
         pg.request.post("/api/deck", data={"title": t, "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/deck?view=focus")
-    arranged = pg.locator(".list-section[data-section='lineup']")
-    unarranged = pg.locator(".list-section[data-section='others']")
-    touch_drag(pg, card(pg, "Bravo"), arranged)
-    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] == 0)
-    assert tasks_by_title(pg)["Alpha"]["focus_order"] is None
-    touch_drag(pg, card(pg, "Bravo"), unarranged)
-    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["focus_order"] is None)
+    sorted_ = pg.locator(".list-section[data-section='sorted']")
+    unsorted = pg.locator(".list-section[data-section='unsorted']")
+    touch_drag(pg, card(pg, "Bravo"), sorted_)
+    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["sort_order"] == 0)
+    assert tasks_by_title(pg)["Alpha"]["sort_order"] is None
+    touch_drag(pg, card(pg, "Bravo"), unsorted)
+    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["sort_order"] is None)
 
 
 def test_tap_outside_only_closes_the_card_date_picker(phone):

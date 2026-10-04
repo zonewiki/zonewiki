@@ -631,26 +631,25 @@ class TestReorder:
         assert tasks[0]["sort_order"] is None
 
     def test_reorder_updates_can_clear_the_field(self, client):
-        """Dragging a task out of a manual order (Focus's Lineup, Open's
-        Sorted) clears the field (null) in the same request that renumbers
-        the rest."""
-        today = date.today().isoformat()   # on Focus, where a Lineup place lasts
-        t1 = create_task(client, title="First", start_date=today).get_json()
-        t2 = create_task(client, title="Second", start_date=today).get_json()
+        """Dragging a task out of Sorted (on Open or Focus) clears its
+        sort_order (null) in the same request that renumbers the rest."""
+        t1 = create_task(client, title="First").get_json()
+        t2 = create_task(client, title="Second").get_json()
         client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]]})
-        client.post("/api/deck/reorder", json={"order": [t1["id"], t2["id"]], "field": "focus_order"})
         resp = client.post("/api/deck/reorder", json={
-            "order": [t2["id"]], "updates": [{"id": t1["id"], "focus_order": None}],
-            "field": "focus_order"})
+            "order": [t2["id"]], "updates": [{"id": t1["id"], "sort_order": None}]})
         assert resp.status_code == 204
         by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
-        assert by_id[t1["id"]]["focus_order"] is None
-        assert by_id[t2["id"]]["focus_order"] == 0
-        # sort_order the same way: the task goes back to Open's Unsorted section.
-        client.post("/api/deck/reorder", json={"updates": [{"id": t1["id"], "sort_order": None}]})
-        by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
         assert by_id[t1["id"]]["sort_order"] is None
-        assert by_id[t2["id"]]["sort_order"] == 1
+        assert by_id[t2["id"]]["sort_order"] == 0
+
+    def test_reorder_has_no_focus_order(self, client):
+        """Focus has no order of its own: the reorder API only knows sort_order."""
+        t1 = create_task(client, title="First").get_json()
+        resp = client.post("/api/deck/reorder", json={"order": [t1["id"]], "field": "focus_order"})
+        assert resp.status_code == 204
+        task = client.get("/api/deck").get_json()[0]
+        assert task["sort_order"] == 0 and "focus_order" not in task
 
     def test_reorder_empty_updates_and_order(self, client):
         resp = client.post("/api/deck/reorder", json={"order": [], "updates": []})
@@ -678,83 +677,25 @@ class TestSortOrderUpdate:
         assert resp.get_json()["sort_order"] == 5
 
 
-# ---------- focus_order (the Focus tab's arrangement) on update ----------
+# ---------- focus_order (the old Lineup) is gone ----------
 
 
-class TestFocusOrderReset:
-    def arranged(self, client, start):
-        task = create_task(client, title="Arranged", start_date=start).get_json()
-        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
-        return task["id"]
+class TestNoFocusOrder:
+    def test_new_tasks_have_none(self, client):
+        assert "focus_order" not in create_task(client).get_json()
 
-    def focus_order_after(self, client, tid, **data):
-        return client.put(f"/api/deck/{tid}", json=data).get_json()["focus_order"]
+    def test_put_ignores_it(self, client):
+        tid = create_task(client, start_date=date.today().isoformat()).get_json()["id"]
+        task = client.put(f"/api/deck/{tid}", json={"focus_order": 3}).get_json()
+        assert "focus_order" not in task
 
-    def test_moving_to_a_later_day_clears_it(self, client):
-        today = date.today()
-        tid = self.arranged(client, today.isoformat())
-        tomorrow = (today + timedelta(days=1)).isoformat()
-        assert self.focus_order_after(client, tid, start_date=tomorrow) is None
-
-    def test_moving_to_today_or_earlier_keeps_it(self, client):
-        today = date.today()
-        tid = self.arranged(client, (today - timedelta(days=2)).isoformat())
-        assert self.focus_order_after(client, tid, start_date=today.isoformat()) == 0
-        yesterday = (today - timedelta(days=1)).isoformat()
-        assert self.focus_order_after(client, tid, start_date=yesterday) == 0
-
-    def test_other_edits_keep_it(self, client):
-        tid = self.arranged(client, date.today().isoformat())
-        assert self.focus_order_after(client, tid, title="Renamed") == 0
-        later = (date.today() + timedelta(days=9)).isoformat()
-        assert self.focus_order_after(client, tid, due_date=later) == 0
-
-    def test_unplanning_clears_it(self, client):
-        tid = self.arranged(client, date.today().isoformat())
-        assert self.focus_order_after(client, tid, start_date=None) is None
-
-    def test_explicit_focus_order_wins(self, client):
-        # Undo of a move sends the old date and the old place together.
-        tid = self.arranged(client, date.today().isoformat())
-        assert self.focus_order_after(client, tid, start_date=None) is None
-        assert self.focus_order_after(client, tid, start_date=date.today().isoformat(),
-                                      focus_order=0) == 0
-
-    def test_starting_a_due_task_keeps_its_place(self, client):
-        """Regression: a task due today (no start date) in the Lineup lost its
-        place when started today, though it never left Focus."""
-        today = date.today().isoformat()
-        task = create_task(client, title="Due", due_date=today).get_json()
-        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
-        assert self.focus_order_after(client, task["id"], start_date=today) == 0
-
-    def test_moving_start_later_keeps_it_while_due(self, client):
-        # Still due today, so still on Focus: the place stays.
-        today = date.today()
-        task = create_task(client, title="Due", start_date=today.isoformat(),
-                           due_date=today.isoformat()).get_json()
-        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
-        tomorrow = (today + timedelta(days=1)).isoformat()
-        assert self.focus_order_after(client, task["id"], start_date=tomorrow) == 0
-
-    def test_deadline_moving_out_of_focus_clears_it(self, client):
-        """Regression: a lined-up task (no start date) whose deadline moved
-        to next week kept its place and came back to it later."""
-        today = date.today()
-        task = create_task(client, title="Due", due_date=today.isoformat()).get_json()
-        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
-        later = (today + timedelta(days=7)).isoformat()
-        assert self.focus_order_after(client, task["id"], due_date=later) is None
-
-    def test_stale_place_outside_focus_is_dropped_on_read(self, client, wiki_dir):
-        later = (date.today() + timedelta(days=7)).isoformat()
+    def test_stored_one_is_dropped_on_read(self, client, wiki_dir):
         (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "s", "title": "Stale", "due_date": later, "focus_order": 3},
-            {"id": "f", "title": "Focus", "start_date": date.today().isoformat(), "focus_order": 1},
+            {"id": "f", "title": "Focus", "start_date": date.today().isoformat(),
+             "focus_order": 1, "sort_order": 4},
         ]), encoding="utf-8")
-        by_id = {t["id"]: t for t in client.get("/api/deck").get_json()}
-        assert by_id["s"]["focus_order"] is None
-        assert by_id["f"]["focus_order"] == 1
+        task = client.get("/api/deck").get_json()[0]
+        assert "focus_order" not in task and task["sort_order"] == 4
 
 
 # ---------- Completed Count ----------
@@ -2079,13 +2020,13 @@ class TestLists:
 
 class TestKeep:
     """A keep task is never archived: completing it sends it back to Open
-    (no start date, no deadline, out of the Lineup) and records last_done."""
+    (no start date, no deadline) and records last_done."""
 
     def _keep_task(self, client, **kw):
         today = date.today().isoformat()
         task = create_task(client, title="Milk", keep=True, start_date=today,
                            due_date=_future(2), **kw).get_json()
-        client.post("/api/deck/reorder", json={"order": [task["id"]], "field": "focus_order"})
+        client.post("/api/deck/reorder", json={"order": [task["id"]]})
         return task
 
     def test_new_task_defaults(self, client):
@@ -2097,7 +2038,7 @@ class TestKeep:
         done = client.put(f"/api/deck/{tid}", json={"completed": True}).get_json()
         assert done["completed_at"] is None
         assert done["start_date"] is None and done["due_date"] is None
-        assert done["focus_order"] is None
+        assert done["sort_order"] == 0      # keeps its place in Open's order
         assert done["last_done"] == date.today().isoformat()
         assert [t["id"] for t in client.get("/api/deck").get_json()] == [tid]
         assert client.get("/api/deck/completed").get_json() == []
@@ -2108,9 +2049,8 @@ class TestKeep:
         client.put(f"/api/deck/{tid}", json={"completed": True})
         back = client.put(f"/api/deck/{tid}", json={
             "start_date": task["start_date"], "due_date": task["due_date"],
-            "focus_order": 0, "last_done": None}).get_json()
+            "last_done": None}).get_json()
         assert back["start_date"] == task["start_date"] and back["due_date"] == task["due_date"]
-        assert back["focus_order"] == 0      # sent explicitly, so not cleared with the date
         assert back["last_done"] is None
 
     def test_batch_complete_keeps_keep_tasks_open(self, client):

@@ -4,7 +4,7 @@
   'use strict';
 
   // Pure task logic lives in deck-core.js (loaded before this file).
-  const { dateToStr, addDays, isFocus, byOpenOrder, byFocusOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = window.DeckCore;
+  const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = window.DeckCore;
 
   // Find all deck app instances on the page and initialize each
   const allApps = document.querySelectorAll('.tasks-app');
@@ -144,7 +144,7 @@
     if (!task || !task.due_date || day <= task.due_date) return updateTask(id, { start_date: day });
     if (!await confirmDeadlineMove(task, day)) return;
     const old = { start_date: task.start_date ?? null, due_date: task.due_date,
-                  focus_order: task.focus_order ?? null, history: oldHistory(id) };
+                  history: oldHistory(id) };
     if (await updateTask(id, { start_date: day, due_date: day })) {
       showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
     }
@@ -642,7 +642,7 @@
       due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
       rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
       last_done: t.last_done || null, sort_order: t.sort_order ?? null,
-      focus_order: t.focus_order ?? null, history: t.history || [],
+      history: t.history || [],
     };
   }
 
@@ -739,12 +739,10 @@
   }
 
   // What completing a keep task changes (mirrors _keep_done in deck.py), so
-  // undo can put it back. focus_order is sent explicitly, which
-  // makes the server keep it rather than clear it with the start date.
+  // undo can put it back.
   function keepSnapshot(t) {
     return { start_date: t.start_date || null, due_date: t.due_date || null,
-             focus_order: t.focus_order ?? null, last_done: t.last_done || null,
-             history: t.history || [] };
+             last_done: t.last_done || null, history: t.history || [] };
   }
 
   async function completeTasks(ids, completed) {
@@ -799,12 +797,10 @@
     const task = tasks.find(t => t.id === id);
     if (startsAfterDeadline(task, startDate)) return planOnDay(id, startDate);
     const prev = task?.start_date ?? null;
-    const prevFocus = task?.focus_order ?? null;
     const history = oldHistory(id);
     updateTask(id, { start_date: startDate });
     const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
-    // A move can clear the task's place on Focus; undo puts it back.
-    showUndo(msg, () => updateTask(id, { start_date: prev, focus_order: prevFocus, history }));
+    showUndo(msg, () => updateTask(id, { start_date: prev, history }));
   }
 
   // Confirm, delete, and offer undo that restores the full snapshots (ids and
@@ -1013,10 +1009,9 @@
 
   // ── Sorting ────────────────────────────────────────────────────────────────
 
-  // Per-tab sort comparators. Open sorts with DeckCore.byOpenOrder in
-  // render(), and Plan with DeckCore.boardBuckets.
+  // Per-tab sort comparators. Open and Focus sort with DeckCore.byOpenOrder
+  // in render(), and Plan with DeckCore.boardBuckets.
   const TAB_SORT = {
-    focus:     byFocusOrder,  // Lineup (focus_order), then Open's order
     completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
   };
 
@@ -1024,30 +1019,22 @@
     return !!t.due_date && t.due_date <= today;
   }
 
-  // Open and Focus each have two sections under a heading (sectionHTML): one
-  // in a manual order, one in a fixed order.
-  //   Open:  Unsorted (no sort_order, newest first) · Sorted (sort_order)
-  //   Focus: Lineup (focus_order) · Others (no focus_order, in Open's order)
-  // A move works on the visible list with both headings as slots in it
-  // (sectionList): the side of the second heading a task lands on decides its
-  // section. So dropping on that heading moves a task across it, and moves
-  // within the fixed-order section change nothing.
+  // Open and Focus share one manual order, sort_order: Focus is Open
+  // filtered to what is in Focus, so both have the same two sections under a
+  // heading (sectionHTML): Unsorted (no sort_order, newest first) · Sorted
+  // (sort_order). A move works on the visible list with both headings as
+  // slots in it (sectionList): the side of the Sorted heading a task lands on
+  // decides its section. So dropping on that heading moves a task across it,
+  // and moves within Unsorted change nothing.
   const SECTIONS = {
-    open:  { field: 'sort_order',  top: 'unsorted', bottom: 'sorted', orderedTop: false },
-    focus: { field: 'focus_order', top: 'lineup',   bottom: 'others', orderedTop: true },
+    open:  { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
+    focus: { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
   };
   const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
-  function focusTasks() {
-    const today = todayStr();
-    return [...tasks]
-      .filter(t => !t.completed_at && isFocus(t, today))
-      .sort(TAB_SORT.focus);
-  }
-  // Every task in the tab's manual order, including ones the filter hides.
+  // Every task in the manual order, including ones the view or filter hides.
   function manualOrderIds(s) {
-    if (s.field === 'focus_order') return focusTasks().filter(t => t.focus_order != null).map(t => t.id);
-    return tasks.filter(t => !t.completed_at && t.sort_order != null)
-      .sort((a, b) => a.sort_order - b.sort_order).map(t => t.id);
+    return tasks.filter(t => !t.completed_at && t[s.field] != null)
+      .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
   }
   function sectionList() {
     const s = SECTIONS[activeFilter];
@@ -1055,38 +1042,40 @@
     const ids = visibleItems().map(el => el.dataset.id);
     const manual = ids.filter(id => byId.get(id)[s.field] != null);
     const fixed = ids.filter(id => byId.get(id)[s.field] == null);
-    return s.orderedTop
-      ? [sectionKey(s.top), ...manual, sectionKey(s.bottom), ...fixed]
-      : [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
+    return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
   }
-  // Save a rearranged sectionList(). Tasks hidden by the filter keep their
-  // slots in the manual order; the visible ones fill the rest.
-  function applySectionList(list) {
+  // Save a rearranged sectionList() in which the tasks `moved` changed place.
+  // Every other task keeps its place in the manual order, hidden ones too: on
+  // Focus most of the order is hidden (a shopping list shows today's items of
+  // the shop's order). A moved task goes right after the visible task now
+  // above it, or right before the one below it when it is first.
+  function applySectionList(list, moved) {
     const s = SECTIONS[activeFilter];
     const cut = list.indexOf(sectionKey(s.bottom));
-    const visManual = (s.orderedTop ? list.slice(0, cut) : list.slice(cut + 1))
-      .filter(id => !id.startsWith('#'));
-    const vis = new Set(list);
+    const visManual = list.slice(cut + 1);
+    const movedSet = new Set(moved);
     const old = manualOrderIds(s);
-    const order = [];
-    let k = 0;
-    old.forEach(id => {
-      if (!vis.has(id)) order.push(id);
-      else if (k < visManual.length) order.push(visManual[k++]);
+    const order = old.filter(id => !movedSet.has(id));
+    visManual.forEach((id, i) => {
+      if (!movedSet.has(id)) return;
+      if (i > 0) order.splice(order.indexOf(visManual[i - 1]) + 1, 0, id);
+      else {
+        const below = visManual.slice(1).find(b => !movedSet.has(b));
+        order.splice(below ? order.indexOf(below) : 0, 0, id);
+      }
     });
-    order.push(...visManual.slice(k));
     const kept = new Set(order);
     const removed = old.filter(id => !kept.has(id));
     if (!removed.length && order.join() === old.join()) return;
     const byId = new Map(tasks.map(t => [t.id, t]));
     order.forEach((id, i) => { byId.get(id)[s.field] = i; });
     removed.forEach(id => { byId.get(id)[s.field] = null; });
-    postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })), field: s.field });
+    postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
     render();
   }
   // Drop `draggedId` on a task or a section heading (`key`). A task entering
-  // the manual order from the other section lands before the task it is
-  // dropped on (on Open that is a move down, which otherwise lands after).
+  // Sorted from Unsorted lands before the task it is dropped on (a move down,
+  // which otherwise lands after).
   function sectionDrop(key) {
     const s = SECTIONS[activeFilter];
     const list = sectionList();
@@ -1096,12 +1085,11 @@
     const entering = byId.get(key)?.[s.field] != null && byId.get(draggedId)[s.field] == null;
     list.splice(from, 1);
     list.splice(entering && from < to ? to - 1 : to, 0, draggedId);
-    applySectionList(list);
+    applySectionList(list, [draggedId]);
   }
   // Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
-  // slots, so the edge task of the manual order crosses into the other
-  // section. Tasks in the fixed-order section can't move within it; a move
-  // toward the manual order takes them straight across the heading.
+  // slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
+  // can't move within it; moving down takes them straight across the heading.
   function sectionKeyMove(direction) {
     const s = SECTIONS[activeFilter];
     const list = sectionList();
@@ -1111,9 +1099,8 @@
     const group = idxs.map(i => list[i]);
     const rest = list.filter(id => !selectedIds.has(id));
     if (group.every(id => byId.get(id)[s.field] == null)) {
-      if ((direction === 'up') !== s.orderedTop) return;  // away from the manual order
-      const at = rest.indexOf(sectionKey(s.bottom));
-      rest.splice(s.orderedTop ? at : at + 1, 0, ...group);
+      if (direction === 'up') return;  // away from the manual order
+      rest.splice(rest.indexOf(sectionKey(s.bottom)) + 1, 0, ...group);
     } else if (direction === 'up') {
       const above = list[idxs[0] - 1];
       if (above === undefined || above === sectionKey(s.top)) return;
@@ -1123,27 +1110,15 @@
       if (below === undefined) return;
       rest.splice(rest.indexOf(below) + 1, 0, ...group);
     }
-    applySectionList(rest);
+    applySectionList(rest, group);
   }
 
   // A section heading on Open and Focus. It looks like a Plan-board day
   // heading and, like one, takes drops: an empty section is only this row.
-  // `action` is an optional button in the heading (Others: Line up all).
-  function sectionHTML(zone, label, count, action = '') {
+  function sectionHTML(zone, label, count) {
     const empty = count ? '' : ' board-day--empty';
     return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
-      `<span class="board-day-label">${label}</span>${action}<span class="board-day-count">${count}</span></li>`;
-  }
-
-  // Others' "Line up all": every visible task of Others goes to the end of
-  // the Lineup, in the order they are listed. Tasks hidden by the filter stay
-  // in Others.
-  function lineUpAll() {
-    const list = sectionList();
-    const others = list.slice(list.indexOf(sectionKey('others')) + 1);
-    const rest = list.filter(id => !others.includes(id));
-    rest.splice(rest.indexOf(sectionKey('others')), 0, ...others);
-    applySectionList(rest);
+      `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
   }
 
   function sortTasks(tasksArr) {
@@ -1523,17 +1498,12 @@
     const filtered = filterTasks();
 
 
-    // Open and Focus have two sections each (SECTIONS): Open's Unsorted
-    // (newTasks) above Sorted (orderedTasks), and Focus's Lineup (orderedTasks)
-    // above Others (unarrangedTasks, in Open's order via TAB_SORT.focus). A
-    // due task has no section of its own on either tab: it keeps its place in
-    // the order, and its urgency colour marks it.
-    let orderedTasks, newTasks = [], unarrangedTasks = [];
-    if (activeFilter === 'focus') {
-      const sorted = sortTasks(filtered);
-      orderedTasks    = sorted.filter(t => t.focus_order != null);
-      unarrangedTasks = sorted.filter(t => t.focus_order == null);
-    } else if (activeFilter === 'open') {
+    // Open and Focus have the same two sections (SECTIONS): Unsorted
+    // (newTasks) above Sorted (orderedTasks); Focus is Open filtered. A due
+    // task has no section of its own: it keeps its place in the order, and
+    // its urgency colour marks it.
+    let orderedTasks, newTasks = [];
+    if (SECTIONS[activeFilter]) {
       // DeckCore.byOpenOrder, which the Plan board uses too. Reversed first,
       // so tasks created in the same second (created_at has no finer
       // resolution) keep newest-first.
@@ -1545,8 +1515,7 @@
     }
 
     if (activeFilter !== 'due' &&
-        orderedTasks.length === 0 && newTasks.length === 0 &&
-        unarrangedTasks.length === 0) {
+        orderedTasks.length === 0 && newTasks.length === 0) {
       if (activeFilter === 'focus') {
         listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
           '<button type="button" class="btn btn-sm" data-goto-tab="due">Plan your day</button></li>';
@@ -1664,7 +1633,7 @@
     }
 
     if (activeFilter === 'focus') {
-      const inFocus = orderedTasks.length + unarrangedTasks.length;
+      const inFocus = orderedTasks.length + newTasks.length;
       if (LIMIT && inFocus >= LIMIT) {
         html += `<li class="focus-stale-bar focus-over-capacity">` +
           `<span>⚠ ${inFocus} tasks in ${esc(tabLabel('focus'))} (limit: ${LIMIT})</span></li>`;
@@ -1689,19 +1658,12 @@
     }
     // Open and Focus: both sections always have a heading, even when empty,
     // because the heading is where a task is dropped to enter an empty section.
-    if (activeFilter === 'open') {
+    if (SECTIONS[activeFilter]) {
       html += sectionHTML('unsorted', 'Unsorted', newTasks.length);
       html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
       html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
     }
-    const focusSections = activeFilter === 'focus' && (orderedTasks.length || unarrangedTasks.length);
-    if (focusSections) html += sectionHTML('lineup', 'Lineup', orderedTasks.length);
     html += displayTasks.map(t => taskHTML(t)).join('');
-    const lineUpAllBtn = unarrangedTasks.length
-      ? '<button type="button" class="section-action" data-section-action="line-up-all" title="Append all of these to the Lineup">Line up all</button>'
-      : '';
-    if (focusSections) html += sectionHTML('others', 'Others', unarrangedTasks.length, lineUpAllBtn);
-    html += unarrangedTasks.map(t => taskHTML(t)).join('');
     if (truncated) {
       html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
     }
@@ -1709,7 +1671,6 @@
     wireListHandlers();
 
     function wireListHandlers() {
-    listEl.querySelector('[data-section-action="line-up-all"]')?.addEventListener('click', lineUpAll);
     listEl.querySelectorAll('.task-menu-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();

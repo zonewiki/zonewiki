@@ -1655,14 +1655,6 @@ div.chip-input > input {
 .board-day-divider:first-child { margin-top: 0; }
 .board-day-label { flex: 1; }
 .board-day-count { font-weight: 700; color: var(--muted); }
-/* A button in a section heading (Others: Line up all), link-like so the heading
-   stays a quiet row. */
-.section-action {
-  font: inherit; letter-spacing: inherit; text-transform: inherit;
-  background: none; border: 0; padding: 0 .25rem; cursor: pointer; color: var(--link);
-}
-.section-action:hover { text-decoration: underline; }
-@media (pointer: coarse) { .section-action { padding: .45rem .5rem; margin: -.45rem 0; } }
 .board-day--over .board-day-count { color: #d97706; }  /* over capacity */
 .board-day-over-icon { color: #d97706; font-size: .8rem; margin-right: .25rem; cursor: default; }
 /* Highlight the whole section while dragging a card over it. */

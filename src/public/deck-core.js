@@ -32,27 +32,14 @@
     return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
   }
 
-  // Open's order, also the order inside every Plan-board section but Overdue:
-  // Unsorted (no sort_order) first, newest first, then Sorted in sort_order.
-  // Plan only moves tasks between days; the order is Open's.
+  // Open's order, also Focus's (Open filtered) and the order inside every
+  // Plan-board section but Overdue: Unsorted (no sort_order) first, newest
+  // first, then Sorted in sort_order. Plan only moves tasks between days.
   function byOpenOrder(a, b) {
     if (a.sort_order == null && b.sort_order == null) return (b.created_at || '').localeCompare(a.created_at || '');
     if (a.sort_order == null) return -1;
     if (b.sort_order == null) return 1;
     return a.sort_order - b.sort_order;
-  }
-
-  // Focus's order: the Lineup (focus_order) first, then Others in Open's sorted
-  // order. Never-sorted tasks come last, oldest first, so a task added during
-  // the day lands at the end.
-  function byFocusOrder(a, b) {
-    if (a.focus_order != null && b.focus_order != null) return a.focus_order - b.focus_order;
-    if (a.focus_order != null) return -1;
-    if (b.focus_order != null) return 1;
-    if (a.sort_order != null && b.sort_order != null) return a.sort_order - b.sort_order;
-    if (a.sort_order != null) return -1;
-    if (b.sort_order != null) return 1;
-    return (a.created_at || '').localeCompare(b.created_at || '');
   }
 
   // Checkbox items in a task's notes: a line "- [ ] text" (or "* ", "+ ",
@@ -273,7 +260,7 @@
   }
 
   const DeckCore = {
-    dateToStr, addDays, isOverdue, isFocus, byOpenOrder, byFocusOrder, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
+    dateToStr, addDays, isOverdue, isFocus, byOpenOrder, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
     parseFilter, matchesFilter, tagParamToQuery, DESC_CHECK_RE, toggleDescCheck,
     bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   };

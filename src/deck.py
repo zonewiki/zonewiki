@@ -194,8 +194,8 @@ def _normalize_task(task: dict) -> bool:
     task has. Tags are cleaned (_clean_tags): older decks allowed spaces.
     The ``page`` field (a linked page slug) is gone: a wikilink in the notes
     does the same, so the slug becomes ``[[slug]]`` there unless the title or
-    notes already link to it. A stale Lineup place (focus_order on a task
-    outside Focus) is dropped."""
+    notes already link to it. ``focus_order`` (a place in Focus's own order,
+    the Lineup) is gone: Focus uses Open's order."""
     changed = False
     if "page" in task:
         slug = task.pop("page")
@@ -223,12 +223,8 @@ def _normalize_task(task: dict) -> bool:
     if isinstance(tags, list) and _clean_tags(tags) != tags:
         task["tags"] = _clean_tags(tags)
         changed = True
-    # A Lineup place outside Focus is stale: older versions kept it when a
-    # deadline change took the task out of Focus. Time only moves tasks into
-    # Focus, never out, so such a place can't be current.
-    if (task.get("focus_order") is not None and not task.get("completed_at")
-            and not _in_focus(task, date.today().isoformat())):
-        task["focus_order"] = None
+    if "focus_order" in task:
+        del task["focus_order"]
         changed = True
     return changed
 
@@ -506,7 +502,6 @@ def _new_task(**overrides) -> dict:
         "completed_at": None,
         "wont_do": False,
         "start_date": None,
-        "focus_order": None,
         "sort_order": None,
         "recurrence": None,
         "spawned_from": None,
@@ -697,14 +692,13 @@ def _clean_comments(val) -> list[dict]:
 
 def _keep_done(task: dict) -> None:
     """Complete a keep task. It is never archived: done means "back to the
-    pool". It returns to Open with no start date (so it leaves Focus and its
-    Lineup), its deadline is dropped (it was this round's), and the day is
+    pool". It returns to Open with no start date (so it leaves Focus), its
+    deadline is dropped (it was this round's), and the day is
     recorded in ``last_done``. Undo is a plain update restoring those fields."""
     _log(task, "done")
     task["last_done"] = date.today().isoformat()
     task["start_date"] = None
     task["due_date"] = None
-    task["focus_order"] = None
 
 
 def _complete_task(task: dict, now: str | None = None) -> dict | None:
@@ -1272,17 +1266,9 @@ def api_create_deck_item():
     return jsonify(task), 201
 
 
-def _in_focus(task: dict, today: str) -> bool:
-    """Whether the task is on the Focus tab: started, or due today or earlier
-    (mirrors DeckCore.isFocus)."""
-    start, due = task.get("start_date"), task.get("due_date")
-    return bool((start and start <= today) or (due and due <= today))
-
-
 def _apply_task_fields(task: dict, data: dict) -> None:
     """Apply non-completion field updates from request data onto task in place."""
     old_due_date = task.get("due_date")
-    was_focus = _in_focus(task, date.today().isoformat())
     if "title" in data:
         title = _as_str(data["title"], "title").strip()
         if not title:
@@ -1302,8 +1288,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
             _log(task, "due", old_due_date, task["due_date"])
     if "sort_order" in data:
         task["sort_order"] = _as_order(data["sort_order"], "sort_order")
-    if "focus_order" in data:
-        task["focus_order"] = _as_order(data["focus_order"], "focus_order")
     if "keep" in data:
         task["keep"] = bool(data["keep"])
     if "last_done" in data:
@@ -1314,15 +1298,6 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["start_date"] = _validate_date(data["start_date"])
         if task["start_date"] != old_start_date:
             _log(task, "start", old_start_date, task["start_date"])
-    # focus_order is the task's place in Focus's Lineup. It only lasts while
-    # the task stays in Focus (_in_focus, the same rule as DeckCore.isFocus):
-    # a write that takes it out, or brings it in, clears it, so it comes back
-    # unarranged. Edits that keep it in Focus keep its place, and so does
-    # leaving it alone (an unfinished Lineup carries over). An explicit
-    # focus_order in the same request (undo of a move) wins.
-    today = date.today().isoformat()
-    if "focus_order" not in data and not (was_focus and _in_focus(task, today)):
-        task["focus_order"] = None
     if "rec_type" in data:
         rec_type = data["rec_type"]
         if rec_type in ("daily", "weekly", "monthly", "yearly"):
@@ -1647,9 +1622,7 @@ def api_reorder_deck():
         abort(400, description="order must be a list of ids, updates a list of objects")
     if not order and not updates:
         abort(400)
-    field = data.get("field", "sort_order")
-    if field not in ("sort_order", "focus_order"):
-        abort(400)
+    field = "sort_order"
     active = _read_deck_strict()
     id_map = {t["id"]: t for t in active}
     for i, task_id in enumerate(order):
@@ -1658,8 +1631,8 @@ def api_reorder_deck():
     for u in updates:
         task_id = u.get("id")
         val = u.get(field)
-        # null clears the field: the task leaves the manual order (Open's
-        # Sorted section, Focus's Lineup).
+        # null clears the field: the task leaves the manual order (the
+        # Sorted section of Open and Focus).
         if val is None and task_id in id_map:
             id_map[task_id][field] = None
             continue

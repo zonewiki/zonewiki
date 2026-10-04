@@ -2050,7 +2050,7 @@ document.addEventListener('change', async e => {
   showCheckboxToast(`${done ? 'Done' : 'Reopened'} “${label}”`, async () => {
     const undo = before?.keep
       ? { start_date: before.start_date, due_date: before.due_date, last_done: before.last_done,
-          focus_order: before.focus_order ?? null, history: before.history }
+          history: before.history }
       : { completed: !done, ...(before ? { history: before.history } : {}) };
     const r = await putTask(id, undo).catch(() => null);
     if (r?.ok) chip = await rerenderTaskRef(chip, id);
