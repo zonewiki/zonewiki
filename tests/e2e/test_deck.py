@@ -675,20 +675,26 @@ def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):
     wait_for_field(page, "Bread", "tags", ["groceries"])
 
 
-def test_list_tag_comes_first_and_bold(page, wiki):
+def test_list_tag_comes_first_and_marked(page, wiki):
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "dairy,groceries"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     page.goto("/page/shop?view=open")
     tags = card(page, "Oat milk").locator(".task-tag")      # the card too
     expect(tags).to_have_text(["#groceries", "#dairy"])
     expect(tags.first).to_have_class(re.compile(r"\btask-tag-list\b"))
-    assert tags.first.evaluate("e => getComputedStyle(e).fontWeight") == "600"
     modal = open_edit(page, "Oat milk")
     chips = modal.locator(".tag-chip")
     expect(chips.locator(".tag-chip-label")).to_have_text(["#groceries", "#dairy"])
     expect(chips.first).to_have_class(re.compile(r"\btag-chip-list\b"))
     expect(chips.nth(1)).not_to_have_class(re.compile(r"\btag-chip-list\b"))
-    assert chips.first.evaluate("e => getComputedStyle(e).fontWeight") == "600"
+    # Icon, tint and a tooltip naming the list's page, on the chip and the card.
+    for el, plain in ((chips.first, chips.nth(1)), (tags.first, tags.nth(1))):
+        assert "svg" in el.evaluate("e => getComputedStyle(e, '::before').maskImage")
+        assert plain.evaluate("e => getComputedStyle(e, '::before').content") in ("none", "normal")
+        bg = "e => getComputedStyle(e).backgroundColor"
+        assert el.evaluate(bg) != plain.evaluate(bg)
+        assert el.get_attribute("title") == "List: Shop"
+        assert not plain.get_attribute("title")
     # A list tag typed in later moves to the front too.
     wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
     page.goto("/page/shop?view=open")
@@ -698,7 +704,7 @@ def test_list_tag_comes_first_and_bold(page, wiki):
     expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries", "#hardware", "#dairy"])
 
 
-def test_filter_shows_only_list_tags_bold(page, wiki):
+def test_filter_marks_only_list_tags(page, wiki):
     page.request.post("/api/deck", data={"title": "Screws", "tags": "groceries,weekly,hardware,dairy"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries tag=weekly]]\n")
     wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
@@ -711,9 +717,12 @@ def test_filter_shows_only_list_tags_bold(page, wiki):
     chips = page.locator(".tasks-toolbar .tag-chip")
     expect(chips.locator(".tag-chip-label")).to_have_text(
         ["#groceries", "#hardware", "#weekly", "#dairy"])
-    weights = chips.evaluate_all("cs => cs.map(c => getComputedStyle(c).fontWeight)")
-    assert weights[:2] == ["600", "600"]                     # lists
-    assert all(w != "600" for w in weights[2:])              # locked tag= and typed tag
+    bgs = chips.evaluate_all("cs => cs.map(c => getComputedStyle(c).backgroundColor)")
+    assert bgs[0] == bgs[1] and bgs[2] == bgs[3] and bgs[0] != bgs[2]   # lists tinted only
+    titles = chips.evaluate_all("cs => cs.map(c => c.title)")
+    assert titles[0] == "List: Shop"
+    assert titles[1] == "List: DIY"
+    assert titles[2] == "Set by this page" and titles[3] == ""
 
 
 def test_task_moves_to_another_list(page, wiki):

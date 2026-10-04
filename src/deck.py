@@ -743,8 +743,8 @@ _FILTER_ALIASES = {
 # that page shows the tasks carrying the tag, and the main deck leaves them
 # out. The server scans pages for the declarations (server._deck_lists) and
 # installs the lookup here, since deck.py doesn't read pages itself.
-# LISTS_FN() returns {name: {"slug": declaring page, "params": its embed's
-# params}}; names are lowercase.
+# LISTS_FN() returns {name: {"slug": declaring page, "title": its title,
+# "params": its embed's params}}; names are lowercase.
 LISTS_FN = lambda: {}
 
 
@@ -815,13 +815,17 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
     # Every declared list: the main deck leaves their tasks out (deck.js).
-    lists_json = html.escape(json.dumps(sorted(list_names())))
+    # Each one's home page title is for the list tag's tooltip.
+    lists = LISTS_FN()
+    lists_json = html.escape(json.dumps(sorted(lists)))
+    homes_json = html.escape(json.dumps(
+        {n: l.get("title") or l.get("slug") or "" for n, l in sorted(lists.items())}))
 
     # Use instance suffix for unique IDs when multiple embeds exist
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
     hide = ' data-headless="1" style="display:none"' if headless else ""
-    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>

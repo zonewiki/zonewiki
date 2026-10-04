@@ -1582,8 +1582,23 @@ div.chip-input > input {
 .tag-chip-x:hover { color: var(--fg); }
 /* Set by the embed (list= and tag= filter words): no ×. */
 .tag-chip-locked { padding-right: .4rem; }
-/* A separate list's tag in the edit modal: first and bold, like the list's filter chip. */
-.tag-chip-list { font-weight: 600; }
+/* A separate list's tag (filter, edit modal, cards): first, with a list icon
+   and a tint, so a list never passes for an ordinary tag. */
+.tag-chip-list, .task-tag.task-tag-list {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--link) 7%, var(--code-bg));
+}
+/* The icon is a bulleted list drawn as an SVG mask, so it looks the same in
+   every font. Only the icon is in the accent colour. */
+.tag-chip-list::before, .task-tag.task-tag-list::before {
+  content: ""; display: inline-block; width: .8em; height: .8em;
+  margin-right: .25rem; vertical-align: -.05em; background: var(--link); opacity: .8;
+  -webkit-mask: var(--list-icon) center / contain no-repeat;
+  mask: var(--list-icon) center / contain no-repeat;
+}
+:root {
+  --list-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='2.5' cy='3.5' r='1.5'/%3E%3Ccircle cx='2.5' cy='8' r='1.5'/%3E%3Ccircle cx='2.5' cy='12.5' r='1.5'/%3E%3Crect x='6' y='2.5' width='9' height='2' rx='1'/%3E%3Crect x='6' y='7' width='9' height='2' rx='1'/%3E%3Crect x='6' y='11.5' width='9' height='2' rx='1'/%3E%3C/svg%3E");
+}
 @media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
 .tasks-toolbar .btn { flex: none; }
 
@@ -1801,7 +1816,6 @@ div.chip-input > input {
   background: var(--code-bg); border-radius: 3px; color: var(--muted);
 }
 
-.task-tag-list { font-weight: 600; color: var(--fg); }  /* a separate list's tag */
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 

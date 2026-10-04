@@ -362,6 +362,14 @@
   let declaredLists = [];
   try { declaredLists = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
   const listSet = new Set(declaredLists);
+  let listHomes = {};   // list name → its home page's title
+  try { listHomes = JSON.parse(appEl?.dataset.listHomes || '{}'); } catch (_) {}
+  // The tooltip of a list's tag (cards, filter and Tags chips): its page.
+  function listTooltip(name) {
+    const n = String(name).replace(/^-?#/, '').toLowerCase();
+    const home = listHomes[n];
+    return home ? `List: ${home}` : 'List';
+  }
   const isMainDeck = !initList && !appEl?.dataset.initTag;
   const SHOW_LISTS_KEY = 'leaf-deck-show-lists';
   let showLists = false;
@@ -1531,10 +1539,13 @@
       const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
       const dueClass = dueDateClass(task);
       const urgClass = urgencyClass(task);
-      // A separate list's tag first and bold, as in the filter and the modal.
+      // A separate list's tag first and marked (icon, tint, tooltip), as in
+      // the filter and the modal.
       const isListTag = t => listSet.has(t.toLowerCase());
       const tags = [...(task.tags || []).filter(isListTag), ...(task.tags || []).filter(t => !isListTag(t))]
-        .map(t => `<span class="task-tag${isListTag(t) ? ' task-tag-list' : ''}">#${esc(t)}</span>`).join('');
+        .map(t => isListTag(t)
+          ? `<span class="task-tag task-tag-list" title="${esc(listTooltip(t))}">#${esc(t)}</span>`
+          : `<span class="task-tag">#${esc(t)}</span>`).join('');
       const tagsHtml = tags ? `<div class="task-tags-right">${tags}</div>` : '';
       const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
         : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(tabLabel('open'))} when ticked off">⟲</span>` : '';
@@ -2026,7 +2037,7 @@
     ...(initList ? ['#' + initList] : []),
     ...tagParamToQuery(appEl?.dataset.initTag || '').split(' ').filter(Boolean),
   ];
-  // A chip that is just a separate list's tag (#groceries) is shown bold.
+  // A chip that is just a separate list's tag (#groceries) is marked as a list.
   const filterChips = filterSearch && chipField(filterSearch, {
     onChange: () => render(), locked: embedFilterWords,
     listWord: w => w.startsWith('#') && listSet.has(w.slice(1).toLowerCase()) });
@@ -2054,7 +2065,8 @@
   // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
   // modal's Tags field (chips are tag names, shown as #name). `locked` words
   // (an embed's filter words, case ignored) are always there and have no ×.
-  // `listWord(w)` marks a separate list's tag: such chips come first, bold.
+  // `listWord(w)` marks a separate list's tag: such chips come first, with a
+  // list icon, a tint and a tooltip naming the list's page.
   function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false } = {}) {
     const lockedSet = new Set(locked.map(w => w.toLowerCase()));
     const isLocked = w => lockedSet.has(w.toLowerCase());
@@ -2072,10 +2084,14 @@
         text.className = 'tag-chip-label';
         text.textContent = label(w);
         chip.appendChild(text);
-        if (listWord(w)) chip.classList.add('tag-chip-list');
+        const isList = listWord(w);
+        if (isList) {
+          chip.classList.add('tag-chip-list');
+          chip.title = listTooltip(w);
+        }
         if (isLocked(w)) {
           chip.classList.add('tag-chip-locked');
-          chip.title = 'Set by this page';
+          if (!isList) chip.title = 'Set by this page';
           box.insertBefore(chip, input);
           return;
         }

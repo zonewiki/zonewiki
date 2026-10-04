@@ -2043,6 +2043,8 @@ class TestLists:
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body
         assert 'data-lists="[&quot;groceries&quot;]"' in body
+        # The home page's title, for the list tag's tooltip.
+        assert 'data-list-homes="{&quot;groceries&quot;: &quot;Shop&quot;}"' in body
         assert 'id="task-edit-list"' not in body
         assert 'id="task-show-lists"' in body
 

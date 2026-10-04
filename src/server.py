@@ -1162,12 +1162,13 @@ def _page_meta(md_file: Path, slug: str) -> tuple[str, set[str]]:
 
 def _deck_lists() -> dict[str, dict]:
     """Every separate list some page declares with [[deck list=<name>]]:
-    {name: {"slug": the page, "params": its embed's params}}. When several
-    pages declare one, the first slug A–Z is its home."""
+    {name: {"slug": the page, "title": its title, "params": its embed's
+    params}}. When several pages declare one, the first slug A–Z is its home."""
     out: dict[str, dict] = {}
     for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
-        for name, params in _page_meta_entry(md_file, slug)[3]:
-            out.setdefault(name, {"slug": slug, "params": params})
+        _, title, _, lists = _page_meta_entry(md_file, slug)
+        for name, params in lists:
+            out.setdefault(name, {"slug": slug, "title": title, "params": params})
     return out
 
 
