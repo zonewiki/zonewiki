@@ -1060,7 +1060,7 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
                     break
         if found:
             results.append({"id": task["id"], "title": task.get("title", ""),
-                            "list": task_list(task)})
+                            "tags": task.get("tags") or [], "list": task_list(task)})
     return results
 
 

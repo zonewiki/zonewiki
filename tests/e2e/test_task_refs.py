@@ -60,6 +60,20 @@ def test_keep_task_chip_comes_back_and_undo_restores_its_dates(page, wiki):
     assert _deck_task(wiki, t["id"])["last_done"] is None
 
 
+def test_ticked_chip_keeps_linking_to_the_pages_list(page, wiki):
+    # A task in two lists; the page declares the second one A–Z. The chip
+    # re-rendered after ticking still links to the page's list.
+    wiki.write("ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
+    t = _task(page, title="Lego", keep=True, tags=["presentideas", "task"])
+    wiki.write("todo", f"# Todo\n\n[[deck list=task]]\n\n[[task:{t['id'][:8]}]]\n")
+    page.goto("/page/todo")
+    link = page.locator(".page-content .task-ref-title")
+    expect(link).to_have_attribute("href", re.compile(r"list=task$"))
+    page.locator(".page-content .task-ref-check").check()
+    expect(page.locator(".page-content .task-ref")).to_contain_text("⟲ ✓")   # re-rendered
+    expect(link).to_have_attribute("href", re.compile(r"list=task$"))
+
+
 def test_editor_completes_task_references(page, wiki):
     _task(page, title="Book flights")
     t = _task(page, title="Renew passport", due_date="2030-01-02")

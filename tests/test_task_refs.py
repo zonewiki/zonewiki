@@ -132,6 +132,48 @@ class TestLinkedTasks:
         assert other["id"] in linked
 
 
+class TestTwoLists:
+    """A task in two lists links, from a page declaring one of them, to that
+    list rather than to its first list A–Z (server._link_list)."""
+
+    def _setup(self, client, wiki_dir):  # noqa: F811
+        write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
+        t = task(client, title="Lego for Sam", tags=["presentideas", "task"],
+                 description="see [[todo]]")
+        write_page(wiki_dir, "todo", f"# Todo\n\n[[deck list=task]]\n\n[[task:{t['id'][:8]}]]\n")
+        return t
+
+    def test_chip_links_to_the_list_the_page_declares(self, client, wiki_dir):  # noqa: F811
+        t = self._setup(client, wiki_dir)
+        body = view(client, "todo")
+        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in body
+        assert '<span class="task-ref-badge task-ref-list">task</span>' in body
+
+    def test_elsewhere_the_first_list_wins(self, client, wiki_dir):  # noqa: F811
+        t = self._setup(client, wiki_dir)
+        write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
+        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
+
+    def test_page_declaring_a_list_the_task_is_not_in(self, client, wiki_dir):  # noqa: F811
+        t = self._setup(client, wiki_dir)
+        write_page(wiki_dir, "notes", f"# N\n\n[[deck list=groceries]]\n\n[[task:{t['id'][:8]}]]\n")
+        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
+
+    def test_linked_tasks_link_to_the_pages_list(self, client, wiki_dir):  # noqa: F811
+        t = self._setup(client, wiki_dir)
+        write_page(wiki_dir, "todo", "# Todo\n\n[[deck list=task]]\n")   # no chip: Linked tasks
+        linked = view(client, "todo").split('id="task-backlinks"', 1)[1]
+        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in linked
+
+    def test_preview_with_lists_param(self, client, wiki_dir):  # noqa: F811
+        t = self._setup(client, wiki_dir)
+        ref = f"[[task:{t['id']}]]"
+        plain = client.post("/api/preview", data=ref, headers=HOST).data.decode()
+        assert "list=presentideas" in plain
+        kept = client.post("/api/preview?lists=Task", data=ref, headers=HOST).data.decode()
+        assert "list=task" in kept and "list=presentideas" not in kept
+
+
 class TestSearch:
     def test_page_is_found_by_the_task_title_and_follows_renames(self, client, wiki_dir):  # noqa: F811
         t = task(client, title="Renew passport")

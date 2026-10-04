@@ -681,8 +681,13 @@ def _enable_task_checkboxes(html_str: str) -> str:
         lambda m: re.sub(r'\s+disabled(?:="[^"]*")?', '', m.group(0)), html_str)
 
 
-def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True) -> str:
+def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
+              prefer_lists: list[str] | None = None) -> str:
+    """Render a page's markdown. Task chips link to a task in a list the text
+    declares with [[deck list=…]] (or one of `prefer_lists`) when the task is
+    in it, rather than in its first list A–Z (_link_list)."""
     fm_meta, text = parse_frontmatter(text)
+    prefer = [name for name, _ in _page_deck_lists(text)] + list(prefer_lists or [])
     fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
 
     text, code_stash = _mask_code(text)
@@ -700,7 +705,7 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True) -> s
     result = _apply_img_sizes(md.render(text))
     result = _enable_task_checkboxes(result)
     result = _render_task_dates(result)
-    result = _inject_task_refs(result, task_refs)
+    result = _inject_task_refs(result, task_refs, prefer)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     if deck_embeds:
@@ -724,14 +729,14 @@ def _mask_task_refs(text: str) -> tuple[str, list[str]]:
     return deck_module.TASK_REF_RE.sub(token, text), refs
 
 
-def _inject_task_refs(html_str: str, refs: list[str]) -> str:
+def _inject_task_refs(html_str: str, refs: list[str], prefer: list[str] = ()) -> str:
     if not refs:
         return html_str
     tasks = deck_module.resolve_task_refs(refs)
     today = date.today().isoformat()
     html_str = _TASK_REF_ITEM_RE.sub('<li class="task-ref-item">', html_str)
     return _TASK_REF_TOKEN_RE.sub(
-        lambda m: _task_ref_html(refs[int(m.group(1))], tasks[refs[int(m.group(1))]], today),
+        lambda m: _task_ref_html(refs[int(m.group(1))], tasks[refs[int(m.group(1))]], today, prefer),
         html_str)
 
 
@@ -745,7 +750,16 @@ def _short_date(iso: str, today: str) -> str:
     return text if iso[:4] == today[:4] else f"{text}, {d.year}"
 
 
-def _task_ref_html(ref: str, task: dict | None, today: str) -> str:
+def _link_list(task: dict, prefer=()) -> str | None:
+    """The list a link to a task opens it in: one of `prefer` (the lists the
+    page with the link declares) when the task is in it, so a task in two
+    lists opens in the one the page is about; else its own (deck.task_list)."""
+    tags = {t.lower() for t in task.get("tags") or []}
+    hits = sorted(tags & {p.lower() for p in prefer})
+    return hits[0] if hits else deck_module.task_list(task)
+
+
+def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
     """A task as an inline chip: its checkbox (completes it in the deck,
     leaf.js), its title linking to it in the deck, and badges for what the
     deck card shows at a glance (deadline, a later start, repeat, keep)."""
@@ -755,7 +769,7 @@ def _task_ref_html(ref: str, task: dict | None, today: str) -> str:
     title = html.escape(_plain_task_title(task.get("title", "")))
     done, wont = bool(task.get("completed_at")), bool(task.get("wont_do"))
     year = deck_module._past_year(task) if done else None
-    list_name = deck_module.task_list(task)
+    list_name = _link_list(task, prefer)
     href = html.escape(_task_href(task["id"], "completed" if done else "open", list_name, year))
     cls, badges = "task-ref", []
     if done:
@@ -1273,8 +1287,10 @@ def _plain_task_title(title: str) -> str:
     return re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', r'\1', title)
 
 
-def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict]) -> tuple[str, str]:
-    """Return (bl_html, bl_chip) for the backlinks sections and the header chip."""
+def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict],
+                          prefer=()) -> tuple[str, str]:
+    """Return (bl_html, bl_chip) for the backlinks sections and the header chip.
+    `prefer`: the lists the page declares, for the Linked tasks' links."""
     bl_html = ""
     bl_chip = ""
     if backlinks:
@@ -1293,7 +1309,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
         )
     if task_backlinks:
         tbl_items = "".join(
-            f'<li><a href="{html.escape(_task_href(t["id"], "open", t.get("list")))}">'
+            f'<li><a href="{html.escape(_task_href(t["id"], "open", _link_list(t, prefer)))}">'
             f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
             for t in task_backlinks
         )
@@ -1810,7 +1826,8 @@ def view_page(slug):
     # Tasks the page shows inline already aren't repeated under Linked tasks.
     inline = page_task_refs(content)
     task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
-    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, task_backlinks)
+    page_lists = [name for name, _ in _page_deck_lists(content)]
+    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, task_backlinks, page_lists)
     bl_html += _build_related_html(slug, path, backlinks)
     delete_dialog = _build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
@@ -3088,7 +3105,10 @@ def api_toggle_checkbox(slug):
 @app.post("/api/preview")
 def api_preview():
     text = request.get_data(as_text=True)
-    return render_md(text)
+    # ?lists=a,b: the lists the page declares, so a chip re-rendered on its
+    # own (leaf.js rerenderTaskRef) keeps linking to the page's list.
+    lists = [n for n in (deck_module._clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
+    return render_md(text, prefer_lists=lists)
 
 
 @app.get("/api/version")

@@ -2010,8 +2010,13 @@ function showCheckboxToast(msg, undo) {
 // is then re-rendered by the server (/api/preview of the reference): a
 // repeating task shows its next occurrence, a keep task its "✓ today".
 async function rerenderTaskRef(chip, id) {
+  // The lists the page declares (its list embeds), so the fresh chip links to
+  // the task in the same list as the server-rendered one (_link_list).
+  const lists = [...document.querySelectorAll('.tasks-app[data-init-list]')]
+    .map(el => el.dataset.initList).filter(Boolean);
+  const query = lists.length ? `?lists=${encodeURIComponent(lists.join(','))}` : '';
   try {
-    const res = await fetch('/api/preview', {
+    const res = await fetch(`/api/preview${query}`, {
       method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `[[task:${id}]]`,
     });
     const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').querySelector('.task-ref');
