@@ -424,6 +424,17 @@
     pendingUndoFn = null;
   }
 
+  // A toast goes into an open modal dialog if there is one: in <body> it
+  // would sit under the dialog (top layer) and its Undo couldn't be clicked.
+  // It moves back to <body> when the dialog closes.
+  function placeToast(el) {
+    const dialog = document.querySelector('dialog[open]');
+    (dialog || document.body).appendChild(el);
+    dialog?.addEventListener('close', () => {
+      if (el.isConnected) document.body.appendChild(el);
+    }, { once: true });
+  }
+
   function showUndo(msg, undoFn) {
     dismissUndo();
     pendingUndoFn = undoFn;
@@ -437,7 +448,7 @@
     btn.addEventListener('click', () => { const fn = pendingUndoFn; dismissUndo(); fn?.(); });
     el.appendChild(span);
     el.appendChild(btn);
-    document.body.appendChild(el);
+    placeToast(el);
     undoToastEl = el;
     undoTimer = setTimeout(dismissUndo, 6000);
   }
@@ -454,7 +465,7 @@
     const el = document.createElement('div');
     el.className = 'raw-toast task-undo-toast';
     el.textContent = msg;
-    document.body.appendChild(el);
+    placeToast(el);
     setTimeout(() => el.remove(), 4000);
   }
 
@@ -1552,6 +1563,11 @@
       // A keep task's last completion, e.g. when the milk was last bought.
       const lastDoneDisplay = task.keep && task.last_done && !task.completed_at
         ? `<span class="task-last-done" title="Last done">✓ ${shortDate(task.last_done)}</span>` : '';
+      // Comments: a count; hovering shows the latest, a click opens them.
+      const comments = task.comments || [];
+      const lastComment = comments[comments.length - 1];
+      const commentsDisplay = lastComment
+        ? `<button type="button" class="task-comments-btn" data-id="${task.id}" title="${esc(commentWhen(lastComment.at) + ': ' + lastComment.text)}" aria-label="${comments.length} comment${comments.length === 1 ? '' : 's'}">💬 ${comments.length}</button>` : '';
       // A planned task is either in Focus already (start today or earlier) or
       // planned for later; the card's left edge and its 📅 date say which, the
       // same on every tab.
@@ -1581,10 +1597,10 @@
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-        task.keep || task.completed_at);
+        task.keep || task.completed_at || commentsDisplay);
       const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -1686,6 +1702,12 @@
       btn.addEventListener('click', e => {
         e.stopPropagation();
         openTaskMenu(btn.dataset.id, btn);
+      });
+    });
+    listEl.querySelectorAll('.task-comments-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openEditModal(btn.dataset.id, { focusComment: true });
       });
     });
 
@@ -2414,6 +2436,104 @@
       `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
   }
 
+  // The modal's Comments: short status lines ("called Bob, waiting"), newest
+  // first. They are saved at once through their own routes (not with Save),
+  // so a comment is never lost to Cancel. Hidden for a new task. Enter in
+  // the field adds one; ✎ edits one in place (Enter saves, Esc cancels), ×
+  // deletes it with undo.
+  const commentsBox = document.getElementById('task-edit-comments' + sfx);
+  const commentInput = document.getElementById('task-edit-comment' + sfx);
+  const commentList = document.getElementById('task-edit-comment-list' + sfx);
+  let commentsTaskId = null;
+  function commentWhen(at) {
+    return `${shortDate(at.slice(0, 10))} ${at.slice(11, 16)}`;
+  }
+  function renderComments(task) {
+    commentsTaskId = task?.id || null;
+    commentsBox.hidden = !task;
+    if (!task) return;
+    const comments = task.comments || [];
+    document.getElementById('task-edit-comments-count' + sfx).textContent = comments.length || '';
+    commentList.innerHTML = comments.slice().reverse().map(c =>
+      `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentWhen(c.at))}</span>` +
+      `<span class="task-comment-text">${renderDesc(c.text)}</span>` +
+      `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
+      `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button></li>`).join('');
+  }
+  // A comment route answered with the task: take it in and redraw.
+  async function commentWrite(url, method, body) {
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) { await noticeFromResponse(res, 'Comment not saved'); return null; }
+    const updated = await res.json();
+    const idx = tasks.findIndex(t => t.id === updated.id);
+    if (idx !== -1) tasks[idx] = updated;
+    if (commentsTaskId === updated.id && modal.open) renderComments(updated);
+    render();
+    refreshOtherInstances(instanceId);
+    return updated;
+  }
+  const commentsUrl = id => `/api/deck/${encodeURIComponent(id)}/comments`;
+  async function addComment() {
+    const text = commentInput.value.trim();
+    if (!text || !commentsTaskId) return;
+    commentInput.disabled = true;
+    const ok = await commentWrite(commentsUrl(commentsTaskId), 'POST', { text });
+    commentInput.disabled = false;
+    if (ok) commentInput.value = '';
+    commentInput.focus();
+  }
+  commentInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addComment(); }
+  });
+  document.getElementById('task-edit-comment-add' + sfx).addEventListener('click', addComment);
+  commentList.addEventListener('click', e => {
+    const btn = e.target.closest('[data-comment-action]');
+    const li = btn?.closest('[data-comment]');
+    if (!li || !commentsTaskId) return;
+    const taskId = commentsTaskId, cid = li.dataset.comment;
+    const task = tasks.find(t => t.id === taskId);
+    const comment = task?.comments?.find(c => c.id === cid);
+    if (!comment) return;
+    if (btn.dataset.commentAction === 'delete') {
+      const before = task.comments;
+      commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'DELETE').then(ok => {
+        if (ok) showUndo('Comment deleted', () => updateTask(taskId, { comments: before }).then(t => {
+          if (t && commentsTaskId === taskId && modal.open) renderComments(t);
+        }));
+      });
+      return;
+    }
+    // Edit in place.
+    const textEl = li.querySelector('.task-comment-text');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'task-comment-edit';
+    input.value = comment.text;
+    input.setAttribute('aria-label', 'Edit comment');
+    textEl.replaceWith(input);
+    li.querySelectorAll('.task-comment-btn').forEach(b => { b.hidden = true; });
+    input.focus();
+    let done = false;
+    const finish = async save => {
+      if (done) return;
+      done = true;
+      const text = input.value.trim();
+      if (save && text && text !== comment.text) {
+        if (await commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'PUT', { text })) return;
+      }
+      renderComments(tasks.find(t => t.id === taskId));
+    };
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); finish(true); }
+      // Esc ends the edit, not the modal.
+      else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+  });
+
   // opts (new tasks): `tags` (comma-separated), and from the editor's Make
   // task a starting `title` and `description`, a `start_date` (null: none,
   // instead of Focus's today) and `onCreated(task)`, called once it is saved.
@@ -2436,6 +2556,8 @@
     editChips.set(startTags, true);
     editTagsInput.value = '';
     renderHistory(task);
+    renderComments(task);
+    commentInput.value = '';
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
     keepCb.checked = task ? !!task.keep : initKeep;
@@ -2448,7 +2570,7 @@
     deleteBtn.style.display = task ? '' : 'none';
     syncDates('open');
     modal.showModal();
-    (batchTitles ? editTagsInput : titleInput).focus();
+    (task && opts?.focusComment ? commentInput : batchTitles ? editTagsInput : titleInput).focus();
   }
 
   // Relative-date helpers (used by card rendering and focus defaults).

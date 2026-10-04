@@ -7,6 +7,7 @@ Run with:
 """
 
 import os
+import re
 
 import pytest
 
@@ -480,3 +481,15 @@ class TestListPages:
     def test_limit(self, client, pages):  # noqa: F811
         text, _ = call(client, "list_pages", limit=1)
         assert "(1 of 3)" in text and len(text.splitlines()) == 2
+
+
+class TestTaskComments:
+    def test_task_text_lists_comments(self, client):
+        tid = client.post("/api/deck", json={"title": "Plan on-call", "tags": ["task"],
+                                             "description": "the notes"},
+                          headers=HOST).get_json()["id"]
+        client.post(f"/api/deck/{tid}/comments", json={"text": "asked alex: 6 people"}, headers=HOST)
+        text, err = call(client, "search_tasks", tag="task")
+        assert not err
+        assert "the notes\n\nComments:\n- " in text
+        assert re.search(r"- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: asked alex: 6 people", text)

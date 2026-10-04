@@ -2771,7 +2771,7 @@ def _task_status(task: dict) -> str:
 
 def _mcp_task_text(task: dict, base: str) -> str:
     """One deck task for an LLM: title, a line of facts (status, tags, dates,
-    repeat, list), its link in the deck, and its notes."""
+    repeat, list), its link in the deck, its notes and its comments."""
     status = _task_status(task)
     facts = [f"status: {status}" + (f" {task['completed_at'][:10]}" if status != "open" else "")]
     if task.get("tags"):
@@ -2796,7 +2796,14 @@ def _mcp_task_text(task: dict, base: str) -> str:
     url = base + _task_href(task["id"], "completed" if done else "open", list_name, year)
     text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
     notes = (task.get("description") or "").strip()
-    return f"{text}\n\n{notes}" if notes else text
+    if notes:
+        text += f"\n\n{notes}"
+    # Comments: the user's status lines, oldest first, each with its time.
+    comments = [c for c in task.get("comments") or [] if isinstance(c, dict) and c.get("text")]
+    if comments:
+        text += "\n\nComments:\n" + "\n".join(
+            f"- {str(c.get('at', ''))[:16].replace('T', ' ')}: {c['text']}" for c in comments)
+    return text
 
 
 def _mcp_task_refs(content: str, base: str) -> str:

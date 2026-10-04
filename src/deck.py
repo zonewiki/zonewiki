@@ -513,6 +513,7 @@ def _new_task(**overrides) -> dict:
         "keep": False,
         "last_done": None,
         "history": [],
+        "comments": [],
     }
     task.update(overrides)
     return task
@@ -615,6 +616,7 @@ def _spawn_recurring(task: dict) -> dict | None:
     # The next occurrence carries the series' history on (with the "done" or
     # "skipped" just logged), then notes its own date.
     spawned["history"] = list(task.get("history") or [])
+    spawned["comments"] = list(task.get("comments") or [])   # the series' log too
     _log(spawned, "repeat", None, spawned["due_date"] or spawned["start_date"])
     return spawned
 
@@ -657,6 +659,40 @@ def _clean_history(val) -> list[dict]:
                 entry[k] = v if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else None
         out.append(entry)
     return out[-HISTORY_LIMIT:]
+
+
+# A task's comments: short status lines the user adds ("called Bob, waiting
+# for an answer"), oldest first, each {id, at, text}. Unlike the history
+# they are never capped, and undo of other changes leaves them alone; they
+# are added, edited and deleted through their own routes. A recurring
+# task's next occurrence carries them on, like the history.
+COMMENT_MAX = 2000
+
+
+def _new_comment_id() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+def _comment_text(val) -> str:
+    text = _as_str(val, "text").strip()
+    if not text:
+        abort(400, description="Comment cannot be empty")
+    return text[:COMMENT_MAX]
+
+
+def _clean_comments(val) -> list[dict]:
+    """Validate a comment list from a request or snapshot; bad entries go."""
+    out, seen = [], set()
+    for c in val if isinstance(val, list) else []:
+        if not (isinstance(c, dict) and isinstance(c.get("text"), str) and c["text"].strip()
+                and isinstance(c.get("at"), str)):
+            continue
+        cid = c.get("id") if isinstance(c.get("id"), str) and c["id"] else _new_comment_id()
+        if cid in seen:
+            cid = _new_comment_id()
+        seen.add(cid)
+        out.append({"id": cid, "at": c["at"][:16], "text": c["text"].strip()[:COMMENT_MAX]})
+    return out
 
 
 def _keep_done(task: dict) -> None:
@@ -861,6 +897,14 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     <div class="task-field">
       <label for="task-edit-desc{sfx}">Notes</label>
       <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>
+    </div>
+    <div class="task-field task-comments" id="task-edit-comments{sfx}" hidden>
+      <label for="task-edit-comment{sfx}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{sfx}"></span></label>
+      <div class="task-comment-add">
+        <input type="text" id="task-edit-comment{sfx}" placeholder="Add a status line" autocomplete="off" maxlength="2000">
+        <button type="button" class="btn" id="task-edit-comment-add{sfx}">Add</button>
+      </div>
+      <ul class="task-comment-list" id="task-edit-comment-list{sfx}"></ul>
     </div>
     <div class="task-field">
       <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(Tab completes, comma adds)</span></label>
@@ -1092,10 +1136,11 @@ def _deck_mtimes() -> tuple:
 
 
 def _last_activity(task: dict) -> str | None:
-    """The day a task last changed, as far as it records: its completion,
-    else its latest history event, else its creation ("YYYY-MM-DD")."""
+    """The day a task last changed, as far as it records: the latest of its
+    completion, history events, comments and creation ("YYYY-MM-DD")."""
     stamps = [task.get("completed_at"), task.get("created_at")]
     stamps += [e.get("at") for e in task.get("history") or [] if isinstance(e, dict)]
+    stamps += [c.get("at") for c in task.get("comments") or [] if isinstance(c, dict)]
     days = [str(t)[:10] for t in stamps if t and re.match(r"\d{4}-\d{2}-\d{2}", str(t))]
     return max(days) if days else None
 
@@ -1120,7 +1165,8 @@ def task_search_docs() -> list[dict]:
         # Tags as "#tag" words, so a page's tag pill (/search?q=<tag>) finds
         # the tasks with that tag too, and the excerpt can show the match.
         tags = " ".join(f"#{t}" for t in task.get("tags") or [])
-        text = search.strip_link_targets(f"{title} {desc} {tags}".strip())
+        comments = " ".join(c.get("text", "") for c in task.get("comments") or [] if isinstance(c, dict))
+        text = search.strip_link_targets(f"{title} {desc} {comments} {tags}".strip())
         docs.append({
             "slug": "_deck",
             "title": f"[Task] {title}",
@@ -1246,6 +1292,10 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         task["description"] = _as_str(data["description"] or "", "description").strip()
     if "tags" in data:
         task["tags"] = _clean_tags(_as_str_list(data["tags"] or [], "tags"))
+    if "comments" in data:     # the whole list, for undoing a comment's delete or edit
+        if not isinstance(data["comments"], list):
+            abort(400, description="comments must be a list")
+        task["comments"] = _clean_comments(data["comments"])
     if "due_date" in data:
         task["due_date"] = _validate_date(data["due_date"])
         if task["due_date"] != old_due_date:
@@ -1387,6 +1437,59 @@ def api_update_deck_item(task_id):
     return jsonify(task)
 
 
+def _find_for_write(task_id: str) -> tuple[list[dict], list[dict], dict]:
+    """(open tasks, every completed task, the task with that id) for a
+    write; 404 when no task has it."""
+    active = _read_deck_strict()
+    completed_list = _read_completed_all_strict()
+    task = next((t for t in active + completed_list if t["id"] == task_id), None)
+    if not task:
+        abort(404)
+    return active, completed_list, task
+
+
+@bp.post("/api/deck/<task_id>/comments")
+@_locked
+def api_add_comment(task_id):
+    """Add a comment (a status line) to a task, open or done; returns the task."""
+    text = _comment_text(_json_object().get("text"))
+    active, completed_list, task = _find_for_write(task_id)
+    task["comments"] = _clean_comments(task.get("comments")) + [{
+        "id": _new_comment_id(), "at": datetime.now().strftime("%Y-%m-%dT%H:%M"), "text": text}]
+    _write_both(active, completed_list, "Comment on deck task")
+    return jsonify(task), 201
+
+
+def _task_comment(task: dict, comment_id: str) -> dict:
+    task["comments"] = _clean_comments(task.get("comments"))
+    comment = next((c for c in task["comments"] if c["id"] == comment_id), None)
+    if not comment:
+        abort(404)
+    return comment
+
+
+@bp.put("/api/deck/<task_id>/comments/<comment_id>")
+@_locked
+def api_edit_comment(task_id, comment_id):
+    """Change a comment's text; its time stays. Returns the task."""
+    text = _comment_text(_json_object().get("text"))
+    active, completed_list, task = _find_for_write(task_id)
+    _task_comment(task, comment_id)["text"] = text
+    _write_both(active, completed_list, "Edit deck task comment")
+    return jsonify(task)
+
+
+@bp.delete("/api/deck/<task_id>/comments/<comment_id>")
+@_locked
+def api_delete_comment(task_id, comment_id):
+    """Delete a comment; returns the task."""
+    active, completed_list, task = _find_for_write(task_id)
+    comment = _task_comment(task, comment_id)
+    task["comments"] = [c for c in task["comments"] if c is not comment]
+    _write_both(active, completed_list, "Delete deck task comment")
+    return jsonify(task)
+
+
 @bp.delete("/api/deck/<task_id>")
 @_locked
 def api_delete_deck_item(task_id):
@@ -1445,6 +1548,7 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     task["wont_do"] = bool(snap.get("wont_do"))
     task["keep"] = bool(snap.get("keep"))
     task["history"] = _clean_history(snap.get("history"))
+    task["comments"] = _clean_comments(snap.get("comments"))
     rec = snap.get("recurrence")
     if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
         task["recurrence"] = {

@@ -1538,3 +1538,64 @@ def test_quick_start_after_the_deadline_asks(page, wiki):
     wait_for_field(page, "Late task", "start_date", _day(0))
     expect(dialog).to_be_hidden()
     assert task_by_title(page, "Late task")["due_date"] == _day(-1)
+
+
+def test_comments_in_edit_modal(page, wiki):
+    page.request.post("/api/deck", data={"title": "Plan on-call"})
+    page.goto("/deck?view=open")
+    modal = open_edit(page, "Plan on-call")
+    field = modal.locator("#task-edit-comment")
+    field.fill("asked Alex")
+    field.press("Enter")                       # adds, doesn't submit the form
+    expect(modal).to_be_visible()
+    items = modal.locator(".task-comment-list li")
+    expect(items.locator(".task-comment-text")).to_have_text(["asked Alex"])
+    expect(field).to_have_value("")
+    field.fill("6 people")
+    modal.get_by_role("button", name="Add").click()
+    expect(items.locator(".task-comment-text")).to_have_text(["6 people", "asked Alex"])   # newest first
+    # Saved at once: Cancel keeps them, and the card shows the count.
+    modal.get_by_role("button", name="Cancel").click()
+    wait_for_field(page, "Plan on-call", "comments",
+                   task_by_title(page, "Plan on-call")["comments"])
+    assert [c["text"] for c in task_by_title(page, "Plan on-call")["comments"]] == ["asked Alex", "6 people"]
+    badge = card(page, "Plan on-call").locator(".task-comments-btn")
+    expect(badge).to_have_text("💬 2")
+    assert badge.get_attribute("title").endswith(": 6 people")
+    # The badge opens the modal with the comment field focused.
+    badge.click()
+    expect(field).to_be_focused()
+    # Edit in place: Esc cancels without closing the modal, Enter saves.
+    items.first.hover()
+    items.first.get_by_role("button", name="Edit comment").click()
+    edit = items.first.locator(".task-comment-edit")
+    edit.fill("nope")
+    edit.press("Escape")
+    expect(modal).to_be_visible()
+    expect(items.first.locator(".task-comment-text")).to_have_text("6 people")
+    items.first.hover()
+    items.first.get_by_role("button", name="Edit comment").click()
+    edit.fill("6 people, maybe 7")
+    edit.press("Enter")
+    expect(items.first.locator(".task-comment-text")).to_have_text("6 people, maybe 7")
+    # Delete, then undo.
+    items.first.hover()
+    items.first.get_by_role("button", name="Delete comment").click()
+    expect(items.locator(".task-comment-text")).to_have_text(["asked Alex"])
+    page.locator(".task-undo-btn").click()
+    expect(items.locator(".task-comment-text")).to_have_text(["6 people, maybe 7", "asked Alex"])
+    # The toast sits in the modal (else the dialog covers it) and stays,
+    # clickable, once the modal is closed.
+    items.first.hover()
+    items.first.get_by_role("button", name="Delete comment").click()
+    modal.get_by_role("button", name="Cancel").click()
+    expect(modal).to_be_hidden()
+    page.locator(".task-undo-btn").click()
+    expect(card(page, "Plan on-call").locator(".task-comments-btn")).to_have_text("💬 2")
+    assert len(task_by_title(page, "Plan on-call")["comments"]) == 2
+
+
+def test_new_task_has_no_comments_field(page, wiki):
+    page.goto("/deck?view=open")
+    page.get_by_role("button", name="New task").click()
+    expect(page.locator("#task-edit-comments")).to_be_hidden()

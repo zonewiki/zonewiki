@@ -2337,3 +2337,92 @@ class TestLastActivity:
                                     "completed_at": "2026-05-06T08:00:00",
                                     "history": [{"at": "2026-03-04T09:00"}, "junk"]}) == "2026-05-06"
         assert deck._last_activity({}) is None
+
+
+# ---------- Comments ----------
+
+
+class TestComments:
+    def _url(self, tid, cid=None):
+        return f"/api/deck/{tid}/comments" + (f"/{cid}" if cid else "")
+
+    def test_add_edit_delete(self, client):
+        tid = create_task(client).get_json()["id"]
+        resp = client.post(self._url(tid), json={"text": "  called Bob, waiting  "})
+        assert resp.status_code == 201
+        [c] = resp.get_json()["comments"]
+        assert c["text"] == "called Bob, waiting"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", c["at"]) and c["id"]
+        client.post(self._url(tid), json={"text": "Bob answered"})
+        task = client.get("/api/deck").get_json()[0]
+        assert [x["text"] for x in task["comments"]] == ["called Bob, waiting", "Bob answered"]
+        # Edit keeps the time; delete removes just that one.
+        edited = client.put(self._url(tid, c["id"]), json={"text": "called Bob twice"}).get_json()
+        assert edited["comments"][0] == {**c, "text": "called Bob twice"}
+        left = client.delete(self._url(tid, c["id"])).get_json()
+        assert [x["text"] for x in left["comments"]] == ["Bob answered"]
+        # Comments are not history events.
+        assert [e["event"] for e in left["history"]] == ["created"]
+
+    def test_bad_requests(self, client):
+        tid = create_task(client).get_json()["id"]
+        assert client.post(self._url(tid), json={"text": "  "}).status_code == 400
+        assert client.post(self._url(tid), json={"text": 3}).status_code == 400
+        assert client.post(self._url(tid), data="x", content_type="text/plain").status_code == 400
+        assert client.post(self._url("nope"), json={"text": "x"}).status_code == 404
+        assert client.put(self._url(tid, "nope"), json={"text": "x"}).status_code == 404
+        assert client.delete(self._url(tid, "nope")).status_code == 404
+        cid = client.post(self._url(tid), json={"text": "x"}).get_json()["comments"][0]["id"]
+        assert client.put(self._url(tid, cid), json={"text": ""}).status_code == 400
+        long = client.post(self._url(tid), json={"text": "y" * 5000}).get_json()["comments"][-1]
+        assert len(long["text"]) == deck_module.COMMENT_MAX
+
+    def test_on_a_completed_task(self, client):
+        tid = create_task(client).get_json()["id"]
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        assert client.post(self._url(tid), json={"text": "done by Sam"}).status_code == 201
+        done = client.get("/api/deck/completed").get_json()[0]
+        assert done["comments"][0]["text"] == "done by Sam"
+        assert done["completed_at"]
+
+    def test_other_writes_leave_them_alone(self, client):
+        tid = create_task(client).get_json()["id"]
+        client.post(self._url(tid), json={"text": "status"})
+        client.put(f"/api/deck/{tid}", json={"title": "Renamed", "history": []})
+        assert client.get("/api/deck").get_json()[0]["comments"][0]["text"] == "status"
+
+    def test_put_replaces_the_list_for_undo(self, client):
+        tid = create_task(client).get_json()["id"]
+        before = client.post(self._url(tid), json={"text": "keep me"}).get_json()["comments"]
+        client.delete(self._url(tid, before[0]["id"]))
+        restored = client.put(f"/api/deck/{tid}", json={"comments": before}).get_json()
+        assert restored["comments"] == before
+        # Validated: junk entries go, duplicate ids get new ones.
+        dup = client.put(f"/api/deck/{tid}", json={"comments": [
+            before[0], before[0], {"text": "no time"}, "junk", {"at": "2026-01-01T10:00", "text": " "}]}).get_json()
+        assert [c["text"] for c in dup["comments"]] == ["keep me", "keep me"]
+        assert len({c["id"] for c in dup["comments"]}) == 2
+        assert client.put(f"/api/deck/{tid}", json={"comments": "x"}).status_code == 400
+
+    def test_next_occurrence_carries_them_on(self, client):
+        tid = create_task(client, rec_type="daily", due_date=_future(0)).get_json()["id"]
+        client.post(self._url(tid), json={"text": "first round"})
+        client.put(f"/api/deck/{tid}", json={"completed": True})
+        nxt = client.get("/api/deck").get_json()[0]
+        assert nxt["id"] != tid
+        assert [c["text"] for c in nxt["comments"]] == ["first round"]
+
+    def test_restore_keeps_them(self, client):
+        task = create_task(client).get_json()
+        snap = client.post(self._url(task["id"]), json={"text": "noted"}).get_json()
+        client.delete(f"/api/deck/{task['id']}")
+        [restored] = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
+        assert restored["comments"] == snap["comments"]
+
+    def test_searchable_and_count_as_activity(self, client):
+        tid = create_task(client, title="Plan on-call").get_json()["id"]
+        client.post(self._url(tid), json={"text": "asked alex about headcount"})
+        results = client.get("/api/search?q=headcount", headers={"Host": "localhost:5000"}).get_json()
+        assert [r.get("task_id") for r in results] == [tid]
+        assert deck_module._last_activity({"created_at": "2026-01-02T10:00:00",
+                                           "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}) == "2026-04-01"

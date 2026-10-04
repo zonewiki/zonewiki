@@ -1806,6 +1806,11 @@ div.chip-input > input {
 .task-due { font-size: .75rem; color: var(--muted); }
 .task-date-info { font-size: .75rem; color: var(--muted); }
 .task-last-done { font-size: .75rem; color: var(--muted); }  /* keep task: "✓ Sep 21" */
+.task-comments-btn {   /* "💬 2": the task's comments, hover shows the latest */
+  border: none; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: .75rem; color: var(--muted);
+}
+.task-comments-btn:hover { color: var(--fg); }
 .task-due.task-overdue { color: #dc2626; font-weight: 600; }
 .task-due.task-due-today { color: var(--btn-primary); font-weight: 600; }
 
@@ -2097,6 +2102,24 @@ div.chip-input > input {
 .task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }
 .task-history li { padding: .1rem 0; }
 .task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
+/* Comments: status lines, newest first; the field adds one at once. `ul.`
+   outranks .page-content ul (the deck page is a page). */
+.task-comments[hidden] { display: none; }
+.task-comment-add { display: flex; gap: .4rem; }
+.task-comment-add input { flex: 1; min-width: 0; }
+ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 10rem; overflow-y: auto; }
+.task-comment-list:empty { display: none; }
+.task-comment-list li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
+.task-comment-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-comment-edit { flex: 1; min-width: 0; font: inherit; }
+.task-comment-btn {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; padding: 0 .3rem; opacity: 0; flex: none;
+}
+.task-comment-list li:hover .task-comment-btn, .task-comment-btn:focus-visible { opacity: 1; }
+.task-comment-btn:hover { color: var(--fg); }
+@media (hover: none) { .task-comment-btn { opacity: 1; } }
+@media (pointer: coarse) { .task-comment-btn { padding: .3rem .5rem; } }
 /* min-width:0 lets fields shrink below their content's min-content width,
    so the Due/Plan-for shortcut buttons can't force the row to wrap. */
 .task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
