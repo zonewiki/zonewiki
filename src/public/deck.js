@@ -1425,6 +1425,22 @@
       swallowNextClick();
     }
 
+    // One-tap shortcuts, counted from today (not from the current value):
+    // today, tomorrow, in two days, next Monday, in a week. Short labels, so
+    // all five fit on one row; the tooltip says what each means and the day.
+    const now = new Date();
+    const QUICK = [
+      ['Today', 0, 'Today'], ['Tmrw', 1, 'Tomorrow'], ['+2d', 2, 'In 2 days'],
+      ['Mon', (8 - now.getDay()) % 7 || 7, 'Next Monday'], ['+1w', 7, 'In a week'],
+    ];
+    const quickHtml = QUICK.map(([label, days, name]) => {
+      const ds = dateOffset(days);
+      const off = min && ds < min;
+      return `<button type="button" class="dp-quick-btn${ds === current ? ' dp-selected' : ''}" data-date="${ds}"` +
+        `${off ? ' disabled' : ''} title="${esc(name + ': ' + new Date(ds + 'T00:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }))}"` +
+        ` aria-label="${esc(name)}">${label}</button>`;
+    }).join('');
+
     function draw() {
       const first = new Date(viewY, viewM, 1);
       // Monday-first offset (JS getDay: 0=Sun).
@@ -1444,6 +1460,7 @@
       }
 
       pop.innerHTML =
+        `<div class="dp-quick">${quickHtml}</div>` +
         `<div class="dp-head">` +
           `<button type="button" class="dp-nav" data-nav="-1">‹</button>` +
           `<span class="dp-title">${MONTHS[viewM]} ${viewY}</span>` +
@@ -1452,7 +1469,6 @@
         `<div class="dp-weekdays">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>` +
         `<div class="dp-grid">${cells}</div>` +
         `<div class="dp-foot">` +
-          `<button type="button" class="dp-today-btn">Today</button>` +
           `<button type="button" class="dp-clear-btn">Clear</button>` +
         `</div>`;
       place();
@@ -1467,12 +1483,8 @@
         draw();
         return;
       }
-      if (e.target.classList.contains('dp-today-btn')) {
-        if (!(min && today < min)) commit(today);
-        return;
-      }
       if (e.target.classList.contains('dp-clear-btn')) { commit(null); return; }
-      const day = e.target.closest('.dp-day[data-date]');
+      const day = e.target.closest('.dp-day[data-date], .dp-quick-btn');
       if (day && !day.disabled) commit(day.dataset.date);
     });
 

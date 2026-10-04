@@ -1905,7 +1905,7 @@ div.chip-input > input {
 .deck-datepicker .dp-selected:hover { background: var(--btn-primary); }
 .deck-datepicker .dp-disabled { opacity: .3; cursor: default; }
 .deck-datepicker .dp-foot {
-  display: flex; justify-content: space-between; margin-top: .4rem;
+  display: flex; justify-content: flex-end; margin-top: .4rem;
 }
 .deck-datepicker .dp-foot button {
   background: var(--btn-bg); color: var(--btn-fg);
@@ -1913,6 +1913,21 @@ div.chip-input > input {
   padding: .2rem .5rem; cursor: pointer; font-size: .75rem;
 }
 .deck-datepicker .dp-foot button:hover { background: var(--code-bg); }
+/* Shortcuts above the month: Today, Tmrw, +2d, Mon, +1w. */
+.deck-datepicker .dp-quick {
+  display: flex; gap: .25rem;
+  margin-bottom: .5rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+}
+.deck-datepicker .dp-quick-btn {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .25rem .2rem; cursor: pointer; font-size: .75rem; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0;
+}
+.deck-datepicker .dp-quick-btn:hover { background: var(--code-bg); }
+.deck-datepicker .dp-quick-btn.dp-selected { border-color: var(--btn-primary); }
+.deck-datepicker .dp-quick-btn:disabled { opacity: .3; cursor: default; }
+@media (pointer: coarse) { .deck-datepicker .dp-quick-btn { padding: .55rem .1rem; font-size: .85rem; } }
 /* Planned tasks (deck.js taskHTML): in Focus already (start today or
    earlier) amber, planned later blue, the same on every tab. A due/overdue
    urgency colour wins. */

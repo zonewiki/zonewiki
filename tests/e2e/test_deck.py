@@ -1599,3 +1599,26 @@ def test_new_task_has_no_comments_field(page, wiki):
     page.goto("/deck?view=open")
     page.get_by_role("button", name="New task").click()
     expect(page.locator("#task-edit-comments")).to_be_hidden()
+
+
+def test_date_picker_shortcuts_move_the_start_date(page, wiki):
+    page.request.post("/api/deck", data={"title": "Shift me", "start_date": date.today().isoformat()})
+    page.goto("/deck?view=open")
+    chip = card(page, "Shift me").locator(".task-focus-info")
+    for label, days in (("Tomorrow", 1), ("In 2 days", 2), ("In a week", 7), ("Today", 0),
+                        ("Next Monday", (7 - date.today().weekday()) or 7)):
+        chip.click()
+        page.locator(".deck-datepicker").get_by_role("button", name=label, exact=True).click()
+        expect(page.locator(".deck-datepicker")).to_have_count(0)
+        wait_for_field(page, "Shift me", "start_date", (date.today() + timedelta(days=days)).isoformat())
+    # The current value is marked, and the tooltip names the day.
+    chip.click()
+    btn = page.locator(".deck-datepicker").get_by_role("button", name="Next Monday")
+    expect(btn).to_have_class(re.compile(r"\bdp-selected\b"))
+    assert btn.get_attribute("title").startswith("Next Monday: Mon")
+    # All five fit on one row, also at finger size (test_touch covers the phone).
+    quick = page.locator(".dp-quick-btn")
+    expect(quick).to_have_text(["Today", "Tmrw", "+2d", "Mon", "+1w"])
+    assert quick.evaluate_all("bs => bs.every(b => b.scrollWidth <= b.clientWidth)")
+    assert len(set(quick.evaluate_all("bs => bs.map(b => Math.round(b.getBoundingClientRect().top))"))) == 1
+
