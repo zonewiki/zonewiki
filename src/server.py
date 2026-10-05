@@ -3018,8 +3018,8 @@ def deck_page():
                          f'{html.escape(_page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
             note = f'<p class="deck-list-home">A separate list, from {page_link}.</p>'
         else:
-            note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>, '
-                    f'so these tasks also show in the main deck.</p>')
+            note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>: '
+                    f'these are the tasks tagged #{heading}.</p>')
     else:
         embed = deck_module._build_deck_embed({})
         title = "Deck"

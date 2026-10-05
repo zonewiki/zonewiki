@@ -364,13 +364,12 @@ def completed_years(scope: str | None) -> list[str]:
     year is always included."""
     current = str(date.today().year)
     years = {current}
-    names = list_names()
     with _LOCK:
         for t in _read_completed():
-            if in_scope(t, scope, names) and _past_year(t, current):
+            if in_scope(t, scope) and _past_year(t, current):
                 years.add(_completed_year(t))
         for path in _archive_glob():
-            if any(in_scope(t, scope, names) for t in _read_list_lenient(path)):
+            if any(in_scope(t, scope) for t in _read_list_lenient(path)):
                 years.add(_ARCHIVE_NAME_RE.fullmatch(path.name).group(1))
     return sorted(years, reverse=True)
 
@@ -770,8 +769,9 @@ _FILTER_ALIASES = {
 
 
 # Separate lists. A list is a tag that a page declares with [[deck list=<tag>]]:
-# that page shows the tasks carrying the tag, and the main deck leaves them
-# out. The server scans pages for the declarations (server._deck_lists) and
+# that page shows the tasks carrying the tag, and marks the tag as a list
+# everywhere. Otherwise a list tag is a tag: the main deck shows its tasks like
+# any other. The server scans pages for the declarations (server._deck_lists) and
 # installs the lookup here, since deck.py doesn't read pages itself.
 # LISTS_FN() returns {name: {"slug": declaring page, "title": its title,
 # "params": its embed's params}}; names are lowercase.
@@ -785,29 +785,24 @@ def list_names() -> set[str]:
 
 def task_list(task: dict, names: set[str] | None = None) -> str | None:
     """The separate list a task belongs to: the first (A–Z) of its tags that
-    is a declared list, or None for the main deck."""
+    is a declared list, or None."""
     names = list_names() if names is None else names
     hits = sorted({t.lower() for t in task.get("tags") or []} & names)
     return hits[0] if hits else None
 
 
-def in_scope(task: dict, scope: str | None, names: set[str]) -> bool:
+def in_scope(task: dict, scope: str | None) -> bool:
     """Whether a task belongs to a deck view: scope is a list name (tasks
-    tagged with it), "" for the main deck (tasks in no list) or None for
-    every task (tag embeds, the main deck showing separate lists)."""
-    if scope is None:
+    tagged with it) or None for every task (the main deck, tag embeds)."""
+    if not scope:
         return True
-    if scope:
-        return scope in {t.lower() for t in task.get("tags") or []}
-    return task_list(task, names) is None
+    return scope in {t.lower() for t in task.get("tags") or []}
 
 
 def _scope_arg() -> str | None:
-    """The view a completed-count/-years request is for: ?list=<name>, ?all=1
-    (every task) or neither (the main deck)."""
-    if request.args.get("all"):
-        return None
-    return _clean_list(request.args.get("list")) or ""
+    """The list a completed-count/-years request is for (?list=<name>), or
+    None for every task. A leftover ?all=1 changes nothing."""
+    return _clean_list(request.args.get("list")) or None
 
 
 def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False) -> str:
@@ -844,7 +839,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     keep = "1" if params.get("keep", "").strip().lower() in ("1", "true", "yes") else ""
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
-    # Every declared list: the main deck leaves their tasks out (deck.js).
+    # Every declared list: their tags are marked as lists (deck.js).
     # Each one's home page title is for the list tag's tooltip.
     lists = LISTS_FN()
     lists_json = html.escape(json.dumps(sorted(lists)))
@@ -870,9 +865,6 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
   <ul class="tasks-list" id="tasks-list{sfx}"></ul>
   <div class="deck-footer">
     <button type="button" class="deck-completed-link" id="task-completed-link{sfx}">✓ Completed</button>
-    <label class="deck-show-lists" id="task-show-lists{sfx}" hidden title="Also show the tasks of separate lists ([[deck list=…]] pages)">
-      <input type="checkbox" id="task-show-lists-input{sfx}"> Show separate lists<span class="deck-show-lists-count" id="task-show-lists-count{sfx}"></span>
-    </label>
   </div>
 </div>
 <dialog id="task-edit-modal{sfx}" class="task-edit-modal">
@@ -1219,18 +1211,17 @@ def api_get_deck_completed():
 
 @bp.get("/api/deck/completed-years")
 def api_deck_completed_years():
-    """Years the Completed view can show for ?list=, ?all=1 or the main deck."""
+    """Years the Completed view can show, of list ?list= or of every task."""
     return jsonify({"years": completed_years(_scope_arg())})
 
 
 @bp.get("/api/deck/completed-count")
 def api_deck_completed_count():
     """How many tasks the Completed view would list (for its link's label):
-    this year's, of list ?list=, of every task with ?all=1, else of the main
-    deck (tasks in no list)."""
-    scope, names = _scope_arg(), list_names()
+    this year's, of list ?list=, else of every task."""
+    scope = _scope_arg()
     tasks = _completed_in_year(str(date.today().year))
-    return jsonify({"count": sum(in_scope(t, scope, names) for t in tasks)})
+    return jsonify({"count": sum(in_scope(t, scope) for t in tasks)})
 
 
 @bp.get("/api/deck/due-count")
@@ -1238,10 +1229,8 @@ def api_tasks_due_count():
     today = date.today().isoformat()
     overdue = today_count = 0
     tasks = _read_deck()
-    names = list_names()
     for t in tasks:
-        # Tasks in a separate list stay on their list's page, out of the badge.
-        if not t.get("due_date") or task_list(t, names):
+        if not t.get("due_date"):
             continue
         if t["due_date"] < today:
             overdue += 1

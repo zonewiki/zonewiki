@@ -167,7 +167,7 @@ def test_deck_page_opens_linked_task_and_lists(page, wiki):
     expect(page.locator(".tasks-app")).to_have_count(1)
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     expect(card(page, "Untagged")).to_have_class(re.compile(r"\btask-selected\b"))
-    expect(card(page, "Milk")).to_have_count(0)
+    expect(card(page, "Milk")).to_be_visible()     # list tasks too: it's every task
 
     page.goto("/deck?list=groceries&view=open")
     expect(page.locator("h1")).to_have_text("groceries")
@@ -353,21 +353,37 @@ def test_task_link_to_missing_task_says_so(page, wiki):
     expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()
 
 
-# Adding a list's tag in the main deck moves the task into that list.
+# Swapping a list's tag in a list view moves the task into the other list.
 
-def test_list_tag_moves_task_out_of_main_deck(page, wiki):
-    page.request.post("/api/deck", data={"title": "Prune"})
+def test_list_tag_moves_task_to_another_list(page, wiki):
+    page.request.post("/api/deck", data={"title": "Prune", "tags": "chores"})
     wiki.write("garden", "# Garden\n\n[[deck list=garden]]\n")
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("home", "# Home\n\n[[deck list=chores]]\n")
+    page.goto("/page/home?view=open")
     modal = open_edit(page, "Prune")
     expect(modal.locator("#task-edit-list")).to_have_count(0)   # no List field any more
+    modal.locator("#task-edit-tags").click()
+    page.keyboard.press("Backspace")      # drops #chores
     modal.locator("#task-edit-tags").fill("garden,")
     modal.get_by_role("button", name="Save").click()
-    # It leaves the main deck and says where it went.
+    # It leaves this list and says where it went.
     expect(card(page, "Prune")).to_have_count(0)
     expect(page.get_by_text("Saved to list “garden”.")).to_be_visible()
     wait_for_field(page, "Prune", "tags", ["garden"])
+
+
+def test_list_tag_in_main_deck_keeps_the_task(page, wiki):
+    # On the main deck a list's tag is just a tag: the task stays.
+    page.request.post("/api/deck", data={"title": "Prune"})
+    wiki.write("garden", "# Garden\n\n[[deck list=garden]]\n")
+    page.goto("/deck?view=open")
+    modal = open_edit(page, "Prune")
+    modal.locator("#task-edit-tags").fill("garden,")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Prune", "tags", ["garden"])
+    expect(card(page, "Prune")).to_be_visible()
+    expect(card(page, "Prune").locator(".task-tag-list")).to_have_text("#garden")
+    expect(page.get_by_text("Saved to list “garden”.")).to_have_count(0)
 
 
 # Completed: a link under the list instead of a tab.
@@ -518,12 +534,13 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
 
+    # The main deck shows every task, list tasks included.
     page.goto("/page/deck?view=open")
     expect(card(page, "Main task")).to_be_visible()
-    expect(card(page, "Oat milk")).to_have_count(0)
+    expect(card(page, "Oat milk")).to_be_visible()
     open_tab(page, "due")
     expect(card(page, "Main task")).to_be_visible()
-    expect(card(page, "Oat milk")).to_have_count(0)
+    expect(card(page, "Oat milk")).to_be_visible()
 
     page.goto("/page/shop?view=open")
     expect(card(page, "Oat milk")).to_be_visible()
@@ -531,13 +548,12 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
 
 
 def test_tag_embed_shows_list_tasks(page, wiki):
-    # Only the main deck leaves list tasks out; a tag view shows them.
+    # A tag view shows list tasks like any other.
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries,sam"})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     wiki.write("sam", "# Sam\n\n[[deck tag=sam]]\n")
     page.goto("/page/sam?view=open")
     expect(card(page, "Oat milk")).to_be_visible()
-    expect(page.locator("#task-show-lists")).to_be_hidden()
 
 
 def test_tag_embed_filter_is_locked_and_says_when_a_task_leaves(page, wiki):
@@ -608,15 +624,17 @@ def test_undo_removing_the_tag_on_a_tag_page(page, wiki):
 
 
 def test_undo_a_bulk_retag(page, wiki):
-    # Bulk tag (t) moving tasks into a list: one toast, one undo for all.
+    # Bulk tag (T) taking tasks out of a list into another one they carry:
+    # one toast, one undo for all.
     for title in ("Nails", "Glue"):
-        page.request.post("/api/deck", data={"title": title, "tags": "misc"})
+        page.request.post("/api/deck", data={"title": title, "tags": "misc,hardware"})
     wiki.write("diy", "# DIY\n\n[[deck list=hardware]]\n")
-    page.goto("/deck?view=open")
+    wiki.write("misc", "# Misc\n\n[[deck list=misc]]\n")
+    page.goto("/page/misc?view=open")
     card(page, "Glue").locator(".task-title").click()     # newest first: Glue, Nails
     page.keyboard.press("Shift+ArrowDown")
-    page.keyboard.press("t")
-    page.locator("#bulk-tag-input").fill("hardware")
+    page.keyboard.press("Shift+T")
+    page.locator("#bulk-tag-input").fill("misc")
     page.keyboard.press("Enter")
     toast = page.locator(".task-undo-toast")
     expect(toast).to_contain_text("2 tasks saved to list “hardware”.")
@@ -625,34 +643,19 @@ def test_undo_a_bulk_retag(page, wiki):
     toast.locator(".task-undo-btn").click()
     expect(card(page, "Nails")).to_be_visible()
     expect(card(page, "Glue")).to_be_visible()
-    wait_for_field(page, "Nails", "tags", ["misc"])
-    wait_for_field(page, "Glue", "tags", ["misc"])
+    wait_for_field(page, "Nails", "tags", ["misc", "hardware"])
+    wait_for_field(page, "Glue", "tags", ["misc", "hardware"])
 
 
-def test_show_separate_lists_checkbox(page, wiki):
-    page.request.post("/api/deck", data={"title": "Main task"})
+def test_main_deck_counts_list_tasks_as_completed(page, wiki):
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
     done = page.request.post("/api/deck", data={"title": "Bread", "tags": "groceries"}).json()
     page.request.put(f"/api/deck/{done['id']}", data={"completed": True})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries]]\n")
     page.goto("/deck?view=open")
-    box = page.locator("#task-show-lists")
-    expect(box).to_contain_text("Show separate lists (1)")
-    expect(card(page, "Oat milk")).to_have_count(0)
-    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (0) →")
-    box.locator("input").check()
     expect(card(page, "Oat milk")).to_be_visible()
-    expect(card(page, "Main task")).to_be_visible()
     expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (1) →")
-    # Remembered in this browser.
-    page.reload()
-    expect(box.locator("input")).to_be_checked()
-    expect(card(page, "Oat milk")).to_be_visible()
-    box.locator("input").uncheck()
-    expect(card(page, "Oat milk")).to_have_count(0)
-    # The list page itself has no such box.
-    page.goto("/page/shop?view=open")
-    expect(page.locator("#task-show-lists")).to_be_hidden()
+    expect(page.locator("#task-show-lists")).to_have_count(0)
 
 
 def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):

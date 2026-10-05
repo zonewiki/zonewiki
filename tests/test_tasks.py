@@ -1702,9 +1702,9 @@ class TestCompletedByYear:
         arch.write_text(json.dumps([{"id": "g", "title": "Milk", "tags": ["groceries"],
                                      "completed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
         years = lambda q: client.get("/api/deck/completed-years" + q).get_json()["years"]  # noqa: E731
-        assert years("") == [str(year), str(year-1)]
+        # The main deck's are every task's: list tasks included.
+        assert years("") == [str(year), str(year-1), str(year-2)]
         assert years("?list=groceries") == [str(year), str(year-2)]
-        assert years("?all=1") == [str(year), str(year-1), str(year-2)]
 
     def test_edit_keeps_task_in_its_archive(self, client, wiki_dir):
         year = self._seed(wiki_dir)
@@ -1929,8 +1929,9 @@ class TestTagCleaning:
 
 class TestLists:
     """A separate list is a tag some page declares with [[deck list=<tag>]]:
-    its tasks stay out of the main deck, the due badge and the main Completed
-    count, and links to them open /deck?list=<tag>."""
+    the tag is marked as a list and links to its tasks open /deck?list=<tag>,
+    but otherwise it is a tag: the main deck, the due badge and the main
+    Completed count include its tasks."""
 
     @pytest.fixture()
     def shop(self, wiki_dir):
@@ -1960,20 +1961,20 @@ class TestLists:
         create_task(client, due_date=today, tags=["groceries"])
         assert client.get("/api/deck/due-count").get_json()["count"] == 1
 
-    def test_due_count_ignores_list_tasks(self, client, shop):
+    def test_due_count_includes_list_tasks(self, client, shop):
         today = date.today().isoformat()
         create_task(client, due_date=today)
         create_task(client, due_date=today, tags=["groceries"])
-        assert client.get("/api/deck/due-count").get_json()["count"] == 1
+        assert client.get("/api/deck/due-count").get_json()["count"] == 2
 
     def test_completed_count_per_scope(self, client, shop):
         for tags in ([], ["groceries"], ["Groceries", "x"]):
             tid = create_task(client, tags=tags).get_json()["id"]
             client.put(f"/api/deck/{tid}", json={"completed": True})
         count = lambda q: client.get("/api/deck/completed-count" + q).get_json()["count"]  # noqa: E731
-        assert count("") == 1
+        assert count("") == 3
         assert count("?list=Groceries") == 2
-        assert count("?all=1") == 3
+        assert count("?all=1") == 3      # the old "show separate lists" scope
 
     def test_list_field_is_gone(self, client):
         task = create_task(client, list="groceries").get_json()
@@ -1987,7 +1988,7 @@ class TestLists:
         # The home page's title, for the list tag's tooltip.
         assert 'data-list-homes="{&quot;groceries&quot;: &quot;Shop&quot;}"' in body
         assert 'id="task-edit-list"' not in body
-        assert 'id="task-show-lists"' in body
+        assert "task-show-lists" not in body       # the main deck hides nothing
 
     def test_deck_list_page_uses_the_declaring_embed(self, client, shop):
         body = client.get("/deck?list=groceries").get_data(as_text=True)
@@ -1998,7 +1999,7 @@ class TestLists:
     def test_deck_list_page_without_declaration(self, client):
         body = client.get("/deck?list=books").get_data(as_text=True)
         assert 'data-init-list="books"' in body
-        assert "also show in the main deck" in body
+        assert "these are the tasks tagged #books" in body
 
     def test_search_links_to_list(self, client, shop):
         tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]

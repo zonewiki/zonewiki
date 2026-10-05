@@ -83,9 +83,9 @@ class TestTasksLinkRender:
         assert "tasks-list" in html
         assert "deck.js" in html
 
-    def test_show_lists_checkbox_per_instance(self, wiki_dir):
+    def test_no_list_field_or_show_lists_checkbox(self, wiki_dir):
         html = server.render_md("[[deck]]\n[[deck]]\n")
-        assert 'id="task-show-lists-input"' in html and 'id="task-show-lists-input-1"' in html
+        assert "task-show-lists" not in html
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):

@@ -355,9 +355,9 @@
   // Separate lists: a list is a tag that a page declares with
   // [[deck list=<tag>]]. That embed (and /deck?list=<tag>) shows the tasks
   // carrying the tag, whose filter chip is locked there (new tasks get it;
-  // a task's own tags stay editable, so a task can move to another list). The main
-  // deck (no list=, no tag=) leaves list tasks out unless "Show separate
-  // lists" is checked; a tag embed shows them like any other task.
+  // a task's own tags stay editable, so a task can move to another list).
+  // Elsewhere a list's tag is marked as a list but otherwise a tag: the main
+  // deck and tag embeds show list tasks like any other.
   const initList = cleanList(appEl?.dataset.initList);
   let declaredLists = [];
   try { declaredLists = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
@@ -370,11 +370,6 @@
     const home = listHomes[n];
     return home ? `List: ${home}` : 'List';
   }
-  const isMainDeck = !initList && !appEl?.dataset.initTag;
-  const SHOW_LISTS_KEY = 'leaf-deck-show-lists';
-  let showLists = false;
-  try { showLists = localStorage.getItem(SHOW_LISTS_KEY) === '1'; } catch (_) {}
-  let hiddenListCount = 0;   // open list tasks the main deck leaves out
   // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
   // into the tab buttons by deck.py, so they are read back from there).
   const tabLabel = view => tabsEl.querySelector(`[data-filter="${view}"]`)?.textContent.trim() || view;
@@ -389,14 +384,11 @@
   // of its tags that is a declared list.
   function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0] || null; }
   function inScope(t) {
-    if (initList) return lowerTags(t).includes(initList);
-    if (isMainDeck && !showLists) return !taskList(t);
-    return true;
+    return !initList || lowerTags(t).includes(initList);
   }
   // The scope of the server's completed counts, matching inScope.
   function scopeQuery() {
-    if (initList) return `?list=${encodeURIComponent(initList)}`;
-    return isMainDeck && !showLists ? '' : '?all=1';
+    return initList ? `?list=${encodeURIComponent(initList)}` : '';
   }
   // ?view= / [[deck view=…]] pick the tab; ?filter= is the old name, still accepted.
   const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
@@ -486,10 +478,7 @@
   let deckGen = 0;
   async function fetchDeck() {
     const res = await fetch('/api/deck');
-    const all = await res.json();
-    tasks = all.filter(inScope);
-    hiddenListCount = isMainDeck ? all.filter(t => taskList(t)).length : 0;
-    syncShowLists();
+    tasks = (await res.json()).filter(inScope);
     deckGen++;
     completedLoaded = false;
     render();
@@ -614,7 +603,7 @@
     return null;
   }
 
-  // A task saved into a separate list leaves the main deck; say where it went.
+  // A task saved out of a list view, into another list or none; say where it went.
   function listMovedNotice(task) {
     const name = taskList(task);
     return name ? `Saved to list “${name}”.` : 'Saved; it no longer shows here.';
@@ -665,23 +654,6 @@
       refreshOtherInstances(instanceId);
     });
   }
-
-  // "Show separate lists" (main deck only): also show the tasks of declared
-  // lists. Remembered per browser; the due badge and links don't change.
-  const showListsLabel = document.getElementById('task-show-lists' + sfx);
-  const showListsInput = document.getElementById('task-show-lists-input' + sfx);
-  function syncShowLists() {
-    if (!showListsLabel) return;
-    showListsLabel.hidden = !isMainDeck || headless || !declaredLists.length;
-    showListsInput.checked = showLists;
-    document.getElementById('task-show-lists-count' + sfx).textContent =
-      hiddenListCount ? ` (${hiddenListCount})` : '';
-  }
-  showListsInput?.addEventListener('change', () => {
-    showLists = showListsInput.checked;
-    try { localStorage.setItem(SHOW_LISTS_KEY, showLists ? '1' : '0'); } catch (_) {}
-    fetchDeck();
-  });
 
   async function deleteTask(id) {
     const res = await fetch(`/api/deck/${id}`, { method: 'DELETE' });

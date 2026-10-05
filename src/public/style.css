@@ -1611,14 +1611,6 @@ div.chip-input > input {
 }
 .deck-completed-link:hover { color: var(--link); text-decoration: underline; }
 .deck-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
-/* Main deck: "Show separate lists", left of the Completed link. */
-.deck-show-lists {
-  order: -1; margin-right: auto; display: inline-flex; align-items: center; gap: .3rem;
-  font-size: .8rem; color: var(--muted); cursor: pointer; padding: .3rem .2rem;
-}
-.deck-show-lists[hidden] { display: none; }
-.deck-show-lists input { margin: 0; }
-@media (pointer: coarse) { .deck-show-lists { padding: .6rem .2rem; } .deck-show-lists input { width: 1.1rem; height: 1.1rem; } }
 /* /deck?list=…: where the list comes from. */
 .deck-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
