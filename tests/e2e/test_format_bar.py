@@ -67,6 +67,24 @@ def test_strike_and_inline_code(page, wiki):
     assert _body(textarea) == "~~old~~ `cmd`"
 
 
+def test_code_toggles_off_span_content(page, wiki):
+    # Selecting the content inside a code span (marks just outside the selection)
+    # and clicking Code must remove the wrapping backticks.
+    textarea = _edit(page, wiki, "`hello`", 1, 6)   # select 'hello' inside the span
+    _click(page, "code")
+    assert _body(textarea) == "hello"
+
+
+def test_code_wraps_between_adjacent_spans(page, wiki):
+    # Selecting text between two adjacent code spans must wrap it in backticks,
+    # not eat the neighbouring spans' backtick markers.
+    # Regression: check 1 in toggleWrap fired whenever both neighbours were
+    # backticks, even when they belonged to two different spans.
+    textarea = _edit(page, wiki, "`foo`bar`baz`", 5, 8)   # select 'bar'
+    _click(page, "code")
+    assert _body(textarea) == "`foo``bar``baz`"
+
+
 def test_lists_switch_kind_number_and_toggle_off(page, wiki):
     text = "eggs\nmilk\n\nbread"
     textarea = _edit(page, wiki, text, 0, len(text))

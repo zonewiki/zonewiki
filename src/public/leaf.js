@@ -914,8 +914,16 @@ if (textarea && previewPane) {
     const v = textarea.value, n = mark.length;
     let s = textarea.selectionStart, e = textarea.selectionEnd;
     if (s >= n && v.slice(s - n, s) === mark && v.slice(e, e + n) === mark) {
-      replaceRange(s - n, e + n, v.slice(s, e), 0, e - s);
-      return;
+      // For single-char marks (like `), the mark just before the selection might
+      // be a closing mark from a prior span rather than an opening mark for this
+      // selection. Count the marks before it: even = opening (inside a span →
+      // unwrap), odd = closing (between two spans → don't remove their backticks).
+      const shouldUnwrap = n > 1 ||
+        (v.slice(0, s - n).split(mark).length - 1) % 2 === 0;
+      if (shouldUnwrap) {
+        replaceRange(s - n, e + n, v.slice(s, e), 0, e - s);
+        return;
+      }
     }
     const sel = v.slice(s, e);
     if (sel.length >= 2 * n && sel.startsWith(mark) && sel.endsWith(mark)) {
