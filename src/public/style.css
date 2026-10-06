@@ -222,6 +222,13 @@ main {
     display: block; position: sticky; top: 1.5rem; align-self: start;
     max-height: calc(100vh - 3rem); overflow-y: auto; padding-top: .25rem;
   }
+  /* A column taller than the window scrolls; a fade marks the edge with
+     more (leaf.js sets the classes). */
+  .rail.rail-more-below { mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent); }
+  .rail.rail-more-above { mask-image: linear-gradient(to top, #000 calc(100% - 2.5rem), transparent); }
+  .rail.rail-more-above.rail-more-below {
+    mask-image: linear-gradient(to bottom, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+  }
   .page-col { min-width: 0; container-type: inline-size; }
   .page-col > :is(.page-header, .page-meta-wrapper, .page-tldr, .page-content) {
     max-width: 46rem; margin-inline: auto;

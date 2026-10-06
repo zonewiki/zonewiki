@@ -445,3 +445,22 @@ def test_side_toc_without_the_directive(new_page, wiki):
     expect(page.locator(".rail-toc a.active")).to_have_text("Part 1")
     page.evaluate("window.scrollBy(0, document.getElementById('part-3').getBoundingClientRect().top - 40)")
     expect(page.locator(".rail-toc a.active")).to_have_text("Part 3")
+
+
+def test_long_side_toc_fades_and_follows(new_page, wiki):
+    # A TOC taller than the window scrolls in its column: a fade shows there
+    # is more, and the section being read stays in view.
+    text = "# Many\n\n" + "".join(f"## Section {i}\n\n" + "Text. " * 80 + "\n\n" for i in range(1, 41))
+    wiki.write("many", text)
+    page = new_page(viewport={"width": 1600, "height": 600})
+    page.goto("/page/many")
+    rail = page.locator(".rail-left")
+    expect(rail).to_have_class(re.compile(r"\brail-more-below\b"))
+    expect(rail).not_to_have_class(re.compile(r"\brail-more-above\b"))
+    page.evaluate("window.scrollBy(0, document.getElementById('section-30').getBoundingClientRect().top - 40)")
+    active = page.locator(".rail-toc a.active")
+    expect(active).to_have_text("Section 30")
+    expect(rail).to_have_class(re.compile(r"\brail-more-above\b"))
+    a, r = active.bounding_box(), rail.bounding_box()
+    assert r["y"] <= a["y"] and a["y"] + a["height"] <= r["y"] + r["height"]
+    assert page.locator(".rail-context").evaluate("el => el.className").count("rail-more") == 0

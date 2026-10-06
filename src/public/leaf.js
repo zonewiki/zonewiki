@@ -117,11 +117,36 @@
       if (i === current) a.setAttribute('aria-current', 'location');
       else a.removeAttribute('aria-current');
     });
+    // A long TOC scrolls in its column: keep the marked entry in view
+    // (by scrolling the column only, never the page).
+    const rail = links[current].closest('.rail'), a = links[current];
+    if (rail && rail.scrollHeight > rail.clientHeight) {
+      const top = a.getBoundingClientRect().top - rail.getBoundingClientRect().top + rail.scrollTop, margin = 32;
+      if (top < rail.scrollTop + margin) rail.scrollTop = top - margin;
+      else if (top + a.offsetHeight > rail.scrollTop + rail.clientHeight - margin)
+        rail.scrollTop = top + a.offsetHeight - rail.clientHeight + margin;
+    }
   }
   const queue = () => { if (!queued) { queued = true; requestAnimationFrame(mark); } };
   window.addEventListener('scroll', queue, { passive: true });
   window.addEventListener('resize', queue);
   mark();
+}());
+
+// A side column taller than the window scrolls on its own; a fade at its
+// top or bottom edge (.rail-more-above/-below) says there is more.
+(function () {
+  const rails = document.querySelectorAll('.rail');
+  if (!rails.length) return;
+  const update = rail => {
+    rail.classList.toggle('rail-more-above', rail.scrollTop > 1);
+    rail.classList.toggle('rail-more-below', rail.scrollTop + rail.clientHeight < rail.scrollHeight - 1);
+  };
+  rails.forEach(rail => {
+    rail.addEventListener('scroll', () => update(rail), { passive: true });
+    update(rail);
+  });
+  window.addEventListener('resize', () => rails.forEach(update));
 }());
 
 // ── Uncommitted changes badge ────────────────────────────────────────────────
