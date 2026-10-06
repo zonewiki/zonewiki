@@ -376,7 +376,9 @@ class TestViewPage:
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n## Paths\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<aside class="rail rail-left"><a class="rail-top" href="#" hidden>↑ Back to top</a></aside>' in body
-        assert '<aside class="rail rail-context" aria-label="Links"></aside>' in body
+        right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]
+        assert right.startswith('<div class="rail-actions" hidden><a href="/edit/garden" class="btn">Edit</a>')
+        assert "<section" not in right
 
     def test_only_page_views_are_wide(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")

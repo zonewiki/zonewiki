@@ -133,6 +133,21 @@
   mark();
 }());
 
+// The page's actions at the top of the right column, once the header's
+// have scrolled out of view; Present only where the header's shows.
+(function () {
+  const box = document.querySelector('.rail-actions');
+  const header = document.querySelector('.page-header-actions');
+  if (!box || !header) return;
+  const present = box.querySelector('.rail-present');
+  present?.addEventListener('click', () => document.getElementById('present-btn')?.click());
+  new IntersectionObserver(([entry]) => {
+    box.hidden = entry.isIntersecting;
+    const headerPresent = document.getElementById('present-btn');
+    if (present) present.hidden = !headerPresent || headerPresent.style.display === 'none';
+  }).observe(header);
+}());
+
 // "Back to top" under the left column's TOC, once the page has scrolled a
 // screen down.
 (function () {

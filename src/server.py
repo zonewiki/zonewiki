@@ -2018,6 +2018,7 @@ def view_page(slug):
         )
         page_meta_html = ""
         article_html = render_md(strip_h1(content))
+        rail_actions = ""
     else:
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
@@ -2026,6 +2027,14 @@ def view_page(slug):
             f'    <button id="present-btn" class="btn" title="Presentation mode">Present</button>\n'
             f'    <a href="/edit/{slug}" class="btn">Edit</a>'
         )
+        # The same, at the top of the right column on big screens, shown
+        # once the header has scrolled away (leaf.js).
+        rail_actions = (
+            f'<div class="rail-actions" hidden>'
+            f'<a href="/edit/{slug}" class="btn">Edit</a>'
+            f'<button type="button" class="btn rail-present" title="Presentation mode">Present</button>'
+            + (f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else "")
+            + '</div>')
         last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
         tags_html = _render_tags_pills_html(fm_meta.get('tags', []))
@@ -2069,7 +2078,7 @@ def view_page(slug):
 </article>
 <div class="page-foot">{bl_html}</div>
 </div>
-<aside class="rail rail-context" aria-label="Links">{_rail_copy(bl_html)}</aside>
+<aside class="rail rail-context" aria-label="Links">{rail_actions}{_rail_copy(bl_html)}</aside>
 </div>"""
     return shell(title, body, wide=True)
 

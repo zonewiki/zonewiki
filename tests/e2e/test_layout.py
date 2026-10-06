@@ -479,3 +479,23 @@ def test_back_to_top_in_the_left_column(new_page, wiki):
     page.wait_for_function("window.scrollY === 0")
     assert page.url.endswith("/page/release")      # no #hash left behind
     expect(top).to_be_hidden()
+
+
+def test_page_actions_in_the_right_column_once_scrolled(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    page.goto("/page/release")
+    box = page.locator(".rail-actions")
+    expect(box).to_be_hidden()                      # the header's are in view
+    page.evaluate("window.scrollTo(0, 1500)")
+    expect(box).to_be_visible()
+    expect(box.get_by_role("link", name="Edit")).to_have_attribute("href", "/edit/release")
+    box.get_by_role("button", name="Present").click()
+    expect(page.locator(".presentation-overlay")).to_be_visible()
+    page.keyboard.press("Escape")
+    # A page without ## headings has no presentation: no Present there either.
+    wiki.write("flat", "# Flat\n\n" + "Text. " * 2000)
+    page.goto("/page/flat")
+    page.evaluate("window.scrollTo(0, 3000)")
+    expect(box).to_be_visible()
+    expect(box.get_by_role("button", name="Present")).to_be_hidden()

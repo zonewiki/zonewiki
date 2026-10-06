@@ -190,6 +190,8 @@ main {
 .rail-toc li.toc-h3 a { padding-left: 1.6rem; font-size: .78rem; }
 .rail-toc li a:hover { color: var(--link); }
 .rail-toc li a.active { color: var(--fg); border-left-color: var(--btn-primary); }
+.rail-actions { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.4rem; }
+.rail-actions[hidden], .rail-actions [hidden] { display: none; }
 .rail-top {
   display: inline-block; margin-top: 1rem; padding: .2rem 0;
   font-size: .78rem; color: var(--muted); text-decoration: none;
