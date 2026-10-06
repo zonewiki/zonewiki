@@ -190,6 +190,12 @@ main {
 .rail-toc li.toc-h3 a { padding-left: 1.6rem; font-size: .78rem; }
 .rail-toc li a:hover { color: var(--link); }
 .rail-toc li a.active { color: var(--fg); border-left-color: var(--btn-primary); }
+.rail-top {
+  display: inline-block; margin-top: 1rem; padding: .2rem 0;
+  font-size: .78rem; color: var(--muted); text-decoration: none;
+}
+.rail-top[hidden] { display: none; }
+.rail-top:hover { color: var(--link); }
 .rail-context .backlinks,
 .rail-context .backlinks + .backlinks { margin: 0 0 1.4rem; padding: 0; border: none; }
 .rail-context .backlinks ul { display: block; }

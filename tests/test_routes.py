@@ -375,7 +375,7 @@ class TestViewPage:
         # column stays, so the page keeps its place.
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n## Paths\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert '<aside class="rail rail-left"></aside>' in body
+        assert '<aside class="rail rail-left"><a class="rail-top" href="#" hidden>↑ Back to top</a></aside>' in body
         assert '<aside class="rail rail-context" aria-label="Links"></aside>' in body
 
     def test_only_page_views_are_wide(self, client, wiki_dir):

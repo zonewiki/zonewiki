@@ -2096,14 +2096,19 @@ def _rail_toc_html(article_html: str) -> str:
     else:
         heads = _HEADING_RE.findall(article_html)
         if len(heads) < RAIL_TOC_MIN_HEADINGS:
-            return '<aside class="rail rail-left"></aside>\n'
+            return f'<aside class="rail rail-left">{_RAIL_TOP}</aside>\n'
         # A heading's own links are flattened: no link inside a link.
         items = "<ul>\n" + "\n".join(
             f'<li{" class=\"toc-h3\"" if level == "3" else ""}><a href="#{hid}">'
             f'{re.sub(r"</?a\b[^>]*>", "", label).strip()}</a></li>'
             for level, hid, label in heads) + "\n</ul>"
     return (f'<aside class="rail rail-left"><nav class="rail-toc" aria-label="On this page">'
-            f'<p class="rail-label">On this page</p>{items}</nav></aside>\n')
+            f'<p class="rail-label">On this page</p>{items}</nav>{_RAIL_TOP}</aside>\n')
+
+
+# "Back to top" under the TOC; leaf.js shows it once the page has scrolled
+# a screen down, and scrolls up without leaving a #hash in the URL.
+_RAIL_TOP = '<a class="rail-top" href="#" hidden>↑ Back to top</a>'
 
 
 def _rail_copy(sections_html: str) -> str:

@@ -464,3 +464,18 @@ def test_long_side_toc_fades_and_follows(new_page, wiki):
     a, r = active.bounding_box(), rail.bounding_box()
     assert r["y"] <= a["y"] and a["y"] + a["height"] <= r["y"] + r["height"]
     assert page.locator(".rail-context").evaluate("el => el.className").count("rail-more") == 0
+
+
+def test_back_to_top_in_the_left_column(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    page.goto("/page/release#part-1")
+    top = page.locator(".rail-top")
+    page.evaluate("window.scrollTo(0, 0)")
+    expect(top).to_be_hidden()
+    page.evaluate("window.scrollTo(0, 2000)")
+    expect(top).to_be_visible()
+    top.click()
+    page.wait_for_function("window.scrollY === 0")
+    assert page.url.endswith("/page/release")      # no #hash left behind
+    expect(top).to_be_hidden()

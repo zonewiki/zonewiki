@@ -133,6 +133,22 @@
   mark();
 }());
 
+// "Back to top" under the left column's TOC, once the page has scrolled a
+// screen down.
+(function () {
+  const link = document.querySelector('.rail-top');
+  if (!link) return;
+  const update = () => { link.hidden = window.scrollY < window.innerHeight; };
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  });
+}());
+
 // A side column taller than the window scrolls on its own; a fade at its
 // top or bottom edge (.rail-more-above/-below) says there is more.
 (function () {
