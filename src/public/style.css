@@ -100,10 +100,8 @@ body {
 /* Shown only on small screens (see the 640px media query) */
 .mobile-only { display: none; }
 
-/* Action bar (see ACTION_BUTTONS in server.py): on desktop New and Search as
-   small round buttons in the bottom-right corner, Search in the corner
-   itself; the module links and the labels show only on phones, where it is a
-   bottom tab bar (see the 640px media query). */
+/* Action bar (action_bar_html in server.py): the phone's bottom tab bar
+   (see the 640px media query). Desktop has the top actions instead. */
 .action-buttons {
   display: flex; gap: .5rem;
   position: fixed; z-index: 300;
@@ -123,10 +121,25 @@ body {
   transition: color .15s, box-shadow .15s;
 }
 .action-buttons button:hover { color: var(--fg); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
-/* Keep the toasts clear of the buttons. */
-body:has(.action-buttons) .raw-toast { bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
-/* Sign out takes the other corner. */
-body:has(.action-buttons) .signout-form { right: auto; left: 1rem; }
+@media (min-width: 641px) { .action-buttons { display: none; } }
+
+/* Top actions (top_actions_html in server.py): on desktop New scratch note,
+   New task and Search as icons at the top right of the page, in line with
+   the breadcrumb, which keeps their room free. Phones have the tab bar. */
+.top-actions {
+  position: absolute; top: 1.5rem; right: 1.5rem;
+  display: flex; gap: .25rem;
+}
+.top-actions button {
+  display: flex; align-items: center; justify-content: center;
+  width: 2.25rem; height: 2.25rem; padding: 0;
+  border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--muted); cursor: pointer;
+  transition: color .15s, background-color .15s;
+}
+.top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
+.top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: 8rem; }
 
 /* The Deck links' counts (server.py _deck_counts_html, kept current by
    leaf.js): tasks due today or overdue (orange) and tasks in Focus (muted),
@@ -150,9 +163,78 @@ body:has(.action-buttons) .signout-form { right: auto; left: 1rem; }
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
 main {
+  position: relative;
   max-width: 800px;
   margin: 0 auto;
   padding: 1.5rem 1.5rem 4rem;
+}
+
+/* ── Side columns ──────────────────────────────────────────────────────────── */
+/* A page view on a big screen (view_page, main.wide): the table of contents
+   on the left, what links to the page on the right, both sticky. They are
+   copies of what smaller screens show inline (the [[toc]] box, the sections
+   at the end), which hide there. The text keeps its reading width; tables
+   and code blocks grow into the middle column only when they need it. */
+
+.rail { display: none; }
+.rail-label {
+  font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); margin-bottom: .5rem;
+}
+.rail-toc ul { list-style: none; border-left: 1px solid var(--border); }
+.rail-toc li a {
+  display: block; margin-left: -1px; padding: .2rem 0 .2rem .8rem;
+  border-left: 2px solid transparent;
+  color: var(--muted); font-size: .82rem; line-height: 1.4; text-decoration: none;
+}
+.rail-toc li.toc-h3 a { padding-left: 1.6rem; font-size: .78rem; }
+.rail-toc li a:hover { color: var(--link); }
+.rail-toc li a.active { color: var(--fg); border-left-color: var(--btn-primary); }
+.rail-context .backlinks,
+.rail-context .backlinks + .backlinks { margin: 0 0 1.4rem; padding: 0; border: none; }
+.rail-context .backlinks ul { display: block; }
+.rail-context .backlinks li { padding: .15rem 0; line-height: 1.4; }
+.rail-context .backlinks li + li::before { content: none; }
+.rail-context .backlinks li a { font-size: .82rem; color: var(--fg); }
+.rail-context .backlinks li a:hover { color: var(--link); text-decoration: none; }
+
+@media (min-width: 1320px) {
+  /* The wide page, with wider side padding: on a window not much wider
+     than the page, the badges fixed at the top left would otherwise touch
+     the breadcrumb. */
+  body:not(.editor-page) main {
+    max-width: calc(14rem + 60rem + 14rem + 2 * 3rem + 2 * 3.5rem);
+    padding-inline: 3.5rem;
+  }
+  main > .top-actions { right: 3.5rem; }
+  /* Every view gets that top row (breadcrumb and top actions), so it stays
+     put when switching modules; the views without side columns (deck,
+     scratch, search, …) keep their content at its usual width, centred. */
+  body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions) {
+    max-width: 46rem; margin-inline: auto;
+  }
+  .page-grid {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 60rem) 14rem;
+    column-gap: 3rem;
+  }
+  .rail {
+    display: block; position: sticky; top: 1.5rem; align-self: start;
+    max-height: calc(100vh - 3rem); overflow-y: auto; padding-top: .25rem;
+  }
+  .page-col { min-width: 0; container-type: inline-size; }
+  .page-col > :is(.page-header, .page-meta-wrapper, .page-tldr, .page-content) {
+    max-width: 46rem; margin-inline: auto;
+  }
+  .page-col .page-content > .toc, .page-foot { display: none; }
+  /* The right column lists the backlinks, so the breadcrumb's chip goes. */
+  main.wide .breadcrumb-right { display: none; }
+  /* As wide as the text, unless a line or a row needs more: then up to the
+     middle column, centred. Text itself stays at its reading width. */
+  .page-col .page-content > :is(pre, table) {
+    width: max-content; min-width: 100%; max-width: 100cqw;
+    position: relative; left: 50%; translate: -50% 0;
+  }
 }
 
 /* ── Page header ───────────────────────────────────────────────────────────── */
@@ -1483,7 +1565,9 @@ body.editor-page main {
   .top-badges { position: static; margin: 0 1rem; }
   .top-badges > * { margin-top: .6rem; }
   .remote-badge { display: none; }
-  .signout-form, body:has(.action-buttons) .signout-form { position: static; margin-left: auto; }
+  .signout-form { position: static; margin-left: auto; }
+  .top-actions { display: none; }
+  main:has(> .top-actions) > .breadcrumb { min-height: 0; padding-right: 0; }
   /* A showing badge (leaf.js sets inline-flex) already spaces the page from
      the top edge, so main's own top padding shrinks. */
   body:has(.top-badges > [style*="inline-flex"]) main { padding-top: .5rem; }

@@ -149,10 +149,10 @@ class TestViewPage:
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._deck_links(body) == ["/page/deck", "/page/deck"]
         home = client.get("/page/deck", headers=HOST).get_data(as_text=True)
-        assert '<body data-module="deck">' in home
+        assert '<body data-module="deck" data-deck-tags="task">' in home
         assert 'data-home="1"' in home   # the embed New clicks
         # /deck stays the view of every task, in the Deck module.
-        assert '<body data-module="deck">' in client.get("/deck", headers=HOST).get_data(as_text=True)
+        assert '<body data-module="deck" data-deck-tags="task">' in client.get("/deck", headers=HOST).get_data(as_text=True)
 
     def test_deck_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
         write_page(wiki_dir, "aaa", "# A\n\n```\n[[deck home=1]]\n```\n")
@@ -179,6 +179,32 @@ class TestViewPage:
             assert 'class="action-new"' in body and 'class="action-search"' in body
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
+
+    def test_desktop_top_actions_on_views_not_in_editor(self, client, wiki_dir):
+        # New scratch note, New task and Search, at the start of <main> so the
+        # CSS can put them at the top right, in line with the breadcrumb.
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        for url in ("/page/my-page", "/deck", "/page/_scratch"):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
+            assert len(top) == 2 and top[0].strip(' >\n').replace('class="wide"', '').strip() == "", url
+            buttons = re.findall(r'<button type="button" class="top-(\w+)" aria-label="([^"]+)" title="([^"]+)"',
+                                 top[1].split("</div>", 1)[0])
+            assert buttons == [("scratch", "New scratch note", "New scratch note (c s)"),
+                               ("task", "Add a task to your deck", "Add a task to your deck (c t)"),
+                               ("search", "Search", "Search (Ctrl+P)")], url
+        assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
+
+    def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
+        # c t and the New task button tag a task as the deck's home does:
+        # leaf.js reads the tags (and keep) from <body>, on every view.
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
+        assert "data-deck-tags" not in body and "data-deck-keep" not in body   # no home: no tags
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=Task tag=work,-mary home=1 keep=1]]\n")
+        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+            tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
+            assert 'data-deck-tags="task,work"' in tag and 'data-deck-keep="1"' in tag, url
 
     def test_pages_load_nothing_from_other_hosts(self, client, wiki_dir):
         # No CDN: highlight.js is vendored and served from /public/.
@@ -308,6 +334,58 @@ class TestViewPage:
         assert 'class="tldr-toggle"' not in text
         assert 'class="tldr-label"' not in text
         assert 'class="task-tag page-tag"' in text
+
+    # ── Side columns (big screens; the CSS decides when they show) ──────────
+
+    def test_page_view_has_side_columns(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n\n[[toc]]\n\n## Beds\n\nSoil.\n\n### Roses\n\nRed.\n")
+        write_page(wiki_dir, "plans", "# Plans\n\nSee [[Garden]].\n")
+        client.post("/api/deck", json={"title": "Weed the [[garden]]"})
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert '<main class="wide">' in body
+        grid = body.split('<div class="page-grid">', 1)[1]
+        left, rest = grid.split('<div class="page-col">', 1)
+        # Left: the [[toc]] as "On this page", the same links as the box.
+        assert '<aside class="rail rail-left"><nav class="rail-toc" aria-label="On this page">' in left
+        assert re.findall(r'href="(#[^"]+)"', left) == ["#beds", "#roses"]
+        assert '<li class="toc-h3"><a href="#roses">' in left
+        assert '<nav class="toc">' in rest   # the box stays, for smaller screens
+        # Right: a copy of the sections at the end; the anchors stay with them.
+        col, right = rest.split('<aside class="rail rail-context" aria-label="Links">', 1)
+        foot = col.split('<div class="page-foot">', 1)[1]
+        for sid in ("backlinks", "task-backlinks"):
+            assert f'<section class="backlinks" id="{sid}">' in foot
+            assert f'<section class="backlinks" data-id="{sid}">' in right
+        assert ' id="' not in right.split("</aside>", 1)[0]
+        assert "Plans" in right and "Weed the garden" in right
+
+    def test_side_column_without_toc_is_empty(self, client, wiki_dir):
+        # No [[toc]], no left column content; the column stays, so the page
+        # keeps its place. Headings alone don't make a TOC.
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n")
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert '<aside class="rail rail-left"></aside>' in body
+        assert '<aside class="rail rail-context" aria-label="Links"></aside>' in body
+
+    def test_only_page_views_are_wide(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        for url in ("/deck", "/page/_scratch", "/search?q=garden", "/edit/garden"):
+            assert 'class="wide"' not in client.get(url, headers=HOST).get_data(as_text=True), url
+
+
+class TestNewTaskTags:
+    """deck.new_task_tags: what a new task in an embed gets, as its "+ New"."""
+
+    def test_list_then_single_tags(self):
+        assert deck_module.new_task_tags({"list": "Shop", "tag": "weekly, food"}) == ["shop", "weekly", "food"]
+
+    def test_excluded_and_any_of_add_nothing(self):
+        assert deck_module.new_task_tags({"tag": "work,-mary"}) == ["work"]
+        assert deck_module.new_task_tags({"list": "task", "tag": "a|b"}) == ["task"]
+
+    def test_nothing(self):
+        assert deck_module.new_task_tags({}) == []
+        assert deck_module.new_task_tags({"list": "task", "tag": "Task"}) == ["task"]
 
 
 # ===========================================================================

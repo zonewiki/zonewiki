@@ -133,33 +133,129 @@ def test_deck_tab_shows_the_due_count(new_page, wiki):
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
-# The same two buttons, smaller, for mouse users who don't know the shortcuts.
+# At the top right, in line with the breadcrumb: New scratch note, New task
+# and Search, as icons. The bottom bar is the phone's.
 
-def test_action_buttons_on_desktop(page, wiki):
+def test_top_actions_on_desktop(page, wiki):
     page.goto("/page/index")
-    new, search = page.locator(".action-new"), page.locator(".action-search")
-    expect(new).to_be_visible()
-    expect(search).to_be_visible()
-    # The modules are in the breadcrumb on desktop, the labels are hidden.
-    expect(page.locator(".action-buttons .action-module")).to_have_count(3)
-    for m in page.locator(".action-buttons .action-module").all():
-        expect(m).to_be_hidden()
-    nb, sb = new.bounding_box(), search.bounding_box()
-    vw, vh = page.viewport_size["width"], page.viewport_size["height"]
-    assert sb["x"] + sb["width"] > vw - 40 and sb["y"] + sb["height"] > vh - 40  # bottom right
-    assert nb["x"] + nb["width"] < sb["x"] and abs(nb["y"] - sb["y"]) < 1
-    assert sb["width"] < 48   # smaller than the phone's finger-sized ones
+    expect(page.locator(".action-buttons")).to_be_hidden()
+    buttons = page.locator(".top-actions button")
+    expect(buttons).to_have_count(3)
+    names = [b.get_attribute("aria-label") for b in buttons.all()]
+    assert names == ["New scratch note", "Add a task to your deck", "Search"]
+    boxes = [b.bounding_box() for b in buttons.all()]
+    crumb = page.locator("main > .breadcrumb").bounding_box()
+    vw = page.viewport_size["width"]
+    main = page.locator("main").bounding_box()
+    for b in boxes:
+        assert 32 <= b["width"] <= 40 and b["width"] == b["height"]           # icon buttons, not tiny
+        assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
+    assert boxes[0]["x"] < boxes[1]["x"] < boxes[2]["x"]
+    assert boxes[2]["x"] + boxes[2]["width"] > main["x"] + main["width"] - 40 and boxes[2]["x"] < vw
+    # The breadcrumb's own right end (the backlinks chip) keeps clear of them.
+    assert crumb["x"] + crumb["width"] - float(page.locator("main > .breadcrumb").evaluate(
+        "el => getComputedStyle(el).paddingRight").rstrip("px")) <= boxes[0]["x"]
 
 
-def test_desktop_buttons_open_search_and_new_page(page, wiki):
+def test_top_actions_hidden_on_phones(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/index")
+    expect(phone.locator(".top-actions")).to_be_hidden()
+    expect(phone.locator(".action-buttons")).to_be_visible()
+
+
+def test_top_actions_open_scratch_and_search(page, wiki):
     page.goto("/page/index")
-    page.locator(".action-search").click()
+    page.locator(".top-search").click()
     expect(page.locator("#search-modal")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator("#search-modal")).to_be_hidden()
-    expect(page.locator(".action-new")).to_have_attribute("title", "New page (Ctrl+N)")
-    page.locator(".action-new").click()
-    expect(page.locator("#new-page-modal")).to_be_visible()
+    page.locator(".top-scratch").click()
+    expect(page.locator("#scratch-modal")).to_be_visible()
+
+
+# ── New task: the deck's home decides ────────────────────────────────────────
+# The New task button and c t give a new task the home deck's tags.
+
+def _home(wiki, embed="[[deck list=task view=focus home=1]]"):
+    wiki.write("deck", f"# My deck\n\n{embed}\n")
+    wiki.write("garden", "# Garden\n\nBeds.\n")
+
+
+def test_new_task_button_opens_the_home_deck(page, wiki):
+    # A page without a deck app: the home page opens with the modal, so its
+    # "+ New" applies (its tags, Focus's start today).
+    _home(wiki)
+    page.goto("/page/garden")
+    page.locator(".top-task").click()
+    page.wait_for_url(re.compile(r"/page/deck(\?.*)?$"))
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
+    expect(modal.locator("[id^=task-edit-start]")).to_have_value(date.today().isoformat())
+
+
+def test_new_task_button_on_the_home_page(page, wiki):
+    _home(wiki)
+    page.goto("/page/deck")
+    page.locator(".top-task").click()
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
+    assert page.url.endswith("/page/deck")
+
+
+def test_new_task_on_another_deck_gets_the_homes_tags(page, wiki):
+    # A page with another deck (here /deck, every task): the modal opens
+    # there, but with the home's tags and keep, not that deck's filter.
+    _home(wiki, "[[deck list=shop keep=1 home=1]]")
+    page.goto("/deck?tag=garden")
+    page.locator(".top-task").click()
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip")).to_have_count(1)
+    expect(modal.locator(".tag-chip")).to_contain_text("shop")
+    expect(modal.locator("[id^=task-edit-keep]")).to_be_checked()
+    assert "/deck" in page.url
+
+
+def test_new_task_without_a_home_has_no_tags(page, wiki):
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    page.wait_for_url(re.compile(r"/deck(\?.*)?$"))
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip")).to_have_count(0)
+
+
+def test_c_t_in_the_editor_tags_like_the_home(page, wiki):
+    # The editor has a hidden deck: the modal opens right there. (Not the
+    # old fixed #task: c t once always tagged that.)
+    _home(wiki, "[[deck list=work home=1]]")
+    page.goto("/edit/garden")
+    page.locator("#editor-textarea").evaluate("el => el.blur()")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip")).to_have_count(1)
+    expect(modal.locator(".tag-chip")).to_contain_text("work")
+    assert "/edit/garden" in page.url
+
+
+def test_g_t_goes_to_the_home_deck(page, wiki):
+    _home(wiki)
+    page.goto("/page/garden")
+    page.keyboard.press("g")
+    page.keyboard.press("t")
+    page.wait_for_url("**/page/deck")
+    wiki.write("deck", "# My deck\n\n[[deck list=task]]\n")   # no home any more
+    page.goto("/page/garden")
+    page.keyboard.press("g")
+    page.keyboard.press("t")
+    page.wait_for_url(re.compile(r"/deck$"))
 
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
@@ -253,7 +349,7 @@ def test_deck_home_page_is_the_deck_module(page, wiki):
     page.wait_for_url("**/page/deck")
     expect(deck).to_have_attribute("aria-current", "page")
     expect(page.locator(".action-new")).to_have_attribute("title", "New task (n)")
-    page.locator(".action-new").click()
+    page.locator(".top-task").click()
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
@@ -277,7 +373,7 @@ def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
     page.goto("/page/index")
     signout = page.get_by_role("button", name="Sign out")
     expect(signout).to_be_visible()
-    assert not _overlap(signout.bounding_box(), page.locator(".action-buttons").bounding_box())
+    assert not _overlap(signout.bounding_box(), page.locator(".top-actions").bounding_box())
 
 
 def test_desktop_toast_clear_of_the_buttons(page, wiki):
@@ -286,7 +382,7 @@ def test_desktop_toast_clear_of_the_buttons(page, wiki):
     page.locator(".task-list-item-checkbox").check()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_be_visible()
-    assert not _overlap(toast.bounding_box(), page.locator(".action-buttons").bounding_box())
+    assert not _overlap(toast.bounding_box(), page.locator(".top-actions").bounding_box())
 
 
 def test_no_action_buttons_in_desktop_editor(page, wiki):

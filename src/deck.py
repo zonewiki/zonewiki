@@ -809,6 +809,18 @@ def tag_param_matches(task: dict, raw: str) -> bool:
     return True
 
 
+def new_task_tags(params: dict) -> list[str]:
+    """The tags a new task gets in an embed with these params, as its own
+    "+ New" gives them (deck.js filterDefaultTags over the locked filter
+    words): the `list=` tag, then the single tags of `tag=`. An `a|b` group
+    names no one tag, and an excluded `-tag` adds nothing."""
+    tags = [_clean_list(params.get("list")) or ""]
+    raw = (params.get("tag") or "").strip()
+    if raw and "|" not in raw:
+        tags += [t for t in (t.strip() for t in raw.split(",")) if not t.startswith("-")]
+    return _clean_tags(tags)
+
+
 def list_names() -> set[str]:
     """Every declared list name."""
     return set(LISTS_FN())

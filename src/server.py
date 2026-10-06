@@ -1288,15 +1288,19 @@ def _deck_home() -> dict | None:
     return None
 
 
+def deck_home() -> dict | None:
+    """The deck's home (_deck_home), looked up once per request."""
+    if not has_app_context():
+        return _deck_home()
+    if "deck_home" not in g:
+        g.deck_home = _deck_home()
+    return g.deck_home
+
+
 def deck_home_slug() -> str | None:
     """The deck home's slug, looked up once per request."""
-    if not has_app_context():
-        home = _deck_home()
-        return home["slug"] if home else None
-    if "deck_home" not in g:
-        home = _deck_home()
-        g.deck_home = home["slug"] if home else None
-    return g.deck_home
+    home = deck_home()
+    return home["slug"] if home else None
 
 
 deck_module.LISTS_FN = _deck_lists
@@ -1511,6 +1515,23 @@ _MODULE_ICONS = {
                '<polyline points="9.5 1.5 9.5 5 13 5"/><line x1="5.5" y1="8.5" x2="10.5" y2="8.5"/>'
                '<line x1="5.5" y1="11" x2="9" y2="11"/></svg>',
 }
+def top_actions_html() -> str:
+    """The desktop's action buttons, at the top right of the page (in line
+    with the breadcrumb): a new scratch note, a new task in the deck's home
+    and search, as icons with their name and shortcut in the tooltip. Phones
+    have the action bar at the bottom instead (see the 640px media query)."""
+    return (
+        '<div class="top-actions">'
+        f'<button type="button" class="top-scratch" aria-label="New scratch note" title="New scratch note (c s)">{_SVG}'
+        '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/>'
+        '<line x1="8" y1="7.5" x2="8" y2="12"/><line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/></svg></button>'
+        f'<button type="button" class="top-task" aria-label="Add a task to your deck" title="Add a task to your deck (c t)">{_SVG}'
+        '<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><polyline points="5.25 8.25 7.25 10.25 10.75 6"/></svg></button>'
+        f'<button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
+        '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg></button>'
+        '</div>')
+
+
 def action_bar_html() -> str:
     """The action bar's HTML (see above)."""
     return (
@@ -1584,14 +1605,24 @@ FORMAT_BAR = (
 
 
 def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
-          extra_head: str | None = None, action_buttons: bool = True) -> str:
+          extra_head: str | None = None, action_buttons: bool = True,
+          wide: bool = False) -> str:
     """Wrap body in the page skeleton. `action_buttons=False` drops the
     action buttons, new note and search (the editor has its own toolbar; the
-    login page has nothing to search or write)."""
+    login page has nothing to search or write). `wide`: a page view with
+    side columns on big screens (`main.wide`, see view_page)."""
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     module = "" if editor else current_module()
     body_attrs = body_class + (f' data-module="{module}"' if module else "")
+    # New tasks from any page (c t, the New task button) get the tags the
+    # deck's home gives them, and are keep tasks if it makes them (leaf.js).
+    home = deck_home()
+    if home:
+        body_attrs += f' data-deck-tags="{html.escape(",".join(deck_module.new_task_tags(home["params"])))}"'
+        if deck_module.is_true(home["params"].get("keep")):
+            body_attrs += ' data-deck-keep="1"'
+    show_actions = action_buttons and not editor
     safe_title = html.escape(title)
     extra_head_html = extra_head if extra_head else ""
     return f"""<!DOCTYPE html>
@@ -1657,10 +1688,11 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
       <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
       <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
-      <tr><td><kbd>c t</kbd></td><td>Add to Deck</td></tr>
+      <tr><td><kbd>c t</kbd></td><td>New task in your deck</td></tr>
       <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
       <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
-      <tr><td><kbd>g d</kbd></td><td>Go to Deck</td></tr>
+      <tr><td><kbd>g d</kbd></td><td>Go to Deck (every task)</td></tr>
+      <tr><td><kbd>g t</kbd></td><td>Go to your deck</td></tr>
 
       <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
       <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
@@ -1718,10 +1750,10 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
     </a>
     {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   </div>
-  <main>
-    {body}
+  <main{' class="wide"' if wide else ""}>
+    {top_actions_html() if show_actions else ""}{body}
   </main>
-  {action_bar_html() if action_buttons and not editor else ""}
+  {action_bar_html() if show_actions else ""}
 </body>
 </html>"""
 
@@ -2023,6 +2055,8 @@ def view_page(slug):
         )
 
     body = f"""{breadcrumb}{delete_dialog}
+<div class="page-grid">
+{_rail_toc_html(article_html)}<div class="page-col">
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
@@ -2033,8 +2067,33 @@ def view_page(slug):
 <article class="page-content">
   {article_html}
 </article>
-{bl_html}"""
-    return shell(title, body)
+<div class="page-foot">{bl_html}</div>
+</div>
+<aside class="rail rail-context" aria-label="Links">{_rail_copy(bl_html)}</aside>
+</div>"""
+    return shell(title, body, wide=True)
+
+
+# Big screens (style.css, "Side columns") show a page view in three columns:
+# the table of contents on the left, the page in the middle and what links
+# to it on the right, both sides sticky. The columns are copies of what
+# smaller screens show inline: the [[toc]] box and the sections at the end.
+_TOC_NAV_RE = re.compile(r'<nav class="toc">(<ul>.*?</ul>)</nav>', re.S)
+
+
+def _rail_toc_html(article_html: str) -> str:
+    """The left column: the page's [[toc]] as "On this page"; empty (the
+    column stays, so the page keeps its place) without one."""
+    m = _TOC_NAV_RE.search(article_html)
+    toc = (f'<nav class="rail-toc" aria-label="On this page"><p class="rail-label">On this page</p>'
+           f'{m.group(1)}</nav>') if m else ""
+    return f'<aside class="rail rail-left">{toc}</aside>\n'
+
+
+def _rail_copy(sections_html: str) -> str:
+    """The right column's copy of Backlinks, Linked tasks and Related, its
+    ids moved to data-id: the anchors (#backlinks) belong to the originals."""
+    return sections_html.replace('<section class="backlinks" id="', '<section class="backlinks" data-id="')
 
 
 @app.get("/edit/<path:slug>")

@@ -96,6 +96,34 @@
   });
 }());
 
+// ── Side columns: the section being read ─────────────────────────────────────
+// On big screens a page's table of contents is the left column (server.py
+// _rail_toc_html); it marks the section whose heading was scrolled past
+// last, and at the end of the page the last one that came into view.
+
+(function () {
+  const links = [...document.querySelectorAll('.rail-toc a[href^="#"]')];
+  if (!links.length) return;
+  const heads = links.map(a => document.getElementById(decodeURIComponent(a.hash.slice(1))));
+  let queued = false;
+  function mark() {
+    queued = false;
+    const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    const line = atEnd ? window.innerHeight : 120;
+    let current = 0;
+    heads.forEach((h, i) => { if (h && h.getBoundingClientRect().top < line) current = i; });
+    links.forEach((a, i) => {
+      a.classList.toggle('active', i === current);
+      if (i === current) a.setAttribute('aria-current', 'location');
+      else a.removeAttribute('aria-current');
+    });
+  }
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(mark); } };
+  window.addEventListener('scroll', queue, { passive: true });
+  window.addEventListener('resize', queue);
+  mark();
+}());
+
 // ── Uncommitted changes badge ────────────────────────────────────────────────
 
 (function () {
@@ -528,16 +556,26 @@ async function fetchModalContentMatches(q) {
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-function openQuickTask(defaultTag) {
-  // Always use the full deck edit modal — navigate to the deck page (/deck redirects there) with new param
+// A new task in the deck's home, from any page (c t, the New task button).
+// On the home page its own "+ New" (so the view's tags and dates apply);
+// where a deck app is loaded (an embed, the editor's hidden one) its edit
+// modal, with the tags and keep the home gives new tasks (the server puts
+// them on <body>: data-deck-tags, data-deck-keep; none without a home);
+// elsewhere the home page (or /deck) opens with the modal.
+function openHomeTask() {
+  const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
+  if (homeAdd) { homeAdd.click(); return; }
+  const { deckTags = '', deckKeep } = document.body.dataset;
   if (typeof window.openDeckEdit === 'function') {
-    window.openDeckEdit(null, { tags: defaultTag || '' });
-  } else {
-    const params = new URLSearchParams({ new: '1' });
-    if (defaultTag) params.set('tag', defaultTag);
-    window.location.href = '/deck?' + params.toString();
+    window.openDeckEdit(null, { tags: deckTags, keep: deckKeep === '1' });
+    return;
   }
+  window.location.href = deckHomeHref() + '?new=1';
 }
+
+// Where the Deck module links go: the deck's home page, else /deck.
+const deckHomeHref = () =>
+  document.querySelector('.module-link[data-module="deck"]')?.getAttribute('href') || '/deck';
 
 // ── Scratch modal ───────────────────────────────────────────────────────────────
 
@@ -618,6 +656,10 @@ const NEW_ACTIONS = {
   btn.addEventListener('click', action.run);
 }());
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
+// The desktop's buttons at the top right (server.py top_actions_html).
+document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
+document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
+document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
@@ -681,10 +723,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gs=scratch, gd=deck, gt=deck(task)
+  // g-prefix navigation: gh=home, gs=scratch, gd=deck (every task),
+  // gt=the deck's home (your own deck; /deck without one)
   if (awaitingG) {
     resetG();
-    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: '/deck?tag=task' };
+    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: deckHomeHref() };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }
@@ -695,11 +738,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cs=scratch note, ct=task-tagged deck item
+  // c-prefix create: cs=scratch note, ct=task in the deck's home
   if (awaitingC) {
     resetC();
     if (e.key === 's') { e.preventDefault(); openScratch(); }
-    else if (e.key === 't') { e.preventDefault(); openQuickTask('task'); }
+    else if (e.key === 't') { e.preventDefault(); openHomeTask(); }
     return;
   }
   if (e.key === 'c') {

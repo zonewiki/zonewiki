@@ -2479,7 +2479,8 @@
     input.addEventListener('blur', () => finish(true));
   });
 
-  // opts (new tasks): `tags` (comma-separated), and from the editor's Make
+  // opts (new tasks): `tags` (comma-separated; given, even empty, it
+  // replaces the filter's tags), `keep` (instead of the embed's keep=), and from the editor's Make
   // task a starting `title` and `description`, a `start_date` (null: none,
   // instead of Focus's today) and `onCreated(task)`, called once it is saved.
   // `titles` instead of `title` makes one task per title (batch mode), and
@@ -2488,6 +2489,7 @@
   function openEditModal(taskId, opts) {
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
+    const givenTags = !!opts && 'tags' in opts;
     onCreated = !task && opts?.onCreated || null;
     setBatch(!task && opts?.titles);
     document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
@@ -2497,7 +2499,7 @@
     document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
       : opts && 'start_date' in opts ? opts.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
     const startTags = task ? task.tags || []
-      : defaultTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
+      : givenTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
     editChips.set(startTags, true);
     editTagsInput.value = '';
     renderHistory(task);
@@ -2505,7 +2507,7 @@
     commentInput.value = '';
     titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
     syncQuickPreview();
-    keepCb.checked = task ? !!task.keep : initKeep;
+    keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : initKeep;
     const recType = task?.recurrence?.type || '';
     recTypeSelect.value = recType;
     document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;

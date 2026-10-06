@@ -302,3 +302,119 @@ def test_code_block_padding_survives_the_highlight_theme(page, wiki):
     code = page.locator(".page-content pre code")
     expect(code).to_have_class(re.compile(r"\bhljs\b"))   # highlighted, from the local copy
     assert code.evaluate("c => getComputedStyle(c).paddingTop") == "0px"
+
+
+# ── Side columns (big screens) ───────────────────────────────────────────────
+# From 1320px a page view shows its table of contents on the left and what
+# links to it on the right, both sticky; the text keeps its width.
+
+BIG = {"width": 1600, "height": 900}
+
+LONG = "# Release\n\n[[toc]]\n\nIntro text.\n\n" + "".join(
+    f"## Part {i}\n\n" + "A paragraph of text that fills the line nicely. " * 12 + "\n\n" for i in range(1, 7)
+) + """## Code and tables
+
+```
+short
+```
+
+```
+""" + "x" * 300 + """
+```
+
+| A | B |
+|---|---|
+| 1 | 2 |
+
+| """ + " | ".join(f"Column {i} with a long header" for i in range(8)) + """ |
+|""" + "---|" * 8 + """
+| """ + " | ".join("value" for _ in range(8)) + """ |
+"""
+
+
+def _side_wiki(wiki):
+    wiki.write("release", LONG)
+    wiki.write("plans", "# Plans\n\nSee [[Release]].\n")
+
+
+def test_side_columns_on_big_screens(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    page.goto("/page/release")
+    toc, links = page.locator(".rail-toc"), page.locator(".rail-context")
+    expect(toc).to_be_visible()
+    expect(links.locator(".backlinks a", has_text="Plans")).to_be_visible()
+    # The inline copies and the breadcrumb's backlinks chip are gone.
+    expect(page.locator(".page-content .toc")).to_be_hidden()
+    expect(page.locator(".page-foot")).to_be_hidden()
+    expect(page.locator(".bl-count")).to_be_hidden()
+    t, c, r = (page.locator(s).bounding_box() for s in (".rail-left", ".page-content", ".rail-context"))
+    assert t["x"] + t["width"] < c["x"] and c["x"] + c["width"] < r["x"]
+    assert abs(c["width"] - 46 * 16) < 2                    # the reading width
+    # Both columns stay in view while the page scrolls.
+    page.mouse.wheel(0, 2500)
+    page.wait_for_timeout(200)
+    assert 0 <= toc.bounding_box()["y"] < 100 and 0 <= links.bounding_box()["y"] < 100
+
+
+def test_side_toc_marks_the_section_being_read(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    page.goto("/page/release")
+    active = page.locator(".rail-toc a.active")
+    expect(active).to_have_text("Part 1")
+    page.locator("#part-4").scroll_into_view_if_needed()
+    page.evaluate("window.scrollBy(0, document.getElementById('part-4').getBoundingClientRect().top - 40)")
+    expect(active).to_have_text("Part 4")
+    expect(active).to_have_attribute("aria-current", "location")
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    expect(active).to_have_text("Code and tables")   # the end: the last section
+    page.locator(".rail-toc a", has_text="Part 2").click()
+    page.wait_for_url("**#part-2")
+    expect(active).to_have_text("Part 2")
+
+
+def test_wide_code_and_tables_grow_short_ones_dont(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    page.goto("/page/release")
+    text = page.locator(".page-content > p").first.bounding_box()
+    short, long_ = (b.bounding_box() for b in page.locator(".page-content > pre").all())
+    small, wide = (b.bounding_box() for b in page.locator(".page-content > table").all())
+    for box in (short, small):                         # as wide as the text
+        assert abs(box["x"] - text["x"]) < 1 and abs(box["width"] - text["width"]) < 1
+    centre = text["x"] + text["width"] / 2
+    for box in (long_, wide):                          # wider, centred on the text
+        assert box["width"] > text["width"] + 100
+        assert abs(box["x"] + box["width"] / 2 - centre) < 1
+        assert box["width"] <= page.locator(".page-col").bounding_box()["width"] + 1
+
+
+def test_no_side_columns_below_1320(new_page, wiki):
+    _side_wiki(wiki)
+    page = new_page(viewport={"width": 1280, "height": 900})
+    page.goto("/page/release")
+    expect(page.locator(".rail-left")).to_be_hidden()
+    expect(page.locator(".rail-context")).to_be_hidden()
+    expect(page.locator(".page-content .toc")).to_be_visible()
+    expect(page.locator(".page-foot .backlinks a", has_text="Plans")).to_be_visible()
+    expect(page.locator(".bl-count")).to_be_visible()
+    text = page.locator(".page-content > p").first.bounding_box()
+    for el in page.locator(".page-content > :is(pre, table)").all():
+        assert el.bounding_box()["width"] <= page.locator(".page-content").bounding_box()["width"] + 1
+    assert text["width"] < 800
+
+
+def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
+    # Regression: only page views were wide, so on Scratch or the Deck the
+    # switcher and the top actions jumped inward. Every view shares the top
+    # row; the text column sits in the same place on each.
+    _side_wiki(wiki)
+    page = new_page(viewport=BIG)
+    rows = []
+    for url in ("/page/release", "/page/_scratch", "/deck"):
+        page.goto(url)
+        sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
+        h1 = page.locator("h1").first.bounding_box()
+        rows.append((round(sw["x"]), round(ta["x"] + ta["width"]), round(h1["x"])))
+    assert len(set(rows)) == 1, rows
