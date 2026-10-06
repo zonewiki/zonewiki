@@ -180,3 +180,22 @@ def test_url_paste_in_task_notes_undoes(page, wiki):
     expect(page.locator("#task-edit-modal")).to_be_visible()
     page.keyboard.press("Control+z")
     expect(notes).to_have_value("read ")
+
+
+def test_preview_grows_on_very_wide_screens(new_page, wiki):
+    # From 1800px the preview may be 1100px wide (the writing pane stays
+    # 800px); its text keeps the reading width, a wide table uses the rest.
+    wide_table = "| " + " | ".join(f"Column {i} with a long header" for i in range(8)) + " |\n|" + "---|" * 8 + "\n"
+    wiki.write("wide", "# Wide\n\n" + "Words to fill a line. " * 30 + "\n\n" + wide_table)
+    page = new_page(viewport={"width": 2200, "height": 900})
+    page.goto("/edit/wide")
+    preview = page.locator("#editor-preview")
+    expect(preview.locator("table")).to_be_visible()
+    assert page.locator(".preview-pane").bounding_box()["width"] == 1100
+    assert page.locator(".editor-pane").bounding_box()["width"] == 800
+    text = preview.locator("p").first.bounding_box()
+    table = preview.locator("table").bounding_box()
+    assert abs(text["width"] - 46 * 16) < 1 and table["width"] > text["width"] + 100
+    # Below 1800px: both panes as before.
+    page.set_viewport_size({"width": 1700, "height": 900})
+    assert page.locator(".preview-pane").bounding_box()["width"] <= 800
