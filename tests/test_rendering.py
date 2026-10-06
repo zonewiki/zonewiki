@@ -741,3 +741,33 @@ class TestImageParagraphs:
     def test_sized_image_alone_is_marked_too(self):
         from server import render_md
         assert '<p class="img-block"><img ' in render_md("![a|300](/a.png)\n")
+
+
+class TestWikilinkSections:
+    """[[Page#Section]]: a link to a heading on that page; [[#Section]] to
+    one on this page."""
+
+    def test_split(self):
+        from server import split_wikilink
+        assert split_wikilink("Garden") == ("Garden", "", "Garden")
+        assert split_wikilink("Garden|the garden") == ("Garden", "", "the garden")
+        assert split_wikilink("Garden#Beds") == ("Garden", "Beds", "Garden › Beds")
+        assert split_wikilink(" Garden # Raised beds | beds") == ("Garden", "Raised beds", "beds")
+        assert split_wikilink("#Beds") == ("", "Beds", "Beds")
+
+    def test_rendered_links(self, tmp_path, monkeypatch):
+        import server
+        monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
+        (tmp_path / "garden.md").write_text("# Garden\n")
+        out = server.render_md("[[Garden#Raised beds!]] [[Garden#Beds|beds]] [[#Notes]] [[Nowhere#Beds]]\n")
+        assert '<a href="/page/garden#raised-beds" class="wikilink">Garden › Raised beds!</a>' in out
+        assert '<a href="/page/garden#beds" class="wikilink">beds</a>' in out
+        assert '<a href="#notes" class="wikilink">Notes</a>' in out
+        assert '<a href="/page/nowhere#beds" class="wikilink wikilink-missing">' in out
+
+    def test_section_link_is_a_backlink_and_survives_a_rename(self):
+        import server
+        assert server._page_link_targets("[[Garden#Beds]] [[#Here]]", "x") == {"garden"}
+        assert server.rewrite_page_links("[[garden#Beds|b]] [[Garden#Paths]] [[#garden]]", "garden", "yard") == \
+            "[[yard#Beds|b]] [[yard#Paths]] [[#garden]]"
+        assert server._plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"

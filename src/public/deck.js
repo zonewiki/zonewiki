@@ -1770,13 +1770,12 @@
   function renderDesc(text) {
     if (!text) return '';
     let h = esc(text);
-    // Wikilinks: [[page|label]] and [[page]] — slugified with the shared
-    // toSlug from leaf.js so links resolve exactly like the server's.
-    h = h.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_, page, label) => {
-      return `<a href="/page/${window.toSlug(page)}">${label}</a>`;
-    });
-    h = h.replace(/\[\[([^\]]+)\]\]/g, (_, page) => {
-      return `<a href="/page/${window.toSlug(page)}">${esc(page.trim())}</a>`;
+    // Wikilinks: [[page]], [[page|label]], [[page#section]] (… with |label)
+    // — resolved with the shared wikilinkHref from leaf.js, exactly like the
+    // server's. The text is escaped already, so labels need no more.
+    h = h.replace(/\[\[([^\]]+)\]\]/g, (_, inner) => {
+      const { href, label } = window.wikilinkHref(inner);
+      return `<a href="${href}">${label}</a>`;
     });
     // Markdown links: [label](url)
     h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');

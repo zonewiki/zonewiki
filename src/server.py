@@ -617,20 +617,36 @@ def page_title(content: str, slug: str) -> str:
     return slug_display_name(slug)
 
 
+def split_wikilink(inner: str) -> tuple[str, str, str]:
+    """A wikilink's inside as (page, section, label): `Page`, `Page|Label`,
+    `Page#Section` (a heading on that page), `Page#Section|Label`, or
+    `#Section` (a heading on this page). The label defaults to the page,
+    "Page › Section" with a section, or the section alone."""
+    target, bar, label = inner.partition("|")
+    page, _, section = target.partition("#")
+    page, section = page.strip(), section.strip()
+    if not bar:
+        label = f"{page} › {section}" if page and section else section or page
+    return page, section, label.strip()
+
+
+def section_anchor(section: str) -> str:
+    """The heading id a wikilink's #Section points at (as rendered)."""
+    return _heading_id(_plain_heading(section))
+
+
 def process_wikilinks(text: str) -> str:
     slugs = set(all_slugs())
 
     def replace(m: re.Match) -> str:
-        inner = m.group(1)
-        if "|" in inner:
-            page_name, label = inner.split("|", 1)
-        else:
-            page_name = label = inner
-        raw = page_name.strip()
-        slug = raw if raw in slugs else to_slug(page_name)
-        label = html.escape(label.strip())
+        page_name, section, label = split_wikilink(m.group(1))
+        anchor = f"#{html.escape(section_anchor(section))}" if section else ""
+        label = html.escape(label)
+        if not page_name:
+            return f'<a href="{anchor or "#"}" class="wikilink">{label}</a>'
+        slug = page_name if page_name in slugs else to_slug(page_name)
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
-        return f'<a href="/page/{html.escape(slug)}" class="{css}">{label}</a>'
+        return f'<a href="/page/{html.escape(slug)}{anchor}" class="{css}">{label}</a>'
 
     return WIKILINK_RE.sub(replace, text)
 
@@ -1077,6 +1093,30 @@ def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
     return re.sub(r'<(h[23])\b[^>]*>.*?</\1>', wrap, html_str, flags=re.DOTALL)
 
 
+def _inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) -> str:
+    """A section that tasks link to (`[[Page#Section]]`) gets a ☑ N chip
+    after its heading, opening the list of those tasks (a <details>, no JS)."""
+    by_anchor: dict[str, list[dict]] = {}
+    for t in task_backlinks:
+        if t.get("anchor"):
+            by_anchor.setdefault(t["anchor"], []).append(t)
+    if not by_anchor:
+        return html_str
+
+    def chip(m: re.Match) -> str:
+        tasks = by_anchor.get(html.unescape(m.group(2)))
+        if not tasks:
+            return m.group(0)
+        n = len(tasks)
+        items = "".join(
+            f'<li><a href="{html.escape(_task_href(t["id"], "open", _link_list(t, prefer)))}">'
+            f'{html.escape(_plain_task_title(t["title"]))}</a></li>' for t in tasks)
+        return (f'{m.group(0)}<details class="section-tasks"><summary title="{n} linked task{"s" if n > 1 else ""}">'
+                f'☑ {n}</summary><ul>{items}</ul></details>')
+
+    return re.sub(r'<h([23]) id="([^"]+)">.*?</h\1>', chip, html_str, flags=re.S)
+
+
 def strip_h1(content: str) -> str:
     """Remove the first H1 line so it isn't duplicated below the page header."""
     lines = content.split("\n")
@@ -1209,7 +1249,9 @@ def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | Non
     """Collect all slugs that a page links to (wikilinks + markdown links)."""
     targets: set[str] = set()
     for m in WIKILINK_RE.finditer(content):
-        targets.add(to_slug(m.group(1).split("|")[0].strip()))
+        page = split_wikilink(m.group(1))[0]
+        if page:
+            targets.add(to_slug(page))
     for m in _ANY_MD_LINK_RE.finditer(content):
         href = m.group(1)
         if href.endswith('.md'):
@@ -1315,6 +1357,7 @@ def deck_home_slug() -> str | None:
 
 deck_module.LISTS_FN = _deck_lists
 deck_module.HOME_FN = _deck_home
+deck_module.ANCHOR_FN = section_anchor
 
 
 def all_backlink_counts() -> dict[str, int]:
@@ -1362,9 +1405,10 @@ def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str
     text, stash = _mask_code(text)
 
     def wikilink(m: re.Match) -> str:
-        page_name, sep, label = m.group(1).partition("|")
-        if page_name.strip() == old_slug or to_slug(page_name) == old_slug:
-            return f"[[{new_slug}{sep}{label}]]"
+        target, sep, label = m.group(1).partition("|")
+        page_name, hash_, section = target.partition("#")
+        if page_name.strip() and (page_name.strip() == old_slug or to_slug(page_name) == old_slug):
+            return f"[[{new_slug}{hash_}{section}{sep}{label}]]"
         return m.group(0)
 
     source_dir = posixpath.dirname(source_slug)
@@ -1410,8 +1454,7 @@ def _plain_task_title(title: str) -> str:
     Used where the whole title is already inside one link (Linked tasks), so
     it must not contain anchors of its own — nested <a> is invalid HTML and
     browsers split it into separate links."""
-    title = re.sub(r'\[\[([^\[\]|]+)\|([^\[\]]+)\]\]', lambda m: m.group(2).strip(), title)
-    title = re.sub(r'\[\[([^\[\]]+)\]\]', lambda m: m.group(1).strip(), title)
+    title = re.sub(r'\[\[([^\[\]]+)\]\]', lambda m: split_wikilink(m.group(1))[2], title)
     return re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', r'\1', title)
 
 
@@ -1436,9 +1479,14 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
             f'<div class="bl-tooltip">{bl_popup_items}</div>'
         )
     if task_backlinks:
+        # A task linking to a section names it after its title (§ Section,
+        # linking to the heading).
         tbl_items = "".join(
             f'<li><a href="{html.escape(_task_href(t["id"], "open", _link_list(t, prefer)))}">'
-            f'{html.escape(_plain_task_title(t["title"]))}</a></li>'
+            f'{html.escape(_plain_task_title(t["title"]))}</a>'
+            + (f' <a class="task-bl-section" href="#{html.escape(t["anchor"])}">§ {html.escape(t["section"])}</a>'
+               if t.get("section") else "")
+            + '</li>'
             for t in task_backlinks
         )
         bl_html += f'<section class="backlinks" id="task-backlinks"><h3>Linked tasks</h3><ul>{tbl_items}</ul></section>'
@@ -2015,6 +2063,12 @@ def view_page(slug):
     # Tasks the page shows inline already aren't repeated under Linked tasks.
     inline = page_task_refs(content)
     task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
+    # A section a task links to is named as the page's heading says it.
+    heading_names = {section_anchor(h): _plain_heading(h)
+                     for h in re.findall(r"^#{2,3}\s+(.+?)\s*#*\s*$", _mask_code(content)[0], re.M)}
+    for t in task_backlinks:
+        if t.get("anchor") in heading_names:
+            t["section"] = heading_names[t["anchor"]]
     page_lists = [name for name, _ in _page_deck_lists(content)]
     bl_html, bl_chip = _build_backlinks_html(slug, backlinks, task_backlinks, page_lists)
     bl_html += _build_related_html(slug, path, backlinks)
@@ -2072,9 +2126,9 @@ def view_page(slug):
             f'{tldr_body}'
             if last_modified or meta_commit_btn or tags_html or tldr_text else ""
         )
-        article_html = _inject_section_edit_buttons(
+        article_html = _inject_section_tasks(_inject_section_edit_buttons(
             render_md(strip_h1(content), show_tags=False, show_tldr=False), slug
-        )
+        ), task_backlinks, page_lists)
 
     body = f"""{breadcrumb}{delete_dialog}
 <div class="page-grid">

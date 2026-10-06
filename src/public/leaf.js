@@ -335,6 +335,26 @@ function toSlug(name) {
 }
 window.toSlug = toSlug;
 
+// A heading's id as rendered (server.py _heading_id, mdit-py-plugins'
+// anchors slugify): no punctuation, lowercase, spaces → hyphens.
+const headingId = text => text.replace(/[^\p{L}\p{N}\p{M}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');
+
+// A wikilink's inside → { href, label }, as server.py split_wikilink and
+// process_wikilinks: `Page`, `Page|Label`, `Page#Section` (that heading),
+// `#Section` (a heading on this page).
+function wikilinkHref(inner) {
+  const bar = inner.indexOf('|');
+  const target = bar < 0 ? inner : inner.slice(0, bar);
+  const hash = target.indexOf('#');
+  const page = (hash < 0 ? target : target.slice(0, hash)).trim();
+  const section = hash < 0 ? '' : target.slice(hash + 1).trim();
+  const label = bar >= 0 ? inner.slice(bar + 1).trim()
+    : page && section ? `${page} › ${section}` : section || page;
+  const anchor = section ? '#' + headingId(section) : '';
+  return { href: page ? `/page/${toSlug(page)}${anchor}` : anchor || '#', label };
+}
+window.wikilinkHref = wikilinkHref;
+
 // ── Search modal ──────────────────────────────────────────────────────────────
 
 const searchModal    = document.getElementById('search-modal');
@@ -938,12 +958,12 @@ if (textarea && previewPane) {
       const wlText = wikilinkAtCursor();
       if (wlText !== null) {
         e.preventDefault();
-        const pageName = wlText.split('|')[0].trim();
-        const targetSlug = toSlug(pageName);
+        let { href } = wikilinkHref(wlText);
+        if (href.startsWith('#')) href = new URL(editorForm.action).pathname.replace(/^\/edit\//, '/page/') + href;
         formSubmitting = true;
         const data = new FormData(editorForm);
         fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
-          .finally(() => { window.location.href = `/page/${targetSlug}`; });
+          .finally(() => { window.location.href = href; });
         return;
       }
       if (continueList(textarea, e)) {

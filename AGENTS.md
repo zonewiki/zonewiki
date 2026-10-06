@@ -183,7 +183,7 @@ Every page view includes:
 - **Backlinks** — section at the bottom listing all pages that contain a `[[wikilink]]` pointing to the current page. Shows "No pages link here." when empty.
 - **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the right end of the breadcrumb (left of the top actions; hidden where the side columns list the backlinks). On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section. Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `leaf.js`) instead of scrolling down. A second tap or a tap elsewhere closes it. The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
 - **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`_build_related_html`). Absent when none clears the similarity floor.
-- **Linked tasks** — open deck tasks whose title/description link to the page. Each entry is a single link to that task in the deck (`/deck?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `_task_href()`); links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
+- **Linked tasks** — open deck tasks whose title/description link to the page. A task linking to a section (`[[Page#Section]]`, or `/page/<slug>#anchor`; `deck.find_task_backlinks` returns its `section` and `anchor`) names it after its title (`§ Section`, linking to the heading, named as the page's heading says), and that heading gets a `☑ N` chip (`_inject_section_tasks`, a `<details>` after the heading, no JS) listing the section's tasks. Each entry is a single link to that task in the deck (`/deck?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `_task_href()`); links inside the task title are flattened to their labels (`_plain_task_title`) so anchors are never nested.
 
 ### Side columns (big screens)
 
@@ -223,6 +223,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ### Wikilinks
 
 - Wikilinks use the `[[Page Name]]` syntax. Nested pages can be linked as `[[journal/my-page]]`.
+- **Sections**: `[[Page#Section]]` links to a heading on that page (`/page/page#section`, the id as the heading renders, `section_anchor`), labelled "Page › Section"; `[[Page#Section|Label]]` with a label; `[[#Section]]` a heading on the same page. `split_wikilink` parses all forms (server), `wikilinkHref` in `leaf.js` the same for `deck.js`'s task notes and the editor's Enter-on-a-wikilink. The section is ignored for backlinks and kept on rename.
 - Before passing markdown to `markdown-it-py`, run a regex pre-processing step that rewrites wikilinks to standard markdown links:
   - `[[Page Name]]` → `[Page Name](/page/page-name)` (slug = lowercase, spaces → hyphens)
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`

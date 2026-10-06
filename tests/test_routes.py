@@ -1556,6 +1556,31 @@ class TestBacklinkCacheInvalidation:
 
 class TestTaskBacklinks:
 
+    def test_task_linking_a_section_names_it_and_marks_the_heading(self, client, wiki_dir):
+        # [[Page#Section]] in a task: it is still a linked task of the page,
+        # names the section (linking to the heading), and the heading gets a
+        # chip listing the section's tasks. A /page/<slug>#anchor link too.
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n## Garden paths\n\nGravel.\n")
+        weed = client.post("/api/deck", json={"title": "Weed [[Garden#Beds]]"}, headers=HOST).get_json()["id"]
+        client.post("/api/deck", json={"title": "Rake", "description": "[the paths](/page/garden#garden-paths)"}, headers=HOST)
+        client.post("/api/deck", json={"title": "Water [[garden]]"}, headers=HOST)
+        html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        section = html.split('id="task-backlinks"')[1].split("</section>")[0]
+        items = re.findall(r"<li>(.*?)</li>", section)
+        assert len(items) == 3
+        weed_item = next(i for i in items if "Weed" in i)
+        assert "Weed Garden › Beds</a>" in weed_item
+        assert '<a class="task-bl-section" href="#beds">§ Beds</a>' in weed_item
+        assert '<a class="task-bl-section" href="#garden-paths">§ Garden paths</a>' in next(i for i in items if "Rake" in i)
+        assert "task-bl-section" not in next(i for i in items if "Water" in i)
+        beds = html.split('<h2 id="beds">', 1)[1].split("</div>", 1)[0]
+        assert '<details class="section-tasks"><summary title="1 linked task">☑ 1</summary>' in beds
+        assert f'href="/deck?task={weed}&amp;view=open"' in beds
+        paths = html.split('<h2 id="garden-paths">', 1)[1].split("</div>", 1)[0]
+        assert "☑ 1" in paths and "Rake" in paths
+        # The chip sits after the heading: the TOC and anchors are unchanged.
+        assert '<h2 id="beds">Beds</h2>' in html
+
     def test_task_with_wikilink_listed_on_page(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)

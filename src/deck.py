@@ -1050,6 +1050,8 @@ def inject_deck_embeds(html_str: str, embeds: list[tuple[str, str]]) -> str:
 # ── Task backlinks ────────────────────────────────────────────────────────────
 
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
+# A wikilink's #Section as a heading id (the server installs its own).
+ANCHOR_FN = lambda section: re.sub(r"[^\w\- ]+", "", section).strip().lower().replace(" ", "-")
 _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\(/page/([^)]+)\)')
 
 
@@ -1078,27 +1080,34 @@ def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
 
 
 def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
-    """Return deck tasks whose title or description contain a wikilink to slug."""
+    """Return deck tasks whose title or description contain a link to slug
+    (a wikilink, or a markdown link to /page/<slug>). A link to one of its
+    sections (`[[Page#Section]]`, `/page/<slug>#anchor`) gives the task a
+    `section`: the section as written, and `anchor`, its heading id (via
+    the server's ANCHOR_FN), for the first such link."""
     results = []
     for task in _read_all():
         if task.get("completed_at"):
             continue
         text = (task.get("title") or "") + "\n" + (task.get("description") or "")
-        found = False
+        found, section, anchor = False, "", ""
         for m in WIKILINK_RE.finditer(text):
-            inner = m.group(1)
-            page_name = inner.split("|", 1)[0].strip() if "|" in inner else inner.strip()
-            if page_name == slug or to_slug_fn(page_name) == slug:
+            target = m.group(1).partition("|")[0]
+            page_name, _, sec = (x.strip() for x in target.partition("#"))
+            if page_name and (page_name == slug or to_slug_fn(page_name) == slug):
                 found = True
-                break
-        if not found:
-            for m in _MD_LINK_RE.finditer(text):
-                if m.group(2) == slug:
-                    found = True
-                    break
+                if sec and not section:
+                    section, anchor = sec, ANCHOR_FN(sec)
+        for m in _MD_LINK_RE.finditer(text):
+            page, _, frag = m.group(2).partition("#")
+            if page == slug:
+                found = True
+                if frag and not section:
+                    section, anchor = frag.replace("-", " "), frag
         if found:
             results.append({"id": task["id"], "title": task.get("title", ""),
-                            "tags": task.get("tags") or [], "list": task_list(task)})
+                            "tags": task.get("tags") or [], "list": task_list(task),
+                            "section": section, "anchor": anchor})
     return results
 
 

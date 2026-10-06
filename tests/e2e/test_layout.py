@@ -565,3 +565,17 @@ def test_deck_and_scratch_use_the_middle_column(new_page, wiki):
     expect(items.first).to_contain_text("Note 5")          # newest first, top left
     page.goto("/search?q=note")
     assert page.locator(".search-results").bounding_box()["width"] <= 46 * 16 + 1
+
+
+def test_section_task_chip_opens_its_tasks(page, wiki):
+    wiki.write("garden", "# Garden\n\n## Beds\n\nSoil.\n")
+    page.request.post("/api/deck", data={"title": "Weed [[Garden#Beds]]"})
+    page.goto("/page/garden")
+    chip = page.locator(".section-header .section-tasks")
+    expect(chip.locator("summary")).to_have_text("☑ 1")
+    expect(chip.locator("ul")).to_be_hidden()
+    chip.locator("summary").click()
+    link = chip.locator("ul a")
+    expect(link).to_have_text("Weed Garden › Beds")
+    link.click()
+    page.wait_for_url(re.compile(r"/deck\?task="))

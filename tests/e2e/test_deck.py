@@ -1593,3 +1593,12 @@ def test_new_param_opens_one_modal_on_a_page_with_several_decks(page, wiki):
     page.goto("/page/decks?new=1")
     expect(modal).to_have_count(1)
     expect(modal.locator(".tag-chip")).to_contain_text("shop")
+
+
+def test_section_wikilinks_in_task_notes(page, wiki):
+    # deck.js renders [[Page#Section]] like the server: the heading's anchor,
+    # "Page › Section" as label; [[Page#Section|label]] keeps the label.
+    wiki.write("garden", "# Garden\n\n## Raised beds\n")
+    page.request.post("/api/deck", data={"title": "Weed", "description": "See [[Garden#Raised beds]] and [[Garden#Raised beds|there]]."})
+    page.goto("/deck?view=open")
+    expect(page.locator(".task-item a[href='/page/garden#raised-beds']")).to_have_text(["Garden › Raised beds", "there"])
