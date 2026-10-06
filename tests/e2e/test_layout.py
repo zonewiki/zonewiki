@@ -435,3 +435,13 @@ def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
             if box:
                 assert (b["x"] + b["width"] <= box["x"] or box["x"] + box["width"] <= b["x"] or
                         b["y"] + b["height"] <= box["y"] or box["y"] + box["height"] <= b["y"]), sel
+
+
+def test_side_toc_without_the_directive(new_page, wiki):
+    wiki.write("long", LONG.replace("[[toc]]\n\n", ""))
+    page = new_page(viewport=BIG)
+    page.goto("/page/long")
+    expect(page.locator(".rail-toc a")).to_have_count(7)
+    expect(page.locator(".rail-toc a.active")).to_have_text("Part 1")
+    page.evaluate("window.scrollBy(0, document.getElementById('part-3').getBoundingClientRect().top - 40)")
+    expect(page.locator(".rail-toc a.active")).to_have_text("Part 3")

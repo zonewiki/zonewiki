@@ -2081,13 +2081,29 @@ def view_page(slug):
 _TOC_NAV_RE = re.compile(r'<nav class="toc">(<ul>.*?</ul>)</nav>', re.S)
 
 
+_HEADING_RE = re.compile(r'<h([23]) id="([^"]+)">(.*?)</h\1>', re.S)
+RAIL_TOC_MIN_HEADINGS = 3
+
+
 def _rail_toc_html(article_html: str) -> str:
-    """The left column: the page's [[toc]] as "On this page"; empty (the
-    column stays, so the page keeps its place) without one."""
+    """The left column: "On this page", the page's [[toc]], or without one
+    its ## and ### headings when there are at least RAIL_TOC_MIN_HEADINGS
+    (a long page shouldn't need the directive for this). Empty otherwise;
+    the column stays, so the page keeps its place."""
     m = _TOC_NAV_RE.search(article_html)
-    toc = (f'<nav class="rail-toc" aria-label="On this page"><p class="rail-label">On this page</p>'
-           f'{m.group(1)}</nav>') if m else ""
-    return f'<aside class="rail rail-left">{toc}</aside>\n'
+    if m:
+        items = m.group(1)
+    else:
+        heads = _HEADING_RE.findall(article_html)
+        if len(heads) < RAIL_TOC_MIN_HEADINGS:
+            return '<aside class="rail rail-left"></aside>\n'
+        # A heading's own links are flattened: no link inside a link.
+        items = "<ul>\n" + "\n".join(
+            f'<li{" class=\"toc-h3\"" if level == "3" else ""}><a href="#{hid}">'
+            f'{re.sub(r"</?a\b[^>]*>", "", label).strip()}</a></li>'
+            for level, hid, label in heads) + "\n</ul>"
+    return (f'<aside class="rail rail-left"><nav class="rail-toc" aria-label="On this page">'
+            f'<p class="rail-label">On this page</p>{items}</nav></aside>\n')
 
 
 def _rail_copy(sections_html: str) -> str:

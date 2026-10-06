@@ -359,10 +359,21 @@ class TestViewPage:
         assert ' id="' not in right.split("</aside>", 1)[0]
         assert "Plans" in right and "Weed the garden" in right
 
+    def test_side_toc_without_directive_from_three_headings(self, client, wiki_dir):
+        # A long page gets "On this page" without [[toc]]: its ## and ###
+        # headings, links in them flattened (no link inside a link). No box
+        # in the text, which stays as written.
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n### [[Roses]] and `tulips`\n\n```\n## not a heading\n```\n\n## Paths\n")
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        left = body.split('<aside class="rail rail-left">', 1)[1].split("</aside>", 1)[0]
+        assert re.findall(r'href="(#[^"]+)"', left) == ["#beds", "#roses-and-tulips", "#paths"]
+        assert '<li class="toc-h3"><a href="#roses-and-tulips">Roses and <code>tulips</code></a></li>' in left
+        assert '<nav class="toc">' not in body
+
     def test_side_column_without_toc_is_empty(self, client, wiki_dir):
-        # No [[toc]], no left column content; the column stays, so the page
-        # keeps its place. Headings alone don't make a TOC.
-        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n")
+        # No [[toc]] and under three headings: no left column content; the
+        # column stays, so the page keeps its place.
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n## Paths\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<aside class="rail rail-left"></aside>' in body
         assert '<aside class="rail rail-context" aria-label="Links"></aside>' in body
