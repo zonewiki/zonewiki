@@ -683,6 +683,16 @@ def _build_toc(text: str, unmask=lambda s: s) -> str:
     return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
 
 
+_IMG_PARA_RE = re.compile(r'<p>(<img\b[^>]*>)</p>')
+
+
+def _mark_image_paragraphs(html_text: str) -> str:
+    """An image alone in its paragraph gets `<p class="img-block">`: on big
+    screens such an image may grow beyond the text width (style.css, Side
+    columns), an image within a sentence may not."""
+    return _IMG_PARA_RE.sub(r'<p class="img-block">\1</p>', html_text)
+
+
 _IMG_SIZE_RE = re.compile(r'<img\b[^>]*\balt="([^"]*)\|(\d+)"[^>]*>', re.IGNORECASE)
 
 # ── Task metadata ─────────────────────────────────────────────────────────────
@@ -785,7 +795,7 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
     text, task_refs = _mask_task_refs(text)
 
     text = _unmask_code(process_wikilinks(text), code_stash)
-    result = _apply_img_sizes(md.render(text))
+    result = _mark_image_paragraphs(_apply_img_sizes(md.render(text)))
     result = _enable_task_checkboxes(result)
     result = _render_task_dates(result)
     result = _inject_task_refs(result, task_refs, prefer)

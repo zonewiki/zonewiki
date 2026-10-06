@@ -520,3 +520,27 @@ def test_section_jump_keys(page, wiki):
     for _ in range(10):
         page.keyboard.press("]")
     assert page.url.endswith("#code-and-tables")  # stops at the last
+
+
+def test_wide_images_and_deck_embeds_use_the_middle_column(new_page, wiki):
+    assets = wiki.root / "_assets"
+    assets.mkdir(exist_ok=True)
+    for name, w in (("wide.svg", 1400), ("small.svg", 200)):
+        (assets / name).write_text(f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="80">'
+                                   f'<rect width="{w}" height="80" fill="#888"/></svg>')
+    wiki.write("pics", "# Pics\n\nSome text to measure the column by, long enough to fill a line of it.\n\n"
+                       "![wide](/_assets/wide.svg)\n\n![small](/_assets/small.svg)\n\n"
+                       "In a sentence ![wide](/_assets/wide.svg) stays.\n\n[[deck]]\n")
+    page = new_page(viewport=BIG)
+    page.goto("/page/pics")
+    text = page.locator(".page-content > p").first.bounding_box()
+    col = page.locator(".page-col").bounding_box()
+    imgs = page.locator(".page-content img")
+    expect(imgs.first).to_have_js_property("complete", True)
+    wide, small, inline = (i.bounding_box() for i in imgs.all())
+    assert wide["width"] > text["width"] + 100 and wide["width"] <= col["width"] + 1
+    assert abs(wide["x"] + wide["width"] / 2 - (text["x"] + text["width"] / 2)) < 1
+    assert small["width"] == 200 and abs(small["x"] - text["x"]) < 1
+    assert inline["width"] <= text["width"] + 1
+    deck = page.locator(".tasks-app").bounding_box()
+    assert abs(deck["width"] - col["width"]) < 1 and abs(deck["x"] - col["x"]) < 1

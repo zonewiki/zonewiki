@@ -726,3 +726,18 @@ class TestCallouts:
         (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
         html = server.render_md("> [!TIP]\n> See [[Garden]].\n")
         assert "markdown-alert-tip" in html and 'href="/page/garden"' in html
+
+
+class TestImageParagraphs:
+    """An image alone in its paragraph is marked, so wide screens may let it
+    grow beyond the text; one inside a sentence is not."""
+
+    def test_alone_is_marked(self):
+        from server import render_md
+        html_out = render_md("![Map](/_assets/map.png)\n\nSee ![icon](/_assets/i.png) here.\n")
+        assert '<p class="img-block"><img src="/_assets/map.png" alt="Map" /></p>' in html_out
+        assert "<p>See <img" in html_out
+
+    def test_sized_image_alone_is_marked_too(self):
+        from server import render_md
+        assert '<p class="img-block"><img ' in render_md("![a|300](/a.png)\n")
