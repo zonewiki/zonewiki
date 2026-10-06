@@ -1,4 +1,5 @@
-"""Action buttons (phone and desktop), status badges on phones, and the compact Plan board."""
+"""The modules (switcher and phone tab bar), action buttons (phone and desktop),
+status badges on phones, and the compact Plan board."""
 
 import re
 from datetime import date
@@ -51,29 +52,84 @@ def test_page_end_not_hidden_behind_search_button(new_page, wiki):
     assert last["y"] + last["height"] <= phone.locator(".action-search").bounding_box()["y"]
 
 
-# ── Phone new-note button ────────────────────────────────────────────────────
-# Next to search: `c s` (a new scratch note) for a phone.
+# ── Phone tab bar ────────────────────────────────────────────────────────────
+# The phone's way to the modules: Wiki, Scratch, Deck, then New and Search.
 
-def test_new_note_button_sits_left_of_search_on_phones(new_page, wiki):
+def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    note, search = phone.locator(".action-note"), phone.locator(".action-search")
-    expect(note).to_be_visible()
-    nb, sb = note.bounding_box(), search.bounding_box()
-    assert nb["width"] >= 44 and nb["height"] >= 44
-    assert nb["x"] + nb["width"] < sb["x"] and abs(nb["y"] - sb["y"]) < 1
+    bar = phone.locator(".action-buttons")
+    b = bar.bounding_box()
+    assert b["x"] == 0 and b["width"] == 390 and abs(b["y"] + b["height"] - 844) < 1
+    items = bar.locator(".action-module, button")
+    expect(items).to_have_text(["Wiki", "Scratch", "Deck", "New", "Search"])
+    boxes = [i.bounding_box() for i in items.all()]
+    assert all(x["width"] >= 44 and x["height"] >= 44 for x in boxes)
+    assert all(abs(x["y"] - boxes[0]["y"]) < 1 for x in boxes)   # one row
+    # The breadcrumb's switcher shrinks to the logo: the bar has the rest.
+    expect(phone.locator(".breadcrumb .module-link[data-module=wiki] svg")).to_be_visible()
+    expect(phone.locator(".breadcrumb .module-link[data-module=deck]")).to_be_hidden()
+    for label in phone.locator(".breadcrumb .module-label").all():
+        expect(label).to_be_hidden()
 
 
-def test_new_note_button_creates_a_scratch_note(new_page, wiki):
+def test_phone_tab_bar_marks_and_opens_modules(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
-    phone.goto("/deck")
-    phone.locator(".action-note").tap()
+    phone.goto("/page/index")
+    tab = lambda m: phone.locator(f".action-buttons .action-module[data-module={m}]")
+    expect(tab("wiki")).to_have_attribute("aria-current", "page")
+    tab("deck").tap()
+    phone.wait_for_url("**/deck")
+    expect(tab("deck")).to_have_attribute("aria-current", "page")
+    expect(tab("wiki")).not_to_have_attribute("aria-current", "page")
+    tab("scratch").tap()
+    phone.wait_for_url("**/page/_scratch")
+    expect(tab("scratch")).to_have_attribute("aria-current", "page")
+
+
+def test_new_creates_a_scratch_note_in_scratch(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/_scratch")
+    expect(phone.locator(".action-new")).to_have_attribute("aria-label", "New scratch note")
+    phone.locator(".action-new").tap()
     expect(phone.locator("#scratch-modal")).to_be_visible()
-    # The title field has focus (keyboard up), so the buttons step aside.
+    # The title field has focus (keyboard up), so the bar steps aside.
     expect(phone.locator(".action-buttons")).to_be_hidden()
     phone.locator("#scratch-title").fill("Shopping idea")
     phone.locator("#scratch-title").press("Enter")
     expect(phone).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
+    # On a scratch note, too.
+    phone.goto(phone.url.replace("/edit/", "/page/"))
+    expect(phone.locator(".action-new")).to_have_attribute("aria-label", "New scratch note")
+
+
+def test_new_creates_a_page_in_the_wiki(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/index")
+    phone.locator(".action-new").tap()
+    expect(phone.locator("#new-page-modal")).to_be_visible()
+    phone.locator("#new-page-input").fill("Garden plan")
+    phone.locator("#new-page-input").press("Enter")
+    phone.wait_for_url("**/edit/garden-plan")
+
+
+def test_new_creates_a_task_in_the_deck(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/deck")
+    expect(phone.locator(".action-new")).to_have_attribute("aria-label", "New task")
+    phone.locator(".action-new").tap()
+    expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
+
+
+def test_deck_tab_shows_the_due_count(new_page, wiki):
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/api/deck", data={"title": "Pay rent", "due_date": date.today().isoformat()})
+    phone.goto("/page/index")
+    due = phone.locator(".action-buttons .module-due")
+    expect(due).to_have_text("1")
+    expect(due).to_be_visible()
+    d, tab = due.bounding_box(), phone.locator(".action-buttons [data-module=deck]").bounding_box()
+    assert tab["x"] <= d["x"] and d["x"] + d["width"] <= tab["x"] + tab["width"]
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
@@ -81,24 +137,137 @@ def test_new_note_button_creates_a_scratch_note(new_page, wiki):
 
 def test_action_buttons_on_desktop(page, wiki):
     page.goto("/page/index")
-    note, search = page.locator(".action-note"), page.locator(".action-search")
-    expect(note).to_be_visible()
+    new, search = page.locator(".action-new"), page.locator(".action-search")
+    expect(new).to_be_visible()
     expect(search).to_be_visible()
-    nb, sb = note.bounding_box(), search.bounding_box()
+    # The modules are in the breadcrumb on desktop, the labels are hidden.
+    expect(page.locator(".action-buttons .action-module")).to_have_count(3)
+    for m in page.locator(".action-buttons .action-module").all():
+        expect(m).to_be_hidden()
+    nb, sb = new.bounding_box(), search.bounding_box()
     vw, vh = page.viewport_size["width"], page.viewport_size["height"]
     assert sb["x"] + sb["width"] > vw - 40 and sb["y"] + sb["height"] > vh - 40  # bottom right
     assert nb["x"] + nb["width"] < sb["x"] and abs(nb["y"] - sb["y"]) < 1
     assert sb["width"] < 48   # smaller than the phone's finger-sized ones
 
 
-def test_desktop_buttons_open_search_and_scratch(page, wiki):
+def test_desktop_buttons_open_search_and_new_page(page, wiki):
     page.goto("/page/index")
     page.locator(".action-search").click()
     expect(page.locator("#search-modal")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator("#search-modal")).to_be_hidden()
-    page.locator(".action-note").click()
-    expect(page.locator("#scratch-modal")).to_be_visible()
+    expect(page.locator(".action-new")).to_have_attribute("title", "New page (Ctrl+N)")
+    page.locator(".action-new").click()
+    expect(page.locator("#new-page-modal")).to_be_visible()
+
+
+# ── Module switcher on desktop ───────────────────────────────────────────────
+# The breadcrumb starts with the modules: Wiki (with the logo), Scratch, Deck.
+
+def test_desktop_breadcrumb_switches_modules(page, wiki):
+    wiki.write("garden", "# Garden\n\nBeds.\n")
+    page.goto("/page/garden")
+    switch = page.locator(".breadcrumb .module-switch .module-link")
+    expect(switch.locator(".module-label")).to_have_text(["Wiki", "Scratch", "Deck"])
+    expect(switch.nth(0)).to_have_attribute("aria-current", "page")
+    # One line with the page title after it.
+    boxes = [m.bounding_box() for m in switch.all()]
+    title = page.locator(".breadcrumb > span", has_text="Garden").bounding_box()
+    assert all(abs(b["y"] - boxes[0]["y"]) < 3 for b in boxes)
+    assert boxes[-1]["x"] + boxes[-1]["width"] < title["x"]
+    page.locator(".breadcrumb .module-link[data-module=deck]").click()
+    page.wait_for_url("**/deck")
+    expect(page.locator(".breadcrumb .module-link[data-module=deck]")).to_have_attribute("aria-current", "page")
+    expect(page.locator(".action-new")).to_have_attribute("title", "New task (n)")
+    page.locator(".breadcrumb .module-link[data-module=scratch]").click()
+    page.wait_for_url("**/page/_scratch")
+    # The navigation trail keeps the page, but not the modules' own pages.
+    expect(page.locator(".breadcrumb > a")).to_have_text(["Garden"])
+
+
+def test_desktop_switcher_is_set_apart_from_the_trail(page, wiki):
+    # The switcher is a control, not a crumb: a bordered pill group, then a
+    # thin vertical divider instead of "›" before the pages.
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    switch = page.locator(".breadcrumb .module-switch")
+    assert switch.evaluate("el => getComputedStyle(el).borderTopWidth") == "1px"
+    current = switch.locator(".module-link[aria-current]")
+    assert current.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
+    divider = page.locator(".breadcrumb .module-switch + .breadcrumb-sep")
+    d = divider.bounding_box()
+    assert d["width"] <= 1.5 and d["height"] >= 10, d
+    s, t = switch.bounding_box(), page.locator(".breadcrumb > span", has_text="Garden").bounding_box()
+    assert s["x"] + s["width"] < d["x"] < t["x"]
+
+
+def test_desktop_breadcrumb_deck_link_shows_the_due_count(page, wiki):
+    page.request.post("/api/deck", data={"title": "Overdue", "due_date": "2020-01-01"})
+    page.request.post("/api/deck", data={"title": "Due today", "due_date": date.today().isoformat()})
+    page.goto("/page/index")
+    deck = page.locator(".breadcrumb .module-link[data-module=deck]")
+    expect(deck.locator(".module-due")).to_have_text("2")
+    expect(deck.locator(".module-focus")).to_have_text("2")
+    expect(deck).to_have_attribute("title", "Deck: 2 in Focus · 1 overdue · 1 due today")
+
+
+def test_deck_counts_are_in_the_page_before_any_script(page, wiki):
+    # Regression: the counts came from a fetch after the page had painted, so
+    # the Deck link grew a moment later on every page load (flicker). The
+    # server renders them; with scripts off they are there all the same.
+    page.request.post("/api/deck", data={"title": "Pay rent", "due_date": date.today().isoformat()})
+    page.request.post("/api/deck", data={"title": "Water plants", "start_date": date.today().isoformat()})
+    page.route("**/public/leaf.js", lambda route: route.abort())
+    page.route("**/api/deck/due-count", lambda route: route.abort())
+    page.goto("/page/index")
+    deck = page.locator(".breadcrumb .module-link[data-module=deck]")
+    expect(deck.locator(".module-due")).to_have_text("1")
+    expect(deck.locator(".module-focus")).to_have_text("2")
+    expect(deck).to_have_attribute("title", "Deck: 2 in Focus · 1 due today")
+
+
+def test_deck_counts_follow_deck_changes(page, wiki):
+    # A task started from the deck shows up in the Focus count at once.
+    page.request.post("/api/deck", data={"title": "Water plants"})
+    page.goto("/deck?view=open")
+    deck = page.locator(".breadcrumb .module-link[data-module=deck]")
+    expect(deck.locator(".module-focus")).to_be_hidden()
+    page.locator(".task-item").first.click()
+    page.keyboard.press("f")   # start today
+    expect(deck.locator(".module-focus")).to_have_text("1")
+
+
+def test_deck_home_page_is_the_deck_module(page, wiki):
+    # [[deck … home=1]]: your own deck. The Deck links go there, it counts
+    # as the Deck module, New adds a task in its embed (with its list tag),
+    # and it is no stop in the navigation trail.
+    wiki.write("deck", "# My deck\n\n[[deck list=task view=focus home=1]]\n")
+    wiki.write("garden", "# Garden\n\nBeds.\n")
+    page.request.post("/api/deck", data={"title": "Milk", "tags": "shop", "due_date": date.today().isoformat()})
+    page.request.post("/api/deck", data={"title": "Pay rent", "tags": "task", "due_date": date.today().isoformat()})
+    page.goto("/page/garden")
+    deck = page.locator(".breadcrumb .module-link[data-module=deck]")
+    expect(deck.locator(".module-due")).to_have_text("1")   # the #task list's only
+    deck.click()
+    page.wait_for_url("**/page/deck")
+    expect(deck).to_have_attribute("aria-current", "page")
+    expect(page.locator(".action-new")).to_have_attribute("title", "New task (n)")
+    page.locator(".action-new").click()
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
+    page.keyboard.press("Escape")
+    page.goto("/page/garden")
+    expect(page.locator(".breadcrumb > a")).to_have_count(0)   # no "My deck" stop
+
+
+def test_editor_breadcrumb_keeps_only_the_logo(page, wiki):
+    page.goto("/edit/index")
+    expect(page.locator(".breadcrumb .module-link[data-module=wiki] svg")).to_be_visible()
+    expect(page.locator(".breadcrumb .module-link[data-module=deck]")).to_be_hidden()
+    for label in page.locator(".breadcrumb .module-label").all():
+        expect(label).to_be_hidden()
 
 
 def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
@@ -187,7 +356,8 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
 
 def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     # Regression: Sign out sat in the bottom-right corner, under the New note
-    # and Search buttons.
+    # and Search buttons. With the tab bar along the bottom edge it sits at
+    # the top, in the row of status badges.
     import server
     monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
     phone = new_page(**TOUCH_PHONE)
@@ -196,5 +366,6 @@ def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     signout = phone.get_by_role("button", name="Sign out")
     expect(signout).to_be_visible()
     s, a = signout.bounding_box(), phone.locator(".action-buttons").bounding_box()
-    assert s["x"] + s["width"] <= a["x"] or s["y"] + s["height"] <= a["y"], (s, a)
-    assert s["x"] >= 0 and s["y"] + s["height"] <= 844
+    assert s["y"] + s["height"] <= a["y"], (s, a)
+    assert s["x"] + s["width"] <= 390 and s["y"] < 100
+    assert not _overlap(s, phone.locator(".breadcrumb").bounding_box())

@@ -132,8 +132,8 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
     expect(page.locator(".review-panel")).to_have_count(0)
 
 
-def test_due_badge_links_to_focus_with_the_due_tasks(page, wiki):
-    # The badge counts deadlines (overdue + due today) and links to Focus.
+def test_deck_link_counts_the_due_tasks_and_opens_focus(page, wiki):
+    # The Deck link counts deadlines (overdue + due today); the deck opens on Focus.
     # There is no Due section: the counted tasks sit in Focus's order like
     # any other, marked by their deadline colour.
     d = lambda n: (date.today() + timedelta(days=n)).isoformat()
@@ -142,13 +142,15 @@ def test_due_badge_links_to_focus_with_the_due_tasks(page, wiki):
     page.request.post("/api/deck", data={"title": "Started", "start_date": d(-1)})
     page.request.post("/api/deck", data={"title": "Started, due later",
                                          "start_date": d(0), "due_date": d(5)})
-    # No deck.md: the badge goes to the built-in /deck page.
+    # No deck.md: the Deck module link goes to the built-in /deck page,
+    # which opens on Focus.
     page.goto("/page/index")
-    badge = page.locator("#deck-due-badge")
-    expect(page.locator("#deck-due-count")).to_have_text("2")
-    expect(badge).to_have_attribute("title", "1 overdue · 1 due today")
-    badge.click()
-    expect(page).to_have_url(re.compile(r"/deck\?view=focus$"))
+    deck = page.locator(".breadcrumb .module-link[data-module=deck]")
+    expect(deck.locator(".module-due")).to_have_text("2")
+    expect(deck.locator(".module-focus")).to_have_text("4")
+    expect(deck).to_have_attribute("title", "Deck: 4 in Focus · 1 overdue · 1 due today")
+    deck.click()
+    expect(page).to_have_url(re.compile(r"/deck$"))
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     expect(page.locator(".task-inbox-divider--only")).to_have_count(0)   # no Due section
     # All in Unsorted, in Open's order (newest first).
@@ -1550,7 +1552,7 @@ def test_comments_in_edit_modal(page, wiki):
 
 def test_new_task_has_no_comments_field(page, wiki):
     page.goto("/deck?view=open")
-    page.get_by_role("button", name="New task").click()
+    page.locator(".tasks-app").get_by_role("button", name="New task").click()
     expect(page.locator("#task-edit-comments")).to_be_hidden()
 
 

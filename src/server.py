@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
+from flask import Flask, abort, g, has_app_context, has_request_context, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
 from mdit_py_plugins.anchors import anchors_plugin
 from mdit_py_plugins.deflist import deflist_plugin
@@ -342,13 +342,96 @@ deck_module.init_deck(WIKI_DIR, GIT_ENABLED, git_commit)
 app.register_blueprint(deck_module.bp)
 DECK_FILE = deck_module.DECK_FILE
 
-HOME_LINK = f"""<a href="/" class="breadcrumb-home" aria-label="{APP_NAME} home">
-  <svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
+_LEAF_LOGO = """<svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
     <path d="M3.5 12.5 Q3 15 2 15" stroke="black" stroke-width="1.1" stroke-linecap="round" fill="none"/>
-  </svg>
-  <span>{APP_NAME}</span>
-</a>"""
+  </svg>"""
+
+# Leaf's three modules: the wiki, the deck and the scratch notes. Every view
+# names the one it belongs to (`<body data-module>`, `current_module()`);
+# leaf.js marks the matching links as current (aria-current) and makes the
+# "New" button create that module's kind of thing.
+MODULES = (("wiki", "Wiki", "/"), ("scratch", "Scratch", "/page/_scratch"), ("deck", "Deck", "/deck"))
+
+def _module_href(key: str, href: str) -> str:
+    """A module's link: the Deck goes to the deck's home page when a page
+    declares one ([[deck … home=1]]), else to /deck."""
+    if key == "deck" and (home := deck_home_slug()):
+        return f"/page/{html.escape(home)}"
+    return href
+
+
+def _deck_counts_title(c: dict) -> str:
+    """The Deck links' tooltip, e.g. "Deck: 5 in Focus · 1 overdue · 1 due
+    today" (leaf.js builds the same, deckCountsTitle)."""
+    parts = [f"{c['focus']} in Focus"] if c["focus"] else []
+    if c["overdue"]:
+        parts.append(f"{c['overdue']} overdue")
+    if c["today"]:
+        parts.append(f"{c['today']} due today")
+    return "Deck: " + " · ".join(parts) if parts else "Deck"
+
+
+def _deck_counts_html() -> tuple[str, str]:
+    """(title attribute, counts HTML) for the Deck links: the due count
+    (orange) and the Focus count (muted), each hidden at zero. Rendered by the
+    server, so the link doesn't change width after the page has painted;
+    leaf.js refreshes them. Once per request."""
+    if has_app_context() and "deck_counts" in g:
+        return g.deck_counts
+    c = deck_module.deck_counts()
+    hide = lambda n: "" if n else " hidden"
+    out = (f' title="{html.escape(_deck_counts_title(c))}"',
+           f'<span class="module-counts"><span class="module-due"{hide(c["count"])}>{c["count"] or ""}</span>'
+           f'<span class="module-focus"{hide(c["focus"])}>{c["focus"] or ""}</span></span>')
+    if has_app_context():
+        g.deck_counts = out
+    return out
+
+
+def _module_link_extras(key: str) -> tuple[str, str]:
+    """(extra attributes, extra content) of a module link: aria-current on
+    the current module's (rendered, not set by script, so the highlight is
+    there at first paint), the Deck's counts."""
+    attrs, content = _deck_counts_html() if key == "deck" else ("", "")
+    if has_request_context() and current_module() == key:
+        attrs += ' aria-current="page"'
+    return attrs, content
+
+
+def home_link() -> str:
+    """The root of every breadcrumb, the module switcher: the leaf logo with
+    "Wiki" (the home page), then Scratch and Deck. Phones and the editor show
+    the logo only (style.css); phones have the bottom bar (action_bar_html()).
+    The trail code in leaf.js keeps it (`.breadcrumb-home`) as the first
+    crumb."""
+    return (
+        f'<nav class="breadcrumb-home module-switch" aria-label="{APP_NAME}">'
+        + "".join(
+            f'<a href="{_module_href(key, href)}" class="module-link" data-module="{key}"'
+            + _module_link_extras(key)[0]
+            + (f' aria-label="{label} ({APP_NAME} home)">{_LEAF_LOGO}' if key == "wiki" else ">")
+            + f'<span class="module-label">{label}</span>'
+            + _module_link_extras(key)[1]
+            + "</a>"
+            for key, label, href in MODULES)
+        + "</nav>")
+
+
+def current_module() -> str:
+    """The module the current request's view belongs to: "deck", "scratch",
+    "wiki", or "" for views of none (search results, login)."""
+    path = request.path
+    if path == "/deck":
+        return "deck"
+    if path in ("/search", "/login"):
+        return ""
+    m = re.match(r"^/(?:page|history)/(.+)$", path)
+    if m and (m.group(1) == "_scratch" or is_scratch(m.group(1))):
+        return "scratch"
+    if path.startswith("/page/") and m.group(1) == deck_home_slug():
+        return "deck"
+    return "wiki"
 
 def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "", query_string: str = "") -> str:
     """Build a breadcrumb for a page slug.
@@ -358,7 +441,7 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "",
     """
     sep = '<span class="breadcrumb-sep">›</span>'
     parts = slug.split('/')
-    crumbs = [HOME_LINK]
+    crumbs = [home_link()]
     page_href = f'/page/{html.escape(slug)}{html.escape(query_string)}'
     for i, part in enumerate(parts[:-1]):
         ancestor = '/'.join(parts[:i + 1])
@@ -1133,21 +1216,28 @@ def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | Non
 # mtime changes, so edits made outside the app stay reflected. Link targets are
 # cached unfiltered; both consumers only ever look up slugs that exist, so
 # filtering against the known-slug set is unnecessary. The last item is the
-# separate lists the page declares (_page_deck_lists).
+# params of the page's deck embeds (_page_deck_embeds): the separate lists it
+# declares and whether it is the deck's home come from them.
 _page_meta_cache: dict[str, tuple[float, str, set[str], list]] = {}
+
+
+def _page_deck_embeds(content: str) -> list[dict]:
+    """The params of each [[deck …]] on a page, outside code."""
+    masked, _ = _mask_code(content)
+    return [deck_module._parse_tasks_params(m.group(1) or "")
+            for m in deck_module._DECK_RE.finditer(masked)]
+
+
+def _embeds_lists(embeds: list[dict]) -> list[tuple[str, dict]]:
+    """(list name, embed params) of each embed that declares a list."""
+    return [(name, params) for params in embeds
+            if (name := deck_module._clean_list(params.get("list")))]
 
 
 def _page_deck_lists(content: str) -> list[tuple[str, dict]]:
     """(list name, embed params) of each [[deck list=…]] on a page, outside
     code."""
-    masked, _ = _mask_code(content)
-    out = []
-    for m in deck_module._DECK_RE.finditer(masked):
-        params = deck_module._parse_tasks_params(m.group(1) or "")
-        name = deck_module._clean_list(params.get("list"))
-        if name:
-            out.append((name, params))
-    return out
+    return _embeds_lists(_page_deck_embeds(content))
 
 
 def _page_meta_entry(md_file: Path, slug: str) -> tuple[float, str, set[str], list]:
@@ -1163,7 +1253,7 @@ def _page_meta_entry(md_file: Path, slug: str) -> tuple[float, str, set[str], li
     except OSError:
         return 0.0, slug_display_name(slug), set(), []
     entry = (mtime, page_title(content, slug), _page_link_targets(content, slug),
-             _page_deck_lists(content))
+             _page_deck_embeds(content))
     _page_meta_cache[slug] = entry
     return entry
 
@@ -1180,13 +1270,37 @@ def _deck_lists() -> dict[str, dict]:
     params}}. When several pages declare one, the first slug A–Z is its home."""
     out: dict[str, dict] = {}
     for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
-        _, title, _, lists = _page_meta_entry(md_file, slug)
-        for name, params in lists:
+        _, title, _, embeds = _page_meta_entry(md_file, slug)
+        for name, params in _embeds_lists(embeds):
             out.setdefault(name, {"slug": slug, "title": title, "params": params})
     return out
 
 
+def _deck_home() -> dict | None:
+    """The deck's home: the page with a [[deck … home=1]] embed, the user's
+    own deck, as {"slug", "title", "params": that embed's params}; the first
+    slug A–Z when several declare one. None: the Deck link goes to /deck."""
+    for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
+        _, title, _, embeds = _page_meta_entry(md_file, slug)
+        for params in embeds:
+            if deck_module.is_true(params.get("home")):
+                return {"slug": slug, "title": title, "params": params}
+    return None
+
+
+def deck_home_slug() -> str | None:
+    """The deck home's slug, looked up once per request."""
+    if not has_app_context():
+        home = _deck_home()
+        return home["slug"] if home else None
+    if "deck_home" not in g:
+        home = _deck_home()
+        g.deck_home = home["slug"] if home else None
+    return g.deck_home
+
+
 deck_module.LISTS_FN = _deck_lists
+deck_module.HOME_FN = _deck_home
 
 
 def all_backlink_counts() -> dict[str, int]:
@@ -1383,18 +1497,38 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
 _SVG = ('<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
         'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
 
-# Action buttons: clickable stand-ins for keyboard shortcuts (and the only way
-# on a phone, which has no keyboard). New note = `c s` (openScratch), search =
-# Ctrl+P (openSearchModal); leaf.js wires them. Styled in style.css.
-ACTION_BUTTONS = (
-    '<div class="action-buttons">'
-    f'<button type="button" class="action-note" aria-label="New note" title="New note (c s)">{_SVG}'
-    '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/>'
-    '<polyline points="9.5 1.5 9.5 5 13 5"/><line x1="8" y1="7.5" x2="8" y2="12"/>'
-    '<line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/></svg></button>'
-    f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
-    '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg></button>'
-    '</div>')
+# The action bar (`.action-buttons`): the modules plus Search (Ctrl+P,
+# openSearchModal) and New (leaf.js: a page in the wiki, a task in the deck, a
+# scratch note in scratch; Ctrl+N, n, c s). On desktop only New and Search
+# show, as small round buttons in the bottom-right corner (the modules are in
+# the breadcrumb); on phones it is a bottom tab bar. Styled in style.css.
+_MODULE_ICONS = {
+    "wiki": _SVG + '<path d="M13 2.5C8 2.6 4.5 5.5 4.5 11.5c6 0 8.5-3.5 8.5-9z"/>'
+            '<path d="M3 13.5 9 7.5"/></svg>',
+    "deck": _SVG + '<rect x="2.5" y="2.5" width="11" height="11" rx="2"/>'
+            '<polyline points="5.25 8.25 7.25 10.25 10.75 6"/></svg>',
+    "scratch": _SVG + '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/>'
+               '<polyline points="9.5 1.5 9.5 5 13 5"/><line x1="5.5" y1="8.5" x2="10.5" y2="8.5"/>'
+               '<line x1="5.5" y1="11" x2="9" y2="11"/></svg>',
+}
+def action_bar_html() -> str:
+    """The action bar's HTML (see above)."""
+    return (
+        f'<nav class="action-buttons" aria-label="{APP_NAME}">'
+        + "".join(
+            f'<a href="{_module_href(key, href)}" class="action-module module-link" data-module="{key}"'
+            f'{_module_link_extras(key)[0]}>'
+            f'{_MODULE_ICONS[key]}<span class="action-label">{label}</span>'
+            + _module_link_extras(key)[1]
+            + "</a>"
+            for key, label, href in MODULES)
+        + f'<button type="button" class="action-new" aria-label="New" title="New">{_SVG}'
+        '<line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>'
+        '<span class="action-label">New</span></button>'
+        f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
+        '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>'
+        '<span class="action-label">Search</span></button>'
+        '</nav>')
 
 
 # Editor formatting bar: one button per markdown construct, applied to the
@@ -1456,6 +1590,8 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
     login page has nothing to search or write)."""
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
+    module = "" if editor else current_module()
+    body_attrs = body_class + (f' data-module="{module}"' if module else "")
     safe_title = html.escape(title)
     extra_head_html = extra_head if extra_head else ""
     return f"""<!DOCTYPE html>
@@ -1476,7 +1612,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <script src="/public/leaf.js" defer></script>
   {extra_head_html}
 </head>
-<body{body_class}>
+<body{body_attrs}>
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">
       <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">
@@ -1574,22 +1710,18 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
     </div>
   </dialog>
-  {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   <div class="top-badges">
     {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if ALLOW_REMOTE else ''}
-    <a id="deck-due-badge" class="deck-due-badge" href="/deck?view=focus" style="display: none;" title="Deck due">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><line x1="2" y1="7" x2="14" y2="7"/></svg>
-      <span id="deck-due-count">0</span>
-    </a>
-    <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
+  <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
       <span id="uncommitted-count">0</span>
     </a>
+    {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   </div>
   <main>
     {body}
   </main>
-  {ACTION_BUTTONS if action_buttons and not editor else ""}
+  {action_bar_html() if action_buttons and not editor else ""}
 </body>
 </html>"""
 
@@ -1657,7 +1789,7 @@ def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
     if not entries:
         return f"<p>{empty_msg}</p>"
     items = "".join(
-        f'<li><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
+        f'<li data-slug="{html.escape(n["slug"])}"><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
         f'<span class="note-date">{n["date"]}</span></li>'
         for n in entries
     )
@@ -1666,7 +1798,19 @@ def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
 
 @app.get("/page/_scratch")
 def scratch_page():
-    return _index_page('_scratch', 'Scratch', _notes_list_html(list_scratch(), 'No entries yet.'))
+    # The filter runs the search (/api/search?scratch=1: its ranking and
+    # query syntax) over scratch notes only; leaf.js (initScratchFilter)
+    # shows the matches in ranked order with their excerpts. ?q= keeps the
+    # query (Back returns to the filtered list).
+    notes = list_scratch()
+    q = request.args.get("q", "")
+    filt = (f'<div class="scratch-filter"><input type="search" id="scratch-filter" '
+            f'value="{html.escape(q)}" placeholder="Filter scratch notes…" '
+            f'title="Search syntax works: &quot;phrase&quot;, -word, #tag, edited:2026-09 …" '
+            f'aria-label="Filter scratch notes" autocomplete="off" spellcheck="false">'
+            f'<span class="scratch-filter-count" id="scratch-filter-count" aria-live="polite"></span></div>'
+            if notes else "")
+    return _index_page('_scratch', 'Scratch', filt + _notes_list_html(notes, 'No entries yet.'))
 
 
 @app.get("/page/_deleted")
@@ -2332,16 +2476,19 @@ def api_pages_list():
             "edited": fmt_date(mtime),
         })
     pages.sort(key=lambda p: p["title"].lower())
-    # Built-in pages, first and in this order. `special` pins them to the top
-    # of the search modal's empty-query list (the phone's way to reach them);
-    # `href` is for entries that are not /page/<slug> (the deck is at /deck).
-    special = [
+    # Built-in pages (`builtin`). Deck and Scratch are modules, reached from
+    # the module switcher, so the empty-query list leaves them out; typing
+    # still finds them. `special` pins Deleted
+    # Pages to the top of the search modal's empty-query list, the one way
+    # there without typing. `href` is for entries that are not /page/<slug>
+    # (the deck is at /deck).
+    builtin = [
         {"slug": "/deck", "title": "Deck", "href": "/deck", "links": 0},
         {"slug": "_scratch", "title": "Scratch", "links": counts.get("_scratch", 0)},
     ]
-    if GIT_ENABLED:
-        special.append({"slug": "_deleted", "title": "Deleted Pages", "links": 0})
-    return jsonify([{**p, "mtime": 0, "special": True} for p in special] + pages)
+    special = [{"slug": "_deleted", "title": "Deleted Pages", "links": 0}] if GIT_ENABLED else []
+    return jsonify([{**p, "mtime": 0, "builtin": True, "special": True} for p in special]
+                   + pages + [{**p, "mtime": 0, "builtin": True} for p in builtin])
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
@@ -2593,20 +2740,26 @@ def _result_meta(d: dict) -> str:
 SEARCH_LIMIT = 15       # results in the search modal (/api/search default)
 SEARCH_PAGE_LIMIT = 50  # results on the /search page ("All results")
 SEARCH_MAX_LIMIT = 100
+SCRATCH_FILTER_LIMIT = 1000   # the Scratch page's filter lists every match
 
 
-def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT) -> list[dict]:
+def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
+              scratch: bool = False) -> list[dict]:
     """Search results for the browser, at most `limit`. `unlinked` keeps
     only pages no other page links to (the search modal's "Unlinked
-    only"), no tasks."""
+    only"), no tasks. `scratch` keeps only scratch notes (the Scratch
+    page's filter)."""
     if not raw.strip():
         return []
     query = search.Query(raw)
     q = query.ranking_text  # what excerpts mark: the words, without operators
-    keep = None
+    tests = []
     if unlinked:
         linked = {slug for slug, n in all_backlink_counts().items() if n > 0}
-        keep = lambda d: d.get("type") != "task" and d["slug"] not in linked  # noqa: E731
+        tests.append(lambda d: d.get("type") != "task" and d["slug"] not in linked)
+    if scratch:
+        tests.append(lambda d: d.get("type") != "task" and is_scratch(d["slug"]))
+    keep = (lambda d: all(t(d) for t in tests)) if tests else None
     docs = _ranked_docs(query, _search_index(), keep, limit)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
@@ -2986,9 +3139,11 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
+    scratch = request.args.get("scratch") == "1"
     limit = request.args.get("limit", SEARCH_LIMIT, type=int)
-    limit = max(1, min(limit, SEARCH_MAX_LIMIT))
-    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1", limit=limit))
+    limit = max(1, min(limit, SCRATCH_FILTER_LIMIT if scratch else SEARCH_MAX_LIMIT))
+    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1", limit=limit,
+                             scratch=scratch))
 
 
 # ── The deck page ─────────────────────────────────────────────────────────────
@@ -3011,7 +3166,7 @@ def deck_page():
         params["list"] = list_name
         embed = deck_module._build_deck_embed(params)
         title = f"{list_name} · Deck"
-        crumbs = [HOME_LINK, '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
+        crumbs = [home_link(), '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
         heading = html.escape(list_name)
         if home:
             page_link = (f'<a href="/page/{html.escape(home["slug"])}">'
@@ -3023,7 +3178,7 @@ def deck_page():
     else:
         embed = deck_module._build_deck_embed({})
         title = "Deck"
-        crumbs = [HOME_LINK, "<span>Deck</span>"]
+        crumbs = [home_link(), "<span>Deck</span>"]
         heading = "Deck"
         note = ""
     # data-slug keys the navigation trail (leaf.js); no page has this slug.

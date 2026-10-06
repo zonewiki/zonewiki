@@ -250,11 +250,11 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
         pg.goto(f"/page/long-{i}")
     pg.goto("/deck?view=focus")
     # A phone shows at most 4 pages: the last 3 visited and the current one.
-    crumbs = pg.locator(".breadcrumb a")
-    expect(crumbs).to_have_count(5)  # home, 3 pages, current
-    expect(crumbs.nth(1)).to_contain_text("Troubleshooting2")
+    crumbs = pg.locator(".breadcrumb > a")   # after the module switcher
+    expect(crumbs).to_have_count(4)  # 3 pages, current
+    expect(crumbs.nth(0)).to_contain_text("Troubleshooting2")
     assert horizontal_overflow(pg) <= 0
-    last = crumbs.nth(3)
+    last = crumbs.nth(2)
     assert last.evaluate("el => el.scrollWidth > el.clientWidth"), "long titles are cut off"
 
     pg.locator(".task-item").filter(has=pg.get_by_text("Water plants", exact=True)) \
@@ -291,7 +291,7 @@ def test_desktop_keeps_the_full_breadcrumb_trail(page, wiki):
         wiki.write(f"p{i}", f"# Page {i}\n")
         page.goto(f"/page/p{i}")
     page.goto("/deck")
-    expect(page.locator(".breadcrumb a")).to_have_count(6)  # home, 5 pages (current is text)
+    expect(page.locator(".breadcrumb > a")).to_have_count(5)  # 5 pages (current is text)
 
 
 def test_code_block_padding_survives_the_highlight_theme(page, wiki):

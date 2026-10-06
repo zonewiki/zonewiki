@@ -778,6 +778,37 @@ _FILTER_ALIASES = {
 LISTS_FN = lambda: {}
 
 
+# The deck's home: the page whose [[deck … home=1]] embed is the user's own
+# deck, where the Deck module link goes (server._deck_home installs the
+# lookup). HOME_FN() returns {"slug", "title", "params"} or None (then the
+# Deck link goes to /deck).
+HOME_FN = lambda: None
+
+
+def is_true(value) -> bool:
+    """A yes/no embed param (`keep=1`, `home=yes`)."""
+    return str(value or "").strip().lower() in ("1", "true", "yes")
+
+
+def tag_param_matches(task: dict, raw: str) -> bool:
+    """Whether a task passes an embed's `tag=` param, as deck.js reads it
+    (DeckCore.tagParamToQuery): `a|b` any of them, else comma-separated tags
+    that all must be there, a leading `-` excluding one."""
+    raw = (raw or "").strip()
+    if not raw:
+        return True
+    tags = {t.lower() for t in task.get("tags") or []}
+    if "|" in raw:
+        return bool(tags & {t.strip().lstrip("#").lower() for t in raw.split("|") if t.strip()})
+    for t in (t.strip().lstrip("#").lower() for t in raw.split(",")):
+        if t.startswith("-"):
+            if t[1:] in tags:
+                return False
+        elif t and t not in tags:
+            return False
+    return True
+
+
 def list_names() -> set[str]:
     """Every declared list name."""
     return set(LISTS_FN())
@@ -836,7 +867,10 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     open_label, plan_label, focus_label = (html.escape(n) for n in tab_labels)
     # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
     # staples); the edit modal's checkbox still turns it off per task.
-    keep = "1" if params.get("keep", "").strip().lower() in ("1", "true", "yes") else ""
+    keep = "1" if is_true(params.get("keep")) else ""
+    # `home=1`: this embed is the user's own deck (HOME_FN); the module bar's
+    # New clicks this embed's "+ New".
+    home_attr = ' data-home="1"' if is_true(params.get("home")) else ""
     init_tag = html.escape(tag_val)
     init_filter = html.escape(filt)
     # Every declared list: their tags are marked as lists (deck.js).
@@ -850,7 +884,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
     hide = ' data-headless="1" style="display:none"' if headless else ""
-    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}">
+    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}"{home_attr}>
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>
@@ -1224,19 +1258,34 @@ def api_deck_completed_count():
     return jsonify({"count": sum(in_scope(t, scope) for t in tasks)})
 
 
+def deck_counts() -> dict:
+    """What the Deck module links show: the open tasks in Focus (DeckCore.
+    isFocus: started, or due today or earlier) and, of those, how many are
+    overdue or due today. Of the deck's home view (its `list=` and `tag=`)
+    when a page declares one, else of every task."""
+    today = date.today().isoformat()
+    home = HOME_FN()
+    params = home["params"] if home else {}
+    scope, tag = _clean_list(params.get("list")) or None, params.get("tag", "")
+    overdue = today_count = focus = 0
+    for t in _read_deck():
+        if not (in_scope(t, scope) and tag_param_matches(t, tag)):
+            continue
+        due, start = t.get("due_date"), t.get("start_date")
+        if (start and start <= today) or (due and due <= today):
+            focus += 1
+        if due and due < today:
+            overdue += 1
+        elif due == today:
+            today_count += 1
+    return {"count": overdue + today_count, "overdue": overdue, "today": today_count, "focus": focus}
+
+
 @bp.get("/api/deck/due-count")
 def api_tasks_due_count():
-    today = date.today().isoformat()
-    overdue = today_count = 0
-    tasks = _read_deck()
-    for t in tasks:
-        if not t.get("due_date"):
-            continue
-        if t["due_date"] < today:
-            overdue += 1
-        elif t["due_date"] == today:
-            today_count += 1
-    return jsonify({"count": overdue + today_count, "overdue": overdue, "today": today_count})
+    """deck_counts(): `count` (due today or overdue), `overdue`, `today`,
+    `focus` (tasks in Focus)."""
+    return jsonify(deck_counts())
 
 
 @bp.post("/api/deck")

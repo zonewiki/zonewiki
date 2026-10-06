@@ -18,7 +18,11 @@
   // All entries before the current page (last) become breadcrumb links. A
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
-  const intermediates = hist.slice(0, -1).filter(p => p.slug !== 'index' && p.slug !== '_scratch')
+  // The modules' own pages are in the module switcher already: home,
+  // Scratch, /deck and the deck's home page (where the Deck link goes).
+  const deckHref = bc.querySelector('.module-link[data-module="deck"]')?.getAttribute('href');
+  const intermediates = hist.slice(0, -1)
+    .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && (p.url || '').split('?')[0] !== deckHref)
                             .slice(-maxPrev);
   if (!intermediates.length) return;
 
@@ -123,35 +127,50 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUncommitted(); });
 }());
 
-// ── Deck due badge ──────────────────────────────────────────────────────────
+// ── Modules ─────────────────────────────────────────────────────────────────
+// The module switcher (breadcrumb) and the phone's bottom bar link to the
+// three modules; the server marks the current one (aria-current). The Deck
+// links carry the counts of tasks due and in Focus.
 
 (function () {
-  const badge = document.getElementById('deck-due-badge');
-  const countEl = document.getElementById('deck-due-count');
+  // The server renders the counts into the page (no change of width after
+  // it has painted); this keeps them current: every minute, when the tab
+  // comes back and after deck writes (window.refreshDueBadge).
+  const links = document.querySelectorAll('.module-link[data-module="deck"]');
+  if (!links.length) return;
 
-  if (!badge) return;
+  // Same as server.py's _deck_counts_title.
+  function deckCountsTitle({ focus, overdue, today }) {
+    const parts = [];
+    if (focus > 0) parts.push(`${focus} in Focus`);
+    if (overdue > 0) parts.push(`${overdue} overdue`);
+    if (today > 0) parts.push(`${today} due today`);
+    return parts.length ? `Deck: ${parts.join(' · ')}` : 'Deck';
+  }
+
+  function show(el, n) {
+    const text = n > 0 ? String(n) : '';
+    if (el && el.textContent !== text) el.textContent = text;
+    if (el) el.hidden = !(n > 0);
+  }
 
   async function checkDue() {
     try {
       const res = await fetch('/api/deck/due-count');
-      const { count, overdue, today } = await res.json();
-      if (count > 0) {
-        countEl.textContent = count;
-        const parts = [];
-        if (overdue > 0) parts.push(`${overdue} overdue`);
-        if (today > 0) parts.push(`${today} due today`);
-        badge.title = parts.join(' · ');
-        badge.style.display = 'inline-flex';
-      } else {
-        badge.style.display = 'none';
-      }
+      const c = await res.json();
+      links.forEach(a => {
+        show(a.querySelector('.module-due'), c.count);
+        show(a.querySelector('.module-focus'), c.focus);
+        a.title = deckCountsTitle(c);
+      });
     } catch (e) {}
   }
 
   window.refreshDueBadge = checkDue;
-  checkDue();
   setInterval(() => { if (!document.hidden) checkDue(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDue(); });
+  // A page restored from the back/forward cache shows old counts.
+  window.addEventListener('pageshow', e => { if (e.persisted) checkDue(); });
 }());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -449,12 +468,13 @@ function applyModalControls() {
   } else {
     // No query: static list, sort by dropdown, filter by unlinked checkbox.
     // Sort the data first and render once (no post-render DOM shuffling).
-    // The built-in pages (Deck, Scratch, …) come first in the server's order,
-    // whatever the sort, so they are always two taps away; "Unlinked only"
-    // looks for orphan pages, so it leaves them out.
+    // Deleted Pages (`special`) comes first, whatever the sort; the other
+    // built-in pages (Deck, Scratch) are modules, in the module switcher, so
+    // only typing lists them. "Unlinked only" looks for orphan pages, so it
+    // leaves them all out.
     const special = unlinked ? [] : modalPages.filter(p => p.special);
     const sorted = modalPages
-      .filter(p => !p.special && !(unlinked && p.links > 0))
+      .filter(p => !p.builtin && !(unlinked && p.links > 0))
       .sort((a, b) => {
         if (sort === 'title-desc') return b.title.toLowerCase().localeCompare(a.title.toLowerCase());
         if (sort === 'mtime-desc') return b.mtime - a.mtime;
@@ -571,10 +591,32 @@ function openNewPage() {
   newPageInput.focus();
 }
 
-// ── Phone action buttons ──────────────────────────────────────────────────────
-// The touch stand-ins for `c s` (new scratch note) and Ctrl+P (search).
+// ── Action bar ───────────────────────────────────────────────────────────────
+// Search is Ctrl+P. New creates the current module's kind of thing: a task
+// in the deck (its own "+ New", so the view's tags and dates apply; on the
+// deck's home page the home embed's), a
+// scratch note in scratch (`c s`), else a page (Ctrl+N).
 
-document.querySelector('.action-note')?.addEventListener('click', openScratch);
+const deckAddButton = () =>
+  document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
+  || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
+
+const NEW_ACTIONS = {
+  deck:    { label: 'New task (n)', run: () => deckAddButton()?.click() },
+  scratch: { label: 'New scratch note (c s)', run: openScratch },
+  wiki:    { label: 'New page (Ctrl+N)', run: openNewPage },
+};
+
+(function () {
+  const btn = document.querySelector('.action-new');
+  if (!btn) return;
+  let action = NEW_ACTIONS[document.body.dataset.module] || NEW_ACTIONS.scratch;
+  // A deck page without its deck app (it failed to load) still gets a note.
+  if (action === NEW_ACTIONS.deck && !deckAddButton()) action = NEW_ACTIONS.scratch;
+  btn.title = action.label;
+  btn.setAttribute('aria-label', action.label.replace(/ \(.*\)$/, ''));
+  btn.addEventListener('click', action.run);
+}());
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -1796,6 +1838,89 @@ if (editorMoreBtn && editorMore) {
   document.addEventListener('click', () => setOpen(false));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
 }
+
+// ── Scratch filter ────────────────────────────────────────────────────────────
+// The Scratch page's filter box runs the search (/api/search?scratch=1: the
+// same ranking, query syntax, excerpts and on-page highlights) over scratch
+// notes only. Matches show in ranked order with their excerpt, linking to
+// the section that matched; an empty box restores the newest-first list.
+// The query lives in ?q=, so Back returns to the filtered list. Enter opens
+// the first match, Esc clears the box (a second Esc leaves it).
+
+(function initScratchFilter() {
+  const input = document.getElementById('scratch-filter');
+  const list = document.querySelector('.notes-list');
+  if (!input || !list) return;
+  const countEl = document.getElementById('scratch-filter-count');
+  const items = [...list.children];
+  const bySlug = new Map(items.map(li => [li.dataset.slug, li]));
+  const empty = document.createElement('p');
+  empty.className = 'scratch-filter-empty';
+  empty.textContent = 'No scratch note matches.';
+  empty.hidden = true;
+  list.after(empty);
+  let seq = 0, timer = null;
+
+  function reset(li) {
+    li.hidden = false;
+    li.querySelector('a').href = `/page/${li.dataset.slug}`;
+    li.querySelector('.note-excerpt')?.remove();
+  }
+
+  function remember(q) {
+    const url = new URL(location.href);
+    if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+    history.replaceState(history.state, '', url);
+  }
+
+  async function apply() {
+    const q = input.value.trim();
+    const mine = ++seq;
+    remember(q);
+    if (!q) {
+      items.forEach(li => { reset(li); list.appendChild(li); });
+      empty.hidden = true;
+      countEl.textContent = '';
+      return;
+    }
+    let results;
+    try {
+      const res = await fetch(`/api/search?scratch=1&limit=1000&q=${encodeURIComponent(q)}`);
+      results = await res.json();
+    } catch (_) { return; }
+    if (mine !== seq) return;   // a newer query is on its way
+    items.forEach(li => { reset(li); li.hidden = true; });
+    let shown = 0;
+    for (const r of results) {
+      const li = bySlug.get(r.slug);
+      if (!li) continue;
+      li.hidden = false;
+      li.querySelector('a').href = r.href;
+      if (r.excerpt) {
+        const ex = document.createElement('div');
+        ex.className = 'note-excerpt';
+        ex.innerHTML = r.excerpt;   // escaped by the server, <mark> around matches
+        li.appendChild(ex);
+      }
+      list.appendChild(li);   // ranked order
+      shown++;
+    }
+    empty.hidden = shown > 0;
+    countEl.textContent = shown ? `${shown} of ${items.length}` : '';
+  }
+
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 150); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const first = [...list.children].find(li => !li.hidden);
+      if (first) { e.preventDefault(); location.href = first.querySelector('a').href; }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (input.value) { input.value = ''; apply(); } else input.blur();
+    }
+  });
+  if (input.value.trim()) apply();
+}());
 
 // ── Search highlights ─────────────────────────────────────────────────────────
 // A page opened from a search result carries the words that matched as

@@ -100,13 +100,19 @@ body {
 /* Shown only on small screens (see the 640px media query) */
 .mobile-only { display: none; }
 
-/* Action buttons (see ACTION_BUTTONS in server.py): New note (`c s`) and
-   Search (Ctrl+P) as round buttons in the bottom-right corner, search in the
-   corner itself. Small and quiet on desktop; phones make them finger-sized. */
+/* Action bar (see ACTION_BUTTONS in server.py): on desktop New and Search as
+   small round buttons in the bottom-right corner, Search in the corner
+   itself; the module links and the labels show only on phones, where it is a
+   bottom tab bar (see the 640px media query). */
 .action-buttons {
   display: flex; gap: .5rem;
   position: fixed; z-index: 300;
   right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+.action-buttons .action-module { display: none; }
+.action-label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
 }
 .action-buttons button {
   display: flex; align-items: center; justify-content: center;
@@ -121,6 +127,25 @@ body {
 body:has(.action-buttons) .raw-toast { bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
 /* Sign out takes the other corner. */
 body:has(.action-buttons) .signout-form { right: auto; left: 1rem; }
+
+/* The Deck links' counts (server.py _deck_counts_html, kept current by
+   leaf.js): tasks due today or overdue (orange) and tasks in Focus (muted),
+   each hidden at zero. */
+.module-counts { display: inline-flex; gap: .2rem; margin-left: .3rem; }
+.module-counts:not(:has(> :not([hidden]))) { display: none; }
+.module-due, .module-focus {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem;
+  border-radius: 1rem; font-size: .7rem; font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.module-due { background: color-mix(in srgb, #f97316 18%, transparent); color: #c2540a; }
+.module-focus { background: color-mix(in srgb, var(--muted) 15%, transparent); color: var(--muted); }
+:is(.module-due, .module-focus)[hidden] { display: none; }
+@media (prefers-color-scheme: dark) {
+  .module-due { background: color-mix(in srgb, #f97316 22%, transparent); color: #fb923c; }
+  .module-focus { background: color-mix(in srgb, var(--muted) 25%, transparent); }
+}
 
 /* ── Main ──────────────────────────────────────────────────────────────────── */
 
@@ -692,12 +717,38 @@ main {
 }
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
+/* The breadcrumb's root is the module switcher (home_link() in server.py):
+   the leaf logo with Wiki, then Scratch and Deck. It is a control, not part
+   of the trail: a pill group with the current module shaded, and a thin
+   vertical divider (the first separator) between it and the pages. Phones
+   and the editor show the logo only, followed by a plain "›". */
 .breadcrumb-home {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
-  font-weight: 600;
 }
+.breadcrumb .module-link { display: inline-flex; align-items: center; gap: .4rem; }
+@media (min-width: 641px) {
+  body:not(.editor-page) .module-switch {
+    gap: 0; padding: 2px;
+    border: 1px solid var(--border); border-radius: 999px;
+  }
+  body:not(.editor-page) .module-switch .module-link {
+    padding: .1rem .65rem; border-radius: 999px;
+    transition: background .15s, color .15s;
+  }
+  body:not(.editor-page) .module-switch .module-link:hover { background: var(--btn-bg); color: var(--fg); }
+  body:not(.editor-page) .module-switch .module-link[aria-current] {
+    background: var(--btn-bg); color: var(--fg); font-weight: 600;
+  }
+  body:not(.editor-page) .module-switch + .breadcrumb-sep {
+    align-self: stretch; width: 1px; margin: .2rem .5rem;
+    background: var(--border); opacity: 1; font-size: 0;
+  }
+}
+/* The editor keeps its focus: the logo only, as the way home. */
+.editor-page .module-link:not([data-module="wiki"]),
+.editor-page .module-label { display: none; }
 .breadcrumb-sep { opacity: .5; }
 /* The navigation trail holds up to 6 pages. It stays on one line, and the
    page titles shrink with an ellipsis instead of pushing the page wider than
@@ -937,7 +988,7 @@ kbd {
 
 /* ── Scratch list (_scratch page) ───────────────────────────────────────────── */
 
-.notes-list { list-style: none; padding: 0; }
+.notes-list, .page-content .notes-list { list-style: none; padding: 0; margin-left: 0; }
 .notes-list li {
   display: flex;
   align-items: baseline;
@@ -948,6 +999,24 @@ kbd {
 }
 .notes-list li:last-child { border-bottom: none; }
 .note-date { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+/* The Scratch page's filter (initScratchFilter in leaf.js). */
+.scratch-filter { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.scratch-filter input {
+  flex: 1; min-width: 0; padding: .4rem .65rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: .9rem;
+}
+.scratch-filter input:focus { outline: 2px solid var(--link); outline-offset: -1px; }
+.scratch-filter-count { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.notes-list li[hidden] { display: none; }
+.notes-list li:has(.note-excerpt) { flex-wrap: wrap; row-gap: .15rem; }
+.note-excerpt {
+  flex-basis: 100%; font-size: .8rem; color: var(--muted); line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.note-excerpt mark { background: color-mix(in srgb, #facc15 40%, transparent); color: inherit; border-radius: 2px; }
+.scratch-filter-empty { color: var(--muted); font-size: .9rem; }
+@media (max-width: 640px) { .scratch-filter input { font-size: 16px; } }
 .deleted-page-info { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
 .deleted-page-title { font-weight: 500; }
 
@@ -986,8 +1055,8 @@ kbd {
   opacity: .6;
 }
 
-/* Shared pill shape for the top badges; per-badge rules add colour. */
-.uncommitted-badge, .deck-due-badge {
+/* The uncommitted-changes badge. */
+.uncommitted-badge {
   display: inline-flex;
   align-items: center;
   gap: .3rem;
@@ -1000,7 +1069,7 @@ kbd {
   font-weight: 600;
   line-height: 1;
 }
-.uncommitted-badge svg, .deck-due-badge svg { flex-shrink: 0; }
+.uncommitted-badge svg { flex-shrink: 0; }
 
 .uncommitted-badge {
   background: color-mix(in srgb, var(--muted) 15%, transparent);
@@ -1011,29 +1080,12 @@ kbd {
   color: var(--fg);
 }
 
-.deck-due-badge {
-  background: color-mix(in srgb, #f97316 18%, transparent);
-  color: #c2540a;
-}
-.deck-due-badge:hover {
-  background: color-mix(in srgb, #f97316 30%, transparent);
-  color: #9a3d06;
-}
-
 @media (prefers-color-scheme: dark) {
   .uncommitted-badge {
     background: color-mix(in srgb, var(--muted) 20%, transparent);
   }
   .uncommitted-badge:hover {
     background: color-mix(in srgb, var(--muted) 35%, transparent);
-  }
-  .deck-due-badge {
-    background: color-mix(in srgb, #f97316 22%, transparent);
-    color: #fb923c;
-  }
-  .deck-due-badge:hover {
-    background: color-mix(in srgb, #f97316 35%, transparent);
-    color: #fdba74;
   }
 }
 
@@ -1391,29 +1443,47 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
-  /* Phone action buttons: finger-sized, within thumb reach. */
-  .action-buttons { gap: .75rem; }
-  .action-buttons button {
-    width: 3.25rem; height: 3.25rem;
-    color: var(--fg); box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  /* The action bar becomes a bottom tab bar: Wiki, Scratch, Deck, New,
+     Search, each an icon over its label, the current module in the accent
+     colour. The breadcrumb's switcher shrinks to the logo. */
+  .action-buttons {
+    left: 0; right: 0; bottom: 0; gap: 0;
+    padding: .2rem .25rem calc(.2rem + env(safe-area-inset-bottom));
+    background: var(--nav-bg); border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
   }
-  /* Keep the end of the page and the toasts clear of the buttons. */
+  .action-buttons .action-module, .action-buttons button {
+    flex: 1 1 0; min-width: 0; width: auto; height: auto; min-height: 3.25rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem;
+    position: relative; padding: .2rem 0;
+    border: none; border-radius: .5rem; background: none; box-shadow: none;
+    color: var(--muted); font: inherit; font-size: .7rem; line-height: 1.2;
+    text-decoration: none; cursor: pointer;
+  }
+  .action-buttons button:hover { box-shadow: none; }
+  .action-buttons .action-module[aria-current] { color: var(--btn-primary); font-weight: 600; }
+  .action-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .action-buttons .module-counts { position: absolute; top: .15rem; left: calc(50% + .45rem); margin: 0; gap: .15rem; }
+  .action-buttons :is(.module-due, .module-focus) {
+    min-width: 1rem; height: 1rem; padding: 0 .25rem; font-size: .65rem;
+  }
+  .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label { display: none; }
+  /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
-  body:has(.action-buttons) .raw-toast { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  body:has(.action-buttons) .raw-toast { bottom: calc(4.75rem + env(safe-area-inset-bottom)); }
   /* While typing, the on-screen keyboard owns the bottom of the screen; the
-     buttons would otherwise ride on top of it. */
+     bar would otherwise ride on top of it. */
   body:has(:is(input, textarea, select, [contenteditable]):focus) :is(.action-buttons, .signout-form) { display: none; }
-  /* Sign out moves to the other corner: the bottom right holds the action
-     buttons. Level with them, in the space main keeps clear at the bottom. */
-  .signout-form { right: auto; left: 1rem; bottom: calc(1.65rem + env(safe-area-inset-bottom)); }
 
   /* The status badges join the page flow instead of floating over the
      breadcrumb. The container has no box of its own, so with no badge
      showing it takes no space. 🌐 (remote access) goes: on a phone that is
-     a given. */
+     a given. Sign out sits in the same row, on the right: the bottom edge
+     belongs to the bar. */
   .top-badges { position: static; margin: 0 1rem; }
   .top-badges > * { margin-top: .6rem; }
   .remote-badge { display: none; }
+  .signout-form, body:has(.action-buttons) .signout-form { position: static; margin-left: auto; }
   /* A showing badge (leaf.js sets inline-flex) already spaces the page from
      the top edge, so main's own top padding shrinks. */
   body:has(.top-badges > [style*="inline-flex"]) main { padding-top: .5rem; }

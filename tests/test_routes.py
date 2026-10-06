@@ -105,11 +105,78 @@ class TestViewPage:
         assert ('<meta name="viewport" content="width=device-width, initial-scale=1, '
                 'interactive-widget=resizes-content">') in text
 
+    def test_views_name_their_module(self, client, wiki_dir):
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        scratch = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        for url, module in (("/page/my-page", "wiki"), ("/page/index", "wiki"),
+                            ("/deck", "deck"), ("/deck?list=shop", "deck"),
+                            ("/page/_scratch", "scratch"), (f"/page/{scratch}", "scratch"),
+                            ("/history/my-page", "wiki")):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            assert f'<body data-module="{module}">' in body, url
+            # The current module's links (switcher, bar) are marked by the
+            # server, so the highlight is there at first paint.
+            assert len(re.findall(rf'data-module="{module}"[^>]*aria-current="page"', body)) == 2, url
+            assert body.count('aria-current="page"') == 2, url
+        # Search results belong to no module; the editor has none either.
+        assert "<body>" in client.get("/search?q=page", headers=HOST).get_data(as_text=True)
+        assert 'data-module=' not in client.get("/edit/my-page", headers=HOST).get_data(
+            as_text=True).split("<body", 1)[1].split(">", 1)[0]
+
+    def test_breadcrumb_root_is_the_module_switcher(self, client, wiki_dir):
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        for url in ("/page/my-page", "/deck", "/page/_scratch"):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
+            assert crumb.index('href="/"') < crumb.index('href="/page/_scratch"') < crumb.index('href="/deck"'), url
+            assert '<span class="module-label">Wiki</span>' in crumb
+
+    @staticmethod
+    def _deck_links(body):
+        return re.findall(r'<a href="([^"]*)" class="(?:action-module )?module-link" data-module="deck"', body)
+
+    def test_deck_links_go_to_deck_without_a_home(self, client, wiki_dir):
+        write_page(wiki_dir, "my-page", "# My Page\n\n[[deck list=task]]\n")
+        body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
+        assert self._deck_links(body) == ["/deck", "/deck"]   # switcher, bar
+        assert '<body data-module="wiki">' in body
+
+    def test_deck_home_page_is_where_the_deck_links_go(self, client, wiki_dir):
+        # [[deck … home=1]] makes that page your own deck: the Deck module
+        # links go there, and the page belongs to the Deck module.
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task view=focus home=1]]\n")
+        write_page(wiki_dir, "other", "# Other\n")
+        body = client.get("/page/other", headers=HOST).get_data(as_text=True)
+        assert self._deck_links(body) == ["/page/deck", "/page/deck"]
+        home = client.get("/page/deck", headers=HOST).get_data(as_text=True)
+        assert '<body data-module="deck">' in home
+        assert 'data-home="1"' in home   # the embed New clicks
+        # /deck stays the view of every task, in the Deck module.
+        assert '<body data-module="deck">' in client.get("/deck", headers=HOST).get_data(as_text=True)
+
+    def test_deck_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
+        write_page(wiki_dir, "aaa", "# A\n\n```\n[[deck home=1]]\n```\n")
+        write_page(wiki_dir, "zzz", "# Z\n\n[[deck tag=x home=yes]]\n")
+        write_page(wiki_dir, "mmm", "# M\n\n[[deck home=true]]\n")
+        body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
+        assert self._deck_links(body)[0] == "/page/mmm"
+        # Removing the declaration ends it at once.
+        write_page(wiki_dir, "mmm", "# M\n\n[[deck]]\n")
+        os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))
+        body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
+        assert self._deck_links(body)[0] == "/page/zzz"
+
+    def test_bottom_bar_lists_the_modules(self, client, wiki_dir):
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        bar = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split(
+            '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
+        assert re.findall(r'class="action-label">(\w+)<', bar) == ["Wiki", "Scratch", "Deck", "New", "Search"]
+
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/deck"):
             body = client.get(url, headers=HOST).data.decode()
-            assert 'class="action-note"' in body and 'class="action-search"' in body
+            assert 'class="action-new"' in body and 'class="action-search"' in body
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
@@ -626,13 +693,17 @@ class TestApiPagesList:
         assert "_scratch" in slugs
         assert "_daily" not in slugs   # daily notes were removed
 
-    def test_special_pages_come_first_and_are_marked(self, client, wiki_dir):
+    def test_built_in_pages_are_marked(self, client, wiki_dir):
+        # Deck and Scratch are modules (the module switcher links to them), so
+        # only Deleted Pages is pinned (`special`, git only); all three are
+        # `builtin`, which the empty-query list and "Unlinked only" leave out.
         write_page(wiki_dir, "aaa", "# AAA\n")
         pages = client.get("/api/pages-list", headers=HOST).get_json()
-        special = [p["title"] for p in pages if p.get("special")]
-        assert special[:2] == ["Deck", "Scratch"]
-        assert [p["title"] for p in pages[:len(special)]] == special
-        assert not next(p for p in pages if p["slug"] == "aaa").get("special")
+        assert not [p for p in pages if p.get("special") and p["title"] != "Deleted Pages"]
+        builtin = {p["title"]: p for p in pages if p.get("builtin")}
+        assert {"Deck", "Scratch"} <= builtin.keys()
+        assert builtin["Deck"]["href"] == "/deck"
+        assert not next(p for p in pages if p["slug"] == "aaa").get("builtin")
 
 
 # ===========================================================================
@@ -1251,6 +1322,36 @@ class TestSpecialPages:
         slug = resp.get_json()["slug"]
         assert (wiki_dir / f"{slug}.md").exists()
 
+    def test_search_can_keep_only_scratch_notes(self, client, wiki_dir):
+        # The Scratch page's filter: the same search, scratch notes only.
+        write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n\nRoof repair quote.\n")
+        write_page(wiki_dir, "2026-09-02_10-00-00_groceries", "# Groceries\n\nMilk, eggs.\n")
+        write_page(wiki_dir, "roof", "# Roof\n\nThe roof repair plan.\n")
+        client.post("/api/deck", json={"title": "Roof repair"}, headers=HOST)
+        get = lambda q, **kw: client.get("/api/search", query_string={"q": q, **kw}, headers=HOST).get_json()
+        assert {r["slug"] for r in get("roof repair")} >= {"roof", "2026-09-01_10-00-00_bob-call"}
+        hits = get("roof repair", scratch="1")
+        assert [r["slug"] for r in hits] == ["2026-09-01_10-00-00_bob-call"]
+        assert "<mark>" in hits[0]["excerpt"] and "hl=" in hits[0]["href"]
+        # The query syntax works as everywhere.
+        assert [r["slug"] for r in get('"milk, eggs"', scratch="1")] == ["2026-09-02_10-00-00_groceries"]
+        assert [r["slug"] for r in get("roof -quote", scratch="1")] == []
+        # Every match, not only the search modal's 100.
+        for i in range(120):
+            write_page(wiki_dir, f"2026-08-01_10-00-{i // 60:02d}_n{i}", f"# Note {i}\n\nzebra\n")
+        assert len(get("zebra", scratch="1", limit="1000")) == 120
+        assert len(get("zebra", limit="1000")) == 100
+
+    def test_scratch_page_has_a_filter(self, client, wiki_dir):
+        write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n")
+        body = client.get("/page/_scratch?q=bob", headers=HOST).get_data(as_text=True)
+        assert 'id="scratch-filter"' in body and 'value="bob"' in body
+        assert 'data-slug="2026-09-01_10-00-00_bob-call"' in body
+        # No notes, nothing to filter.
+        for f in wiki_dir.glob("2026-*.md"):
+            f.unlink()
+        assert 'id="scratch-filter"' not in client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+
     def test_daily_notes_are_gone(self, client, wiki_dir):
         # The feature was removed: no endpoint, no shortcut, no index. An old
         # daily note on disk is just an ordinary page.
@@ -1594,11 +1695,48 @@ class TestDeckPage:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert f'href="/deck?task={tid}&amp;view=open&amp;list=shop"' in body
 
+    def test_due_count_follows_the_deck_home(self, client, wiki_dir):
+        from datetime import date
+        today = date.today().isoformat()
+        for title, tags in (("Pay rent", ["task"]), ("Milk", ["shop"]),
+                            ("Call Bob", ["task", "waiting"]), ("Book trip", [])):
+            client.post("/api/deck", json={"title": title, "tags": tags, "due_date": today}, headers=HOST)
+        count = lambda: client.get("/api/deck/due-count", headers=HOST).get_json()["count"]
+        assert count() == 4   # no home: every task
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task home=1]]\n")
+        assert count() == 2   # the home's list
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task tag=-waiting home=1]]\n")
+        os.utime(wiki_dir / "deck.md", (2_000_000_000, 2_000_000_000))
+        assert count() == 1   # and its tag filter
+
+    def test_deck_counts_are_rendered_into_the_page(self, client, wiki_dir):
+        # In the HTML, not only fetched later: the Deck link must not change
+        # width after the page has painted.
+        from datetime import date, timedelta
+        today = date.today()
+        for data in ({"title": "Late", "due_date": (today - timedelta(days=1)).isoformat()},
+                     {"title": "Started", "start_date": today.isoformat()},
+                     {"title": "Later", "start_date": (today + timedelta(days=3)).isoformat()},
+                     {"title": "Someday"}):
+            client.post("/api/deck", json=data, headers=HOST)
+        assert client.get("/api/deck/due-count", headers=HOST).get_json() == {
+            "count": 1, "overdue": 1, "today": 0, "focus": 2}
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        counts = ('<span class="module-counts"><span class="module-due">1</span>'
+                  '<span class="module-focus">2</span></span>')
+        assert body.count(counts) == 2   # switcher and tab bar
+        assert body.count('title="Deck: 2 in Focus · 1 overdue"') == 2
+        # Zero is hidden, not "0".
+        client.post("/api/deck/batch-delete", json={"ids": [t["id"] for t in client.get(
+            "/api/deck", headers=HOST).get_json()]}, headers=HOST)
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert '<span class="module-due" hidden></span><span class="module-focus" hidden></span>' in body
+
     def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck?view=focus"' in body
+        assert 'href="/deck" class="module-link" data-module="deck"' in body
         assert "/page/deck" not in body
 
 
@@ -1695,3 +1833,21 @@ class TestVersion:
 
     def test_source_build_without_git_repo(self, tmp_path):
         assert server._source_build(tmp_path) == "unknown"
+
+
+# ===========================================================================
+# deck.tag_param_matches (an embed's tag= on the server, for the due count)
+# ===========================================================================
+
+@pytest.mark.parametrize("raw,tags,expected", [
+    ("", ["a"], True),
+    ("a", ["A", "b"], True),
+    ("a,b", ["a"], False),
+    ("a,b", ["a", "b"], True),
+    ("a,-b", ["a", "b"], False),
+    ("a,-b", ["a"], True),
+    ("a|b", ["b"], True),
+    ("a|b", ["c"], False),
+])
+def test_tag_param_matches(raw, tags, expected):
+    assert deck_module.tag_param_matches({"tags": tags}, raw) is expected
