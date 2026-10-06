@@ -370,6 +370,20 @@ class TestViewPage:
         assert '<li class="toc-h3"><a href="#roses-and-tulips">Roses and <code>tulips</code></a></li>' in left
         assert '<nav class="toc">' not in body
 
+    def test_side_column_lists_the_pages_linked_to(self, client, wiki_dir):
+        # "Links to": existing pages only, A–Z by title, not the page itself;
+        # only in the column (smaller screens have the links in the text).
+        write_page(wiki_dir, "garden", "# Garden\n\nSee [[Zinnias]], [[roses]], [[Missing]], [[Garden]] and [beds](beds).\n")
+        write_page(wiki_dir, "roses", "# Roses\n")
+        write_page(wiki_dir, "zinnias", "# Zinnias\n")
+        write_page(wiki_dir, "beds", "# Beds\n")
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]
+        out = right.split('<section class="backlinks" data-id="outlinks"><h3>Links to</h3>', 1)[1]
+        assert re.findall(r'<a href="/page/([^"]+)">([^<]+)</a>', out) == [
+            ("beds", "Beds"), ("roses", "Roses"), ("zinnias", "Zinnias")]
+        assert body.count("Links to") == 1
+
     def test_side_column_without_toc_is_empty(self, client, wiki_dir):
         # No [[toc]] and under three headings: no left column content; the
         # column stays, so the page keeps its place.

@@ -2078,7 +2078,7 @@ def view_page(slug):
 </article>
 <div class="page-foot">{bl_html}</div>
 </div>
-<aside class="rail rail-context" aria-label="Links">{rail_actions}{_rail_copy(bl_html)}</aside>
+<aside class="rail rail-context" aria-label="Links">{rail_actions}{_rail_copy(bl_html)}{_outlinks_html(slug, path)}</aside>
 </div>"""
     return shell(title, body, wide=True)
 
@@ -2118,6 +2118,22 @@ def _rail_toc_html(article_html: str) -> str:
 # "Back to top" under the TOC; leaf.js shows it once the page has scrolled
 # a screen down, and scrolls up without leaving a #hash in the URL.
 _RAIL_TOP = '<a class="rail-top" href="#" hidden>↑ Back to top</a>'
+
+
+def _outlinks_html(slug: str, path: Path) -> str:
+    """The right column's "Links to": the existing pages this page links to,
+    A–Z by title, so a page nothing links to still shows its connections."""
+    _, targets = _page_meta(path, slug)
+    pages = []
+    for target in targets - {slug}:
+        target_path = safe_path(target)
+        if target_path is not None and target_path.exists():
+            pages.append((_page_meta(target_path, target)[0], target))
+    if not pages:
+        return ""
+    items = "".join(f'<li><a href="/page/{html.escape(t)}">{html.escape(title)}</a></li>'
+                    for title, t in sorted(pages, key=lambda p: p[0].lower()))
+    return f'<section class="backlinks" data-id="outlinks"><h3>Links to</h3><ul>{items}</ul></section>'
 
 
 def _rail_copy(sections_html: str) -> str:
