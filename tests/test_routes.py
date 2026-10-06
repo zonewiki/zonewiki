@@ -417,6 +417,23 @@ class TestViewPage:
             assert 'class="roomy"' not in client.get(url, headers=HOST).get_data(as_text=True), url
 
 
+class TestPagePreview:
+    """/api/page-preview: a page for the search modal's preview pane."""
+
+    def test_rendered_without_ids_and_decks(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n[[deck list=garden]]\n\n```\n[[deck]]\n```\n")
+        data = client.get("/api/page-preview/garden", headers=HOST).get_json()
+        assert data["title"] == "Garden"
+        assert '<h2 data-pid="beds">Beds</h2>' in data["html"] and ' id="' not in data["html"]
+        assert "tasks-app" not in data["html"] and "<em>(deck)</em>" in data["html"]
+        assert "[[deck]]" in data["html"]    # code stays as written
+        assert "<h1" not in data["html"]
+
+    def test_missing_page(self, client, wiki_dir):
+        assert client.get("/api/page-preview/nowhere", headers=HOST).status_code == 404
+        assert client.get("/api/page-preview/../etc/passwd", headers=HOST).status_code in (400, 404)
+
+
 class TestNewTaskTags:
     """deck.new_task_tags: what a new task in an embed gets, as its "+ New"."""
 

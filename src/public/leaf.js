@@ -411,6 +411,67 @@ function setModalActive(idx) {
     items[modalActiveIdx].classList.add('active');
     items[modalActiveIdx].scrollIntoView({ block: 'nearest' });
   }
+  queueModalPreview(items[modalActiveIdx]);
+}
+
+// ── Search preview ───────────────────────────────────────────────────────────
+// On wide screens the search modal shows the highlighted result on the right:
+// a page from its section on (/api/page-preview, the matched words marked as
+// on the opened page), a task or other entry as its result card.
+const modalPreview = document.getElementById('modal-preview');
+const modalPreviewWide = matchMedia('(min-width: 1100px)');
+const modalPreviewCache = new Map();
+let modalPreviewTimer = null, modalPreviewFor = null;
+
+function queueModalPreview(item) {
+  if (!modalPreview || !modalPreviewWide.matches) return;
+  clearTimeout(modalPreviewTimer);
+  modalPreviewTimer = setTimeout(() => showModalPreview(item), 80);
+}
+
+async function showModalPreview(item) {
+  const link = item && (item.matches('a') ? item : item.querySelector('a[href]'));
+  const href = link?.getAttribute('href') || '';
+  if (href === modalPreviewFor) return;
+  modalPreviewFor = href;
+  if (!href) { modalPreview.replaceChildren(); return; }
+  const url = new URL(href, location.origin);
+  const m = url.pathname.match(/^\/page\/(.+)$/);
+  if (!m || m[1].startsWith('_')) {
+    // A task, the deck, a built-in page: the result card says enough.
+    const card = document.createElement('div');
+    card.className = 'search-preview-card';
+    card.append(...[...link.childNodes].map(n => n.cloneNode(true)));
+    modalPreview.replaceChildren(card);
+    return;
+  }
+  const slug = decodeURIComponent(m[1]);
+  let data = modalPreviewCache.get(slug);
+  if (!data) {
+    try {
+      const res = await fetch(`/api/page-preview/${encodeURI(slug)}`);
+      if (!res.ok) throw new Error(res.status);
+      data = await res.json();
+      modalPreviewCache.set(slug, data);
+    } catch (_) {
+      if (modalPreviewFor === href) modalPreview.replaceChildren();
+      return;
+    }
+  }
+  if (modalPreviewFor !== href) return;   // the highlight moved on meanwhile
+  const title = document.createElement('h2');
+  title.className = 'search-preview-title';
+  title.textContent = data.title;
+  const body = document.createElement('div');
+  body.className = 'page-content';
+  body.innerHTML = data.html;
+  modalPreview.replaceChildren(title, body);
+  const marks = markTerms(body, url.searchParams.getAll('hl').filter(Boolean));
+  const anchor = url.hash && body.querySelector(`[data-pid="${CSS.escape(decodeURIComponent(url.hash.slice(1)))}"]`);
+  const target = anchor || marks[0];
+  modalPreview.scrollTop = target
+    ? target.getBoundingClientRect().top - modalPreview.getBoundingClientRect().top + modalPreview.scrollTop - 12
+    : 0;
 }
 
 modalFilter?.addEventListener('input', applyModalControls);
@@ -625,8 +686,9 @@ async function fetchModalContentMatches(q) {
         `<span class="result-meta">${he(r.meta || '')}</span><p>${r.excerpt}</p></a>`
       ).join('') + more;
     modalCM.classList.remove('hidden');
-    // Re-clamp active index now that content cards are in the pool
-    if (modalActiveIdx >= 0) setModalActive(modalActiveIdx);
+    // Re-clamp active index now that content cards are in the pool; with no
+    // title match the first content match is highlighted (Enter opens it).
+    if (modalActiveIdx >= 0 || modalFilter.value.trim()) setModalActive(Math.max(0, modalActiveIdx));
   } catch (_) {}
 }
 
@@ -2118,11 +2180,18 @@ function initSearchHighlights() {
   const params = new URLSearchParams(location.search);
   const terms = params.getAll('hl').map(t => t.trim()).filter(Boolean);
   if (!article || !terms.length) return;
+  const marks = markTerms(article, terms);
+  if (!marks.length) return;
+  searchHighlightBar(article, params, marks, terms);
+}
 
+// Mark every whole-word occurrence of the terms in root (<mark class=
+// "search-hl">), skipping code and deck embeds; returns the marks in order.
+function markTerms(root, terms) {
   const escape = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   const alternatives = [...terms].sort((a, b) => b.length - a.length).map(escape).join('|');
   const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, 'giu');
-  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app')
       ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
   });
@@ -2147,8 +2216,10 @@ function initSearchHighlights() {
     frag.append(text.slice(at));
     node.replaceWith(frag);
   }
-  if (!marks.length) return;
+  return marks;
+}
 
+function searchHighlightBar(article, params, marks, terms) {
   const bar = document.createElement('div');
   bar.className = 'search-hl-bar';
   bar.setAttribute('role', 'status');

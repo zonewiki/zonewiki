@@ -393,3 +393,34 @@ def test_scratch_filter_uses_the_search(page, wiki):
     page.go_back()
     expect(page.locator("#scratch-filter")).to_have_value("runs late")
     expect(items.locator("a")).to_have_text(["Bob call"])
+
+
+def test_preview_pane_on_wide_screens(new_page, wiki):
+    # The highlighted result shows on the right: a page from its section on,
+    # the words marked; moving the highlight moves the preview.
+    wiki.write("garden", "# Garden\n\n## Beds\n\nSoil.\n\n" + "Filler text. " * 300 + "\n\n## Compost\n\nTurn the compost heap weekly.\n\n" + "More text. " * 300 + "\n")
+    wiki.write("kitchen", "# Kitchen\n\nCompost bin under the sink.\n")
+    page = new_page(viewport={"width": 1400, "height": 900})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("compost heap")
+    preview = page.locator("#modal-preview")
+    expect(preview.locator(".search-preview-title")).to_have_text("Garden")
+    expect(preview.locator("mark.search-hl").first).to_be_visible()   # scrolled to the section
+    heading = preview.locator('[data-pid="compost"]').bounding_box()
+    pane = preview.bounding_box()
+    assert pane["y"] <= heading["y"] < pane["y"] + pane["height"] / 2
+    assert page.locator("#compost").count() == 0                       # no ids of its own
+    page.keyboard.press("ArrowDown")
+    expect(preview.locator(".search-preview-title")).not_to_have_text("Garden")
+
+
+def test_no_preview_pane_on_narrow_screens(new_page, wiki):
+    wiki.write("garden", "# Garden\n\nCompost.\n")
+    page = new_page(viewport={"width": 1000, "height": 800})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("compost")
+    expect(page.locator(".search-result-card").first).to_be_visible()
+    expect(page.locator("#modal-preview")).to_be_hidden()
+    assert page.locator("#search-modal").bounding_box()["width"] <= 660

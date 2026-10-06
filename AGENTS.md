@@ -145,6 +145,7 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/new`                | Create `pages/<slug>.md` and redirect to it     |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
+| GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
@@ -371,7 +372,8 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
   - **Sort by** — Recently edited (default, so an empty query works as a quick switcher), Title A–Z, Title Z–A, Most linked. Applies while the query is empty; a sort picked by hand is remembered in `localStorage` (`leaf-search-sort`).
   - **Built-in pages** — `api_pages_list()` adds Deck (`href: /deck`), Scratch and (git only) Deleted Pages, marked `builtin`. Deck and Scratch are modules, linked from the module switcher, so the empty-query list leaves them out; Deleted Pages, also marked `special`, is pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`). Typing matches all three like any other entry; "Unlinked only" leaves them out.
   - **Unlinked only** checkbox — pages with zero incoming wikilinks, in the title list and in the Content matches: the modal sends `/api/search?…&unlinked=1`, and the server keeps only such pages, no tasks (`do_search(unlinked=True)`, same counts as the list's, `all_backlink_counts`) before it cuts the results to 15. Toggling it re-runs the content search.
-  - First match is highlighted; **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
+  - First match is highlighted (with no title match, the first content match once it arrives); **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
+  - **Preview pane** (≥1100px; `showModalPreview` in `leaf.js`): the modal widens (up to 1180px, 76vh) into results on the left and the highlighted result on the right. A page comes from `GET /api/page-preview/<slug>` (`{title, html}`: rendered without its H1, heading ids as `data-pid` so they don't clash with the page underneath, deck embeds as *(deck)*; cached per slug while the page is open), scrolled to the result's `#anchor` section, its `hl` words marked (`markTerms`, shared with the opened page's highlights). A task, the deck or a built-in page shows its result card. Updates 80ms after the highlight settles.
 
 ---
 

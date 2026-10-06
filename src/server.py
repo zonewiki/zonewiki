@@ -1726,6 +1726,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <ul id="modal-page-list" class="page-list"></ul>
       <div id="modal-content-matches" class="content-matches hidden"></div>
     </div>
+    <div id="modal-preview" class="search-preview" aria-live="polite"></div>
   </dialog>
   <dialog id="scratch-modal" class="scratch-modal">
     <p class="scratch-label">New scratch note</p>
@@ -1931,6 +1932,22 @@ def deleted_pages_route():
     else:
         body_inner = "<p>No deleted pages in history.</p>"
     return _index_page('_deleted', 'Deleted Pages', body_inner)
+
+
+@app.get("/api/page-preview/<path:slug>")
+def api_page_preview(slug):
+    """A page rendered for the search modal's preview pane: {title, html}.
+    Heading ids become data-pid (the page underneath has its own ids), and
+    deck embeds are left out (an app has no place in a preview)."""
+    path = safe_path(slug)
+    if path is None or not path.exists():
+        abort(404)
+    content = path.read_text(encoding="utf-8")
+    masked, stash = _mask_code(content)
+    masked = deck_module._DECK_RE.sub("*(deck)*", masked)
+    html_out = render_md(strip_h1(_unmask_code(masked, stash)))
+    html_out = re.sub(r'(<h[1-6]\b[^>]*?) id="', r'\1 data-pid="', html_out)
+    return jsonify({"title": page_title(content, slug), "html": html_out})
 
 
 @app.get("/page/_raw")

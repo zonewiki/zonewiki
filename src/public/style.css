@@ -744,6 +744,26 @@ main {
   margin: 12vh auto auto;
 }
 
+/* The preview pane (showModalPreview in leaf.js): wide screens only, the
+   modal then wider, results on the left, the highlighted one on the right. */
+.search-preview { display: none; }
+@media (min-width: 1100px) {
+  .search-modal { width: min(1180px, 94vw); height: 76vh; max-height: none; }
+  .search-modal[open] {
+    display: grid; gap: 0 1.25rem;
+    grid-template: auto minmax(0, 1fr) / minmax(0, 32rem) minmax(0, 1fr);
+  }
+  .search-modal-controls { grid-column: 1 / -1; }
+  .search-preview {
+    display: block; overflow-y: auto; min-width: 0;
+    border-left: 1px solid var(--border); padding: .25rem 0 1rem 1.25rem;
+  }
+  .search-preview .page-content { font-size: .9rem; }
+  .search-preview-title { font-size: 1.3rem; margin: 0 0 .75rem; }
+  .search-preview-card { display: flex; flex-direction: column; gap: .4rem; font-size: .9rem; }
+  .search-preview-card .result-title { font-weight: 600; font-size: 1.05rem; }
+}
+
 .search-modal-controls {
   display: flex;
   gap: .5rem;
