@@ -418,6 +418,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
 | **e** | page view | Navigate to edit mode |
+| **]** / **[** | page view | Next / previous section (`##`/`###`, not a deck embed's; `jumpSection` in `leaf.js`): scrolls it to the top and puts its anchor in the URL; the current one is the last heading scrolled past, as the side TOC marks it; `[` before the first goes to the top |
 | **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |

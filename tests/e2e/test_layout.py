@@ -499,3 +499,24 @@ def test_page_actions_in_the_right_column_once_scrolled(new_page, wiki):
     page.evaluate("window.scrollTo(0, 3000)")
     expect(box).to_be_visible()
     expect(box.get_by_role("button", name="Present")).to_be_hidden()
+
+
+def test_section_jump_keys(page, wiki):
+    # ] / [ step through the page's sections (any width), the anchor in the
+    # URL; the side TOC follows. At the ends nothing happens.
+    _side_wiki(wiki)
+    page.goto("/page/release")
+    top = lambda hid: page.evaluate(f"document.getElementById('{hid}').getBoundingClientRect().top")
+    page.keyboard.press("]")
+    assert abs(top("part-1") - 40) < 2 and page.url.endswith("#part-1")
+    page.keyboard.press("]")
+    page.keyboard.press("]")
+    assert abs(top("part-3") - 40) < 2 and page.url.endswith("#part-3")
+    page.keyboard.press("[")
+    assert abs(top("part-2") - 40) < 2 and page.url.endswith("#part-2")
+    page.keyboard.press("[")
+    page.keyboard.press("[")                     # before the first: the top
+    assert page.evaluate("window.scrollY") == 0
+    for _ in range(10):
+        page.keyboard.press("]")
+    assert page.url.endswith("#code-and-tables")  # stops at the last
