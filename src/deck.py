@@ -19,7 +19,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, Response, abort, jsonify, request
 
 import search
 
@@ -1255,6 +1255,15 @@ def _year_arg() -> str:
     if not re.fullmatch(r"\d{4}", year):
         abort(400, description="year must be YYYY")
     return year
+
+
+@bp.get("/api/deck/headless")
+def api_headless():
+    """A hidden deck app, for a page without one that wants its edit modal
+    (leaf.js openHomeTask: c t, the New task button). The HTML without its
+    <script> tags; the page loads deck-core.js and deck.js itself."""
+    html_out = re.sub(r"<script\b[^>]*></script>", "", _build_deck_embed({}, headless=True))
+    return Response(html_out, mimetype="text/html")
 
 
 @bp.get("/api/deck/completed")

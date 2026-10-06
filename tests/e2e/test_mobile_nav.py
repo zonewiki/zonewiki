@@ -182,17 +182,45 @@ def _home(wiki, embed="[[deck list=task view=focus home=1]]"):
     wiki.write("garden", "# Garden\n\nBeds.\n")
 
 
-def test_new_task_button_opens_the_home_deck(page, wiki):
-    # A page without a deck app: the home page opens with the modal, so its
-    # "+ New" applies (its tags, Focus's start today).
+def test_new_task_button_stays_on_the_page(page, wiki):
+    # A page without a deck app loads a hidden one: the modal opens right
+    # there, with the home's tags and start (Focus: today); a toast says
+    # where the task went.
     _home(wiki)
     page.goto("/page/garden")
     page.locator(".top-task").click()
-    page.wait_for_url(re.compile(r"/page/deck(\?.*)?$"))
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
+    assert page.url.endswith("/page/garden")
     expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
     expect(modal.locator("[id^=task-edit-start]")).to_have_value(date.today().isoformat())
+    modal.locator("[id^=task-edit-title]").fill("Order seeds")
+    page.keyboard.press("Enter")
+    expect(page.locator(".task-undo-toast")).to_contain_text("Added “Order seeds” to your deck")
+    tasks = page.request.get("/api/deck").json()
+    assert [(t["title"], t["tags"], t["start_date"]) for t in tasks] == [("Order seeds", ["task"], date.today().isoformat())]
+    # A second time doesn't load the deck again.
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    expect(modal).to_be_visible()
+    expect(page.locator(".tasks-app[data-headless]")).to_have_count(1)
+
+
+def test_new_task_start_follows_the_homes_view(page, wiki):
+    _home(wiki, "[[deck list=task view=open home=1]]")
+    page.goto("/page/garden")
+    page.locator(".top-task").click()
+    expect(page.locator(".task-edit-modal[open] [id^=task-edit-start]")).to_have_value("")
+
+
+def test_new_task_falls_back_to_the_home_page(page, wiki):
+    # Should the hidden deck fail to load, the home page opens with the modal.
+    _home(wiki)
+    page.route("**/api/deck/headless", lambda route: route.fulfill(status=500, body="no"))
+    page.goto("/page/garden")
+    page.locator(".top-task").click()
+    page.wait_for_url(re.compile(r"/page/deck(\?.*)?$"))
+    expect(page.locator(".task-edit-modal[open]")).to_be_visible()
 
 
 def test_new_task_button_on_the_home_page(page, wiki):
@@ -224,9 +252,9 @@ def test_new_task_without_a_home_has_no_tags(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("c")
     page.keyboard.press("t")
-    page.wait_for_url(re.compile(r"/deck(\?.*)?$"))
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
+    assert page.url.endswith("/page/garden")
     expect(modal.locator(".tag-chip")).to_have_count(0)
 
 

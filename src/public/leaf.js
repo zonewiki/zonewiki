@@ -638,15 +638,53 @@ async function fetchModalContentMatches(q) {
 // modal, with the tags and keep the home gives new tasks (the server puts
 // them on <body>: data-deck-tags, data-deck-keep; none without a home);
 // elsewhere the home page (or /deck) opens with the modal.
-function openHomeTask() {
+// A page without a deck app loads a hidden one first (/api/deck/headless,
+// then deck-core.js and deck.js), so you stay on the page; a toast says
+// where the task went. Should that fail, the home page opens instead.
+async function openHomeTask() {
   const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
   if (homeAdd) { homeAdd.click(); return; }
-  const { deckTags = '', deckKeep } = document.body.dataset;
-  if (typeof window.openDeckEdit === 'function') {
-    window.openDeckEdit(null, { tags: deckTags, keep: deckKeep === '1' });
-    return;
+  const { deckTags = '', deckKeep, deckToday } = document.body.dataset;
+  // The start date as the home's "+ New" gives it (today on Focus); without
+  // a home, as /deck's Focus does.
+  const homeless = !('deckTags' in document.body.dataset);
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const opts = { tags: deckTags, keep: deckKeep === '1', start_date: homeless || deckToday === '1' ? today : null };
+  if (typeof window.openDeckEdit !== 'function') {
+    try {
+      await loadHeadlessDeck();
+    } catch (err) {
+      window.location.href = deckHomeHref() + '?new=1';
+      return;
+    }
+    opts.onCreated = task => {
+      if (task) showCheckboxToast(`Added “${task.title}” to your deck`);
+    };
   }
-  window.location.href = deckHomeHref() + '?new=1';
+  window.openDeckEdit(null, opts);
+}
+
+let headlessDeck = null;
+function loadHeadlessDeck() {
+  const script = src => new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(src));
+    document.body.appendChild(el);
+  });
+  headlessDeck ??= (async () => {
+    const res = await fetch('/api/deck/headless');
+    if (!res.ok) throw new Error(res.status);
+    const holder = document.createElement('div');
+    holder.innerHTML = await res.text();
+    document.body.append(...holder.childNodes);
+    if (!window.DeckCore) await script('/public/deck-core.js');
+    await script('/public/deck.js');
+    if (typeof window.openDeckEdit !== 'function') throw new Error('no deck');
+  })().catch(err => { headlessDeck = null; throw err; });
+  return headlessDeck;
 }
 
 // Where the Deck module links go: the deck's home page, else /deck.

@@ -1682,6 +1682,11 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
         body_attrs += f' data-deck-tags="{html.escape(",".join(deck_module.new_task_tags(home["params"])))}"'
         if deck_module.is_true(home["params"].get("keep")):
             body_attrs += ' data-deck-keep="1"'
+        # Its "+ New" on Focus (its view, or the default one) starts the
+        # task today; elsewhere a new task has no start date.
+        raw_view = (home["params"].get("view") or home["params"].get("filter", "")).strip().lower()
+        if deck_module._FILTER_ALIASES.get(raw_view, raw_view) in ("", "focus"):
+            body_attrs += ' data-deck-today="1"'
     show_actions = action_buttons and not editor
     safe_title = html.escape(title)
     extra_head_html = extra_head if extra_head else ""

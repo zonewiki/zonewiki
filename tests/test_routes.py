@@ -149,10 +149,10 @@ class TestViewPage:
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._deck_links(body) == ["/page/deck", "/page/deck"]
         home = client.get("/page/deck", headers=HOST).get_data(as_text=True)
-        assert '<body data-module="deck" data-deck-tags="task">' in home
+        assert '<body data-module="deck" data-deck-tags="task" data-deck-today="1">' in home
         assert 'data-home="1"' in home   # the embed New clicks
         # /deck stays the view of every task, in the Deck module.
-        assert '<body data-module="deck" data-deck-tags="task">' in client.get("/deck", headers=HOST).get_data(as_text=True)
+        assert '<body data-module="deck" data-deck-tags="task" data-deck-today="1">' in client.get("/deck", headers=HOST).get_data(as_text=True)
 
     def test_deck_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
         write_page(wiki_dir, "aaa", "# A\n\n```\n[[deck home=1]]\n```\n")
@@ -205,6 +205,17 @@ class TestViewPage:
         for url in ("/page/my-page", "/edit/my-page", "/deck"):
             tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
             assert 'data-deck-tags="task,work"' in tag and 'data-deck-keep="1"' in tag, url
+            assert 'data-deck-today="1"' in tag, url   # the default view, Focus: start today
+        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task view=open home=1]]\n")
+        tag = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
+        assert 'data-deck-tags="task"' in tag and "data-deck-today" not in tag and "data-deck-keep" not in tag
+
+    def test_headless_deck_for_pages_without_one(self, client, wiki_dir):
+        # c t on a page without a deck app loads this hidden one (scripts
+        # left out: the page loads them).
+        body = client.get("/api/deck/headless", headers=HOST).get_data(as_text=True)
+        assert 'data-headless="1"' in body and 'id="task-edit-modal"' in body
+        assert "<script" not in body
 
     def test_pages_load_nothing_from_other_hosts(self, client, wiki_dir):
         # No CDN: highlight.js is vendored and served from /public/.
