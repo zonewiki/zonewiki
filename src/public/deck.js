@@ -1470,6 +1470,7 @@
 
   function render() {
     syncCompletedLink();
+    if (appEl) appEl.dataset.view = activeFilter;
 
     const filtered = filterTasks();
 
@@ -1601,7 +1602,10 @@
         // target (styled tall enough to hit). Nothing grows when a drag
         // starts, so the section you aim at never moves under the pointer.
         const body = s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
-        return header + body;
+        // Each section in its own column element: on a wide deck the
+        // sections sit side by side as tiles (CSS), on a narrow one they
+        // stack as before. Heading and cards stay siblings (boardDivider).
+        return `<li class="board-col"><ul class="board-col-list">${header}${body}</ul></li>`;
       }).join('');
       listEl.innerHTML = html;
       wireListHandlers();

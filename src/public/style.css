@@ -240,6 +240,12 @@ main {
   body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions) {
     max-width: 46rem; margin-inline: auto;
   }
+  /* The deck's Plan board on /deck may use the whole top row's width: more
+     day tiles side by side; tabs and filter stay. (Not on a page view: the
+     side columns are there.) */
+  main.roomy .tasks-app[data-view="due"] .tasks-list {
+    width: min(100vw - 7rem, 94rem); position: relative; left: 50%; translate: -50% 0;
+  }
   /* Views of lists (the deck, scratch) use the whole middle column; the
      scratch list runs in two columns, newest first down the left. Search
      results stay one ranked column at reading width. */
@@ -1896,6 +1902,33 @@ div.chip-input > input {
   border-style: dashed;
 }
 .task-item + .board-day-divider.board-day--empty { margin-top: 1rem; }
+/* Each section is a column element (.board-col, deck.js). On a narrow deck
+   they stack as one list: the same spacing as headings in a flat list. On a
+   wide one (the list is a size container; from 53rem, three tiles) they are
+   tiles side by side, as many 17rem columns as fit, filled row by row. */
+.tasks-app .tasks-list:has(> .board-col) {
+  container-type: inline-size;
+  /* One column below 53rem (three tiles): (53rem - 100%) * 999 is then
+     huge, so a column is the full width; above, it is negative, so 17rem. */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(max(17rem, min(100%, (53rem - 100%) * 999)), 1fr));
+  column-gap: 1rem; align-items: start;
+}
+/* .tasks-app raises these above `.page-content ul`/`li` (list margins). */
+.tasks-app .board-col-list { list-style: none; margin: 0; padding: 0; }
+.tasks-app .board-col { margin-bottom: 0; }
+/* Grid items don't collapse margins: a section's last item would add its
+   own to the gap before the next section. */
+.tasks-app .board-col-list > li:last-child { margin-bottom: 0; }
+.board-col .board-day-divider { margin-top: 0; }
+.board-col + .board-col { margin-top: 1.6rem; }
+.board-col + .board-col:has(.board-day--empty) { margin-top: .35rem; }
+.board-col:not(:has(.board-day--empty)) + .board-col:has(.board-day--empty) { margin-top: 1rem; }
+@container (min-width: 53rem) {
+  .board-col + .board-col, .board-col + .board-col:has(.board-day--empty),
+  .board-col:not(:has(.board-day--empty)) + .board-col:has(.board-day--empty) { margin-top: 0; }
+  .tasks-app .board-col { margin-bottom: 1.25rem; }
+  .board-col .board-day-divider.board-day--empty { border-radius: 4px; }
+}
 .board-day--empty .board-day-count { opacity: .5; }
 @media (pointer: coarse) {
   .board-day-divider.board-day--empty { min-height: 2.5rem; }
