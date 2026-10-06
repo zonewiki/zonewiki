@@ -418,3 +418,20 @@ def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
         h1 = page.locator("h1").first.bounding_box()
         rows.append((round(sw["x"]), round(ta["x"] + ta["width"]), round(h1["x"])))
     assert len(set(rows)) == 1, rows
+
+
+def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
+    # Regression: the badges, fixed at the top left, covered the start of
+    # the editor's breadcrumb (the logo and the first crumb).
+    wiki.write("draft", "# Draft\n\nNot committed yet.\n")   # → uncommitted badge
+    page.set_viewport_size({"width": 1600, "height": 800})
+    page.goto("/edit/draft")
+    badge = page.locator("#uncommitted-badge")
+    expect(badge).to_be_visible()
+    b = badge.bounding_box()
+    for sel in (".editor-pane .breadcrumb > *", ".editor-toolbar button, .editor-toolbar a", "#editor-textarea"):
+        for el in page.locator(sel).all():
+            box = el.bounding_box()
+            if box:
+                assert (b["x"] + b["width"] <= box["x"] or box["x"] + box["width"] <= b["x"] or
+                        b["y"] + b["height"] <= box["y"] or box["y"] + box["height"] <= b["y"]), sel

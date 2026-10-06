@@ -1120,6 +1120,11 @@ kbd {
   align-items: center;
   gap: .5rem;
 }
+/* The editor's breadcrumb starts at the window's left edge, where the
+   badges would cover it; its right end is free. */
+@media (min-width: 641px) {
+  body.editor-page .top-badges { left: auto; right: .6rem; }
+}
 
 .remote-badge {
   font-size: .9rem;
