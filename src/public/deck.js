@@ -393,7 +393,11 @@
   // ?view= / [[deck view=…]] pick the tab; ?filter= is the old name, still accepted.
   const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
   const embedFilter = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
-  const initNew = appEl?.dataset.initNew === '1' || urlParams.has('new');
+  // ?new=1 opens the new-task modal in one embed: the deck's home if the
+  // page has it (as the New buttons do), else the first.
+  const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
+    || document.querySelector('.tasks-app:not([data-headless])');
+  const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl === newTarget);
   // The year Completed shows: '' is this year, an earlier one ('2025', from
   // ?year= or the year switcher) comes from that year's archive.
   const thisYear = String(new Date().getFullYear());

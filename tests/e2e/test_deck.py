@@ -1577,3 +1577,19 @@ def test_date_picker_shortcuts_move_the_start_date(page, wiki):
     assert quick.evaluate_all("bs => bs.every(b => b.scrollWidth <= b.clientWidth)")
     assert len(set(quick.evaluate_all("bs => bs.map(b => Math.round(b.getBoundingClientRect().top))"))) == 1
 
+
+
+def test_new_param_opens_one_modal_on_a_page_with_several_decks(page, wiki):
+    # Regression: the first embed always took ?new=1 (and removed it from
+    # the URL), even on a page with the deck's home further down. The home
+    # embed opens it, as the New buttons do, else the first one.
+    wiki.write("decks", "# Decks\n\n[[deck list=shop]]\n\n[[deck list=task home=1]]\n")
+    page.goto("/page/decks?new=1")
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_have_count(1)
+    expect(modal.locator(".tag-chip")).to_contain_text("task")
+    page.keyboard.press("Escape")
+    wiki.write("decks", "# Decks\n\n[[deck list=shop]]\n\n[[deck list=task]]\n")
+    page.goto("/page/decks?new=1")
+    expect(modal).to_have_count(1)
+    expect(modal.locator(".tag-chip")).to_contain_text("shop")
