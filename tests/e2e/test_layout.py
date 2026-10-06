@@ -408,16 +408,22 @@ def test_no_side_columns_below_1320(new_page, wiki):
 def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
     # Regression: only page views were wide, so on Scratch or the Deck the
     # switcher and the top actions jumped inward. Every view shares the top
-    # row; the text column sits in the same place on each.
+    # row. Content is centred in it: text at its reading width, the list
+    # views (deck, scratch) in the whole middle column, like a deck embed.
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
-    rows = []
-    for url in ("/page/release", "/page/_scratch", "/deck"):
+    rows, centres = [], []
+    for url in ("/page/release", "/page/_scratch", "/deck", "/search?q=part"):
         page.goto(url)
-        sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
+        ta = page.locator(".top-actions").bounding_box()
         h1 = page.locator("h1").first.bounding_box()
-        rows.append((round(sw["x"]), round(ta["x"] + ta["width"]), round(h1["x"])))
+        content = page.locator(".page-header, .search-results").first.bounding_box()
+        if url != "/search?q=part":
+            sw = page.locator(".breadcrumb .module-switch").bounding_box()
+            rows.append((round(sw["x"]), round(ta["x"] + ta["width"])))
+        centres.append(round(content["x"] + content["width"] / 2))
     assert len(set(rows)) == 1, rows
+    assert max(centres) - min(centres) <= 1, centres
 
 
 def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
@@ -544,3 +550,18 @@ def test_wide_images_and_deck_embeds_use_the_middle_column(new_page, wiki):
     assert inline["width"] <= text["width"] + 1
     deck = page.locator(".tasks-app").bounding_box()
     assert abs(deck["width"] - col["width"]) < 1 and abs(deck["x"] - col["x"]) < 1
+
+
+def test_deck_and_scratch_use_the_middle_column(new_page, wiki):
+    for i in range(6):
+        wiki.write(f"2026-10-0{i + 1}_09-00-00_note-{i}", f"# Note {i}\n")
+    page = new_page(viewport=BIG)
+    page.goto("/deck")
+    assert abs(page.locator(".tasks-app").bounding_box()["width"] - 60 * 16) < 1
+    page.goto("/page/_scratch")
+    items = page.locator(".notes-list li")
+    first, last = items.first.bounding_box(), items.last.bounding_box()
+    assert last["x"] > first["x"] + first["width"]        # two columns
+    expect(items.first).to_contain_text("Note 5")          # newest first, top left
+    page.goto("/search?q=note")
+    assert page.locator(".search-results").bounding_box()["width"] <= 46 * 16 + 1

@@ -187,7 +187,7 @@ class TestViewPage:
         for url in ("/page/my-page", "/deck", "/page/_scratch"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
-            assert len(top) == 2 and top[0].strip(' >\n').replace('class="wide"', '').strip() == "", url
+            assert len(top) == 2 and re.sub(r'class="(wide|roomy)"', '', top[0]).strip(' >\n') == "", url
             buttons = re.findall(r'<button type="button" class="top-(\w+)" aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
             assert buttons == [("scratch", "New scratch note", "New scratch note (c s)"),
@@ -398,6 +398,12 @@ class TestViewPage:
         write_page(wiki_dir, "garden", "# Garden\n")
         for url in ("/deck", "/page/_scratch", "/search?q=garden", "/edit/garden"):
             assert 'class="wide"' not in client.get(url, headers=HOST).get_data(as_text=True), url
+        # Views of lists may use the wider middle column; search, a ranked
+        # list of excerpts, and the editor don't.
+        for url in ("/deck", "/page/_scratch"):
+            assert '<main class="roomy">' in client.get(url, headers=HOST).get_data(as_text=True), url
+        for url in ("/search?q=garden", "/edit/garden", "/page/garden"):
+            assert 'class="roomy"' not in client.get(url, headers=HOST).get_data(as_text=True), url
 
 
 class TestNewTaskTags:

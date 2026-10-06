@@ -222,6 +222,12 @@ main {
   body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions) {
     max-width: 46rem; margin-inline: auto;
   }
+  /* Views of lists (the deck, scratch) use the whole middle column; the
+     scratch list runs in two columns, newest first down the left. Search
+     results stay one ranked column at reading width. */
+  body:not(.editor-page) main.roomy > :not(.breadcrumb, .top-actions) { max-width: 60rem; }
+  main.roomy .notes-list { columns: 2; column-gap: 3rem; }
+  main.roomy .notes-list li { break-inside: avoid; }
   .page-grid {
     display: grid;
     grid-template-columns: 14rem minmax(0, 60rem) 14rem;
