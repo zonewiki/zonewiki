@@ -1640,8 +1640,7 @@ def test_compact_switch_one_line_per_task(page, wiki):
     box = passport.bounding_box()
     assert box["height"] < 45 < full
     expect(passport.locator(".task-desc")).to_be_hidden()
-    expect(passport.locator(".task-notes-mark")).to_be_visible()
-    for sel in (".task-title", ".task-tags-right .task-tag >> nth=0", ".task-notes-mark", ".task-due"):
+    for sel in (".task-title", ".task-tags-right .task-tag >> nth=0", ".task-due"):
         b = passport.locator(sel).bounding_box()
         assert box["y"] <= b["y"] and b["y"] + b["height"] <= box["y"] + box["height"], sel
     # Remembered for this deck; v switches back.
@@ -1703,11 +1702,20 @@ def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     _compact_tasks(phone)
     phone.goto("/deck?view=open")
+    tid = task_by_title(phone, "Renew passport")["id"]
+    phone.request.put(f"/api/deck/{tid}", data={"rec_type": "yearly", "rec_interval": 10})
+    phone.request.post(f"/api/deck/{tid}/comments", data={"text": "Shop closes at 6"})
+    phone.request.post("/api/deck", data={"title": "Review the canary dashboards carefully", "start_date": tomorrow()})
+    phone.reload()
     phone.locator(".deck-density-btn").tap()
     passport = card(phone, "Renew passport")
     box = passport.bounding_box()
     assert box["height"] >= 44                                   # finger-sized
     assert phone.evaluate("document.documentElement.scrollWidth") <= 390
+    # Regression: with markers (↻ 💬) or a "📅 Tomorrow" the dates were
+    # cut at the line's end; every line's meta fits.
+    for item in phone.locator(".task-item").all():
+        assert item.evaluate("el => { const m = el.querySelector('.task-meta'); return !m || m.scrollWidth <= m.clientWidth + 1; }"), item.inner_text()
     due = passport.locator(".task-due")
     d = due.bounding_box()
     assert due.evaluate("el => el.scrollWidth <= el.clientWidth + 1") and d["x"] + d["width"] <= box["x"] + box["width"]
@@ -1757,9 +1765,6 @@ def test_compact_enter_expands_then_opens(page, wiki):
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
     page.keyboard.press("j")
     expect(page.locator(".task-expanded")).to_have_count(0)
-    # The 📝 marker expands its task.
-    card(page, "Renew passport").locator(".task-notes-mark").click()
-    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
 
 
 def test_full_cards_enter_opens_the_modal_at_once(page, wiki):
@@ -1795,3 +1800,17 @@ def test_deck_keys_work_right_after_the_modal_closes(page, wiki):
     expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
     page.keyboard.press("j")
     expect(card(page, "Alpha")).to_have_class(re.compile(r"\btask-selected\b"))
+
+
+def test_compact_tags_follow_the_title(page, wiki):
+    # In the line the tags (pills, as on full cards) come right after the
+    # title; dates and markers sit at the right end.
+    _compact_tasks(page)
+    page.goto("/deck?view=open")
+    page.locator(".deck-density-btn").click()
+    passport = card(page, "Renew passport")
+    expect(passport.locator(".task-tag").first).to_have_text("#personal")
+    title, first, due = (passport.locator(sel).first.bounding_box() for sel in (".task-title", ".task-tag", ".task-due"))
+    assert first["x"] - (title["x"] + title["width"]) < 30
+    row = passport.bounding_box()
+    assert due["x"] + due["width"] > row["x"] + row["width"] - 90

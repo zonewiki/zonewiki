@@ -178,14 +178,6 @@
     if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
   });
   listEl.addEventListener('click', e => {
-    // 📝 (compact): show the task's details in place.
-    const mark = e.target.closest('.task-notes-mark');
-    if (mark && compact) {
-      const id = mark.closest('.task-item').dataset.id;
-      setSelected(id);
-      setExpanded(id);
-      return;
-    }
     if (lastPointerType !== 'touch') return;
     const card = e.target.closest('.task-item');
     if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
@@ -392,7 +384,7 @@
   // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
   const initKeep = appEl?.dataset.initKeep === '1';
   // Compact: one line per task (title, then tags, markers and dates; notes
-  // hidden behind 📝). Per deck, remembered in this browser; an embed with
+  // hidden; Enter or a tap expands a task). Per deck, remembered in this browser; an embed with
   // compact=1 starts so. The density button and v switch it.
   // Per tab: Open (and Completed), long lists to scan, are compact unless
   // switched; Focus and Plan, where a task's details matter, are full cards.
@@ -423,7 +415,7 @@
     }
   }
   // In compact view one task at a time can be expanded to its full card
-  // (Enter, a tap, its 📝): the details in place. Moving the selection or
+  // (Enter, a tap): the details in place. Moving the selection or
   // Esc collapses it; Enter on it opens the modal.
   let expandedId = null;
   function setExpanded(id) {
@@ -1615,16 +1607,11 @@
         : '';
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
-      // Compact cards hide the notes; this marker (shown only there) says
-      // there are some, with their start as its tooltip; a click expands
-      // the task to show them.
-      const notesMark = task.description
-        ? `<span class="task-notes-mark" role="button" title="${esc(task.description.slice(0, 200))}" aria-label="Show notes">📝</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
         task.keep || task.completed_at || commentsDisplay);
       const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${notesMark}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
