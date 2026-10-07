@@ -178,9 +178,24 @@
     if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
   });
   listEl.addEventListener('click', e => {
+    // 📝 (compact): show the task's details in place.
+    const mark = e.target.closest('.task-notes-mark');
+    if (mark && compact) {
+      const id = mark.closest('.task-item').dataset.id;
+      setSelected(id);
+      setExpanded(id);
+      return;
+    }
     if (lastPointerType !== 'touch') return;
     const card = e.target.closest('.task-item');
     if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
+    // Compact: the first tap expands the task, a tap on the expanded one
+    // opens the modal.
+    if (compact && expandedId !== card.dataset.id) {
+      setSelected(card.dataset.id);
+      setExpanded(card.dataset.id);
+      return;
+    }
     openEditModal(card.dataset.id);
   });
 
@@ -395,7 +410,17 @@
       densityBtn.setAttribute('aria-label', label);
     }
   }
+  // In compact view one task at a time can be expanded to its full card
+  // (Enter, a tap, its 📝): the details in place. Moving the selection or
+  // Esc collapses it; Enter on it opens the modal.
+  let expandedId = null;
+  function setExpanded(id) {
+    expandedId = id;
+    listEl?.querySelectorAll('.task-item').forEach(el =>
+      el.classList.toggle('task-expanded', el.dataset.id === id));
+  }
   function toggleCompact() {
+    expandedId = null;
     compact = !compact;
     try { localStorage.setItem(densityKey, compact ? '1' : '0'); } catch (_) {}
     applyCompact();
@@ -1225,6 +1250,7 @@
     listEl.querySelectorAll('.task-item').forEach(el => {
       el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
     });
+    if (expandedId && !(selectedIds.size === 1 && selectedIds.has(expandedId))) setExpanded(null);
   }
 
   function setSelected(id) {
@@ -1579,9 +1605,10 @@
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
       // Compact cards hide the notes; this marker (shown only there) says
-      // there are some, with their start as its tooltip.
+      // there are some, with their start as its tooltip; a click expands
+      // the task to show them.
       const notesMark = task.description
-        ? `<span class="task-notes-mark" title="${esc(task.description.slice(0, 200))}" aria-label="Has notes">📝</span>` : '';
+        ? `<span class="task-notes-mark" role="button" title="${esc(task.description.slice(0, 200))}" aria-label="Show notes">📝</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
         task.keep || task.completed_at || commentsDisplay);
       const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
@@ -1596,7 +1623,7 @@
         : '';
       const dragAttr = draggable ? 'draggable="true" data-drag' : '';
       return `
-        <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}" data-id="${task.id}" ${dragAttr}>
+        <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' : ''}" data-id="${task.id}" ${dragAttr}>
           <label class="task-checkbox">
             <input type="checkbox" ${checked} data-id="${task.id}">
           </label>
@@ -3029,7 +3056,9 @@
       }
     } else if (e.key === 'Enter' && selectedId) {
       e.preventDefault();
-      openEditModal(selectedId);
+      // Compact: the first Enter expands the task, the next opens the modal.
+      if (compact && selectedIds.size === 1 && expandedId !== selectedId) setExpanded(selectedId);
+      else openEditModal(selectedId);
     } else if (e.key === 'Delete' && selectedIds.size) {
       e.preventDefault();
       await deleteWithUndo([...selectedIds], () => {
@@ -3046,6 +3075,8 @@
       const ids = [...selectedIds];
       const removing = e.key === 'T';
       openBulkTagModal(ids, removing);
+    } else if (e.key === 'Escape' && expandedId) {
+      setExpanded(null);   // collapse first; the next Esc clears the selection
     } else if (e.key === 'Escape') {
       selectedId = null;
       selectedIds.clear();

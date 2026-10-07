@@ -1686,6 +1686,67 @@ def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
             assert b["x"] + b["width"] <= t["x"] + t["width"] + 0.5 and b["y"] + b["height"] <= t["y"] + t["height"] + 0.5
 
 
+# ── Compact: expand a task in place ──────────────────────────────────────────
+
+def _expand_setup(page):
+    page.request.post("/api/deck", data={"title": "Renew passport", "tags": "admin", "due_date": "2026-11-15",
+                                          "description": "At the shop.\n- [ ] old passport"})
+    page.request.post("/api/deck", data={"title": "Plain"})
+    page.goto("/deck?view=open")
+    page.locator(".deck-density-btn").click()
+
+
+def test_compact_enter_expands_then_opens(page, wiki):
+    _expand_setup(page)
+    passport = card(page, "Renew passport")
+    one_line = passport.bounding_box()["height"]
+    expect(passport.locator(".task-desc")).to_be_hidden()
+    passport.locator(".task-content").click()                      # select
+    page.keyboard.press("Enter")                                    # expand
+    expect(passport).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(passport.locator(".task-desc")).to_be_visible()
+    assert passport.bounding_box()["height"] > one_line + 30
+    expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
+    # The notes' checkboxes work; the save re-renders, the task stays open.
+    passport.locator("input[data-desc-check]").check()
+    wait_for_field(page, "Renew passport", "description", "At the shop.\n- [x] old passport")
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    page.keyboard.press("Enter")                                    # then the modal
+    expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Renew passport")
+    page.keyboard.press("Escape")
+    # Esc collapses (the selection stays); moving the selection collapses too.
+    page.keyboard.press("Escape")
+    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-selected\b"))
+    page.keyboard.press("Enter")
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    page.keyboard.press("j")
+    expect(page.locator(".task-expanded")).to_have_count(0)
+    # The 📝 marker expands its task.
+    card(page, "Renew passport").locator(".task-notes-mark").click()
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+
+
+def test_full_cards_enter_opens_the_modal_at_once(page, wiki):
+    page.request.post("/api/deck", data={"title": "Plain"})
+    page.goto("/deck?view=open")
+    card(page, "Plain").locator(".task-content").click()
+    page.keyboard.press("Enter")
+    expect(page.locator(".task-edit-modal[open]")).to_be_visible()
+
+
+def test_compact_tap_expands_then_opens(new_page, wiki):
+    from conftest import TOUCH_PHONE
+    phone = new_page(**TOUCH_PHONE)
+    _expand_setup(phone)
+    passport = card(phone, "Renew passport")
+    passport.locator(".task-content").tap()
+    expect(passport).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
+    passport.locator(".task-content").tap()
+    expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
+
+
 def test_deck_keys_work_right_after_the_modal_closes(page, wiki):
     # Regression: focus stayed on the closed modal's title field, so j/k,
     # Enter and Esc did nothing until a click somewhere.

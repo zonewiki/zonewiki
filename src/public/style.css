@@ -2063,6 +2063,23 @@ div.chip-input > input {
 .deck-compact .task-desc, .deck-compact .task-date-empty { display: none; }
 .deck-compact .task-notes-mark { display: inline; }
 @media (pointer: coarse) { .tasks-app.deck-compact .task-item { min-height: 2.75rem; } }
+.deck-compact .task-notes-mark { cursor: pointer; }
+/* The expanded task (Enter, a tap, its 📝): its full card again, in place. */
+.tasks-app.deck-compact .task-item.task-expanded {
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "check title actions" ". meta meta" ". desc desc";
+  align-items: start; padding-block: .4rem;
+}
+.deck-compact .task-expanded .task-content { white-space: normal; overflow: visible; }
+.deck-compact .task-expanded .task-meta {
+  flex-wrap: wrap; margin: .2rem 0 0; padding-top: .2rem; overflow: visible;
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+.deck-compact .task-expanded .task-tags-right { flex-wrap: wrap; height: auto; overflow: visible; row-gap: .2rem; }
+.deck-compact .task-expanded .task-tags-right::before { content: none; }
+.deck-compact .task-expanded .task-meta-right { flex-wrap: wrap; margin-left: auto; }
+.deck-compact .task-expanded .task-desc { display: block; }
+.deck-compact .task-expanded .task-notes-mark { display: none; }
 
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
