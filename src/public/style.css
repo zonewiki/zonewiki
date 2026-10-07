@@ -2079,12 +2079,25 @@ div.chip-input > input {
    off but wrapping, and its notes underneath. Tags and dates stay where
    they are, on the first line, so moving through tasks shifts nothing. */
 .tasks-app.deck-compact .task-item.task-expanded {
-  grid-template-areas: "check title meta actions" ". desc desc desc";
+  grid-template-areas: "check title meta actions" ". desc desc desc" ". comments comments comments";
   align-items: start;
 }
 .deck-compact .task-expanded .task-content { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .deck-compact .task-expanded :is(.task-checkbox, .task-meta, .task-actions) { align-self: start; margin-top: .1rem; }
 .deck-compact .task-expanded .task-desc { display: block; }
+/* Its latest comments, under the notes (built into every card, shown only
+   here). */
+.task-card-comments { display: none; grid-area: comments; }
+.deck-compact .task-expanded .task-card-comments {
+  display: block; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
+  border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+.tasks-app .task-card-comments p { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
+.task-comment-when { color: var(--muted); font-size: .75rem; margin-right: .25rem; }
+.task-comments-more {
+  background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
+  color: var(--link); cursor: pointer;
+}
 
 
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }

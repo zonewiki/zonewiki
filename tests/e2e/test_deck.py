@@ -1880,3 +1880,22 @@ def test_expanded_task_keeps_its_line(page, wiki):
     assert not title.evaluate(text_wider)                                # the whole title, wrapped
     desc = item.locator(".task-desc").bounding_box()
     assert desc["y"] > title.bounding_box()["y"] + title.bounding_box()["height"] - 1
+
+
+def test_expanded_task_shows_its_latest_comments(page, wiki):
+    tid = page.request.post("/api/deck", data={"title": "Renew passport"}).json()["id"]
+    for text in ("Photos done", "Form printed", "Appointment Tue", "Paid the fee"):
+        page.request.post(f"/api/deck/{tid}/comments", data={"text": text})
+    page.goto("/deck?view=open")
+    passport = card(page, "Renew passport")
+    expect(passport.locator(".task-card-comments")).to_be_hidden()   # full cards: the 💬 count only
+    page.locator(".deck-density-btn").click()
+    expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
+    passport.locator(".task-content").click()
+    page.keyboard.press("Enter")
+    comments = passport.locator(".task-card-comments p")
+    expect(comments).to_have_count(3)                                # the latest 3, newest first
+    expect(comments.first).to_contain_text("Paid the fee")
+    expect(comments.last).to_contain_text("Form printed")
+    passport.get_by_role("button", name="1 earlier…").click()       # the rest: in the modal
+    expect(page.locator(".task-edit-modal[open] #task-edit-comment")).to_be_focused()

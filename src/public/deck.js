@@ -1628,6 +1628,14 @@
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
       const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
+      // The latest comments, newest first: shown only when a compact task is
+      // expanded (full cards have the 💬 count; the modal has them all).
+      const earlier = comments.length - 3;
+      const commentsHtml = comments.length
+        ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
+            `<p><span class="task-comment-when">${esc(commentWhen(c.at))}</span> ${esc(c.text)}</p>`).join('')}` +
+          (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
+        : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
         : '';
@@ -1643,7 +1651,7 @@
           <div class="task-actions">
             ${skipBtnHtml}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">⋯</button>
           </div>
-          ${metaHtml}${descHtml}
+          ${metaHtml}${descHtml}${commentsHtml}
         </li>`;
     };
 
@@ -1762,6 +1770,10 @@
           else updateTask(id, { [field]: d });
         }, el, todayStr());
       });
+    });
+
+    listEl.querySelectorAll('.task-comments-more').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); openEditModal(btn.dataset.id, { focusComment: true }); });
     });
 
     listEl.querySelectorAll('.task-skip-btn').forEach(btn => {
