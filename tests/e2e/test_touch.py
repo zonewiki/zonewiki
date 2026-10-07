@@ -145,15 +145,19 @@ def test_desktop_click_selects_does_not_edit(page, wiki):
 
 
 def test_desktop_menu_popover_and_keyboard(page, wiki):
+    # With a mouse there is no ⋯ button: right-click (or the menu key, or
+    # Shift+F10 on the selected card) opens the menu as a popover.
     page.request.post("/api/deck", data={"title": "Water plants"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=open")
-    btn = card(page, "Water plants").locator(".task-menu-btn")
-    btn.click()
+    expect(card(page, "Water plants").locator(".task-menu-btn")).to_be_hidden()
+    title = card(page, "Water plants").locator(".task-title")
+    tb = title.bounding_box()
+    page.mouse.click(tb["x"] + 5, tb["y"] + 5, button="right")
     menu = page.locator(".task-menu")
-    # Popover next to the button, not a bottom sheet.
-    mb, bb = menu.bounding_box(), btn.bounding_box()
-    assert abs(mb["x"] + mb["width"] - (bb["x"] + bb["width"])) < 2 and mb["y"] > bb["y"]
+    # A popover at the pointer, not a bottom sheet.
+    mb = menu.bounding_box()
+    assert abs(mb["x"] - (tb["x"] + 5)) < 6 and mb["width"] < 400
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     page.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
@@ -161,11 +165,14 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     expect(menu).to_have_count(0)
     expect(page.locator("#task-edit-modal")).to_be_hidden()   # deck keys stayed out
     wait_until(page, lambda: tasks_by_title(page)["Water plants"]["start_date"] == day(0))
-    btn = card(page, "Water plants").locator(".task-menu-btn")
-    btn.click()
+    # Keyboard: Shift+F10 on the selected card; Esc closes.
+    expect(card(page, "Water plants")).to_have_class(re.compile(r"\btask-selected\b"))
+    page.keyboard.press("Shift+F10")
+    expect(menu.locator(".task-menu-title")).to_have_text("Water plants")
     page.keyboard.press("Escape")
     expect(page.locator(".task-menu")).to_have_count(0)
-    expect(btn).to_be_focused()
+    page.keyboard.press("ContextMenu")
+    expect(menu).to_be_visible()
 
 
 # ── Edit modal on small screens ──────────────────────────────────────────────

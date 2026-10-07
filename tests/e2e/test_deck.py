@@ -243,7 +243,7 @@ def test_board_groups_by_start_date(page, wiki):
 
 
 def open_edit(page, title: str):
-    card(page, title).locator(".task-menu-btn").click()
+    card(page, title).locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()
     modal = page.locator("#task-edit-modal")
     expect(modal).to_be_visible()
@@ -304,7 +304,7 @@ def test_deck_refreshes_when_restored_from_bfcache(page, wiki):
 
 def test_deck_refresh_waits_while_editing(page, wiki):
     _deck_with_one_task(page, wiki)
-    card(page, "Loaded").locator(".task-menu-btn").click()
+    card(page, "Loaded").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()
     expect(page.locator("#task-edit-modal")).to_be_visible()
     page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
@@ -1225,7 +1225,7 @@ def test_history_in_edit_modal_and_undo_leaves_no_trace(page, wiki):
     page.goto("/deck?view=open")
 
     # Start today from the ⋯ menu; its undo puts the old log back.
-    card(page, "Report").locator(".task-menu-btn").click()
+    card(page, "Report").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Start today").click()
     wait_for_field(page, "Report", "start_date", date.today().isoformat())
     page.locator(".task-undo-btn").click()
@@ -1475,7 +1475,7 @@ def test_quick_start_after_the_deadline_asks(page, wiki):
     dialog = page.locator("#task-deadline-modal")
 
     # ⋯ Start tomorrow on a task due today: asks; Cancel changes nothing.
-    card(page, "Due today").locator(".task-menu-btn").click()
+    card(page, "Due today").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Start tomorrow").click()
     expect(dialog).to_be_visible()
     page.locator("#task-deadline-cancel").click()
@@ -1491,7 +1491,7 @@ def test_quick_start_after_the_deadline_asks(page, wiki):
     assert task_by_title(page, "Due today")["start_date"] == _day(1)
 
     # An overdue task started today: catching up, no question.
-    card(page, "Late task").locator(".task-menu-btn").click()
+    card(page, "Late task").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Start today").click()
     wait_for_field(page, "Late task", "start_date", _day(0))
     expect(dialog).to_be_hidden()

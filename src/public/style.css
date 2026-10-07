@@ -2244,10 +2244,12 @@ div.chip-input > input {
 @media (hover: none) {
   .task-skip-btn { display: none; }
 }
-/* With a mouse a card's actions (⏭, ⋯) show on hover or when it is selected
-   (or a button in it has focus); right-click opens the same menu. They keep
-   their room, so nothing moves when they appear. Touch keeps ⋯ visible. */
+/* With a mouse the ⋯ button goes (right-click and the menu key open the
+   menu) and ⏭ shows on hover or when the card is selected (or has focus);
+   it keeps its room, so nothing moves when it appears. Touch keeps ⋯. */
 @media (hover: hover) {
+  /* Right-click (or the menu key) opens the menu; no ⋯ needed. */
+  .task-menu-btn { display: none; }
   .task-item .task-actions { opacity: 0; transition: opacity .12s; }
   .task-item:hover .task-actions, .task-item.task-selected .task-actions,
   .task-item .task-actions:focus-within { opacity: 1; }

@@ -357,7 +357,7 @@
     if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea, .task-inline-input')) return;
     e.preventDefault();
     setSelected(card.dataset.id);
-    openTaskMenu(card.dataset.id, card.querySelector('.task-menu-btn') || card, { x: e.clientX, y: e.clientY });
+    openTaskMenu(card.dataset.id, card, { x: e.clientX, y: e.clientY });
   });
 
   // Claim keyboard focus when user interacts with this instance
@@ -2957,6 +2957,14 @@
 
     const items = visibleItems();
     const currentIdx = selectedId ? items.findIndex(el => el.dataset.id === selectedId) : -1;
+
+    // The menu key or Shift+F10: the selected task's ⋯ menu (with a mouse
+    // there is no ⋯ button; right-click opens it too)
+    if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && selectedId) {
+      const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(selectedId)}"]`);
+      if (el) { e.preventDefault(); openTaskMenu(selectedId, el); }
+      return;
+    }
 
     // 'v' switches between full cards and one line per task
     if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
