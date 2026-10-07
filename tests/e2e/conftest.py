@@ -129,12 +129,32 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
             external.append(r.request.url)
             r.abort()
     ctx.route("**/*", route)
+    # Decks open with full cards in tests, as before the per-tab defaults
+    # (Open compact): most tests exercise cards, not density. A test of the
+    # real defaults calls real_density(page) first.
+    ctx.add_init_script("""
+      if (!sessionStorage.getItem('leaf-test-real-density')) {
+        const get = Storage.prototype.getItem;
+        Storage.prototype.getItem = function (key) {
+          const value = get.call(this, key);
+          return value === null && String(key).startsWith('leaf-deck-compact:') ? '0' : value;
+        };
+      }
+    """)
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     page.js_errors = errors
     page.external_requests = external
     return ctx, page
+
+
+def real_density(page):
+    """Use the deck's real density defaults (Open compact …) on this page's
+    tab from the next load on; the test setup otherwise keeps full cards."""
+    if page.url.startswith("about:"):
+        page.goto("/page/index")
+    page.evaluate("sessionStorage.setItem('leaf-test-real-density', '1')")
 
 
 @pytest.fixture()

@@ -394,14 +394,26 @@
   // Compact: one line per task (title, then tags, markers and dates; notes
   // hidden behind 📝). Per deck, remembered in this browser; an embed with
   // compact=1 starts so. The density button and v switch it.
-  const densityKey = 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
-    appEl?.dataset.initTag || '', instanceId].join('|');
-  let compact = appEl?.dataset.initCompact === '1';
-  try {
-    const stored = localStorage.getItem(densityKey);
-    if (stored !== null) compact = stored === '1';
-  } catch (_) {}
-  function applyCompact() {
+  // Per tab: Open (and Completed), long lists to scan, are compact unless
+  // switched; Focus and Plan, where a task's details matter, are full cards.
+  // compact=1 makes every tab start compact. A switch is remembered per
+  // deck and tab.
+  const COMPACT_DEFAULT = { open: true, completed: true, due: false, focus: false };
+  const densityKey = view => 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
+    appEl?.dataset.initTag || '', instanceId, view].join('|');
+  function compactFor(view) {
+    try {
+      const stored = localStorage.getItem(densityKey(view));
+      if (stored !== null) return stored === '1';
+    } catch (_) {}
+    return appEl?.dataset.initCompact === '1' || !!COMPACT_DEFAULT[view];
+  }
+  let compact = false;   // the shown tab's (applyCompact)
+  function applyCompact(view) {
+    if (view) {
+      compact = compactFor(view);
+      expandedId = null;
+    }
     appEl?.classList.toggle('deck-compact', compact);
     densityBtn?.setAttribute('aria-pressed', String(compact));
     if (densityBtn) {
@@ -422,10 +434,9 @@
   function toggleCompact() {
     expandedId = null;
     compact = !compact;
-    try { localStorage.setItem(densityKey, compact ? '1' : '0'); } catch (_) {}
+    try { localStorage.setItem(densityKey(activeFilter), compact ? '1' : '0'); } catch (_) {}
     applyCompact();
   }
-  applyCompact();
   densityBtn?.addEventListener('click', toggleCompact);
   function cleanList(name) {
     return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
@@ -2044,6 +2055,7 @@
     if (!VIEWS.includes(filter)) return;
     if (filter !== 'completed') lastTab = filter;
     activeFilter = filter;
+    applyCompact(filter);
     // Back from an earlier year: the other views count this year's matches.
     if (filter !== 'completed' && completedYear) setCompletedYear('');
     markActiveTab(filter);   // Completed has no tab: none is marked
@@ -3132,6 +3144,7 @@
     activeFilter = restoreFilter;
     if (restoreFilter !== 'completed') lastTab = restoreFilter;
   }
+  applyCompact(activeFilter);
   markActiveTab(activeFilter);
   syncCompletedLink();
 
