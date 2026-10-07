@@ -479,3 +479,13 @@ def test_backspace_in_tags_field(page, wiki):
     # The × removes a chip too.
     page.locator("#task-edit-modal .tag-chip-x").click()
     expect(tag_chips(page)).to_have_count(0)
+
+
+def test_swipe_starting_on_a_date(new_page, wiki):
+    # The dates sit on a card's first line, where a thumb starts a swipe: a
+    # swipe from there works, and doesn't also open the date picker.
+    phone = phone_deck(new_page, wiki, view="plan", start_date=NEXT_WEEK)
+    chip = card(phone, "Water plants").locator(".task-clickable-date[data-field='start_date']")
+    swipe(phone, chip, 150)
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
+    expect(phone.locator(".deck-datepicker")).to_have_count(0)

@@ -1888,7 +1888,7 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
         page.request.post(f"/api/deck/{tid}/comments", data={"text": text})
     page.goto("/deck?view=open")
     passport = card(page, "Renew passport")
-    expect(passport.locator(".task-card-comments")).to_be_hidden()   # full cards: the 💬 count only
+    expect(passport.locator(".task-card-comments p")).to_have_count(3)   # full cards show them
     page.locator(".deck-density-btn").click()
     expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
     passport.locator(".task-content").click()

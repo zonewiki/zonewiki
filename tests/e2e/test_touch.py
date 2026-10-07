@@ -247,7 +247,8 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
     pg.request.post("/api/deck", data={"title": "Weekly review", "rec_type": "weekly"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/page/deck?view=open")
-    card(pg, "Weekly review").locator(".task-content").dblclick()
+    c = card(pg, "Weekly review")
+    c.dblclick(position={"x": c.bounding_box()["width"] * 0.6, "y": 12})   # empty space in the card
     modal = pg.locator("#task-edit-modal")
     expect(modal).to_be_visible()
     assert in_viewport(pg, modal.get_by_role("button", name="Save"))

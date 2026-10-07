@@ -2031,23 +2031,31 @@ div.chip-input > input {
 
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
 
-/* Compact deck (deck.js applyCompact): one line per task. The meta row moves
-   into the title's line: title (cut off with …), then tags, markers and
-   dates, then the actions. Notes are hidden (Enter or a tap expands the
-   task); empty date placeholders too (⋯ and the edit modal set dates). When the line is short
-   of room, the tags are clipped before anything else. */
-.tasks-app.deck-compact .task-item {
-  /* The title as wide as it needs (at least 6rem), the tags right after it,
-     dates and markers at the right end. The meta column is never narrower
-     than its dates and markers (the tags in it have no minimum): only tags
-     get clipped, never a date. */
+/* Cards (deck.js taskHTML): one layout for every card. The first line:
+   checkbox, title, the tags right after it, markers and dates at the right
+   end, the actions. Under it the notes, then the latest comments. Full
+   cards show all of it. Compact view (.deck-compact, applyCompact)
+   collapses each card to its line (title cut off with …, notes and
+   comments hidden), except the expanded one (Enter, a tap), which looks
+   exactly like a full card; so does a card in full view.
+   The title is as wide as it needs (at least 6rem), the meta column never
+   narrower than its dates and markers (the tags in it have no minimum):
+   short of room, only tags give way, never a date. */
+.tasks-app .task-item {
   grid-template-columns: auto minmax(6rem, max-content) minmax(min-content, 1fr) auto;
-  grid-template-areas: "check title meta actions";
-  align-items: center; padding-block: .15rem; margin-bottom: .2rem; min-height: 2.1rem;
+  grid-template-areas: "check title meta actions" ". desc desc desc" ". comments comments comments";
+  /* The first line sits where a compact line has it (a 2.1rem row), so
+     expanding one moves nothing; one line's height for every item in it. */
+  align-items: start; padding-block: .15rem .4rem;
+  --line: calc(2.1rem - .3rem - 2px);
 }
-.deck-compact .task-content { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.deck-compact .task-meta,
-.deck-compact .task-meta--hover-only {
+.tasks-app .task-item :is(.task-checkbox, .task-content, .task-meta, .task-actions) {
+  align-self: start; min-height: var(--line); display: flex; align-items: center;
+}
+.tasks-app .task-content { white-space: normal; overflow-wrap: anywhere; }
+.tasks-app .task-item .task-meta,
+.tasks-app .task-item .task-meta--hover-only,
+.tasks-app .task-item:hover .task-meta--hover-only {
   margin: 0 0 0 .5rem; padding: 0; border: none; max-height: none; opacity: .85; pointer-events: auto;
   flex-wrap: nowrap; min-width: 0; overflow: hidden;
   /* No wrap inside "📅 Tomorrow": its column's minimum is the whole line. */
@@ -2055,41 +2063,25 @@ div.chip-input > input {
 }
 /* Tags that don't fit drop out whole: they wrap onto a second line, which
    the one-line height hides (never half a tag). */
-.deck-compact .task-tags-right {
+.tasks-app .task-tags-right {
   flex-wrap: wrap; min-width: 0; flex: 1 1 auto; overflow: hidden;
   height: 1.5em; align-content: flex-start; row-gap: 1em;
   /* Its own width doesn't count toward the column's: the tags only fill
      what the title, dates and markers leave. */
   contain: inline-size;
 }
-
 /* An empty first item, so even the first tag can wrap away. */
-.deck-compact .task-tags-right::before { content: ""; width: 0; height: 1.5em; margin-right: -.2rem; }
-.deck-compact .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; padding-left: .35rem; }
-.deck-compact .task-desc, .deck-compact .task-date-empty { display: none; }
-@media (pointer: coarse) { .tasks-app.deck-compact .task-item { min-height: 2.75rem; } }
-/* A phone's line is short: the title gives way down to 4.5rem before a
-   date or marker would be cut. */
-@media (max-width: 640px) {
-  .tasks-app.deck-compact .task-item:not(.task-expanded) {
-    grid-template-columns: auto minmax(4.5rem, max-content) minmax(min-content, 1fr) auto;
-  }
-}
-/* The expanded task (Enter, a tap): the same line, the title no longer cut
-   off but wrapping, and its notes underneath. Tags and dates stay where
-   they are, on the first line, so moving through tasks shifts nothing. */
-.tasks-app.deck-compact .task-item.task-expanded {
-  grid-template-areas: "check title meta actions" ". desc desc desc" ". comments comments comments";
-  align-items: start;
-}
-.deck-compact .task-expanded .task-content { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
-.deck-compact .task-expanded :is(.task-checkbox, .task-meta, .task-actions) { align-self: start; margin-top: .1rem; }
-.deck-compact .task-expanded .task-desc { display: block; }
-/* Its latest comments, under the notes (built into every card, shown only
-   here). */
-.task-card-comments { display: none; grid-area: comments; }
-.deck-compact .task-expanded .task-card-comments {
-  display: block; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
+.tasks-app .task-tags-right::before { content: ""; width: 0; height: 1.5em; margin-right: -.2rem; }
+.tasks-app .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; padding-left: .35rem; }
+/* Empty date placeholders (⏰ 📅 to set one): full cards on hover only;
+   compact lines never (⋯ / right-click and the modal set dates). */
+.tasks-app .task-date-empty { display: none; }
+.tasks-app:not(.deck-compact) .task-item:hover .task-date-empty { display: inline; }
+/* Touch has no hover: there full cards always offer them. */
+@media (hover: none) { .tasks-app:not(.deck-compact) .task-date-empty { display: inline; } }
+/* The latest comments, under the notes. */
+.task-card-comments {
+  grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
 .tasks-app .task-card-comments p { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
@@ -2098,7 +2090,20 @@ div.chip-input > input {
   background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
   color: var(--link); cursor: pointer;
 }
+/* A phone's line is short: the title gives way down to 4.5rem before a
+   date or marker would be cut. */
+@media (max-width: 640px) {
+  .tasks-app .task-item { grid-template-columns: auto minmax(4.5rem, max-content) minmax(min-content, 1fr) auto; }
+}
 
+/* Compact: every card but the expanded one is its line. */
+.tasks-app.deck-compact .task-item:not(.task-expanded) {
+  grid-template-areas: "check title meta actions";
+  padding-block: .15rem; margin-bottom: .2rem;
+}
+.deck-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.deck-compact .task-item:not(.task-expanded) :is(.task-desc, .task-card-comments) { display: none; }
+@media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }
 
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }

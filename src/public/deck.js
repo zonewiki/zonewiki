@@ -306,7 +306,9 @@
     endTouchDrag(false);
     if (e.touches.length !== 1) return;
     const item = e.target.closest('.task-item');
-    if (!item || e.target.closest('input, button, a, .task-clickable-date, .task-inline-input')) return;
+    // A date chip may start a swipe or drag (it sits on the first line, where
+    // a thumb starts one); a mere tap on it still opens its date picker.
+    if (!item || e.target.closest('input, button, a, .task-inline-input')) return;
     const canDrag = !!touchDrop && item.matches('[data-drag]');
     const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
     const canSwipe = !!(swipe.right || swipe.left);
@@ -1788,10 +1790,12 @@
       });
     });
 
-    listEl.querySelectorAll('.task-content').forEach(el => {
+    // Double-click anywhere on a card but its title (which edits the title
+    // in place) and its controls opens the modal.
+    listEl.querySelectorAll('.task-item').forEach(el => {
       el.addEventListener('dblclick', e => {
-        if (e.target.classList.contains('task-title')) return;
-        openEditModal(e.currentTarget.dataset.id);
+        if (e.target.closest('.task-title, input, button, a, label, .task-clickable-date, .task-inline-input, .task-desc')) return;
+        openEditModal(el.dataset.id);
       });
     });
 
