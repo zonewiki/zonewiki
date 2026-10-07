@@ -175,7 +175,7 @@ main {
    copies of what smaller screens show inline (the [[toc]] box, the sections
    at the end), which hide there. The text keeps its reading width; tables,
    code blocks and images alone in a paragraph grow into the middle column
-   only when they need it, deck embeds take all of it. */
+   only when they need it. */
 
 .rail { display: none; }
 .rail-label {
@@ -240,12 +240,6 @@ main {
   body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions) {
     max-width: 46rem; margin-inline: auto;
   }
-  /* Views of lists (the deck, scratch) use the whole middle column; the
-     scratch list runs in two columns, newest first down the left. Search
-     results stay one ranked column at reading width. */
-  body:not(.editor-page) main.roomy > :not(.breadcrumb, .top-actions) { max-width: 60rem; }
-  main.roomy .notes-list { columns: 2; column-gap: 3rem; }
-  main.roomy .notes-list li { break-inside: avoid; }
   .page-grid {
     display: grid;
     grid-template-columns: 14rem minmax(0, 60rem) 14rem;
@@ -275,8 +269,6 @@ main {
     width: max-content; min-width: 100%; max-width: 100cqw;
     position: relative; left: 50%; translate: -50% 0;
   }
-  /* A deck embed takes the whole middle column: room for longer titles. */
-  .page-col .page-content > .tasks-app { margin-inline: calc((100% - 100cqw) / 2); }
 }
 
 /* ── Page header ───────────────────────────────────────────────────────────── */

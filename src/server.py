@@ -1684,13 +1684,11 @@ FORMAT_BAR = (
 
 def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
           extra_head: str | None = None, action_buttons: bool = True,
-          wide: bool = False, roomy: bool = False) -> str:
+          wide: bool = False) -> str:
     """Wrap body in the page skeleton. `action_buttons=False` drops the
     action buttons, new note and search (the editor has its own toolbar; the
     login page has nothing to search or write). `wide`: a page view with
-    side columns on big screens (`main.wide`, see view_page). `roomy`: a
-    view of lists rather than text (the deck, scratch), whose content may
-    use the wider middle column there (`main.roomy`)."""
+    side columns on big screens (`main.wide`, see view_page)."""
     edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     module = "" if editor else current_module()
@@ -1837,7 +1835,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
     </a>
     {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if LEAF_PASSWORD else ''}
   </div>
-  <main{' class="wide"' if wide else ' class="roomy"' if roomy else ""}>
+  <main{' class="wide"' if wide else ""}>
     {top_actions_html() if show_actions else ""}{body}
   </main>
   {action_bar_html() if show_actions else ""}
@@ -1896,12 +1894,12 @@ def index():
     return redirect("/page/index")
 
 
-def _index_page(slug: str, title: str, body_inner: str, roomy: bool = False) -> str:
+def _index_page(slug: str, title: str, body_inner: str) -> str:
     """Shared shell for the auto-generated index pages (_scratch, _deleted)."""
     body = f"""{build_breadcrumb(slug, title)}
 <header class="page-header"><h1>{title}</h1></header>
 <article class="page-content">{body_inner}</article>"""
-    return shell(title, body, roomy=roomy)
+    return shell(title, body)
 
 
 def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
@@ -1929,7 +1927,7 @@ def scratch_page():
             f'aria-label="Filter scratch notes" autocomplete="off" spellcheck="false">'
             f'<span class="scratch-filter-count" id="scratch-filter-count" aria-live="polite"></span></div>'
             if notes else "")
-    return _index_page('_scratch', 'Scratch', filt + _notes_list_html(notes, 'No entries yet.'), roomy=True)
+    return _index_page('_scratch', 'Scratch', filt + _notes_list_html(notes, 'No entries yet.'))
 
 
 @app.get("/page/_deleted")
@@ -3400,7 +3398,7 @@ def deck_page():
     body = f"""<div class="breadcrumb" data-slug="{html.escape(key)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>
 <header class="page-header"><h1>{heading}</h1></header>
 <article class="page-content">{note}{embed}</article>"""
-    return shell(title, body, roomy=True)
+    return shell(title, body)
 
 
 def _task_href(task_id: str, tab: str, list_name: str | None,

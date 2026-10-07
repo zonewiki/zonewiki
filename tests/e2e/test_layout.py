@@ -408,22 +408,16 @@ def test_no_side_columns_below_1320(new_page, wiki):
 def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
     # Regression: only page views were wide, so on Scratch or the Deck the
     # switcher and the top actions jumped inward. Every view shares the top
-    # row. Content is centred in it: text at its reading width, the list
-    # views (deck, scratch) in the whole middle column, like a deck embed.
+    # row; the text column sits in the same place on each.
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
-    rows, centres = [], []
-    for url in ("/page/release", "/page/_scratch", "/deck", "/search?q=part"):
+    rows = []
+    for url in ("/page/release", "/page/_scratch", "/deck"):
         page.goto(url)
-        ta = page.locator(".top-actions").bounding_box()
+        sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
         h1 = page.locator("h1").first.bounding_box()
-        content = page.locator(".page-header, .search-results").first.bounding_box()
-        if url != "/search?q=part":
-            sw = page.locator(".breadcrumb .module-switch").bounding_box()
-            rows.append((round(sw["x"]), round(ta["x"] + ta["width"])))
-        centres.append(round(content["x"] + content["width"] / 2))
+        rows.append((round(sw["x"]), round(ta["x"] + ta["width"]), round(h1["x"])))
     assert len(set(rows)) == 1, rows
-    assert max(centres) - min(centres) <= 1, centres
 
 
 def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
@@ -528,7 +522,7 @@ def test_section_jump_keys(page, wiki):
     assert page.url.endswith("#code-and-tables")  # stops at the last
 
 
-def test_wide_images_and_deck_embeds_use_the_middle_column(new_page, wiki):
+def test_wide_images_use_the_middle_column(new_page, wiki):
     assets = wiki.root / "_assets"
     assets.mkdir(exist_ok=True)
     for name, w in (("wide.svg", 1400), ("small.svg", 200)):
@@ -548,23 +542,31 @@ def test_wide_images_and_deck_embeds_use_the_middle_column(new_page, wiki):
     assert abs(wide["x"] + wide["width"] / 2 - (text["x"] + text["width"] / 2)) < 1
     assert small["width"] == 200 and abs(small["x"] - text["x"]) < 1
     assert inline["width"] <= text["width"] + 1
-    deck = page.locator(".tasks-app").bounding_box()
-    assert abs(deck["width"] - col["width"]) < 1 and abs(deck["x"] - col["x"]) < 1
+    deck = page.locator(".tasks-app").bounding_box()     # a deck keeps the text's width
+    assert abs(deck["width"] - text["width"]) < 1 and abs(deck["x"] - text["x"]) < 1
 
 
-def test_deck_and_scratch_use_the_middle_column(new_page, wiki):
-    for i in range(6):
-        wiki.write(f"2026-10-0{i + 1}_09-00-00_note-{i}", f"# Note {i}\n")
-    page = new_page(viewport=BIG)
-    page.goto("/deck")
-    assert abs(page.locator(".tasks-app").bounding_box()["width"] - 60 * 16) < 1
-    page.goto("/page/_scratch")
-    items = page.locator(".notes-list li")
-    first, last = items.first.bounding_box(), items.last.bounding_box()
-    assert last["x"] > first["x"] + first["width"]        # two columns
-    expect(items.first).to_contain_text("Note 5")          # newest first, top left
-    page.goto("/search?q=note")
-    assert page.locator(".search-results").bounding_box()["width"] <= 46 * 16 + 1
+def test_deck_scratch_and_wiki_content_share_one_width(new_page, wiki):
+    # Every view's content has the text's width, on big screens and small:
+    # a page's text, a deck embed on it, /deck, Scratch and search results.
+    _side_wiki(wiki)
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("2026-10-01_09-00-00_note", "# Note\n")
+    for viewport in (BIG, {"width": 1100, "height": 900}):
+        page = new_page(viewport=viewport)
+        boxes = {}
+        page.goto("/page/release")
+        boxes["text"] = page.locator(".page-content").bounding_box()
+        page.goto("/page/tasks")
+        boxes["embed"] = page.locator(".tasks-app").bounding_box()
+        page.goto("/deck")
+        boxes["deck"] = page.locator(".tasks-app").bounding_box()
+        page.goto("/page/_scratch")
+        boxes["scratch"] = page.locator(".notes-list").bounding_box()
+        page.goto("/search?q=note")
+        boxes["search"] = page.locator(".search-results").bounding_box()
+        edges = {k: (round(b["x"]), round(b["width"])) for k, b in boxes.items()}
+        assert len(set(edges.values())) == 1, (viewport, edges)
 
 
 def test_section_task_chip_opens_its_tasks(page, wiki):
