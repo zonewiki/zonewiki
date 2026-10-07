@@ -424,3 +424,18 @@ def test_no_preview_pane_on_narrow_screens(new_page, wiki):
     expect(page.locator(".search-result-card").first).to_be_visible()
     expect(page.locator("#modal-preview")).to_be_hidden()
     assert page.locator("#search-modal").bounding_box()["width"] <= 660
+
+
+def test_preview_of_a_title_match(new_page, wiki):
+    # Regression: a page found by its title has no words to mark; the empty
+    # term list matched everywhere, scattering empty marks through the
+    # preview and scrolling it to the first one.
+    wiki.write("garden", "# Garden\n\n## Beds\n\n" + "Soil and more soil. " * 200 + "\n")
+    page = new_page(viewport={"width": 1400, "height": 900})
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("gard")
+    preview = page.locator("#modal-preview")
+    expect(preview.locator(".search-preview-title")).to_have_text("Garden")
+    expect(preview.locator("mark")).to_have_count(0)
+    assert preview.evaluate("el => el.scrollTop") == 0

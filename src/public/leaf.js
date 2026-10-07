@@ -2188,6 +2188,9 @@ function initSearchHighlights() {
 // Mark every whole-word occurrence of the terms in root (<mark class=
 // "search-hl">), skipping code and deck embeds; returns the marks in order.
 function markTerms(root, terms) {
+  // No terms (a page matched by its title): nothing to mark. An empty
+  // pattern would match everywhere.
+  if (!terms.length) return [];
   const escape = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   const alternatives = [...terms].sort((a, b) => b.length - a.length).map(escape).join('|');
   const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, 'giu');
