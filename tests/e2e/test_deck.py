@@ -794,8 +794,9 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
     expect(_focus_titles(page)).to_have_text(["Butter", "Apples", "Cheese", "Eggs"])
     assert task_by_title(page, "Butter")["start_date"] == today
 
-    # Onto Cheese from Unsorted: before it, so right after Apples in the shop.
-    card(page, "Butter").drag_to(card(page, "Cheese"))
+    # Onto Apples from Unsorted (a move down): after it, so right after
+    # Apples in the shop, before Bread, which Focus doesn't show.
+    card(page, "Butter").drag_to(card(page, "Apples"))
     expect(_focus_titles(page)).to_have_text(["Apples", "Butter", "Cheese", "Eggs"])
     wait_until(lambda: _by_order(page, "sort_order") ==
                ["Apples", "Butter", "Bread", "Cheese", "Dates", "Eggs"])
@@ -1019,8 +1020,10 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     # Within Unsorted nothing moves (newest first).
     card(page, "Two").drag_to(card(page, "One"))
     assert _open_titles(page, "unsorted") == ["Two", "One"]
-    # Onto a sorted task: lands before it.
-    card(page, "One").drag_to(card(page, "Bravo"))
+    # Onto a sorted task: a move down, so it lands after it, as any move down
+    # does. (It once landed before, and dragging it down again onto the same
+    # task then put it after: two drops, two results.)
+    card(page, "One").drag_to(card(page, "Alpha"))
     wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
     wait_for_field(page, "One", "sort_order", 1)
     assert task_by_title(page, "Two")["sort_order"] is None

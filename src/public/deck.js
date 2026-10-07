@@ -1049,18 +1049,16 @@
     postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
     render();
   }
-  // Drop `draggedId` on a task or a section heading (`key`). A task entering
-  // Sorted from Unsorted lands before the task it is dropped on (a move down,
-  // which otherwise lands after).
+  // Drop `draggedId` on a task or a section heading (`key`): it takes the
+  // target's slot, so a move down lands after the task dropped on and a move
+  // up before it. That holds for a task entering Sorted from Unsorted too
+  // (a move down); dropping on the Sorted heading puts it first.
   function sectionDrop(key) {
-    const s = SECTIONS[activeFilter];
     const list = sectionList();
     const from = list.indexOf(draggedId), to = list.indexOf(key);
     if (from === -1 || to === -1 || from === to) return;
-    const byId = new Map(tasks.map(t => [t.id, t]));
-    const entering = byId.get(key)?.[s.field] != null && byId.get(draggedId)[s.field] == null;
     list.splice(from, 1);
-    list.splice(entering && from < to ? to - 1 : to, 0, draggedId);
+    list.splice(to, 0, draggedId);
     applySectionList(list, [draggedId]);
   }
   // Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
