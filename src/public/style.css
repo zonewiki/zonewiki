@@ -2328,20 +2328,6 @@ div.chip-input > input {
   position: fixed; inset: 0; margin: auto; height: fit-content;
   max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain;
 }
-/* Big screens: the edit form as a panel on the right (deck.js, not modal);
-   the page moves over to make room for it. */
-@media (min-width: 1320px) {
-  .task-edit-modal.task-panel {
-    inset: 0 0 0 auto; margin: 0; z-index: 400;
-    width: min(30rem, 36vw); max-width: none; height: 100dvh; max-height: 100dvh;
-    border-radius: 0; border-left: 1px solid var(--border);
-    box-shadow: -8px 0 30px rgba(0,0,0,.12);
-  }
-  body:has(.task-edit-modal.task-panel[open]) { padding-right: min(30rem, 36vw); }
-  body:has(.task-edit-modal.task-panel[open]) main.roomy .tasks-app[data-view="due"] .tasks-list {
-    width: 100%; left: 0; translate: none;
-  }
-}
 .task-edit-modal .wikilink-ac { position: absolute; }
 .task-edit-modal::backdrop { background: rgba(0,0,0,.4); }
 .task-edit-form { display: flex; flex-direction: column; gap: .75rem; }

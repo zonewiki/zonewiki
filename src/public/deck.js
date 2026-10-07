@@ -177,7 +177,7 @@
     if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
   });
   listEl.addEventListener('click', e => {
-    if (lastPointerType !== 'touch' && !isPanel()) return;
+    if (lastPointerType !== 'touch') return;
     const card = e.target.closest('.task-item');
     if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
     openEditModal(card.dataset.id);
@@ -2493,22 +2493,7 @@
   // `titles` instead of `title` makes one task per title (batch mode), and
   // onCreated gets them all (a null where creating failed, then it stops).
   let onCreated = null;
-  // Big screens: the form is a panel on the right instead of a modal dialog
-  // (not modal: the list stays usable, a click on another card loads that
-  // task). Not for the hidden deck (the editor, pages without a deck).
-  const panelWide = matchMedia('(min-width: 1320px)');
-  const isPanel = () => modal.open && modal.classList.contains('task-panel');
-  let formAtOpen = '';
-  const formState = () => JSON.stringify([...form.elements].map(el =>
-    el.type === 'checkbox' ? el.checked : el.value).concat(editTags()));
   function openEditModal(taskId, opts) {
-    // An open panel with unsaved changes isn't replaced: they'd be lost.
-    if (isPanel() && formState() !== formAtOpen &&
-        (taskId || '') !== document.getElementById('task-edit-id' + sfx).value) {
-      showNotice('Save or cancel the open task first.');
-      modal.querySelector('.task-edit-actions [type=submit]')?.focus();
-      return;
-    }
     const task = taskId ? tasks.find(t => t.id === taskId) : null;
     const defaultTags = opts?.tags || '';
     const givenTags = !!opts && 'tags' in opts;
@@ -2538,25 +2523,9 @@
     syncRecFields();
     deleteBtn.style.display = task ? '' : 'none';
     syncDates('open');
-    if (!headless && panelWide.matches) {
-      if (modal.open && !isPanel()) modal.close();
-      modal.classList.add('task-panel');
-      if (!modal.open) modal.show();
-      if (task) setSelected(task.id);
-    } else {
-      if (isPanel()) modal.close();
-      modal.classList.remove('task-panel');
-      if (!modal.open) modal.showModal();
-    }
-    formAtOpen = formState();
+    modal.showModal();
     (task && opts?.focusComment ? commentInput : batchTitles ? editTagsInput : titleInput).focus();
   }
-  // A panel isn't a modal dialog: Esc doesn't close it by itself (fields
-  // that use Esc themselves, like a comment being edited, prevent this).
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !e.defaultPrevented && isPanel() &&
-        !document.querySelector('dialog[open]:modal')) cancelBtn.click();
-  });
 
   // Relative-date helpers (used by card rendering and focus defaults).
   function dateOffset(days) {
