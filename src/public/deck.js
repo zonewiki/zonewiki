@@ -51,6 +51,7 @@
   const listEl = document.getElementById('tasks-list' + sfx);
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
   const addBtn = document.getElementById('task-add-btn' + sfx);
+  const densityBtn = document.getElementById('task-density-btn' + sfx);
   const filterSearch = document.getElementById('task-filter-search' + sfx);
   const completedLink = document.getElementById('task-completed-link' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
@@ -375,6 +376,32 @@
   const tabLabel = view => tabsEl.querySelector(`[data-filter="${view}"]`)?.textContent.trim() || view;
   // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
   const initKeep = appEl?.dataset.initKeep === '1';
+  // Compact: one line per task (title, then tags, markers and dates; notes
+  // hidden behind 📝). Per deck, remembered in this browser; an embed with
+  // compact=1 starts so. The density button and v switch it.
+  const densityKey = 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
+    appEl?.dataset.initTag || '', instanceId].join('|');
+  let compact = appEl?.dataset.initCompact === '1';
+  try {
+    const stored = localStorage.getItem(densityKey);
+    if (stored !== null) compact = stored === '1';
+  } catch (_) {}
+  function applyCompact() {
+    appEl?.classList.toggle('deck-compact', compact);
+    densityBtn?.setAttribute('aria-pressed', String(compact));
+    if (densityBtn) {
+      const label = compact ? 'Full cards' : 'One line per task';
+      densityBtn.title = `${label} (v)`;
+      densityBtn.setAttribute('aria-label', label);
+    }
+  }
+  function toggleCompact() {
+    compact = !compact;
+    try { localStorage.setItem(densityKey, compact ? '1' : '0'); } catch (_) {}
+    applyCompact();
+  }
+  applyCompact();
+  densityBtn?.addEventListener('click', toggleCompact);
   function cleanList(name) {
     return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
       .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
@@ -1551,11 +1578,15 @@
         : '';
 
       const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
+      // Compact cards hide the notes; this marker (shown only there) says
+      // there are some, with their start as its tooltip.
+      const notesMark = task.description
+        ? `<span class="task-notes-mark" title="${esc(task.description.slice(0, 200))}" aria-label="Has notes">📝</span>` : '';
       const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
         task.keep || task.completed_at || commentsDisplay);
       const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
       const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+      const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${notesMark}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
       const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -2890,6 +2921,13 @@
 
     const items = visibleItems();
     const currentIdx = selectedId ? items.findIndex(el => el.dataset.id === selectedId) : -1;
+
+    // 'v' switches between full cards and one line per task
+    if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      toggleCompact();
+      return;
+    }
 
     // 'n' opens new task modal
     if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {

@@ -293,6 +293,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 | `view` | `focus`, `open`, `plan`, `completed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Old names are still accepted via `_FILTER_ALIASES` (`upcoming`, `today`, `all`, `backlog`, `due`, `done`), as is `filter` for `view`. |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/deck`; `capacity` is an old alias. |
 | `list` | a tag | — | Makes the embed a separate list: it shows the tasks with that tag, the tag is locked there and marked as a list everywhere (see Deck → Separate lists). Cleaned like tags, lowercased (`_clean_list`). |
+| `compact` | `1`/`true`/`yes` | — | The embed starts in one line per task (see Deck → Compact); the viewer's own switch, once used, wins. |
 | `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. |
 | `home` | `1`/`true`/`yes` | — | Makes this embed your own deck, the **deck's home**: the Deck module links go to its page, the page belongs to the Deck module, New adds a task in this embed, and the due count counts what it shows (see Modules). The first page A–Z with one wins; without any, the Deck links go to `/deck`. |
 | `labels` | up to 3 comma-separated names | `Open,Plan,Focus` | The embed's own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Plan,Shopping` for a shopping list. Only the words change: views, `view=` values and links keep their names. An empty entry keeps the default, `_` stands for a space (params split on whitespace). Rendered into the tab buttons by `_build_deck_embed`; `deck.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip. |
@@ -578,7 +579,8 @@ A segmented control (`.view-tabs`, one `<button data-filter>` each) in the order
 - **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice. A newly created task is flashed the same way when the view shows it.
 - **Rejected writes** show the server's error as a toast (`showNotice`).
 - **Toasts and modals** (`placeToast`): a toast shown while a modal dialog is open goes into the dialog, since in `<body>` it would sit under the dialog's top layer and its Undo couldn't be clicked (deleting a comment showed that); when the dialog closes the toast moves back to `<body>`.
-- **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
+- **Compact** (`applyCompact` in `deck.js`, `.deck-compact`): one line per task on every tab. The card's grid becomes one row: checkbox, title (cut off with …, 6rem at least), then tags, markers and dates (`.task-meta` moves into the line), then the actions. Notes are hidden behind 📝 (`.task-notes-mark`, their start as tooltip; shown only here), empty date placeholders too. Short of room, tags give way first and only whole (they wrap onto a second line that the one-line height hides; an empty `::before` lets even the first one go); dates and markers are never clipped (the meta column's minimum is their width). Rows stay ≥44px on touch. Switched by the density button in the toolbar (`#task-density-btn`, `aria-pressed`) or **v**, remembered per deck in `localStorage` (`leaf-deck-compact:<path>|<list>|<tag>|<instance>`); `[[deck compact=1]]` starts compact.
+- **Header**: tabs, filter, the density button and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
 
 ### History
 
@@ -618,6 +620,7 @@ A separate list is a tag that a page declares with `[[deck list=<tag>]]`: a high
 ### Keyboard shortcuts
 
 - **g d**: go to `/deck`; **g t**: go to the deck's home
+- **v**: one line per task / full cards (see Compact)
 - **c t**: a new task in the deck's home, with its tags (from any page; see Modules → New task from anywhere)
 
 ---

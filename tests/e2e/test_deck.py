@@ -1617,3 +1617,70 @@ def test_external_links_in_tasks_open_a_new_tab(page, wiki):
         expect(link).to_have_attribute("target", "_blank")
         expect(link).to_have_attribute("rel", "noopener noreferrer")
     expect(item.locator('a[href="/page/home"]')).not_to_have_attribute("target", "_blank")
+
+
+# ── Compact (one line per task) ──────────────────────────────────────────────
+
+def _compact_tasks(page):
+    page.request.post("/api/deck", data={"title": "Renew passport", "tags": "personal,admin,travel",
+                                          "due_date": "2026-11-15", "description": "Photos first.\nBring the old one."})
+    page.request.post("/api/deck", data={"title": "Plain"})
+
+
+def test_compact_switch_one_line_per_task(page, wiki):
+    _compact_tasks(page)
+    page.goto("/deck?view=open")
+    passport = card(page, "Renew passport")
+    full = passport.bounding_box()["height"]
+    expect(passport.locator(".task-desc")).to_be_visible()
+    page.locator(".deck-density-btn").click()
+    expect(page.locator(".tasks-app")).to_have_class(re.compile(r"\bdeck-compact\b"))
+    expect(page.locator(".deck-density-btn")).to_have_attribute("aria-pressed", "true")
+    # One line: title, tags, the notes marker and the deadline side by side.
+    box = passport.bounding_box()
+    assert box["height"] < 45 < full
+    expect(passport.locator(".task-desc")).to_be_hidden()
+    expect(passport.locator(".task-notes-mark")).to_be_visible()
+    for sel in (".task-title", ".task-tags-right .task-tag >> nth=0", ".task-notes-mark", ".task-due"):
+        b = passport.locator(sel).bounding_box()
+        assert box["y"] <= b["y"] and b["y"] + b["height"] <= box["y"] + box["height"], sel
+    # Remembered for this deck; v switches back.
+    page.reload()
+    expect(page.locator(".tasks-app")).to_have_class(re.compile(r"\bdeck-compact\b"))
+    page.locator("body").click(position={"x": 5, "y": 300})
+    page.keyboard.press("v")
+    expect(page.locator(".tasks-app")).not_to_have_class(re.compile(r"\bdeck-compact\b"))
+    expect(passport.locator(".task-desc")).to_be_visible()
+
+
+def test_compact_embed_param_and_other_decks(page, wiki):
+    # compact=1 starts compact; the choice is per deck, so /deck stays full.
+    wiki.write("shop", "# Shop\n\n[[deck compact=1]]\n")
+    _compact_tasks(page)
+    page.goto("/page/shop")
+    expect(page.locator(".tasks-app")).to_have_class(re.compile(r"\bdeck-compact\b"))
+    page.goto("/deck?view=open")
+    expect(page.locator(".tasks-app")).not_to_have_class(re.compile(r"\bdeck-compact\b"))
+
+
+def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
+    from conftest import TOUCH_PHONE
+    phone = new_page(**TOUCH_PHONE)
+    _compact_tasks(phone)
+    phone.goto("/deck?view=open")
+    phone.locator(".deck-density-btn").tap()
+    passport = card(phone, "Renew passport")
+    box = passport.bounding_box()
+    assert box["height"] >= 44                                   # finger-sized
+    assert phone.evaluate("document.documentElement.scrollWidth") <= 390
+    due = passport.locator(".task-due")
+    d = due.bounding_box()
+    assert due.evaluate("el => el.scrollWidth <= el.clientWidth + 1") and d["x"] + d["width"] <= box["x"] + box["width"]
+    # A tag shows whole or not at all.
+    tags = passport.locator(".task-tags-right")
+    t = tags.bounding_box()
+    for tag in passport.locator(".task-tag").all():
+        b = tag.bounding_box()
+        visible = b["y"] < t["y"] + t["height"] and b["x"] < t["x"] + t["width"]
+        if visible:
+            assert b["x"] + b["width"] <= t["x"] + t["width"] + 0.5 and b["y"] + b["height"] <= t["y"] + t["height"] + 0.5

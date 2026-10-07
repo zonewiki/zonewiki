@@ -88,6 +88,13 @@ class TestTasksLinkRender:
         assert "task-show-lists" not in html
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
+    def test_compact_param_and_density_button(self, wiki_dir):
+        """[[deck compact=1]] starts one line per task; every deck has the switch."""
+        assert 'data-init-compact="1"' in server.render_md("[[deck compact=1]]\n")
+        html = server.render_md("[[deck]]\n")
+        assert 'data-init-compact=""' in html
+        assert 'class="btn deck-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
+
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""
         create_task(client, title="Write code", tags=["work"])

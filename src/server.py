@@ -1790,6 +1790,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
       <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
       <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search highlight (page opened from search)</td></tr>
+      <tr><td><kbd>v</kbd></td><td>One line per task / full cards (deck)</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Clear search highlights</td></tr>
     </table>
     <p class="scratch-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>

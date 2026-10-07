@@ -2031,6 +2031,41 @@ div.chip-input > input {
 }
 
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
+.task-notes-mark { display: none; font-size: .75rem; cursor: default; }
+
+/* Compact deck (deck.js applyCompact): one line per task. The meta row moves
+   into the title's line: title (cut off with …), then tags, markers and
+   dates, then the actions. Notes are hidden behind 📝; empty date
+   placeholders too (⋯ and the edit modal set dates). When the line is short
+   of room, the tags are clipped before anything else. */
+.tasks-app.deck-compact .task-item {
+  /* The meta column is never narrower than its dates and markers (the
+     tags in it have no minimum): only tags get clipped, never a date. */
+  grid-template-columns: auto minmax(6rem, 1fr) minmax(min-content, auto) auto;
+  grid-template-areas: "check title meta actions";
+  align-items: center; padding-block: .15rem; margin-bottom: .2rem; min-height: 2.1rem;
+}
+.deck-compact .task-content { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.deck-compact .task-meta,
+.deck-compact .task-meta--hover-only {
+  margin: 0 0 0 .5rem; padding: 0; border: none; max-height: none; opacity: .85; pointer-events: auto;
+  flex-wrap: nowrap; min-width: 0; overflow: hidden;
+}
+/* Tags that don't fit drop out whole: they wrap onto a second line, which
+   the one-line height hides (never half a tag). */
+.deck-compact .task-tags-right {
+  flex-wrap: wrap; min-width: 0; flex-shrink: 1; overflow: hidden;
+  height: 1.5em; align-content: flex-start; row-gap: 1em;
+}
+/* An empty first item, so even the first tag can wrap away. */
+.deck-compact .task-tags-right::before { content: ""; width: 0; height: 1.5em; margin-right: -.2rem; }
+.deck-compact .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: .35rem; }
+.deck-compact .task-desc, .deck-compact .task-date-empty { display: none; }
+.deck-compact .task-notes-mark { display: inline; }
+@media (pointer: coarse) { .tasks-app.deck-compact .task-item { min-height: 2.75rem; } }
+
+.deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
 .task-inline-input {

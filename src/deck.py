@@ -880,6 +880,8 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
     # staples); the edit modal's checkbox still turns it off per task.
     keep = "1" if is_true(params.get("keep")) else ""
+    # `compact=1`: one line per task until the viewer switches (deck.js).
+    compact = "1" if is_true(params.get("compact")) else ""
     # `home=1`: this embed is the user's own deck (HOME_FN); the module bar's
     # New clicks this embed's "+ New".
     home_attr = ' data-home="1"' if is_true(params.get("home")) else ""
@@ -896,7 +898,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     sfx = f"-{instance_id}" if instance_id > 0 else ""
 
     hide = ' data-headless="1" style="display:none"' if headless else ""
-    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-new="" data-instance="{instance_id}"{home_attr}>
+    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-compact="{compact}" data-init-new="" data-instance="{instance_id}"{home_attr}>
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>
@@ -905,6 +907,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
+      <button type="button" class="btn deck-density-btn" id="task-density-btn{sfx}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
       <button class="btn btn-primary" id="task-add-btn{sfx}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
