@@ -2064,6 +2064,36 @@ div.chip-input > input {
 .deck-compact .task-notes-mark { display: inline; }
 @media (pointer: coarse) { .tasks-app.deck-compact .task-item { min-height: 2.75rem; } }
 
+/* The selected task's details beside a compact list (renderDetail in
+   deck.js): in the free space right of the deck, sticky while the list
+   scrolls; only where there is room for it. On a page view it takes the
+   place of the right side column while it shows. */
+.deck-detail { display: none; }
+@media (min-width: 1480px) {
+  .tasks-app { position: relative; }
+  .tasks-app.deck-compact .deck-detail:not([hidden]) {
+    display: block; position: absolute; top: 0; bottom: 0; left: calc(100% + 2rem);
+    width: min(24rem, calc((100vw - 100%) / 2 - 5.5rem));
+  }
+  body:has(.tasks-app.deck-compact .deck-detail:not([hidden])) .rail-context { visibility: hidden; }
+}
+.deck-detail-inner {
+  position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto;
+  padding: .9rem 1rem 1rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--code-bg); font-size: .875rem;
+}
+.deck-detail .detail-title {
+  font-size: 1.05rem; margin: 0 0 .5rem; padding: 0; border: none; width: auto;
+  line-height: 1.35; overflow-wrap: anywhere;
+}
+.detail-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin-bottom: .6rem; }
+.detail-row { display: flex; gap: .6rem; padding: .15rem 0; }
+.detail-key { color: var(--muted); font-size: .75rem; min-width: 4.5rem; padding-top: .1rem; }
+.tasks-app.deck-compact .deck-detail .detail-notes { display: block; margin-top: .6rem; }
+.detail-comments { margin-top: .75rem; }
+.detail-comments p { margin: .25rem 0; overflow-wrap: anywhere; }
+.detail-when { color: var(--muted); font-size: .75rem; }
+.detail-actions { display: flex; gap: .4rem; margin-top: .9rem; }
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }

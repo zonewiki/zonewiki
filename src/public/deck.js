@@ -52,6 +52,8 @@
   const tabsEl = document.getElementById('tasks-tabs' + sfx);
   const addBtn = document.getElementById('task-add-btn' + sfx);
   const densityBtn = document.getElementById('task-density-btn' + sfx);
+  const detailEl = document.getElementById('task-detail' + sfx);
+  const detailInner = detailEl?.querySelector('.deck-detail-inner');
   const filterSearch = document.getElementById('task-filter-search' + sfx);
   const completedLink = document.getElementById('task-completed-link' + sfx);
   const modal = document.getElementById('task-edit-modal' + sfx);
@@ -388,6 +390,7 @@
   } catch (_) {}
   function applyCompact() {
     appEl?.classList.toggle('deck-compact', compact);
+    renderDetail();
     densityBtn?.setAttribute('aria-pressed', String(compact));
     if (densityBtn) {
       const label = compact ? 'Full cards' : 'One line per task';
@@ -1225,7 +1228,56 @@
     listEl.querySelectorAll('.task-item').forEach(el => {
       el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
     });
+    renderDetail();
   }
+
+  // Compact view on a wide window: the selected task's details beside the
+  // list (read-only: notes with their checkboxes, tags, dates, repeat,
+  // the latest comments). Edit opens the modal. CSS decides whether there
+  // is room for it (the 1480px media query); hidden without one selection.
+  function recurrenceText(r) {
+    const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[r.type] || r.type;
+    const every = r.interval > 1 ? `Every ${r.interval} ${unit}s` : r.type[0].toUpperCase() + r.type.slice(1);
+    return every + (r.from === 'completion' ? ', from done' : '');
+  }
+  function renderDetail() {
+    if (!detailEl) return;
+    const t = compact && selectedIds.size === 1 ? tasks.find(x => x.id === selectedId) : null;
+    detailEl.hidden = !t;
+    if (!t) { detailInner.replaceChildren(); return; }
+    const isListTag = tag => listSet.has(tag.toLowerCase());
+    const tags = [...(t.tags || []).filter(isListTag), ...(t.tags || []).filter(tag => !isListTag(tag))]
+      .map(tag => `<span class="task-tag${isListTag(tag) ? ' task-tag-list' : ''}"${isListTag(tag) ? ` title="${esc(listTooltip(tag))}"` : ''}>#${esc(tag)}</span>`).join('');
+    const row = (label, value, cls = '') => value
+      ? `<div class="detail-row"><span class="detail-key">${label}</span><span class="detail-value ${cls}">${value}</span></div>` : '';
+    const comments = t.comments || [];
+    const shown = comments.slice(-3).reverse();
+    detailInner.innerHTML =
+      `<h3 class="detail-title">${linkifyTitle(t.title)}</h3>` +
+      (tags ? `<div class="detail-tags">${tags}</div>` : '') +
+      row('Deadline', t.due_date ? `⏰ ${esc(formatDate(t.due_date))}` : '', dueDateClass(t)) +
+      row('Start', t.start_date ? `📅 ${esc(formatDate(t.start_date))}` : '') +
+      row('Repeats', t.recurrence ? `↻ ${esc(recurrenceText(t.recurrence))}` : '') +
+      row('Keep', t.keep ? `⟲ back to ${esc(tabLabel('open'))} when done${t.last_done ? `, last ${esc(shortDate(t.last_done))}` : ''}` : '') +
+      row('Done', t.completed_at ? (t.wont_do ? "✗ won't do" : esc(t.completed_at.slice(0, 10))) : '') +
+      (t.description ? `<div class="detail-notes task-desc">${renderDesc(t.description)}</div>` : '') +
+      (shown.length ? `<div class="detail-comments"><div class="detail-key">Comments${comments.length > 3 ? ` (latest 3 of ${comments.length})` : ''}</div>` +
+        shown.map(c => `<p><span class="detail-when">${esc(commentWhen(c.at))}</span> ${esc(c.text)}</p>`).join('') + '</div>' : '') +
+      `<div class="detail-actions"><button type="button" class="btn" data-detail="edit">Edit…</button>` +
+      `<button type="button" class="btn" data-detail="comment">Comment…</button></div>`;
+    detailEl.dataset.id = t.id;
+  }
+  detailEl?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-detail]');
+    if (!btn) return;
+    openEditModal(detailEl.dataset.id, btn.dataset.detail === 'comment' ? { focusComment: true } : undefined);
+  });
+  // Ticking a checkbox in the notes saves it, as on a full card.
+  detailEl?.addEventListener('change', e => {
+    const cb = e.target.closest('input[data-desc-check]');
+    const task = cb && tasks.find(x => x.id === detailEl.dataset.id);
+    if (task) updateTask(task.id, { description: toggleDescCheck(task.description, +cb.dataset.descCheck) });
+  });
 
   function setSelected(id) {
     selectedId = id;
@@ -1758,6 +1810,7 @@
       setupDragAndDrop();
     }
 
+    renderDetail();
     // Restore or clear selection after re-render
     if (selectedIds.size) {
       const visSet = new Set(visibleItems().map(el => el.dataset.id));

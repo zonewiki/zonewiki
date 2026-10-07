@@ -1684,3 +1684,63 @@ def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
         visible = b["y"] < t["y"] + t["height"] and b["x"] < t["x"] + t["width"]
         if visible:
             assert b["x"] + b["width"] <= t["x"] + t["width"] + 0.5 and b["y"] + b["height"] <= t["y"] + t["height"] + 0.5
+
+
+# ── Compact: details beside the list ─────────────────────────────────────────
+
+def _detail_setup(page, wiki):
+    a = page.request.post("/api/deck", data={"title": "Renew passport", "tags": "admin", "due_date": "2026-11-15",
+                                              "description": "At the shop.\n- [ ] old passport"}).json()["id"]
+    page.request.post(f"/api/deck/{a}/comments", data={"text": "Shop closes at 6"})
+    page.request.put(f"/api/deck/{a}", data={"rec_type": "yearly", "rec_interval": 10})
+    page.request.post("/api/deck", data={"title": "Plain"})
+    page.goto("/deck?view=open")
+    page.locator(".deck-density-btn").click()
+    return a
+
+
+def test_compact_details_beside_the_list(new_page, wiki):
+    page = new_page(viewport={"width": 1600, "height": 900})
+    a = _detail_setup(page, wiki)
+    detail = page.locator(".deck-detail")
+    expect(detail).to_be_hidden()                                  # nothing selected
+    card(page, "Renew passport").locator(".task-content").click()
+    expect(detail).to_be_visible()
+    d, lst = detail.bounding_box(), page.locator(".tasks-list").bounding_box()
+    assert d["x"] > lst["x"] + lst["width"]                         # right of the list, list unchanged
+    expect(detail.locator(".detail-title")).to_have_text("Renew passport")
+    expect(detail).to_contain_text("Every 10 years")
+    expect(detail).to_contain_text("At the shop.")
+    expect(detail).to_contain_text("Shop closes at 6")
+    # The notes' checkboxes work there too.
+    detail.locator("input[data-desc-check]").check()
+    wait_for_field(page, "Renew passport", "description", "At the shop.\n- [x] old passport")
+    # Moving the selection moves the details; Edit opens the modal.
+    card(page, "Plain").locator(".task-content").click()
+    expect(detail.locator(".detail-title")).to_have_text("Plain")
+    detail.get_by_role("button", name="Edit…").click()
+    expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Plain")
+    page.keyboard.press("Escape")
+    # Full cards: no pane.
+    page.locator(".deck-density-btn").click()
+    expect(detail).to_be_hidden()
+
+
+def test_no_compact_details_without_room(new_page, wiki):
+    page = new_page(viewport={"width": 1300, "height": 900})
+    _detail_setup(page, wiki)
+    card(page, "Renew passport").locator(".task-content").click()
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(page.locator(".deck-detail")).to_be_hidden()
+
+
+def test_compact_details_take_the_right_column_on_a_page(new_page, wiki):
+    wiki.write("tasks", "# Tasks\n\nSee [[Home]].\n\n[[deck compact=1 view=open]]\n")
+    wiki.write("home", "# Home\n\n[[Tasks]]\n")
+    page = new_page(viewport={"width": 1600, "height": 900})
+    page.request.post("/api/deck", data={"title": "Plain"})
+    page.goto("/page/tasks")
+    expect(page.locator(".rail-context")).to_be_visible()
+    card(page, "Plain").locator(".task-content").click()
+    expect(page.locator(".deck-detail")).to_be_visible()
+    expect(page.locator(".rail-context")).to_be_hidden()

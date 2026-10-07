@@ -912,6 +912,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     </div>
   </div>
   <ul class="tasks-list" id="tasks-list{sfx}"></ul>
+  <aside class="deck-detail" id="task-detail{sfx}" aria-label="Task details" hidden><div class="deck-detail-inner"></div></aside>
   <div class="deck-footer">
     <button type="button" class="deck-completed-link" id="task-completed-link{sfx}">✓ Completed</button>
   </div>
