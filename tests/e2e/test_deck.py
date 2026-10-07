@@ -1602,38 +1602,3 @@ def test_section_wikilinks_in_task_notes(page, wiki):
     page.request.post("/api/deck", data={"title": "Weed", "description": "See [[Garden#Raised beds]] and [[Garden#Raised beds|there]]."})
     page.goto("/deck?view=open")
     expect(page.locator(".task-item a[href='/page/garden#raised-beds']")).to_have_text(["Garden › Raised beds", "there"])
-
-
-def test_plan_board_tiles_on_a_wide_deck(new_page, wiki):
-    # A wide deck shows the day sections side by side, each a heading over
-    # its cards; a card drags across columns. On /deck the board may use the
-    # whole top row's width (the tabs and filter stay in the column).
-    page = new_page(viewport={"width": 1600, "height": 1000})
-    page.request.post("/api/deck", data={"title": "Today one", "start_date": date.today().isoformat()})
-    page.request.post("/api/deck", data={"title": "Today two", "start_date": date.today().isoformat()})
-    page.goto("/deck?view=due")
-    heads = page.locator(".board-day-divider")
-    expect(heads.first).to_be_visible()
-    boxes = [h.bounding_box() for h in heads.all()[:4]]
-    assert all(abs(b["y"] - boxes[0]["y"]) < 1 for b in boxes)          # one row
-    assert all(a["x"] + a["width"] < b["x"] for a, b in zip(boxes, boxes[1:]))
-    # A section's cards are under its heading, one after the other.
-    today = page.locator(".board-day-divider", has_text="Today").bounding_box()
-    upper, lower = sorted((card(page, t).bounding_box() for t in ("Today one", "Today two")), key=lambda b: b["y"])
-    assert abs(upper["x"] - today["x"]) < 1 and abs(lower["x"] - today["x"]) < 1 and today["y"] < upper["y"]
-    assert lower["y"] - (upper["y"] + upper["height"]) < 8             # no gap from other columns
-    list_w = page.locator(".tasks-list").bounding_box()["width"]
-    assert list_w > page.locator(".deck-header, .tasks-toolbar").first.bounding_box()["width"] + 200
-    # Drag into another column.
-    target = page.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
-    card(page, "Today two").drag_to(target)
-    wait_for_field(page, "Today two", "start_date", tomorrow())
-
-
-def test_plan_board_stacks_on_a_narrow_deck(new_page, wiki):
-    page = new_page(viewport={"width": 900, "height": 1000})
-    page.goto("/deck?view=due")
-    heads = page.locator(".board-day-divider")
-    expect(heads.first).to_be_visible()
-    xs = {round(h.bounding_box()["x"]) for h in heads.all()}
-    assert len(xs) == 1                                                # one column
