@@ -482,6 +482,26 @@ md = (
 )
 
 
+def _is_external(href: str) -> bool:
+    """An http(s) link to another site: it opens in a new tab. A full URL
+    to Leaf itself (the host this request came in on) is not external."""
+    parts = urlparse(href)
+    if parts.scheme not in ("http", "https"):
+        return False
+    return not (has_request_context() and parts.netloc.lower() == request.host.lower())
+
+
+def _link_open(self, tokens, idx, options, env):
+    tok = tokens[idx]
+    if _is_external(tok.attrGet("href") or ""):
+        tok.attrSet("target", "_blank")
+        tok.attrSet("rel", "noopener noreferrer")
+    return self.renderToken(tokens, idx, options, env)
+
+
+md.add_render_rule("link_open", _link_open)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

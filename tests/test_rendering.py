@@ -693,21 +693,21 @@ class TestAutolinks:
 
     def test_bare_url_www_and_email(self, wiki_dir):
         html = server.render_md("see https://example.com/a?b=1. and www.x.org, or me@x.org\n")
-        assert '<a href="https://example.com/a?b=1">https://example.com/a?b=1</a>.' in html
-        assert '<a href="http://www.x.org">www.x.org</a>' in html
+        assert '<a href="https://example.com/a?b=1" target="_blank" rel="noopener noreferrer">https://example.com/a?b=1</a>.' in html
+        assert '<a href="http://www.x.org" target="_blank" rel="noopener noreferrer">www.x.org</a>' in html
         assert '<a href="mailto:me@x.org">me@x.org</a>' in html
 
     def test_code_and_existing_links_untouched(self, wiki_dir):
         html = server.render_md("`https://code.org` and [named](https://y.org)\n\n```\nhttps://fenced.org\n```\n")
         assert "<code>https://code.org</code>" in html
-        assert html.count("<a ") == 1 and '<a href="https://y.org">named</a>' in html
+        assert html.count("<a ") == 1 and '<a href="https://y.org" target="_blank" rel="noopener noreferrer">named</a>' in html
         assert "https://fenced.org" in html and 'href="https://fenced.org"' not in html
 
     def test_wikilinks_still_work_next_to_urls(self, wiki_dir):
         (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
         html = server.render_md("[[Garden]] https://example.com\n")
         assert 'href="/page/garden"' in html
-        assert '<a href="https://example.com">' in html
+        assert '<a href="https://example.com" target="_blank" rel="noopener noreferrer">' in html
 
 
 class TestCallouts:
@@ -771,3 +771,23 @@ class TestWikilinkSections:
         assert server.rewrite_page_links("[[garden#Beds|b]] [[Garden#Paths]] [[#garden]]", "garden", "yard") == \
             "[[yard#Beds|b]] [[yard#Paths]] [[#garden]]"
         assert server._plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"
+
+
+class TestExternalLinks:
+    """Links to other sites open in a new tab; Leaf's own links don't."""
+
+    def test_marked_in_rendered_pages(self):
+        from server import render_md
+        out = render_md("[a](https://example.com) https://x.org www.y.org [p](/page/x) [[Home]] [m](mailto:a@b.c)\n")
+        ext = ' target="_blank" rel="noopener noreferrer"'
+        assert f'<a href="https://example.com"{ext}>a</a>' in out
+        assert f'<a href="https://x.org"{ext}>' in out and f'<a href="http://www.y.org"{ext}>' in out
+        assert '<a href="/page/x">p</a>' in out and '<a href="mailto:a@b.c">m</a>' in out
+        assert out.count("_blank") == 3
+
+    def test_full_url_to_leaf_itself_stays(self):
+        import server
+        with server.app.test_request_context("/page/x", headers={"Host": "localhost:5000"}):
+            out = server.render_md("[me](http://localhost:5000/page/y) [other](http://other:5000/)\n")
+        assert '<a href="http://localhost:5000/page/y">me</a>' in out
+        assert '<a href="http://other:5000/" target="_blank"' in out

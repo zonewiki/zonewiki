@@ -1760,9 +1760,20 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // A link to another site opens in a new tab (as server.py _is_external
+  // marks them in pages); a full URL to Leaf itself stays.
+  const extAttrs = href => {
+    try {
+      const u = new URL(href, location.href);
+      return /^https?:$/.test(u.protocol) && u.host !== location.host
+        ? ' target="_blank" rel="noopener noreferrer"' : '';
+    } catch (_) { return ''; }
+  };
+  const unesc = h => h.replace(/&amp;/g, '&');
+
   function linkifyTitle(text) {
     const escaped = esc(text);
-    return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" class="task-link">$1</a>');
+    return escaped.replace(/(https?:\/\/[^\s<]+)/g, (_, url) => `<a href="${url}" class="task-link"${extAttrs(unesc(url))}>${url}</a>`);
   }
 
   // ── Inline markdown rendering for descriptions ─────────────────────────────
@@ -1778,9 +1789,9 @@
       return `<a href="${href}">${label}</a>`;
     });
     // Markdown links: [label](url)
-    h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${href}"${extAttrs(unesc(href))}>${label}</a>`);
     // Bare URLs (skip those already inside href="..." or anchor text)
-    h = h.replace(/(?<![">])(https?:\/\/[^\s<]+)/g, '<a href="$1" class="task-link">$1</a>');
+    h = h.replace(/(?<![">])(https?:\/\/[^\s<]+)/g, (_, url) => `<a href="${url}" class="task-link"${extAttrs(unesc(url))}>${url}</a>`);
     // Bold
     h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     // Italic

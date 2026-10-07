@@ -1602,3 +1602,15 @@ def test_section_wikilinks_in_task_notes(page, wiki):
     page.request.post("/api/deck", data={"title": "Weed", "description": "See [[Garden#Raised beds]] and [[Garden#Raised beds|there]]."})
     page.goto("/deck?view=open")
     expect(page.locator(".task-item a[href='/page/garden#raised-beds']")).to_have_text(["Garden › Raised beds", "there"])
+
+
+def test_external_links_in_tasks_open_a_new_tab(page, wiki):
+    page.request.post("/api/deck", data={"title": "Read https://example.com/a",
+                                          "description": "[docs](https://example.org) and https://example.net/x and [[Home]]"})
+    page.goto("/deck?view=open")
+    item = page.locator(".task-item").first
+    for href in ("https://example.com/a", "https://example.org", "https://example.net/x"):
+        link = item.locator(f'a[href="{href}"]')
+        expect(link).to_have_attribute("target", "_blank")
+        expect(link).to_have_attribute("rel", "noopener noreferrer")
+    expect(item.locator('a[href="/page/home"]')).not_to_have_attribute("target", "_blank")

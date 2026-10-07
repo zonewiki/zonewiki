@@ -208,6 +208,7 @@ From 1320px wide a page view (`view_page`, `shell(…, wide=True)` → `main.wid
 ### Autolinks and callouts
 
 - **Bare URLs become links** (`gfm_autolink_plugin`): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link. Code spans, fenced code and existing links are untouched. It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
+- **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`_is_external`, a `link_open` render rule, so autolinks too); `deck.js` does the same for links in task titles and notes (`extAttrs`). Leaf's own links, `mailto:` and a full URL to Leaf itself stay in the tab.
 - **Callouts** (markdown-it's `alerts` option, GitHub/Obsidian syntax): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css` (GitHub colours, a `--alert` variable per kind, dark variants). Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 
 ### Sortable tables
