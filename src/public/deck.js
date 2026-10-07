@@ -424,8 +424,8 @@
     }
   }
   // In compact view one task at a time can be expanded to its full card
-  // (Enter, a tap): the details in place. Moving the selection or
-  // Esc collapses it; Enter on it opens the modal.
+  // (Enter, a tap): the details in place. Moving the selection moves the
+  // expansion along; Esc collapses it; Enter on it opens the modal.
   let expandedId = null;
   function setExpanded(id) {
     expandedId = id;
@@ -1265,7 +1265,10 @@
     listEl.querySelectorAll('.task-item').forEach(el => {
       el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
     });
-    if (expandedId && !(selectedIds.size === 1 && selectedIds.has(expandedId))) setExpanded(null);
+    // An expanded task hands its expansion on to the next one selected
+    // (arrows, j/k, a click), so you can read through tasks; several
+    // selected, or none, close it.
+    if (expandedId && expandedId !== selectedId) setExpanded(selectedIds.size === 1 ? selectedId : null);
   }
 
   function setSelected(id) {

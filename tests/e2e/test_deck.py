@@ -1763,6 +1763,15 @@ def test_compact_enter_expands_then_opens(page, wiki):
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-selected\b"))
     page.keyboard.press("Enter")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    # Moving the selection moves the expansion along, the previous one closes.
+    page.keyboard.press("j")
+    expect(page.locator(".task-expanded")).to_have_count(1)
+    expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
+    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    page.keyboard.press("k")
+    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    # After Esc, moving doesn't expand.
+    page.keyboard.press("Escape")
     page.keyboard.press("j")
     expect(page.locator(".task-expanded")).to_have_count(0)
 
