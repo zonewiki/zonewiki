@@ -349,7 +349,16 @@
   });
   listEl.addEventListener('touchcancel', () => endTouchDrag(false));
   // The long press would otherwise open the browser's context menu.
-  listEl.addEventListener('contextmenu', e => { if (touchDrag) e.preventDefault(); });
+  // Right-click on a card (mouse): the ⋯ menu, at the pointer. A link in the
+  // card keeps the browser's own menu (open in a new tab …).
+  listEl.addEventListener('contextmenu', e => {
+    if (touchDrag) { e.preventDefault(); return; }
+    const card = e.target.closest('.task-item');
+    if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea, .task-inline-input')) return;
+    e.preventDefault();
+    setSelected(card.dataset.id);
+    openTaskMenu(card.dataset.id, card.querySelector('.task-menu-btn') || card, { x: e.clientX, y: e.clientY });
+  });
 
   // Claim keyboard focus when user interacts with this instance
   appEl.addEventListener('pointerdown', () => { activeDeckInstance = instanceId; });
@@ -869,7 +878,9 @@
     taskMenu = null;
   }
 
-  function openTaskMenu(id, anchor) {
+  // `at` ({x, y}, a right-click): the menu opens there instead of at the
+  // anchor (the ⋯ button).
+  function openTaskMenu(id, anchor, at) {
     closeTaskMenu();
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -900,11 +911,12 @@
 
     // Desktop popover: under the button, right-aligned, flipped up if needed.
     // (The narrow-screen bottom sheet is pure CSS and ignores these.)
-    const r = anchor.getBoundingClientRect();
+    const r = at ? { top: at.y, bottom: at.y, right: at.x } : anchor.getBoundingClientRect();
     const m = el.getBoundingClientRect();
     const top = r.bottom + 4 + m.height > window.innerHeight ? r.top - 4 - m.height : r.bottom + 4;
     el.style.top = `${Math.max(4, top)}px`;
-    el.style.left = `${Math.max(4, Math.min(r.right - m.width, window.innerWidth - m.width - 4))}px`;
+    const left = at ? at.x : r.right - m.width;
+    el.style.left = `${Math.max(4, Math.min(left, window.innerWidth - m.width - 4))}px`;
 
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTaskMenu(); }
@@ -1616,9 +1628,6 @@
       const skipBtnHtml = (!task.completed_at && task.recurrence)
         ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
         : '';
-      const wontDoBtnHtml = !task.completed_at
-        ? `<button class="task-wontdo-btn" data-id="${task.id}" title="Won't do">✗</button>`
-        : '';
       const dragAttr = draggable ? 'draggable="true" data-drag' : '';
       return `
         <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' : ''}" data-id="${task.id}" ${dragAttr}>
@@ -1629,7 +1638,7 @@
             <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
           </div>
           <div class="task-actions">
-            ${skipBtnHtml}${wontDoBtnHtml}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">⋯</button>
+            ${skipBtnHtml}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">⋯</button>
           </div>
           ${metaHtml}${descHtml}
         </li>`;
@@ -1750,10 +1759,6 @@
           else updateTask(id, { [field]: d });
         }, el, todayStr());
       });
-    });
-
-    listEl.querySelectorAll('.task-wontdo-btn').forEach(btn => {
-      btn.addEventListener('click', e => { e.stopPropagation(); markWontDo(btn.dataset.id); });
     });
 
     listEl.querySelectorAll('.task-skip-btn').forEach(btn => {

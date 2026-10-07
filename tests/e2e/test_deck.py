@@ -1814,3 +1814,36 @@ def test_compact_tags_follow_the_title(page, wiki):
     assert first["x"] - (title["x"] + title["width"]) < 30
     row = passport.bounding_box()
     assert due["x"] + due["width"] > row["x"] + row["width"] - 90
+
+
+# ── Card actions with a mouse ────────────────────────────────────────────────
+
+def test_card_actions_on_hover_and_right_click_menu(page, wiki):
+    page.request.post("/api/deck", data={"title": "Water plants", "description": "See https://example.com"})
+    page.request.post("/api/deck", data={"title": "Other"})
+    page.goto("/deck?view=open")
+    water = card(page, "Water plants")
+    actions = water.locator(".task-actions")
+    expect(water.locator(".task-wontdo-btn")).to_have_count(0)        # no ✗ on cards
+    opacity = lambda: actions.evaluate("el => getComputedStyle(el).opacity")
+    page.mouse.move(0, 0)
+    page.wait_for_function("el => getComputedStyle(el).opacity === '0'", arg=actions.element_handle())
+    water.hover()
+    page.wait_for_function("el => getComputedStyle(el).opacity === '1'", arg=actions.element_handle())
+    water.locator(".task-content").click()                             # selected: stays shown
+    page.mouse.move(0, 0)
+    page.wait_for_timeout(200)
+    assert opacity() == "1"
+    # Right-click: the same menu, at the pointer; its actions work.
+    box = card(page, "Other").locator(".task-title").bounding_box()
+    page.mouse.click(box["x"] + 10, box["y"] + 5, button="right")
+    menu = page.locator(".task-menu")
+    expect(menu.locator(".task-menu-title")).to_have_text("Other")
+    m = menu.bounding_box()
+    assert abs(m["x"] - (box["x"] + 10)) < 6 and m["y"] >= box["y"]
+    expect(card(page, "Other")).to_have_class(re.compile(r"\btask-selected\b"))
+    menu.get_by_role("menuitem", name="Won't do").click()
+    expect(card(page, "Other")).to_have_count(0)
+    # A link in a card keeps the browser's menu.
+    water.locator("a[href='https://example.com']").click(button="right")
+    expect(page.locator(".task-menu")).to_have_count(0)

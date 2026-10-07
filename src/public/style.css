@@ -1964,7 +1964,6 @@ div.chip-input > input {
     inset 0 0 0 999px color-mix(in srgb, var(--fg) 8%, transparent),
     0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent);
 }
-.task-item.task-selected .task-wontdo-btn { opacity: 1; }
 /* The darker selected background washes out the light separator lines inside
    the card — strengthen them by the same amount. The collapsed hover-only
    meta keeps its transparent border; it only darkens while revealed. */
@@ -2102,15 +2101,6 @@ div.chip-input > input {
   background: transparent; color: var(--fg); outline: none; width: 100%;
   padding: 0; margin: 0;
 }
-
-.task-wontdo-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.6rem; height: 1.6rem; padding: 0;
-  background: none; border: none;
-  color: var(--muted); cursor: pointer; font-size: .9rem; line-height: 1;
-  border-radius: 3px; transition: color .15s, background .15s;
-}
-.task-wontdo-btn:hover { background: color-mix(in srgb, #dc2626 15%, var(--bg)); color: #dc2626; }
 
 .task-skip-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -2252,7 +2242,15 @@ div.chip-input > input {
 /* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
    the small hover-era icons go; everything tappable gets a real target. */
 @media (hover: none) {
-  .task-wontdo-btn, .task-skip-btn { display: none; }
+  .task-skip-btn { display: none; }
+}
+/* With a mouse a card's actions (⏭, ⋯) show on hover or when it is selected
+   (or a button in it has focus); right-click opens the same menu. They keep
+   their room, so nothing moves when they appear. Touch keeps ⋯ visible. */
+@media (hover: hover) {
+  .task-item .task-actions { opacity: 0; transition: opacity .12s; }
+  .task-item:hover .task-actions, .task-item.task-selected .task-actions,
+  .task-item .task-actions:focus-within { opacity: 1; }
 }
 @media (pointer: coarse) {
   /* A long press picks a card up (touch drag), so it must not select text

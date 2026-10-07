@@ -69,7 +69,7 @@ def test_tapping_checkbox_completes_not_edits(phone):
 
 
 def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
-    expect(card(phone, "Weekly review").locator(".task-wontdo-btn")).to_be_hidden()
+    expect(card(phone, "Weekly review").locator(".task-wontdo-btn")).to_have_count(0)
     expect(card(phone, "Weekly review").locator(".task-skip-btn")).to_be_hidden()
     box = card(phone, "Weekly review").locator(".task-menu-btn").bounding_box()
     assert box["width"] >= 40 and box["height"] >= 40
