@@ -2672,7 +2672,12 @@
 
   cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
   // Closed without saving (Cancel, Esc): no callback later by mistake.
-  modal.addEventListener('close', () => { onCreated = null; });
+  // Focus would stay on a field of the closed dialog, and the deck's keys
+  // (j/k, Enter, Esc …) ignore keys typed into a field. Esc's cancel comes
+  // at once (close only after the key), so the next key already works.
+  const blurInside = () => { if (modal.contains(document.activeElement)) document.activeElement.blur(); };
+  modal.addEventListener('cancel', blurInside);
+  modal.addEventListener('close', () => { onCreated = null; blurInside(); });
 
   modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
 

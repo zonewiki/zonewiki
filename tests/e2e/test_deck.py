@@ -1684,3 +1684,18 @@ def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
         visible = b["y"] < t["y"] + t["height"] and b["x"] < t["x"] + t["width"]
         if visible:
             assert b["x"] + b["width"] <= t["x"] + t["width"] + 0.5 and b["y"] + b["height"] <= t["y"] + t["height"] + 0.5
+
+
+def test_deck_keys_work_right_after_the_modal_closes(page, wiki):
+    # Regression: focus stayed on the closed modal's title field, so j/k,
+    # Enter and Esc did nothing until a click somewhere.
+    for t in ("Alpha", "Bravo"):
+        page.request.post("/api/deck", data={"title": t})
+    page.goto("/deck?view=open")
+    card(page, "Bravo").locator(".task-content").click()
+    page.keyboard.press("Enter")
+    expect(page.locator(".task-edit-modal[open]")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
+    page.keyboard.press("j")
+    expect(card(page, "Alpha")).to_have_class(re.compile(r"\btask-selected\b"))
