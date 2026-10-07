@@ -2075,20 +2075,15 @@ div.chip-input > input {
     grid-template-columns: auto minmax(4.5rem, max-content) minmax(min-content, 1fr) auto;
   }
 }
-/* The expanded task (Enter, a tap): its full card again, in place. */
+/* The expanded task (Enter, a tap): the same line, the title no longer cut
+   off but wrapping, and its notes underneath. Tags and dates stay where
+   they are, on the first line, so moving through tasks shifts nothing. */
 .tasks-app.deck-compact .task-item.task-expanded {
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas: "check title actions" ". meta meta" ". desc desc";
-  align-items: start; padding-block: .4rem;
+  grid-template-areas: "check title meta actions" ". desc desc desc";
+  align-items: start;
 }
-.deck-compact .task-expanded .task-content { white-space: normal; overflow: visible; }
-.deck-compact .task-expanded .task-meta {
-  flex-wrap: wrap; margin: .2rem 0 0; padding-top: .2rem; overflow: visible;
-  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, var(--border));
-}
-.deck-compact .task-expanded .task-tags-right { flex-wrap: wrap; height: auto; overflow: visible; row-gap: .2rem; }
-.deck-compact .task-expanded .task-tags-right::before { content: none; }
-.deck-compact .task-expanded .task-meta-right { flex-wrap: wrap; margin-left: auto; }
+.deck-compact .task-expanded .task-content { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.deck-compact .task-expanded :is(.task-checkbox, .task-meta, .task-actions) { align-self: start; margin-top: .1rem; }
 .deck-compact .task-expanded .task-desc { display: block; }
 
 

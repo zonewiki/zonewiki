@@ -1,6 +1,10 @@
 """Editor: auto-save, the unsaved indicator, Done, and save-on-navigate."""
 
+import time
+
 from playwright.sync_api import expect
+
+import server
 
 
 def test_autosave_writes_file_without_commit(page, wiki):
@@ -65,6 +69,48 @@ def test_navigating_away_saves_pending_edit(page, wiki):
     page.goto("/page/index")
     page.wait_for_timeout(300)
     assert wiki.read("draft").endswith("not yet auto-saved")
+
+
+def _slow_saves(monkeypatch, delay=2.5):
+    """Auto-saves write the file at once but answer *delay* seconds later,
+    as over a slow connection."""
+    orig = server.app.view_functions["api_save"]
+
+    def slow(*args, **kwargs):
+        res = orig(*args, **kwargs)
+        time.sleep(delay)
+        return res
+    monkeypatch.setitem(server.app.view_functions, "api_save", slow)
+
+
+def test_overlapping_autosaves_are_no_conflict(page, wiki, monkeypatch):
+    # The second auto-save starts while the first one's answer is still out.
+    # It used to send the hash from before the first save and be refused:
+    # "File was modified on disk while you were editing."
+    wiki.write("notes", "# Notes\n\n")
+    page.goto("/edit/notes")
+    _slow_saves(monkeypatch)
+    page.keyboard.press("Control+End")
+    page.keyboard.type("one")
+    page.wait_for_timeout(2300)
+    page.keyboard.type(" two")
+    expect(page.locator("#save-dot")).not_to_have_class("save-dot unsaved", timeout=10000)
+    expect(page.locator(".conflict-banner")).to_have_count(0)
+    assert wiki.read("notes").endswith("one two")
+
+
+def test_done_waits_for_autosave_in_flight(page, wiki, monkeypatch):
+    wiki.write("notes", "# Notes\n\n")
+    page.goto("/edit/notes")
+    _slow_saves(monkeypatch)
+    page.keyboard.press("Control+End")
+    page.keyboard.type("one")
+    page.wait_for_timeout(2300)
+    page.keyboard.type(" two")
+    page.keyboard.press("Control+s")
+    page.wait_for_url("**/page/notes", timeout=10000)
+    assert wiki.read("notes").endswith("one two")
+    assert wiki.git("log", "-1", "--format=%s").strip() == "Update notes"
 
 
 def test_list_continuation(page, wiki):

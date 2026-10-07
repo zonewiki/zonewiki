@@ -903,7 +903,9 @@ document.addEventListener('keydown', e => {
   // Ctrl/Cmd+S — save (in editor)
   if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
     const form = document.getElementById('editor-form');
-    if (form) { e.preventDefault(); form.submit(); }
+    // requestSubmit, not submit(): the submit handler waits for a save in
+    // flight and handles a conflict in place
+    if (form) { e.preventDefault(); form.requestSubmit(); }
     return;
   }
 
@@ -1061,8 +1063,9 @@ if (textarea && previewPane) {
         let { href } = wikilinkHref(wlText);
         if (href.startsWith('#')) href = new URL(editorForm.action).pathname.replace(/^\/edit\//, '/page/') + href;
         formSubmitting = true;
-        const data = new FormData(editorForm);
-        fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
+        clearTimeout(autoSaveTimer);
+        queueSave(() => fetch(editorForm.action,
+                              { method: 'POST', body: new FormData(editorForm), redirect: 'follow' }))
           .finally(() => { window.location.href = href; });
         return;
       }
@@ -1530,28 +1533,48 @@ if (textarea && previewPane) {
     }
   }
 
-  async function autoSave() {
-    if (!autoSaveUrl || sectionConflict) return;
-    const data = new FormData();
-    data.append('content', textarea.value);
-    appendSaveFields(data);
-    try {
-      const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
-      if (res.ok) {
-        lastSavedContent = textarea.value;
-        saveDot.classList.remove('unsaved');
-        if (res.headers.get('content-type')?.includes('json')) {
-          const json = await res.json();
-          if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
-          if (isSectionEdit && json.start_char !== undefined) {
-            sectionStartEl.value = json.start_char;
-            sectionEndEl.value = json.end_char;
-          }
-        }
-      } else if (res.status === 409) {
-        showConflictBanner();
+  // Saves run one at a time. Each sends the file hash the previous one
+  // returned; two in flight at once would both send the older hash, and the
+  // second would be refused as if someone else had changed the file.
+  let saveQueue = Promise.resolve();
+  function queueSave(fn) {
+    const run = saveQueue.then(fn);
+    saveQueue = run.catch(() => {});
+    return run;
+  }
+
+  // Take a successful save's answer: the new hash and section range, and the
+  // content it wrote (not what the textarea holds by now).
+  async function saved(res, content) {
+    lastSavedContent = content;
+    if (textarea.value === content) saveDot.classList.remove('unsaved');
+    if (res.headers.get('content-type')?.includes('json')) {
+      const json = await res.json();
+      if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
+      if (isSectionEdit && json.start_char !== undefined) {
+        sectionStartEl.value = json.start_char;
+        sectionEndEl.value = json.end_char;
       }
-    } catch { /* ignore */ }
+    }
+  }
+
+  function autoSave() {
+    return queueSave(async () => {
+      if (!autoSaveUrl || sectionConflict) return;
+      const content = textarea.value;
+      if (content === lastSavedContent) return;
+      const data = new FormData();
+      data.append('content', content);
+      appendSaveFields(data);
+      try {
+        const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
+        if (res.ok) {
+          await saved(res, content);
+        } else if (res.status === 409) {
+          showConflictBanner();
+        }
+      } catch { /* ignore */ }
+    });
   }
 
   function showConflictBanner(fromDone) {
@@ -1579,20 +1602,12 @@ if (textarea && previewPane) {
       }
       // Full-file edit: no file_hash, no section fields → plain overwrite
       try {
-        const res = await fetch(autoSaveUrl, { method: 'POST', body: data });
+        const content = textarea.value;
+        const res = await queueSave(() => fetch(autoSaveUrl, { method: 'POST', body: data }));
         if (res.ok) {
-          lastSavedContent = textarea.value;
-          saveDot.classList.remove('unsaved');
           banner.remove();
           sectionConflict = false;
-          if (res.headers.get('content-type')?.includes('json')) {
-            const json = await res.json();
-            if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
-            if (isSectionEdit && json.start_char !== undefined) {
-              sectionStartEl.value = json.start_char;
-              sectionEndEl.value = json.end_char;
-            }
-          }
+          await saved(res, content);
           if (fromDone) {
             editorForm.submit();
           }
@@ -1603,12 +1618,14 @@ if (textarea && previewPane) {
 
   // Flag form submission so pagehide beacon doesn't race with the POST
   editorForm?.addEventListener('submit', (e) => {
+    clearTimeout(autoSaveTimer);
     if (sectionHashEl?.value) {
       // Submit via fetch so we can handle conflicts in-place
       e.preventDefault();
       formSubmitting = true;
-      const data = new FormData(editorForm);
-      fetch(editorForm.action, { method: 'POST', body: data, redirect: 'follow' })
+      // After any save still in flight, so the form carries its new hash
+      queueSave(() => fetch(editorForm.action,
+                            { method: 'POST', body: new FormData(editorForm), redirect: 'follow' }))
         .then(res => {
           if (res.redirected && res.url.includes('conflict=1')) {
             formSubmitting = false;
@@ -1633,10 +1650,17 @@ if (textarea && previewPane) {
   window.addEventListener('pagehide', () => {
     if (formSubmitting || sectionConflict) return;
     if (!autoSaveUrl || textarea.value === lastSavedContent) return;
+    clearTimeout(autoSaveTimer);
+    const content = textarea.value;
     const data = new FormData();
-    data.append('content', textarea.value);
+    data.append('content', content);
     appendSaveFields(data);
-    navigator.sendBeacon(autoSaveUrl, data);
+    // Not a beacon: if the page comes back from the back/forward cache, this
+    // answer still arrives and updates the hash, so the next save isn't
+    // refused for the change this one made. keepalive outlives the page.
+    fetch(autoSaveUrl, { method: 'POST', body: data, keepalive: true })
+      .then(res => { if (res.ok) return saved(res, content); if (res.status === 409) showConflictBanner(); })
+      .catch(() => {});
   });
 }
 

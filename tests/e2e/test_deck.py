@@ -1856,3 +1856,27 @@ def test_card_actions_on_hover_and_right_click_menu(page, wiki):
     # A link in a card keeps the browser's menu.
     water.locator("a[href='https://example.com']").click(button="right")
     expect(page.locator(".task-menu")).to_have_count(0)
+
+
+def test_expanded_task_keeps_its_line(page, wiki):
+    # Expanding keeps the first line as it is (tags and dates don't move);
+    # the title wraps instead of being cut off, the notes open below.
+    page.request.post("/api/deck", data={"title": "Renew the passport before the trip to Lisbon in spring next year, with new photos from the shop on Main Street and the form",
+                                          "tags": "admin", "due_date": "2026-11-15", "description": "At the shop."})
+    page.set_viewport_size({"width": 800, "height": 800})
+    page.goto("/deck?view=open")
+    page.locator(".deck-density-btn").click()
+    item = page.locator(".task-item").first
+    before = {sel: item.locator(sel).first.bounding_box() for sel in (".task-tag", ".task-due")}
+    title = item.locator(".task-content")
+    text_wider = "el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width > el.clientWidth + 1; }"
+    assert title.evaluate(text_wider)                                    # cut off in the line
+    item.locator(".task-content").click()
+    page.keyboard.press("Enter")
+    expect(item).to_have_class(re.compile(r"\btask-expanded\b"))
+    for sel, box in before.items():
+        after = item.locator(sel).first.bounding_box()
+        assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 3, sel
+    assert not title.evaluate(text_wider)                                # the whole title, wrapped
+    desc = item.locator(".task-desc").bounding_box()
+    assert desc["y"] > title.bounding_box()["y"] + title.bounding_box()["height"] - 1
