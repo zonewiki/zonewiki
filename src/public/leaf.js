@@ -860,6 +860,7 @@ function promotedSlug(folder, name, date) {
     if (item.dataset.action === 'delete') document.getElementById('page-delete-dialog')?.showModal();
     else if (item.dataset.action === 'rename') openRename();
     else if (item.dataset.action === 'promote') openPromote();
+    else if (item.dataset.action === 'append') openAppend();
   });
 
   // Move to wiki (scratch notes): the slug the page will get, as the server
@@ -884,12 +885,30 @@ function promotedSlug(folder, name, date) {
     update();
     document.getElementById('page-promote-cancel').addEventListener('click', () => promote.close());
     closeOnBackdropClick(promote);
-    if (promote.hasAttribute('data-open')) {
-      openPromote();
-      const url = new URL(location.href);
-      url.searchParams.delete('promote_error');
-      history.replaceState(null, '', url);
-    }
+    reopenWithError(promote, openPromote, 'promote_error');
+  }
+
+  // Append to page (scratch notes): the page, then the section's heading.
+  const append = document.getElementById('page-append-dialog');
+  function openAppend() {
+    if (!append) return;
+    append.showModal();
+    document.getElementById('append-page').focus();
+  }
+  if (append) {
+    document.getElementById('page-append-cancel').addEventListener('click', () => append.close());
+    closeOnBackdropClick(append);
+    reopenWithError(append, openAppend, 'append_error');
+  }
+
+  // A refused move comes back to the note with the error: show it in its
+  // dialog, and drop it from the URL.
+  function reopenWithError(dialog, open, param) {
+    if (!dialog.hasAttribute('data-open')) return;
+    open();
+    const url = new URL(location.href);
+    url.searchParams.delete(param);
+    history.replaceState(null, '', url);
   }
 
   const rename = document.getElementById('page-rename-dialog');

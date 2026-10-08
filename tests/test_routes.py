@@ -2186,3 +2186,87 @@ class TestPromotePage:
         write_page(wiki_dir, "garden", "# Garden\n")
         assert client.post("/promote/garden", data={"name": "x"}, headers=HOST).status_code == 400
         assert client.post(f"/promote/{SCRATCH}", data={"name": "x"}, headers=HOST).status_code == 404
+
+
+# ===========================================================================
+# Append a scratch note to a page (/append/<slug>)
+# ===========================================================================
+
+
+class TestAppendToPage:
+
+    def test_menu_and_dialog(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Alex 1:1\n\nnotes\n")
+        write_page(wiki_dir, "people/alex", "# Alex Morgan\n")
+        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
+        assert "Append to page…" in re.findall(r'role="menuitem"[^>]*>([^<]+)', menu)
+        dialog = body.split('<dialog id="page-append-dialog"', 1)[1].split("</dialog>", 1)[0]
+        assert '<option value="people/alex">Alex Morgan</option>' in dialog
+        assert SCRATCH not in dialog.split("<datalist", 1)[1]      # no scratch notes offered
+        assert 'id="append-heading" value="Alex 1:1 (2026-10-08)"' in dialog
+
+    def test_note_as_section(self):
+        note = ("---\ntags: alex, 1on1\ntldr: All good\n---\n# Title\n\nIntro\n\n"
+                "## Topics\n\n### Detail\n\n```\n# not a heading\n```\n")
+        section, tags = server.note_as_section(note, "Alex 1:1 (2026-10-08)")
+        assert section == ("## Alex 1:1 (2026-10-08)\n\n_All good_\n\nIntro\n\n"
+                           "### Topics\n\n#### Detail\n\n```\n# not a heading\n```\n")
+        assert tags == ["alex", "1on1"]
+        assert server.note_as_section("# Only a title\n", "H") == ("## H\n", [])
+
+    def test_add_frontmatter_tags(self):
+        add = server.add_frontmatter_tags
+        assert add("# P\n", ["a"]) == "---\ntags: a\n---\n# P\n"
+        assert add("---\ntags: [A, b]\n---\n# P\n", ["a", "c"]) == "---\ntags: A, b, c\n---\n# P\n"
+        assert add("---\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: c\ntldr: x\n---\n# P\n"
+        assert add("# P\n", []) == "# P\n"
+
+    def test_append_moves_note_into_the_page(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "---\ntags: sync\n---\n# Alex 1:1\n\nnotes\n\n## Next\n\nsteps\n")
+        page = write_page(wiki_dir, "people/alex", "# Alex\n\nAbout Alex.\n")
+        ref = write_page(wiki_dir, "ref", f"See [[{SCRATCH}]], [[{SCRATCH}#Next|next]] "
+                                          f"and [it](/page/{SCRATCH}).\n")
+        resp = client.post(f"/append/{SCRATCH}", headers=HOST,
+                           data={"page": "/page/people/alex", "heading": "Alex 1:1 (2026-10-08)"})
+        assert resp.headers["Location"] == "/page/people/alex#alex-11-2026-10-08"
+        assert not (wiki_dir / f"{SCRATCH}.md").exists()
+        assert page.read_text(encoding="utf-8") == (
+            "---\ntags: sync\n---\n# Alex\n\nAbout Alex.\n\n"
+            "## Alex 1:1 (2026-10-08)\n\nnotes\n\n### Next\n\nsteps\n")
+        # Links follow to the section; one with its own anchor keeps it.
+        assert ref.read_text(encoding="utf-8") == (
+            "See [[people/alex#Alex 1:1 (2026-10-08)]], [[people/alex#Next|next]] "
+            "and [it](/page/people/alex#alex-11-2026-10-08).\n")
+        body = client.get("/page/people/alex", headers=HOST).get_data(as_text=True)
+        assert 'id="alex-11-2026-10-08"' in body
+
+    def test_append_refuses_and_says_why(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Notes\n\nx\n")
+        write_page(wiki_dir, "garden", "# Garden\n\n## Notes (2026-10-08)\n")
+        for data, error in [({"page": "nowhere", "heading": "H"}, "There is no page"),
+                            ({"page": "", "heading": "H"}, "Choose a page"),
+                            ({"page": SCRATCH, "heading": "H"}, "another page than this note"),
+                            ({"page": "garden", "heading": " | "}, "Give the section a heading"),
+                            ({"page": "garden", "heading": "Notes (2026-10-08)"}, "already has a section")]:
+            loc = client.post(f"/append/{SCRATCH}", data=data, headers=HOST).headers["Location"]
+            assert loc.startswith(f"/page/{SCRATCH}?append_error=")
+            body = client.get(loc, headers=HOST).get_data(as_text=True)
+            assert '<dialog id="page-append-dialog" class="scratch-modal promote-modal" data-open>' in body
+            assert error in body
+        assert (wiki_dir / f"{SCRATCH}.md").exists()
+        assert (wiki_dir / "garden.md").read_text(encoding="utf-8") == "# Garden\n\n## Notes (2026-10-08)\n"
+
+    def test_append_only_scratch_notes(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        write_page(wiki_dir, "other", "# Other\n")
+        assert client.post("/append/garden", data={"page": "other", "heading": "H"},
+                           headers=HOST).status_code == 400
+
+    def test_append_points_deck_links_at_the_section(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        write_page(wiki_dir, "garden", "# Garden\n")
+        client.post("/api/deck", json={"title": f"Follow up [[{SCRATCH}]]"}, headers=HOST)
+        client.post(f"/append/{SCRATCH}", data={"page": "garden", "heading": "Notes"}, headers=HOST)
+        titles = [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()]
+        assert titles == ["Follow up [[garden#Notes]]"]

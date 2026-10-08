@@ -1540,8 +1540,13 @@ def find_task_backlinks(slug: str) -> list[dict]:
 _MD_LINK_REWRITE_RE = re.compile(r'(?<!!)(\[[^\]]*\]\()([^)#?\s]+)([^)]*\))')
 
 
-def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str = "") -> str:
+def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str = "",
+                       section: str = "") -> str:
     """Point every link to old_slug in text at new_slug.
+
+    With a `section` (a heading's text), links without an #anchor of their
+    own point at that heading of new_slug: a scratch note appended to a page
+    is that section now.
 
     Handles [[wikilinks]] (with or without |label) and markdown links in the
     forms backlinks recognise — relative (`old`, `../dir/old`, `old.md`) and
@@ -1552,15 +1557,20 @@ def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str
 
     def wikilink(m: re.Match) -> str:
         target, sep, label = m.group(1).partition("|")
-        page_name, hash_, section = target.partition("#")
+        page_name, hash_, sect = target.partition("#")
         if page_name.strip() and (page_name.strip() == old_slug or to_slug(page_name) == old_slug):
-            return f"[[{new_slug}{hash_}{section}{sep}{label}]]"
+            if not hash_ and section:
+                return f"[[{new_slug}#{section}{sep}{label}]]"
+            return f"[[{new_slug}{hash_}{sect}{sep}{label}]]"
         return m.group(0)
 
     source_dir = posixpath.dirname(source_slug)
+    anchor = f"#{section_anchor(section)}" if section else ""
 
     def md_link(m: re.Match) -> str:
         prefix, href, rest = m.groups()
+        if not rest.startswith("#"):
+            rest = anchor + rest
         if href.startswith("/page/"):
             if href[len("/page/"):] == old_slug:
                 return f"{prefix}/page/{new_slug}{rest}"
@@ -1577,20 +1587,21 @@ def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str
     return _unmask_code(text, stash)
 
 
-def update_references(old_slug: str, new_slug: str) -> list[Path]:
-    """Rewrite links to old_slug across all pages and deck tasks after a rename.
+def update_references(old_slug: str, new_slug: str, section: str = "") -> list[Path]:
+    """Rewrite links to old_slug across all pages and deck tasks after a rename
+    (to a `section` of new_slug: see rewrite_page_links).
 
     Returns the files that were modified (pages and deck storage), so the
     rename commit can include them."""
     modified: list[Path] = []
     for md_file, file_slug in iter_pages():
         content = md_file.read_text(encoding="utf-8")
-        new_content = rewrite_page_links(content, old_slug, new_slug, file_slug)
+        new_content = rewrite_page_links(content, old_slug, new_slug, file_slug, section)
         if new_content != content:
             md_file.write_text(new_content, encoding="utf-8")
             modified.append(md_file)
     modified += deck_module.rename_page_refs(
-        old_slug, new_slug, lambda text: rewrite_page_links(text, old_slug, new_slug))
+        old_slug, new_slug, lambda text: rewrite_page_links(text, old_slug, new_slug, section=section))
     return modified
 
 
@@ -1736,15 +1747,97 @@ def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
         f'</div></form></dialog>')
 
 
+def _append_heading(slug: str, title: str) -> str:
+    """The section heading a scratch note gets on the page it is appended
+    to: its title and its day."""
+    return f"{title} ({SCRATCH_RE.match(slug).group(1)[:10]})"
+
+
+def _build_append_dialog(slug: str, title: str, error: str = "") -> str:
+    """The "Append to page" dialog of a scratch note: the page (suggesting
+    every page but scratch notes) and the heading of the section the note
+    becomes there. Posts to /append/<slug>."""
+    options = "".join(
+        f'<option value="{html.escape(s)}">{html.escape(t)}</option>'
+        for s, t in sorted((s, _page_meta(p, s)[0]) for p, s in iter_pages()
+                           if not is_scratch(s) and not hidden_page(s)))
+    error_html = f'<p class="rename-error">{html.escape(error)}</p>' if error else ""
+    return (
+        f'<dialog id="page-append-dialog" class="scratch-modal promote-modal"'
+        f'{" data-open" if error else ""}>'
+        f'<p class="scratch-label">Append to page</p>'
+        f'<p class="modal-desc">The note becomes a section at the end of the page '
+        f'and leaves Scratch. Links to it follow.</p>'
+        f'<form method="post" action="/append/{html.escape(slug)}">'
+        f'<label class="promote-field">Page'
+        f'<input type="text" name="page" id="append-page" list="append-pages" '
+        f'autocomplete="off" spellcheck="false" required></label>'
+        f'<datalist id="append-pages">{options}</datalist>'
+        f'<label class="promote-field">Section heading'
+        f'<input type="text" name="heading" id="append-heading" '
+        f'value="{html.escape(_append_heading(slug, title))}" autocomplete="off" required></label>'
+        f'{error_html}'
+        f'<div class="scratch-actions">'
+        f'<button type="submit" class="btn btn-primary">Append</button>'
+        f'<button type="button" class="btn" id="page-append-cancel">Cancel</button>'
+        f'</div></form></dialog>')
+
+
+def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
+    """A scratch note's text as a `## heading` section of another page, and
+    its frontmatter tags (for that page's). The note's own title goes (the
+    heading replaces it), a tldr becomes an italic first line, and its
+    headings move down so the highest is a ###: they are subsections now."""
+    meta, body = parse_frontmatter(content)
+    lines = strip_h1(body).strip("\n").split("\n")
+    levels = [len(m.group(1)) for _, line, fenced in _iter_fenced_lines(lines)
+              if not fenced and (m := re.match(r"^(#{1,6})[ \t]", line))]
+    shift = max(0, 3 - min(levels)) if levels else 0
+    if shift:
+        for i, line, fenced in list(_iter_fenced_lines(lines)):
+            m = None if fenced else re.match(r"^(#{1,6})([ \t])", line)
+            if m:
+                lines[i] = "#" * min(6, len(m.group(1)) + shift) + line[len(m.group(1)):]
+    parts = [f"## {heading}"]
+    if meta.get("tldr"):
+        parts.append(f"_{meta['tldr']}_")
+    text = "\n".join(lines).strip("\n")
+    if text:
+        parts.append(text)
+    return "\n\n".join(parts) + "\n", meta.get("tags", [])
+
+
+def add_frontmatter_tags(content: str, tags: list[str]) -> str:
+    """content with tags added to its frontmatter `tags:` (those it lacks,
+    case ignored), adding the line, or the block, when there is none."""
+    have = parse_frontmatter(content)[0].get("tags", [])
+    new = [t for t in tags if t.lower() not in {h.lower() for h in have}]
+    if not new:
+        return content
+    line = f"tags: {', '.join(have + new)}"
+    lines = content.split("\n")
+    end = (next((i for i in range(1, len(lines)) if lines[i].strip() == _FRONTMATTER_FENCE), None)
+           if lines and lines[0].strip() == _FRONTMATTER_FENCE else None)
+    if end is None:
+        return f"---\n{line}\n---\n{content}"
+    for i in range(1, end):
+        if lines[i].partition(":")[0].strip().lower() == "tags":
+            lines[i] = line
+            break
+    else:
+        lines.insert(1, line)
+    return "\n".join(lines)
+
+
 PAGE_MENU_BTN = ('<button type="button" class="btn page-menu-btn" aria-haspopup="menu" '
                  'aria-expanded="false" aria-controls="page-menu" title="More actions" '
                  'aria-label="More actions">⋯</button>')
 
 
 def _build_page_menu(slug: str, title: str, rename_error: str = "",
-                     promote_error: str = "") -> str:
-    """The page view's ⋯ menu (Present, History, Move to wiki… for a scratch
-    note, Rename…, Delete…) and the dialogs behind them. It looks like the deck's ⋯ menu (style.css).
+                     promote_error: str = "", append_error: str = "") -> str:
+    """The page view's ⋯ menu (Present, History, Move to wiki… and Append to
+    page… for a scratch note, Rename…, Delete…) and the dialogs behind them. It looks like the deck's ⋯ menu (style.css).
     The menu is one hidden element that leaf.js
     opens under whichever ⋯ was pressed (header or right column); Present
     shows only on a page with headings. Outside the page grid, since the
@@ -1757,7 +1850,9 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "",
     rename_dialog = ""
     if is_scratch(slug):
         items.append('<button type="button" role="menuitem" data-action="promote">Move to wiki…</button>')
+        items.append('<button type="button" role="menuitem" data-action="append">Append to page…</button>')
         rename_dialog += _build_promote_dialog(slug, title, promote_error)
+        rename_dialog += _build_append_dialog(slug, title, append_error)
     if not is_protected(slug):
         items.append('<button type="button" role="menuitem" data-action="rename">Rename…</button>')
         items.append('<button type="button" role="menuitem" data-action="delete" class="danger">'
@@ -2378,7 +2473,8 @@ def view_page(slug):
         # Edit, and the rarer actions in a ⋯ menu (_build_page_menu).
         actions = f'<a href="/edit/{slug}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
         page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""),
-                                     request.args.get("promote_error", ""))
+                                     request.args.get("promote_error", ""),
+                                     request.args.get("append_error", ""))
         # The same, at the top of the right column on big screens, shown
         # once the header has scrolled away (leaf.js).
         rail_actions = (
@@ -2777,6 +2873,43 @@ def promote_page(slug):
     return redirect(f"/page/{new_slug}")
 
 
+@app.post("/append/<path:slug>")
+def append_page(slug):
+    """Append a scratch note to a page as a section (note_as_section, its
+    tags into the page's frontmatter), and delete the note. Links to the
+    note point at that section, all in one commit."""
+    if not is_scratch(slug):
+        abort(400)
+    old_path = safe_path(slug)
+    if old_path is None or not old_path.exists():
+        abort(404)
+    back = f"/page/{slug}?append_error="
+    raw = request.form.get("page", "").strip()
+    raw = raw.removeprefix("/page/").split("#")[0].strip("/")
+    target = raw if safe_path(raw) and safe_path(raw).exists() else to_slug(raw)
+    # [ ] | would break the wikilinks that now point at the section.
+    heading = re.sub(r"[\[\]|]", "", request.form.get("heading", "")).strip()
+    target_path = safe_path(target) if target else None
+    if not target_path or not target_path.exists():
+        return redirect(back + quote(f"There is no page “{raw}”" if raw else "Choose a page"))
+    if target == slug:
+        return redirect(back + quote("Choose another page than this note"))
+    if not heading:
+        return redirect(back + quote("Give the section a heading"))
+    page = target_path.read_text(encoding="utf-8")
+    anchor = section_anchor(heading)
+    if any(section_anchor(h) == anchor for h in re.findall(
+            r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", _mask_code(page)[0], re.M)):
+        return redirect(back + quote(f"“{target}” already has a section “{heading}”"))
+    section, tags = note_as_section(old_path.read_text(encoding="utf-8"), heading)
+    page = add_frontmatter_tags(page, tags)
+    target_path.write_text(page.rstrip("\n") + "\n\n" + section, encoding="utf-8")
+    old_path.unlink()
+    modified_refs = update_references(slug, target, heading)
+    git_commit([old_path, target_path, *modified_refs], f"Append {slug} to {target}")
+    return redirect(f"/page/{target}#{anchor}")
+
+
 @app.post("/delete/<path:slug>")
 def delete_page(slug):
     if is_protected(slug):
@@ -2820,6 +2953,13 @@ def _version_label(entry: dict, entries: list[dict]) -> str:
         if entry["path"] == f"{m.group(2)}.md":
             return "Moved from Scratch"
         return "Link updated (a scratch note moved to the wiki)"
+    m = re.fullmatch(r"Append (\S+) to (\S+)", msg)
+    if m:
+        if entry["path"] == f"{m.group(2)}.md":
+            return "Scratch note appended"
+        if entry["path"] == f"{m.group(1)}.md":
+            return f"Appended to “{m.group(2)}”"
+        return "Link updated (a scratch note appended to a page)"
     m = re.fullmatch(r"Restore \S+ to ([0-9a-f]{7,40})", msg)
     if m:
         old = next((e for e in entries if e["sha"].startswith(m.group(1))), None)

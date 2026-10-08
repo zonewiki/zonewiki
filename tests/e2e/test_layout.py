@@ -721,3 +721,32 @@ def test_move_scratch_note_to_wiki(page, wiki):
     page.wait_for_url("**/page/conversations/2026-10-08_alex-sync")
     assert (wiki.root / "conversations" / "2026-10-08_alex-sync.md").exists()
     assert not (wiki.root / f"{note}.md").exists()
+
+
+def test_append_scratch_note_to_page(page, wiki):
+    # Append to page…: pick the page, keep the suggested heading, and land
+    # on the new section there.
+    note = "2026-10-08_14-03-11_alex-notes"
+    wiki.write(note, "# Alex notes\n\nText.\n")
+    wiki.write("people/alex", "# Alex\n\nAbout.\n")
+    page.goto(f"/page/{note}")
+    page.locator(".page-header-actions").get_by_role("button", name="More actions").click()
+    page.locator("#page-menu").get_by_role("menuitem", name="Append to page…").click()
+    dialog = page.locator("#page-append-dialog")
+    expect(page.locator("#append-page")).to_be_focused()
+    expect(page.locator("#append-heading")).to_have_value("Alex notes (2026-10-08)")
+    page.locator("#append-page").fill("people/alex")
+    dialog.get_by_role("button", name="Append").click()
+    page.wait_for_url("**/page/people/alex#alex-notes-2026-10-08")
+    expect(page.locator("#alex-notes-2026-10-08")).to_be_visible()
+    assert not (wiki.root / f"{note}.md").exists()
+    # A page that doesn't exist brings the dialog back with the error.
+    wiki.write(note, "# Alex notes\n")
+    page.goto(f"/page/{note}")
+    page.locator(".page-header-actions").get_by_role("button", name="More actions").click()
+    page.locator("#page-menu").get_by_role("menuitem", name="Append to page…").click()
+    page.locator("#append-page").fill("nowhere")
+    page.keyboard.press("Enter")
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("There is no page “nowhere”")
+    assert "append_error" not in page.url
