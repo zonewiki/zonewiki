@@ -1555,6 +1555,12 @@ body.editor-page main {
 .hist-table tr:last-child td { border-bottom: none; }
 .hist-date { white-space: nowrap; font-family: var(--mono); color: var(--fg); }
 .hist-rel  { white-space: nowrap; color: var(--muted); }
+/* Phones: the uncommitted list's date says when; the relative time would
+   push the Diff/View buttons off the screen. */
+@media (max-width: 640px) {
+  .hist-table .hist-rel { display: none; }
+  .hist-table td { padding-inline: .4rem; }
+}
 .hist-msg  { color: var(--fg); width: 100%; }
 .hist-filepath { display: block; color: var(--muted); font-size: 0.85em; }
 /* Page history (/history): one row per saved version, the row opening it,
