@@ -240,7 +240,6 @@ class SearchIndex:
         self.docs = docs
         self.k1 = k1
         self.b = b
-        self._tf: list[dict[str, int]] = []
         self._len: list[int] = []
         # Inverted index: term -> [(doc index, term frequency)], so a search
         # scores only the docs containing its terms, not every doc.
@@ -250,7 +249,6 @@ class SearchIndex:
             tf: dict[str, int] = {}
             for t in d.get("tokens", ()):
                 tf[t] = tf.get(t, 0) + 1
-            self._tf.append(tf)
             self._len.append(sum(tf.values()))
             for t, f in tf.items():
                 df[t] = df.get(t, 0) + 1
