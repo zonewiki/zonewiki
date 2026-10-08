@@ -3317,53 +3317,60 @@ def _task_refs_as_titles(content: str) -> str:
         content, lambda ref, task: _plain_task_title(task.get("title", "")) if task else "")
 
 
-def _page_search_docs() -> list[dict]:
-    """Every page as a BM25 document: its text, its title (TITLE_WEIGHT extra
-    times) and the words of its slug once, so a page is found by its file
-    and folder names too ("robin" finds .../2026-06-18_update-alex-robin)
-    without those outranking what the page says."""
-    docs = []
-    seen = set()
-    deck_key = deck_module._deck_mtimes()
+def _per_page(cache: dict, build, key=None, fresh=lambda value, key: True) -> list:
+    """build(slug, content, mtime) for every page, cached per page until its
+    file changes (by mtime, so edits made outside the app count), or until
+    fresh(value, key) says the value is stale. Entries of pages that are
+    gone are dropped. One bad file must not fail every search: a page
+    deleted meanwhile is skipped, one that isn't UTF-8 is read with
+    stand-ins for the undecodable bytes."""
+    out, seen = [], set()
     for md_file, slug in iter_pages():
-        seen.add(slug)
         try:
             mtime = md_file.stat().st_mtime
         except OSError:
             continue
-        cached = _search_doc_cache.get(slug)
-        # A page with [[task:…]] is indexed with the tasks' titles, so it is
-        # stale when the deck changes too.
-        if cached and cached[0] == mtime and (not cached[1]["task_refs"] or cached[2] == deck_key):
-            docs.append(cached[1])
-            continue
-        # One bad file must not fail every search: a page deleted meanwhile
-        # is skipped, one that isn't UTF-8 is searched with stand-ins for
-        # the undecodable bytes.
-        try:
-            content = md_file.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            seen.discard(slug)
-            continue
-        title = page_title(content, slug)
-        text = search.strip_link_targets(_task_refs_as_titles(content))
-        doc = {
-            "slug": slug,
-            "title": title,
-            "mtime": mtime,
-            "task_refs": bool(deck_module.TASK_REF_RE.search(content)),
-            "tags": _page_tags(content),
-            "excerpt_text": text,
-            "tokens": search.tokenize(text)
-            + search.tokenize(title) * search.TITLE_WEIGHT
-            + search.tokenize(slug),
-        }
-        _search_doc_cache[slug] = (mtime, doc, deck_key)
-        docs.append(doc)
-    # Drop cache entries for deleted/renamed pages.
-    for stale in [s for s in _search_doc_cache if s not in seen]:
-        del _search_doc_cache[stale]
-    return docs
+        cached = cache.get(slug)
+        if not (cached and cached[0] == mtime and fresh(cached[1], cached[2])):
+            try:
+                content = md_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            cached = cache[slug] = (mtime, build(slug, content, mtime), key)
+        seen.add(slug)
+        out.append(cached[1])
+    for stale in [s for s in cache if s not in seen]:
+        del cache[stale]
+    return out
+
+
+def _page_search_doc(slug: str, content: str, mtime: float) -> dict:
+    """A page as a BM25 document: its text, its title (TITLE_WEIGHT extra
+    times) and the words of its slug once, so a page is found by its file
+    and folder names too ("robin" finds .../2026-06-18_update-alex-robin)
+    without those outranking what the page says."""
+    title = page_title(content, slug)
+    text = search.strip_link_targets(_task_refs_as_titles(content))
+    return {
+        "slug": slug,
+        "title": title,
+        "mtime": mtime,
+        "task_refs": bool(deck_module.TASK_REF_RE.search(content)),
+        "tags": _page_tags(content),
+        "excerpt_text": text,
+        "tokens": search.tokenize(text)
+        + search.tokenize(title) * search.TITLE_WEIGHT
+        + search.tokenize(slug),
+    }
+
+
+def _page_search_docs() -> list[dict]:
+    """Every page as a BM25 document (_page_search_doc). A page with
+    [[task:…]] is indexed with the tasks' titles, so it is stale when the
+    deck changes too."""
+    deck_key = deck_module._deck_mtimes()
+    return _per_page(_search_doc_cache, _page_search_doc, key=deck_key,
+                     fresh=lambda doc, key: not doc["task_refs"] or key == deck_key)
 
 
 # The BM25 index over the current docs, rebuilt only when a doc changes.
@@ -3373,13 +3380,17 @@ def _page_search_docs() -> list[dict]:
 _search_index_cache: dict = {"key": None, "index": None}
 
 
-def _search_index() -> search.SearchIndex:
-    docs = _page_search_docs() + deck_module.task_search_docs()
+def _cached_index(cache: dict, docs: list[dict]) -> search.SearchIndex:
+    """The BM25 index over docs, kept in cache until a doc changes."""
     key = tuple(map(id, docs))
-    if _search_index_cache["key"] != key:
-        _search_index_cache["index"] = search.SearchIndex(docs)
-        _search_index_cache["key"] = key
-    return _search_index_cache["index"]
+    if cache["key"] != key:
+        cache["index"] = search.SearchIndex(docs)
+        cache["key"] = key
+    return cache["index"]
+
+
+def _search_index() -> search.SearchIndex:
+    return _cached_index(_search_index_cache, _page_search_docs() + deck_module.task_search_docs())
 
 
 # ── Semantic search (opt-in, see embed.py) ───────────────────────────────────
@@ -3436,6 +3447,12 @@ def _accepts(query: search.Query, d: dict) -> bool:
     return query.accepts(_doc_text(d), d["tokens"], d.get("tags"), _doc_date(d))
 
 
+def _passes(query: search.Query, d: dict, keep=None) -> bool:
+    """Whether a doc takes part in a search: it passes `keep` (when given)
+    and the query's filters."""
+    return (keep is None or keep(d)) and (not query.has_filters or _accepts(query, d))
+
+
 def _has_phrase(d: dict, phrase: str) -> bool:
     # The squashed text is cached on the doc, which lives until its file changes.
     if "_squashed" not in d:
@@ -3452,8 +3469,7 @@ def _phrase_first(ranked: list[dict], query: search.Query, index: search.SearchI
     if not phrase:
         return ranked
     hits = [d for _s, d in index.search(query.ranking_text, limit=len(index.docs))
-            if (keep is None or keep(d)) and (not query.has_filters or _accepts(query, d))
-            and _has_phrase(d, phrase)]
+            if _passes(query, d, keep) and _has_phrase(d, phrase)]
     if not hits:
         return ranked
     first = {id(d) for d in hits}
@@ -3467,7 +3483,7 @@ def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None)
     if not query.has_filters and keep is None:
         return [d for _s, d in index.search(text, limit=depth)]
     return [d for _s, d in index.search(text, limit=len(index.docs))
-            if (keep is None or keep(d)) and _accepts(query, d)][:depth]
+            if _passes(query, d, keep)][:depth]
 
 
 def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
@@ -3482,7 +3498,7 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
             return []
         # Only date filters ("edited:2026-09"): everything that passes,
         # newest first. There are no words to rank by.
-        docs = [d for d in index.docs if (keep is None or keep(d)) and _accepts(query, d)]
+        docs = [d for d in index.docs if _passes(query, d, keep)]
         return sorted(docs, key=lambda d: _doc_date(d) or "", reverse=True)[:limit]
     # Each ranking goes as deep as the fused list must be long.
     depth = max(FUSE_DEPTH, limit) if SEMANTIC else limit
@@ -3490,8 +3506,7 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
     if not SEMANTIC:
         return _phrase_first(bm25, query, index, keep)[:limit]
     SEMANTIC.poke()
-    allowed = [d for d in index.docs if (keep is None or keep(d))
-               and (not query.has_filters or _accepts(query, d))]
+    allowed = [d for d in index.docs if _passes(query, d, keep)]
     pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
     tasks = {d["task_id"]: d for d in allowed if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=depth)
@@ -3607,7 +3622,7 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
 # text: an LLM needs the passages, and the best ones may share a page. BM25
 # runs over sections here, fused with semantic section hits when that is on.
 
-_chunk_doc_cache: dict[str, tuple[float, list[dict]]] = {}
+_chunk_doc_cache: dict[str, tuple[float, list[dict], None]] = {}
 
 
 def _section_anchor(heading: str, level: int) -> str:
@@ -3619,40 +3634,27 @@ def _section_anchor(heading: str, level: int) -> str:
     return f"#{_heading_id(_plain_heading(heading))}"
 
 
+def _page_chunks(slug: str, content: str, mtime: float) -> list[dict]:
+    """A page's sections (embed.chunk_sections) as BM25 documents. A
+    section's `key` is the one its vector has in the semantic index."""
+    title, body = _semantic_text(content, slug)
+    tags = _page_tags(content)
+    chunks = []
+    for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
+        chunk = f"{heading}\n{text}" if heading else text
+        chunks.append({
+            "slug": slug, "title": title, "heading": heading, "text": text,
+            "anchor": _section_anchor(heading, level), "tags": tags,
+            "mtime": mtime, "key": embed.chunk_key(title, chunk),
+            "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT
+            + search.tokenize(slug),
+        })
+    return chunks
+
+
 def _page_chunk_docs() -> list[dict]:
-    """Every page's sections (embed.chunk_sections) as BM25 documents,
-    cached per page by mtime like _search_doc_cache. A section's `key` is
-    the one its vector has in the semantic index."""
-    docs, seen = [], set()
-    for md_file, slug in iter_pages():
-        try:
-            mtime = md_file.stat().st_mtime
-        except OSError:
-            continue
-        cached = _chunk_doc_cache.get(slug)
-        if not cached or cached[0] != mtime:
-            try:
-                content = md_file.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            title, body = _semantic_text(content, slug)
-            tags = _page_tags(content)
-            chunks = []
-            for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
-                chunk = f"{heading}\n{text}" if heading else text
-                chunks.append({
-                    "slug": slug, "title": title, "heading": heading, "text": text,
-                    "anchor": _section_anchor(heading, level), "tags": tags,
-                    "mtime": mtime, "key": embed.chunk_key(title, chunk),
-                    "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT
-                    + search.tokenize(slug),
-                })
-            cached = _chunk_doc_cache[slug] = (mtime, chunks)
-        seen.add(slug)
-        docs.extend(cached[1])
-    for stale in [s for s in _chunk_doc_cache if s not in seen]:
-        del _chunk_doc_cache[stale]
-    return docs
+    """Every page's sections as BM25 documents, cached per page by mtime."""
+    return [d for chunks in _per_page(_chunk_doc_cache, _page_chunks) for d in chunks]
 
 
 _chunk_index_cache: dict = {"key": None, "index": None}
@@ -3661,12 +3663,7 @@ _chunk_index_cache: dict = {"key": None, "index": None}
 def _chunk_index() -> search.SearchIndex:
     """BM25 over page sections and deck tasks (a task is one result, like a
     section), as the browser search ranks pages and tasks together."""
-    docs = _page_chunk_docs() + deck_module.task_search_docs()
-    key = tuple(map(id, docs))
-    if _chunk_index_cache["key"] != key:
-        _chunk_index_cache["index"] = search.SearchIndex(docs)
-        _chunk_index_cache["key"] = key
-    return _chunk_index_cache["index"]
+    return _cached_index(_chunk_index_cache, _page_chunk_docs() + deck_module.task_search_docs())
 
 
 def _in_folder(slug: str, folder: str | None) -> bool:
@@ -3703,14 +3700,13 @@ def retrieve(raw: str, limit: int = 8, under: str | None = None) -> list[dict]:
     if SEMANTIC:
         SEMANTIC.poke()
         sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)
-                    and (not query.has_filters or _accepts(query, d))]
+                    and _passes(query, d)]
         by_key = {d["key"]: d for d in sections}
         hits = [(by_key[k], sc) for k, sc in SEMANTIC.search_chunks(
             q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH) if k in by_key]
         task_hits = []
         if not under:
-            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task"
-                     and (not query.has_filters or _accepts(query, d))}
+            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task" and _passes(query, d)}
             task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
         if hits or task_hits:
             ranked = search.fuse([ranked, _by_similarity(hits, task_hits)[:FUSE_DEPTH]])
@@ -3831,7 +3827,7 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
 
     parsed = search.Query(query)
     docs = [d for d in deck_module.task_search_docs()
-            if matches(d["task"]) and (not parsed.has_filters or _accepts(parsed, d))]
+            if matches(d["task"]) and _passes(parsed, d)]
     if parsed.text.strip():
         ranked = [d for _s, d in search.SearchIndex(docs).search(parsed.text, limit=max(len(docs), 1))]
         if SEMANTIC:
