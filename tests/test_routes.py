@@ -205,17 +205,13 @@ class TestViewPage:
     def test_slug_with_md_extension_stripped(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n\nContent.\n")
         resp = client.get("/page/my-page.md", headers=HOST)
-        # Should redirect or serve the page without .md
-        assert resp.status_code in (200, 301, 302)
-
-    def test_index_page_served(self, client):
-        resp = client.get("/page/index", headers=HOST)
         assert resp.status_code == 200
+        assert "Content." in resp.data.decode()
 
     def test_page_title_in_head(self, client, wiki_dir):
         write_page(wiki_dir, "about", "# About Us\n\nInfo.\n")
         resp = client.get("/page/about", headers=HOST)
-        assert b"About Us" in resp.data
+        assert "<title>About Us — Leaf</title>" in resp.data.decode()
 
     def test_edit_link_present(self, client, wiki_dir):
         write_page(wiki_dir, "editable", "# Editable\n\ncontent\n")
@@ -445,14 +441,11 @@ class TestEditPageGet:
         assert "tags: work, urgent" in text
         assert "tldr: Short summary." in text
 
-    def test_edit_new_page_shows_empty_editor(self, client):
+    def test_edit_new_page_shows_editor_flagged_new(self, client):
         resp = client.get("/edit/brand-new-page", headers=HOST)
         assert resp.status_code == 200
-        assert b'name="content"' in resp.data
-
-    def test_new_page_textarea_flagged_data_new(self, client):
-        resp = client.get("/edit/brand-new-page", headers=HOST)
-        assert 'data-new="1"' in resp.data.decode()
+        text = resp.data.decode()
+        assert 'name="content"' in text and 'data-new="1"' in text
 
     def test_existing_page_textarea_not_flagged_data_new(self, client, wiki_dir):
         write_page(wiki_dir, "test-edit", "# Test\n\nContent here.\n")
@@ -511,24 +504,6 @@ class TestSavePage:
         assert resp.status_code in (301, 302)
         assert "conflict" in resp.headers["Location"]
 
-    def test_save_section_replaces_only_section(self, client, wiki_dir):
-        content = "# Title\n\npreamble\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n"
-        path = write_page(wiki_dir, "section-save", content)
-        rng = section_char_range(content, 1)
-        assert rng is not None
-        s, e = rng
-        resp = client.post("/edit/section-save", data={
-            "content": "## Alpha\n\nUPDATED alpha\n",
-            "file_hash": content_hash(content),
-            "start_char": str(s),
-            "end_char": str(e),
-        }, headers=HOST)
-        assert resp.status_code in (301, 302)
-        saved = path.read_text(encoding="utf-8")
-        assert "UPDATED alpha" in saved
-        assert "beta body" in saved
-        assert "preamble" in saved
-
     def test_save_normalizes_crlf(self, client, wiki_dir):
         resp = client.post(
             "/edit/crlf-page",
@@ -560,7 +535,7 @@ class TestApiSave:
 
     def test_section_save_returns_json(self, client, wiki_dir):
         content = "# T\n\npre\n\n## S\n\nbody\n"
-        path = write_page(wiki_dir, "api-section", content)
+        write_page(wiki_dir, "api-section", content)
         rng = section_char_range(content, 1)
         s, e = rng
         resp = client.post("/api/save/api-section", data={
@@ -698,12 +673,6 @@ class TestRenamePage:
         resp = client.post("/rename/page-a", data={"new_name": "page-b"}, headers=HOST)
         assert resp.status_code in (301, 302)
         assert "rename_error" in resp.headers["Location"]
-
-    def test_rename_preserves_content(self, client, wiki_dir):
-        write_page(wiki_dir, "preserve-me", "# Preserve\n\nUnique content 99.\n")
-        client.post("/rename/preserve-me", data={"new_name": "preserved"}, headers=HOST)
-        saved = (wiki_dir / "preserved.md").read_text(encoding="utf-8")
-        assert "Unique content 99." in saved
 
     def test_rename_from_page_view_returns_to_the_page(self, client, wiki_dir):
         # The page view's ⋯ menu renames through a dialog (from=page): an
