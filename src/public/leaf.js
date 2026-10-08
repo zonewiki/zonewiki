@@ -138,18 +138,12 @@
 }());
 
 // The page's actions at the top of the right column, once the header's
-// have scrolled out of view; Present only where the header's shows.
+// have scrolled out of view.
 (function () {
   const box = document.querySelector('.rail-actions');
   const header = document.querySelector('.page-header-actions');
   if (!box || !header) return;
-  const present = box.querySelector('.rail-present');
-  present?.addEventListener('click', () => document.getElementById('present-btn')?.click());
-  new IntersectionObserver(([entry]) => {
-    box.hidden = entry.isIntersecting;
-    const headerPresent = document.getElementById('present-btn');
-    if (present) present.hidden = !headerPresent || headerPresent.style.display === 'none';
-  }).observe(header);
+  new IntersectionObserver(([entry]) => { box.hidden = entry.isIntersecting; }).observe(header);
 }());
 
 // "Back to top" under the left column's TOC, once the page has scrolled a
@@ -793,6 +787,84 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
   document.getElementById('page-delete-dialog').close();
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
+
+// ── Page ⋯ menu ───────────────────────────────────────────────────────────────
+// Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
+// rendered hidden) for both ⋯ buttons, the header's and the right column's:
+// a popover under the pressed one, a bottom sheet on phones (the deck's
+// .task-menu styles). ↑/↓ move, Esc closes and returns focus to the ⋯.
+
+(function () {
+  const menu = document.getElementById('page-menu');
+  const backdrop = document.querySelector('.page-menu-backdrop');
+  if (!menu || !backdrop) return;
+  let opener = null;
+  const items = () => [...menu.querySelectorAll('[role="menuitem"]')].filter(el => !el.hidden);
+
+  function close(refocus) {
+    if (menu.hidden) return;
+    menu.hidden = backdrop.hidden = true;
+    document.removeEventListener('keydown', onKey, true);
+    opener?.setAttribute('aria-expanded', 'false');
+    if (refocus) opener?.focus();
+    opener = null;
+  }
+  function open(btn) {
+    opener = btn;
+    menu.hidden = backdrop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    // Under the button, right-aligned, flipped up if it doesn't fit below.
+    const r = btn.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    const top = r.bottom + 4 + m.height > window.innerHeight ? r.top - 4 - m.height : r.bottom + 4;
+    menu.style.top = `${Math.max(4, top)}px`;
+    menu.style.left = `${Math.max(4, Math.min(r.right - m.width, window.innerWidth - m.width - 4))}px`;
+    document.addEventListener('keydown', onKey, true);
+    items()[0]?.focus({ preventScroll: true });
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+    else if (e.key === 'Tab') close(false);
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); e.stopPropagation();
+      const list = items(), i = list.indexOf(document.activeElement);
+      list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
+    }
+  }
+
+  document.querySelectorAll('.page-menu-btn').forEach(btn => btn.addEventListener('click', () => {
+    const again = opener === btn;
+    close(false);
+    if (!again) open(btn);
+  }));
+  backdrop.addEventListener('click', () => close(false));
+  menu.addEventListener('click', e => {
+    const item = e.target.closest('[role="menuitem"]');
+    if (!item) return;
+    close(false);
+    if (item.dataset.action === 'delete') document.getElementById('page-delete-dialog')?.showModal();
+    else if (item.dataset.action === 'rename') openRename();
+  });
+
+  const rename = document.getElementById('page-rename-dialog');
+  const renameInput = document.getElementById('page-rename-input');
+  function openRename() {
+    if (!rename) return;
+    rename.showModal();
+    renameInput.focus();
+    renameInput.select();
+  }
+  if (rename) {
+    document.getElementById('page-rename-cancel').addEventListener('click', () => rename.close());
+    closeOnBackdropClick(rename);
+    // A refused rename comes back here with the error: show it in the dialog.
+    if (rename.hasAttribute('data-open')) {
+      openRename();
+      const url = new URL(location.href);
+      url.searchParams.delete('rename_error');
+      history.replaceState(null, '', url);
+    }
+  }
+}());
 
 // ── New-page modal ─────────────────────────────────────────────────────────────
 
@@ -2730,10 +2802,9 @@ document.addEventListener('keydown', e => {
     }
   }
 
-  // Show the button only when the page has headings — hidden by default in CSS.
+  // The ⋯ menu offers Present only when the page has headings (hidden in the HTML).
   function syncPresentBtn() {
-    const has = document.querySelector('.page-content h1, .page-content h2, .page-content h3');
-    presentBtn.style.display = has ? 'inline-block' : 'none';
+    presentBtn.hidden = !document.querySelector('.page-content h1, .page-content h2, .page-content h3');
   }
   requestAnimationFrame(syncPresentBtn);
   window.addEventListener('pageshow', syncPresentBtn);

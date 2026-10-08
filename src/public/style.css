@@ -80,12 +80,6 @@ body {
 }
 .btn:hover { opacity: .8; }
 .btn-sm { padding: .15rem .4rem; font-size: .75rem; line-height: 1; }
-.hist-link {
-  font-size: .8rem;
-  color: var(--muted);
-  text-decoration: none;
-}
-.hist-link:hover { text-decoration: underline; }
 .btn-primary {
   background: var(--btn-primary);
   color: var(--btn-primary-fg);
@@ -1491,7 +1485,23 @@ body.editor-page main {
 /* ── Page header actions group ─────────────────────────────────────────────── */
 
 .page-header-actions { display: flex; gap: .5rem; align-items: center; flex-shrink: 0; }
-#present-btn { display: none; }
+.page-menu-btn { padding-left: .55rem; padding-right: .55rem; letter-spacing: .05em; }
+/* The page's ⋯ menu: the deck's ⋯ menu look (.task-menu rules below, a
+   bottom sheet on phones); links as items, shortcuts on the right. */
+.page-menu[hidden], .page-menu-backdrop[hidden] { display: none !important; }
+.page-menu [hidden] { display: none !important; }
+.page-menu a {
+  display: block; padding: .4rem .6rem; border-radius: 4px;
+  color: var(--fg); font-size: .85rem; text-decoration: none;
+}
+.page-menu a:hover, .page-menu a:focus-visible { background: var(--code-bg); outline: none; }
+#page-menu button { display: flex; align-items: baseline; gap: 1.5rem; }
+.scratch-modal .rename-error { margin: 0; }
+.page-menu .menu-key {
+  margin-left: auto; padding: 0; border: none; background: none;
+  font-family: inherit; font-size: .75rem; color: var(--muted);
+}
+@media (hover: none) { .page-menu .menu-key { display: none; } }
 
 /* ── History ───────────────────────────────────────────────────────────────── */
 
@@ -2296,8 +2306,8 @@ div.chip-input > input {
   color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1;
 }
 .task-menu-btn:hover { background: var(--code-bg); color: var(--fg); }
-.task-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
-.task-menu {
+.task-menu-backdrop, .page-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.task-menu, .page-menu {
   position: fixed; z-index: 1000; min-width: 12rem; max-width: 18rem;
   display: flex; flex-direction: column; padding: .3rem;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -2308,13 +2318,14 @@ div.chip-input > input {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   border-bottom: 1px solid var(--border); margin-bottom: .2rem;
 }
-.task-menu button {
+.task-menu button, .page-menu button {
   display: block; width: 100%; text-align: left;
   padding: .4rem .6rem; border: none; border-radius: 4px; margin: 0;
   background: none; color: var(--fg); font: inherit; font-size: .85rem; cursor: pointer;
 }
-.task-menu button:hover, .task-menu button:focus-visible { background: var(--code-bg); outline: none; }
-.task-menu button.danger { color: #dc2626; }
+.task-menu button:hover, .task-menu button:focus-visible,
+.page-menu button:hover, .page-menu button:focus-visible { background: var(--code-bg); outline: none; }
+.task-menu button.danger, .page-menu button.danger { color: #dc2626; }
 
 /* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
    the small hover-era icons go; everything tappable gets a real target. */
@@ -2343,7 +2354,7 @@ div.chip-input > input {
   .tasks-empty .btn {
     display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .75rem; font-size: .8rem;
   }
-  .task-menu button { padding: .7rem .8rem; font-size: 1rem; }
+  .task-menu button, .page-menu button, .page-menu a { padding: .7rem .8rem; font-size: 1rem; }
   /* iOS Safari zooms the page on focusing a field under 16px */
   /* (element-qualified so it outranks the later .task-field input rules) */
   dialog.task-edit-modal :is(input, textarea, select, .date-trigger),
@@ -2548,8 +2559,8 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   }
   .task-edit-actions { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
   /* The ⋯ menu becomes a bottom sheet (inline top/left from JS are overridden) */
-  .task-menu-backdrop { background: rgba(0, 0, 0, .35); }
-  .task-menu {
+  .task-menu-backdrop, .page-menu-backdrop { background: rgba(0, 0, 0, .35); }
+  .task-menu, .page-menu {
     top: auto !important; left: 0 !important; right: 0; bottom: 0;
     max-width: none; border-radius: 12px 12px 0 0;
     padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));

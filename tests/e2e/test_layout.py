@@ -490,7 +490,13 @@ def test_page_actions_in_the_right_column_once_scrolled(new_page, wiki):
     page.evaluate("window.scrollTo(0, 1500)")
     expect(box).to_be_visible()
     expect(box.get_by_role("link", name="Edit")).to_have_attribute("href", "/edit/release")
-    box.get_by_role("button", name="Present").click()
+    box.get_by_role("button", name="More actions").click()
+    menu = page.locator("#page-menu")
+    expect(menu).to_be_visible()
+    # Under the column's ⋯, not the header's (scrolled out of view).
+    btn = box.get_by_role("button", name="More actions").bounding_box()
+    assert menu.bounding_box()["y"] >= btn["y"] + btn["height"]
+    menu.get_by_role("menuitem", name="Present").click()
     expect(page.locator(".presentation-overlay")).to_be_visible()
     page.keyboard.press("Escape")
     # A page without ## headings has no presentation: no Present there either.
@@ -498,7 +504,62 @@ def test_page_actions_in_the_right_column_once_scrolled(new_page, wiki):
     page.goto("/page/flat")
     page.evaluate("window.scrollTo(0, 3000)")
     expect(box).to_be_visible()
-    expect(box.get_by_role("button", name="Present")).to_be_hidden()
+    box.get_by_role("button", name="More actions").click()
+    expect(menu.get_by_role("menuitem", name="Rename…")).to_be_visible()
+    expect(menu.get_by_role("menuitem", name="Present")).to_be_hidden()
+
+
+def test_page_menu(page, wiki):
+    # The header's ⋯: keyboard (↓/↑ wrap, Esc back to the ⋯), History,
+    # Rename… in a dialog, Delete… in its confirmation dialog.
+    wiki.write("talk", "# Talk\n\n## One\n\nText.\n")
+    page.goto("/page/talk")
+    more = page.locator(".page-header-actions").get_by_role("button", name="More actions")
+    menu = page.locator("#page-menu")
+    expect(menu).to_be_hidden()
+    more.click()
+    expect(more).to_have_attribute("aria-expanded", "true")
+    assert menu.evaluate("m => [...m.querySelectorAll('[role=menuitem]')].map(i => i.firstChild.textContent)") \
+        == ["Present", "History", "Rename…", "Delete…"]
+    expect(menu.get_by_role("menuitem", name="Present")).to_be_focused()
+    page.keyboard.press("ArrowUp")                  # wraps to the last
+    expect(menu.get_by_role("menuitem", name="Delete…")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    expect(more).to_be_focused()
+    expect(more).to_have_attribute("aria-expanded", "false")
+    # A click outside closes it.
+    more.click()
+    page.mouse.click(5, 400)
+    expect(menu).to_be_hidden()
+    # Rename… renames from the page view and lands on the renamed page.
+    more.click()
+    menu.get_by_role("menuitem", name="Rename…").click()
+    field = page.locator("#page-rename-input")
+    expect(field).to_be_focused()
+    field.fill("speech")
+    page.locator("#page-rename-dialog").get_by_role("button", name="Rename").click()
+    page.wait_for_url("**/page/speech")
+    assert (wiki.root / "speech.md").exists() and not (wiki.root / "talk.md").exists()
+    # A taken name brings the dialog back with the error.
+    wiki.write("other", "# Other\n")
+    more.click()
+    menu.get_by_role("menuitem", name="Rename…").click()
+    field.fill("other")
+    page.keyboard.press("Enter")
+    expect(page.locator("#page-rename-dialog")).to_be_visible()
+    expect(page.locator("#page-rename-dialog")).to_contain_text('A page named "other" already exists')
+    assert "rename_error" not in page.url
+    page.keyboard.press("Escape")
+    # Delete… asks first.
+    more.click()
+    menu.get_by_role("menuitem", name="Delete…").click()
+    expect(page.locator("#page-delete-dialog")).to_be_visible()
+    page.locator("#page-delete-dialog").get_by_role("button", name="Cancel").click()
+    assert (wiki.root / "speech.md").exists()
+    # History is a link.
+    more.click()
+    expect(menu.get_by_role("menuitem", name="History")).to_have_attribute("href", "/history/speech")
 
 
 def test_section_jump_keys(page, wiki):

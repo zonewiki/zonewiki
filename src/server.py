@@ -1639,6 +1639,48 @@ def _build_delete_dialog(slug: str, title: str) -> str:
     )
 
 
+PAGE_MENU_BTN = ('<button type="button" class="btn page-menu-btn" aria-haspopup="menu" '
+                 'aria-expanded="false" aria-controls="page-menu" title="More actions" '
+                 'aria-label="More actions">⋯</button>')
+
+
+def _build_page_menu(slug: str, title: str, rename_error: str = "") -> str:
+    """The page view's ⋯ menu (Present, History, Rename…, Delete…) and the
+    rename dialog behind Rename…. It looks like the deck's ⋯ menu (style.css).
+    The menu is one hidden element that leaf.js
+    opens under whichever ⋯ was pressed (header or right column); Present
+    shows only on a page with headings. Outside the page grid, since the
+    middle column is a size container, which would anchor position: fixed."""
+    safe_slug = html.escape(slug)
+    items = ['<button type="button" role="menuitem" id="present-btn" hidden>'
+             'Present<kbd class="menu-key">p</kbd></button>']
+    if GIT_ENABLED:
+        items.append(f'<a role="menuitem" href="/history/{safe_slug}">History</a>')
+    rename_dialog = ""
+    if not is_protected(slug):
+        items.append('<button type="button" role="menuitem" data-action="rename">Rename…</button>')
+        items.append('<button type="button" role="menuitem" data-action="delete" class="danger">'
+                     'Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>')
+        error_html = (f'<p class="rename-error">{html.escape(rename_error)}</p>'
+                      if rename_error else "")
+        rename_dialog = (
+            f'<dialog id="page-rename-dialog" class="scratch-modal"'
+            f'{" data-open" if rename_error else ""}>'
+            f'<p class="scratch-label">Rename page</p>'
+            f'<form method="post" action="/rename/{safe_slug}">'
+            f'<input type="hidden" name="from" value="page">'
+            f'<input type="text" name="new_name" id="page-rename-input" value="{safe_slug}" '
+            f'aria-label="New name for “{html.escape(title)}”" autocomplete="off" spellcheck="false" required>'
+            f'{error_html}'
+            f'<div class="scratch-actions">'
+            f'<button type="submit" class="btn btn-primary">Rename</button>'
+            f'<button type="button" class="btn" id="page-rename-cancel">Cancel</button>'
+            f'</div></form></dialog>')
+    return (f'<div class="page-menu-backdrop" hidden></div>'
+            f'<div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>'
+            f'{"".join(items)}</div>{rename_dialog}')
+
+
 def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
     """Return (last_modified_html, commit_btn_html) for the page meta bar.
 
@@ -2221,23 +2263,17 @@ def view_page(slug):
         )
         page_meta_html = ""
         article_html = render_md(strip_h1(content))
-        rail_actions = ""
+        rail_actions = page_menu = ""
     else:
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
-        hist_link = f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else ""
-        actions = (
-            f'{hist_link}\n'
-            f'    <button id="present-btn" class="btn" title="Presentation mode">Present</button>\n'
-            f'    <a href="/edit/{slug}" class="btn">Edit</a>'
-        )
+        # Edit, and the rarer actions in a ⋯ menu (_build_page_menu).
+        actions = f'<a href="/edit/{slug}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
+        page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""))
         # The same, at the top of the right column on big screens, shown
         # once the header has scrolled away (leaf.js).
         rail_actions = (
             f'<div class="rail-actions" hidden>'
-            f'<a href="/edit/{slug}" class="btn">Edit</a>'
-            f'<button type="button" class="btn rail-present" title="Presentation mode">Present</button>'
-            + (f'<a href="/history/{slug}" class="hist-link">History</a>' if GIT_ENABLED else "")
-            + '</div>')
+            f'<a href="/edit/{slug}" class="btn">Edit</a>{PAGE_MENU_BTN}</div>')
         last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
         tags_html = _render_tags_pills_html(fm_meta.get('tags', []))
@@ -2282,7 +2318,7 @@ def view_page(slug):
 <div class="page-foot">{bl_html}</div>
 </div>
 <aside class="rail rail-context" aria-label="Links">{rail_actions}{_rail_copy(bl_html)}{_outlinks_html(slug, path)}</aside>
-</div>"""
+</div>{page_menu}"""
     return shell(title, body, wide=True)
 
 
@@ -2581,15 +2617,18 @@ def rename_page(slug):
     if old_path is None or not old_path.exists():
         abort(404)
     raw = request.form.get("new_name", "").strip()
+    # Back to where the rename was asked for: the editor, or the page view's
+    # ⋯ menu (which reopens its dialog with the error).
+    back = f"/page/{slug}" if request.form.get("from") == "page" else f"/edit/{slug}"
     # to_slug preserves underscores, so scratch timestamps survive a rename
     new_slug = to_slug(raw)
     if not new_slug or new_slug == slug:
-        return redirect(f"/edit/{slug}")
+        return redirect(back)
     new_path = safe_path(new_slug)
     if new_path is None:
         abort(400)
     if new_path.exists():
-        return redirect(f"/edit/{slug}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
+        return redirect(f"{back}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
     modified_refs = update_references(slug, new_slug)

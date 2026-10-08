@@ -419,6 +419,23 @@ class TestViewPage:
         assert right.startswith('<div class="rail-actions" hidden><a href="/edit/garden" class="btn">Edit</a>')
         assert "<section" not in right
 
+    def test_page_actions_menu(self, client, wiki_dir):
+        # The header has Edit and a ⋯ menu (Present, History with git,
+        # Rename…, Delete…); the right column the same two.
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n")
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        header = body.split('<div class="page-header-actions">', 1)[1].split("</div>", 1)[0]
+        assert '<a href="/edit/garden" class="btn">Edit</a>' in header
+        assert body.count('class="btn page-menu-btn"') == 2
+        menu = body.split('<div class="page-menu" id="page-menu"', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * server.GIT_ENABLED + ["Rename…", "Delete…"]
+        assert 'id="page-rename-dialog"' in body and 'id="page-delete-dialog"' in body
+        # The home page can't be renamed or deleted: only Present is left.
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * server.GIT_ENABLED
+        assert 'id="page-rename-dialog"' not in body
+
     def test_only_page_views_are_wide(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         for url in ("/deck", "/page/_scratch", "/search?q=garden", "/edit/garden"):
@@ -742,6 +759,21 @@ class TestRenamePage:
         client.post("/rename/preserve-me", data={"new_name": "preserved"}, headers=HOST)
         saved = (wiki_dir / "preserved.md").read_text(encoding="utf-8")
         assert "Unique content 99." in saved
+
+    def test_rename_from_page_view_returns_to_the_page(self, client, wiki_dir):
+        # The page view's ⋯ menu renames through a dialog (from=page): an
+        # error, or no change, goes back to the page view, not the editor.
+        write_page(wiki_dir, "page-a", "# A\n")
+        write_page(wiki_dir, "page-b", "# B\n")
+        resp = client.post("/rename/page-a", data={"new_name": "page-b", "from": "page"}, headers=HOST)
+        assert resp.headers["Location"].startswith("/page/page-a?rename_error=")
+        body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+        assert '<dialog id="page-rename-dialog" class="scratch-modal" data-open>' in body
+        assert 'A page named &quot;page-b&quot; already exists' in body
+        resp = client.post("/rename/page-a", data={"new_name": "page-a", "from": "page"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/page-a"
+        resp = client.post("/rename/page-a", data={"new_name": "page-c", "from": "page"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/page-c"
 
     def test_rename_updates_pipe_alias_wikilinks(self, client, wiki_dir):
         write_page(wiki_dir, "old-page", "# Old\n\ncontent\n")

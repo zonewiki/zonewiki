@@ -192,7 +192,7 @@ Every page view includes:
 From 1320px wide a page view (`view_page`, `shell(…, wide=True)` → `main.wide`) uses the room beside the text: three columns (`.page-grid`: 14rem · up to 60rem · 14rem, so the text sits in the middle of the window, where the other views have theirs), both sides sticky. Every other view (deck, scratch, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
 
 - **Left** (`.rail-left`): "On this page" (`_rail_toc_html`): the page's `[[toc]]` (copied from the rendered box), or without one its rendered `##`/`###` headings when there are at least `RAIL_TOC_MIN_HEADINGS` (3), links in them flattened. Otherwise empty; the column stays so the page keeps its place. At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL. `leaf.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view. A column taller than the window scrolls on its own: a fade marks the edge with more (`.rail-more-above`/`-below`, set by `leaf.js`, CSS `mask-image`), and the TOC scrolls its column (never the page) to keep the marked entry in view.
-- **Right** (`.rail-context`): at its top the page's actions (`.rail-actions`: Edit, Present, History), shown once the header's have scrolled out of view (IntersectionObserver in `leaf.js`; Present clicks the header's `#present-btn` and hides where that is hidden); then Backlinks, Linked tasks and Related (`_rail_copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`), and **Links to** (`_outlinks_html`: the existing pages this page links to, A–Z by title; only in the column), so a page nothing links to still shows its connections.
+- **Right** (`.rail-context`): at its top the page's actions (`.rail-actions`: Edit and ⋯, opening the same page menu as the header's), shown once the header's have scrolled out of view (IntersectionObserver in `leaf.js`); then Backlinks, Linked tasks and Related (`_rail_copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`), and **Links to** (`_outlinks_html`: the existing pages this page links to, A–Z by title; only in the column), so a page nothing links to still shows its connections.
 - **Middle** (`.page-col`, a size container): header, meta row and text keep the reading width (46rem, about 85 characters); a code block, table or image alone in its paragraph (`<p class="img-block">`, marked by `_mark_image_paragraphs` in `render_md`) is as wide as the text unless its content needs more, then grows up to the middle column, centred on the text (`width: max-content; min-width: 100%; max-width: 100cqw`); an image within a sentence stays inside the text. A deck embed keeps the text width, like the deck and scratch pages. Text itself is never widened: longer lines read worse.
 - The inline copies (`.page-content .toc`, `.page-foot`) and the breadcrumb's backlinks chip are hidden there. `main.wide` has wider side padding (3.5rem), so the badges fixed at the top left don't touch the breadcrumb on a window just over 1320px. Below 1320px the page is the single 800px column as before.
 
@@ -201,7 +201,7 @@ From 1320px wide a page view (`view_page`, `shell(…, wide=True)` → `main.wid
 ## Rendering
 
 - `server.py` reads `pages/<slug>.md`, converts it to HTML using `markdown-it-py`, and injects it into a shared HTML shell (Python f-string in `server.py` — not a separate template file).
-- The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit/History/Present), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
+- The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
 - The shared shell renders the product brand as `Leaf` (page titles, the switcher's accessible name), with a small green inline SVG leaf logo (`_LEAF_LOGO`) on the breadcrumb's Wiki link.
 
@@ -220,6 +220,7 @@ Clicking a column header of a table in a page's article sorts its rows: ascendin
 Every rendered page displays a `<header class="page-header">` above the article content containing:
 - An `<h1>` with the page title (derived from the first `# Heading` in the file, or the slug as a fallback)
 - An Edit button linking to `/edit/<slug>`
+- A **⋯ page menu** (`.page-menu-btn`, menu `#page-menu`, `_build_page_menu` in `server.py`; opening, keys and actions in `leaf.js`) with the rarer actions: **Present** (`#present-btn`, only on a page with headings, `p`), **History** (git only), **Rename…** (a dialog, `#page-rename-dialog`, see Rename) and **Delete…** (the `#page-delete-dialog` confirmation, also Ctrl+Delete); Rename… and Delete… not for `index`. One hidden menu element for both ⋯ buttons (header and right column), positioned under the pressed one: a popover with ↑/↓, Esc (focus back to the ⋯), a bottom sheet at ≤640px, styled like the deck's ⋯ menu (`.task-menu` rules list `.page-menu` too). It sits outside `.page-grid`, since the middle column is a size container and would anchor `position: fixed`. Shortcut hints (`.menu-key`) hide on touch screens.
 
 The `# H1` line is **stripped from the markdown** before rendering so the title is not duplicated in the body. Use a simple approach: if the first non-empty line of the file matches `^#\s+`, remove it before passing to `md.render()`.
 
@@ -274,7 +275,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (`_GIT_ENV`, also used by the tests' own git calls): git 2.47+ starts its automatic maintenance after a commit as a detached process, which nobody reaped with Leaf as the container's PID 1, so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions). Not detached, git reaps its own children; `run.sh`'s `--init` covers anything else.
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
-- History link appears next to Edit button on page view and in the editor toolbar.
+- History is in the page view's ⋯ menu (and the breadcrumb of a revision or diff links back to it).
 
 ### Table of Contents
 
@@ -353,12 +354,12 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
 
 ### Rename
 
-- The editor toolbar includes a "Rename" button that reveals an inline rename form (hidden by default).
+- The editor toolbar includes a "Rename" button that reveals an inline rename form (hidden by default); the page view's ⋯ menu has **Rename…**, which opens a dialog (`#page-rename-dialog`) with the same form plus `from=page`.
 - The form has a single text input pre-filled with the current slug, and a "Rename" submit button.
 - On submit, POSTs to `POST /rename/<slug>` with field `new_name` (human-readable name accepted, converted to slug server-side).
 - Server renames the file (`pages/<old>.md` → `pages/<new>.md`), updates wikilink references in all other pages (see Key Constraints), then redirects to `/page/<new-slug>`.
 - Renaming `index` is forbidden — the server returns 400 if the old slug is `index`.
-- If the new slug already exists, the server returns 400 (do not overwrite).
+- If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_error=…` (to the editor, which shows the rename bar with the error, or with `from=page` to the page view, whose rename dialog reopens with it). An unchanged name goes back the same way.
 - Validate new slug with `safe_path()` before renaming.
 
 ---
@@ -446,14 +447,14 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 
 ## Presentation Mode
 
-- A **"Present"** button appears in the page header actions whenever a page contains at least one `##` heading.
-- Clicking Present (or pressing **`p`**) opens a fullscreen dark overlay, splitting the article into slides at each `<h2>` boundary.
+- **Present** is in the page's ⋯ menu (see Page header) whenever the page has a heading.
+- Choosing Present (or pressing **`p`**) opens a fullscreen dark overlay, splitting the article into slides at each `<h2>` boundary.
 - Content before the first `<h2>` (if any) becomes an intro slide.
 - Navigation: **← →** arrow keys, or click "← Prev" / "Next →" buttons. **Esc** exits.
 - The slide counter (`1 / N`) is shown in the centre of the control bar.
 - Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay. CSS custom properties are overridden to force dark colours.
 - Syntax highlighting is re-applied via `hljs.highlightElement` when each slide is shown.
-- The Present button is hidden (via JS) on pages with no `##` headings.
+- The Present menu item is hidden (via JS, `syncPresentBtn`) on pages with no headings.
 
 ---
 
