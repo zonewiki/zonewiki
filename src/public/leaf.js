@@ -843,23 +843,23 @@ document.querySelector('.action-search')?.addEventListener('click', openSearchMo
 // on screen is hidden (style.css, html.sharing): the trail of visited pages,
 // backlinks, Related, Links to, linked tasks, the empty search modal's
 // recent pages, the editor's page list before anything is typed, the
-// status counts. Remembered in this browser; the server's inline script
-// applies it before the first paint.
+// status counts. And the server leaves out the pages not for sharing
+// (LEAF_NOSHARE). It is a cookie, so the server knows: it renders
+// <html class="sharing"> from the first paint, and switching reloads the
+// page, rendered for the new mode.
 const sharingBtn = document.querySelector('.top-sharing');
+const sharingOn = () => document.documentElement.classList.contains('sharing');
 function syncSharingButton() {
-  const on = document.documentElement.classList.contains('sharing');
+  const on = sharingOn();
   sharingBtn?.setAttribute('aria-pressed', String(on));
   if (sharingBtn) sharingBtn.title = on ? 'Sharing mode is on: click to show everything again (S)'
                                         : 'Sharing mode: hide what is around the page (S)';
 }
 function toggleSharing() {
-  const on = document.documentElement.classList.toggle('sharing');
-  try { localStorage.setItem('leaf-sharing', on ? '1' : '0'); } catch (_) {}
-  syncSharingButton();
-  if (typeof applyModalControls === 'function' && modalPages) applyModalControls();
-  showCheckboxToast(on ? 'Sharing mode on: other pages are hidden' : 'Sharing mode off');
+  const on = !sharingOn();
+  document.cookie = `leaf-sharing=${on ? '1' : '0'}; path=/; SameSite=Lax; max-age=${on ? 31536000 : 0}`;
+  location.reload();
 }
-const sharingOn = () => document.documentElement.classList.contains('sharing');
 sharingBtn?.addEventListener('click', toggleSharing);
 syncSharingButton();
 // The desktop's buttons at the top right (server.py top_actions_html).

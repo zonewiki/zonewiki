@@ -199,14 +199,15 @@ class TestViewPage:
                                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
-    def test_sharing_mode_applies_before_the_first_paint(self, client, wiki_dir):
-        # An inline script in <head> sets html.sharing from localStorage, so
-        # nothing sharing mode hides flashes on a shared screen.
+    def test_sharing_mode_is_rendered_from_the_cookie(self, client, wiki_dir):
+        # The server renders html.sharing from the cookie: from the first
+        # paint, nothing sharing mode hides flashes on a shared screen.
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/edit/my-page", "/deck"):
-            head = client.get(url, headers=HOST).get_data(as_text=True).split("</head>", 1)[0]
-            assert "localStorage.getItem('leaf-sharing') === '1'" in head, url
-            assert head.index("leaf-sharing") > head.index("/public/style.css"), url
+            assert '<html lang="en">' in client.get(url, headers=HOST).get_data(as_text=True), url
+        client.set_cookie("leaf-sharing", "1")
+        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+            assert '<html lang="en" class="sharing">' in client.get(url, headers=HOST).get_data(as_text=True), url
 
     def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
         # c t and the New task button tag a task as the deck's home does:
@@ -2022,3 +2023,65 @@ class TestVersion:
 ])
 def test_tag_param_matches(raw, tags, expected):
     assert deck_module.tag_param_matches({"tags": tags}, raw) is expected
+
+
+class TestNoshare:
+    """Sharing mode leaves out the pages LEAF_NOSHARE names (#tags, folders/)."""
+
+    @pytest.fixture(autouse=True)
+    def _config(self, monkeypatch):
+        tags, folders = server._parse_noshare("#noshare, #People ,personal/")
+        monkeypatch.setattr(server, "NOSHARE_TAGS", tags)
+        monkeypatch.setattr(server, "NOSHARE_FOLDERS", folders)
+        server._noshare_tag_cache.clear()
+
+    def _wiki(self, wiki_dir):
+        write_page(wiki_dir, "home2", "# Home2\n\n[[Bob]], [[personal/diary|my diary]] and [[Garden]].\n")
+        write_page(wiki_dir, "bob", "---\ntags: people\n---\n# Bob Secret\n\nAbout [[Home2]]. Garden too.\n")
+        write_page(wiki_dir, "personal/diary", "# Diary Secret\n\nGarden thoughts, see [[Home2]].\n")
+        write_page(wiki_dir, "garden", "# Garden\n\nBeds. See [[Home2]].\n")
+
+    def test_parse(self):
+        assert server._parse_noshare("#a, b ,x/,/y/ ,") == (frozenset({"a", "b"}), ("x/", "y/"))
+        assert server._parse_noshare("") == (frozenset(), ())
+
+    def test_off_everything_shows(self, client, wiki_dir):
+        self._wiki(wiki_dir)
+        assert "Bob Secret" in client.get("/page/bob", headers=HOST).get_data(as_text=True)
+        assert any(r["slug"] == "bob" for r in client.get("/api/search?q=about", headers=HOST).get_json())
+
+    def test_pages_hidden_in_sharing_mode(self, client, wiki_dir):
+        self._wiki(wiki_dir)
+        client.set_cookie("leaf-sharing", "1")
+        for url in ("/page/bob", "/page/personal/diary", "/edit/bob", "/history/bob"):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            assert "Hidden page" in body and "Secret" not in body, url
+        assert client.get("/api/page-preview/bob", headers=HOST).status_code == 404
+        assert "Garden" in client.get("/page/garden", headers=HOST).get_data(as_text=True)
+
+    def test_left_out_of_search_and_lists(self, client, wiki_dir):
+        self._wiki(wiki_dir)
+        client.set_cookie("leaf-sharing", "1")
+        slugs = {r["slug"] for r in client.get("/api/search?q=garden", headers=HOST).get_json()}
+        assert slugs == {"garden", "home2"}
+        assert "Secret" not in client.get("/search?q=secret", headers=HOST).get_data(as_text=True)
+        assert set(client.get("/api/pages", headers=HOST).get_json()) >= {"garden", "home2"}
+        assert not {"bob", "personal/diary"} & set(client.get("/api/pages", headers=HOST).get_json())
+        assert not {"bob", "personal/diary"} & {p["slug"] for p in client.get("/api/pages-list", headers=HOST).get_json()}
+
+    def test_links_to_them_become_plain_text(self, client, wiki_dir):
+        self._wiki(wiki_dir)
+        client.set_cookie("leaf-sharing", "1")
+        body = client.get("/page/home2", headers=HOST).get_data(as_text=True)
+        assert '<span class="wikilink-hidden">Bob</span>' in body
+        assert '<span class="wikilink-hidden">my diary</span>' in body
+        assert 'href="/page/garden"' in body and 'href="/page/bob"' not in body
+        # Nor do they show among the page's backlinks or links.
+        assert "Bob Secret" not in body and "Diary Secret" not in body
+
+    def test_scratch_notes_too(self, client, wiki_dir):
+        write_page(wiki_dir, "2026-10-01_09-00-00_salary", "---\ntags: noshare\n---\n# Salary talk\n")
+        write_page(wiki_dir, "2026-10-01_10-00-00_lunch", "# Lunch\n")
+        client.set_cookie("leaf-sharing", "1")
+        body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        assert "Lunch" in body and "Salary" not in body

@@ -65,6 +65,33 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 ALLOW_REMOTE  = os.environ.get("ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
+
+
+# ── Sharing mode ──────────────────────────────────────────────────────────────
+# For sharing the screen (leaf.js toggleSharing, a cookie): the CSS hides what
+# is around the page (html.sharing), and the server leaves out the pages that
+# are not for sharing. LEAF_NOSHARE names them: "#tag" entries are tags,
+# "folder/" entries folders (everything below them), e.g.
+# LEAF_NOSHARE=#noshare,#people,people/,personal/ ; default #noshare. A bare
+# word counts as a tag.
+
+SHARING_COOKIE = "leaf-sharing"
+
+
+def _parse_noshare(spec: str) -> tuple[frozenset[str], tuple[str, ...]]:
+    tags, folders = set(), []
+    for item in (x.strip() for x in spec.split(",")):
+        if not item:
+            continue
+        if item.endswith("/") and not item.startswith("#"):
+            folders.append(item.strip("/").lower() + "/")
+        else:
+            tags.add(item.lstrip("#").lower())
+    return frozenset(tags), tuple(folders)
+
+
+# Empty counts as unset (run.sh passes unset settings as empty strings).
+NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or "#noshare")
 ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}
 
 PUBLIC_DIR = Path(__file__).parent / "public"
@@ -613,8 +640,63 @@ def _list_dated_notes(pattern: re.Pattern, ts_format: str, date_format: str) -> 
 
 
 def list_scratch() -> list[dict]:
-    """Return all scratch notes sorted newest first."""
-    return _list_dated_notes(SCRATCH_RE, "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d %H:%M")
+    """Return all scratch notes sorted newest first (in sharing mode without
+    the ones not for sharing)."""
+    return [n for n in _list_dated_notes(SCRATCH_RE, "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d %H:%M")
+            if not hidden_page(n["slug"])]
+
+
+def sharing_on() -> bool:
+    """Whether this request comes from a browser in sharing mode."""
+    return has_request_context() and request.cookies.get(SHARING_COOKIE) == "1"
+
+
+# slug -> (mtime, whether its tags name it not for sharing)
+_noshare_tag_cache: dict[str, tuple[float, bool]] = {}
+
+
+def is_noshare(slug: str) -> bool:
+    """A page LEAF_NOSHARE names: in a noshare folder, or with a noshare tag
+    in its frontmatter (cached by the file's mtime)."""
+    low = slug.lower()
+    if any(low.startswith(f) or low == f[:-1] for f in NOSHARE_FOLDERS):
+        return True
+    if not NOSHARE_TAGS:
+        return False
+    path = safe_path(slug)
+    try:
+        mtime = path.stat().st_mtime if path else None
+    except OSError:
+        mtime = None
+    if mtime is None:
+        return False
+    cached = _noshare_tag_cache.get(slug)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        tags = {t.lower() for t in parse_frontmatter(path.read_text(encoding="utf-8"))[0].get("tags", [])}
+    except OSError:
+        tags = set()
+    result = bool(tags & NOSHARE_TAGS)
+    _noshare_tag_cache[slug] = (mtime, result)
+    return result
+
+
+def hidden_page(slug: str) -> bool:
+    """A page to leave out of this response: sharing mode is on and the page
+    is not for sharing."""
+    return sharing_on() and is_noshare(slug)
+
+
+def hidden_page_view() -> str:
+    """What a page not for sharing shows in sharing mode: neither its title
+    nor its text, and no stop in the navigation trail."""
+    body = (f'<div class="breadcrumb">{home_link()}<span class="breadcrumb-sep">›</span>'
+            '<span>Hidden page</span></div>'
+            '<header class="page-header"><h1>Hidden page</h1></header>'
+            '<article class="page-content"><p class="hidden-page-note">This page is not shown in '
+            'sharing mode. Turn sharing mode off (the eye at the top, or <kbd>S</kbd>) to see it.</p></article>')
+    return shell("Hidden page", body)
 
 
 _H1_RE = re.compile(r"^#[ \t]+(\S.*)$")
@@ -665,6 +747,10 @@ def process_wikilinks(text: str) -> str:
         if not page_name:
             return f'<a href="{anchor or "#"}" class="wikilink">{label}</a>'
         slug = page_name if page_name in slugs else to_slug(page_name)
+        if hidden_page(slug):
+            # Sharing mode: the words stay (they are this page's), the link
+            # to a page not for sharing goes.
+            return f'<span class="wikilink-hidden">{label}</span>'
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
         return f'<a href="/page/{html.escape(slug)}{anchor}" class="{css}">{label}</a>'
 
@@ -1529,8 +1615,10 @@ def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
     items = "".join(
         f'<li><a href="/page/{html.escape(other)}">'
         f'{html.escape(_page_meta(pages[other], other)[0])}</a></li>'
-        for other, _score in related
+        for other, _score in related if not hidden_page(other)
     )
+    if not items:
+        return ""
     return f'<section class="backlinks" id="related"><h3>Related</h3><ul>{items}</ul></section>'
 
 
@@ -1711,7 +1799,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
     safe_title = html.escape(title)
     extra_head_html = extra_head if extra_head else ""
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en"{' class="sharing"' if sharing_on() else ""}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
@@ -1724,9 +1812,6 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <link rel="stylesheet" href="/public/vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/public/style.css">
-  <!-- Sharing mode (leaf.js toggleSharing) before the first paint, so
-       nothing it hides ever flashes on a shared screen. -->
-  <script>try {{ if (localStorage.getItem('leaf-sharing') === '1') document.documentElement.classList.add('sharing'); }} catch (e) {{}}</script>
   <script src="/public/vendor/highlight/highlight.min.js" defer></script>
   <script src="/public/leaf.js" defer></script>
   {extra_head_html}
@@ -1942,7 +2027,8 @@ def scratch_page():
 def deleted_pages_route():
     if not GIT_ENABLED:
         abort(404)
-    pages = list_deleted_pages()
+    # Sharing mode: a deleted page's tags are gone with it; its folder still counts.
+    pages = [p for p in list_deleted_pages() if not hidden_page(p["slug"])]
     if pages:
         items = "".join(
             f'<li>'
@@ -1966,7 +2052,7 @@ def api_page_preview(slug):
     Heading ids become data-pid (the page underneath has its own ids), and
     deck embeds are left out (an app has no place in a preview)."""
     path = safe_path(slug)
-    if path is None or not path.exists():
+    if path is None or not path.exists() or hidden_page(slug):
         abort(404)
     content = path.read_text(encoding="utf-8")
     masked, stash = _mask_code(content)
@@ -2081,6 +2167,8 @@ def view_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
+    if hidden_page(slug):
+        return hidden_page_view()
 
     if not path.exists():
         # Show a restore prompt if the page was deleted from git history
@@ -2107,7 +2195,7 @@ def view_page(slug):
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    backlinks = find_backlinks(slug)
+    backlinks = [b for b in find_backlinks(slug) if not hidden_page(b["slug"])]
     # Tasks the page shows inline already aren't repeated under Linked tasks.
     inline = page_task_refs(content)
     task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
@@ -2241,6 +2329,8 @@ def _outlinks_html(slug: str, path: Path) -> str:
     _, targets = _page_meta(path, slug)
     pages = []
     for target in targets - {slug}:
+        if hidden_page(target):
+            continue
         target_path = safe_path(target)
         if target_path is not None and target_path.exists():
             pages.append((_page_meta(target_path, target)[0], target))
@@ -2262,6 +2352,8 @@ def edit_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
+    if hidden_page(slug):
+        return hidden_page_view()
     if path.exists():
         content = path.read_text(encoding="utf-8")
         title = page_title(content, slug)
@@ -2527,6 +2619,8 @@ def delete_page(slug):
 
 @app.get("/history/<path:slug>")
 def history_page_route(slug):
+    if hidden_page(slug):
+        return hidden_page_view()
     if not GIT_ENABLED:
         abort(404)
     path = safe_path(slug)
@@ -2575,6 +2669,8 @@ def history_page_route(slug):
 
 @app.get("/revision/<path:slug>/<sha>")
 def revision_view(slug, sha):
+    if hidden_page(slug):
+        return hidden_page_view()
     if not GIT_ENABLED:
         abort(404)
     if not SHA_RE.match(sha):
@@ -2684,6 +2780,8 @@ def api_pages_list():
     counts = all_backlink_counts()
     pages = []
     for md_file, slug in iter_pages():
+        if hidden_page(slug):
+            continue
         title, _ = _page_meta(md_file, slug)
         stat = md_file.stat()
         mtime = stat.st_mtime
@@ -2979,6 +3077,8 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
         tests.append(lambda d: d.get("type") != "task" and d["slug"] not in linked)
     if scratch:
         tests.append(lambda d: d.get("type") != "task" and is_scratch(d["slug"]))
+    if sharing_on():
+        tests.append(lambda d: d.get("type") == "task" or not is_noshare(d["slug"]))
     keep = (lambda d: all(t(d) for t in tests)) if tests else None
     docs = _ranked_docs(query, _search_index(), keep, limit)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
@@ -3493,7 +3593,7 @@ def api_version():
 
 @app.get("/api/pages")
 def api_pages():
-    return jsonify(all_slugs())
+    return jsonify([s for s in all_slugs() if not hidden_page(s)])
 
 
 @app.post("/api/upload")
@@ -3564,7 +3664,7 @@ def uncommitted_page():
     if not GIT_ENABLED:
         abort(404)
 
-    file_list = _uncommitted_entries()
+    file_list = [f for f in _uncommitted_entries() if not (f["slug"] and hidden_page(f["slug"]))]
     if file_list:
         rows = "".join(
             f'<tr>'
@@ -3634,7 +3734,7 @@ def api_uncommitted():
     """Return list of files with uncommitted changes."""
     return jsonify([
         {"slug": e["slug"], "title": e["title"], "filepath": e["filepath"]}
-        for e in _uncommitted_entries()
+        for e in _uncommitted_entries() if not (e["slug"] and hidden_page(e["slug"]))
     ])
 
 

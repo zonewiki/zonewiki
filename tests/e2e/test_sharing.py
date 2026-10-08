@@ -6,6 +6,13 @@ import re
 from playwright.sync_api import expect
 
 
+def sharing_on(page):
+    """Switch sharing mode on (S) and wait for the page, reloaded for it."""
+    page.keyboard.press("Shift+S")
+    page.wait_for_load_state()
+    expect(page.locator("html.sharing")).to_have_count(1)
+
+
 def _wiki(wiki):
     wiki.write("release", "# Release\n\nSee [[Rollout]].\n\n## Plan\n\nText.\n")
     wiki.write("rollout", "# Rollout\n\nBack to [[Release]].\n")
@@ -23,8 +30,7 @@ def test_sharing_mode_hides_the_surroundings(new_page, wiki):
     for sel in hidden:
         expect(page.locator(sel).first).to_be_visible()
     expect(page.locator("html.sharing")).to_have_count(0)
-    page.keyboard.press("Shift+S")
-    expect(page.locator("html.sharing")).to_have_count(1)
+    sharing_on(page)
     expect(page.locator(".top-sharing")).to_have_attribute("aria-pressed", "true")
     for sel in hidden:
         expect(page.locator(sel).first).to_be_hidden()
@@ -48,7 +54,7 @@ def test_sharing_mode_search_lists_nothing_until_typed(new_page, wiki):
     _wiki(wiki)
     page = new_page(viewport={"width": 1600, "height": 900})
     page.goto("/page/release")
-    page.keyboard.press("Shift+S")
+    sharing_on(page)
     page.keyboard.press("Control+p")
     expect(page.locator("#search-modal")).to_be_visible()
     expect(page.locator("#modal-page-list .page-list-item")).to_have_count(0)
@@ -62,7 +68,7 @@ def test_sharing_mode_editor_page_list_waits_for_letters(new_page, wiki):
     _wiki(wiki)
     page = new_page(viewport={"width": 1600, "height": 900})
     page.goto("/page/release")
-    page.keyboard.press("Shift+S")
+    sharing_on(page)
     page.goto("/edit/release")
     page.locator("#editor-textarea").press("Control+End")
     page.keyboard.type("\n[[")
@@ -86,6 +92,31 @@ def test_sharing_mode_hides_the_backlinks_chip_and_page_end(new_page, wiki):
     page.goto("/page/release")
     expect(page.locator(".bl-count")).to_be_visible()
     expect(page.locator(".page-foot .backlinks").first).to_be_visible()
-    page.keyboard.press("Shift+S")
+    sharing_on(page)
     expect(page.locator(".bl-count")).to_be_hidden()
     expect(page.locator(".page-foot")).to_be_hidden()
+
+
+def test_noshare_pages_hidden_in_sharing_mode(new_page, wiki):
+    # Pages tagged #noshare (LEAF_NOSHARE's default) are left out: their
+    # page shows "Hidden page", links to them are plain words, search and
+    # the editor's completion don't offer them.
+    wiki.write("bob", "---\ntags: noshare\n---\n# Bob Private\n\nNotes about Bob.\n")
+    wiki.write("team", "# Team\n\nTalk to [[Bob]] about notes.\n")
+    page = new_page(viewport={"width": 1400, "height": 900})
+    page.goto("/page/team")
+    expect(page.locator(".page-content a", has_text="Bob")).to_have_count(1)
+    sharing_on(page)
+    expect(page.locator(".page-content a", has_text="Bob")).to_have_count(0)
+    expect(page.locator(".page-content .wikilink-hidden")).to_have_text("Bob")
+    page.goto("/page/bob")
+    expect(page.locator("h1")).to_have_text("Hidden page")
+    expect(page.locator("body")).not_to_contain_text("Bob Private")
+    page.keyboard.press("Control+p")
+    page.locator("#modal-filter").fill("notes")
+    expect(page.locator(".search-result-card").first).to_contain_text("Team")
+    expect(page.locator(".search-result-card", has_text="Bob Private")).to_have_count(0)
+    # Off again: everything is back.
+    page.keyboard.press("Escape")
+    page.locator(".top-sharing").click()
+    expect(page.locator("h1")).to_have_text("Bob Private")
