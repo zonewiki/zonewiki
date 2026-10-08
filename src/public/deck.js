@@ -802,14 +802,8 @@
   }
 
   // Bare PUT without the per-call render of updateTask — for batched writes
-  // that end with a single fetchDeck().
-  function putTask(id, data) {
-    return fetch(`/api/deck/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-  }
+  // that end with a single fetchDeck(). Shared from leaf.js.
+  const putTask = (id, data) => window.putTask(id, data);
 
   async function afterBatchWrite() {
     await fetchDeck();

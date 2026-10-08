@@ -714,9 +714,8 @@ async function openHomeTask() {
   // The start date as the home's "+ New" gives it (today on Focus); without
   // a home, as /deck's Focus does.
   const homeless = !('deckTags' in document.body.dataset);
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const opts = { tags: deckTags, keep: deckKeep === '1', start_date: homeless || deckToday === '1' ? today : null };
+  const opts = { tags: deckTags, keep: deckKeep === '1',
+                 start_date: homeless || deckToday === '1' ? localDate() : null };
   if (typeof window.openDeckEdit !== 'function') {
     try {
       await loadHeadlessDeck();
@@ -792,14 +791,6 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
   document.getElementById('page-delete-dialog').close();
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
-
-// server.to_slug: lowercase, runs of anything else than a-z 0-9 _ become
-// "-", "/" separates folders.
-function toSlug(name) {
-  return name.trim().split('/')
-    .map(p => p.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/^-+|-+$/g, ''))
-    .filter(Boolean).join('/');
-}
 
 // server.promoted_slug: where a scratch note moved to the wiki goes.
 function promotedSlug(folder, name, date) {
@@ -1226,6 +1217,11 @@ document.addEventListener('keydown', e => {
 const textarea = document.getElementById('editor-textarea');
 const previewPane = document.getElementById('editor-preview');
 let previewTimer = null;
+// The live preview follows the text ~300ms after the last change.
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(fetchPreview, 300);
+}
 let applyFormat = () => {};   // set up with the editor's formatting bar
 
 if (textarea && previewPane) {
@@ -1255,8 +1251,7 @@ if (textarea && previewPane) {
     if (e.key === 'Tab') {
       e.preventDefault();
       if (expandSnippet()) {
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(fetchPreview, 300);
+        schedulePreview();
         return;
       }
       document.execCommand('insertText', false, '  ');
@@ -1284,8 +1279,7 @@ if (textarea && previewPane) {
         textarea.setSelectionRange(lineStart, lineEnd === -1 ? val.length : lineEnd);
         document.execCommand('insertText', false, toggled);
         textarea.setSelectionRange(pos, pos);
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(fetchPreview, 300);
+        schedulePreview();
       }
       return;
     }
@@ -1301,8 +1295,7 @@ if (textarea && previewPane) {
         document.execCommand('insertText', false, `[[${selected}]]`);
         const p = textarea.selectionStart - 2; // before ]]
         textarea.setSelectionRange(p, p);
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(fetchPreview, 300);
+        schedulePreview();
         return;
       }
       // Cursor inside [[...]] → follow the link
@@ -1319,16 +1312,14 @@ if (textarea && previewPane) {
         return;
       }
       if (continueList(textarea, e)) {
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(fetchPreview, 300);
+        schedulePreview();
       }
     }
   });
 
   textarea.addEventListener('input', () => {
     updateAcDropdown();
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(fetchPreview, 300);
+    schedulePreview();
   });
 
   textarea.addEventListener('blur', () => {
@@ -1603,11 +1594,6 @@ if (textarea && previewPane) {
   const pageSlug = (document.getElementById('editor-form')?.getAttribute('action') || '')
     .replace(/^\/edit\//, '');
 
-  function localToday() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
   async function makeTasks() {
     const v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
     const sel = v.slice(s, e);
@@ -1675,7 +1661,7 @@ if (textarea && previewPane) {
     }
 
     // Without the deck app (it failed to load): create right away.
-    const today = localToday();
+    const today = localDate();
     const created = [];
     for (const it of todo) {
       const q = window.DeckCore?.parseQuickAdd(it.text, today)
@@ -2252,8 +2238,7 @@ function insertWikilink(page) {
   textarea.setSelectionRange(bracketPos, pos);
   document.execCommand('insertText', false, '[[' + page + ']]');
   hideAcDropdown();
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(fetchPreview, 300);
+  schedulePreview();
 }
 
 function insertMdLink(page) {
@@ -2264,8 +2249,7 @@ function insertMdLink(page) {
   textarea.setSelectionRange(parenPos + 1, pos);
   document.execCommand('insertText', false, '/page/' + page);
   hideAcDropdown();
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(fetchPreview, 300);
+  schedulePreview();
 }
 
 // ── Snippets ──────────────────────────────────────────────────────────────────
@@ -2705,6 +2689,7 @@ function putTask(id, body) {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
 }
+window.putTask = putTask;   // deck.js's batched writes too
 
 document.addEventListener('change', async e => {
   const cb = e.target;
