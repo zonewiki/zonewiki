@@ -218,19 +218,46 @@ def git_commit_rename(old_path: Path, new_path: Path, modified_refs: list[Path],
     git_commit([old_path, new_path, *modified_refs], message)
 
 
+_RENAME_BRACES_RE = re.compile(r"\{([^{}]*) => ([^{}]*)\}")
+
+
+def _numstat_path(p: str) -> str:
+    """The path after a commit from a --numstat path, which for a rename
+    reads "old => new" or "dir/{old => new}.md"."""
+    if " => " not in p:
+        return p
+    if "{" in p:
+        return _RENAME_BRACES_RE.sub(r"\2", p).replace("//", "/")
+    return p.split(" => ", 1)[1]
+
+
 def git_log(path: Path, max_count: int | None = None) -> list[dict]:
+    """The commits of a file, newest first, across renames (--follow): sha,
+    date, time (YYYY-MM-DD HH:MM), rel (relative date), msg, the lines
+    added and deleted, and the file's path at that commit (`path`, relative
+    to the wiki), which differs from today's before a rename."""
     if not GIT_ENABLED:
         return []
     rel = str(path.relative_to(WIKI_DIR))
     count_args = ["-n", str(max_count)] if max_count else []
-    r = _git("git", "log", "--follow", *count_args,
-             "--format=%H\x1f%as\x1f%ar\x1f%s", "--", rel)
+    r = _git("git", "log", "--follow", *count_args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
+             "--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%s", "--", rel)
     entries = []
-    for line in r.stdout.splitlines():
-        parts = line.split("\x1f", 3)
-        if len(parts) == 4:
-            entries.append({"sha": parts[0], "date": parts[1],
-                            "rel": parts[2], "msg": parts[3]})
+    for record in r.stdout.split("\x1e")[1:]:
+        head, _, stats = record.partition("\n")
+        parts = head.split("\x1f", 4)
+        if len(parts) != 5:
+            continue
+        added = deleted = 0
+        at = rel
+        for line in stats.splitlines():
+            cols = line.split("\t", 2)
+            if len(cols) == 3:
+                added += int(cols[0]) if cols[0].isdigit() else 0
+                deleted += int(cols[1]) if cols[1].isdigit() else 0
+                at = _numstat_path(cols[2])
+        entries.append({"sha": parts[0], "date": parts[1], "rel": parts[2], "time": parts[3],
+                        "msg": parts[4], "added": added, "deleted": deleted, "path": at})
     return entries
 
 
@@ -307,22 +334,35 @@ def _commit_message(filepath: str) -> str:
     return f"Save {filepath[:-3]}" if filepath.endswith('.md') else f"Update {filepath}"
 
 
-def git_diff(sha: str, path: Path) -> str | None:
-    rel = str(path.relative_to(WIKI_DIR))
-    r = _git("git", "show", "--format=", "--patch", sha, "--", rel)
+def git_diff(sha: str, path: Path, *also: Path) -> str | None:
+    """What a commit changed in a file. `also`: its name before the commit,
+    when the commit renamed it, so the rename is seen as one (a pure rename
+    changes nothing) instead of a new file."""
+    rels = [str(p.relative_to(WIKI_DIR)) for p in (path, *also)]
+    r = _git("git", "show", "--format=", "--patch", "-M", sha, "--", *dict.fromkeys(rels))
     return r.stdout.strip() if r.returncode == 0 else None
 
 
 def _diff_to_html(diff: str) -> str:
-    """Render a unified diff as classed <span> lines for the diff view."""
+    """Render a unified diff as classed <span> lines for the diff view.
+    git's file headers (everything before a file's first @@) say nothing to
+    a reader and are left out; a hunk header becomes a quiet "⋯" between
+    the parts of the page that changed."""
     lines = []
+    in_header = False
     for line in diff.splitlines():
-        if line.startswith('+') and not line.startswith('+++'):
+        if line.startswith('diff --git '):
+            in_header = True
+        if line.startswith('@@'):
+            in_header = False
+            lines.append('<span class="diff-hunk">⋯</span>')
+            continue
+        if in_header:
+            continue
+        if line.startswith('+'):
             cls = 'diff-add'
-        elif line.startswith('-') and not line.startswith('---'):
+        elif line.startswith('-'):
             cls = 'diff-del'
-        elif line.startswith('@@'):
-            cls = 'diff-hunk'
         else:
             cls = 'diff-ctx'
         lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
@@ -2664,6 +2704,59 @@ def delete_page(slug):
 # ── History routes ────────────────────────────────────────────────────────────
 
 
+def _version_label(entry: dict, entries: list[dict]) -> str:
+    """What a commit did to the page, in words: Leaf's own commit messages
+    ("Update p", "Rename a to b", "Restore p to 1a2b3c4", …) read alike in a
+    list, so they are named by kind. Others are shown as written."""
+    msg = entry["msg"]
+    if re.fullmatch(r"(Update|Save) \S+", msg):
+        return "Edited"
+    if re.fullmatch(r"Create \S+", msg):
+        return "Created"
+    if re.fullmatch(r"Delete \S+", msg):
+        return "Deleted"
+    if msg == "Initial import":
+        return "Imported"
+    m = re.fullmatch(r"Rename (\S+) to (\S+)", msg)
+    if m:
+        if entry["path"] == f"{m.group(2)}.md":
+            return f"Renamed from “{m.group(1)}”"
+        return f"Link updated (“{m.group(1)}” renamed)"
+    m = re.fullmatch(r"Restore \S+ to ([0-9a-f]{7,40})", msg)
+    if m:
+        old = next((e for e in entries if e["sha"].startswith(m.group(1))), None)
+        return f"Restored the version of {old['time']}" if old else "Restored an older version"
+    return msg
+
+
+def _version_index(entries: list[dict], sha: str) -> int | None:
+    return next((i for i, e in enumerate(entries) if e["sha"].startswith(sha)), None)
+
+
+def _version_path(path: Path, entries: list[dict], sha: str) -> Path:
+    """The file's path at a commit: before a rename it had another name."""
+    i = _version_index(entries, sha)
+    return WIKI_DIR / entries[i]["path"] if i is not None else path
+
+
+def _is_current(path: Path, entries: list[dict]) -> bool:
+    """Whether the newest commit is what the page holds now (no edits on
+    disk since, not deleted)."""
+    if not entries or not path.exists():
+        return False
+    return git_show(entries[0]["sha"], _version_path(path, entries, entries[0]["sha"])) == \
+        path.read_text(encoding="utf-8")
+
+
+def _change_counts(e: dict) -> str:
+    parts = []
+    if e["added"]:
+        parts.append(f'<span class="hist-add">+{e["added"]}</span>')
+    if e["deleted"]:
+        parts.append(f'<span class="hist-del">−{e["deleted"]}</span>')
+    return " ".join(parts)
+
+
 @app.get("/history/<path:slug>")
 def history_page_route(slug):
     if hidden_page(slug):
@@ -2683,19 +2776,33 @@ def history_page_route(slug):
     if not entries and not page_exists:
         abort(404)
 
+    # One row per saved version, newest first. The row opens that version;
+    # the page as it is now is marked Current and opens the page itself.
+    # "Changes" shows what that save changed.
+    current = _is_current(path, entries)
+    rows = []
+    if page_exists and not current:
+        rows.append(
+            f'<li class="hist-row hist-current">'
+            f'<a class="hist-main" href="/page/{slug}"><span class="hist-when">Now</span>'
+            f'<span class="hist-what">Not committed yet</span></a>'
+            f'<span class="hist-badge">Current</span></li>')
+    for i, e in enumerate(entries):
+        is_cur = current and i == 0
+        href = f"/page/{slug}" if is_cur else f"/revision/{slug}/{e['sha']}"
+        rows.append(
+            f'<li class="hist-row{" hist-current" if is_cur else ""}">'
+            f'<a class="hist-main" href="{href}">'
+            f'<span class="hist-when">{e["time"]}<span class="hist-rel">{html.escape(e["rel"])}</span></span>'
+            f'<span class="hist-what">{html.escape(_version_label(e, entries))}</span>'
+            f'<span class="hist-counts">{_change_counts(e)}</span></a>'
+            + ('<span class="hist-badge">Current</span>' if is_cur else "")
+            + f'<a class="hist-changes" href="/diff/{slug}/{e["sha"]}" title="What this save changed">Changes</a>'
+            f'</li>')
     if entries:
-        rows = "".join(
-            f'<tr>'
-            f'<td class="hist-date">{e["date"]}</td>'
-            f'<td class="hist-rel">{html.escape(e["rel"])}</td>'
-            f'<td class="hist-msg">{html.escape(e["msg"])}</td>'
-            f'<td style="white-space:nowrap">'
-            f'<a href="/diff/{slug}/{e["sha"]}" class="btn">Diff</a> '
-            f'<a href="/revision/{slug}/{e["sha"]}" class="btn">View</a></td>'
-            f'</tr>'
-            for e in entries
-        )
-        table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'
+        table = (f'<p class="hist-intro">Every saved version of this page, newest first. '
+                 f'Open one to read it, step through older ones or bring it back.</p>'
+                 f'<ol class="hist-list">{"".join(rows)}</ol>')
     else:
         table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
 
@@ -2714,6 +2821,20 @@ def history_page_route(slug):
     return shell(f"History — {title}", body)
 
 
+def _version_nav(slug: str, entries: list[dict], i: int, current: bool, kind: str) -> str:
+    """← Older · Newer → between versions (kind: "revision" or "diff");
+    the newest, when it is the page as it is now, is the page itself."""
+    older = (f'<a href="/{kind}/{slug}/{entries[i + 1]["sha"]}" class="btn">← Older</a>'
+             if i + 1 < len(entries) else '<span class="btn" aria-disabled="true">← Older</span>')
+    if i == 0:
+        newer = '<span class="btn" aria-disabled="true">Newer →</span>'
+    elif i == 1 and current and kind == "revision":
+        newer = f'<a href="/page/{slug}" class="btn">Current →</a>'
+    else:
+        newer = f'<a href="/{kind}/{slug}/{entries[i - 1]["sha"]}" class="btn">Newer →</a>'
+    return f'<nav class="version-nav" aria-label="Versions">{older}{newer}</nav>'
+
+
 @app.get("/revision/<path:slug>/<sha>")
 def revision_view(slug, sha):
     if hidden_page(slug):
@@ -2725,39 +2846,62 @@ def revision_view(slug, sha):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = git_show(sha, path)
+    entries = git_log(path)
+    i = _version_index(entries, sha)
+    content = git_show(sha, _version_path(path, entries, sha))
     restore_sha = sha
     if content is None:
         # Deletion commit — file absent at this SHA; use parent
         r_par = _git("git", "rev-parse", "--verify", f"{sha}^")
         if r_par.returncode == 0:
             restore_sha = r_par.stdout.strip()
-            content = git_show(restore_sha, path)
+            content = git_show(restore_sha, _version_path(path, entries, sha))
         if content is None:
             abort(404)
     title = page_title(content, slug)
     page_exists = path.exists()
+    current = _is_current(path, entries)
+    when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
         back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (sha[:7], None))
+        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (when, None))
     else:
         back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
         breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
+    # Where this version stands: the current one, n versions back, or the last
+    # version of a deleted page. Restoring is offered for every other one.
+    if i is None:
+        where = f"Version <code>{sha[:7]}</code>"
+    elif current and i == 0:
+        where = f"The current version, saved {when}"
+    elif not page_exists and restore_sha != sha:
+        where = f"The last version before the page was deleted ({when})"
+    else:
+        back = i + (0 if current else 1) if page_exists else i
+        where = (f"The version of {when}"
+                 + (f" · {back} {'version' if back == 1 else 'versions'} back" if page_exists and back else ""))
+    can_restore = not (current and i == 0)
+    restore = (f'<form method="post" action="/restore/{slug}/{restore_sha}" class="version-restore" '
+               f'data-confirm="Make this version the page again? The page as it is now stays in its history.">'
+               f'<button type="submit" class="btn">Restore this version</button></form>'
+               if can_restore else "")
+    changes = (f'<a href="/diff/{slug}/{sha}" class="version-link">What this save changed</a>'
+               if i is not None else "")
+    nav = _version_nav(slug, entries, i, current, "revision") if i is not None else ""
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
-  <div class="page-header-actions">
-    <form method="post" action="/restore/{slug}/{restore_sha}" style="display:inline">
-      <button type="submit" class="btn btn-primary">Restore</button>
-    </form>
-    {back_link}
-  </div>
+  <div class="page-header-actions">{back_link}</div>
 </header>
-<div class="revision-banner">Revision <code>{sha[:7]}</code> — restoring will create a new commit.</div>
+<div class="version-bar">
+  <p class="version-where">{where}</p>
+  <div class="version-actions">{changes}{restore}</div>
+  {nav}
+</div>
 <article class="page-content">
   {render_md(strip_h1(content))}
 </article>"""
-    return shell(f"Revision {sha[:7]} — {title}", body)
+    return shell(f"{when} — {title}", body)
 
 
 @app.get("/diff/<path:slug>/<sha>")
@@ -2769,30 +2913,38 @@ def diff_view(slug, sha):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    diff = git_diff(sha, path)
+    entries = git_log(path)
+    i = _version_index(entries, sha)
+    before = [WIKI_DIR / entries[i + 1]["path"]] if i is not None and i + 1 < len(entries) else []
+    diff = git_diff(sha, _version_path(path, entries, sha), *before)
     if diff is None:
         abort(404)
     title = slug_display_name(slug)
     diff_html = _diff_to_html(diff)
     page_exists = path.exists()
+    when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
         back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (f'Diff {sha[:7]}', None))
+        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), ('Changes', None))
     else:
         back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
-        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, f'/history/{slug}'), (f'Diff {sha[:7]}', None))
+        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, f'/history/{slug}'), ('Changes', None))
+    what = html.escape(_version_label(entries[i], entries)) if i is not None else ""
+    nav = _version_nav(slug, entries, i, False, "diff") if i is not None else ""
+    view = (f'<a href="/revision/{slug}/{sha}" class="version-link">View this version</a>'
+            if i is not None else "")
     body = f"""{breadcrumb}
 <header class="page-header">
-  <h1>Diff <code>{sha[:7]}</code> — {html.escape(title)}</h1>
-  <div class="page-header-actions">
-    <form method="post" action="/restore/{slug}/{sha}" style="display:inline">
-      <button type="submit" class="btn btn-primary">Restore</button>
-    </form>
-    {back_link}
-  </div>
+  <h1>Changes — {html.escape(title)}</h1>
+  <div class="page-header-actions">{back_link}</div>
 </header>
+<div class="version-bar">
+  <p class="version-where">What the save of {when} changed{f" ({what[:1].lower() + what[1:]})" if what else ""}: <span class="hist-del">red</span> was taken out, <span class="hist-add">green</span> put in.</p>
+  <div class="version-actions">{view}</div>
+  {nav}
+</div>
 <pre class="diff-view">{diff_html}</pre>"""
-    return shell(f"Diff {sha[:7]} — {title}", body)
+    return shell(f"Changes {when} — {title}", body)
 
 
 @app.post("/restore/<path:slug>/<sha>")
@@ -2804,7 +2956,7 @@ def restore_revision(slug, sha):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = git_show(sha, path)
+    content = git_show(sha, _version_path(path, git_log(path), sha))
     if content is None:
         abort(404)
     path.parent.mkdir(parents=True, exist_ok=True)

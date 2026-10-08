@@ -175,9 +175,10 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |
 | GET    | `/pages`              | Redirects to `/` (browsing lives in the search modal) |
-| GET    | `/history/<slug>`     | Git commit log for a page (only when git is enabled) |
-| GET    | `/revision/<slug>/<sha>` | Render a page at a specific git commit (read-only view) |
-| POST   | `/restore/<slug>/<sha>` | Restore a page to a prior revision; creates a new commit |
+| GET    | `/history/<slug>`     | A page's saved versions, newest first (only when git is enabled; see Version history) |
+| GET    | `/revision/<slug>/<sha>` | A page as one save left it (read-only), with ← Older / Newer → and Restore |
+| GET    | `/diff/<slug>/<sha>`  | What one save changed in a page |
+| POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
 Every page view includes:
@@ -276,6 +277,10 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (`_GIT_ENV`, also used by the tests' own git calls): git 2.47+ starts its automatic maintenance after a commit as a detached process, which nobody reaped with Leaf as the container's PID 1, so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions). Not detached, git reaps its own children; `run.sh`'s `--init` covers anything else.
 - SHA values are validated with `SHA_RE = r'^[0-9a-f]{7,40}$'` before use.
 - History is in the page view's ⋯ menu (and the breadcrumb of a revision or diff links back to it).
+- **`/history/<slug>`** lists the page's saved versions, newest first, one row each (`.hist-list`): date and time, what the save did in words (`_version_label`: Leaf's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported; other messages as written) and the lines added/removed (`--numstat`). The row opens that version; the page as it is now is marked **Current** and opens the page itself (`_is_current`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead). **Changes** opens the diff.
+- **`/revision/<slug>/<sha>`** shows that version with a bar (`.version-bar`) saying where it stands ("The version of 2026-10-08 14:32 · 2 versions back", "The current version", or a deleted page's last version), **What this save changed** (the diff), **Restore this version** (a plain button that asks first: `form[data-confirm]` in `leaf.js`; not offered for the current version) and **← Older / Newer →** (`_version_nav`; Newer from the version before the current one is **Current →**, the page). The breadcrumb names the version by its time, not its hash.
+- **`/diff/<slug>/<sha>`** ("Changes") shows what that save changed, red taken out and green put in, without git's file headers (`_diff_to_html` leaves out everything before a file's first `@@`; a hunk header becomes `⋯`), with **View this version** and the same ← Older / Newer →. No Restore there: a diff shows a change, not a version.
+- **Renames**: `git_log` (`--follow`) records each commit's path for the file (`path`, from `--numstat`, `_numstat_path` reading `old => new` and `dir/{old => new}.md`), and revision, diff and restore read a version under the name it had then (`_version_path`); before, a version from before a rename was a 404. The diff of a rename passes both names (`git_diff(…, *also)`, `-M`), so a pure rename shows no change instead of the whole page as new.
 
 ### Table of Contents
 

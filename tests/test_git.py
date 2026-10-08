@@ -1,3 +1,4 @@
+import re
 """Tests for Leaf's git-backed version history — commits on write, history,
 revision/diff/restore, deleted pages, and the uncommitted-changes workflow.
 
@@ -261,8 +262,37 @@ class TestHistory:
         shas = git(wiki_dir, "log", "--format=%H", "--", "p.md").split()
         html = client.get("/history/p", headers=HOST).get_data(as_text=True)
         assert "History — P" in html
-        assert html.index(f"/revision/p/{shas[0]}") < html.index(f"/revision/p/{shas[1]}")
-        assert f"/diff/p/{shas[0]}" in html
+        # The newest is the page as it is now: marked Current, opening the page.
+        rows = html.split('<ol class="hist-list">', 1)[1].split("</ol>", 1)[0].split("<li ")[1:]
+        assert 'class="hist-row hist-current"' in rows[0] and 'href="/page/p"' in rows[0]
+        assert '<span class="hist-badge">Current</span>' in rows[0]
+        assert f"/revision/p/{shas[1]}" in rows[1] and "Current" not in rows[1]
+        assert f"/diff/p/{shas[0]}" in rows[0] and f"/diff/p/{shas[1]}" in rows[1]
+        # What each save did, in words, and how much it changed.
+        assert '<span class="hist-what">Edited</span>' in rows[0]
+        assert '<span class="hist-add">+1</span> <span class="hist-del">−1</span>' in rows[0]
+
+    def test_history_names_what_each_save_did(self, client, wiki_dir):
+        save(client, "draft", "# Talk\n\nv1\n")
+        client.post("/rename/draft", data={"new_name": "talk"}, headers=HOST)
+        old = head_sha(wiki_dir)
+        save(client, "talk", "# Talk\n\nv2\n")
+        client.post(f"/restore/talk/{old}", headers=HOST)
+        html = client.get("/history/talk", headers=HOST).get_data(as_text=True)
+        what = re.findall(r'<span class="hist-what">([^<]*)</span>', html)
+        assert what[0].startswith("Restored the version of 20")
+        assert what[1:] == ["Edited", "Renamed from “draft”", "Edited"]
+
+    def test_history_with_edits_not_committed_yet(self, client, wiki_dir):
+        # Edits on disk since the last commit: a "Now" row is the current
+        # one, and the newest commit is an old version like the rest.
+        save(client, "p", "# P\n\nv1\n")
+        sha = head_sha(wiki_dir)
+        (wiki_dir / "p.md").write_text("# P\n\nedited on disk\n", encoding="utf-8")
+        html = client.get("/history/p", headers=HOST).get_data(as_text=True)
+        rows = html.split('<ol class="hist-list">', 1)[1].split("<li ")[1:]
+        assert "Not committed yet" in rows[0] and 'href="/page/p"' in rows[0]
+        assert f'href="/revision/p/{sha}"' in rows[1] and "Current" not in rows[1]
 
     def test_history_follows_renames(self, client, wiki_dir):
         save(client, "before", "# Page\n\nv1\n")
@@ -319,6 +349,45 @@ class TestRevision:
         assert "old text" in html and "new text" not in html
         assert f'action="/restore/p/{old}"' in html
 
+    def test_revision_says_where_it_stands_and_steps_through(self, client, wiki_dir):
+        save(client, "p", "# P\n\nv1\n")
+        v1 = head_sha(wiki_dir)
+        save(client, "p", "# P\n\nv2\n")
+        v2 = head_sha(wiki_dir)
+        save(client, "p", "# P\n\nv3\n")
+        v3 = head_sha(wiki_dir)
+        html = client.get(f"/revision/p/{v2}", headers=HOST).get_data(as_text=True)
+        assert "· 1 version back" in html
+        assert f'<a href="/revision/p/{v1}" class="btn">← Older</a>' in html
+        assert '<a href="/page/p" class="btn">Current →</a>' in html     # the next is the page now
+        assert f'href="/diff/p/{v2}"' in html
+        # Restoring asks first, and is a plain button, not the main action.
+        form = html.split('class="version-restore"', 1)[1].split("</form>", 1)[0]
+        assert "data-confirm=" in form and 'class="btn">Restore this version' in form
+        html = client.get(f"/revision/p/{v1}", headers=HOST).get_data(as_text=True)
+        assert "· 2 versions back" in html and '<span class="btn" aria-disabled="true">← Older</span>' in html
+        assert f'<a href="/revision/p/{v2}" class="btn">Newer →</a>' in html
+        # The current version can't be restored: it is the page.
+        html = client.get(f"/revision/p/{v3}", headers=HOST).get_data(as_text=True)
+        assert "The current version" in html and "/restore/" not in html
+
+    def test_versions_from_before_a_rename(self, client, wiki_dir):
+        # A version saved under the page's old name is found under it:
+        # viewing, its changes and restoring it used to 404.
+        save(client, "draft", "# Talk\n\nold words\n")
+        old = head_sha(wiki_dir)
+        client.post("/rename/draft", data={"new_name": "talk"}, headers=HOST)
+        renamed = head_sha(wiki_dir)
+        save(client, "talk", "# Talk\n\nnew words\n")
+        resp = client.get(f"/revision/talk/{old}", headers=HOST)
+        assert resp.status_code == 200 and "old words" in resp.get_data(as_text=True)
+        assert client.get(f"/diff/talk/{old}", headers=HOST).status_code == 200
+        # The rename itself changed no text: not the whole page as new.
+        html = client.get(f"/diff/talk/{renamed}", headers=HOST).get_data(as_text=True)
+        assert "diff-add" not in html and "(no changes)" in html
+        assert client.post(f"/restore/talk/{old}", headers=HOST).status_code == 302
+        assert "old words" in (wiki_dir / "talk.md").read_text()
+
     def test_revision_accepts_short_sha(self, client, wiki_dir):
         save(client, "p", "# P\n\nold text\n")
         resp = client.get(f"/revision/p/{head_sha(wiki_dir)[:7]}", headers=HOST)
@@ -349,7 +418,10 @@ class TestDiff:
         html = client.get(f"/diff/p/{head_sha(wiki_dir)}", headers=HOST).get_data(as_text=True)
         assert '<span class="diff-del">-alpha</span>' in html
         assert '<span class="diff-add">+beta</span>' in html
-        assert 'class="diff-hunk"' in html
+        assert '<span class="diff-hunk">⋯</span>' in html
+        # No git file headers; it says which save and offers that version.
+        assert "diff --git" not in html and "+++ b/" not in html
+        assert f'href="/revision/p/{head_sha(wiki_dir)}"' in html and "/restore/" not in html
 
     def test_diff_escapes_html(self, client, wiki_dir):
         save(client, "p", "<script>x</script>\n")
@@ -608,9 +680,13 @@ class TestHelpers:
     def test_diff_to_html_empty(self):
         assert server._diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
 
-    def test_diff_to_html_file_headers_are_context(self):
-        out = server._diff_to_html("--- a/x\n+++ b/x\n context")
-        assert out.count('class="diff-ctx"') == 3
+    def test_diff_to_html_leaves_out_file_headers(self):
+        # Only what comes before the first @@ is a header: a removed line
+        # "-- x" reads "--- x" in the diff and stays.
+        out = server._diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
+                                   "@@ -1,2 +1,2 @@\n context\n--- x\n+++ y")
+        assert out == ('<span class="diff-hunk">⋯</span><span class="diff-ctx"> context</span>'
+                       '<span class="diff-del">--- x</span><span class="diff-add">+++ y</span>')
 
     @pytest.mark.parametrize("filepath,expected", [
         ("notes.md", "Save notes"),

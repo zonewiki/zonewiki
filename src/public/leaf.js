@@ -2187,6 +2187,11 @@ document.getElementById('delete-btn')?.addEventListener('click', e => {
   if (form) injectNextField(form);
 });
 
+// Forms that ask first (data-confirm), e.g. restoring an old version.
+document.querySelectorAll('form[data-confirm]').forEach(form => form.addEventListener('submit', e => {
+  if (!confirm(form.dataset.confirm)) e.preventDefault();
+}));
+
 document.getElementById('page-delete-dialog')?.querySelector('form')?.addEventListener('submit', function () {
   injectNextField(this);
 });

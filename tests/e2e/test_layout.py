@@ -668,3 +668,34 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     # 🌐 left of the module switcher, outside the content's edge.
     globe, switch = page.locator(".remote-badge").bounding_box(), page.locator(".breadcrumb .module-switch").bounding_box()
     assert globe["x"] + globe["width"] <= switch["x"] and globe["x"] >= 0
+
+
+def test_history_flow(page, wiki):
+    # History lists versions; a row opens one, ← Older / Newer → step through
+    # them, Restore asks first, and "What this save changed" shows the diff.
+    for text in ("v1", "v2", "v3"):
+        page.request.post("/edit/talk", form={"content": f"# Talk\n\n{text}\n"})
+    page.goto("/history/talk")
+    rows = page.locator(".hist-row")
+    expect(rows).to_have_count(3)
+    expect(rows.first.locator(".hist-badge")).to_have_text("Current")
+    rows.nth(2).locator(".hist-main").click()
+    expect(page.locator(".version-where")).to_contain_text("2 versions back")
+    expect(page.locator("article.page-content")).to_have_text("v1")
+    page.get_by_role("link", name="Newer →").click()
+    expect(page.locator("article.page-content")).to_have_text("v2")
+    # Declining the question changes nothing; accepting restores.
+    page.once("dialog", lambda d: d.dismiss())
+    page.get_by_role("button", name="Restore this version").click()
+    expect(page.locator(".version-where")).to_contain_text("1 version back")
+    assert "v3" in wiki.read("talk")
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_role("button", name="Restore this version").click()
+    page.wait_for_url("**/page/talk")
+    assert "v2" in wiki.read("talk")
+    page.goto("/history/talk")
+    expect(rows.first.locator(".hist-what")).to_contain_text("Restored the version of")
+    rows.nth(1).get_by_role("link", name="Changes").click()
+    expect(page.locator(".diff-view .diff-add")).to_have_text("+v3")
+    page.get_by_role("link", name="View this version").click()
+    expect(page.locator("article.page-content")).to_have_text("v3")

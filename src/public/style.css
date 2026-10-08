@@ -1526,6 +1526,36 @@ body.editor-page main {
 .hist-rel  { white-space: nowrap; color: var(--muted); }
 .hist-msg  { color: var(--fg); width: 100%; }
 .hist-filepath { display: block; color: var(--muted); font-size: 0.85em; }
+/* Page history (/history): one row per saved version, the row opening it,
+   "Changes" what that save changed; the page as it is now marked Current. */
+.hist-intro { color: var(--muted); font-size: .875rem; margin: .25rem 0 1rem; }
+.hist-list { list-style: none; margin: 0; padding: 0; }
+.hist-row { display: flex; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); }
+.hist-row:last-child { border-bottom: none; }
+.hist-main {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 1rem;
+  padding: .6rem .5rem; margin: 0 -.5rem; border-radius: 6px;
+  color: var(--fg); text-decoration: none;
+}
+.hist-main:hover { background: var(--code-bg); }
+.hist-when { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: .875rem; }
+.hist-when .hist-rel { margin-left: .6rem; }
+.hist-what { flex: 1; min-width: 0; font-size: .875rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-counts { white-space: nowrap; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.hist-add { color: #1a7f37; }
+.hist-del { color: #cf222e; }
+.hist-badge {
+  padding: .05rem .45rem; border-radius: 99px; font-size: .72rem; font-weight: 600;
+  color: var(--btn-primary-fg); background: var(--btn-primary);
+}
+.hist-current .hist-when { font-weight: 600; }
+.hist-changes { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.hist-changes:hover { color: var(--fg); }
+@media (prefers-color-scheme: dark) { .hist-add { color: #3fb950; } .hist-del { color: #f85149; } }
+@media (max-width: 640px) {
+  .hist-main { flex-wrap: wrap; row-gap: .1rem; }
+  .hist-what { flex-basis: 100%; order: 3; }
+}
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
 
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
@@ -1541,16 +1571,21 @@ body.editor-page main {
   .diff-del { color: #ffa198; background: #1f0d0d; }
 }
 
-.revision-banner {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: .5rem .875rem;
-  font-size: .875rem;
-  color: var(--muted);
-  margin-bottom: 1.5rem;
+/* An old version, or what one save changed (/revision, /diff): where it
+   stands, its actions, and ← Older · Newer → to step through versions. */
+.version-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem;
+  background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: .5rem .5rem .5rem .875rem; margin-bottom: 1.5rem; font-size: .875rem;
 }
-.revision-banner code { font-size: .8125rem; }
+.version-where { margin: 0; flex: 1 1 16rem; color: var(--fg); }
+.version-where code { font-size: .8125rem; }
+.version-actions { display: flex; align-items: center; gap: .75rem; }
+.version-restore { display: contents; }
+.version-link { font-size: .8125rem; color: var(--muted); }
+.version-link:hover { color: var(--fg); }
+.version-nav { display: flex; gap: .25rem; }
+.version-nav [aria-disabled="true"] { opacity: .4; cursor: default; }
 
 /* ── Presentation mode ─────────────────────────────────────────────────────── */
 
