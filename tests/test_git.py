@@ -637,6 +637,10 @@ class TestUncommitted:
         assert resp.get_json() == {"success": True}
         assert is_clean(wiki_dir)
 
+    def test_commit_file_without_json_body(self, client):
+        resp = client.post("/api/commit-file", data="filepath=index.md", headers=HOST)
+        assert resp.status_code == 400
+
     def test_commit_file(self, client, wiki_dir):
         client.post("/api/save/index", data={"content": "# Home\n\nedit\n"}, headers=HOST)
         resp = client.post("/api/commit-file", json={"filepath": "index.md"}, headers=HOST)

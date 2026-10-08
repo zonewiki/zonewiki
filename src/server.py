@@ -4259,8 +4259,8 @@ def api_commit_file():
     if not GIT_ENABLED:
         return jsonify({"error": "Git not enabled"}), 400
     
-    data = request.get_json()
-    filepath = data.get("filepath", "")
+    data = request.get_json(silent=True)
+    filepath = data.get("filepath", "") if isinstance(data, dict) else ""
     if not filepath:
         return jsonify({"error": "No filepath provided"}), 400
 
