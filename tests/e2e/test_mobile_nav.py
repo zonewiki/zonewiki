@@ -148,8 +148,19 @@ def test_top_actions_on_desktop(page, wiki):
     vw = page.viewport_size["width"]
     main = page.locator("main").bounding_box()
     for b in boxes:
-        assert 32 <= b["width"] <= 40 and b["width"] == b["height"]           # icon buttons, not tiny
         assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
+    for b in boxes[:3]:
+        assert 32 <= b["width"] <= 40 and b["width"] == b["height"]           # icon buttons, not tiny
+    # Search, the one used most, is a labelled pill with its shortcut.
+    assert boxes[3]["width"] > 100
+    expect(buttons.nth(3)).to_contain_text("Search")
+    expect(buttons.nth(3).locator("kbd")).to_have_text("Ctrl P")
+    # Groups: the eye set apart by a divider; the two "new" buttons side by
+    # side; a wider gap before search.
+    sep = page.locator(".top-actions .top-sep").bounding_box()
+    assert boxes[0]["x"] + boxes[0]["width"] < sep["x"] < boxes[1]["x"]
+    gap = lambda a, b: b["x"] - (a["x"] + a["width"])
+    assert gap(boxes[2], boxes[3]) > gap(boxes[1], boxes[2])
     assert all(a["x"] < b["x"] for a, b in zip(boxes, boxes[1:]))
     assert boxes[-1]["x"] + boxes[-1]["width"] > main["x"] + main["width"] - 40 and boxes[-1]["x"] < vw
     # The breadcrumb's own right end (the backlinks chip) keeps clear of them.

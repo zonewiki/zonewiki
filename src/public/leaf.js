@@ -938,6 +938,11 @@ syncSharingButton();
 document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
 document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
+// The search pill names its shortcut; on a Mac that is ⌘P.
+if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+  const key = document.querySelector('.top-search-key');
+  if (key) key.textContent = '⌘P';
+}
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 

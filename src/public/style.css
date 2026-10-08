@@ -117,14 +117,28 @@ body {
 .action-buttons button:hover { color: var(--fg); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
 @media (min-width: 641px) { .action-buttons { display: none; } }
 
-/* Top actions (top_actions_html in server.py): on desktop New scratch note,
-   New task and Search as icons at the top right of the page, in line with
-   the breadcrumb, which keeps their room free. Phones have the tab bar. */
+/* Top actions (top_actions_html in server.py): on desktop, at the top
+   right of the page in line with the breadcrumb, three groups: sharing mode,
+   a divider, New scratch note and New task, then Search as a labelled pill.
+   The breadcrumb and the status badges keep their room free
+   (--top-actions-w, its width). Phones have the tab bar. */
+/* Icons 3 × 2.25rem, gaps, divider and the pill's margin (8.91rem) plus
+   the pill's fixed width, so the row's width doesn't depend on the font. */
+main { --top-actions-w: 17.25rem; }
 .top-actions {
-  /* The last icon's visible edge on the content's edge: the buttons'
-     inner padding (.5rem) sits outside it. */
-  position: absolute; top: 1.5rem; right: calc(var(--main-pad) - .5rem);
-  display: flex; gap: .25rem;
+  /* The search pill's border on the content's edge. */
+  position: absolute; top: 1.5rem; right: var(--main-pad);
+  display: flex; align-items: center; gap: .25rem;
+}
+.top-sep { width: 1px; height: 1.25rem; margin: 0 .3rem; background: var(--border); }
+.top-actions .top-search {
+  width: 8.25rem; justify-content: flex-start; gap: .45rem; margin-left: .5rem; padding: 0 .45rem 0 .6rem;
+  border-color: var(--border); font: inherit; font-size: .8rem;
+}
+.top-actions .top-search svg { width: 16px; height: 16px; }
+.top-search-key {
+  margin-left: auto; padding: .05rem .3rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--code-bg); font-family: inherit; font-size: .7rem; color: var(--muted);
 }
 .top-actions button {
   display: flex; align-items: center; justify-content: center;
@@ -135,7 +149,7 @@ body {
 }
 .top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
 .top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
-main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: 10.5rem; }
+main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: calc(var(--top-actions-w) + 1.25rem); }
 
 /* ── Sharing mode ─────────────────────────────────────────────────────────── */
 /* For sharing the screen (leaf.js toggleSharing, html.sharing): the page
@@ -1195,7 +1209,7 @@ kbd {
 }
 /* The editor's breadcrumb starts at the window's left edge, where the
    badges would cover it; its right end is free. Every other view has them
-   in its top row, left of the top actions (three 2.25rem icons), centred
+   in its top row, left of the top actions (--top-actions-w), centred
    on the row, and the breadcrumb keeps their room free. */
 @media (min-width: 641px) {
   body.editor-page .top-badges { left: auto; right: .6rem; }
@@ -1209,9 +1223,9 @@ kbd {
   }
   body:not(.editor-page) main > .top-badges {
     position: absolute; left: auto; top: 1.5rem; height: 2.25rem;
-    right: calc(var(--main-pad) - .5rem + 9.75rem + .75rem);
+    right: calc(var(--main-pad) + var(--top-actions-w) + .75rem);
   }
-  main:has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: 15.5rem; }
+  main:has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: calc(var(--top-actions-w) + 5.75rem); }
 }
 
 .remote-badge {

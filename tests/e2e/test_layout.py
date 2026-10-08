@@ -649,7 +649,7 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     # Regression: the status badges were fixed to the window's corner, above
     # and left of the row, and the icons' padding pushed them inside the
     # content's edge. Now badges, switcher and icons share the row's centre
-    # line, and the last icon ends on the content's right edge.
+    # line, and the last button (the search pill) ends on the content's right edge.
     import server
     monkeypatch.setattr(server, "ALLOW_REMOTE", True)
     _side_wiki(wiki)                                   # uncommitted pages: the badge shows
@@ -660,9 +660,9 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     row = centre(".breadcrumb .module-switch")
     for sel in (".remote-badge", "#uncommitted-badge", ".top-actions button"):
         assert abs(centre(sel) - row) < 1.5, sel
-    last_icon = page.locator(".top-actions svg").last.bounding_box()
+    last = page.locator(".top-actions button").last.bounding_box()     # the search pill's border
     edge = page.locator("main > .breadcrumb").bounding_box()
-    assert abs(last_icon["x"] + last_icon["width"] - (edge["x"] + edge["width"])) < 1
+    assert abs(last["x"] + last["width"] - (edge["x"] + edge["width"])) < 1
     badges = page.locator("#uncommitted-badge").bounding_box()
     assert badges["x"] + badges["width"] < page.locator(".top-actions").bounding_box()["x"]
     # 🌐 left of the module switcher, outside the content's edge.
