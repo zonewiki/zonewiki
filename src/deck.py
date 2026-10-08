@@ -1021,10 +1021,10 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
 <script src="/public/deck.js" defer></script>"""
 
 
-def process_deck_embeds(text: str) -> tuple[str, list[str]]:
+def process_deck_embeds(text: str) -> tuple[str, list[tuple[str, str]]]:
     """Replace all [[deck ...]] directives with placeholders.
 
-    Returns (modified_text, list_of_embed_htmls).
+    Returns (modified_text, [(placeholder, embed html), …]).
     Supports multiple embeds per page.
     """
     embeds = []
@@ -1043,8 +1043,10 @@ def process_deck_embeds(text: str) -> tuple[str, list[str]]:
 
 
 def inject_deck_embeds(html_str: str, embeds: list[tuple[str, str]]) -> str:
-    """Replace deck placeholders in rendered HTML with actual embed HTML."""
-    for placeholder, embed_html in embeds:
+    """Replace deck placeholders in rendered HTML with actual embed HTML.
+    Last first: placeholder _1 is a prefix of _10, so in order the 11th
+    embed's placeholder would get the second embed's HTML."""
+    for placeholder, embed_html in reversed(embeds):
         html_str = html_str.replace(f'<p>{placeholder}</p>', embed_html)
         html_str = html_str.replace(placeholder, embed_html)
     return html_str

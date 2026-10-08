@@ -83,6 +83,16 @@ class TestTasksLinkRender:
         assert "tasks-list" in html
         assert "deck.js" in html
 
+    def test_eleven_embeds_each_render_their_own(self, wiki_dir):
+        # Regression: placeholder _1 is a prefix of _10, so the 11th embed
+        # was replaced by (part of) the 2nd one's HTML.
+        html = server.render_md("\n\n".join(f"[[deck tag=t{i}]]" for i in range(11)) + "\n")
+        assert "LEAFDECKPLACEHOLDER" not in html
+        for i in range(11):
+            sfx = f"-{i}" if i else ""
+            assert html.count(f'id="tasks-app{sfx}"') == 1
+            assert f'id="tasks-app{sfx}" data-init-tag="t{i}"' in html
+
     def test_no_list_field_or_show_lists_checkbox(self, wiki_dir):
         html = server.render_md("[[deck]]\n[[deck]]\n")
         assert "task-show-lists" not in html
