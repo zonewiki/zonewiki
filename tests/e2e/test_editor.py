@@ -261,3 +261,28 @@ def test_date_snippets_use_local_time(new_page, wiki):
         page.keyboard.type(snippet)
         page.keyboard.press("Tab")
     expect(textarea).to_have_value("# Notes\n\n2026-03-23 2026-03-23 13:30 13:30")
+
+
+def test_task_notes_complete_page_links(page, wiki):
+    # The deck's notes and title complete [[ and [text]( like the editor
+    # (one implementation, linkAutocomplete in leaf.js).
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("target-page", "# Target\n")
+    wiki.write("tangent", "# Tangent\n")
+    page.goto("/page/deck?view=open")
+    page.locator("#task-add-btn").click()
+    notes = page.locator("#task-edit-desc")
+    notes.click()
+    page.keyboard.type("see [[ta")
+    items = page.locator("#task-edit-modal .wikilink-ac-item")
+    expect(items).to_have_text(["tangent", "target-page"])
+    page.keyboard.press("ArrowDown")
+    page.keyboard.type("r")          # the list shrinks under the highlight
+    expect(items).to_have_text(["target-page"])
+    page.keyboard.press("Enter")     # still picks it, no new line
+    expect(notes).to_have_value("see [[target-page]]")
+    page.keyboard.type(" or [docs](tan")
+    expect(items).to_have_text(["tangent"])
+    page.keyboard.press("Tab")
+    expect(notes).to_have_value("see [[target-page]] or [docs](/page/tangent")
+    expect(page.locator("#task-edit-modal")).to_be_visible()

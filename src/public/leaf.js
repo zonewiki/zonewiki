@@ -358,6 +358,190 @@ function wikilinkHref(inner) {
 }
 window.wikilinkHref = wikilinkHref;
 
+// ── Link completion ───────────────────────────────────────────────────────────
+// In a text field, `[[` offers pages, `[[task:` open deck tasks (with
+// `tasks: true`, the editor) and `[text](` pages as /page/ links. One
+// implementation for the editor and the deck's task fields (deck.js).
+
+let wikiPages = null;   // page slugs, fetched once when first needed
+
+function loadWikiPages() {
+  if (wikiPages) return;
+  wikiPages = [];
+  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
+}
+
+// Open tasks for `[[task:` completion, fetched when first needed and again
+// when older than a minute (tasks change in other tabs); `onLoad` runs when
+// a fetch it started has come back.
+let acTasks = null, acTasksAt = 0, acTasksLoading = false;
+
+function taskAcMatches(query, onLoad) {
+  if (!acTasks || Date.now() - acTasksAt > 60000) {
+    if (!acTasksLoading) {
+      acTasksLoading = true;
+      fetch('/api/deck').then(r => r.json()).then(tasks => {
+        acTasks = tasks; acTasksAt = Date.now();
+      }).catch(() => {}).finally(() => { acTasksLoading = false; onLoad(); });
+    }
+    if (!acTasks) return [];
+  }
+  const q = query.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  return acTasks
+    .filter(t => t.id.startsWith(q) || words.every(w => t.title.toLowerCase().includes(w)))
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    .slice(0, 8)
+    .map(t => ({
+      value: t.id.slice(0, 8),
+      label: t.title,
+      meta: [t.list, t.due_date && `⏰ ${t.due_date}`].filter(Boolean).join(' · '),
+    }));
+}
+
+// Measure approximate caret position inside textarea using a mirror div
+function getCaretCoords(el) {
+  const computed = window.getComputedStyle(el);
+  const mirror = document.createElement('div');
+  Object.assign(mirror.style, {
+    position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap',
+    wordWrap: 'break-word', overflow: 'hidden',
+    boxSizing: computed.boxSizing,
+    width: computed.width,
+    paddingTop: computed.paddingTop, paddingRight: computed.paddingRight,
+    paddingBottom: computed.paddingBottom, paddingLeft: computed.paddingLeft,
+    borderTopWidth: computed.borderTopWidth, borderLeftWidth: computed.borderLeftWidth,
+    fontFamily: computed.fontFamily, fontSize: computed.fontSize,
+    fontWeight: computed.fontWeight, lineHeight: computed.lineHeight,
+    letterSpacing: computed.letterSpacing,
+  });
+  document.body.appendChild(mirror);
+  mirror.textContent = el.value.slice(0, el.selectionStart);
+  const span = document.createElement('span');
+  span.textContent = '\u200b';
+  mirror.appendChild(span);
+  const coords = { top: span.offsetTop, left: span.offsetLeft };
+  document.body.removeChild(mirror);
+  return coords;
+}
+
+// Attach link completion to a textarea or input. Keys: ↑/↓ move, Enter or
+// Tab insert (the event's default is prevented, so later handlers can skip
+// it), Esc closes. Returns { update }, for text inserted by script.
+function linkAutocomplete(ta, { tasks = false } = {}) {
+  loadWikiPages();
+  let el = null, index = 0, mode = 'wikilink';
+
+  // [kind, query] at the caret, or [null] outside a link.
+  function context() {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const w = before.match(/\[\[([^\][\n]*)$/);
+    if (w) return tasks && /^task:/i.test(w[1]) ? ['task', w[1].slice(5)] : ['wikilink', w[1]];
+    // [label]( then what looks like a page path (no space, no closing paren)
+    const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
+    if (m && (m[1] === '' || /^[/a-z0-9_-]/i.test(m[1]))) return ['mdlink', m[1].replace(/^\/page\//, '')];
+    return [null];
+  }
+
+  function update() {
+    const [kind, q] = context();
+    // Sharing mode: no list of pages or tasks before two letters are typed.
+    if (!kind || (sharingOn() && q.trim().length < 2)) { hide(); return; }
+    mode = kind;
+    const matches = kind === 'task' ? taskAcMatches(q, update)
+      : wikiPages.filter(p => p.includes(q.toLowerCase())).slice(0, 8);
+    if (matches.length) show(matches); else hide();
+  }
+
+  // An item is a page slug, or { value, label, meta } (tasks).
+  function show(matches) {
+    const dialog = ta.closest('dialog');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'wikilink-ac';
+      // In a modal dialog only the top layer shows: the list goes inside it.
+      (dialog || document.body).appendChild(el);
+      index = 0;
+    }
+    if (index >= matches.length) index = 0;
+    el.innerHTML = '';
+    matches.forEach((m, i) => {
+      const item = document.createElement('div');
+      item.className = 'wikilink-ac-item' + (i === index ? ' selected' : '');
+      const value = typeof m === 'string' ? m : m.value;
+      item.dataset.value = value;
+      item.textContent = typeof m === 'string' ? m : m.label;
+      if (m.meta) {
+        const meta = document.createElement('span');
+        meta.className = 'wikilink-ac-meta';
+        meta.textContent = m.meta;
+        item.append(meta);
+      }
+      item.addEventListener('mousedown', ev => {
+        ev.preventDefault();
+        insert(value);
+      });
+      el.appendChild(item);
+    });
+
+    const rect = ta.getBoundingClientRect();
+    const coords = getCaretCoords(ta);
+    const lineH = parseFloat(window.getComputedStyle(ta).lineHeight) || 20;
+    let top = Math.min(rect.top + coords.top - ta.scrollTop + lineH, window.innerHeight - 220);
+    let left = Math.max(4, Math.min(rect.left + coords.left, window.innerWidth - el.offsetWidth - 8));
+    if (dialog) {
+      // Absolutely positioned there (style.css), so it scrolls with the form.
+      const d = dialog.getBoundingClientRect();
+      top += dialog.scrollTop - d.top - dialog.clientTop;
+      left += dialog.scrollLeft - d.left - dialog.clientLeft;
+    }
+    el.style.top = top + 'px';
+    el.style.left = left + 'px';
+  }
+
+  function hide() {
+    if (el) { el.remove(); el = null; }
+  }
+
+  function move(dir) {
+    const items = el.querySelectorAll('.wikilink-ac-item');
+    items[index]?.classList.remove('selected');
+    index = (index + dir + items.length) % items.length;
+    items[index]?.classList.add('selected');
+  }
+
+  // Replace what was typed of the link with the chosen page or task.
+  function insert(value) {
+    const pos = ta.selectionStart;
+    if (mode === 'mdlink') {
+      ta.setSelectionRange(ta.value.lastIndexOf('(', pos - 1) + 1, pos);
+      document.execCommand('insertText', false, '/page/' + value);
+    } else {
+      ta.setSelectionRange(ta.value.lastIndexOf('[[', pos), pos);
+      document.execCommand('insertText', false, mode === 'task' ? `[[task:${value}]]` : `[[${value}]]`);
+    }
+    hide();
+  }
+
+  ta.addEventListener('input', update);
+  // Delay so a mousedown on a list item fires first.
+  ta.addEventListener('blur', () => setTimeout(hide, 150));
+  ta.addEventListener('keydown', e => {
+    if (!el) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      move(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      const sel = el.querySelector('.selected');
+      if (sel) { e.preventDefault(); insert(sel.dataset.value); }
+    } else if (e.key === 'Escape') {
+      hide();
+    }
+  });
+  return { update };
+}
+window.linkAutocomplete = linkAutocomplete;
+
 // ── Search modal ──────────────────────────────────────────────────────────────
 
 const searchModal    = document.getElementById('search-modal');
@@ -1228,24 +1412,11 @@ if (textarea && previewPane) {
   // Auto-show preview on wide screens
   if (window.innerWidth >= 1000) togglePreview();
 
-  // Pre-fetch all page slugs for wikilink autocomplete
-  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
+  // Page and task completion; its keys (↑/↓, Enter, Tab) come first.
+  const linkAc = linkAutocomplete(textarea, { tasks: true });
 
   textarea.addEventListener('keydown', e => {
-    // Wikilink autocomplete keyboard nav
-    if (acDropdown) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); acMove(1); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); acMove(-1); return; }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        const sel = acDropdown.querySelector('.selected');
-        if (sel) {
-          e.preventDefault();
-          acInsert(sel.dataset.value);
-          return;
-        }
-      }
-      if (e.key === 'Escape') { hideAcDropdown(); return; }
-    }
+    if (e.defaultPrevented) return;   // handled by the completion
 
     // Tab → try snippet expansion, then insert spaces
     if (e.key === 'Tab') {
@@ -1317,15 +1488,7 @@ if (textarea && previewPane) {
     }
   });
 
-  textarea.addEventListener('input', () => {
-    updateAcDropdown();
-    schedulePreview();
-  });
-
-  textarea.addEventListener('blur', () => {
-    // Delay so a mousedown on a dropdown item fires first
-    setTimeout(hideAcDropdown, 150);
-  });
+  textarea.addEventListener('input', schedulePreview);
 
   const uploadConflictModal = document.getElementById('upload-conflict-modal');
   const uploadConflictMsg   = document.getElementById('upload-conflict-msg');
@@ -1435,7 +1598,7 @@ if (textarea && previewPane) {
     if (text) document.execCommand('insertText', false, text);
     else if (start !== end) document.execCommand('delete');
     textarea.setSelectionRange(start + selStart, start + selEnd);
-    updateAcDropdown();   // e.g. `[[` or `[text](` just inserted: offer pages
+    linkAc.update();   // e.g. `[[` or `[text](` just inserted: offer pages
   }
 
   // Wrap the selection in `mark`, or unwrap it when it is wrapped already
@@ -2049,207 +2212,6 @@ function wikilinkAtCursor() {
   const closeIdx = after.indexOf(']]');
   if (closeIdx === -1) return null;
   return before.slice(openIdx + 2) + after.slice(0, closeIdx);
-}
-
-// ── Wikilink autocomplete ─────────────────────────────────────────────────────
-
-let wikiPages = [];
-let acDropdown = null;
-let acIndex = 0;
-let acMode = 'wikilink'; // 'wikilink' | 'mdlink' | 'task'
-
-function getWikilinkQuery() {
-  const before = textarea.value.slice(0, textarea.selectionStart);
-  const m = before.match(/\[\[([^\][\n]*)$/);
-  return m ? m[1] : null;
-}
-
-function getMdLinkQuery() {
-  const before = textarea.value.slice(0, textarea.selectionStart);
-  // Match [any desc]( followed by typed chars that look like a page path (no space, no closing paren)
-  const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
-  if (!m) return null;
-  const typed = m[1];
-  // Only trigger when it looks like an internal link (empty or starts with / or a slug char)
-  if (typed === '' || /^[/a-z0-9_-]/i.test(typed)) return typed;
-  return null;
-}
-
-// Open tasks for `[[task:` completion, fetched when first needed and again
-// when older than a minute (tasks change in other tabs).
-let acTasks = null, acTasksAt = 0, acTasksLoading = false;
-
-function taskAcMatches(query) {
-  if (!acTasks || Date.now() - acTasksAt > 60000) {
-    if (!acTasksLoading) {
-      acTasksLoading = true;
-      fetch('/api/deck').then(r => r.json()).then(tasks => {
-        acTasks = tasks; acTasksAt = Date.now();
-      }).catch(() => {}).finally(() => { acTasksLoading = false; updateAcDropdown(); });
-    }
-    if (!acTasks) return [];
-  }
-  const q = query.trim().toLowerCase();
-  const words = q.split(/\s+/).filter(Boolean);
-  return acTasks
-    .filter(t => t.id.startsWith(q) || words.every(w => t.title.toLowerCase().includes(w)))
-    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-    .slice(0, 8)
-    .map(t => ({
-      value: t.id.slice(0, 8),
-      label: t.title,
-      meta: [t.list, t.due_date && `⏰ ${t.due_date}`].filter(Boolean).join(' · '),
-    }));
-}
-
-function updateAcDropdown() {
-  const wikiQuery = getWikilinkQuery();
-  // Sharing mode: no list of pages or tasks before two letters are typed.
-  const tooShort = q => sharingOn() && q.trim().length < 2;
-  if (wikiQuery !== null && /^task:/i.test(wikiQuery)) {
-    acMode = 'task';
-    if (tooShort(wikiQuery.slice(5))) { hideAcDropdown(); return; }
-    const matches = taskAcMatches(wikiQuery.slice(5));
-    if (!matches.length) { hideAcDropdown(); return; }
-    showAcDropdown(matches);
-    return;
-  }
-  if (wikiQuery !== null) {
-    acMode = 'wikilink';
-    if (tooShort(wikiQuery)) { hideAcDropdown(); return; }
-    const q = wikiQuery.toLowerCase();
-    const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
-    if (!matches.length) { hideAcDropdown(); return; }
-    showAcDropdown(matches);
-    return;
-  }
-  const mdQuery = getMdLinkQuery();
-  if (mdQuery !== null) {
-    acMode = 'mdlink';
-    if (tooShort(mdQuery.replace(/^\/page\//, ''))) { hideAcDropdown(); return; }
-    const q = mdQuery.replace(/^\/page\//, '').toLowerCase();
-    const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
-    if (!matches.length) { hideAcDropdown(); return; }
-    showAcDropdown(matches);
-    return;
-  }
-  hideAcDropdown();
-}
-
-// Measure approximate caret position inside textarea using a mirror div
-function getCaretCoords(el) {
-  const computed = window.getComputedStyle(el);
-  const mirror = document.createElement('div');
-  Object.assign(mirror.style, {
-    position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap',
-    wordWrap: 'break-word', overflow: 'hidden',
-    boxSizing: computed.boxSizing,
-    width: computed.width,
-    paddingTop: computed.paddingTop, paddingRight: computed.paddingRight,
-    paddingBottom: computed.paddingBottom, paddingLeft: computed.paddingLeft,
-    borderTopWidth: computed.borderTopWidth, borderLeftWidth: computed.borderLeftWidth,
-    fontFamily: computed.fontFamily, fontSize: computed.fontSize,
-    fontWeight: computed.fontWeight, lineHeight: computed.lineHeight,
-    letterSpacing: computed.letterSpacing,
-  });
-  document.body.appendChild(mirror);
-  mirror.textContent = el.value.slice(0, el.selectionStart);
-  const span = document.createElement('span');
-  span.textContent = '\u200b';
-  mirror.appendChild(span);
-  const coords = { top: span.offsetTop, left: span.offsetLeft };
-  document.body.removeChild(mirror);
-  return coords;
-}
-window.getCaretCoords = getCaretCoords;
-
-function showAcDropdown(matches) {
-  if (!acDropdown) {
-    acDropdown = document.createElement('div');
-    acDropdown.className = 'wikilink-ac';
-    document.body.appendChild(acDropdown);
-    acIndex = 0;
-  }
-
-  // An item is a page slug, or { value, label, meta } (tasks).
-  acDropdown.innerHTML = '';
-  matches.forEach((m, i) => {
-    const item = document.createElement('div');
-    item.className = 'wikilink-ac-item' + (i === acIndex ? ' selected' : '');
-    const value = typeof m === 'string' ? m : m.value;
-    item.dataset.value = value;
-    item.textContent = typeof m === 'string' ? m : m.label;
-    if (m.meta) {
-      const meta = document.createElement('span');
-      meta.className = 'wikilink-ac-meta';
-      meta.textContent = m.meta;
-      item.append(meta);
-    }
-    item.addEventListener('mousedown', ev => {
-      ev.preventDefault();
-      acInsert(value);
-    });
-    acDropdown.appendChild(item);
-  });
-  if (acIndex >= matches.length) acIndex = 0;
-
-  const elRect = textarea.getBoundingClientRect();
-  const coords = getCaretCoords(textarea);
-  const lineH = parseFloat(window.getComputedStyle(textarea).lineHeight);
-  let top = elRect.top + coords.top - textarea.scrollTop + lineH;
-  let left = elRect.left + coords.left;
-  // Keep within viewport
-  top = Math.min(top, window.innerHeight - 220);
-  left = Math.max(4, Math.min(left, window.innerWidth - acDropdown.offsetWidth - 8));
-  acDropdown.style.top = top + 'px';
-  acDropdown.style.left = left + 'px';
-}
-
-function hideAcDropdown() {
-  if (acDropdown) { acDropdown.remove(); acDropdown = null; }
-}
-
-function acMove(dir) {
-  if (!acDropdown) return;
-  const items = acDropdown.querySelectorAll('.wikilink-ac-item');
-  items[acIndex].classList.remove('selected');
-  acIndex = (acIndex + dir + items.length) % items.length;
-  items[acIndex].classList.add('selected');
-}
-
-function acInsert(value) {
-  if (acMode === 'mdlink') insertMdLink(value);
-  else if (acMode === 'task') insertTaskRef(value);
-  else insertWikilink(value);
-}
-
-function insertTaskRef(id) {
-  const pos = textarea.selectionStart;
-  const bracketPos = textarea.value.lastIndexOf('[[', pos);
-  textarea.setSelectionRange(bracketPos, pos);
-  document.execCommand('insertText', false, `[[task:${id}]]`);
-  hideAcDropdown();
-}
-
-function insertWikilink(page) {
-  const pos = textarea.selectionStart;
-  const val = textarea.value;
-  const bracketPos = val.lastIndexOf('[[', pos);
-  textarea.setSelectionRange(bracketPos, pos);
-  document.execCommand('insertText', false, '[[' + page + ']]');
-  hideAcDropdown();
-  schedulePreview();
-}
-
-function insertMdLink(page) {
-  const pos = textarea.selectionStart;
-  const val = textarea.value;
-  // Find the opening '(' of the markdown link before the cursor
-  const parenPos = val.lastIndexOf('(', pos - 1);
-  textarea.setSelectionRange(parenPos + 1, pos);
-  document.execCommand('insertText', false, '/page/' + page);
-  hideAcDropdown();
-  schedulePreview();
 }
 
 // ── Snippets ──────────────────────────────────────────────────────────────────

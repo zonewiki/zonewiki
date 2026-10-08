@@ -1884,131 +1884,19 @@
     return h;
   }
 
-  // ── Wikilink autocomplete for notes textarea ───────────────────────────────
-
-  let wikiPages = [];
-  let noteAcEl = null;
-  let noteAcIndex = 0;
-
-  fetch('/api/pages').then(r => r.json()).then(p => { wikiPages = p; }).catch(() => {});
-
-  function getNoteWikilinkQuery(ta) {
-    const before = ta.value.slice(0, ta.selectionStart);
-    const m = before.match(/\[\[([^\][\n]*)$/);
-    return m ? m[1] : null;
-  }
-
-  function getNoteMdLinkQuery(ta) {
-    const before = ta.value.slice(0, ta.selectionStart);
-    const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
-    if (!m) return null;
-    const typed = m[1];
-    if (typed === '' || /^[/a-z0-9_-]/i.test(typed)) return typed;
-    return null;
-  }
-
-  function showNoteAc(ta, matches, mode) {
-    const container = ta.closest('dialog') || document.body;
-    if (!noteAcEl) {
-      noteAcEl = document.createElement('div');
-      noteAcEl.className = 'wikilink-ac';
-      container.appendChild(noteAcEl);
-      noteAcIndex = 0;
-    }
-    noteAcEl.innerHTML = '';
-    matches.forEach((page, i) => {
-      const item = document.createElement('div');
-      item.className = 'wikilink-ac-item' + (i === noteAcIndex ? ' selected' : '');
-      item.textContent = page;
-      item.addEventListener('mousedown', ev => {
-        ev.preventDefault();
-        insertNoteLink(ta, page, mode);
-      });
-      noteAcEl.appendChild(item);
-    });
-    if (noteAcIndex >= matches.length) noteAcIndex = 0;
-    // Position relative to textarea within the dialog
-    const taRect = ta.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const coords = window.getCaretCoords(ta);  // shared caret-mirror from leaf.js
-    const lineH = parseFloat(window.getComputedStyle(ta).lineHeight) || 20;
-    let top = taRect.top - containerRect.top + coords.top - ta.scrollTop + lineH;
-    let left = taRect.left - containerRect.left + coords.left;
-    noteAcEl.style.top = top + 'px';
-    noteAcEl.style.left = left + 'px';
-  }
-
-  function hideNoteAc() {
-    if (noteAcEl) { noteAcEl.remove(); noteAcEl = null; }
-  }
-
-  function noteAcMove(dir) {
-    if (!noteAcEl) return;
-    const items = noteAcEl.querySelectorAll('.wikilink-ac-item');
-    items[noteAcIndex]?.classList.remove('selected');
-    noteAcIndex = (noteAcIndex + dir + items.length) % items.length;
-    items[noteAcIndex]?.classList.add('selected');
-  }
-
-  function insertNoteLink(ta, page, mode) {
-    const pos = ta.selectionStart;
-    const val = ta.value;
-    if (mode === 'wikilink') {
-      const bracketPos = val.lastIndexOf('[[', pos);
-      ta.setSelectionRange(bracketPos, pos);
-      document.execCommand('insertText', false, '[[' + page + ']]');
-    } else {
-      const parenPos = val.lastIndexOf('](', pos);
-      ta.setSelectionRange(parenPos + 2, pos);
-      document.execCommand('insertText', false, '/page/' + page + ')');
-    }
-    hideNoteAc();
-  }
-
-  function setupNoteAc(ta) {
-    ta.addEventListener('input', () => {
-      const wq = getNoteWikilinkQuery(ta);
-      if (wq !== null) {
-        const q = wq.toLowerCase();
-        const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
-        if (matches.length) { showNoteAc(ta, matches, 'wikilink'); return; }
-      }
-      const mq = getNoteMdLinkQuery(ta);
-      if (mq !== null) {
-        const q = mq.replace(/^\/page\//, '').toLowerCase();
-        const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
-        if (matches.length) { showNoteAc(ta, matches, 'mdlink'); return; }
-      }
-      hideNoteAc();
-    });
-    ta.addEventListener('keydown', e => {
-      if (!noteAcEl) return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); noteAcMove(1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); noteAcMove(-1); }
-      else if (e.key === 'Enter' || e.key === 'Tab') {
-        const sel = noteAcEl.querySelector('.selected');
-        if (sel) {
-          e.preventDefault();
-          const mode = getNoteWikilinkQuery(ta) !== null ? 'wikilink' : 'mdlink';
-          insertNoteLink(ta, sel.textContent, mode);
-        }
-      } else if (e.key === 'Escape') { hideNoteAc(); }
-    });
-    ta.addEventListener('blur', () => setTimeout(hideNoteAc, 150));
-  }
-
-  // Attach autocomplete to title and notes fields
+  // Page completion in the title and notes ([[ and [text](, shared with
+  // the editor: linkAutocomplete in leaf.js).
   const titleInput = document.getElementById('task-edit-title' + sfx);
   const descTextarea = document.getElementById('task-edit-desc' + sfx);
-  if (titleInput) setupNoteAc(titleInput);
-  if (descTextarea) setupNoteAc(descTextarea);
+  if (titleInput) window.linkAutocomplete(titleInput);
+  if (descTextarea) window.linkAutocomplete(descTextarea);
 
   // Pasting a URL into the notes makes a markdown link (pasteUrlAsLink,
   // shared from leaf.js, undoable).
   descTextarea?.addEventListener('paste', e => window.pasteUrlAsLink(descTextarea, e));
   // Enter in the notes continues a list as in the page editor: "- [ ] eggs"
   // + Enter starts "- [ ] " (continueList, shared from leaf.js). Registered
-  // after setupNoteAc, so an Enter that picked a link suggestion is skipped.
+  // after the completion, so an Enter that picked a link suggestion is skipped.
   descTextarea?.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing || e.defaultPrevented) return;
     window.continueList?.(descTextarea, e);
