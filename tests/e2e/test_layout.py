@@ -604,3 +604,6 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     assert abs(last_icon["x"] + last_icon["width"] - (edge["x"] + edge["width"])) < 1
     badges = page.locator("#uncommitted-badge").bounding_box()
     assert badges["x"] + badges["width"] < page.locator(".top-actions").bounding_box()["x"]
+    # 🌐 left of the module switcher, outside the content's edge.
+    globe, switch = page.locator(".remote-badge").bounding_box(), page.locator(".breadcrumb .module-switch").bounding_box()
+    assert globe["x"] + globe["width"] <= switch["x"] and globe["x"] >= 0

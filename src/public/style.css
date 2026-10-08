@@ -240,7 +240,7 @@ main {
   /* Every view gets that top row (breadcrumb and top actions), so it stays
      put when switching modules; the views without side columns (deck,
      scratch, search, …) keep their content at its usual width, centred. */
-  body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions, .top-badges) {
+  body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions, .top-badges, .remote-badge) {
     max-width: 46rem; margin-inline: auto;
   }
   .page-grid {
@@ -1183,11 +1183,19 @@ kbd {
    on the row, and the breadcrumb keeps their room free. */
 @media (min-width: 641px) {
   body.editor-page .top-badges { left: auto; right: .6rem; }
+  body.editor-page:has(.remote-badge) .top-badges { right: 2.4rem; }
+  body.editor-page .remote-badge { position: fixed; top: .6rem; right: .6rem; z-index: 200; line-height: 24px; }
+  /* 🌐 left of the module switcher, in the margin outside the content's
+     edge, on the row's centre line. */
+  body:not(.editor-page) main > .remote-badge {
+    position: absolute; top: 1.5rem; height: 2.25rem; display: flex; align-items: center;
+    left: calc(var(--main-pad) - 1.6rem);
+  }
   body:not(.editor-page) main > .top-badges {
     position: absolute; left: auto; top: 1.5rem; height: 2.25rem;
     right: calc(var(--main-pad) - .5rem + 7.25rem + .75rem);
   }
-  main:has(> .top-badges > :is(.remote-badge, [style*="inline-flex"])) > .breadcrumb { padding-right: 13rem; }
+  main:has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: 13rem; }
 }
 
 .remote-badge {
