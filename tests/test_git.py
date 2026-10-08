@@ -287,10 +287,12 @@ class TestHistory:
         note = "2026-10-08_14-03-11_notes"
         save(client, note, "# Notes\n\nv1\n")
         save(client, "ref", f"# Ref\n\nSee [[{note}]].\n")
-        client.post(f"/promote/{note}", data={"name": "Notes"}, headers=HOST)
+        save(client, "hub", "# Hub\n")
+        client.post(f"/promote/{note}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
         assert commit_messages(wiki_dir)[0] == f"Promote {note} to notes"
         changed = git(wiki_dir, "show", "--name-status", "--format=", "HEAD").split()
         assert f"{note}.md" in changed and "notes.md" in changed and "ref.md" in changed
+        assert "hub.md" in changed
         assert is_clean(wiki_dir)
         html = client.get("/history/notes", headers=HOST).get_data(as_text=True)
         what = re.findall(r'<span class="hist-what">([^<]*)</span>', html)
@@ -580,7 +582,8 @@ class TestUncommitted:
         assert entries["_assets/pic.png"]["slug"] is None
         html = client.get("/uncommitted", headers=HOST).get_data(as_text=True)
         assert "/diff-uncommitted/index" in html
-        assert "commit-all-btn" in html
+        header = html.split('<header class="page-header">', 1)[1].split("</header>", 1)[0]
+        assert 'id="commit-all-btn"' in header     # with the title, not loose under the list
 
     def test_lists_file_deleted_outside_leaf(self, client, wiki_dir):
         save(client, "p", "# P\n")

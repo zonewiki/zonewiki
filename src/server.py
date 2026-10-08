@@ -1716,11 +1716,40 @@ def promoted_slug(folder: str, name: str, date: str = "") -> str:
     return "/".join(p for p in (to_slug(folder), name) if p)
 
 
+def _wiki_pages_datalist() -> str:
+    """Every page but scratch notes, as suggestions for the scratch note's
+    dialogs (the page to link from, the page to append to)."""
+    options = "".join(
+        f'<option value="{html.escape(s)}">{html.escape(t)}</option>'
+        for s, t in sorted((s, _page_meta(p, s)[0]) for p, s in iter_pages()
+                           if not is_scratch(s) and not hidden_page(s)))
+    return f'<datalist id="wiki-pages">{options}</datalist>'
+
+
+def _page_from_input(raw: str) -> str:
+    """The slug a page field names: a slug, `/page/<slug>` (an #anchor
+    dropped) or the page's name."""
+    raw = raw.strip().removeprefix("/page/").split("#")[0].strip("/")
+    path = safe_path(raw) if raw else None
+    return raw if path and path.exists() else to_slug(raw)
+
+
+def add_link_to_page(content: str, slug: str, label: str) -> str:
+    """content with `- [[slug|label]]` at its end: in the list the page
+    ends with, else as a new one."""
+    body = content.rstrip("\n")
+    last = body.rsplit("\n", 1)[-1]
+    sep = "\n" if re.match(r"^\s*([-*+]|\d+[.)])\s", last) else "\n\n"
+    label = re.sub(r"[\[\]|]", "", label).strip() or slug
+    return f"{body}{sep}- [[{slug}|{label}]]\n"
+
+
 def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
     """The "Move to wiki" dialog of a scratch note: a folder (suggesting the
     existing ones), the name (the note's title, not its timestamped slug),
-    whether to keep the date in front of it, and a preview of the page's
-    slug (leaf.js). Posts to /promote/<slug>."""
+    whether to keep the date in front of it, a preview of the page's slug,
+    and the page to link it from (leaf.js suggests the folder's index).
+    Posts to /promote/<slug>."""
     safe_slug = html.escape(slug)
     date = SCRATCH_RE.match(slug).group(1)[:10]
     options = "".join(f'<option value="{html.escape(f)}/">' for f in page_folders())
@@ -1740,6 +1769,9 @@ def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
         f'<label class="promote-check"><input type="checkbox" name="keep_date" '
         f'id="promote-keep-date" value="{date}"> Keep the date ({date})</label>'
         f'<p class="promote-preview" aria-live="polite">/page/<code id="promote-slug"></code></p>'
+        f'<label class="promote-field">Link from'
+        f'<input type="text" name="link_from" id="promote-link-from" list="wiki-pages" '
+        f'placeholder="(no link)" autocomplete="off" spellcheck="false"></label>'
         f'{error_html}'
         f'<div class="scratch-actions">'
         f'<button type="submit" class="btn btn-primary">Move</button>'
@@ -1757,10 +1789,6 @@ def _build_append_dialog(slug: str, title: str, error: str = "") -> str:
     """The "Append to page" dialog of a scratch note: the page (suggesting
     every page but scratch notes) and the heading of the section the note
     becomes there. Posts to /append/<slug>."""
-    options = "".join(
-        f'<option value="{html.escape(s)}">{html.escape(t)}</option>'
-        for s, t in sorted((s, _page_meta(p, s)[0]) for p, s in iter_pages()
-                           if not is_scratch(s) and not hidden_page(s)))
     error_html = f'<p class="rename-error">{html.escape(error)}</p>' if error else ""
     return (
         f'<dialog id="page-append-dialog" class="scratch-modal promote-modal"'
@@ -1770,9 +1798,8 @@ def _build_append_dialog(slug: str, title: str, error: str = "") -> str:
         f'and leaves Scratch. Links to it follow.</p>'
         f'<form method="post" action="/append/{html.escape(slug)}">'
         f'<label class="promote-field">Page'
-        f'<input type="text" name="page" id="append-page" list="append-pages" '
+        f'<input type="text" name="page" id="append-page" list="wiki-pages" '
         f'autocomplete="off" spellcheck="false" required></label>'
-        f'<datalist id="append-pages">{options}</datalist>'
         f'<label class="promote-field">Section heading'
         f'<input type="text" name="heading" id="append-heading" '
         f'value="{html.escape(_append_heading(slug, title))}" autocomplete="off" required></label>'
@@ -1851,6 +1878,7 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "",
     if is_scratch(slug):
         items.append('<button type="button" role="menuitem" data-action="promote">Move to wiki…</button>')
         items.append('<button type="button" role="menuitem" data-action="append">Append to page…</button>')
+        rename_dialog += _wiki_pages_datalist()
         rename_dialog += _build_promote_dialog(slug, title, promote_error)
         rename_dialog += _build_append_dialog(slug, title, append_error)
     if not is_protected(slug):
@@ -2866,9 +2894,21 @@ def promote_page(slug):
         abort(400)
     if new_path.exists():
         return redirect(back + quote(f"A page named “{new_slug}” already exists"))
+    raw_link = request.form.get("link_from", "").strip()
+    link_slug = _page_from_input(raw_link) if raw_link else ""
+    link_path = safe_path(link_slug) if link_slug else None
+    if raw_link and (not link_path or not link_path.exists() or link_slug == slug):
+        return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
     modified_refs = update_references(slug, new_slug)
+    if link_path:
+        # Linked from that page, unless it already did (now pointing here).
+        content = link_path.read_text(encoding="utf-8")
+        if new_slug not in _page_link_targets(content, link_slug):
+            title = page_title(new_path.read_text(encoding="utf-8"), new_slug)
+            link_path.write_text(add_link_to_page(content, new_slug, title), encoding="utf-8")
+            modified_refs.append(link_path)
     git_commit_rename(old_path, new_path, modified_refs, f"Promote {slug} to {new_slug}")
     return redirect(f"/page/{new_slug}")
 
@@ -2885,8 +2925,7 @@ def append_page(slug):
         abort(404)
     back = f"/page/{slug}?append_error="
     raw = request.form.get("page", "").strip()
-    raw = raw.removeprefix("/page/").split("#")[0].strip("/")
-    target = raw if safe_path(raw) and safe_path(raw).exists() else to_slug(raw)
+    target = _page_from_input(raw)
     # [ ] | would break the wikilinks that now point at the section.
     heading = re.sub(r"[\[\]|]", "", request.form.get("heading", "")).strip()
     target_path = safe_path(target) if target else None
@@ -4118,7 +4157,7 @@ def uncommitted_page():
             for f in file_list
         )
         table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'
-        commit_all_btn = '<button type="button" class="btn btn-primary" id="commit-all-btn" style="margin-top: 1rem;">Commit All</button>'
+        commit_all_btn = '<button type="button" class="btn btn-primary" id="commit-all-btn">Commit All</button>'
     else:
         table = '<p class="hist-empty">No uncommitted changes</p>'
         commit_all_btn = ''
@@ -4126,9 +4165,9 @@ def uncommitted_page():
     body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes')}
 <header class="page-header">
   <h1>Uncommitted Changes</h1>
+  <div class="page-header-actions">{commit_all_btn}</div>
 </header>
-{table}
-{commit_all_btn}"""
+{table}"""
     return shell("Uncommitted Changes", body)
 
 

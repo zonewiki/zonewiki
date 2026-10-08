@@ -877,9 +877,17 @@ function promotedSlug(folder, name, date) {
     const preview = document.getElementById('promote-slug');
     const fields = ['promote-folder', 'promote-name', 'promote-keep-date'].map(id => document.getElementById(id));
     const [folder, name, keepDate] = fields;
+    // Link from: the folder's index page while it has one, until edited.
+    const linkFrom = document.getElementById('promote-link-from');
+    const pages = new Set([...document.querySelectorAll('#wiki-pages option')].map(o => o.value));
+    linkFrom.addEventListener('input', () => { linkFrom.dataset.edited = '1'; });
     const update = () => {
       preview.textContent = promotedSlug(folder.value, name.value,
                                          keepDate.checked ? keepDate.value : '') || '…';
+      if (!linkFrom.dataset.edited) {
+        const index = `${toSlug(folder.value)}/index`;
+        linkFrom.value = toSlug(folder.value) && pages.has(index) ? index : '';
+      }
     };
     fields.forEach(f => f.addEventListener('input', update));
     update();

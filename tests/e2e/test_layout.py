@@ -702,24 +702,32 @@ def test_history_flow(page, wiki):
 
 
 def test_move_scratch_note_to_wiki(page, wiki):
-    # A scratch note's ⋯ has Move to wiki…: folder, name (its title) and
-    # the date, with the page's slug previewed while typing.
+    # A scratch note's ⋯ has Move to wiki…: folder, name (its title), the
+    # date and the page to link from, with the page's slug previewed while
+    # typing.
     note = "2026-10-08_14-03-11_alex-notes"
     wiki.write(note, "# Alex notes\n\nText.\n")
     wiki.write("conversations/2026-07-08_debrief", "# Debrief\n")
+    wiki.write("conversations/index", "# Conversations\n")
     page.goto(f"/page/{note}")
     page.locator(".page-header-actions").get_by_role("button", name="More actions").click()
     page.locator("#page-menu").get_by_role("menuitem", name="Move to wiki…").click()
     dialog = page.locator("#page-promote-dialog")
     expect(page.locator("#promote-name")).to_be_focused()
     expect(page.locator("#promote-slug")).to_have_text("alex-notes")
+    link_from = page.locator("#promote-link-from")
+    expect(link_from).to_have_value("")
     page.locator("#promote-folder").fill("conversations/")
+    # The folder's index page is suggested to link from.
+    expect(link_from).to_have_value("conversations/index")
     page.locator("#promote-name").fill("Alex sync")
     dialog.get_by_label("Keep the date").check()
     expect(page.locator("#promote-slug")).to_have_text("conversations/2026-10-08_alex-sync")
     dialog.get_by_role("button", name="Move").click()
     page.wait_for_url("**/page/conversations/2026-10-08_alex-sync")
     assert (wiki.root / "conversations" / "2026-10-08_alex-sync.md").exists()
+    assert "- [[conversations/2026-10-08_alex-sync|Alex notes]]" in \
+        (wiki.root / "conversations" / "index.md").read_text(encoding="utf-8")
     assert not (wiki.root / f"{note}.md").exists()
 
 
@@ -750,3 +758,19 @@ def test_append_scratch_note_to_page(page, wiki):
     expect(dialog).to_be_visible()
     expect(dialog).to_contain_text("There is no page “nowhere”")
     assert "append_error" not in page.url
+
+
+@pytest.mark.parametrize("width", [390, 1100, 1600])
+def test_uncommitted_list_layout(new_page, wiki, width):
+    # Commit All sits in the header, ending where the list ends (it was a
+    # bare button under the list, at the window's edge from 1320px), and on
+    # a phone the list fits the screen.
+    wiki.write("loose", "# Loose\n")
+    wiki.write("other-notes", "# Other notes with a longer title\n")
+    page = new_page(viewport={"width": width, "height": 700})
+    page.goto("/uncommitted")
+    btn = page.locator(".page-header-actions #commit-all-btn").bounding_box()
+    table = page.locator(".hist-table").bounding_box()
+    assert abs(btn["x"] + btn["width"] - (table["x"] + table["width"])) < 1
+    assert horizontal_overflow(page) <= 0
+    assert table["x"] + table["width"] <= width

@@ -2182,6 +2182,41 @@ class TestPromotePage:
             assert error in body
         assert (wiki_dir / f"{SCRATCH}.md").exists()
 
+    def test_add_link_to_page(self):
+        add = server.add_link_to_page
+        assert add("# P\n\n- [[a]]\n", "b", "B") == "# P\n\n- [[a]]\n- [[b|B]]\n"
+        assert add("# P\n\nText.\n\n", "b", "B") == "# P\n\nText.\n\n- [[b|B]]\n"
+        assert add("# P\n", "b", "x | [y]") == "# P\n\n- [[b|x  y]]\n"
+
+    def test_promote_links_from_a_page(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Alex sync\n")
+        index = write_page(wiki_dir, "conversations/index", "# Conversations\n\n- [[conversations/old]]\n")
+        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        assert 'id="promote-link-from" list="wiki-pages"' in body
+        assert '<option value="conversations/index">Conversations</option>' in body
+        resp = client.post(f"/promote/{SCRATCH}", headers=HOST, data={
+            "folder": "conversations", "name": "Alex sync", "link_from": "/page/conversations/index"})
+        assert resp.headers["Location"] == "/page/conversations/alex-sync"
+        assert index.read_text(encoding="utf-8") == (
+            "# Conversations\n\n- [[conversations/old]]\n- [[conversations/alex-sync|Alex sync]]\n")
+        # Backlinks show it.
+        body = client.get("/page/conversations/alex-sync", headers=HOST).get_data(as_text=True)
+        assert 'href="/page/conversations/index">Conversations</a>' in body
+
+    def test_promote_does_not_link_twice(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        hub = write_page(wiki_dir, "hub", f"# Hub\n\nSee [[{SCRATCH}]].\n")
+        client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
+        assert hub.read_text(encoding="utf-8") == "# Hub\n\nSee [[notes]].\n"
+
+    def test_promote_refuses_an_unknown_link_page(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        loc = client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "nowhere"},
+                          headers=HOST).headers["Location"]
+        assert loc.startswith(f"/page/{SCRATCH}?promote_error=")
+        assert "There is no page “nowhere” to link from" in client.get(loc, headers=HOST).get_data(as_text=True)
+        assert (wiki_dir / f"{SCRATCH}.md").exists() and not (wiki_dir / "notes.md").exists()
+
     def test_promote_only_scratch_notes(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         assert client.post("/promote/garden", data={"name": "x"}, headers=HOST).status_code == 400
@@ -2202,8 +2237,10 @@ class TestAppendToPage:
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
         assert "Append to page…" in re.findall(r'role="menuitem"[^>]*>([^<]+)', menu)
         dialog = body.split('<dialog id="page-append-dialog"', 1)[1].split("</dialog>", 1)[0]
-        assert '<option value="people/alex">Alex Morgan</option>' in dialog
-        assert SCRATCH not in dialog.split("<datalist", 1)[1]      # no scratch notes offered
+        pages = body.split('<datalist id="wiki-pages">', 1)[1].split("</datalist>", 1)[0]
+        assert '<option value="people/alex">Alex Morgan</option>' in pages
+        assert SCRATCH not in pages                                 # no scratch notes offered
+        assert 'list="wiki-pages"' in dialog
         assert 'id="append-heading" value="Alex 1:1 (2026-10-08)"' in dialog
 
     def test_note_as_section(self):
