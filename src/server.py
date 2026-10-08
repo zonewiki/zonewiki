@@ -213,11 +213,6 @@ def git_commit(paths: Path | list[Path], message: str) -> None:
     _git("git", "commit", "-m", message)
 
 
-def git_commit_rename(old_path: Path, new_path: Path, modified_refs: list[Path], message: str) -> None:
-    # Stage the renamed file and only the pages whose wikilinks were updated
-    git_commit([old_path, new_path, *modified_refs], message)
-
-
 _RENAME_BRACES_RE = re.compile(r"\{([^{}]*) => ([^{}]*)\}")
 
 
@@ -317,11 +312,6 @@ def git_uncommitted_files() -> list[dict]:
             mtime, rel = mtime_dt.strftime("%Y-%m-%d"), relative_time(mtime_dt)
         files.append({"filepath": filepath, "mtime": mtime, "rel": rel})
     return files
-
-
-def git_commit_file(filepath: str, message: str) -> None:
-    """Stage and commit a single file given as a WIKI_DIR-relative string."""
-    git_commit(WIKI_DIR / filepath, message)
 
 
 def _commit_message(filepath: str) -> str:
@@ -467,17 +457,16 @@ def home_link() -> str:
     the logo only (style.css); phones have the bottom bar (action_bar_html()).
     The trail code in leaf.js keeps it (`.breadcrumb-home`) as the first
     crumb."""
-    return (
-        f'<nav class="breadcrumb-home module-switch" aria-label="{APP_NAME}">'
-        + "".join(
-            f'<a href="{_module_href(key, href)}" class="module-link" data-module="{key}"'
-            + _module_link_extras(key)[0]
-            + (f' aria-label="{label} ({APP_NAME} home)">{_LEAF_LOGO}' if key == "wiki" else ">")
-            + f'<span class="module-label">{label}</span>'
-            + _module_link_extras(key)[1]
-            + "</a>"
-            for key, label, href in MODULES)
-        + "</nav>")
+    links = []
+    for key, label, href in MODULES:
+        attrs, counts = _module_link_extras(key)
+        if key == "wiki":
+            attrs += f' aria-label="{label} ({APP_NAME} home)">{_LEAF_LOGO}'
+        else:
+            attrs += ">"
+        links.append(f'<a href="{_module_href(key, href)}" class="module-link" data-module="{key}"{attrs}'
+                     f'<span class="module-label">{label}</span>{counts}</a>')
+    return f'<nav class="breadcrumb-home module-switch" aria-label="{APP_NAME}">{"".join(links)}</nav>'
 
 
 def current_module() -> str:
@@ -655,30 +644,19 @@ def list_deleted_pages() -> list[dict]:
     return deleted
 
 
-def _list_dated_notes(pattern: re.Pattern, ts_format: str, date_format: str) -> list[dict]:
-    """Return pages whose stem matches pattern (group 1 = timestamp), newest first."""
+def list_scratch() -> list[dict]:
+    """All scratch notes as {slug, title, date}, newest first (in sharing
+    mode without the ones not for sharing)."""
     entries = []
     for md_file in PAGES_DIR.glob("*.md"):
-        m = pattern.match(md_file.stem)
-        if not m:
+        m = SCRATCH_RE.match(md_file.stem)
+        if not m or hidden_page(md_file.stem):
             continue
-        ts = datetime.strptime(m.group(1), ts_format)
-        content = md_file.read_text(encoding="utf-8")
-        entries.append({
-            "slug": md_file.stem,
-            "title": page_title(content, md_file.stem),
-            "ts": ts,
-            "date": ts.strftime(date_format),
-        })
+        ts = datetime.strptime(m.group(1), "%Y-%m-%d_%H-%M-%S")
+        entries.append({"slug": md_file.stem, "title": _page_meta(md_file, md_file.stem)[0],
+                        "ts": ts, "date": ts.strftime("%Y-%m-%d %H:%M")})
     entries.sort(key=lambda n: n["ts"], reverse=True)
     return entries
-
-
-def list_scratch() -> list[dict]:
-    """Return all scratch notes sorted newest first (in sharing mode without
-    the ones not for sharing)."""
-    return [n for n in _list_dated_notes(SCRATCH_RE, "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d %H:%M")
-            if not hidden_page(n["slug"])]
 
 
 def sharing_on() -> bool:
@@ -1016,9 +994,8 @@ def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
                 f'task {html.escape(ref)}?</span>')
     title = html.escape(_plain_task_title(task.get("title", "")))
     done, wont = bool(task.get("completed_at")), bool(task.get("wont_do"))
-    year = deck_module._past_year(task) if done else None
     list_name = _link_list(task, prefer)
-    href = html.escape(_task_href(task["id"], "completed" if done else "open", list_name, year))
+    href = html.escape(_task_link(task, list_name))
     cls, badges = "task-ref", []
     if done:
         cls += " task-ref-wontdo" if wont else " task-ref-done"
@@ -1922,11 +1899,12 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
 _SVG = ('<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
         'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
 
-# The action bar (`.action-buttons`): the modules plus Search (Ctrl+P,
-# openSearchModal) and New (leaf.js: a page in the wiki, a task in the deck, a
-# scratch note in scratch; Ctrl+N, n, c s). On desktop only New and Search
-# show, as small round buttons in the bottom-right corner (the modules are in
-# the breadcrumb); on phones it is a bottom tab bar. Styled in style.css.
+_SEARCH_ICON = _SVG + '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>'
+
+# The action bar (`.action-buttons`), the phone's bottom tab bar: the modules
+# plus New (leaf.js: a page in the wiki, a task in the deck, a scratch note in
+# scratch) and Search (openSearchModal). Hidden on desktop, which has the
+# module switcher in the breadcrumb and the top actions. Styled in style.css.
 _MODULE_ICONS = {
     "wiki": _SVG + '<path d="M13 2.5C8 2.6 4.5 5.5 4.5 11.5c6 0 8.5-3.5 8.5-9z"/>'
             '<path d="M3 13.5 9 7.5"/></svg>',
@@ -1956,8 +1934,7 @@ def top_actions_html() -> str:
         '<path d="M11.5 8.5v-4a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h4"/>'
         '<polyline points="4.75 7 6.5 8.75 9.25 5.5"/>'
         '<line x1="12.5" y1="10" x2="12.5" y2="15"/><line x1="10" y1="12.5" x2="15" y2="12.5"/></svg></button>'
-        f'<button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
-        '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>'
+        f'<button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{_SEARCH_ICON}'
         '<span class="top-search-label" aria-hidden="true">Search</span>'
         '<kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>'
         '</div>')
@@ -1965,20 +1942,17 @@ def top_actions_html() -> str:
 
 def action_bar_html() -> str:
     """The action bar's HTML (see above)."""
+    links = []
+    for key, label, href in MODULES:
+        attrs, counts = _module_link_extras(key)
+        links.append(f'<a href="{_module_href(key, href)}" class="action-module module-link" data-module="{key}"'
+                     f'{attrs}>{_MODULE_ICONS[key]}<span class="action-label">{label}</span>{counts}</a>')
     return (
-        f'<nav class="action-buttons" aria-label="{APP_NAME}">'
-        + "".join(
-            f'<a href="{_module_href(key, href)}" class="action-module module-link" data-module="{key}"'
-            f'{_module_link_extras(key)[0]}>'
-            f'{_MODULE_ICONS[key]}<span class="action-label">{label}</span>'
-            + _module_link_extras(key)[1]
-            + "</a>"
-            for key, label, href in MODULES)
-        + f'<button type="button" class="action-new" aria-label="New" title="New">{_SVG}'
+        f'<nav class="action-buttons" aria-label="{APP_NAME}">{"".join(links)}'
+        f'<button type="button" class="action-new" aria-label="New" title="New">{_SVG}'
         '<line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>'
         '<span class="action-label">New</span></button>'
-        f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SVG}'
-        '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>'
+        f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SEARCH_ICON}'
         '<span class="action-label">Search</span></button>'
         '</nav>')
 
@@ -2362,22 +2336,23 @@ def raw_page():
     return shell(title, body)
 
 
+def _append_to_raw(line: str, message: str) -> None:
+    """Add a line to the _raw inbox page (created when missing), committed."""
+    path = safe_path("_raw")
+    content = path.read_text(encoding="utf-8") if path.exists() else "# Raw\n\n"
+    if not content.endswith("\n"):
+        content += "\n"
+    path.write_text(content + line + "\n", encoding="utf-8")
+    git_commit(path, message)
+
+
 @app.post("/api/raw/append-url")
 def api_raw_append_url():
     url = request.form.get("url", "").strip()
     title = request.form.get("title", "").strip() or url
     if not url:
         abort(400)
-    path = safe_path("_raw")
-    if path is None:
-        abort(400)
-    content = path.read_text(encoding="utf-8") if path.exists() else "# Raw\n\n"
-    if not content.endswith("\n"):
-        content += "\n"
-    content += f"- [{title}]({url})\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    git_commit(path, f"Add URL to _raw: {title[:60]}")
+    _append_to_raw(f"- [{title}]({url})", f"Add URL to _raw: {title[:60]}")
     return jsonify({"ok": True})
 
 
@@ -2397,14 +2372,7 @@ def api_raw_create_page():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
     git_commit(path, f"Create raw snippet {uid[:8]}: {title[:60]}")
-    raw_path = safe_path("_raw")
-    if raw_path is not None:
-        raw_content = raw_path.read_text(encoding="utf-8") if raw_path.exists() else "# Raw\n\n"
-        if not raw_content.endswith("\n"):
-            raw_content += "\n"
-        raw_content += f"- [{title}](/page/{slug})\n"
-        raw_path.write_text(raw_content, encoding="utf-8")
-        git_commit(raw_path, f"Add snippet link to _raw: {title[:60]}")
+    _append_to_raw(f"- [{title}](/page/{slug})", f"Add snippet link to _raw: {title[:60]}")
     return jsonify({"slug": slug, "title": title})
 
 
@@ -2753,12 +2721,17 @@ def _splice_section(full: str | None, file_hash: str, start_char: int,
     return merged, content_hash(merged), start_char, new_end
 
 
+def _posted_content() -> str:
+    """The editor's posted text, with the browser's CRLF line ends as LF."""
+    return request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+
+
 @app.post("/edit/<path:slug>")
 def save_page(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+    content = _posted_content()
     file_hash = request.form.get("file_hash", "")
     start_char = request.form.get("start_char", type=int)
     end_char = request.form.get("end_char", type=int)
@@ -2785,7 +2758,7 @@ def api_save(slug):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    raw_content = request.form.get("content", "").replace('\r\n', '\n').replace('\r', '\n')
+    raw_content = _posted_content()
     file_hash = request.form.get("file_hash", "")
     start_char = request.form.get("start_char", type=int)
     end_char = request.form.get("end_char", type=int)
@@ -2877,11 +2850,16 @@ def rename_page(slug):
         abort(400)
     if new_path.exists():
         return redirect(f"{back}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
+    _move_page(old_path, new_path, slug, new_slug, f"Rename {slug} to {new_slug}")
+    return redirect(f"/page/{new_slug}")
+
+
+def _move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message: str) -> None:
+    """Move a page's file, point every link to it at the new slug, and
+    commit the move with the pages and deck files whose links changed."""
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
-    modified_refs = update_references(slug, new_slug)
-    git_commit_rename(old_path, new_path, modified_refs, f"Rename {slug} to {new_slug}")
-    return redirect(f"/page/{new_slug}")
+    git_commit([old_path, new_path, *update_references(slug, new_slug)], message)
 
 
 @app.post("/promote/<path:slug>")
@@ -2913,10 +2891,7 @@ def promote_page(slug):
     link_path = safe_path(link_slug) if link_slug else None
     if raw_link and (not link_path or not link_path.exists() or link_slug == slug):
         return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
-    new_path.parent.mkdir(parents=True, exist_ok=True)
-    old_path.rename(new_path)
-    modified_refs = update_references(slug, new_slug)
-    git_commit_rename(old_path, new_path, modified_refs, f"Promote {slug} to {new_slug}")
+    _move_page(old_path, new_path, slug, new_slug, f"Promote {slug} to {new_slug}")
     # The page to link it from opens in the editor, the link to paste where
     # it belongs (leaf.js copied it on Move). A page linking to the note
     # already links here now: nothing to paste.
@@ -3769,9 +3744,7 @@ def _mcp_task_text(task: dict, base: str) -> str:
     list_name = deck_module.task_list(task)
     if list_name:
         facts.append(f"list: {list_name}")
-    done = status != "open"
-    year = deck_module._past_year(task) if done else None
-    url = base + _task_href(task["id"], "completed" if done else "open", list_name, year)
+    url = base + _task_link(task, list_name)
     text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
     notes = (task.get("description") or "").strip()
     if notes:
@@ -3800,9 +3773,7 @@ def _mcp_task_refs(content: str, base: str) -> str:
             continue
         facts = [_task_status(task)]
         facts += [f"{k} {task[k + '_date']}" for k in ("start", "due") if task.get(k + "_date")]
-        done = bool(task.get("completed_at"))
-        url = base + _task_href(task["id"], "completed" if done else "open", deck_module.task_list(task),
-                                deck_module._past_year(task) if done else None)
+        url = base + _task_link(task, deck_module.task_list(task))
         lines.append(f"- [[task:{ref}]]: {task.get('title', '')} ({', '.join(facts)}) {url}")
     return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + "\n".join(lines)
 
@@ -4001,13 +3972,20 @@ def _task_href(task_id: str, tab: str, list_name: str | None,
                year: str | None = None) -> str:
     """Link that opens one task in the deck (or its list's page) on `tab`;
     `year` is the Completed year of a task in an earlier year's archive."""
-    from urllib.parse import urlencode
     params = {"task": task_id, "view": tab}
     if list_name:
         params["list"] = list_name
     if year:
         params["year"] = year
     return "/deck?" + urlencode(params)
+
+
+def _task_link(task: dict, list_name: str | None) -> str:
+    """_task_href for a task as it is now: an open one on Open, a done one
+    on Completed, in its year's archive when that is an earlier year."""
+    if not task.get("completed_at"):
+        return _task_href(task["id"], "open", list_name)
+    return _task_href(task["id"], "completed", list_name, deck_module._past_year(task))
 
 
 def _result_href(r: dict) -> str:
@@ -4237,7 +4215,7 @@ def api_commit_all():
     committed = []
     for f in git_uncommitted_files():
         filepath = f["filepath"]
-        git_commit_file(filepath, _commit_message(filepath))
+        git_commit(WIKI_DIR / filepath, _commit_message(filepath))
         committed.append(filepath)
     return jsonify({"committed": len(committed), "files": committed})
 
@@ -4258,7 +4236,7 @@ def api_commit_file():
         return jsonify({"error": "File is not uncommitted"}), 400
 
     # Message policy lives server-side; the client only sends the filepath.
-    git_commit_file(filepath, _commit_message(filepath))
+    git_commit(WIKI_DIR / filepath, _commit_message(filepath))
     return jsonify({"success": True})
 
 
