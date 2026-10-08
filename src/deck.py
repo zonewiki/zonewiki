@@ -1591,7 +1591,8 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     for field in ("created_at", "completed_at", "spawned_from"):
         if isinstance(snap.get(field), str) and snap[field]:
             task[field] = snap[field]
-    if isinstance(snap.get("sort_order"), int):
+    # Fractional too: a move between two tasks (reorder `updates`) may leave one.
+    if isinstance(snap.get("sort_order"), (int, float)) and not isinstance(snap["sort_order"], bool):
         task["sort_order"] = snap["sort_order"]
     task["wont_do"] = bool(snap.get("wont_do"))
     task["keep"] = bool(snap.get("keep"))

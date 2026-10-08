@@ -1512,6 +1512,17 @@ class TestRestore:
         assert resp.status_code == 201
         assert resp.get_json() == []
 
+    def test_restore_keeps_fractional_sort_order(self, client):
+        # Regression: a move between two tasks (reorder `updates`) can leave a
+        # fractional sort_order; undoing that task's delete dropped it, and the
+        # task fell back to Unsorted.
+        task = create_task(client, title="Between").get_json()
+        client.post("/api/deck/reorder", json={"updates": [{"id": task["id"], "sort_order": 1.5}]})
+        snap = client.get("/api/deck").get_json()[0]
+        client.delete(f"/api/deck/{task['id']}")
+        client.post("/api/deck/restore", json={"tasks": [snap]})
+        assert client.get("/api/deck").get_json()[0]["sort_order"] == 1.5
+
 # ── due-count ────────────────────────────────────────────────────────────────
 
 
