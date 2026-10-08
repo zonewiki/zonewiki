@@ -245,3 +245,19 @@ def test_preview_grows_on_very_wide_screens(new_page, wiki):
     # Below 1800px: both panes as before.
     page.set_viewport_size({"width": 1700, "height": 900})
     assert page.locator(".preview-pane").bounding_box()["width"] <= 800
+
+
+def test_date_snippets_use_local_time(new_page, wiki):
+    # Regression: /date and /datetime took UTC's day and time
+    # (toISOString), so shortly after midnight in Europe /date said
+    # yesterday, and /datetime disagreed with /time.
+    wiki.write("notes", "# Notes\n\n")
+    page = new_page(timezone_id="Pacific/Kiritimati")   # UTC+14
+    page.clock.set_fixed_time("2026-03-22T23:30:00Z")  # there: 2026-03-23 13:30
+    page.goto("/edit/notes")
+    textarea = page.locator("#editor-textarea")
+    textarea.press("Control+End")
+    for snippet in ("/date", " /datetime", " /time"):
+        page.keyboard.type(snippet)
+        page.keyboard.press("Tab")
+    expect(textarea).to_have_value("# Notes\n\n2026-03-23 2026-03-23 13:30 13:30")

@@ -268,6 +268,11 @@ function he(s) {
 }
 window.he = he;
 
+// A day as YYYY-MM-DD in local time (toISOString() would give UTC's day,
+// yesterday's shortly after midnight in Europe).
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 // Prompt for a display name when pasting a bare URL. Resolves with the name,
 // null (no name — insert plain URL), or false (cancelled). Shared with deck.js.
 function askUrlName(url) {
@@ -2265,10 +2270,11 @@ function insertMdLink(page) {
 
 // ── Snippets ──────────────────────────────────────────────────────────────────
 
+// Local date and time, as the user's clock shows them.
 const snippets = {
-  '/date':     () => new Date().toISOString().slice(0, 10),
+  '/date':     () => localDate(),
   '/time':     () => new Date().toTimeString().slice(0, 5),
-  '/datetime': () => new Date().toISOString().slice(0, 16).replace('T', ' '),
+  '/datetime': () => `${localDate()} ${new Date().toTimeString().slice(0, 5)}`,
 };
 
 function expandSnippet() {
