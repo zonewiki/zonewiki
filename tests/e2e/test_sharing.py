@@ -7,9 +7,11 @@ from playwright.sync_api import expect
 
 
 def sharing_on(page):
-    """Switch sharing mode on (S) and wait for the page, reloaded for it."""
-    page.keyboard.press("Shift+S")
-    page.wait_for_load_state()
+    """Switch sharing mode on (S) and wait for the page, reloaded for it.
+    Waiting for html.sharing is not enough: the server renders it before
+    leaf.js has loaded, and a key pressed then is lost."""
+    with page.expect_navigation():
+        page.keyboard.press("Shift+S")
     expect(page.locator("html.sharing")).to_have_count(1)
 
 
