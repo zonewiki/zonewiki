@@ -730,7 +730,7 @@ def test_move_scratch_note_to_wiki(page, wiki):
     assert (wiki.root / "conversations" / "2026-10-08_alex-sync.md").exists()
     link = "[[conversations/2026-10-08_alex-sync|Alex notes]]"
     hint = page.locator(".paste-hint")
-    expect(hint).to_contain_text("Its link is in the clipboard")
+    expect(hint).to_contain_text("Link copied.")
     expect(hint.locator("code")).to_have_text(link)
     assert page.evaluate("navigator.clipboard.readText()") == link
     textarea = page.locator("#editor-textarea")

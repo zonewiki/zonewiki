@@ -2204,11 +2204,11 @@ class TestPromotePage:
         body = client.get(loc, headers=HOST).get_data(as_text=True)
         hint = body.split('<div class="paste-hint"', 1)[1].split("</div>", 1)[0]
         assert 'data-link="[[conversations/alex-sync|Alex sync]]"' in hint
-        assert "Its link is in the clipboard" in hint
+        assert "Link copied." in hint
         # Without the clipboard (copied missing) the hint says to copy it.
         body = client.get("/edit/conversations/index?paste=conversations/alex-sync",
                           headers=HOST).get_data(as_text=True)
-        assert "Copy its link and paste it where it belongs." in body
+        assert "Copy its link and paste it where it belongs." in body and ">Copy link</button>" in body
         # Nothing for an unknown page.
         body = client.get("/edit/conversations/index?paste=nowhere", headers=HOST).get_data(as_text=True)
         assert "paste-hint" not in body

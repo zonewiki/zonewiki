@@ -2727,14 +2727,19 @@ def _paste_hint_html(slug: str, copied: bool) -> str:
     if not path or not path.exists() or hidden_page(slug):
         return ""
     title = page_title(path.read_text(encoding="utf-8"), slug)
-    link = page_wikilink(slug, title)
-    said = ("Its link is in the clipboard: paste it where it belongs."
-            if copied else "Copy its link and paste it where it belongs.")
-    return (f'<div class="paste-hint" role="status" data-link="{html.escape(link)}">'
-            f'<span>Moved “{html.escape(title)}” to the wiki. {said}</span>'
-            f'<code>{html.escape(link)}</code>'
-            f'<button type="button" class="btn paste-hint-copy">Copy</button>'
-            f'<button type="button" class="paste-hint-close" aria-label="Close">×</button></div>')
+    link = html.escape(page_wikilink(slug, title))
+    if copied:
+        said, copy = "<strong>Link copied.</strong> Paste it where it belongs on this page.", "Copy"
+    else:
+        said, copy = "<strong>Moved to the wiki.</strong> Copy its link and paste it where it belongs.", "Copy link"
+    return (f'<div class="paste-hint" role="status" data-link="{link}">'
+            f'<svg class="paste-hint-icon" viewBox="0 0 16 16" aria-hidden="true">'
+            f'<rect x="3.5" y="2.5" width="9" height="12" rx="1.5"/>'
+            f'<path d="M6 2.5h4v2H6z"/><path d="M6 8.5l1.5 1.5L10.5 7"/></svg>'
+            f'<div class="paste-hint-text"><p>{said}</p>'
+            f'<code title="{link}">{link}</code></div>'
+            f'<button type="button" class="btn paste-hint-copy">{copy}</button>'
+            f'<button type="button" class="paste-hint-close" aria-label="Close" title="Close">×</button></div>')
 
 
 def _splice_section(full: str | None, file_hash: str, start_char: int,

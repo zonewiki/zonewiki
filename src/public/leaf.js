@@ -838,7 +838,7 @@ async function copyText(text) {
   history.replaceState(null, '', url);
   const copy = hint.querySelector('.paste-hint-copy');
   copy.addEventListener('click', async () => {
-    copy.textContent = await copyText(hint.dataset.link) ? 'Copied' : 'Copy failed';
+    copy.textContent = await copyText(hint.dataset.link) ? 'Copied ✓' : 'Copy failed';
     document.getElementById('editor-textarea')?.focus();
   });
   hint.querySelector('.paste-hint-close').addEventListener('click', () => {
