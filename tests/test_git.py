@@ -465,6 +465,20 @@ class TestDiff:
     def test_diff_unknown_sha_404(self, client):
         assert client.get("/diff/index/" + "0" * 40, headers=HOST).status_code == 404
 
+    def test_diffs_hidden_in_sharing_mode(self, client, wiki_dir, monkeypatch):
+        # Regression: history and revisions said "Hidden page", but a diff
+        # showed what a page not for sharing said.
+        monkeypatch.setattr(server, "NOSHARE_TAGS", frozenset({"noshare"}))
+        server._noshare_tag_cache.clear()
+        save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nold words\n")
+        save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nnew words\n")
+        client.post("/api/save/secret", data={"content": "---\ntags: noshare\n---\n# Secret\n\nunsaved words\n"},
+                    headers=HOST)
+        client.set_cookie("leaf-sharing", "1")
+        for url in (f"/diff/secret/{head_sha(wiki_dir)}", "/diff-uncommitted/secret"):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            assert "Hidden page" in body and "words" not in body, url
+
 
 class TestRestore:
 

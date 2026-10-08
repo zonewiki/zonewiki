@@ -3209,6 +3209,8 @@ def revision_view(slug, sha):
 
 @app.get("/diff/<path:slug>/<sha>")
 def diff_view(slug, sha):
+    if hidden_page(slug):
+        return hidden_page_view()
     if not GIT_ENABLED:
         abort(404)
     if not SHA_RE.match(sha):
@@ -4200,6 +4202,8 @@ def uncommitted_page():
 @app.get("/diff-uncommitted/<path:slug>")
 def diff_uncommitted(slug):
     """Show uncommitted changes for a file."""
+    if hidden_page(slug):
+        return hidden_page_view()
     if not GIT_ENABLED:
         abort(404)
 
