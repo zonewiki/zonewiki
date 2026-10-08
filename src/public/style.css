@@ -127,7 +127,9 @@ body {
    New task and Search as icons at the top right of the page, in line with
    the breadcrumb, which keeps their room free. Phones have the tab bar. */
 .top-actions {
-  position: absolute; top: 1.5rem; right: 1.5rem;
+  /* The last icon's visible edge on the content's edge: the buttons'
+     inner padding (.5rem) sits outside it. */
+  position: absolute; top: 1.5rem; right: calc(var(--main-pad) - .5rem);
   display: flex; gap: .25rem;
 }
 .top-actions button {
@@ -164,6 +166,7 @@ main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: 8re
 
 main {
   position: relative;
+  --main-pad: 1.5rem;   /* its side padding; the top row aligns to it */
   max-width: 800px;
   margin: 0 auto;
   padding: 1.5rem 1.5rem 4rem;
@@ -233,11 +236,11 @@ main {
     max-width: calc(14rem + 60rem + 14rem + 2 * 3rem + 2 * 3.5rem);
     padding-inline: 3.5rem;
   }
-  main > .top-actions { right: 3.5rem; }
+  body:not(.editor-page) main { --main-pad: 3.5rem; }
   /* Every view gets that top row (breadcrumb and top actions), so it stays
      put when switching modules; the views without side columns (deck,
      scratch, search, …) keep their content at its usual width, centred. */
-  body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions) {
+  body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions, .top-badges) {
     max-width: 46rem; margin-inline: auto;
   }
   .page-grid {
@@ -1175,9 +1178,16 @@ kbd {
   gap: .5rem;
 }
 /* The editor's breadcrumb starts at the window's left edge, where the
-   badges would cover it; its right end is free. */
+   badges would cover it; its right end is free. Every other view has them
+   in its top row, left of the top actions (three 2.25rem icons), centred
+   on the row, and the breadcrumb keeps their room free. */
 @media (min-width: 641px) {
   body.editor-page .top-badges { left: auto; right: .6rem; }
+  body:not(.editor-page) main > .top-badges {
+    position: absolute; left: auto; top: 1.5rem; height: 2.25rem;
+    right: calc(var(--main-pad) - .5rem + 7.25rem + .75rem);
+  }
+  main:has(> .top-badges > :is(.remote-badge, [style*="inline-flex"])) > .breadcrumb { padding-right: 13rem; }
 }
 
 .remote-badge {
@@ -1633,8 +1643,8 @@ body.editor-page main {
      showing it takes no space. 🌐 (remote access) goes: on a phone that is
      a given. Sign out sits in the same row, on the right: the bottom edge
      belongs to the bar. */
-  .top-badges { position: static; margin: 0 1rem; }
-  .top-badges > * { margin-top: .6rem; }
+  .top-badges { position: static; margin: 0; }
+  .top-badges > * { margin-top: .1rem; }
   .remote-badge { display: none; }
   .signout-form { position: static; margin-left: auto; }
   .top-actions { display: none; }

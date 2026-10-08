@@ -581,3 +581,26 @@ def test_section_task_chip_opens_its_tasks(page, wiki):
     expect(link).to_have_text("Weed Garden › Beds")
     link.click()
     page.wait_for_url(re.compile(r"/deck\?task="))
+
+
+@pytest.mark.parametrize("width", [1920, 1000])
+def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
+    # Regression: the status badges were fixed to the window's corner, above
+    # and left of the row, and the icons' padding pushed them inside the
+    # content's edge. Now badges, switcher and icons share the row's centre
+    # line, and the last icon ends on the content's right edge.
+    import server
+    monkeypatch.setattr(server, "ALLOW_REMOTE", True)
+    _side_wiki(wiki)                                   # uncommitted pages: the badge shows
+    page = new_page(viewport={"width": width, "height": 700})
+    page.goto("/page/release")
+    expect(page.locator("#uncommitted-badge")).to_be_visible()
+    centre = lambda sel: (lambda b: b["y"] + b["height"] / 2)(page.locator(sel).first.bounding_box())
+    row = centre(".breadcrumb .module-switch")
+    for sel in (".remote-badge", "#uncommitted-badge", ".top-actions button"):
+        assert abs(centre(sel) - row) < 1.5, sel
+    last_icon = page.locator(".top-actions svg").last.bounding_box()
+    edge = page.locator("main > .breadcrumb").bounding_box()
+    assert abs(last_icon["x"] + last_icon["width"] - (edge["x"] + edge["width"])) < 1
+    badges = page.locator("#uncommitted-badge").bounding_box()
+    assert badges["x"] + badges["width"] < page.locator(".top-actions").bounding_box()["x"]

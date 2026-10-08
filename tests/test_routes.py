@@ -187,7 +187,10 @@ class TestViewPage:
         for url in ("/page/my-page", "/deck", "/page/_scratch"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
-            assert len(top) == 2 and top[0].strip(' >\n').replace('class="wide"', '').strip() == "", url
+            # Before the page itself; only the status badges, which share
+            # the row, come first.
+            assert len(top) == 2 and '<div class="breadcrumb"' not in top[0] and '<header' not in top[0], url
+            assert top[0].count('class="top-badges"') == 1, url
             buttons = re.findall(r'<button type="button" class="top-(\w+)" aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
             assert buttons == [("scratch", "New scratch note", "New scratch note (c s)"),
