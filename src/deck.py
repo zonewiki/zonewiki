@@ -117,8 +117,8 @@ def _migrate_completed_split() -> None:
     if not completed:
         _atomic_write(completed_file, "[]")
         return
-    _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
-    _atomic_write(completed_file, json.dumps(completed, indent=2, ensure_ascii=False))
+    _write_tasks(DECK_FILE, active)
+    _write_tasks(completed_file, completed)
 
 
 # ── Storage ───────────────────────────────────────────────────────────────────
@@ -126,6 +126,15 @@ def _migrate_completed_split() -> None:
 
 class _DeckCorrupt(Exception):
     """Existing deck file is present but unreadable — refuse to overwrite it."""
+
+
+def _now() -> str:
+    """The current time as tasks store it (created_at, completed_at)."""
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _write_tasks(path: Path, tasks: list[dict]) -> None:
+    _atomic_write(path, json.dumps(tasks, indent=2, ensure_ascii=False))
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -251,7 +260,7 @@ def _migrate_deck_files() -> None:
             if not isinstance(data, list):
                 continue
             if any([_normalize_task(t) for t in data if isinstance(t, dict)]):
-                _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
+                _write_tasks(path, data)
                 changed.append(path)
         if changed and GIT_ENABLED and _git_commit_fn:
             _git_commit_fn(changed, "Normalize deck files (date model, tags, page links, Lineup)")
@@ -341,7 +350,7 @@ def _write_completed(completed: list[dict]) -> list[Path]:
                 continue
         except (OSError, ValueError):
             pass
-        _atomic_write(path, json.dumps(tasks, indent=2, ensure_ascii=False))
+        _write_tasks(path, tasks)
         changed.append(path)
     return changed
 
@@ -412,7 +421,7 @@ def _read_all() -> list[dict]:
 
 
 def _write_deck(tasks: list[dict], message: str = "Update deck") -> None:
-    _atomic_write(DECK_FILE, json.dumps(tasks, indent=2, ensure_ascii=False))
+    _write_tasks(DECK_FILE, tasks)
     if GIT_ENABLED and _git_commit_fn:
         _git_commit_fn([DECK_FILE], message)
 
@@ -420,7 +429,7 @@ def _write_deck(tasks: list[dict], message: str = "Update deck") -> None:
 def _write_both(active: list[dict], completed: list[dict], message: str = "Update deck") -> None:
     """Write the open tasks and every completed task (all of them, as read by
     _read_completed_all_strict; filed by year) in a single git commit."""
-    _atomic_write(DECK_FILE, json.dumps(active, indent=2, ensure_ascii=False))
+    _write_tasks(DECK_FILE, active)
     changed = _write_completed(completed)
     if GIT_ENABLED and _git_commit_fn:
         _git_commit_fn([DECK_FILE, *changed], message)
@@ -497,7 +506,7 @@ def _new_task(**overrides) -> dict:
         "description": "",
         "tags": [],
         "due_date": None,
-        "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "created_at": _now(),
         "completed_at": None,
         "wont_do": False,
         "start_date": None,
@@ -702,7 +711,7 @@ def _keep_done(task: dict) -> None:
 
 def _complete_task(task: dict, now: str | None = None) -> dict | None:
     """Stamp task as completed; return the spawned recurring instance, if any."""
-    task["completed_at"] = now or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    task["completed_at"] = now or _now()
     task["wont_do"] = False
     _log(task, "done")
     return _spawn_recurring(task)
@@ -785,6 +794,13 @@ LISTS_FN = lambda: {}
 HOME_FN = lambda: None
 
 
+def embed_view(params: dict) -> str:
+    """The tab an embed opens on (its data-filter value, "" for the
+    default): `view=`, or `filter=`, its old name, through _FILTER_ALIASES."""
+    raw = (params.get("view") or params.get("filter", "")).strip().lower()
+    return _FILTER_ALIASES.get(raw, raw)
+
+
 def is_true(value) -> bool:
     """A yes/no embed param (`keep=1`, `home=yes`)."""
     return str(value or "").strip().lower() in ("1", "true", "yes")
@@ -858,9 +874,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     """
     tag_val = params.get("tag", "")
     list_val = _clean_list(params.get("list")) or ""
-    # `view=` picks the tab; `filter=` is its old name, still accepted.
-    raw_filter = (params.get("view") or params.get("filter", "")).strip().lower()
-    filt = _FILTER_ALIASES.get(raw_filter, raw_filter)
+    filt = embed_view(params)
     # `limit=N` turns on the WIP limit (Focus warning, Plan day flags); without
     # it there is none. `capacity=` is its old name, still accepted.
     try:
@@ -1079,7 +1093,7 @@ def rename_page_refs(old_slug: str, new_slug: str, rewrite_text) -> list[Path]:
                             t[field] = new_text
                             dirty = True
             if dirty:
-                _atomic_write(path, json.dumps(tasks, indent=2, ensure_ascii=False))
+                _write_tasks(path, tasks)
                 changed.append(path)
         return changed
 
@@ -1410,16 +1424,7 @@ def _apply_task_fields(task: dict, data: dict) -> None:
 @_locked
 def api_update_deck_item(task_id):
     data = _json_object()
-    active = _read_deck_strict()
-    completed_list = _read_completed_all_strict()
-
-    task = next((t for t in active if t["id"] == task_id), None)
-    in_completed = task is None
-    if in_completed:
-        task = next((t for t in completed_list if t["id"] == task_id), None)
-    if not task:
-        abort(404)
-
+    active, completed_list, task = _find_for_write(task_id)
     _apply_task_fields(task, data)
 
     did_skip = bool(data.get("skip") and not task.get("completed_at"))
@@ -1429,7 +1434,7 @@ def api_update_deck_item(task_id):
         # it. On a non-recurring task this degrades to a plain won't-do.
         _log(task, "skipped")      # before the spawn, which carries the history on
         spawned = _spawn_recurring(task)
-        task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        task["completed_at"] = _now()
         task["wont_do"] = True
         active = [t for t in active if t["id"] != task_id]
         completed_list.append(task)
@@ -1440,7 +1445,7 @@ def api_update_deck_item(task_id):
             # Won't do: move active → completed, marked as abandoned.
             # Deliberately does NOT spawn a recurring instance — abandoning a
             # task should not perpetuate the series (use skip for that).
-            task["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            task["completed_at"] = _now()
             task["wont_do"] = True
             _log(task, "wontdo")
             active = [t for t in active if t["id"] != task_id]
@@ -1553,10 +1558,9 @@ def api_delete_deck_item(task_id):
 @_locked
 def api_batch_delete_deck():
     data = _json_object()
-    ids = _id_list(data)
-    if not ids or not isinstance(ids, list):
+    id_set = set(_id_list(data))
+    if not id_set:
         abort(400)
-    id_set = set(ids)
     active = _read_deck_strict()
     completed_list = _read_completed_all_strict()
     active = [t for t in active if t["id"] not in id_set]
@@ -1579,13 +1583,8 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     task["description"] = str(snap.get("description") or "")
     task["tags"] = _clean_tags(snap.get("tags") if isinstance(snap.get("tags"), list) else [])
     for field in ("due_date", "start_date", "last_done"):
-        val = snap.get(field)
-        if isinstance(val, str):
-            try:
-                datetime.strptime(val, "%Y-%m-%d")
-                task[field] = val
-            except ValueError:
-                pass
+        if isinstance(snap.get(field), str) and _parse_date(snap[field]):
+            task[field] = snap[field]
     if isinstance(snap.get("id"), str) and snap["id"]:
         task["id"] = snap["id"]
     for field in ("created_at", "completed_at", "spawned_from"):
@@ -1646,14 +1645,13 @@ def api_restore_deck_items():
 @_locked
 def api_batch_complete_deck():
     data = _json_object()
-    ids = _id_list(data)
+    id_set = set(_id_list(data))
     mark_completed = data.get("completed", True)
-    if not ids or not isinstance(ids, list):
+    if not id_set:
         abort(400)
-    id_set = set(ids)
     active = _read_deck_strict()
     completed_list = _read_completed_all_strict()
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now()
     updated = []
 
     if mark_completed:
@@ -1716,21 +1714,20 @@ def api_reorder_deck():
             id_map[task_id][field] = val
     _write_deck(active, "Reorder deck")
     return "", 204
+
+
 @bp.post("/api/deck/batch-tag")
 @_locked
 def api_batch_tag_deck():
     """Add or remove tags from multiple deck items."""
     data = _json_object()
-    ids = _id_list(data)
+    id_set = set(_id_list(data))
     if not isinstance(data.get("add", []), list) or not isinstance(data.get("remove", []), list):
         abort(400, description="add/remove must be lists of strings")
     add_tags = _clean_tags(_as_str_list(data.get("add", []), "add"))
     remove_tags = [t.lower() for t in _clean_tags(_as_str_list(data.get("remove", []), "remove"))]
-    if not ids or not isinstance(ids, list):
+    if not id_set or not (add_tags or remove_tags):
         abort(400)
-    if not add_tags and not remove_tags:
-        abort(400)
-    id_set = set(ids)
     active = _read_deck_strict()
     completed_list = _read_completed_all_strict()
     updated = []

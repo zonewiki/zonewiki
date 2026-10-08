@@ -2061,8 +2061,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
             body_attrs += ' data-deck-keep="1"'
         # Its "+ New" on Focus (its view, or the default one) starts the
         # task today; elsewhere a new task has no start date.
-        raw_view = (home["params"].get("view") or home["params"].get("filter", "")).strip().lower()
-        if deck_module._FILTER_ALIASES.get(raw_view, raw_view) in ("", "focus"):
+        if deck_module.embed_view(home["params"]) in ("", "focus"):
             body_attrs += ' data-deck-today="1"'
     show_actions = action_buttons and not editor
     safe_title = html.escape(title)
