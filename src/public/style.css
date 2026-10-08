@@ -1511,6 +1511,11 @@ body.editor-page main {
 .page-menu a:hover, .page-menu a:focus-visible { background: var(--code-bg); outline: none; }
 #page-menu button { display: flex; align-items: baseline; gap: 1.5rem; }
 .scratch-modal .rename-error { margin: 0; }
+/* Move to wiki (a scratch note's ⋯ menu) */
+.promote-field { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }
+.promote-check { display: flex; align-items: center; gap: .4rem; font-size: .875rem; }
+.promote-preview { margin: 0; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.promote-preview code { font-size: inherit; }
 .page-menu .menu-key {
   margin-left: auto; padding: 0; border: none; background: none;
   font-family: inherit; font-size: .75rem; color: var(--muted);

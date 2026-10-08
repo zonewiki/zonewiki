@@ -2117,3 +2117,72 @@ class TestNoshare:
         client.set_cookie("leaf-sharing", "1")
         body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
         assert "Lunch" in body and "Salary" not in body
+
+
+# ===========================================================================
+# Move a scratch note to the wiki (/promote/<slug>)
+# ===========================================================================
+
+SCRATCH = "2026-10-08_14-03-11_meeting-notes"
+
+
+class TestPromotePage:
+
+    def test_scratch_note_menu_has_move_to_wiki(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
+        write_page(wiki_dir, "conversations/2026-07-08_debrief", "# Debrief\n")
+        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
+        assert "Move to wiki…" in re.findall(r'role="menuitem"[^>]*>([^<]+)', menu)
+        dialog = body.split('<dialog id="page-promote-dialog"', 1)[1].split("</dialog>", 1)[0]
+        # The name is the note's title, not its timestamped slug; the date
+        # can be kept; existing folders are suggested.
+        assert 'id="promote-name" value="Meeting with Alex"' in dialog
+        assert 'value="2026-10-08"> Keep the date (2026-10-08)' in dialog
+        assert '<option value="conversations/">' in dialog
+        # An ordinary page has no such item.
+        write_page(wiki_dir, "garden", "# Garden\n")
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        assert "Move to wiki" not in body
+
+    def test_promoted_slug(self):
+        assert server.promoted_slug("", "Meeting with Alex") == "meeting-with-alex"
+        assert server.promoted_slug("conversations/", "Alex & Sam", "2026-07-08") == \
+            "conversations/2026-07-08_alex-sam"
+        assert server.promoted_slug("A/B", "x/y") == "a/b/x-y"
+        assert server.promoted_slug("people", "  ") == ""
+
+    def test_promote_moves_the_note_and_its_links(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
+        ref = write_page(wiki_dir, "ref", f"# Ref\n\nSee [[{SCRATCH}]] and [x](/page/{SCRATCH}#a).\n")
+        resp = client.post(f"/promote/{SCRATCH}", headers=HOST, data={
+            "folder": "conversations", "name": "Alex sync", "keep_date": "1"})
+        assert resp.headers["Location"] == "/page/conversations/2026-10-08_alex-sync"
+        assert not (wiki_dir / f"{SCRATCH}.md").exists()
+        moved = wiki_dir / "conversations" / "2026-10-08_alex-sync.md"
+        assert moved.read_text(encoding="utf-8") == "# Meeting with Alex\n\nnotes\n"
+        text = ref.read_text(encoding="utf-8")
+        assert "[[conversations/2026-10-08_alex-sync]]" in text
+        assert "(/page/conversations/2026-10-08_alex-sync#a)" in text
+        # It left the Scratch list.
+        body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        assert "Meeting with Alex" not in body
+
+    def test_promote_refuses_and_says_why(self, client, wiki_dir):
+        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        write_page(wiki_dir, "taken", "# Taken\n")
+        for data, error in [({"name": "Taken"}, "already exists"),
+                            ({"name": " "}, "Give the page a name"),
+                            ({"name": "2026-01-01_10-00-00_x"}, "still be a scratch note")]:
+            resp = client.post(f"/promote/{SCRATCH}", data=data, headers=HOST)
+            loc = resp.headers["Location"]
+            assert loc.startswith(f"/page/{SCRATCH}?promote_error=")
+            body = client.get(loc, headers=HOST).get_data(as_text=True)
+            assert '<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-open>' in body
+            assert error in body
+        assert (wiki_dir / f"{SCRATCH}.md").exists()
+
+    def test_promote_only_scratch_notes(self, client, wiki_dir):
+        write_page(wiki_dir, "garden", "# Garden\n")
+        assert client.post("/promote/garden", data={"name": "x"}, headers=HOST).status_code == 400
+        assert client.post(f"/promote/{SCRATCH}", data={"name": "x"}, headers=HOST).status_code == 404

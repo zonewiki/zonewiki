@@ -699,3 +699,25 @@ def test_history_flow(page, wiki):
     expect(page.locator(".diff-view .diff-add")).to_have_text("+v3")
     page.get_by_role("link", name="View this version").click()
     expect(page.locator("article.page-content")).to_have_text("v3")
+
+
+def test_move_scratch_note_to_wiki(page, wiki):
+    # A scratch note's ⋯ has Move to wiki…: folder, name (its title) and
+    # the date, with the page's slug previewed while typing.
+    note = "2026-10-08_14-03-11_alex-notes"
+    wiki.write(note, "# Alex notes\n\nText.\n")
+    wiki.write("conversations/2026-07-08_debrief", "# Debrief\n")
+    page.goto(f"/page/{note}")
+    page.locator(".page-header-actions").get_by_role("button", name="More actions").click()
+    page.locator("#page-menu").get_by_role("menuitem", name="Move to wiki…").click()
+    dialog = page.locator("#page-promote-dialog")
+    expect(page.locator("#promote-name")).to_be_focused()
+    expect(page.locator("#promote-slug")).to_have_text("alex-notes")
+    page.locator("#promote-folder").fill("conversations/")
+    page.locator("#promote-name").fill("Alex sync")
+    dialog.get_by_label("Keep the date").check()
+    expect(page.locator("#promote-slug")).to_have_text("conversations/2026-10-08_alex-sync")
+    dialog.get_by_role("button", name="Move").click()
+    page.wait_for_url("**/page/conversations/2026-10-08_alex-sync")
+    assert (wiki.root / "conversations" / "2026-10-08_alex-sync.md").exists()
+    assert not (wiki.root / f"{note}.md").exists()

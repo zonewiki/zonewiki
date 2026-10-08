@@ -11,7 +11,7 @@ import subprocess
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from flask import Flask, abort, g, has_app_context, has_request_context, jsonify, redirect, request, send_from_directory, session, url_for
 from markdown_it import MarkdownIt
@@ -1679,14 +1679,72 @@ def _build_delete_dialog(slug: str, title: str) -> str:
     )
 
 
+def page_folders() -> list[str]:
+    """The folders that hold pages, A–Z (each parent of a page's slug), for
+    filing a scratch note. Hidden pages don't name theirs in sharing mode."""
+    folders = set()
+    for _, slug in iter_pages():
+        if hidden_page(slug):
+            continue
+        parts = slug.split("/")[:-1]
+        folders.update("/".join(parts[:i]) for i in range(1, len(parts) + 1))
+    return sorted(folders)
+
+
+def promoted_slug(folder: str, name: str, date: str = "") -> str:
+    """Where a scratch note moved to the wiki goes: `folder/name`, with
+    `date_` (YYYY-MM-DD) in front of the name when the date is kept, as in
+    `conversations/2026-07-08_alex-sam-debrief`. The name may not add
+    folders of its own: a / in it is a hyphen. Mirrored by promotedSlug in
+    leaf.js for the dialog's preview."""
+    name = to_slug(name.replace("/", "-"))
+    if not name:
+        return ""
+    if date:
+        name = f"{date}_{name}"
+    return "/".join(p for p in (to_slug(folder), name) if p)
+
+
+def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
+    """The "Move to wiki" dialog of a scratch note: a folder (suggesting the
+    existing ones), the name (the note's title, not its timestamped slug),
+    whether to keep the date in front of it, and a preview of the page's
+    slug (leaf.js). Posts to /promote/<slug>."""
+    safe_slug = html.escape(slug)
+    date = SCRATCH_RE.match(slug).group(1)[:10]
+    options = "".join(f'<option value="{html.escape(f)}/">' for f in page_folders())
+    error_html = f'<p class="rename-error">{html.escape(error)}</p>' if error else ""
+    return (
+        f'<dialog id="page-promote-dialog" class="scratch-modal promote-modal"'
+        f'{" data-open" if error else ""}>'
+        f'<p class="scratch-label">Move to wiki</p>'
+        f'<form method="post" action="/promote/{safe_slug}">'
+        f'<label class="promote-field">Folder'
+        f'<input type="text" name="folder" id="promote-folder" list="promote-folders" '
+        f'placeholder="(top level)" autocomplete="off" spellcheck="false"></label>'
+        f'<datalist id="promote-folders">{options}</datalist>'
+        f'<label class="promote-field">Name'
+        f'<input type="text" name="name" id="promote-name" value="{html.escape(title)}" '
+        f'autocomplete="off" spellcheck="false" required></label>'
+        f'<label class="promote-check"><input type="checkbox" name="keep_date" '
+        f'id="promote-keep-date" value="{date}"> Keep the date ({date})</label>'
+        f'<p class="promote-preview" aria-live="polite">/page/<code id="promote-slug"></code></p>'
+        f'{error_html}'
+        f'<div class="scratch-actions">'
+        f'<button type="submit" class="btn btn-primary">Move</button>'
+        f'<button type="button" class="btn" id="page-promote-cancel">Cancel</button>'
+        f'</div></form></dialog>')
+
+
 PAGE_MENU_BTN = ('<button type="button" class="btn page-menu-btn" aria-haspopup="menu" '
                  'aria-expanded="false" aria-controls="page-menu" title="More actions" '
                  'aria-label="More actions">⋯</button>')
 
 
-def _build_page_menu(slug: str, title: str, rename_error: str = "") -> str:
-    """The page view's ⋯ menu (Present, History, Rename…, Delete…) and the
-    rename dialog behind Rename…. It looks like the deck's ⋯ menu (style.css).
+def _build_page_menu(slug: str, title: str, rename_error: str = "",
+                     promote_error: str = "") -> str:
+    """The page view's ⋯ menu (Present, History, Move to wiki… for a scratch
+    note, Rename…, Delete…) and the dialogs behind them. It looks like the deck's ⋯ menu (style.css).
     The menu is one hidden element that leaf.js
     opens under whichever ⋯ was pressed (header or right column); Present
     shows only on a page with headings. Outside the page grid, since the
@@ -1697,13 +1755,16 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "") -> str:
     if GIT_ENABLED:
         items.append(f'<a role="menuitem" href="/history/{safe_slug}">History</a>')
     rename_dialog = ""
+    if is_scratch(slug):
+        items.append('<button type="button" role="menuitem" data-action="promote">Move to wiki…</button>')
+        rename_dialog += _build_promote_dialog(slug, title, promote_error)
     if not is_protected(slug):
         items.append('<button type="button" role="menuitem" data-action="rename">Rename…</button>')
         items.append('<button type="button" role="menuitem" data-action="delete" class="danger">'
                      'Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>')
         error_html = (f'<p class="rename-error">{html.escape(rename_error)}</p>'
                       if rename_error else "")
-        rename_dialog = (
+        rename_dialog += (
             f'<dialog id="page-rename-dialog" class="scratch-modal"'
             f'{" data-open" if rename_error else ""}>'
             f'<p class="scratch-label">Rename page</p>'
@@ -2316,7 +2377,8 @@ def view_page(slug):
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         # Edit, and the rarer actions in a ⋯ menu (_build_page_menu).
         actions = f'<a href="/edit/{slug}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
-        page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""))
+        page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""),
+                                     request.args.get("promote_error", ""))
         # The same, at the top of the right column on big screens, shown
         # once the header has scrolled away (leaf.js).
         rail_actions = (
@@ -2684,6 +2746,37 @@ def rename_page(slug):
     return redirect(f"/page/{new_slug}")
 
 
+@app.post("/promote/<path:slug>")
+def promote_page(slug):
+    """Move a scratch note into the wiki: a rename to a real name, chosen in
+    the "Move to wiki" dialog (folder, name, maybe the date), links to it
+    following as for any rename. Its own commit message, so the history
+    says what happened."""
+    if not is_scratch(slug):
+        abort(400)
+    old_path = safe_path(slug)
+    if old_path is None or not old_path.exists():
+        abort(404)
+    date = request.form.get("keep_date", "")
+    date = SCRATCH_RE.match(slug).group(1)[:10] if date else ""
+    new_slug = promoted_slug(request.form.get("folder", ""), request.form.get("name", ""), date)
+    back = f"/page/{slug}?promote_error="
+    if not new_slug:
+        return redirect(back + quote("Give the page a name"))
+    if is_scratch(new_slug):
+        return redirect(back + quote("That name would still be a scratch note"))
+    new_path = safe_path(new_slug)
+    if new_path is None:
+        abort(400)
+    if new_path.exists():
+        return redirect(back + quote(f"A page named “{new_slug}” already exists"))
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    old_path.rename(new_path)
+    modified_refs = update_references(slug, new_slug)
+    git_commit_rename(old_path, new_path, modified_refs, f"Promote {slug} to {new_slug}")
+    return redirect(f"/page/{new_slug}")
+
+
 @app.post("/delete/<path:slug>")
 def delete_page(slug):
     if is_protected(slug):
@@ -2722,6 +2815,11 @@ def _version_label(entry: dict, entries: list[dict]) -> str:
         if entry["path"] == f"{m.group(2)}.md":
             return f"Renamed from “{m.group(1)}”"
         return f"Link updated (“{m.group(1)}” renamed)"
+    m = re.fullmatch(r"Promote (\S+) to (\S+)", msg)
+    if m:
+        if entry["path"] == f"{m.group(2)}.md":
+            return "Moved from Scratch"
+        return "Link updated (a scratch note moved to the wiki)"
     m = re.fullmatch(r"Restore \S+ to ([0-9a-f]{7,40})", msg)
     if m:
         old = next((e for e in entries if e["sha"].startswith(m.group(1))), None)

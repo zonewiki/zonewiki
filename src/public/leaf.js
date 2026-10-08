@@ -788,6 +788,22 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 
+// server.to_slug: lowercase, runs of anything else than a-z 0-9 _ become
+// "-", "/" separates folders.
+function toSlug(name) {
+  return name.trim().split('/')
+    .map(p => p.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/^-+|-+$/g, ''))
+    .filter(Boolean).join('/');
+}
+
+// server.promoted_slug: where a scratch note moved to the wiki goes.
+function promotedSlug(folder, name, date) {
+  let n = toSlug(name.replace(/\//g, '-'));
+  if (!n) return '';
+  if (date) n = `${date}_${n}`;
+  return [toSlug(folder), n].filter(Boolean).join('/');
+}
+
 // ── Page ⋯ menu ───────────────────────────────────────────────────────────────
 // Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
 // rendered hidden) for both ⋯ buttons, the header's and the right column's:
@@ -843,7 +859,38 @@ closeOnBackdropClick(document.getElementById('page-delete-dialog'));
     close(false);
     if (item.dataset.action === 'delete') document.getElementById('page-delete-dialog')?.showModal();
     else if (item.dataset.action === 'rename') openRename();
+    else if (item.dataset.action === 'promote') openPromote();
   });
+
+  // Move to wiki (scratch notes): the slug the page will get, as the server
+  // makes it (promoted_slug), shown while typing.
+  const promote = document.getElementById('page-promote-dialog');
+  function openPromote() {
+    if (!promote) return;
+    promote.showModal();
+    const name = document.getElementById('promote-name');
+    name.focus();
+    name.select();
+  }
+  if (promote) {
+    const preview = document.getElementById('promote-slug');
+    const fields = ['promote-folder', 'promote-name', 'promote-keep-date'].map(id => document.getElementById(id));
+    const [folder, name, keepDate] = fields;
+    const update = () => {
+      preview.textContent = promotedSlug(folder.value, name.value,
+                                         keepDate.checked ? keepDate.value : '') || '…';
+    };
+    fields.forEach(f => f.addEventListener('input', update));
+    update();
+    document.getElementById('page-promote-cancel').addEventListener('click', () => promote.close());
+    closeOnBackdropClick(promote);
+    if (promote.hasAttribute('data-open')) {
+      openPromote();
+      const url = new URL(location.href);
+      url.searchParams.delete('promote_error');
+      history.replaceState(null, '', url);
+    }
+  }
 
   const rename = document.getElementById('page-rename-dialog');
   const renameInput = document.getElementById('page-rename-input');
