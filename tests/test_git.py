@@ -1,65 +1,28 @@
-import re
 """Tests for Leaf's git-backed version history — commits on write, history,
 revision/diff/restore, deleted pages, and the uncommitted-changes workflow.
 
-Unlike the other test modules, the fixture here initialises a real git repo in
-the temporary wiki directory, so every git code path actually executes.
-
-Run with:
-    pytest tests/test_git.py -v
+Unlike the other test modules, the wiki here is a real git repo
+(git_wiki_dir), so every git code path actually executes.
 """
 
-import os
+import json
+import re
 import subprocess
-import sys
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_git_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 import server
 import deck as deck_module
+from tests.conftest import HOST
 
 pytestmark = pytest.mark.skipif(not server.GIT_ENABLED, reason="git not installed")
 
-HOST = {"Host": "localhost:5000"}
-
-
-# ── Fixtures / helpers ────────────────────────────────────────────────────────
-
 
 @pytest.fixture()
-def wiki_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(server, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
-    monkeypatch.setattr(server, "UPLOADS_DIR", tmp_path / "_assets")
-    monkeypatch.setattr(server, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
-    monkeypatch.setattr(server, "GIT_REMOTE", "")
-    monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
-    monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(deck_module, "GIT_ENABLED", True)
-    server._search_doc_cache.clear()
-    server._page_meta_cache.clear()
-    deck_module._task_docs_cache["key"] = None
-    deck_module._task_docs_cache["docs"] = []
-    (tmp_path / "_assets").mkdir()
-    (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
-    server.git_setup()
-    return tmp_path
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
+def wiki_dir(git_wiki_dir):
+    return git_wiki_dir
 
 
 def git(wiki_dir: Path, *args: str) -> str:
@@ -211,7 +174,7 @@ class TestDeckFolderMigration:
            "_deck_completed-2025.json": [{"id": "c", "title": "Old", "completed_at": "2025-03-04T10:00:00"}]}
 
     def _old_wiki(self, wiki_dir):
-        import json
+        (wiki_dir / "_deck").rmdir()   # a wiki from before the folder
         for name, tasks in self.OLD.items():
             (wiki_dir / name).write_text(json.dumps(tasks), encoding="utf-8")
         git(wiki_dir, "add", "-A")
@@ -248,7 +211,7 @@ class TestDeckFolderMigration:
         assert (wiki_dir / "_deck" / "completed.json").exists()   # the others moved
 
     def test_a_new_wiki_gets_the_folder_on_first_write(self, client, wiki_dir):
-        assert not (wiki_dir / "_deck").exists()
+        (wiki_dir / "_deck").rmdir()
         client.post("/api/deck", json={"title": "First"}, headers=HOST)
         assert (wiki_dir / "_deck" / "tasks.json").exists()
         assert not list(wiki_dir.glob("_deck*.json"))

@@ -1,31 +1,10 @@
 """Extensive tests for section editing — split_sections, _splice_section,
-content_hash, section_char_range, and the /edit and /api/save HTTP routes.
+content_hash, section_char_range, and the /edit and /api/save HTTP routes."""
 
-Run with:
-    pytest tests/test_section_editing.py -v
-"""
-
-import os
-import sys
 import textwrap
-import tempfile
-from pathlib import Path
 
-import pytest
-
-# ---------------------------------------------------------------------------
-# Bootstrap: point the server at a temp WIKI_DATA dir before importing it.
-# ---------------------------------------------------------------------------
-
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_test_")
-os.environ["WIKI_DATA"] = _SESSION_TMP
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-import server                                                    # noqa: E402
-from server import (split_sections, _splice_section,             # noqa: E402
-                    content_hash, section_char_range)
+from server import split_sections, _splice_section, content_hash, section_char_range
+from tests.conftest import HOST, section_fields, write_page
 
 
 # ===========================================================================
@@ -36,45 +15,6 @@ def dedent(text: str) -> str:
     return textwrap.dedent(text).lstrip("\n")
 
 
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    pages = tmp_path / "pages"
-    pages.mkdir()
-    old_pages, old_wiki = server.PAGES_DIR, server.WIKI_DIR
-    server.PAGES_DIR = pages
-    server.WIKI_DIR  = pages
-    yield pages
-    server.PAGES_DIR = old_pages
-    server.WIKI_DIR  = old_wiki
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
-
-
-def write_page(wiki_dir: Path, slug: str, content: str) -> Path:
-    path = wiki_dir / f"{slug}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return path
-
-
-def section_fields(full_content: str, section_idx: int) -> dict:
-    """Return hidden-field dict for a section edit (file_hash, start_char, end_char)."""
-    rng = section_char_range(full_content, section_idx)
-    assert rng is not None, f"section_char_range returned None for section {section_idx}"
-    s, e = rng
-    return {
-        "file_hash": content_hash(full_content),
-        "start_char": str(s),
-        "end_char": str(e),
-    }
-
-
-HOST = {"Host": "localhost:5000"}
 
 
 # ===========================================================================
@@ -765,7 +705,7 @@ class TestApiSaveSection:
         assert "body b" in saved  # B must not be lost!
 
     def test_full_save_returns_204(self, client, wiki_dir):
-        page = write_page(wiki_dir, "full", "old\n")
+        write_page(wiki_dir, "full", "old\n")
         resp = client.post("/api/save/full", data={"content": "new\n"}, headers=HOST)
         assert resp.status_code == 204
 
@@ -781,7 +721,7 @@ class TestApiSaveSection:
 
     def test_unchanged_content_returns_same_anchors(self, client, wiki_dir):
         original = "pre\n\n## A\n\nbody a\n\n## B\n\nbody b\n"
-        page = write_page(wiki_dir, "noop", original)
+        write_page(wiki_dir, "noop", original)
         fields = section_fields(original, 1)
         rng = section_char_range(original, 1)
         sec_text = original[rng[0]:rng[1]]

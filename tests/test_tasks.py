@@ -1,58 +1,16 @@
 """Comprehensive tests for the Leaf task app API."""
 
-import sys
-import os
 import json
+import os
 import re
-import tempfile
 import threading
-from pathlib import Path
 from datetime import date, timedelta
 
 import pytest
 
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_tasks_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import server
 import deck as deck_module
-
-
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    orig_wiki = server.WIKI_DIR
-    orig_pages = server.PAGES_DIR
-    orig_deck = deck_module.DECK_FILE
-    server.WIKI_DIR = tmp_path
-    server.PAGES_DIR = tmp_path
-    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
-    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    server._page_meta_cache.clear()
-    deck_module._task_docs_cache["key"] = None
-    deck_module._task_docs_cache["docs"] = []
-    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
-    yield tmp_path
-    server.WIKI_DIR = orig_wiki
-    server.PAGES_DIR = orig_pages
-    deck_module.DECK_FILE = orig_deck
-    server.DECK_FILE = orig_deck
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
-
-
-def create_task(client, **kwargs):
-    """Helper to create a task and return the response JSON."""
-    payload = {"title": "Test task", **kwargs}
-    resp = client.post("/api/deck", json=payload)
-    return resp
+from tests.conftest import create_task
 
 
 # ---------- CRUD Basics ----------
@@ -555,7 +513,7 @@ class TestUndoRecurring:
 
     def test_uncomplete_non_recurring_no_side_effects(self, client):
         t1 = create_task(client, title="Task A").get_json()
-        t2 = create_task(client, title="Task B").get_json()
+        create_task(client, title="Task B")
         client.put(f"/api/deck/{t1['id']}", json={"completed": True})
         client.put(f"/api/deck/{t1['id']}", json={"completed": False})
         tasks = client.get("/api/deck").get_json()
@@ -784,7 +742,7 @@ class TestDeckPage:
         assert "deck.js" in body
 
 
-# ── Defer Days (relative defer) ──────────────────────────────────────────────
+# ── Dates ────────────────────────────────────────────────────────────────────
 
 
 class TestIndependentDates:

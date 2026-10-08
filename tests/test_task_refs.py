@@ -1,30 +1,27 @@
 """Task references: [[task:<id>]] in a page renders the deck task as a live
 chip (server._task_ref_html), and search, Linked tasks and MCP know them.
-
-Run with:
-    pytest tests/test_task_refs.py -v
 """
 
 import re
 from datetime import date, timedelta
 
-from tests.test_routes import HOST, client, wiki_dir, write_page  # noqa: F401  (fixtures; sets sys.path)
+from tests.conftest import HOST, write_page
 import server
 
 
-def task(client, **fields):  # noqa: F811
+def task(client, **fields):
     resp = client.post("/api/deck", json=fields, headers=HOST)
     assert resp.status_code == 201, resp.get_json()
     return resp.get_json()
 
 
-def put(client, task_id, **fields):  # noqa: F811
+def put(client, task_id, **fields):
     resp = client.put(f"/api/deck/{task_id}", json=fields, headers=HOST)
     assert resp.status_code == 200, resp.get_json()
     return resp.get_json()
 
 
-def view(client, slug="notes"):  # noqa: F811
+def view(client, slug="notes"):
     resp = client.get(f"/page/{slug}", headers=HOST)
     assert resp.status_code == 200
     return resp.data.decode()
@@ -35,7 +32,7 @@ def day(offset: int) -> str:
 
 
 class TestRendering:
-    def test_short_id_renders_a_chip_linking_to_the_task(self, client, wiki_dir):  # noqa: F811
+    def test_short_id_renders_a_chip_linking_to_the_task(self, client, wiki_dir):
         t = task(client, title="Call the plumber")
         write_page(wiki_dir, "notes", f"# Notes\n\nRemember [[task:{t['id'][:8]}]] today.\n")
         body = view(client)
@@ -45,17 +42,17 @@ class TestRendering:
         assert 'aria-label="Done: Call the plumber">' in body   # not checked
         assert "[[task:" not in body
 
-    def test_full_id_and_uppercase_work(self, client, wiki_dir):  # noqa: F811
+    def test_full_id_and_uppercase_work(self, client, wiki_dir):
         t = task(client, title="Full")
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id']}]] and [[task:{t['id'][:8].upper()}]]\n")
         assert view(client).count(f'data-task-id="{t["id"]}"') == 2
 
-    def test_unknown_id_is_marked_missing(self, client, wiki_dir):  # noqa: F811
+    def test_unknown_id_is_marked_missing(self, client, wiki_dir):
         write_page(wiki_dir, "notes", "# N\n\nGone: [[task:abcd1234]]\n")
         body = view(client)
         assert 'class="task-ref task-ref-missing"' in body and "task abcd1234?" in body
 
-    def test_done_and_wont_do(self, client, wiki_dir):  # noqa: F811
+    def test_done_and_wont_do(self, client, wiki_dir):
         a, b = task(client, title="Finished"), task(client, title="Dropped")
         put(client, a["id"], completed=True)
         put(client, b["id"], wont_do=True)
@@ -68,7 +65,7 @@ class TestRendering:
         assert 'aria-label="Done: Dropped" disabled>' in body
         assert "won&#x27;t do" in body or "won't do" in body
 
-    def test_completed_recurring_task_shows_the_current_occurrence(self, client, wiki_dir):  # noqa: F811
+    def test_completed_recurring_task_shows_the_current_occurrence(self, client, wiki_dir):
         t = task(client, title="Water plants", due_date=day(0), rec_type="weekly", rec_interval=1)
         put(client, t["id"], completed=True)
         write_page(wiki_dir, "notes", f"# N\n\n- [[task:{t['id'][:8]}]]\n")
@@ -77,7 +74,7 @@ class TestRendering:
         assert m and m.group(1) != t["id"], "should be the spawned next occurrence, open"
         assert f"⏰ {server._short_date(day(7), day(0))}" in body
 
-    def test_badges(self, client, wiki_dir):  # noqa: F811
+    def test_badges(self, client, wiki_dir):
         late = task(client, title="Late", due_date=day(-2))
         soon = task(client, title="Soon", start_date=day(3), due_date=day(0))
         keep = task(client, title="Milk", keep=True, tags=["shop"])
@@ -94,7 +91,7 @@ class TestRendering:
         assert f'href="/deck?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
         assert '<span class="task-ref-badge task-ref-list">groceries</span>' in body
 
-    def test_alone_in_a_list_item_is_a_row(self, client, wiki_dir):  # noqa: F811
+    def test_alone_in_a_list_item_is_a_row(self, client, wiki_dir):
         t = task(client, title="Row")
         ref = f"[[task:{t['id'][:8]}]]"
         write_page(wiki_dir, "notes", f"# N\n\n- {ref}\n- text and {ref}\n")
@@ -102,13 +99,13 @@ class TestRendering:
         assert body.count('<li class="task-ref-item">') == 1
         assert "<li>text and <span" in body
 
-    def test_title_is_plain_and_escaped(self, client, wiki_dir):  # noqa: F811
+    def test_title_is_plain_and_escaped(self, client, wiki_dir):
         t = task(client, title="Read [[Design Doc]] <b>now</b>")
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
         body = view(client)
         assert ">Read Design Doc &lt;b&gt;now&lt;/b&gt;</a>" in body
 
-    def test_code_stays_literal(self, client, wiki_dir):  # noqa: F811
+    def test_code_stays_literal(self, client, wiki_dir):
         t = task(client, title="Coded")
         ref = f"[[task:{t['id'][:8]}]]"
         write_page(wiki_dir, "notes", f"# N\n\n`{ref}`\n\n```\n{ref}\n```\n")
@@ -116,14 +113,14 @@ class TestRendering:
         assert "task-ref" not in body.split('<article', 1)[1].split('</article>')[0]
         assert body.count(ref) == 2
 
-    def test_preview_renders_chips(self, client, wiki_dir):  # noqa: F811
+    def test_preview_renders_chips(self, client, wiki_dir):
         t = task(client, title="Previewed")
         resp = client.post("/api/preview", data=f"[[task:{t['id']}]]", headers=HOST)
         assert f'data-task-id="{t["id"]}"' in resp.data.decode()
 
 
 class TestLinkedTasks:
-    def test_inline_task_is_not_repeated_under_linked_tasks(self, client, wiki_dir):  # noqa: F811
+    def test_inline_task_is_not_repeated_under_linked_tasks(self, client, wiki_dir):
         shown = task(client, title="Shown inline", description="see [[notes]]")
         other = task(client, title="Only linked", description="see [[notes]]")
         write_page(wiki_dir, "notes", f"# Notes\n\n[[task:{shown['id'][:8]}]]\n")
@@ -136,36 +133,36 @@ class TestTwoLists:
     """A task in two lists links, from a page declaring one of them, to that
     list rather than to its first list A–Z (server._link_list)."""
 
-    def _setup(self, client, wiki_dir):  # noqa: F811
+    def _setup(self, client, wiki_dir):
         write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
         t = task(client, title="Lego for Sam", tags=["presentideas", "task"],
                  description="see [[todo]]")
         write_page(wiki_dir, "todo", f"# Todo\n\n[[deck list=task]]\n\n[[task:{t['id'][:8]}]]\n")
         return t
 
-    def test_chip_links_to_the_list_the_page_declares(self, client, wiki_dir):  # noqa: F811
+    def test_chip_links_to_the_list_the_page_declares(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         body = view(client, "todo")
         assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in body
         assert '<span class="task-ref-badge task-ref-list">task</span>' in body
 
-    def test_elsewhere_the_first_list_wins(self, client, wiki_dir):  # noqa: F811
+    def test_elsewhere_the_first_list_wins(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
         assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
 
-    def test_page_declaring_a_list_the_task_is_not_in(self, client, wiki_dir):  # noqa: F811
+    def test_page_declaring_a_list_the_task_is_not_in(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         write_page(wiki_dir, "notes", f"# N\n\n[[deck list=groceries]]\n\n[[task:{t['id'][:8]}]]\n")
         assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
 
-    def test_linked_tasks_link_to_the_pages_list(self, client, wiki_dir):  # noqa: F811
+    def test_linked_tasks_link_to_the_pages_list(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         write_page(wiki_dir, "todo", "# Todo\n\n[[deck list=task]]\n")   # no chip: Linked tasks
         linked = view(client, "todo").split('id="task-backlinks"', 1)[1]
         assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in linked
 
-    def test_preview_with_lists_param(self, client, wiki_dir):  # noqa: F811
+    def test_preview_with_lists_param(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         ref = f"[[task:{t['id']}]]"
         plain = client.post("/api/preview", data=ref, headers=HOST).data.decode()
@@ -175,7 +172,7 @@ class TestTwoLists:
 
 
 class TestSearch:
-    def test_page_is_found_by_the_task_title_and_follows_renames(self, client, wiki_dir):  # noqa: F811
+    def test_page_is_found_by_the_task_title_and_follows_renames(self, client, wiki_dir):
         t = task(client, title="Renew passport")
         write_page(wiki_dir, "notes", f"# Notes\n\nTodo: [[task:{t['id'][:8]}]]\n")
 
@@ -189,7 +186,7 @@ class TestSearch:
 
 
 class TestMcp:
-    def test_read_page_lists_the_referenced_tasks(self, client, wiki_dir):  # noqa: F811
+    def test_read_page_lists_the_referenced_tasks(self, client, wiki_dir):
         t = task(client, title="Book flights", due_date="2030-01-02")
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]] and [[task:deadbeef]]\n")
         resp = client.post("/mcp", headers=HOST, json={
@@ -203,7 +200,7 @@ class TestMcp:
 
 
 class TestMakeTask:
-    def test_editor_has_the_button_and_the_quick_add_parser(self, client, wiki_dir):  # noqa: F811
+    def test_editor_has_the_button_and_the_quick_add_parser(self, client, wiki_dir):
         write_page(wiki_dir, "notes", "# N\n")
         body = client.get("/edit/notes", headers=HOST).data.decode()
         assert 'data-fmt="maketask"' in body and 'data-fmt="taskref"' in body

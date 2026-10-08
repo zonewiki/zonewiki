@@ -1,65 +1,11 @@
-"""Tests for confirmed bugs outside of section editing.
-
-Run with:
-    pytest tests/test_bugs.py -v
-"""
-
-import os
-import re
-import sys
-import tempfile
-from pathlib import Path
+"""Tests for confirmed bugs outside of section editing."""
 
 import pytest
-
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_bugs_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+import re
 
 import server
-from server import split_sections, toggle_nth_checkbox, content_hash, section_char_range, find_backlinks, _page_link_targets
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    pages = tmp_path / "pages"
-    pages.mkdir()
-    old_pages = server.PAGES_DIR
-    old_wiki  = server.WIKI_DIR
-    server.PAGES_DIR = pages
-    server.WIKI_DIR  = pages
-    yield pages
-    server.PAGES_DIR = old_pages
-    server.WIKI_DIR  = old_wiki
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
-
-
-def write_page(wiki_dir, slug, content):
-    p = wiki_dir / f"{slug}.md"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content, encoding="utf-8")
-    return p
-
-
-HOST = {"Host": "localhost:5000"}
-
-
-def section_fields(full_content, section_idx):
-    """Return hidden-field dict for a section edit."""
-    rng = section_char_range(full_content, section_idx)
-    assert rng is not None
-    s, e = rng
-    return {"file_hash": content_hash(full_content), "start_char": str(s), "end_char": str(e)}
+from server import split_sections, toggle_nth_checkbox, find_backlinks, _page_link_targets
+from tests.conftest import HOST, section_fields, write_page
 
 
 # ===========================================================================
@@ -209,7 +155,7 @@ class TestSplitSectionsSetextHeadings:
             "Alpha Section\n-------------\n\nalpha body\n\n"
             "Beta Section\n------------\n\nbeta body\n"
         )
-        page = write_page(wiki_dir, "setext_page", content)
+        write_page(wiki_dir, "setext_page", content)
         # The GET /edit route should serve section 1 correctly
         resp = client.get("/edit/setext_page?section=1", headers=HOST)
         assert resp.status_code == 200

@@ -1,9 +1,6 @@
 """Tests for the MCP server: the protocol handler (src/mcp_server.py), the
 /mcp endpoint with its auth, and the tools (search_wiki, search_tasks,
 read_page, list_pages) backed by section-level retrieval in server.py.
-
-Run with:
-    pytest tests/test_mcp.py -v
 """
 
 import os
@@ -11,20 +8,20 @@ import re
 
 import pytest
 
-from tests.test_routes import HOST, client, wiki_dir, write_page  # noqa: F401  (fixtures; sets sys.path)
+from tests.conftest import HOST, write_page
 import mcp_server
 import server
 from tests.test_semantic import make_index
 
 
-def rpc(client, method, params=None, id_=1, headers=None):  # noqa: F811
+def rpc(client, method, params=None, id_=1, headers=None):
     msg = {"jsonrpc": "2.0", "id": id_, "method": method}
     if params is not None:
         msg["params"] = params
     return client.post("/mcp", json=msg, headers={**HOST, **(headers or {})})
 
 
-def call(client, name, **args):  # noqa: F811
+def call(client, name, **args):
     resp = rpc(client, "tools/call", {"name": name, "arguments": args})
     assert resp.status_code == 200
     result = resp.get_json()["result"]
@@ -95,60 +92,60 @@ class TestHandle:
 # ── HTTP transport and auth ──────────────────────────────────────────────────
 
 class TestEndpoint:
-    def test_initialize_over_http(self, client):  # noqa: F811
+    def test_initialize_over_http(self, client):
         resp = rpc(client, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                           "clientInfo": {"name": "t", "version": "0"}})
         assert resp.status_code == 200
         assert resp.get_json()["result"]["serverInfo"]["name"] == "leaf"
 
-    def test_notification_is_202(self, client):  # noqa: F811
+    def test_notification_is_202(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"},
                            headers=HOST)
         assert resp.status_code == 202 and resp.data == b""
 
-    def test_batch(self, client):  # noqa: F811
+    def test_batch(self, client):
         resp = client.post("/mcp", headers=HOST, json=[
             {"jsonrpc": "2.0", "id": 1, "method": "ping"},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
         ])
         assert resp.get_json() == [{"jsonrpc": "2.0", "id": 1, "result": {}}]
 
-    def test_parse_error(self, client):  # noqa: F811
+    def test_parse_error(self, client):
         resp = client.post("/mcp", data="{nope", content_type="application/json", headers=HOST)
         assert resp.status_code == 400
         assert resp.get_json()["error"]["code"] == -32700
 
-    def test_get_and_delete_not_offered(self, client):  # noqa: F811
+    def test_get_and_delete_not_offered(self, client):
         assert client.get("/mcp", headers=HOST).status_code == 405
         assert client.delete("/mcp", headers=HOST).status_code == 405
 
-    def test_cross_site_post_refused(self, client):  # noqa: F811
+    def test_cross_site_post_refused(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
                            headers={**HOST, "Origin": "https://evil.example"})
         assert resp.status_code == 403
 
 
 class TestAuth:
-    def test_password_without_token_closes_mcp(self, client, monkeypatch):  # noqa: F811
+    def test_password_without_token_closes_mcp(self, client, monkeypatch):
         monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
         resp = rpc(client, "ping")
         assert resp.status_code == 401
         assert "LEAF_MCP_TOKEN" in resp.get_json()["error"]
 
-    def test_token_required_when_set(self, client, monkeypatch):  # noqa: F811
+    def test_token_required_when_set(self, client, monkeypatch):
         monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
         assert rpc(client, "ping").status_code == 401
         assert rpc(client, "ping", headers={"Authorization": "Bearer wrong"}).status_code == 401
         assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
 
-    def test_token_works_with_password(self, client, monkeypatch):  # noqa: F811
+    def test_token_works_with_password(self, client, monkeypatch):
         monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
         monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
         assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
         # and the rest of the wiki still wants a login
         assert client.get("/page/index", headers=HOST).status_code == 302
 
-    def test_get_also_needs_auth(self, client, monkeypatch):  # noqa: F811
+    def test_get_also_needs_auth(self, client, monkeypatch):
         monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
         assert client.get("/mcp", headers=HOST).status_code == 401
 
@@ -156,7 +153,7 @@ class TestAuth:
 # ── Tools ────────────────────────────────────────────────────────────────────
 
 @pytest.fixture()
-def pages(wiki_dir):  # noqa: F811
+def pages(wiki_dir):
     write_page(wiki_dir, "git-remote",
                "# Git remote\n\n## Setup\n\nSet GIT_REMOTE in .env.\n\n## Pushing\n\nRun git push to back up.\n")
     write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
@@ -164,7 +161,7 @@ def pages(wiki_dir):  # noqa: F811
 
 
 class TestSearchWiki:
-    def test_returns_sections_with_full_text_and_links(self, client, pages):  # noqa: F811
+    def test_returns_sections_with_full_text_and_links(self, client, pages):
         text, err = call(client, "search_wiki", query="git push")
         assert not err
         first = text.split("\n\n---\n\n")[0]
@@ -173,25 +170,25 @@ class TestSearchWiki:
         assert "url: http://localhost:5000/page/git-remote#pushing" in first
         assert first.endswith("Run git push to back up.")
 
-    def test_last_edit_date(self, client, pages):  # noqa: F811
+    def test_last_edit_date(self, client, pages):
         os.utime(pages / "git-remote.md", (1_000_000_000, 1_000_000_000))
         first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]
         assert "\nslug: git-remote\nedited: 2001-09-0" in first
 
-    def test_several_sections_of_one_page(self, client, pages):  # noqa: F811
+    def test_several_sections_of_one_page(self, client, pages):
         text, _ = call(client, "search_wiki", query="git")
         assert "Git remote › Setup" in text and "Git remote › Pushing" in text
 
-    def test_limit(self, client, pages):  # noqa: F811
+    def test_limit(self, client, pages):
         text, _ = call(client, "search_wiki", query="git", limit=1)
         assert "[1]" in text and "[2]" not in text
 
-    def test_stopwords_dont_rank(self, client, pages):  # noqa: F811
+    def test_stopwords_dont_rank(self, client, pages):
         write_page(pages, "filler", "# Filler\n\nThe the the is is to to the.\n")
         text, _ = call(client, "search_wiki", query="when is the git push")
         assert "Filler" not in text
 
-    def test_query_syntax(self, client, pages):  # noqa: F811
+    def test_query_syntax(self, client, pages):
         text, _ = call(client, "search_wiki", query='"git push" -remote')
         assert text.startswith("No matching")      # the git-remote page has "remote"
         write_page(pages, "tagged", "---\ntags: ops\n---\n# Ops\n\nRun git push to back up.\n")
@@ -200,31 +197,31 @@ class TestSearchWiki:
         assert "slug: tagged" in text and "Task: git push the backup" in text
         assert "slug: git-remote" not in text
 
-    def test_exact_phrase_ranks_first(self, client, pages):  # noqa: F811
+    def test_exact_phrase_ranks_first(self, client, pages):
         write_page(pages, "prep", "# Zebra prep\n\nZebra, zebra, zebra. Then crossing, crossing.\n")
         write_page(pages, "exact", "# Notes\n\nAt the zebra   crossing.\n")
         assert call(client, "search_wiki", query="zebra crossing")[0].startswith("[1] Notes\nslug: exact")
 
-    def test_date_filter(self, client, pages):  # noqa: F811
+    def test_date_filter(self, client, pages):
         os.utime(pages / "golf.md", (1_000_000_000, 1_000_000_000))   # 2001-09-09
         text, _ = call(client, "search_wiki", query="werkstatt edited:2001")
         assert "slug: golf" in text
         assert call(client, "search_wiki", query="werkstatt after:2002")[0].startswith("No matching")
 
-    def test_found_by_file_name(self, client, pages):  # noqa: F811
+    def test_found_by_file_name(self, client, pages):
         write_page(pages, "messages/2026-06-18_update-alex-robin", "# Roof status\n\nRevised timeline.\n")
         assert "slug: messages/2026-06-18_update-alex-robin" in call(client, "search_wiki", query="robin")[0]
 
-    def test_no_match(self, client, pages):  # noqa: F811
+    def test_no_match(self, client, pages):
         text, err = call(client, "search_wiki", query="xqzt")
         assert not err and text.startswith("No matching sections")
 
-    def test_bad_arguments(self, client, pages):  # noqa: F811
+    def test_bad_arguments(self, client, pages):
         assert call(client, "search_wiki", query="  ")[1] is True
         assert call(client, "search_wiki")[1] is True
         assert call(client, "search_wiki", query="git", limit="many")[1] is True
 
-    def test_sees_edits(self, client, pages):  # noqa: F811
+    def test_sees_edits(self, client, pages):
         call(client, "search_wiki", query="git")
         path = pages / "golf.md"
         path.write_text("# Golf\n\nNow about git too.\n", encoding="utf-8")
@@ -232,7 +229,7 @@ class TestSearchWiki:
         os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
         assert "Now about git too." in call(client, "search_wiki", query="git")[0]
 
-    def test_finds_by_meaning_with_semantic_on(self, client, pages, monkeypatch):  # noqa: F811
+    def test_finds_by_meaning_with_semantic_on(self, client, pages, monkeypatch):
         idx = make_index(pages)
         idx.sync()
         monkeypatch.setattr(server, "SEMANTIC", idx)
@@ -240,18 +237,18 @@ class TestSearchWiki:
         assert text.startswith("[1] Golf › Werkstatt")
         assert "#werkstatt" in text
 
-    def test_keywords_only_without_semantic(self, client, pages, monkeypatch):  # noqa: F811
+    def test_keywords_only_without_semantic(self, client, pages, monkeypatch):
         monkeypatch.setattr(server, "SEMANTIC", None)
         assert call(client, "search_wiki", query="car repair")[0].startswith("No matching")
 
 
-def task(client, **fields):  # noqa: F811
+def task(client, **fields):
     resp = client.post("/api/deck", json=fields, headers=HOST)
     assert resp.status_code == 201, resp.get_json()
     return resp.get_json()
 
 
-def close(client, task_id, **fields):  # noqa: F811
+def close(client, task_id, **fields):
     resp = client.put(f"/api/deck/{task_id}", json=fields, headers=HOST)
     assert resp.status_code == 200, resp.get_json()
 
@@ -263,13 +260,13 @@ def entries(text):
 
 class TestFolders:
     @pytest.fixture()
-    def tree(self, pages):  # noqa: F811
+    def tree(self, pages):
         write_page(pages, "tickets/BUG-1_push", "# BUG-1\n\nThe git push failed on the server.\n")
         write_page(pages, "tickets/old/BUG-0", "# BUG-0\n\nAn old git issue.\n")
         write_page(pages, "ticketsarchive", "# Archive\n\nMore git notes.\n")
         return pages
 
-    def test_search_under_a_folder(self, client, tree):  # noqa: F811
+    def test_search_under_a_folder(self, client, tree):
         task(client, title="git chores")
         text, err = call(client, "search_wiki", query="git", under="tickets")
         assert not err
@@ -278,28 +275,28 @@ class TestFolders:
         assert "Task:" not in text
 
     @pytest.mark.parametrize("under", ["tickets/", "/page/tickets", "TICKETS", "tickets/old"])
-    def test_folder_spellings(self, client, tree, under):  # noqa: F811
+    def test_folder_spellings(self, client, tree, under):
         text, err = call(client, "search_wiki", query="git", under=under)
         assert not err and "slug: tickets/old/BUG-0" in text
 
-    def test_unknown_folder_is_an_error(self, client, tree):  # noqa: F811
+    def test_unknown_folder_is_an_error(self, client, tree):
         text, err = call(client, "search_wiki", query="git", under="nope")
         assert err and "list_pages" in text
 
-    def test_empty_under_means_everything(self, client, tree):  # noqa: F811
+    def test_empty_under_means_everything(self, client, tree):
         assert "slug: ticketsarchive" in call(client, "search_wiki", query="git", under="")[0]
 
-    def test_list_pages_under(self, client, tree):  # noqa: F811
+    def test_list_pages_under(self, client, tree):
         text, _ = call(client, "list_pages", under="tickets")
         assert text.splitlines()[0].startswith("Pages under tickets/, most recently edited first (all 2)")
         assert call(client, "list_pages", under="nope")[0] == "No pages under 'nope'."
 
-    def test_bad_type(self, client, tree):  # noqa: F811
+    def test_bad_type(self, client, tree):
         assert call(client, "search_wiki", query="git", under=3)[1] is True
 
 
 class TestTasksInSearchWiki:
-    def test_task_is_a_result_with_its_facts(self, client, pages):  # noqa: F811
+    def test_task_is_a_result_with_its_facts(self, client, pages):
         t = task(client, title="Fix the leaf importer", tags=["leaf"], due_date="2026-10-10",
                  description="Crashes on empty files.")
         text, err = call(client, "search_wiki", query="importer")
@@ -309,18 +306,18 @@ class TestTasksInSearchWiki:
         assert f"url: http://localhost:5000/deck?task={t['id']}&view=open" in first
         assert first.endswith("Crashes on empty files.")
 
-    def test_tasks_and_sections_together(self, client, pages):  # noqa: F811
+    def test_tasks_and_sections_together(self, client, pages):
         task(client, title="Push the git remote again")
         text, _ = call(client, "search_wiki", query="git push")
         assert "Task: Push the git remote again" in text and "Git remote › Pushing" in text
 
-    def test_done_task_links_to_completed(self, client, pages):  # noqa: F811
+    def test_done_task_links_to_completed(self, client, pages):
         t = task(client, title="Renew passport")
         close(client, t["id"], completed=True)
         text, _ = call(client, "search_wiki", query="passport")
         assert "status: done 20" in text and "view=completed" in text
 
-    def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):  # noqa: F811
+    def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):
         idx = make_index(pages)
         idx.sync()
         monkeypatch.setattr(server, "SEMANTIC", idx)
@@ -331,23 +328,23 @@ class TestTasksInSearchWiki:
 
 class TestTasksByMeaning:
     @pytest.fixture()
-    def semantic_on(self, pages, monkeypatch):  # noqa: F811
+    def semantic_on(self, pages, monkeypatch):
         idx = make_index(pages)
         monkeypatch.setattr(server, "SEMANTIC", idx)
         return idx
 
-    def test_search_wiki_finds_task_by_meaning(self, client, semantic_on):  # noqa: F811
+    def test_search_wiki_finds_task_by_meaning(self, client, semantic_on):
         task(client, title="Book the Werkstatt")
         semantic_on.sync()
         assert "Task: Book the Werkstatt" in call(client, "search_wiki", query="car repair")[0]
 
-    def test_not_under_a_folder(self, client, semantic_on, pages):  # noqa: F811
+    def test_not_under_a_folder(self, client, semantic_on, pages):
         write_page(pages, "tickets/car", "# Car\n\nMechaniker.\n")
         task(client, title="Book the Werkstatt")
         semantic_on.sync()
         assert "Task:" not in call(client, "search_wiki", query="car repair", under="tickets")[0]
 
-    def test_search_tasks_query_by_meaning_within_the_filter(self, client, semantic_on):  # noqa: F811
+    def test_search_tasks_query_by_meaning_within_the_filter(self, client, semantic_on):
         task(client, title="Book the Werkstatt", tags=["home"])
         task(client, title="Mechaniker for the van", tags=["work"])
         semantic_on.sync()
@@ -356,7 +353,7 @@ class TestTasksByMeaning:
 
 
 class TestSearchTasks:
-    def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):  # noqa: F811
+    def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):
         task(client, title="Later", tags=["leaf"], due_date="2026-12-01")
         task(client, title="Soon", tags=["leaf", "bug"], due_date="2026-10-05")
         task(client, title="Undated", tags=["Leaf"])
@@ -367,13 +364,13 @@ class TestSearchTasks:
         assert "3 matching tasks:" in text
         assert entries(text.split(":\n\n", 1)[1]) == ["Task: Soon", "Task: Later", "Task: Undated"]
 
-    def test_several_tags_must_all_match(self, client, wiki_dir):  # noqa: F811
+    def test_several_tags_must_all_match(self, client, wiki_dir):
         task(client, title="A", tags=["leaf", "bug"])
         task(client, title="B", tags=["leaf"])
         text, _ = call(client, "search_tasks", tag="#leaf, bug")
         assert "1 matching tasks" in text and "Task: A" in text and "Task: B" not in text
 
-    def test_status(self, client, wiki_dir):  # noqa: F811
+    def test_status(self, client, wiki_dir):
         open_ = task(client, title="Still open", tags=["x"])
         done = task(client, title="Finished", tags=["x"])
         dropped = task(client, title="Dropped", tags=["x"])
@@ -386,13 +383,13 @@ class TestSearchTasks:
         assert text.index("Still open") < text.index("Finished")
         assert open_["id"]
 
-    def test_query_ranks_within_the_filter(self, client, wiki_dir):  # noqa: F811
+    def test_query_ranks_within_the_filter(self, client, wiki_dir):
         task(client, title="Write the importer", tags=["leaf"])
         task(client, title="Importer docs", tags=["kb"])
         text, _ = call(client, "search_tasks", query="importer", tag="leaf")
         assert "1 matching tasks" in text and "Write the importer" in text
 
-    def test_list_label_and_link(self, client, wiki_dir):  # noqa: F811
+    def test_list_label_and_link(self, client, wiki_dir):
         (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries]]\n", encoding="utf-8")
         task(client, title="Milk", tags=["groceries"])
         task(client, title="Main deck task")
@@ -400,7 +397,7 @@ class TestSearchTasks:
         assert "Task: Milk" in text and "list: groceries" in text and "Main deck" not in text
         assert "list=groceries" in text
 
-    def test_repeat_keep_and_start(self, client, wiki_dir):  # noqa: F811
+    def test_repeat_keep_and_start(self, client, wiki_dir):
         task(client, title="Water plants", start_date="2026-10-04", due_date="2026-10-06",
              rec_type="weekly", rec_interval=2)
         task(client, title="Coffee", keep=True)
@@ -408,26 +405,26 @@ class TestSearchTasks:
         assert "start: 2026-10-04 · due: 2026-10-06 · repeats every 2 weeks" in text
         assert "keep task (back to the list when done)" in text
 
-    def test_query_syntax(self, client, wiki_dir):  # noqa: F811
+    def test_query_syntax(self, client, wiki_dir):
         task(client, title="Write the importer docs")
         task(client, title="Write the importer")
         text, _ = call(client, "search_tasks", query="importer -docs")
         assert "1 matching tasks" in text and "Task: Write the importer\n" in text
 
-    def test_limit_and_none(self, client, wiki_dir):  # noqa: F811
+    def test_limit_and_none(self, client, wiki_dir):
         for i in range(3):
             task(client, title=f"T{i}")
         text, _ = call(client, "search_tasks", limit=2)
         assert "3 matching tasks, the first 2 shown" in text
         assert call(client, "search_tasks", tag="nope")[0].endswith("No matching tasks.")
 
-    def test_bad_arguments(self, client, wiki_dir):  # noqa: F811
+    def test_bad_arguments(self, client, wiki_dir):
         assert call(client, "search_tasks", status="later")[1] is True
         assert call(client, "search_tasks", tag=["leaf"])[1] is True
 
 
 class TestBaseUrl:
-    def test_links_use_request_address_by_default(self, client, pages, monkeypatch):  # noqa: F811
+    def test_links_use_request_address_by_default(self, client, pages, monkeypatch):
         monkeypatch.setattr(server, "LEAF_BASE_URL", "")
         resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000"}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -435,7 +432,7 @@ class TestBaseUrl:
         assert "url: http://host.containers.internal:5000/page/golf\n" in \
             resp.get_json()["result"]["content"][0]["text"]
 
-    def test_base_url_wins(self, client, pages, monkeypatch):  # noqa: F811
+    def test_base_url_wins(self, client, pages, monkeypatch):
         monkeypatch.setattr(server, "LEAF_BASE_URL", "http://wiki.lan:5000")
         assert "url: http://wiki.lan:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
         assert "url: http://wiki.lan:5000/page/git-remote#pushing" in \
@@ -445,30 +442,30 @@ class TestBaseUrl:
 class TestReadPage:
     @pytest.mark.parametrize("slug", ["golf", "/page/golf", "http://localhost:5000/page/golf#werkstatt",
                                       "golf.md", "Golf"])
-    def test_slug_forms(self, client, pages, slug):  # noqa: F811
+    def test_slug_forms(self, client, pages, slug):
         text, err = call(client, "read_page", slug=slug)
         assert not err
         assert text.startswith("slug: golf\nurl: http://localhost:5000/page/golf\n\n# Golf\n")
 
-    def test_page_name_with_spaces(self, client, pages):  # noqa: F811
+    def test_page_name_with_spaces(self, client, pages):
         assert call(client, "read_page", slug="Git Remote")[0].startswith("slug: git-remote")
 
-    def test_frontmatter_included(self, client, pages):  # noqa: F811
+    def test_frontmatter_included(self, client, pages):
         write_page(pages, "fm", "---\ntags: a\n---\n# FM\n\nBody.\n")
         assert "tags: a" in call(client, "read_page", slug="fm")[0]
 
-    def test_missing_page(self, client, pages):  # noqa: F811
+    def test_missing_page(self, client, pages):
         text, err = call(client, "read_page", slug="nope")
         assert err and "search_wiki" in text
 
-    def test_path_traversal_refused(self, client, pages):  # noqa: F811
+    def test_path_traversal_refused(self, client, pages):
         (pages.parent / "secret.md").write_text("top secret", encoding="utf-8")
         text, err = call(client, "read_page", slug="../secret")
         assert err and "top secret" not in text
 
 
 class TestListPages:
-    def test_newest_first_with_titles(self, client, pages):  # noqa: F811
+    def test_newest_first_with_titles(self, client, pages):
         old = pages / "index.md"
         os.utime(old, (1_000_000_000, 1_000_000_000))
         text, err = call(client, "list_pages")
@@ -478,7 +475,7 @@ class TestListPages:
         assert lines[-1].startswith("index | Home | edited 2001-09-")
         assert any(line.startswith("golf | Golf | edited ") for line in lines)
 
-    def test_limit(self, client, pages):  # noqa: F811
+    def test_limit(self, client, pages):
         text, _ = call(client, "list_pages", limit=1)
         assert "(1 of 3)" in text and len(text.splitlines()) == 2
 

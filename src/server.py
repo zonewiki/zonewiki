@@ -392,7 +392,6 @@ git_setup()
 # Initialize deck module and register its blueprint
 deck_module.init_deck(WIKI_DIR, GIT_ENABLED, git_commit)
 app.register_blueprint(deck_module.bp)
-DECK_FILE = deck_module.DECK_FILE
 
 _LEAF_LOGO = """<svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>

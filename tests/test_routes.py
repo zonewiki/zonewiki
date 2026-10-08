@@ -1,72 +1,17 @@
-import json
 """Tests for Leaf HTTP routes — page view/edit/save, search, upload, auth,
-rename with reference updates, conflict detection, and API endpoints.
+rename with reference updates, conflict detection, and API endpoints."""
 
-Run with:
-    pytest tests/test_routes.py -v
-"""
-
+import json
 import os
 import re
-import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_routes_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 import server
 import deck as deck_module
 from server import content_hash, section_char_range
-
-HOST = {"Host": "localhost:5000"}
-
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    old_pages = server.PAGES_DIR
-    old_wiki = server.WIKI_DIR
-    old_deck = deck_module.DECK_FILE
-    old_uploads = server.UPLOADS_DIR
-    server.PAGES_DIR = tmp_path
-    server.WIKI_DIR = tmp_path
-    server.UPLOADS_DIR = tmp_path / "_assets"
-    server.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    server._search_doc_cache.clear()
-    server._page_meta_cache.clear()
-    deck_module._task_docs_cache["key"] = None
-    deck_module._task_docs_cache["docs"] = []
-    (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
-    yield tmp_path
-    server.PAGES_DIR = old_pages
-    server.WIKI_DIR = old_wiki
-    server.UPLOADS_DIR = old_uploads
-    deck_module.DECK_FILE = old_deck
-    server.DECK_FILE = old_deck
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
-
-
-def write_page(wiki_dir: Path, slug: str, content: str) -> Path:
-    path = wiki_dir / f"{slug}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return path
+from tests.conftest import HOST, write_page
 
 
 # ===========================================================================

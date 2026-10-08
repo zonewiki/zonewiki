@@ -10,10 +10,7 @@ Skipped automatically when Playwright is not installed, so a plain
     ./run.sh e2e
 """
 
-import os
 import subprocess
-import sys
-import tempfile
 import threading
 from pathlib import Path
 
@@ -23,12 +20,7 @@ pytest.importorskip("playwright.sync_api", reason="playwright not installed (use
 from playwright.sync_api import sync_playwright  # noqa: E402
 from werkzeug.serving import make_server  # noqa: E402
 
-os.environ.setdefault("WIKI_DATA", tempfile.mkdtemp(prefix="leaf_e2e_"))
-os.environ["ALLOW_REMOTE"] = "1"
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-import server  # noqa: E402
-import deck as deck_module  # noqa: E402
+import server  # noqa: E402  (tests/conftest.py set up its import)
 
 SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
@@ -51,24 +43,10 @@ def base_url():
 
 
 @pytest.fixture()
-def wiki(tmp_path, monkeypatch, base_url):
-    """Point the running app at a fresh wiki directory with its own git repo."""
-    monkeypatch.setattr(server, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
-    monkeypatch.setattr(server, "UPLOADS_DIR", tmp_path / "_assets")
-    monkeypatch.setattr(server, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
-    monkeypatch.setattr(server, "GIT_REMOTE", "")
-    monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
-    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
-    monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
-    server._search_doc_cache.clear()
-    server._page_meta_cache.clear()
-    deck_module._task_docs_cache["key"] = None
-    deck_module._task_docs_cache["docs"] = []
-    (tmp_path / "_assets").mkdir()
-    (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
-    server.git_setup()
-    return Wiki(tmp_path)
+def wiki(git_wiki_dir, base_url):
+    """Point the running app at a fresh wiki directory with its own git repo
+    (tests/conftest.py)."""
+    return Wiki(git_wiki_dir)
 
 
 class Wiki:

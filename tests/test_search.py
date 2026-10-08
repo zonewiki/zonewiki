@@ -3,15 +3,7 @@
 These exercise the ranking primitives directly (no Flask), covering the three
 pain points the rewrite targets: multi-word queries, ranking quality, and
 typo/word-variation tolerance.
-
-Run with:
-    pytest tests/test_search.py -v
 """
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 

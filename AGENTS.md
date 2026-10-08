@@ -680,7 +680,9 @@ pytest tests/ -v                                     # Run all tests
 pytest tests/test_section_editing.py -v              # Run section-editing tests only
 ```
 
-`tests/test_git.py` initializes a real git repo in the temp wiki dir and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules point `WIKI_DIR` at a plain temp dir, so git calls there are silent no-ops.
+`tests/conftest.py` holds the shared setup: it imports Leaf against a throwaway `WIKI_DATA`, and gives every test a fresh temp wiki (`wiki_dir`: the server and the deck pointed at it, every page/task cache emptied, just `index.md`; `git_wiki_dir`: the same as a git repo; `client`), plus helpers (`HOST`, `write_page`, `create_task`, `section_fields`) that modules import from `tests.conftest`. The browser tests' `wiki` fixture builds on `git_wiki_dir`.
+
+`tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules use the plain `wiki_dir`, so git calls there are silent no-ops.
 
 `tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, and the four tools (tasks created through `/api/deck`) (with and without the fake semantic index from `test_semantic.py`).
 

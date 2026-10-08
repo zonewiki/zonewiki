@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, open_tab
+from conftest import TOUCH_PHONE
 
 
 def card(page, title):

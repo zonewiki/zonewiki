@@ -4,24 +4,11 @@ Covers: render_md, process_wikilinks, _build_toc, _apply_img_sizes,
         _render_task_dates, toggle_nth_checkbox (metadata), page_title,
         to_slug, build_breadcrumb, strip_h1, _render_task_title,
         parse_frontmatter, _render_frontmatter_html.
-
-Run with:
-    pytest tests/test_rendering.py -v
 """
 
-import os
 import re
-import sys
-import tempfile
-from pathlib import Path
 
 import pytest
-
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_rendering_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import server
 from server import (
@@ -39,27 +26,7 @@ from server import (
     to_slug,
     toggle_nth_checkbox,
 )
-
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    old_pages = server.PAGES_DIR
-    old_wiki = server.WIKI_DIR
-    server.PAGES_DIR = tmp_path
-    server.WIKI_DIR = tmp_path
-    yield tmp_path
-    server.PAGES_DIR = old_pages
-    server.WIKI_DIR = old_wiki
-
-
-def write_page(wiki_dir: Path, slug: str, content: str) -> Path:
-    path = wiki_dir / f"{slug}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return path
+from tests.conftest import write_page
 
 
 # ===========================================================================

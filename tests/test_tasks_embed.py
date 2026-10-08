@@ -1,51 +1,11 @@
 """Tests for [[deck]] embed directive and page field on tasks."""
 
-import sys
-import os
-import re
 import json
-import tempfile
-from pathlib import Path
+import re
 
-import pytest
-
-_SESSION_TMP = tempfile.mkdtemp(prefix="leaf_embed_test_")
-os.environ.setdefault("WIKI_DATA", _SESSION_TMP)
-os.environ["ALLOW_REMOTE"] = "1"
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import server
 import deck as deck_module
-
-
-@pytest.fixture()
-def wiki_dir(tmp_path):
-    orig_wiki = server.WIKI_DIR
-    orig_pages = server.PAGES_DIR
-    orig_deck = deck_module.DECK_FILE
-    server.WIKI_DIR = tmp_path
-    server.PAGES_DIR = tmp_path
-    deck_module.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    (tmp_path / "_deck").mkdir(exist_ok=True)   # tests write deck files directly
-    server.DECK_FILE = tmp_path / "_deck" / "tasks.json"
-    (tmp_path / "index.md").write_text("# Home\n", encoding="utf-8")
-    yield tmp_path
-    server.WIKI_DIR = orig_wiki
-    server.PAGES_DIR = orig_pages
-    deck_module.DECK_FILE = orig_deck
-    server.DECK_FILE = orig_deck
-
-
-@pytest.fixture()
-def client(wiki_dir):
-    server.app.config["TESTING"] = True
-    with server.app.test_client() as c:
-        yield c
-
-
-def create_task(client, **kwargs):
-    payload = {"title": "Test task", **kwargs}
-    return client.post("/api/deck", json=payload)
+from tests.conftest import create_task
 
 
 # ── Param parsing ───────────────────────────────────────────────────────────────

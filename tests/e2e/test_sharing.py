@@ -1,7 +1,6 @@
 """Sharing mode: for sharing the screen, everything that shows other pages
 around the one on screen is hidden; the page itself stays."""
 
-import re
 
 from playwright.sync_api import expect
 
