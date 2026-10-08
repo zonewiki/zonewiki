@@ -1734,29 +1734,26 @@ def _page_from_input(raw: str) -> str:
     return raw if path and path.exists() else to_slug(raw)
 
 
-def add_link_to_page(content: str, slug: str, label: str) -> str:
-    """content with `- [[slug|label]]` at its end: in the list the page
-    ends with, else as a new one."""
-    body = content.rstrip("\n")
-    last = body.rsplit("\n", 1)[-1]
-    sep = "\n" if re.match(r"^\s*([-*+]|\d+[.)])\s", last) else "\n\n"
+def page_wikilink(slug: str, label: str) -> str:
+    """`[[slug|label]]`, with what would break a wikilink taken out of the
+    label. Mirrored by the Move to wiki dialog in leaf.js, which copies it."""
     label = re.sub(r"[\[\]|]", "", label).strip() or slug
-    return f"{body}{sep}- [[{slug}|{label}]]\n"
+    return f"[[{slug}|{label}]]"
 
 
 def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
     """The "Move to wiki" dialog of a scratch note: a folder (suggesting the
     existing ones), the name (the note's title, not its timestamped slug),
     whether to keep the date in front of it, a preview of the page's slug,
-    and the page to link it from (leaf.js suggests the folder's index).
-    Posts to /promote/<slug>."""
+    and the page to link it from (leaf.js suggests the folder's index, and
+    copies the link on Move). Posts to /promote/<slug>."""
     safe_slug = html.escape(slug)
     date = SCRATCH_RE.match(slug).group(1)[:10]
     options = "".join(f'<option value="{html.escape(f)}/">' for f in page_folders())
     error_html = f'<p class="rename-error">{html.escape(error)}</p>' if error else ""
     return (
-        f'<dialog id="page-promote-dialog" class="scratch-modal promote-modal"'
-        f'{" data-open" if error else ""}>'
+        f'<dialog id="page-promote-dialog" class="scratch-modal promote-modal" '
+        f'data-title="{html.escape(title)}"{" data-open" if error else ""}>'
         f'<p class="scratch-label">Move to wiki</p>'
         f'<form method="post" action="/promote/{safe_slug}">'
         f'<label class="promote-field">Folder'
@@ -1772,6 +1769,9 @@ def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
         f'<label class="promote-field">Link from'
         f'<input type="text" name="link_from" id="promote-link-from" list="wiki-pages" '
         f'placeholder="(no link)" autocomplete="off" spellcheck="false"></label>'
+        f'<p class="modal-desc">Opens that page in the editor, the link in the clipboard '
+        f'to paste where it belongs.</p>'
+        f'<input type="hidden" name="copied" id="promote-copied" value="">'
         f'{error_html}'
         f'<div class="scratch-actions">'
         f'<button type="submit" class="btn btn-primary">Move</button>'
@@ -2670,6 +2670,8 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
+    paste_hint = _paste_hint_html(request.args.get("paste", ""),
+                                  request.args.get("copied") == "1")
     form_action = f'/edit/{safe_slug}'
     # Always embed file_hash for conflict detection (full-file and section edits).
     # For a full-file edit, `content` still holds the full file text.
@@ -2698,6 +2700,7 @@ def edit_page(slug):
     </div>
     {delete_form}
     {rename_bar}
+    {paste_hint}
     {FORMAT_BAR}
     <form id="editor-form" method="post" action="{form_action}">
       {section_hidden_fields}
@@ -2714,6 +2717,24 @@ def edit_page(slug):
     # the deck's quick-add parser (deck-core.js) for several lines at once.
     body += deck_module._build_deck_embed({}, headless=True)
     return shell(f"Edit — {title}", body, editor=True)
+
+
+def _paste_hint_html(slug: str, copied: bool) -> str:
+    """The editor's hint after Move to wiki (`?paste=<slug>`): the moved
+    page's link, copied to the clipboard (`copied`) or to copy, for pasting
+    where it belongs on this page. Copy and × in leaf.js."""
+    path = safe_path(slug) if slug else None
+    if not path or not path.exists() or hidden_page(slug):
+        return ""
+    title = page_title(path.read_text(encoding="utf-8"), slug)
+    link = page_wikilink(slug, title)
+    said = ("Its link is in the clipboard: paste it where it belongs."
+            if copied else "Copy its link and paste it where it belongs.")
+    return (f'<div class="paste-hint" role="status" data-link="{html.escape(link)}">'
+            f'<span>Moved “{html.escape(title)}” to the wiki. {said}</span>'
+            f'<code>{html.escape(link)}</code>'
+            f'<button type="button" class="btn paste-hint-copy">Copy</button>'
+            f'<button type="button" class="paste-hint-close" aria-label="Close">×</button></div>')
 
 
 def _splice_section(full: str | None, file_hash: str, start_char: int,
@@ -2902,14 +2923,14 @@ def promote_page(slug):
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
     modified_refs = update_references(slug, new_slug)
-    if link_path:
-        # Linked from that page, unless it already did (now pointing here).
-        content = link_path.read_text(encoding="utf-8")
-        if new_slug not in _page_link_targets(content, link_slug):
-            title = page_title(new_path.read_text(encoding="utf-8"), new_slug)
-            link_path.write_text(add_link_to_page(content, new_slug, title), encoding="utf-8")
-            modified_refs.append(link_path)
     git_commit_rename(old_path, new_path, modified_refs, f"Promote {slug} to {new_slug}")
+    # The page to link it from opens in the editor, the link to paste where
+    # it belongs (leaf.js copied it on Move). A page linking to the note
+    # already links here now: nothing to paste.
+    if link_path and new_slug not in _page_link_targets(
+            link_path.read_text(encoding="utf-8"), link_slug):
+        copied = "&copied=1" if request.form.get("copied") == "1" else ""
+        return redirect(f"/edit/{link_slug}?paste={quote(new_slug)}{copied}")
     return redirect(f"/page/{new_slug}")
 
 

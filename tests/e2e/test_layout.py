@@ -723,11 +723,23 @@ def test_move_scratch_note_to_wiki(page, wiki):
     page.locator("#promote-name").fill("Alex sync")
     dialog.get_by_label("Keep the date").check()
     expect(page.locator("#promote-slug")).to_have_text("conversations/2026-10-08_alex-sync")
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
     dialog.get_by_role("button", name="Move").click()
-    page.wait_for_url("**/page/conversations/2026-10-08_alex-sync")
+    # The page to link from opens in the editor, the link in the clipboard.
+    page.wait_for_url("**/edit/conversations/index")
     assert (wiki.root / "conversations" / "2026-10-08_alex-sync.md").exists()
-    assert "- [[conversations/2026-10-08_alex-sync|Alex notes]]" in \
-        (wiki.root / "conversations" / "index.md").read_text(encoding="utf-8")
+    link = "[[conversations/2026-10-08_alex-sync|Alex notes]]"
+    hint = page.locator(".paste-hint")
+    expect(hint).to_contain_text("Its link is in the clipboard")
+    expect(hint.locator("code")).to_have_text(link)
+    assert page.evaluate("navigator.clipboard.readText()") == link
+    textarea = page.locator("#editor-textarea")
+    textarea.focus()
+    page.keyboard.press("Control+End")
+    page.keyboard.press("Control+v")
+    expect(textarea).to_have_value(f"# Conversations\n{link}")
+    hint.get_by_role("button", name="Close").click()
+    expect(hint).to_have_count(0)
     assert not (wiki.root / f"{note}.md").exists()
 
 

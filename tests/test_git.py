@@ -292,7 +292,7 @@ class TestHistory:
         assert commit_messages(wiki_dir)[0] == f"Promote {note} to notes"
         changed = git(wiki_dir, "show", "--name-status", "--format=", "HEAD").split()
         assert f"{note}.md" in changed and "notes.md" in changed and "ref.md" in changed
-        assert "hub.md" in changed
+        assert "hub.md" not in changed                  # linked by pasting, in the editor
         assert is_clean(wiki_dir)
         html = client.get("/history/notes", headers=HOST).get_data(as_text=True)
         what = re.findall(r'<span class="hist-what">([^<]*)</span>', html)

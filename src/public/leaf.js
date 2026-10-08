@@ -804,6 +804,49 @@ function promotedSlug(folder, name, date) {
   return [toSlug(folder), n].filter(Boolean).join('/');
 }
 
+// Put text in the clipboard; false when the browser won't. The Clipboard
+// API needs a secure context (plain http on the LAN isn't), so without it
+// the old copy command, which works during a user's click.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) {}
+  ta.remove();
+  return ok;
+}
+
+// The editor's hint after Move to wiki (server._paste_hint_html): Copy puts
+// the link in the clipboard (again), × closes it; either way it is gone
+// from the URL, so a reload doesn't bring it back.
+(function () {
+  const hint = document.querySelector('.paste-hint');
+  if (!hint) return;
+  const url = new URL(location.href);
+  url.searchParams.delete('paste');
+  url.searchParams.delete('copied');
+  history.replaceState(null, '', url);
+  const copy = hint.querySelector('.paste-hint-copy');
+  copy.addEventListener('click', async () => {
+    copy.textContent = await copyText(hint.dataset.link) ? 'Copied' : 'Copy failed';
+    document.getElementById('editor-textarea')?.focus();
+  });
+  hint.querySelector('.paste-hint-close').addEventListener('click', () => {
+    hint.remove();
+    document.getElementById('editor-textarea')?.focus();
+  });
+}());
+
 // ── Page ⋯ menu ───────────────────────────────────────────────────────────────
 // Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
 // rendered hidden) for both ⋯ buttons, the header's and the right column's:
@@ -891,6 +934,19 @@ function promotedSlug(folder, name, date) {
     };
     fields.forEach(f => f.addEventListener('input', update));
     update();
+    // With a page to link from, Move copies the new page's link first: the
+    // editor opens on that page to paste it (server.page_wikilink).
+    const form = promote.querySelector('form');
+    form.addEventListener('submit', async e => {
+      if (!linkFrom.value.trim() || form.dataset.copying) return;
+      e.preventDefault();
+      form.dataset.copying = '1';
+      const slug = promotedSlug(folder.value, name.value, keepDate.checked ? keepDate.value : '');
+      const label = promote.dataset.title.replace(/[[\]|]/g, '').trim() || slug;
+      const ok = await copyText(`[[${slug}|${label}]]`);
+      document.getElementById('promote-copied').value = ok ? '1' : '';
+      form.submit();
+    });
     document.getElementById('page-promote-cancel').addEventListener('click', () => promote.close());
     closeOnBackdropClick(promote);
     reopenWithError(promote, openPromote, 'promote_error');

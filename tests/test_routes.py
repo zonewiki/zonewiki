@@ -2178,35 +2178,48 @@ class TestPromotePage:
             loc = resp.headers["Location"]
             assert loc.startswith(f"/page/{SCRATCH}?promote_error=")
             body = client.get(loc, headers=HOST).get_data(as_text=True)
-            assert '<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-open>' in body
+            assert '<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="Notes" data-open>' in body
             assert error in body
         assert (wiki_dir / f"{SCRATCH}.md").exists()
 
-    def test_add_link_to_page(self):
-        add = server.add_link_to_page
-        assert add("# P\n\n- [[a]]\n", "b", "B") == "# P\n\n- [[a]]\n- [[b|B]]\n"
-        assert add("# P\n\nText.\n\n", "b", "B") == "# P\n\nText.\n\n- [[b|B]]\n"
-        assert add("# P\n", "b", "x | [y]") == "# P\n\n- [[b|x  y]]\n"
+    def test_page_wikilink(self):
+        assert server.page_wikilink("a/b", "Title") == "[[a/b|Title]]"
+        assert server.page_wikilink("b", "x | [y]") == "[[b|x  y]]"
+        assert server.page_wikilink("b", "[]") == "[[b|b]]"
 
-    def test_promote_links_from_a_page(self, client, wiki_dir):
+    def test_promote_opens_the_page_to_link_from(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Alex sync\n")
         index = write_page(wiki_dir, "conversations/index", "# Conversations\n\n- [[conversations/old]]\n")
         body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
         assert 'id="promote-link-from" list="wiki-pages"' in body
         assert '<option value="conversations/index">Conversations</option>' in body
         resp = client.post(f"/promote/{SCRATCH}", headers=HOST, data={
-            "folder": "conversations", "name": "Alex sync", "link_from": "/page/conversations/index"})
-        assert resp.headers["Location"] == "/page/conversations/alex-sync"
-        assert index.read_text(encoding="utf-8") == (
-            "# Conversations\n\n- [[conversations/old]]\n- [[conversations/alex-sync|Alex sync]]\n")
-        # Backlinks show it.
-        body = client.get("/page/conversations/alex-sync", headers=HOST).get_data(as_text=True)
-        assert 'href="/page/conversations/index">Conversations</a>' in body
+            "folder": "conversations", "name": "Alex sync", "link_from": "/page/conversations/index",
+            "copied": "1"})
+        # The editor opens on that page, the link to paste; the page itself
+        # is left as it was.
+        loc = resp.headers["Location"]
+        assert loc == "/edit/conversations/index?paste=conversations/alex-sync&copied=1"
+        assert index.read_text(encoding="utf-8") == "# Conversations\n\n- [[conversations/old]]\n"
+        body = client.get(loc, headers=HOST).get_data(as_text=True)
+        hint = body.split('<div class="paste-hint"', 1)[1].split("</div>", 1)[0]
+        assert 'data-link="[[conversations/alex-sync|Alex sync]]"' in hint
+        assert "Its link is in the clipboard" in hint
+        # Without the clipboard (copied missing) the hint says to copy it.
+        body = client.get("/edit/conversations/index?paste=conversations/alex-sync",
+                          headers=HOST).get_data(as_text=True)
+        assert "Copy its link and paste it where it belongs." in body
+        # Nothing for an unknown page.
+        body = client.get("/edit/conversations/index?paste=nowhere", headers=HOST).get_data(as_text=True)
+        assert "paste-hint" not in body
 
-    def test_promote_does_not_link_twice(self, client, wiki_dir):
+    def test_promote_from_a_page_already_linking_opens_the_page(self, client, wiki_dir):
+        # The page linked to the note, so it links to the new page now:
+        # nothing to paste.
         write_page(wiki_dir, SCRATCH, "# Notes\n")
         hub = write_page(wiki_dir, "hub", f"# Hub\n\nSee [[{SCRATCH}]].\n")
-        client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
+        resp = client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/notes"
         assert hub.read_text(encoding="utf-8") == "# Hub\n\nSee [[notes]].\n"
 
     def test_promote_refuses_an_unknown_link_page(self, client, wiki_dir):
