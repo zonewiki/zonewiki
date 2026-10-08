@@ -743,9 +743,7 @@ def page_title(content: str, slug: str) -> str:
     Skips a leading frontmatter block and fenced code, so a shell comment in
     a code example ("# install deps") never becomes the page title."""
     lines = content.splitlines()
-    start = 0
-    if lines and lines[0].strip() == '---':
-        start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == '---'), 0)
+    start = _body_start(lines)
     for i, line, in_fence in _iter_fenced_lines(lines):
         if i >= start and not in_fence:
             m = _H1_RE.match(line)
@@ -1092,12 +1090,7 @@ _TASK_ITEM_RE = re.compile(r'^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]
 def _task_item_lines(lines: list[str]) -> list[tuple[int, re.Match]]:
     """(line index, match) for every task-list checkbox line, skipping a
     leading frontmatter block and fenced code."""
-    start = 0
-    if lines and lines[0].strip() == '---':
-        for i in range(1, len(lines)):
-            if lines[i].strip() == '---':
-                start = i + 1
-                break
+    start = _body_start(lines)
     found = []
     for i, line, in_fence in _iter_fenced_lines(lines):
         if i < start or in_fence:
@@ -1261,13 +1254,7 @@ def _inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) 
 def strip_h1(content: str) -> str:
     """Remove the first H1 line so it isn't duplicated below the page header."""
     lines = content.split("\n")
-    start = 0
-    if lines and lines[0].strip() == '---':
-        for i in range(1, len(lines)):
-            if lines[i].strip() == '---':
-                start = i + 1
-                break
-    for i in range(start, len(lines)):
+    for i in range(_body_start(lines), len(lines)):
         if lines[i].strip():
             if re.match(r"^#\s+", lines[i]):
                 del lines[i]
@@ -1278,6 +1265,20 @@ def strip_h1(content: str) -> str:
 _FRONTMATTER_FENCE = '---'
 
 
+def _frontmatter_end(lines: list[str]) -> int | None:
+    """The index of the line closing a leading frontmatter block, or None
+    when the text has none (no opening fence, or it is never closed)."""
+    if not lines or lines[0].strip() != _FRONTMATTER_FENCE:
+        return None
+    return next((i for i in range(1, len(lines)) if lines[i].strip() == _FRONTMATTER_FENCE), None)
+
+
+def _body_start(lines: list[str]) -> int:
+    """The index of the first line after a leading frontmatter block."""
+    end = _frontmatter_end(lines)
+    return 0 if end is None else end + 1
+
+
 def parse_frontmatter(content: str) -> tuple[dict, str]:
     """Parse a leading frontmatter block (--- ... ---) for `tags` and `tldr`.
 
@@ -1286,13 +1287,7 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     original content unchanged.
     """
     lines = content.split("\n")
-    if not lines or lines[0].strip() != _FRONTMATTER_FENCE:
-        return {}, content
-    end_idx = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == _FRONTMATTER_FENCE:
-            end_idx = i
-            break
+    end_idx = _frontmatter_end(lines)
     if end_idx is None:
         return {}, content
 
@@ -1838,8 +1833,7 @@ def add_frontmatter_tags(content: str, tags: list[str]) -> str:
         return content
     line = f"tags: {', '.join(have + new)}"
     lines = content.split("\n")
-    end = (next((i for i in range(1, len(lines)) if lines[i].strip() == _FRONTMATTER_FENCE), None)
-           if lines and lines[0].strip() == _FRONTMATTER_FENCE else None)
+    end = _frontmatter_end(lines)
     if end is None:
         return f"---\n{line}\n---\n{content}"
     for i in range(1, end):
