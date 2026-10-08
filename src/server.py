@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
@@ -404,11 +404,19 @@ _LEAF_LOGO = """<svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
 # "New" button create that module's kind of thing.
 MODULES = (("wiki", "Wiki", "/"), ("scratch", "Scratch", "/page/_scratch"), ("deck", "Deck", "/deck"))
 
+def url(*parts: str) -> str:
+    """A path in Leaf from its parts, each percent-encoded ("/" kept): a page
+    whose file name has a space, "#" or a quote still gets a working link,
+    and the result is safe in an HTML attribute as it is.
+    url("page", slug) → /page/<slug>."""
+    return "/" + "/".join(quote(p, safe="/") for p in parts)
+
+
 def _module_href(key: str, href: str) -> str:
     """A module's link: the Deck goes to the deck's home page when a page
     declares one ([[deck … home=1]]), else to /deck."""
     if key == "deck" and (home := deck_home_slug()):
-        return f"/page/{html.escape(home)}"
+        return url("page", home)
     return href
 
 
@@ -492,17 +500,17 @@ def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "",
     sep = '<span class="breadcrumb-sep">›</span>'
     parts = slug.split('/')
     crumbs = [home_link()]
-    page_href = f'/page/{html.escape(slug)}{html.escape(query_string)}'
+    page_href = f'{url("page", slug)}{html.escape(query_string)}'
     for i, part in enumerate(parts[:-1]):
         ancestor = '/'.join(parts[:i + 1])
         label = part.replace('-', ' ').title()
-        crumbs.append(f'<a href="/page/{ancestor}">{html.escape(label)}</a>')
+        crumbs.append(f'<a href="{url("page", ancestor)}">{html.escape(label)}</a>')
     # Page itself — link if extra crumbs follow or query_string present, plain span otherwise
     if extra:
         crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
-        for label, url in extra:
-            if url:
-                crumbs.append(f'<a href="{html.escape(url)}">{html.escape(label)}</a>')
+        for label, href in extra:
+            if href:
+                crumbs.append(f'<a href="{html.escape(href)}">{html.escape(label)}</a>')
             else:
                 crumbs.append(f'<span>{html.escape(label)}</span>')
     elif query_string:
@@ -762,7 +770,7 @@ def process_wikilinks(text: str) -> str:
             # to a page not for sharing goes.
             return f'<span class="wikilink-hidden">{label}</span>'
         css = "wikilink" if slug in slugs else "wikilink wikilink-missing"
-        return f'<a href="/page/{html.escape(slug)}{anchor}" class="{css}">{label}</a>'
+        return f'<a href="{url("page", slug)}{anchor}" class="{css}">{label}</a>'
 
     return WIKILINK_RE.sub(replace, text)
 
@@ -1195,7 +1203,7 @@ def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
         n = counter[0]
         level = m.group(1)[1]  # '2' or '3' (strip leading 'h')
         btn = (
-            f'<a href="/edit/{html.escape(slug)}?section={n}" '
+            f'<a href="{url("edit", slug)}?section={n}" '
             f'class="section-edit-btn" title="Edit section">✎</a>'
         )
         return f'<div class="section-header section-header-h{level}">{m.group(0)}{btn}</div>'
@@ -1589,12 +1597,12 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
     bl_chip = ""
     if backlinks:
         bl_items = "".join(
-            f'<li><a href="/page/{r["slug"]}">{html.escape(r["title"])}</a></li>'
+            f'<li><a href="{url("page", r["slug"])}">{html.escape(r["title"])}</a></li>'
             for r in backlinks
         )
         bl_html = f'<section class="backlinks" id="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></section>'
         bl_popup_items = "".join(
-            f'<a href="/page/{r["slug"]}">{html.escape(r["title"])}</a>'
+            f'<a href="{url("page", r["slug"])}">{html.escape(r["title"])}</a>'
             for r in backlinks
         )
         bl_chip = (
@@ -1630,7 +1638,7 @@ def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
     if not related:
         return ""
     items = "".join(
-        f'<li><a href="/page/{html.escape(other)}">'
+        f'<li><a href="{url("page", other)}">'
         f'{html.escape(_page_meta(pages[other], other)[0])}</a></li>'
         for other, _score in related if not hidden_page(other)
     )
@@ -1648,7 +1656,7 @@ def _build_delete_dialog(slug: str, title: str) -> str:
         f'<p class="scratch-label">Delete page</p>'
         f'<p class="modal-desc">Delete &ldquo;{html.escape(title)}&rdquo;?'
         f'{" It can be restored from history." if GIT_ENABLED else " This cannot be undone."}</p>'
-        f'<form method="post" action="/delete/{html.escape(slug)}">'
+        f'<form method="post" action="{url("delete", slug)}">'
         f'<div class="scratch-actions">'
         f'<button type="button" class="btn" id="page-delete-cancel">Cancel</button>'
         f'<button type="submit" class="btn btn-danger">Delete</button>'
@@ -1713,7 +1721,6 @@ def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
     whether to keep the date in front of it, a preview of the page's slug,
     and the page to link it from (leaf.js suggests the folder's index, and
     copies the link on Move). Posts to /promote/<slug>."""
-    safe_slug = html.escape(slug)
     date = SCRATCH_RE.match(slug).group(1)[:10]
     options = "".join(f'<option value="{html.escape(f)}/">' for f in page_folders())
     error_html = f'<p class="rename-error">{html.escape(error)}</p>' if error else ""
@@ -1721,7 +1728,7 @@ def _build_promote_dialog(slug: str, title: str, error: str = "") -> str:
         f'<dialog id="page-promote-dialog" class="scratch-modal promote-modal" '
         f'data-title="{html.escape(title)}"{" data-open" if error else ""}>'
         f'<p class="scratch-label">Move to wiki</p>'
-        f'<form method="post" action="/promote/{safe_slug}">'
+        f'<form method="post" action="{url("promote", slug)}">'
         f'<label class="promote-field">Folder'
         f'<input type="text" name="folder" id="promote-folder" list="promote-folders" '
         f'placeholder="(top level)" autocomplete="off" spellcheck="false"></label>'
@@ -1762,7 +1769,7 @@ def _build_append_dialog(slug: str, title: str, error: str = "") -> str:
         f'<p class="scratch-label">Append to page</p>'
         f'<p class="modal-desc">The note becomes a section at the end of the page '
         f'and leaves Scratch. Links to it follow.</p>'
-        f'<form method="post" action="/append/{html.escape(slug)}">'
+        f'<form method="post" action="{url("append", slug)}">'
         f'<label class="promote-field">Page'
         f'<input type="text" name="page" id="append-page" list="wiki-pages" '
         f'autocomplete="off" spellcheck="false" required></label>'
@@ -1838,7 +1845,7 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "",
     items = ['<button type="button" role="menuitem" id="present-btn" hidden>'
              'Present<kbd class="menu-key">p</kbd></button>']
     if GIT_ENABLED:
-        items.append(f'<a role="menuitem" href="/history/{safe_slug}">History</a>')
+        items.append(f'<a role="menuitem" href="{url("history", slug)}">History</a>')
     rename_dialog = ""
     if is_scratch(slug):
         items.append('<button type="button" role="menuitem" data-action="promote">Move to wiki…</button>')
@@ -1856,7 +1863,7 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "",
             f'<dialog id="page-rename-dialog" class="scratch-modal"'
             f'{" data-open" if rename_error else ""}>'
             f'<p class="scratch-label">Rename page</p>'
-            f'<form method="post" action="/rename/{safe_slug}">'
+            f'<form method="post" action="{url("rename", slug)}">'
             f'<input type="hidden" name="from" value="page">'
             f'<input type="text" name="new_name" id="page-rename-input" value="{safe_slug}" '
             f'aria-label="New name for “{html.escape(title)}”" autocomplete="off" spellcheck="false" required>'
@@ -2008,14 +2015,12 @@ FORMAT_BAR = (
     '</div>')
 
 
-def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
-          extra_head: str | None = None, action_buttons: bool = True,
+def shell(title: str, body: str, *, editor: bool = False, action_buttons: bool = True,
           wide: bool = False) -> str:
     """Wrap body in the page skeleton. `action_buttons=False` drops the
     action buttons, new note and search (the editor has its own toolbar; the
     login page has nothing to search or write). `wide`: a page view with
     side columns on big screens (`main.wide`, see view_page)."""
-    edit_btn = f'<a href="/edit/{slug}" class="btn">Edit</a>' if slug and not editor else ""
     body_class = ' class="editor-page"' if editor else ""
     module = "" if editor else current_module()
     body_attrs = body_class + (f' data-module="{module}"' if module else "")
@@ -2032,7 +2037,6 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
             body_attrs += ' data-deck-today="1"'
     show_actions = action_buttons and not editor
     safe_title = html.escape(title)
-    extra_head_html = extra_head if extra_head else ""
     return f"""<!DOCTYPE html>
 <html lang="en"{' class="sharing"' if sharing_on() else ""}>
 <head>
@@ -2049,7 +2053,6 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <link rel="stylesheet" href="/public/style.css">
   <script src="/public/vendor/highlight/highlight.min.js" defer></script>
   <script src="/public/leaf.js" defer></script>
-  {extra_head_html}
 </head>
 <body{body_attrs}>
   <dialog id="search-modal" class="search-modal">
@@ -2225,7 +2228,7 @@ def index():
 def _index_page(slug: str, title: str, body_inner: str) -> str:
     """Shared shell for the auto-generated index pages (_scratch, _deleted)."""
     body = f"""{build_breadcrumb(slug, title)}
-<header class="page-header"><h1>{title}</h1></header>
+<header class="page-header"><h1>{html.escape(title)}</h1></header>
 <article class="page-content">{body_inner}</article>"""
     return shell(title, body)
 
@@ -2234,7 +2237,7 @@ def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
     if not entries:
         return f"<p>{empty_msg}</p>"
     items = "".join(
-        f'<li data-slug="{html.escape(n["slug"])}"><a href="/page/{n["slug"]}">{html.escape(n["title"])}</a>'
+        f'<li data-slug="{html.escape(n["slug"])}"><a href="{url("page", n["slug"])}">{html.escape(n["title"])}</a>'
         f'<span class="note-date">{n["date"]}</span></li>'
         for n in entries
     )
@@ -2268,9 +2271,9 @@ def deleted_pages_route():
         items = "".join(
             f'<li>'
             f'<span class="deleted-page-info">'
-            f'<a href="/revision/{html.escape(p["slug"])}/{html.escape(p["sha"])}" class="deleted-page-title">{html.escape(p["title"])}</a>'
+            f'<a href="{url("revision", p["slug"])}/{html.escape(p["sha"])}" class="deleted-page-title">{html.escape(p["title"])}</a>'
             f'<span class="note-date">{html.escape(p["slug"])} &middot; {html.escape(p["date"])}</span></span>'
-            f'<form method="post" action="/restore/{html.escape(p["slug"])}/{html.escape(p["sha"])}">'
+            f'<form method="post" action="{url("restore", p["slug"])}/{html.escape(p["sha"])}">'
             f'<button type="submit" class="btn btn-sm">Restore</button>'
             f'</form></li>'
             for p in pages
@@ -2316,7 +2319,7 @@ def raw_page():
             subpages.append({"slug": sub_slug, "title": page_title(sc, sub_slug)})
     if subpages:
         items = "".join(
-            f'<li><a href="/page/{p["slug"]}">{html.escape(p["title"])}</a></li>'
+            f'<li><a href="{url("page", p["slug"])}">{html.escape(p["title"])}</a></li>'
             for p in subpages
         )
         sub_html = f'<section class="backlinks"><h3>Snippets</h3><ul>{items}</ul></section>'
@@ -2415,12 +2418,12 @@ def view_page(slug):
 <header class="page-header"><h1>{html.escape(title)}</h1></header>
 <article class="page-content">
 <p>This page was deleted on {html.escape(del_date)}.</p>
-<form method="post" action="/restore/{html.escape(slug)}/{html.escape(parent_sha)}">
+<form method="post" action="{url("restore", slug)}/{html.escape(parent_sha)}">
   <button type="submit" class="btn">Restore page</button>
 </form>
 </article>"""
                     return shell(title, body)
-        return redirect(f"/edit/{slug}")
+        return redirect(url("edit", slug))
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
@@ -2454,7 +2457,7 @@ def view_page(slug):
     else:
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
         # Edit, and the rarer actions in a ⋯ menu (_build_page_menu).
-        actions = f'<a href="/edit/{slug}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
+        actions = f'<a href="{url("edit", slug)}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
         page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""),
                                      request.args.get("promote_error", ""),
                                      request.args.get("append_error", ""))
@@ -2462,7 +2465,7 @@ def view_page(slug):
         # once the header has scrolled away (leaf.js).
         rail_actions = (
             f'<div class="rail-actions" hidden>'
-            f'<a href="/edit/{slug}" class="btn">Edit</a>{PAGE_MENU_BTN}</div>')
+            f'<a href="{url("edit", slug)}" class="btn">Edit</a>{PAGE_MENU_BTN}</div>')
         last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
         tags_html = _render_tags_pills_html(fm_meta.get('tags', []))
@@ -2561,7 +2564,7 @@ def _outlinks_html(slug: str, path: Path) -> str:
             pages.append((_page_meta(target_path, target)[0], target))
     if not pages:
         return ""
-    items = "".join(f'<li><a href="/page/{html.escape(t)}">{html.escape(title)}</a></li>'
+    items = "".join(f'<li><a href="{url("page", t)}">{html.escape(title)}</a></li>'
                     for title, t in sorted(pages, key=lambda p: p[0].lower()))
     return f'<section class="backlinks" data-id="outlinks"><h3>Links to</h3><ul>{items}</ul></section>'
 
@@ -2613,11 +2616,11 @@ def edit_page(slug):
     more_btn = ('<button type="button" class="btn mobile-only" id="editor-more-btn" aria-haspopup="true" '
                 'aria-expanded="false" aria-controls="editor-more" title="More actions">⋯</button>'
                 if rename_btn or delete_btn else "")
-    delete_form = f'<form id="delete-form" method="post" action="/delete/{safe_slug}" style="display:none"></form>' if can_delete and section is None else ""
+    delete_form = f'<form id="delete-form" method="post" action="{url("delete", slug)}" style="display:none"></form>' if can_delete and section is None else ""
     rename_error = request.args.get("rename_error", "")
     rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
     rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
-    <form method="post" action="/rename/{safe_slug}" class="rename-form">
+    <form method="post" action="{url("rename", slug)}" class="rename-form">
       <label>New name</label>
       <input type="text" name="new_name" id="rename-input" value="{safe_slug}" autocomplete="off">
       <button type="submit" class="btn btn-primary">Rename</button>
@@ -2627,7 +2630,7 @@ def edit_page(slug):
   </div>""" if can_rename and not is_new and section is None else ""
     paste_hint = _paste_hint_html(request.args.get("paste", ""),
                                   request.args.get("copied") == "1")
-    form_action = f'/edit/{safe_slug}'
+    form_action = url("edit", slug)
     # Always embed file_hash for conflict detection (full-file and section edits).
     # For a full-file edit, `content` still holds the full file text.
     if not is_new:
@@ -2738,18 +2741,18 @@ def save_page(slug):
     if file_hash and start_char is not None and end_char is not None:
         result = _splice_section(current, file_hash, start_char, end_char, content)
         if result is None:
-            return redirect(f"/edit/{slug}?conflict=1")
+            return redirect(f"{url('edit', slug)}?conflict=1")
         content = result[0]
     elif file_hash and current is not None:
         # Full-file edit with hash — check for conflict
         if content_hash(current) != file_hash:
-            return redirect(f"/edit/{slug}?conflict=1")
+            return redirect(f"{url('edit', slug)}?conflict=1")
     # Skip write if content is unchanged, but still commit if file is dirty
     if current != content:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     git_commit(path, f"Update {slug}")
-    return redirect(f"/page/{slug}")
+    return redirect(url("page", slug))
 
 
 @app.post("/api/save/<path:slug>")
@@ -2826,7 +2829,7 @@ def create_page():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# {title}\n\n", encoding="utf-8")
         git_commit(path, f"Create {slug}")
-    return redirect(f"/edit/{slug}")
+    return redirect(url("edit", slug))
 
 
 @app.post("/rename/<path:slug>")
@@ -2839,7 +2842,7 @@ def rename_page(slug):
     raw = request.form.get("new_name", "").strip()
     # Back to where the rename was asked for: the editor, or the page view's
     # ⋯ menu (which reopens its dialog with the error).
-    back = f"/page/{slug}" if request.form.get("from") == "page" else f"/edit/{slug}"
+    back = url("page", slug) if request.form.get("from") == "page" else url("edit", slug)
     # to_slug preserves underscores, so scratch timestamps survive a rename
     new_slug = to_slug(raw)
     if not new_slug or new_slug == slug:
@@ -2850,7 +2853,7 @@ def rename_page(slug):
     if new_path.exists():
         return redirect(f"{back}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
     _move_page(old_path, new_path, slug, new_slug, f"Rename {slug} to {new_slug}")
-    return redirect(f"/page/{new_slug}")
+    return redirect(url("page", new_slug))
 
 
 def _move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message: str) -> None:
@@ -2875,7 +2878,7 @@ def promote_page(slug):
     date = request.form.get("keep_date", "")
     date = SCRATCH_RE.match(slug).group(1)[:10] if date else ""
     new_slug = promoted_slug(request.form.get("folder", ""), request.form.get("name", ""), date)
-    back = f"/page/{slug}?promote_error="
+    back = f"{url('page', slug)}?promote_error="
     if not new_slug:
         return redirect(back + quote("Give the page a name"))
     if is_scratch(new_slug):
@@ -2897,8 +2900,8 @@ def promote_page(slug):
     if link_path and new_slug not in _page_link_targets(
             link_path.read_text(encoding="utf-8"), link_slug):
         copied = "&copied=1" if request.form.get("copied") == "1" else ""
-        return redirect(f"/edit/{link_slug}?paste={quote(new_slug)}{copied}")
-    return redirect(f"/page/{new_slug}")
+        return redirect(f"{url('edit', link_slug)}?paste={quote(new_slug)}{copied}")
+    return redirect(url("page", new_slug))
 
 
 @app.post("/append/<path:slug>")
@@ -2911,7 +2914,7 @@ def append_page(slug):
     old_path = safe_path(slug)
     if old_path is None or not old_path.exists():
         abort(404)
-    back = f"/page/{slug}?append_error="
+    back = f"{url('page', slug)}?append_error="
     raw = request.form.get("page", "").strip()
     target = _page_from_input(raw)
     # [ ] | would break the wikilinks that now point at the section.
@@ -2934,7 +2937,7 @@ def append_page(slug):
     old_path.unlink()
     modified_refs = update_references(slug, target, heading)
     git_commit([old_path, target_path, *modified_refs], f"Append {slug} to {target}")
-    return redirect(f"/page/{target}#{anchor}")
+    return redirect(f"{url('page', target)}#{anchor}")
 
 
 @app.post("/delete/<path:slug>")
@@ -3049,12 +3052,12 @@ def history_page_route(slug):
     if page_exists and not current:
         rows.append(
             f'<li class="hist-row hist-current">'
-            f'<a class="hist-main" href="/page/{slug}"><span class="hist-when">Now</span>'
+            f'<a class="hist-main" href="{url("page", slug)}"><span class="hist-when">Now</span>'
             f'<span class="hist-what">Not committed yet</span></a>'
             f'<span class="hist-badge">Current</span></li>')
     for i, e in enumerate(entries):
         is_cur = current and i == 0
-        href = f"/page/{slug}" if is_cur else f"/revision/{slug}/{e['sha']}"
+        href = url('page', slug) if is_cur else f"{url('revision', slug)}/{e['sha']}"
         rows.append(
             f'<li class="hist-row{" hist-current" if is_cur else ""}">'
             f'<a class="hist-main" href="{href}">'
@@ -3062,7 +3065,7 @@ def history_page_route(slug):
             f'<span class="hist-what">{html.escape(_version_label(e, entries))}</span>'
             f'<span class="hist-counts">{_change_counts(e)}</span></a>'
             + ('<span class="hist-badge">Current</span>' if is_cur else "")
-            + f'<a class="hist-changes" href="/diff/{slug}/{e["sha"]}" title="What this save changed">Changes</a>'
+            + f'<a class="hist-changes" href="{url("diff", slug)}/{e["sha"]}" title="What this save changed">Changes</a>'
             f'</li>')
     if entries:
         table = (f'<p class="hist-intro">Every saved version of this page, newest first. '
@@ -3072,10 +3075,10 @@ def history_page_route(slug):
         table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
 
     if page_exists:
-        back_link = f'<a href="/page/{slug}" class="btn">← Page</a>'
+        back_link = f'<a href="{url("page", slug)}" class="btn">← Page</a>'
         breadcrumb = build_breadcrumb(slug, title, ('History', None))
     else:
-        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
         breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
     body = f"""{breadcrumb}
 <header class="page-header">
@@ -3089,14 +3092,14 @@ def history_page_route(slug):
 def _version_nav(slug: str, entries: list[dict], i: int, current: bool, kind: str) -> str:
     """← Older · Newer → between versions (kind: "revision" or "diff");
     the newest, when it is the page as it is now, is the page itself."""
-    older = (f'<a href="/{kind}/{slug}/{entries[i + 1]["sha"]}" class="btn">← Older</a>'
+    older = (f'<a href="{url(kind, slug)}/{entries[i + 1]["sha"]}" class="btn">← Older</a>'
              if i + 1 < len(entries) else '<span class="btn" aria-disabled="true">← Older</span>')
     if i == 0:
         newer = '<span class="btn" aria-disabled="true">Newer →</span>'
     elif i == 1 and current and kind == "revision":
-        newer = f'<a href="/page/{slug}" class="btn">Current →</a>'
+        newer = f'<a href="{url("page", slug)}" class="btn">Current →</a>'
     else:
-        newer = f'<a href="/{kind}/{slug}/{entries[i - 1]["sha"]}" class="btn">Newer →</a>'
+        newer = f'<a href="{url(kind, slug)}/{entries[i - 1]["sha"]}" class="btn">Newer →</a>'
     return f'<nav class="version-nav" aria-label="Versions">{older}{newer}</nav>'
 
 
@@ -3128,10 +3131,10 @@ def revision_view(slug, sha):
     current = _is_current(path, entries)
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
-        back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), (when, None))
+        back_link = f'<a href="{url("history", slug)}" class="btn">← History</a>'
+        breadcrumb = build_breadcrumb(slug, title, ('History', url("history", slug)), (when, None))
     else:
-        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
         breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
     # Where this version stands: the current one, n versions back, or the last
     # version of a deleted page. Restoring is offered for every other one.
@@ -3146,11 +3149,11 @@ def revision_view(slug, sha):
         where = (f"The version of {when}"
                  + (f" · {back} {'version' if back == 1 else 'versions'} back" if page_exists and back else ""))
     can_restore = not (current and i == 0)
-    restore = (f'<form method="post" action="/restore/{slug}/{restore_sha}" class="version-restore" '
+    restore = (f'<form method="post" action="{url("restore", slug)}/{restore_sha}" class="version-restore" '
                f'data-confirm="Make this version the page again? The page as it is now stays in its history.">'
                f'<button type="submit" class="btn">Restore this version</button></form>'
                if can_restore else "")
-    changes = (f'<a href="/diff/{slug}/{sha}" class="version-link">What this save changed</a>'
+    changes = (f'<a href="{url("diff", slug)}/{sha}" class="version-link">What this save changed</a>'
                if i is not None else "")
     nav = _version_nav(slug, entries, i, current, "revision") if i is not None else ""
     body = f"""{breadcrumb}
@@ -3191,14 +3194,14 @@ def diff_view(slug, sha):
     page_exists = path.exists()
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
-        back_link = f'<a href="/history/{slug}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', f'/history/{slug}'), ('Changes', None))
+        back_link = f'<a href="{url("history", slug)}" class="btn">← History</a>'
+        breadcrumb = build_breadcrumb(slug, title, ('History', url("history", slug)), ('Changes', None))
     else:
-        back_link = f'<a href="/page/_deleted" class="btn">← Deleted pages</a>'
-        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, f'/history/{slug}'), ('Changes', None))
+        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
+        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, url("history", slug)), ('Changes', None))
     what = html.escape(_version_label(entries[i], entries)) if i is not None else ""
     nav = _version_nav(slug, entries, i, False, "diff") if i is not None else ""
-    view = (f'<a href="/revision/{slug}/{sha}" class="version-link">View this version</a>'
+    view = (f'<a href="{url("revision", slug)}/{sha}" class="version-link">View this version</a>'
             if i is not None else "")
     body = f"""{breadcrumb}
 <header class="page-header">
@@ -3229,7 +3232,7 @@ def restore_revision(slug, sha):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, f"Restore {slug} to {sha[:7]}")
-    return redirect(f"/page/{slug}")
+    return redirect(url("page", slug))
 
 
 def fmt_date(ts: float) -> str:
@@ -3843,7 +3846,7 @@ def _mcp_call_tool(name: str, args: dict) -> str:
             anchor = d["anchor"]
             where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
             out.append(f"[{i}] {where}\nslug: {d['slug']}\nedited: {fmt_date(d['mtime'])}\n"
-                       f"url: {base}/page/{d['slug']}{anchor}\n\n{d['text']}")
+                       f"url: {base}{url('page', d['slug'])}{anchor}\n\n{d['text']}")
         return "\n\n---\n\n".join(out)
     if name == "search_tasks":
         return _mcp_search_tasks(args, base)
@@ -3855,7 +3858,7 @@ def _mcp_call_tool(name: str, args: dict) -> str:
         if slug is None:
             raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
         content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
-        return f"slug: {slug}\nurl: {base}/page/{slug}\n\n{content}" + _mcp_task_refs(content, base)
+        return f"slug: {slug}\nurl: {base}{url('page', slug)}\n\n{content}" + _mcp_task_refs(content, base)
     if name == "list_pages":
         limit = _mcp_int(args, "limit", 100, 1000)
         under = _clean_folder(args.get("under", ""))
@@ -3947,7 +3950,7 @@ def deck_page():
         crumbs = [home_link(), '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
         heading = html.escape(list_name)
         if home:
-            page_link = (f'<a href="/page/{html.escape(home["slug"])}">'
+            page_link = (f'<a href="{url("page", home["slug"])}">'
                          f'{html.escape(_page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
             note = f'<p class="deck-list-home">A separate list, from {page_link}.</p>'
         else:
@@ -3995,7 +3998,7 @@ def _result_href(r: dict) -> str:
     if r.get("type") == "task":
         tab = "completed" if r.get("status") == "done" else "open"
         return _task_href(r["task_id"], tab, r.get("list"), r.get("year"))
-    return f"/page/{r['slug']}"
+    return url("page", r['slug'])
 
 
 @app.get("/search")
@@ -4138,11 +4141,11 @@ def uncommitted_page():
             f'<td class="hist-msg">{html.escape(f["title"])}'
             + (f'<br><span class="hist-filepath">{html.escape(f["filepath"])}</span>' if f["title"] != f["filepath"] else '')
             + '</td>'
-            f'<td style="white-space:nowrap">'
-            + (f'<a href="/diff-uncommitted/{html.escape(f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
-            + (f'<a href="/page/{html.escape(f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
+            '<td style="white-space:nowrap">'
+            + (f'<a href="{url("diff-uncommitted", f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
+            + (f'<a href="{url("page", f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
             + '</td>'
-            f'</tr>'
+            '</tr>'
             for f in file_list
         )
         table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'

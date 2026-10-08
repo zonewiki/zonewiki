@@ -32,6 +32,18 @@ class TestIndex:
 
 class TestViewPage:
 
+    def test_odd_file_names_get_working_escaped_links(self, client, wiki_dir):
+        # Regression: slugs went into href attributes as they were, so a
+        # file named on disk with a quote broke out of the attribute, and
+        # one with "#" or a space linked to the wrong page.
+        write_page(wiki_dir, "target", "# Target\n")
+        write_page(wiki_dir, 'odd "name" #1', "# Odd\n\nSee [[target]].\n")
+        body = client.get("/page/target", headers=HOST).get_data(as_text=True)
+        href = "/page/odd%20%22name%22%20%231"
+        assert f'<a href="{href}">Odd</a>' in body and 'odd "name"' not in body
+        page = client.get(href, headers=HOST).get_data(as_text=True)
+        assert "See" in page and 'href="/edit/odd%20%22name%22%20%231"' in page
+
     def test_existing_page_returns_200(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n\nHello world.\n")
         resp = client.get("/page/my-page", headers=HOST)
