@@ -402,8 +402,8 @@ main {
    would otherwise overflow; <pre>/tables keep their own horizontal scroll. */
 .page-content { overflow-wrap: break-word; }
 .page-content h1 { font-size: 1.875rem; font-weight: 700; margin: 2rem 0 .875rem; padding-bottom: .35rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border)); line-height: 1.25; letter-spacing: -.02em; }
-.page-content h2 { font-size: 1.25rem; font-weight: 700; margin: 0; padding-bottom: .1rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 30%, var(--border)); }
-.page-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; padding-bottom: .15rem; border-bottom: 1px solid var(--border); width: fit-content; }
+.page-content h2 { font-size: 1.4rem; font-weight: 700; margin: 0; padding-bottom: .1rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 30%, var(--border)); }
+.page-content h3 { font-size: 1.15rem; font-weight: 600; margin: 1.5rem 0 .5rem; padding-bottom: .15rem; border-bottom: 1px solid var(--border); width: fit-content; }
 .page-content h4 { font-size: .95rem; font-weight: 600; margin: 1.25rem 0 .4rem; }
 
 /* Section edit wrapper injected around each <h2> in page view */
