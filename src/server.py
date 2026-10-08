@@ -1595,11 +1595,13 @@ _MODULE_ICONS = {
 }
 def top_actions_html() -> str:
     """The desktop's action buttons, at the top right of the page (in line
-    with the breadcrumb): a new scratch note, a new task in the deck's home
-    and search, as icons with their name and shortcut in the tooltip. Phones
+    with the breadcrumb): sharing mode, a new scratch note, a new task in
+    the deck's home and search, as icons with their name and shortcut in the tooltip. Phones
     have the action bar at the bottom instead (see the 640px media query)."""
     return (
         '<div class="top-actions">'
+        f'<button type="button" class="top-sharing" aria-pressed="false" aria-label="Sharing mode" title="Sharing mode: hide what is around the page (S)">{_SVG}'
+        '<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></button>'
         f'<button type="button" class="top-scratch" aria-label="New scratch note" title="New scratch note (c s)">{_SVG}'
         '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/>'
         '<line x1="8" y1="7.5" x2="8" y2="12"/><line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/></svg></button>'
@@ -1722,6 +1724,9 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
   <link rel="stylesheet" href="/public/vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
   <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/public/style.css">
+  <!-- Sharing mode (leaf.js toggleSharing) before the first paint, so
+       nothing it hides ever flashes on a shared screen. -->
+  <script>try {{ if (localStorage.getItem('leaf-sharing') === '1') document.documentElement.classList.add('sharing'); }} catch (e) {{}}</script>
   <script src="/public/vendor/highlight/highlight.min.js" defer></script>
   <script src="/public/leaf.js" defer></script>
   {extra_head_html}
@@ -1784,6 +1789,7 @@ def shell(title: str, body: str, *, slug: str = "", editor: bool = False,
       <tr><td><kbd>Ctrl+B</kbd> / <kbd>Ctrl+I</kbd></td><td>Bold / italic (editor)</td></tr>
       <tr><td><kbd>Ctrl+K</kbd></td><td>Link (editor)</td></tr>
       <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
+      <tr><td><kbd>S</kbd></td><td>Sharing mode: hide what is around the page</td></tr>
       <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
       <tr><td><kbd>]</kbd> / <kbd>[</kbd></td><td>Next / previous section</td></tr>
       <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>

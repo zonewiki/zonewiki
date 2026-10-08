@@ -191,12 +191,22 @@ class TestViewPage:
             # the row, come first.
             assert len(top) == 2 and '<div class="breadcrumb"' not in top[0] and '<header' not in top[0], url
             assert top[0].count('class="top-badges"') == 1, url
-            buttons = re.findall(r'<button type="button" class="top-(\w+)" aria-label="([^"]+)" title="([^"]+)"',
+            buttons = re.findall(r'<button type="button" class="top-(\w+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
-            assert buttons == [("scratch", "New scratch note", "New scratch note (c s)"),
+            assert buttons == [("sharing", "Sharing mode", "Sharing mode: hide what is around the page (S)"),
+                               ("scratch", "New scratch note", "New scratch note (c s)"),
                                ("task", "Add a task to your deck", "Add a task to your deck (c t)"),
                                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
+
+    def test_sharing_mode_applies_before_the_first_paint(self, client, wiki_dir):
+        # An inline script in <head> sets html.sharing from localStorage, so
+        # nothing sharing mode hides flashes on a shared screen.
+        write_page(wiki_dir, "my-page", "# My Page\n")
+        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+            head = client.get(url, headers=HOST).get_data(as_text=True).split("</head>", 1)[0]
+            assert "localStorage.getItem('leaf-sharing') === '1'" in head, url
+            assert head.index("leaf-sharing") > head.index("/public/style.css"), url
 
     def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
         # c t and the New task button tag a task as the deck's home does:

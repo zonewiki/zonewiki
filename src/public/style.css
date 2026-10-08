@@ -141,7 +141,26 @@ body {
 }
 .top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
 .top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
-main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: 8rem; }
+main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: 10.5rem; }
+
+/* ── Sharing mode ─────────────────────────────────────────────────────────── */
+/* For sharing the screen (leaf.js toggleSharing, html.sharing): the page
+   on screen stays as it is, everything that shows other pages around it
+   goes. A thin bar across the top and the highlighted eye say it is on. */
+html.sharing body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: 3px; z-index: 1000;
+  background: #f59e0b; pointer-events: none;
+}
+.top-actions .top-sharing[aria-pressed="true"] {
+  color: #b45309; background: color-mix(in srgb, #f59e0b 18%, transparent);
+}
+html.sharing :is(
+  .trail-link, .trail-sep, .breadcrumb-clear,  /* the pages visited before */
+  .breadcrumb-right,                             /* backlinks chip */
+  .page-foot, .rail-context .backlinks,          /* backlinks, linked tasks, related, links to */
+  .section-tasks,                                /* a section's linked tasks */
+  .module-counts, #uncommitted-badge             /* status counts */
+) { display: none !important; }
 
 /* The Deck links' counts (server.py _deck_counts_html, kept current by
    leaf.js): tasks due today or overdue (orange) and tasks in Focus (muted),
@@ -880,7 +899,10 @@ main {
   body:not(.editor-page) .module-switch .module-link[aria-current] {
     background: var(--btn-bg); color: var(--fg); font-weight: 600;
   }
-  body:not(.editor-page) .module-switch + .breadcrumb-sep {
+  body:not(.editor-page) .module-switch + .breadcrumb-sep,
+  /* Sharing mode hides the trail: the separator before the page is then
+     the first one shown, the divider. */
+  html.sharing body:not(.editor-page) .module-switch ~ .trail-sep ~ .breadcrumb-sep:not(.trail-sep) {
     align-self: stretch; width: 1px; margin: .2rem .5rem;
     background: var(--border); opacity: 1; font-size: 0;
   }
@@ -1193,9 +1215,9 @@ kbd {
   }
   body:not(.editor-page) main > .top-badges {
     position: absolute; left: auto; top: 1.5rem; height: 2.25rem;
-    right: calc(var(--main-pad) - .5rem + 7.25rem + .75rem);
+    right: calc(var(--main-pad) - .5rem + 9.75rem + .75rem);
   }
-  main:has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: 13rem; }
+  main:has(> .top-badges > [style*="inline-flex"]) > .breadcrumb { padding-right: 15.5rem; }
 }
 
 .remote-badge {

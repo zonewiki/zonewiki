@@ -39,9 +39,13 @@
 
   bc.innerHTML = '';
   bc.appendChild(homeEl);
+  // The visited pages are marked: sharing mode hides them.
   for (const p of intermediates) {
-    bc.appendChild(mkSep());
+    const sep = mkSep();
+    sep.classList.add('trail-sep');
+    bc.appendChild(sep);
     const a = document.createElement('a');
+    a.className = 'trail-link';
     a.href = p.url || `/page/${p.slug}`;
     a.textContent = p.title;
     bc.appendChild(a);
@@ -646,7 +650,8 @@ function applyModalControls() {
         if (sort === 'links-desc') return b.links - a.links;
         return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
       });
-    renderModalList([...special, ...sorted.slice(0, 200)]);
+    // Sharing mode: no list of recent pages before anything is typed.
+    renderModalList(sharingOn() ? [] : [...special, ...sorted.slice(0, 200)]);
   }
 
   setModalActive(raw ? 0 : -1);
@@ -832,6 +837,31 @@ const NEW_ACTIONS = {
   btn.addEventListener('click', action.run);
 }());
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
+
+// ── Sharing mode ─────────────────────────────────────────────────────────────
+// For sharing the screen: everything that shows other pages around the one
+// on screen is hidden (style.css, html.sharing): the trail of visited pages,
+// backlinks, Related, Links to, linked tasks, the empty search modal's
+// recent pages, the editor's page list before anything is typed, the
+// status counts. Remembered in this browser; the server's inline script
+// applies it before the first paint.
+const sharingBtn = document.querySelector('.top-sharing');
+function syncSharingButton() {
+  const on = document.documentElement.classList.contains('sharing');
+  sharingBtn?.setAttribute('aria-pressed', String(on));
+  if (sharingBtn) sharingBtn.title = on ? 'Sharing mode is on: click to show everything again (S)'
+                                        : 'Sharing mode: hide what is around the page (S)';
+}
+function toggleSharing() {
+  const on = document.documentElement.classList.toggle('sharing');
+  try { localStorage.setItem('leaf-sharing', on ? '1' : '0'); } catch (_) {}
+  syncSharingButton();
+  if (typeof applyModalControls === 'function' && modalPages) applyModalControls();
+  showCheckboxToast(on ? 'Sharing mode on: other pages are hidden' : 'Sharing mode off');
+}
+const sharingOn = () => document.documentElement.classList.contains('sharing');
+sharingBtn?.addEventListener('click', toggleSharing);
+syncSharingButton();
 // The desktop's buttons at the top right (server.py top_actions_html).
 document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
 document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
@@ -948,6 +978,13 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     awaitingC = true;
     cPrefixTimer = setTimeout(resetC, 1000);
+    return;
+  }
+
+  // S — sharing mode on/off
+  if (e.key === 'S' && e.shiftKey) {
+    e.preventDefault();
+    toggleSharing();
     return;
   }
 
@@ -1869,8 +1906,11 @@ function taskAcMatches(query) {
 
 function updateAcDropdown() {
   const wikiQuery = getWikilinkQuery();
+  // Sharing mode: no list of pages or tasks before two letters are typed.
+  const tooShort = q => sharingOn() && q.trim().length < 2;
   if (wikiQuery !== null && /^task:/i.test(wikiQuery)) {
     acMode = 'task';
+    if (tooShort(wikiQuery.slice(5))) { hideAcDropdown(); return; }
     const matches = taskAcMatches(wikiQuery.slice(5));
     if (!matches.length) { hideAcDropdown(); return; }
     showAcDropdown(matches);
@@ -1878,6 +1918,7 @@ function updateAcDropdown() {
   }
   if (wikiQuery !== null) {
     acMode = 'wikilink';
+    if (tooShort(wikiQuery)) { hideAcDropdown(); return; }
     const q = wikiQuery.toLowerCase();
     const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
     if (!matches.length) { hideAcDropdown(); return; }
@@ -1887,6 +1928,7 @@ function updateAcDropdown() {
   const mdQuery = getMdLinkQuery();
   if (mdQuery !== null) {
     acMode = 'mdlink';
+    if (tooShort(mdQuery.replace(/^\/page\//, ''))) { hideAcDropdown(); return; }
     const q = mdQuery.replace(/^\/page\//, '').toLowerCase();
     const matches = wikiPages.filter(p => p.includes(q)).slice(0, 8);
     if (!matches.length) { hideAcDropdown(); return; }

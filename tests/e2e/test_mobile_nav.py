@@ -140,9 +140,9 @@ def test_top_actions_on_desktop(page, wiki):
     page.goto("/page/index")
     expect(page.locator(".action-buttons")).to_be_hidden()
     buttons = page.locator(".top-actions button")
-    expect(buttons).to_have_count(3)
+    expect(buttons).to_have_count(4)
     names = [b.get_attribute("aria-label") for b in buttons.all()]
-    assert names == ["New scratch note", "Add a task to your deck", "Search"]
+    assert names == ["Sharing mode", "New scratch note", "Add a task to your deck", "Search"]
     boxes = [b.bounding_box() for b in buttons.all()]
     crumb = page.locator("main > .breadcrumb").bounding_box()
     vw = page.viewport_size["width"]
@@ -150,8 +150,8 @@ def test_top_actions_on_desktop(page, wiki):
     for b in boxes:
         assert 32 <= b["width"] <= 40 and b["width"] == b["height"]           # icon buttons, not tiny
         assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
-    assert boxes[0]["x"] < boxes[1]["x"] < boxes[2]["x"]
-    assert boxes[2]["x"] + boxes[2]["width"] > main["x"] + main["width"] - 40 and boxes[2]["x"] < vw
+    assert all(a["x"] < b["x"] for a, b in zip(boxes, boxes[1:]))
+    assert boxes[-1]["x"] + boxes[-1]["width"] > main["x"] + main["width"] - 40 and boxes[-1]["x"] < vw
     # The breadcrumb's own right end (the backlinks chip) keeps clear of them.
     assert crumb["x"] + crumb["width"] - float(page.locator("main > .breadcrumb").evaluate(
         "el => getComputedStyle(el).paddingRight").rstrip("px")) <= boxes[0]["x"]
