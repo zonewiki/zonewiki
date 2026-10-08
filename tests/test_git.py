@@ -626,6 +626,17 @@ class TestUncommitted:
     def test_diff_uncommitted_missing_page_404(self, client):
         assert client.get("/diff-uncommitted/nope", headers=HOST).status_code == 404
 
+    def test_file_names_with_spaces_and_umlauts(self, client, wiki_dir):
+        # Regression: git quotes such names in plain --porcelain output
+        # ("_assets/my \303\274.pdf"), so the list showed the quoted name and
+        # committing it failed.
+        (wiki_dir / "_assets" / "my ü.pdf").write_bytes(b"pdf")
+        entries = client.get("/api/uncommitted", headers=HOST).get_json()
+        assert [e["filepath"] for e in entries] == ["_assets/my ü.pdf"]
+        resp = client.post("/api/commit-file", json={"filepath": "_assets/my ü.pdf"}, headers=HOST)
+        assert resp.get_json() == {"success": True}
+        assert is_clean(wiki_dir)
+
     def test_commit_file(self, client, wiki_dir):
         client.post("/api/save/index", data={"content": "# Home\n\nedit\n"}, headers=HOST)
         resp = client.post("/api/commit-file", json={"filepath": "index.md"}, headers=HOST)

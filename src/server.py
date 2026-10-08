@@ -293,34 +293,29 @@ def relative_time(dt: datetime) -> str:
 
 
 def git_uncommitted_files() -> list[dict]:
-    """Return list of files with uncommitted changes (relative to WIKI_DIR).
-    
-    Returns: List of dicts with 'filepath', 'mtime' (ISO date string), and 'rel' (relative time).
-    """
+    """Files with uncommitted changes (modified, added, deleted, untracked),
+    as dicts with 'filepath' (relative to WIKI_DIR), 'mtime' (YYYY-MM-DD)
+    and 'rel' (relative time); both empty for a deleted file.
+
+    -z: paths come unquoted (without it git quotes a name with a space or
+    an umlaut, "my file.pdf", and committing that path failed)."""
     if not GIT_ENABLED:
         return []
-    r = _git("git", "status", "--porcelain", "--untracked-files=all")
+    r = _git("git", "status", "--porcelain", "-z", "--untracked-files=all")
+    fields = iter(r.stdout.split("\0"))
     files = []
-    for line in r.stdout.splitlines():
-        if len(line) < 4:
+    for entry in fields:
+        status, filepath = entry[:2], entry[3:]
+        if status[:1] in ("R", "C"):
+            next(fields, None)   # a rename's or copy's old path
+        if not status.strip() or not filepath or filepath.endswith("/"):
             continue
-        status = line[:2]
-        filepath = line[3:]
-        # Skip directories (git reports untracked dirs with a trailing slash)
-        if filepath.endswith('/'):
-            continue
-        # Include modified (M), added (A), deleted (D), and untracked (??)
-        if status.strip():
-            fpath = WIKI_DIR / filepath
-            if fpath.exists():
-                mtime_ts = fpath.stat().st_mtime
-                mtime_dt = datetime.fromtimestamp(mtime_ts)
-                mtime = mtime_dt.strftime("%Y-%m-%d")
-                rel = relative_time(mtime_dt)
-            else:
-                mtime = ""
-                rel = ""
-            files.append({"filepath": filepath, "mtime": mtime, "rel": rel})
+        fpath = WIKI_DIR / filepath
+        mtime = rel = ""
+        if fpath.exists():
+            mtime_dt = datetime.fromtimestamp(fpath.stat().st_mtime)
+            mtime, rel = mtime_dt.strftime("%Y-%m-%d"), relative_time(mtime_dt)
+        files.append({"filepath": filepath, "mtime": mtime, "rel": rel})
     return files
 
 
