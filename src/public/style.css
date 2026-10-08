@@ -2090,11 +2090,6 @@ div.chip-input > input {
   background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
   color: var(--link); cursor: pointer;
 }
-/* A phone's line is short: the title gives way down to 4.5rem before a
-   date or marker would be cut. */
-@media (max-width: 640px) {
-  .tasks-app .task-item { grid-template-columns: auto minmax(4.5rem, max-content) minmax(min-content, 1fr) auto; }
-}
 
 /* Compact: every card but the expanded one is its line. */
 .tasks-app.deck-compact .task-item:not(.task-expanded) {
@@ -2104,6 +2099,34 @@ div.chip-input > input {
 .deck-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .deck-compact .task-item:not(.task-expanded) :is(.task-desc, .task-card-comments) { display: none; }
 @media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }
+/* A phone's line is too short for title and dates: the title gets the
+   first line to itself (beside the checkbox and ⋯), tags, markers and dates
+   go to a second line; a card with none of them stays one line. The same
+   in compact view, so an expanded task still looks like a full card. */
+@media (max-width: 640px) {
+  .tasks-app .task-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    /* ⋯ (finger-sized) spans the title's line and the second one, so it
+       doesn't make the first line tall. */
+    grid-template-areas: "check title actions" ". meta actions" ". desc desc" ". comments comments";
+  }
+  .tasks-app .task-item .task-actions { align-self: center; }
+  .tasks-app .task-item .task-meta,
+  .tasks-app .task-item .task-meta--hover-only,
+  .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
+  .tasks-app.deck-compact .task-item:not(.task-expanded) {
+    grid-template-areas: "check title actions" ". meta actions";
+  }
+  /* Two short lines instead of one tall one: the finger-sized minimum is
+     the row's, not each line's. */
+  .tasks-app .task-item { --line: 1.75rem; min-height: 2.75rem; padding-block: .3rem; }
+  .tasks-app .task-item .task-meta { line-height: 1.3; }
+  /* A line with nothing on it takes no room. */
+  .tasks-app .task-meta:not(:has(.task-tag, .task-recurring, .task-last-done, .task-comments-btn, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
+    display: none;
+  }
+  .tasks-app:not(.deck-compact) .task-meta:has(.task-date-empty) { display: flex; }
+}
 
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }

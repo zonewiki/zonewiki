@@ -1899,3 +1899,21 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
     expect(comments.last).to_contain_text("Form printed")
     passport.get_by_role("button", name="1 earlier…").click()       # the rest: in the modal
     expect(page.locator(".task-edit-modal[open] #task-edit-comment")).to_be_focused()
+
+
+def test_compact_on_a_phone_is_two_lines(new_page, wiki):
+    # A phone's line is too short for title and dates: the title has the
+    # first line (nearly the full width), tags and dates the second; a task
+    # with neither stays one line. Rows stay finger-sized.
+    from conftest import TOUCH_PHONE
+    phone = new_page(**TOUCH_PHONE)
+    _compact_tasks(phone)
+    phone.goto("/deck?view=open")
+    phone.locator(".deck-density-btn").tap()
+    passport, plain = card(phone, "Renew passport"), card(phone, "Plain")
+    row, title, due = (passport.locator(sel).first.bounding_box() for sel in (".task-content", ".task-content", ".task-due"))
+    row = passport.bounding_box()
+    assert title["width"] > row["width"] * 0.6
+    assert due["y"] >= title["y"] + title["height"] - 1                  # dates on the second line
+    assert 44 <= row["height"] < 64
+    assert 44 <= plain.bounding_box()["height"] < 52                     # nothing for a second line
