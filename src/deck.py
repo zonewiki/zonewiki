@@ -185,7 +185,7 @@ def _clean_tags(tags) -> list[str]:
     return out
 
 
-def _clean_list(name) -> str | None:
+def clean_list(name) -> str | None:
     """A list name as stored and matched: trimmed, lowercase, one word
     (whitespace becomes "-", like tags), no leading "#". Empty means no list."""
     name = re.sub(r"\s+", "-", str(name or "").strip().lstrip("#").strip().lower()).strip("-")
@@ -314,7 +314,7 @@ def _completed_year(task: dict) -> str:
     return year if re.fullmatch(r"\d{4}", year) else ""
 
 
-def _past_year(task: dict, current: str | None = None) -> str | None:
+def past_year(task: dict, current: str | None = None) -> str | None:
     """The task's completion year when it is before this one (it belongs in
     that year's archive), else None (the current completed file)."""
     year = _completed_year(task)
@@ -341,7 +341,7 @@ def _write_completed(completed: list[dict]) -> list[Path]:
     for path in _archive_glob():
         by_path[path] = []
     for t in completed:
-        year = _past_year(t, current)
+        year = past_year(t, current)
         by_path.setdefault(_archive_path(year) if year else _completed_path(), []).append(t)
     changed = []
     for path, tasks in by_path.items():
@@ -364,7 +364,7 @@ def _completed_in_year(year: str) -> list[dict]:
         if year != current:
             tasks = tasks + _read_list_lenient(_archive_path(year))
     if year == current:
-        return [t for t in tasks if not _past_year(t, current)]
+        return [t for t in tasks if not past_year(t, current)]
     return [t for t in tasks if _completed_year(t) == year]
 
 
@@ -375,7 +375,7 @@ def completed_years(scope: str | None) -> list[str]:
     years = {current}
     with _LOCK:
         for t in _read_completed():
-            if in_scope(t, scope) and _past_year(t, current):
+            if in_scope(t, scope) and past_year(t, current):
                 years.add(_completed_year(t))
         for path in _archive_glob():
             if any(in_scope(t, scope) for t in _read_list_lenient(path)):
@@ -746,14 +746,14 @@ def _uncomplete_task(task: dict, active: list[dict],
 
 # ── [[deck]] embed ────────────────────────────────────────────────────────────
 
-_DECK_RE = re.compile(
+DECK_RE = re.compile(
     r'\[\[deck(?:\s+([^\]]*))?\]\]', re.IGNORECASE
 )
 
 _DECK_PLACEHOLDER_BASE = "LEAFDECKPLACEHOLDER"
 
 
-def _parse_tasks_params(raw: str) -> dict:
+def parse_deck_params(raw: str) -> dict:
     """Parse key=value pairs from [[deck key=val ...]]."""
     params: dict = {}
     if not raw:
@@ -780,7 +780,7 @@ _FILTER_ALIASES = {
 # Separate lists. A list is a tag that a page declares with [[deck list=<tag>]]:
 # that page shows the tasks carrying the tag, and marks the tag as a list
 # everywhere. Otherwise a list tag is a tag: the main deck shows its tasks like
-# any other. The server scans pages for the declarations (pages._deck_lists) and
+# any other. The server scans pages for the declarations (pages.deck_lists) and
 # installs the lookup here, since deck.py doesn't read pages itself.
 # LISTS_FN() returns {name: {"slug": declaring page, "title": its title,
 # "params": its embed's params}}; names are lowercase.
@@ -788,7 +788,7 @@ LISTS_FN = lambda: {}
 
 
 # The deck's home: the page whose [[deck … home=1]] embed is the user's own
-# deck, where the Deck module link goes (pages._deck_home installs the
+# deck, where the Deck module link goes (pages.lookup_deck_home installs the
 # lookup). HOME_FN() returns {"slug", "title", "params"} or None (then the
 # Deck link goes to /deck).
 HOME_FN = lambda: None
@@ -830,7 +830,7 @@ def new_task_tags(params: dict) -> list[str]:
     "+ New" gives them (deck.js filterDefaultTags over the locked filter
     words): the `list=` tag, then the single tags of `tag=`. An `a|b` group
     names no one tag, and an excluded `-tag` adds nothing."""
-    tags = [_clean_list(params.get("list")) or ""]
+    tags = [clean_list(params.get("list")) or ""]
     raw = (params.get("tag") or "").strip()
     if raw and "|" not in raw:
         tags += [t for t in (t.strip() for t in raw.split(",")) if not t.startswith("-")]
@@ -861,10 +861,10 @@ def in_scope(task: dict, scope: str | None) -> bool:
 def _scope_arg() -> str | None:
     """The list a completed-count/-years request is for (?list=<name>), or
     None for every task. A leftover ?all=1 changes nothing."""
-    return _clean_list(request.args.get("list")) or None
+    return clean_list(request.args.get("list")) or None
 
 
-def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False) -> str:
+def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False) -> str:
     """Render the full interactive deck app HTML for embedding in a wiki page.
 
     instance_id differentiates multiple embeds on the same page. `headless`
@@ -873,7 +873,7 @@ def _build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False
     keyboard shortcuts.
     """
     tag_val = params.get("tag", "")
-    list_val = _clean_list(params.get("list")) or ""
+    list_val = clean_list(params.get("list")) or ""
     filt = embed_view(params)
     # `limit=N` turns on the WIP limit (Focus warning, Plan day flags); without
     # it there is none. `capacity=` is its old name, still accepted.
@@ -1045,14 +1045,14 @@ def process_deck_embeds(text: str) -> tuple[str, list[tuple[str, str]]]:
     instance = [0]
 
     def replacer(m: re.Match) -> str:
-        params = _parse_tasks_params(m.group(1) or "")
-        embed_html = _build_deck_embed(params, instance_id=instance[0])
+        params = parse_deck_params(m.group(1) or "")
+        embed_html = build_deck_embed(params, instance_id=instance[0])
         placeholder = f"{_DECK_PLACEHOLDER_BASE}_{instance[0]}"
         embeds.append((placeholder, embed_html))
         instance[0] += 1
         return placeholder
 
-    text = _DECK_RE.sub(replacer, text)
+    text = DECK_RE.sub(replacer, text)
     return text, embeds
 
 
@@ -1184,7 +1184,7 @@ def expand_task_refs(text: str, fmt) -> str:
 _task_docs_cache: dict = {"key": None, "docs": []}
 
 
-def _deck_mtimes() -> tuple:
+def deck_mtimes() -> tuple:
     """Cache key: paths + mtimes of every deck file, archives included."""
     def mt(p: Path):
         try:
@@ -1215,7 +1215,7 @@ def task_search_docs() -> list[dict]:
     Tokenizing every task on each search request is wasted work, so results are
     cached against the deck files' mtimes (same pattern as the page-token cache
     in retrieval.py)."""
-    key = _deck_mtimes()
+    key = deck_mtimes()
     if _task_docs_cache["key"] == key:
         return _task_docs_cache["docs"]
     docs = []
@@ -1236,7 +1236,7 @@ def task_search_docs() -> list[dict]:
             "type": "task",
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",
-            "year": _past_year(task) if task.get("completed_at") else None,
+            "year": past_year(task) if task.get("completed_at") else None,
             "tags": [t.lower() for t in task.get("tags") or []],  # for #tag queries
             "edited": _last_activity(task),  # for edited:/after:/before: queries
             "task": task,  # the whole task, for the MCP tools' dates and tags
@@ -1281,7 +1281,7 @@ def api_headless():
     """A hidden deck app, for a page without one that wants its edit modal
     (leaf.js openHomeTask: c t, the New task button). The HTML without its
     <script> tags; the page loads deck-core.js and deck.js itself."""
-    html_out = re.sub(r"<script\b[^>]*></script>", "", _build_deck_embed({}, headless=True))
+    html_out = re.sub(r"<script\b[^>]*></script>", "", build_deck_embed({}, headless=True))
     return Response(html_out, mimetype="text/html")
 
 
@@ -1315,7 +1315,7 @@ def deck_counts() -> dict:
     today = date.today().isoformat()
     home = HOME_FN()
     params = home["params"] if home else {}
-    scope, tag = _clean_list(params.get("list")) or None, params.get("tag", "")
+    scope, tag = clean_list(params.get("list")) or None, params.get("tag", "")
     overdue = today_count = focus = 0
     for t in _read_deck():
         if not (in_scope(t, scope) and tag_param_matches(t, tag)):

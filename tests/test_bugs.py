@@ -4,7 +4,7 @@ import pytest
 import re
 
 from mdtext import split_sections, toggle_nth_checkbox
-from pages import find_backlinks, _page_link_targets
+from pages import find_backlinks, page_link_targets
 from tests.conftest import HOST, section_fields, write_page
 import config
 import render
@@ -301,8 +301,8 @@ class TestRenamePageMkdir:
 class TestBareSlugBacklinks:
 
     def test_bare_slug_link_detected_as_target(self, wiki_dir):
-        """[Label](slug) with no extension must appear in _page_link_targets."""
-        targets = _page_link_targets(
+        """[Label](slug) with no extension must appear in page_link_targets."""
+        targets = page_link_targets(
             "- [Ivo](ivo-petrenko)\n",
             "state",
             known_slugs={"ivo-petrenko"},
@@ -326,7 +326,7 @@ class TestBareSlugBacklinks:
 
     def test_bare_slug_in_list_item(self, wiki_dir):
         """Bare slug inside a list item must be detected."""
-        targets = _page_link_targets(
+        targets = page_link_targets(
             "## Team\n\n- Kim\n  - [Ivo](ivo-petrenko)\n    - [ ] task\n",
             "state",
             known_slugs={"ivo-petrenko"},
@@ -335,7 +335,7 @@ class TestBareSlugBacklinks:
 
     def test_external_url_not_counted_as_backlink(self, wiki_dir):
         """External http links must never be treated as page targets."""
-        targets = _page_link_targets(
+        targets = page_link_targets(
             "[link](https://example.com/ivo-petrenko)\n",
             "state",
             known_slugs={"ivo-petrenko"},
@@ -344,7 +344,7 @@ class TestBareSlugBacklinks:
 
     def test_bare_slug_not_in_known_slugs_is_ignored(self, wiki_dir):
         """A bare link whose target page doesn't exist must not appear in targets."""
-        targets = _page_link_targets(
+        targets = page_link_targets(
             "[Ghost](nonexistent-page)\n",
             "state",
             known_slugs={"ivo-petrenko"},
@@ -353,7 +353,7 @@ class TestBareSlugBacklinks:
 
     def test_wikilink_still_works_alongside_bare_link(self, wiki_dir):
         """Both [[wikilink]] and bare slug links must be detected in the same page."""
-        targets = _page_link_targets(
+        targets = page_link_targets(
             "[[Signals]]\n[Ivo](ivo-petrenko)\n",
             "state",
             known_slugs={"signals", "ivo-petrenko"},

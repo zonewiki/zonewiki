@@ -10,10 +10,10 @@ import deck as deck_module
 import mcp_server
 import retrieval
 import search
-from mdtext import _mask_code, to_slug
-from pages import fmt_date, iter_pages, _page_meta, safe_path, url
-from render import _task_link
-from retrieval import _in_folder, _passes, retrieve, _task_status
+from mdtext import mask_code, to_slug
+from pages import fmt_date, iter_pages, page_meta, safe_path, url
+from render import task_link
+from retrieval import in_folder, passes, retrieve, task_status
 
 
 def _clean_folder(raw) -> str | None:
@@ -58,7 +58,7 @@ _RECURRENCE_UNITS = {"daily": "day", "weekly": "week", "monthly": "month", "year
 def _mcp_task_text(task: dict, base: str) -> str:
     """One deck task for an LLM: title, a line of facts (status, tags, dates,
     repeat, list), its link in the deck, its notes and its comments."""
-    status = _task_status(task)
+    status = task_status(task)
     facts = [f"status: {status}" + (f" {task['completed_at'][:10]}" if status != "open" else "")]
     if task.get("tags"):
         facts.append("tags: " + " ".join(f"#{t}" for t in task["tags"]))
@@ -77,7 +77,7 @@ def _mcp_task_text(task: dict, base: str) -> str:
     list_name = deck_module.task_list(task)
     if list_name:
         facts.append(f"list: {list_name}")
-    url = base + _task_link(task, list_name)
+    url = base + task_link(task, list_name)
     text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
     notes = (task.get("description") or "").strip()
     if notes:
@@ -93,7 +93,7 @@ def _mcp_task_text(task: dict, base: str) -> str:
 def _mcp_task_refs(content: str, base: str) -> str:
     """For read_page: what each [[task:…]] on the page stands for, since the
     raw markdown holds only the id."""
-    masked, _ = _mask_code(content)
+    masked, _ = mask_code(content)
     refs = list(dict.fromkeys(m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)))
     if not refs:
         return ""
@@ -104,9 +104,9 @@ def _mcp_task_refs(content: str, base: str) -> str:
         if task is None:
             lines.append(f"- [[task:{ref}]]: no such task (deleted)")
             continue
-        facts = [_task_status(task)]
+        facts = [task_status(task)]
         facts += [f"{k} {task[k + '_date']}" for k in ("start", "due") if task.get(k + "_date")]
-        url = base + _task_link(task, deck_module.task_list(task))
+        url = base + task_link(task, deck_module.task_list(task))
         lines.append(f"- [[task:{ref}]]: {task.get('title', '')} ({', '.join(facts)}) {url}")
     return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + "\n".join(lines)
 
@@ -131,7 +131,7 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
 
     parsed = search.Query(query)
     docs = [d for d in deck_module.task_search_docs()
-            if matches(d["task"]) and _passes(parsed, d)]
+            if matches(d["task"]) and passes(parsed, d)]
     if parsed.text.strip():
         ranked = [d for _s, d in search.SearchIndex(docs).search(parsed.text, limit=max(len(docs), 1))]
         if retrieval.SEMANTIC:
@@ -156,14 +156,14 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
     return f"Today is {date.today()}. {count}:\n\n{body}"
 
 
-def _mcp_call_tool(name: str, args: dict) -> str:
+def mcp_call_tool(name: str, args: dict) -> str:
     base = config.LEAF_BASE_URL or request.host_url.rstrip("/")
     if name == "search_wiki":
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
             raise mcp_server.ToolError("query must be a non-empty string")
         under = _clean_folder(args.get("under", ""))
-        if under and not any(_in_folder(slug, under) for _p, slug in iter_pages()):
+        if under and not any(in_folder(slug, under) for _p, slug in iter_pages()):
             raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs, "
                                        "whose folders are the part before the last '/'.")
         hits = retrieve(query, _mcp_int(args, "limit", 8, 20), under)
@@ -195,13 +195,13 @@ def _mcp_call_tool(name: str, args: dict) -> str:
         under = _clean_folder(args.get("under", ""))
         pages = []
         for md_file, slug in iter_pages():
-            if not _in_folder(slug, under):
+            if not in_folder(slug, under):
                 continue
             try:
                 mtime = md_file.stat().st_mtime
             except OSError:
                 continue
-            pages.append((mtime, slug, _page_meta(md_file, slug)[0]))
+            pages.append((mtime, slug, page_meta(md_file, slug)[0]))
         pages.sort(reverse=True)
         lines = [f"{slug} | {title} | edited {fmt_date(mtime)}" for mtime, slug, title in pages[:limit]]
         if not pages:

@@ -21,31 +21,31 @@ import mcp_server
 import retrieval
 import history
 from mdtext import (
-    add_frontmatter_tags, content_hash, is_scratch, _mask_code, note_as_section, page_title,
-    parse_frontmatter, _plain_heading, promoted_slug, SCRATCH_RE, section_anchor,
-    section_char_range, slug_display_name, _splice_section, strip_h1, to_slug,
-    toggle_nth_checkbox, _unmask_code,
+    add_frontmatter_tags, content_hash, is_scratch, mask_code, note_as_section, page_title,
+    parse_frontmatter, plain_heading, promoted_slug, SCRATCH_RE, section_anchor,
+    section_char_range, slug_display_name, splice_section, strip_h1, to_slug,
+    toggle_nth_checkbox, unmask_code,
 )
 from pages import (
-    all_backlink_counts, all_slugs, _deck_home, _deck_lists, find_backlinks,
+    all_backlink_counts, all_slugs, lookup_deck_home, deck_lists, find_backlinks,
     find_task_backlinks, fmt_date, hidden_page, is_protected, iter_pages, list_scratch,
-    _page_deck_lists, _page_from_input, _page_link_targets, _page_meta, page_task_refs,
+    page_deck_lists, page_from_input, page_link_targets, page_meta, page_task_refs,
     safe_path, update_references, url,
 )
-from gitstore import _git, git_commit, git_setup
+from gitstore import run_git, git_commit, git_setup
 from render import (
-    _inject_section_edit_buttons, _inject_section_tasks, render_md, _render_tags_pills_html,
+    inject_section_edit_buttons, inject_section_tasks, render_md, render_tags_pills_html,
 )
 from retrieval import (
     do_search, SCRATCH_FILTER_LIMIT, SEARCH_LIMIT, SEARCH_MAX_LIMIT, SEARCH_PAGE_LIMIT,
 )
 from views import (
-    _build_backlinks_html, build_breadcrumb, _build_delete_dialog, _build_page_menu,
-    _build_page_meta, _build_related_html, _commit_form_html, FORMAT_BAR, hidden_page_view,
-    home_link, _index_page, _notes_list_html, _outlinks_html, PAGE_MENU_BTN, _paste_hint_html,
-    _rail_copy, _rail_toc_html, shell,
+    build_backlinks_html, build_breadcrumb, build_delete_dialog, build_page_menu,
+    build_page_meta, build_related_html, commit_form_html, FORMAT_BAR, hidden_page_view,
+    home_link, index_page, notes_list_html, outlinks_html, PAGE_MENU_BTN, paste_hint_html,
+    rail_copy, rail_toc_html, shell,
 )
-from mcp_tools import _mcp_call_tool
+from mcp_tools import mcp_call_tool
 
 
 app = Flask(__name__, static_folder=None)
@@ -112,8 +112,8 @@ deck_module.init_deck(config.WIKI_DIR, config.GIT_ENABLED, git_commit)
 
 app.register_blueprint(deck_module.bp)
 app.register_blueprint(history.bp)
-deck_module.LISTS_FN = _deck_lists
-deck_module.HOME_FN = _deck_home
+deck_module.LISTS_FN = deck_lists
+deck_module.HOME_FN = lookup_deck_home
 deck_module.ANCHOR_FN = section_anchor
 retrieval.start_semantic()
 
@@ -177,7 +177,7 @@ def scratch_page():
             f'aria-label="Filter scratch notes" autocomplete="off" spellcheck="false">'
             f'<span class="scratch-filter-count" id="scratch-filter-count" aria-live="polite"></span></div>'
             if notes else "")
-    return _index_page('_scratch', 'Scratch', filt + _notes_list_html(notes, 'No entries yet.'))
+    return index_page('_scratch', 'Scratch', filt + notes_list_html(notes, 'No entries yet.'))
 
 
 @app.get("/api/page-preview/<path:slug>")
@@ -189,9 +189,9 @@ def api_page_preview(slug):
     if path is None or not path.exists() or hidden_page(slug):
         abort(404)
     content = path.read_text(encoding="utf-8")
-    masked, stash = _mask_code(content)
-    masked = deck_module._DECK_RE.sub("*(deck)*", masked)
-    html_out = render_md(strip_h1(_unmask_code(masked, stash)))
+    masked, stash = mask_code(content)
+    masked = deck_module.DECK_RE.sub("*(deck)*", masked)
+    html_out = render_md(strip_h1(unmask_code(masked, stash)))
     html_out = re.sub(r'(<h[1-6]\b[^>]*?) id="', r'\1 data-pid="', html_out)
     return jsonify({"title": page_title(content, slug), "html": html_out})
 
@@ -302,13 +302,13 @@ def view_page(slug):
         # Show a restore prompt if the page was deleted from git history
         if config.GIT_ENABLED:
             rel = slug + ".md"
-            r = _git("git", "log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
+            r = run_git("git", "log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
             if r.returncode == 0 and r.stdout.strip():
                 parts = r.stdout.strip().split('\t', 2)
                 parent_sha = parts[1].split()[0] if len(parts) > 1 and parts[1].strip() else None
                 del_date = parts[2] if len(parts) > 2 else ''
                 if parent_sha:
-                    r2 = _git("git", "show", f"{parent_sha}:{rel}")
+                    r2 = run_git("git", "show", f"{parent_sha}:{rel}")
                     title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
                     body = f"""{build_breadcrumb(slug, title)}
 <header class="page-header"><h1>{html.escape(title)}</h1></header>
@@ -328,15 +328,15 @@ def view_page(slug):
     inline = page_task_refs(content)
     task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
     # A section a task links to is named as the page's heading says it.
-    heading_names = {section_anchor(h): _plain_heading(h)
-                     for h in re.findall(r"^#{2,3}\s+(.+?)\s*#*\s*$", _mask_code(content)[0], re.M)}
+    heading_names = {section_anchor(h): plain_heading(h)
+                     for h in re.findall(r"^#{2,3}\s+(.+?)\s*#*\s*$", mask_code(content)[0], re.M)}
     for t in task_backlinks:
         if t.get("anchor") in heading_names:
             t["section"] = heading_names[t["anchor"]]
-    page_lists = [name for name, _ in _page_deck_lists(content)]
-    bl_html, bl_chip = _build_backlinks_html(slug, backlinks, task_backlinks, page_lists)
-    bl_html += _build_related_html(slug, path, backlinks)
-    delete_dialog = _build_delete_dialog(slug, title)
+    page_lists = [name for name, _ in page_deck_lists(content)]
+    bl_html, bl_chip = build_backlinks_html(slug, backlinks, task_backlinks, page_lists)
+    bl_html += build_related_html(slug, path, backlinks)
+    delete_dialog = build_delete_dialog(slug, title)
     _qs = ('?' + request.query_string.decode()) if request.query_string else ''
 
     from_uncommitted = request.args.get('from') == 'uncommitted' and config.GIT_ENABLED
@@ -344,7 +344,7 @@ def view_page(slug):
         # Viewing a page from the uncommitted-changes list: show commit button
         breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)
         actions = (
-            f'{_commit_form_html(slug + ".md", title, "/uncommitted")}\n'
+            f'{commit_form_html(slug + ".md", title, "/uncommitted")}\n'
             f'    <a href="/uncommitted" class="btn">← Uncommitted</a>'
         )
         page_meta_html = ""
@@ -352,9 +352,9 @@ def view_page(slug):
         rail_actions = page_menu = ""
     else:
         breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
-        # Edit, and the rarer actions in a ⋯ menu (_build_page_menu).
+        # Edit, and the rarer actions in a ⋯ menu (build_page_menu).
         actions = f'<a href="{url("edit", slug)}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
-        page_menu = _build_page_menu(slug, title, request.args.get("rename_error", ""),
+        page_menu = build_page_menu(slug, title, request.args.get("rename_error", ""),
                                      request.args.get("promote_error", ""),
                                      request.args.get("append_error", ""))
         # The same, at the top of the right column on big screens, shown
@@ -362,9 +362,9 @@ def view_page(slug):
         rail_actions = (
             f'<div class="rail-actions" hidden>'
             f'<a href="{url("edit", slug)}" class="btn">Edit</a>{PAGE_MENU_BTN}</div>')
-        last_modified, meta_commit_btn = _build_page_meta(slug, path, title)
+        last_modified, meta_commit_btn = build_page_meta(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
-        tags_html = _render_tags_pills_html(fm_meta.get('tags', []))
+        tags_html = render_tags_pills_html(fm_meta.get('tags', []))
         # The tldr toggle is a checkbox rendered *before* the meta row with its
         # label inside it, and the text as a sibling *after* it. Keeping the
         # three as siblings (rather than a <details> wrapper) is what lets the
@@ -386,13 +386,13 @@ def view_page(slug):
             f'{tldr_body}'
             if last_modified or meta_commit_btn or tags_html or tldr_text else ""
         )
-        article_html = _inject_section_tasks(_inject_section_edit_buttons(
+        article_html = inject_section_tasks(inject_section_edit_buttons(
             render_md(strip_h1(content), show_tags=False, show_tldr=False), slug
         ), task_backlinks, page_lists)
 
     body = f"""{breadcrumb}{delete_dialog}
 <div class="page-grid">
-{_rail_toc_html(article_html)}<div class="page-col">
+{rail_toc_html(article_html)}<div class="page-col">
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
   <div class="page-header-actions">
@@ -405,7 +405,7 @@ def view_page(slug):
 </article>
 <div class="page-foot">{bl_html}</div>
 </div>
-<aside class="rail rail-context" aria-label="Links">{rail_actions}{_rail_copy(bl_html)}{_outlinks_html(slug, path)}</aside>
+<aside class="rail rail-context" aria-label="Links">{rail_actions}{rail_copy(bl_html)}{outlinks_html(slug, path)}</aside>
 </div>{page_menu}"""
     return shell(title, body, wide=True)
 
@@ -463,7 +463,7 @@ def edit_page(slug):
       {rename_error_html}
     </form>
   </div>""" if can_rename and not is_new and section is None else ""
-    paste_hint = _paste_hint_html(request.args.get("paste", ""),
+    paste_hint = paste_hint_html(request.args.get("paste", ""),
                                   request.args.get("copied") == "1")
     form_action = url("edit", slug)
     # Always embed file_hash for conflict detection (full-file and section edits).
@@ -508,7 +508,7 @@ def edit_page(slug):
 </div>"""
     # A hidden deck app: Make task (leaf.js) opens its edit modal, and uses
     # the deck's quick-add parser (deck-core.js) for several lines at once.
-    body += deck_module._build_deck_embed({}, headless=True)
+    body += deck_module.build_deck_embed({}, headless=True)
     return shell(f"Edit — {title}", body, editor=True)
 
 
@@ -528,7 +528,7 @@ def save_page(slug):
     end_char = request.form.get("end_char", type=int)
     current = path.read_text(encoding="utf-8") if path.exists() else None
     if file_hash and start_char is not None and end_char is not None:
-        result = _splice_section(current, file_hash, start_char, end_char, content)
+        result = splice_section(current, file_hash, start_char, end_char, content)
         if result is None:
             return redirect(f"{url('edit', slug)}?conflict=1")
         content = result[0]
@@ -568,10 +568,10 @@ def api_save(slug):
         # Same splice as a normal section save, just without the hash guard
         # (keeps the section's trailing blank lines so the next heading isn't
         # glued onto the last line of the posted content).
-        content, new_hash, new_start, new_end = _splice_section(
+        content, new_hash, new_start, new_end = splice_section(
             current, content_hash(current), fs_start, fs_end, raw_content)
     elif is_section_edit:
-        result = _splice_section(current, file_hash, start_char, end_char, raw_content)
+        result = splice_section(current, file_hash, start_char, end_char, raw_content)
         if result is None:
             return jsonify({"error": "file_changed"}), 409
         content, new_hash, new_start, new_end = result
@@ -678,7 +678,7 @@ def promote_page(slug):
     if new_path.exists():
         return redirect(back + quote(f"A page named “{new_slug}” already exists"))
     raw_link = request.form.get("link_from", "").strip()
-    link_slug = _page_from_input(raw_link) if raw_link else ""
+    link_slug = page_from_input(raw_link) if raw_link else ""
     link_path = safe_path(link_slug) if link_slug else None
     if raw_link and (not link_path or not link_path.exists() or link_slug == slug):
         return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
@@ -686,7 +686,7 @@ def promote_page(slug):
     # The page to link it from opens in the editor, the link to paste where
     # it belongs (leaf.js copied it on Move). A page linking to the note
     # already links here now: nothing to paste.
-    if link_path and new_slug not in _page_link_targets(
+    if link_path and new_slug not in page_link_targets(
             link_path.read_text(encoding="utf-8"), link_slug):
         copied = "&copied=1" if request.form.get("copied") == "1" else ""
         return redirect(f"{url('edit', link_slug)}?paste={quote(new_slug)}{copied}")
@@ -705,7 +705,7 @@ def append_page(slug):
         abort(404)
     back = f"{url('page', slug)}?append_error="
     raw = request.form.get("page", "").strip()
-    target = _page_from_input(raw)
+    target = page_from_input(raw)
     # [ ] | would break the wikilinks that now point at the section.
     heading = re.sub(r"[\[\]|]", "", request.form.get("heading", "")).strip()
     target_path = safe_path(target) if target else None
@@ -718,7 +718,7 @@ def append_page(slug):
     page = target_path.read_text(encoding="utf-8")
     anchor = section_anchor(heading)
     if any(section_anchor(h) == anchor for h in re.findall(
-            r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", _mask_code(page)[0], re.M)):
+            r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", mask_code(page)[0], re.M)):
         return redirect(back + quote(f"“{target}” already has a section “{heading}”"))
     section, tags = note_as_section(old_path.read_text(encoding="utf-8"), heading)
     page = add_frontmatter_tags(page, tags)
@@ -758,7 +758,7 @@ def api_pages_list():
     for md_file, slug in iter_pages():
         if hidden_page(slug):
             continue
-        title, _ = _page_meta(md_file, slug)
+        title, _ = page_meta(md_file, slug)
         stat = md_file.stat()
         mtime = stat.st_mtime
         pages.append({
@@ -813,9 +813,9 @@ def mcp_endpoint():
         return jsonify({"jsonrpc": "2.0", "id": None,
                         "error": {"code": -32700, "message": "Parse error"}}), 400
     if isinstance(message, list):  # a batch (protocol 2025-03-26)
-        replies = [r for m in message if (r := mcp_server.handle(m, _mcp_call_tool, config.VERSION))]
+        replies = [r for m in message if (r := mcp_server.handle(m, mcp_call_tool, config.VERSION))]
         return (jsonify(replies), 200) if replies else ("", 202)
-    reply = mcp_server.handle(message, _mcp_call_tool, config.VERSION)
+    reply = mcp_server.handle(message, mcp_call_tool, config.VERSION)
     return (jsonify(reply), 200) if reply else ("", 202)
 
 
@@ -840,7 +840,7 @@ def api_search():
 
 @app.get("/deck")
 def deck_page():
-    list_name = deck_module._clean_list(request.args.get("list"))
+    list_name = deck_module.clean_list(request.args.get("list"))
     sep = '<span class="breadcrumb-sep">›</span>'
     if list_name:
         # A list looks the same here as on the page that declares it: that
@@ -848,19 +848,19 @@ def deck_page():
         home = deck_module.LISTS_FN().get(list_name)
         params = dict(home["params"]) if home else {}
         params["list"] = list_name
-        embed = deck_module._build_deck_embed(params)
+        embed = deck_module.build_deck_embed(params)
         title = f"{list_name} · Deck"
         crumbs = [home_link(), '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
         heading = html.escape(list_name)
         if home:
             page_link = (f'<a href="{url("page", home["slug"])}">'
-                         f'{html.escape(_page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
+                         f'{html.escape(page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
             note = f'<p class="deck-list-home">A separate list, from {page_link}.</p>'
         else:
             note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>: '
                     f'these are the tasks tagged #{heading}.</p>')
     else:
-        embed = deck_module._build_deck_embed({})
+        embed = deck_module.build_deck_embed({})
         title = "Deck"
         crumbs = [home_link(), "<span>Deck</span>"]
         heading = "Deck"
@@ -919,7 +919,7 @@ def api_preview():
     text = request.get_data(as_text=True)
     # ?lists=a,b: the lists the page declares, so a chip re-rendered on its
     # own (leaf.js rerenderTaskRef) keeps linking to the page's list.
-    lists = [n for n in (deck_module._clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
+    lists = [n for n in (deck_module.clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
     return render_md(text, prefer_lists=lists)
 
 

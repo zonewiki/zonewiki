@@ -13,22 +13,22 @@ import render
 
 class TestParseParams:
     def test_empty(self):
-        assert deck_module._parse_tasks_params("") == {}
+        assert deck_module.parse_deck_params("") == {}
 
     def test_single(self):
-        result = deck_module._parse_tasks_params("tag=work")
+        result = deck_module.parse_deck_params("tag=work")
         assert result == {"tag": "work"}
 
     def test_multiple(self):
-        result = deck_module._parse_tasks_params("tag=work view=due limit=5 sort=due_date")
+        result = deck_module.parse_deck_params("tag=work view=due limit=5 sort=due_date")
         assert result == {"tag": "work", "view": "due", "limit": "5", "sort": "due_date"}
 
     def test_list(self):
-        result = deck_module._parse_tasks_params("list=groceries")
+        result = deck_module.parse_deck_params("list=groceries")
         assert result == {"list": "groceries"}
 
     def test_case_insensitive_keys(self):
-        result = deck_module._parse_tasks_params("Tag=work FILTER=due")
+        result = deck_module.parse_deck_params("Tag=work FILTER=due")
         assert result == {"tag": "work", "filter": "due"}
 
 

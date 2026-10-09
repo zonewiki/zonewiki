@@ -102,7 +102,7 @@
 
 // ── Side columns: the section being read ─────────────────────────────────────
 // On big screens a page's table of contents is the left column (views.py
-// _rail_toc_html); it marks the section whose heading was scrolled past
+// rail_toc_html); it marks the section whose heading was scrolled past
 // last, and at the end of the page the last one that came into view.
 
 (function () {
@@ -338,7 +338,7 @@ function toSlug(name) {
 }
 window.toSlug = toSlug;
 
-// A heading's id as rendered (mdtext.py _heading_id, mdit-py-plugins'
+// A heading's id as rendered (mdtext.py heading_id, mdit-py-plugins'
 // anchors slugify): no punctuation, lowercase, spaces → hyphens.
 const headingId = text => text.replace(/[^\p{L}\p{N}\p{M}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');
 
@@ -1006,7 +1006,7 @@ async function copyText(text) {
   return ok;
 }
 
-// The editor's hint after Move to wiki (views._paste_hint_html): Copy puts
+// The editor's hint after Move to wiki (views.paste_hint_html): Copy puts
 // the link in the clipboard (again), × closes it; either way it is gone
 // from the URL, so a reload doesn't bring it back.
 (function () {
@@ -2632,7 +2632,7 @@ function showCheckboxToast(msg, undo) {
 // repeating task shows its next occurrence, a keep task its "✓ today".
 async function rerenderTaskRef(chip, id) {
   // The lists the page declares (its list embeds), so the fresh chip links to
-  // the task in the same list as the server-rendered one (_link_list).
+  // the task in the same list as the server-rendered one (link_list).
   const lists = [...document.querySelectorAll('.tasks-app[data-init-list]')]
     .map(el => el.dataset.initList).filter(Boolean);
   const query = lists.length ? `?lists=${encodeURIComponent(lists.join(','))}` : '';

@@ -11,7 +11,7 @@ import re
 import pytest
 
 from mdtext import page_title, parse_frontmatter, strip_h1, to_slug, toggle_nth_checkbox
-from render import _apply_img_sizes, _build_toc, _render_frontmatter_html, _render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
+from render import _apply_img_sizes, _build_toc, _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
 from views import build_breadcrumb
 from tests.conftest import write_page
 import config
@@ -168,16 +168,16 @@ class TestParseFrontmatter:
 class TestRenderTagsPillsHtml:
 
     def test_empty_list_renders_nothing(self):
-        assert _render_tags_pills_html([]) == ''
+        assert render_tags_pills_html([]) == ''
 
     def test_renders_pills_with_search_links(self):
-        result = _render_tags_pills_html(["work", "urgent"])
+        result = render_tags_pills_html(["work", "urgent"])
         assert 'class="task-tag page-tag"' in result
         assert 'href="/search?q=%23work"' in result
         assert 'href="/search?q=%23urgent"' in result
 
     def test_tag_with_a_space_stays_a_word_search(self):
-        assert 'href="/search?q=my+tag"' in _render_tags_pills_html(["my tag"])
+        assert 'href="/search?q=my+tag"' in render_tags_pills_html(["my tag"])
 
 
 class TestRenderFrontmatterHtml:
@@ -723,10 +723,10 @@ class TestWikilinkSections:
         assert '<a href="/page/nowhere#beds" class="wikilink wikilink-missing">' in out
 
     def test_section_link_is_a_backlink_and_survives_a_rename(self):
-        assert pages._page_link_targets("[[Garden#Beds]] [[#Here]]", "x") == {"garden"}
+        assert pages.page_link_targets("[[Garden#Beds]] [[#Here]]", "x") == {"garden"}
         assert pages.rewrite_page_links("[[garden#Beds|b]] [[Garden#Paths]] [[#garden]]", "garden", "yard") == \
             "[[yard#Beds|b]] [[yard#Paths]] [[#garden]]"
-        assert mdtext._plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"
+        assert mdtext.plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"
 
 
 class TestExternalLinks:

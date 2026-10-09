@@ -14,8 +14,8 @@ from flask import g, has_app_context, has_request_context, request
 import config
 import deck as deck_module
 from mdtext import (
-    _mask_code, page_title, parse_frontmatter, SCRATCH_RE, section_anchor, slug_display_name,
-    split_wikilink, to_slug, _unmask_code, WIKILINK_RE,
+    mask_code, page_title, parse_frontmatter, SCRATCH_RE, section_anchor, slug_display_name,
+    split_wikilink, to_slug, unmask_code, WIKILINK_RE,
 )
 
 
@@ -82,7 +82,7 @@ def list_scratch() -> list[dict]:
         if not m or hidden_page(md_file.stem):
             continue
         ts = datetime.strptime(m.group(1), "%Y-%m-%d_%H-%M-%S")
-        entries.append({"slug": md_file.stem, "title": _page_meta(md_file, md_file.stem)[0],
+        entries.append({"slug": md_file.stem, "title": page_meta(md_file, md_file.stem)[0],
                         "ts": ts, "date": ts.strftime("%Y-%m-%d %H:%M")})
     entries.sort(key=lambda n: n["ts"], reverse=True)
     return entries
@@ -132,7 +132,7 @@ def hidden_page(slug: str) -> bool:
 
 def page_task_refs(content: str) -> set[str]:
     """Ids of the tasks a page refers to with [[task:…]], code excluded."""
-    masked, _ = _mask_code(content)
+    masked, _ = mask_code(content)
     refs = [m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)]
     return {t["id"] for t in deck_module.resolve_task_refs(refs).values() if t}
 
@@ -165,7 +165,7 @@ def _resolve_bare_link(href: str, source_slug: str) -> str | None:
     return _resolve_relative_link(href, source_slug)
 
 
-def _page_link_targets(content: str, file_slug: str, known_slugs: set[str] | None = None) -> set[str]:
+def page_link_targets(content: str, file_slug: str, known_slugs: set[str] | None = None) -> set[str]:
     """Collect all slugs that a page links to (wikilinks + markdown links)."""
     targets: set[str] = set()
     for m in WIKILINK_RE.finditer(content):
@@ -195,18 +195,18 @@ _page_meta_cache: dict[str, tuple[float, str, set[str], list]] = {}
 
 def _page_deck_embeds(content: str) -> list[dict]:
     """The params of each [[deck …]] on a page, outside code."""
-    masked, _ = _mask_code(content)
-    return [deck_module._parse_tasks_params(m.group(1) or "")
-            for m in deck_module._DECK_RE.finditer(masked)]
+    masked, _ = mask_code(content)
+    return [deck_module.parse_deck_params(m.group(1) or "")
+            for m in deck_module.DECK_RE.finditer(masked)]
 
 
 def _embeds_lists(embeds: list[dict]) -> list[tuple[str, dict]]:
     """(list name, embed params) of each embed that declares a list."""
     return [(name, params) for params in embeds
-            if (name := deck_module._clean_list(params.get("list")))]
+            if (name := deck_module.clean_list(params.get("list")))]
 
 
-def _page_deck_lists(content: str) -> list[tuple[str, dict]]:
+def page_deck_lists(content: str) -> list[tuple[str, dict]]:
     """(list name, embed params) of each [[deck list=…]] on a page, outside
     code."""
     return _embeds_lists(_page_deck_embeds(content))
@@ -224,19 +224,19 @@ def _page_meta_entry(md_file: Path, slug: str) -> tuple[float, str, set[str], li
         content = md_file.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return 0.0, slug_display_name(slug), set(), []
-    entry = (mtime, page_title(content, slug), _page_link_targets(content, slug),
+    entry = (mtime, page_title(content, slug), page_link_targets(content, slug),
              _page_deck_embeds(content))
     _page_meta_cache[slug] = entry
     return entry
 
 
-def _page_meta(md_file: Path, slug: str) -> tuple[str, set[str]]:
+def page_meta(md_file: Path, slug: str) -> tuple[str, set[str]]:
     """Return (title, outgoing link targets) for a page, cached by mtime."""
     _, title, targets, _ = _page_meta_entry(md_file, slug)
     return title, targets
 
 
-def _deck_lists() -> dict[str, dict]:
+def deck_lists() -> dict[str, dict]:
     """Every separate list some page declares with [[deck list=<name>]]:
     {name: {"slug": the page, "title": its title, "params": its embed's
     params}}. When several pages declare one, the first slug A–Z is its home."""
@@ -248,7 +248,7 @@ def _deck_lists() -> dict[str, dict]:
     return out
 
 
-def _deck_home() -> dict | None:
+def lookup_deck_home() -> dict | None:
     """The deck's home: the page with a [[deck … home=1]] embed, the user's
     own deck, as {"slug", "title", "params": that embed's params}; the first
     slug A–Z when several declare one. None: the Deck link goes to /deck."""
@@ -261,11 +261,11 @@ def _deck_home() -> dict | None:
 
 
 def deck_home() -> dict | None:
-    """The deck's home (_deck_home), looked up once per request."""
+    """The deck's home (lookup_deck_home), looked up once per request."""
     if not has_app_context():
-        return _deck_home()
+        return lookup_deck_home()
     if "deck_home" not in g:
-        g.deck_home = _deck_home()
+        g.deck_home = lookup_deck_home()
     return g.deck_home
 
 
@@ -279,7 +279,7 @@ def all_backlink_counts() -> dict[str, int]:
     """Return a mapping of slug → number of pages that link to it."""
     counts: dict[str, int] = {}
     for md_file, file_slug in iter_pages():
-        _, targets = _page_meta(md_file, file_slug)
+        _, targets = page_meta(md_file, file_slug)
         for target in targets:
             if target != file_slug:
                 counts[target] = counts.get(target, 0) + 1
@@ -292,7 +292,7 @@ def find_backlinks(slug: str) -> list[dict]:
     for md_file, file_slug in iter_pages():
         if file_slug == slug:
             continue
-        title, targets = _page_meta(md_file, file_slug)
+        title, targets = page_meta(md_file, file_slug)
         if slug in targets:
             results.append({"slug": file_slug, "title": title})
     results.sort(key=lambda r: r["title"].lower())
@@ -322,7 +322,7 @@ def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str
     absolute (`/page/old`) — keeping each link's style, anchor and title.
     Relative hrefs are recomputed from source_slug's directory. Code blocks
     and inline code are left untouched."""
-    text, stash = _mask_code(text)
+    text, stash = mask_code(text)
 
     def wikilink(m: re.Match) -> str:
         target, sep, label = m.group(1).partition("|")
@@ -353,7 +353,7 @@ def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str
 
     text = WIKILINK_RE.sub(wikilink, text)
     text = _MD_LINK_REWRITE_RE.sub(md_link, text)
-    return _unmask_code(text, stash)
+    return unmask_code(text, stash)
 
 
 def update_references(old_slug: str, new_slug: str, section: str = "") -> list[Path]:
@@ -386,7 +386,7 @@ def page_folders() -> list[str]:
     return sorted(folders)
 
 
-def _page_from_input(raw: str) -> str:
+def page_from_input(raw: str) -> str:
     """The slug a page field names: a slug, `/page/<slug>` (an #anchor
     dropped) or the page's name."""
     raw = raw.strip().removeprefix("/page/").split("#")[0].strip("/")

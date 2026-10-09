@@ -9,11 +9,11 @@ import deck as deck_module
 import embed
 import search
 from mdtext import (
-    _heading_id, is_scratch, _page_tags, page_title, parse_frontmatter, _plain_heading,
-    _plain_task_title, strip_h1,
+    heading_id, is_scratch, page_tags, page_title, parse_frontmatter, plain_heading,
+    plain_task_title, strip_h1,
 )
 from pages import all_backlink_counts, fmt_date, is_noshare, iter_pages, sharing_on, url
-from render import _task_href, _TOC_RE
+from render import task_href, TOC_RE
 
 
 # Cache of tokenized page documents, keyed by slug -> (mtime, doc, deck key). Avoids
@@ -26,7 +26,7 @@ def _task_refs_as_titles(content: str) -> str:
     """Page text with each [[task:…]] replaced by its task's title: what
     the reader sees there, and what search and embeddings should match."""
     return deck_module.expand_task_refs(
-        content, lambda ref, task: _plain_task_title(task.get("title", "")) if task else "")
+        content, lambda ref, task: plain_task_title(task.get("title", "")) if task else "")
 
 
 def _per_page(cache: dict, build, key=None, fresh=lambda value, key: True) -> list:
@@ -68,7 +68,7 @@ def _page_search_doc(slug: str, content: str, mtime: float) -> dict:
         "title": title,
         "mtime": mtime,
         "task_refs": bool(deck_module.TASK_REF_RE.search(content)),
-        "tags": _page_tags(content),
+        "tags": page_tags(content),
         "excerpt_text": text,
         "tokens": search.tokenize(text)
         + search.tokenize(title) * search.TITLE_WEIGHT
@@ -80,7 +80,7 @@ def _page_search_docs() -> list[dict]:
     """Every page as a BM25 document (_page_search_doc). A page with
     [[task:…]] is indexed with the tasks' titles, so it is stale when the
     deck changes too."""
-    deck_key = deck_module._deck_mtimes()
+    deck_key = deck_module.deck_mtimes()
     return _per_page(_search_doc_cache, _page_search_doc, key=deck_key,
                      fresh=lambda doc, key: not doc["task_refs"] or key == deck_key)
 
@@ -112,7 +112,7 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     holding nothing but a deck embed came out as each other's closest match."""
     meta, body = parse_frontmatter(_task_refs_as_titles(content))
     lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
-    body = _TOC_RE.sub("", deck_module._DECK_RE.sub("", strip_h1(body)))
+    body = TOC_RE.sub("", deck_module.DECK_RE.sub("", strip_h1(body)))
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
 
 
@@ -160,7 +160,7 @@ def _accepts(query: search.Query, d: dict) -> bool:
     return query.accepts(_doc_text(d), d["tokens"], d.get("tags"), _doc_date(d))
 
 
-def _passes(query: search.Query, d: dict, keep=None) -> bool:
+def passes(query: search.Query, d: dict, keep=None) -> bool:
     """Whether a doc takes part in a search: it passes `keep` (when given)
     and the query's filters."""
     return (keep is None or keep(d)) and (not query.has_filters or _accepts(query, d))
@@ -182,7 +182,7 @@ def _phrase_first(ranked: list[dict], query: search.Query, index: search.SearchI
     if not phrase:
         return ranked
     hits = [d for _s, d in index.search(query.ranking_text, limit=len(index.docs))
-            if _passes(query, d, keep) and _has_phrase(d, phrase)]
+            if passes(query, d, keep) and _has_phrase(d, phrase)]
     if not hits:
         return ranked
     first = {id(d) for d in hits}
@@ -196,7 +196,7 @@ def _bm25(index: search.SearchIndex, query: search.Query, depth: int, keep=None)
     if not query.has_filters and keep is None:
         return [d for _s, d in index.search(text, limit=depth)]
     return [d for _s, d in index.search(text, limit=len(index.docs))
-            if _passes(query, d, keep)][:depth]
+            if passes(query, d, keep)][:depth]
 
 
 def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
@@ -211,7 +211,7 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
             return []
         # Only date filters ("edited:2026-09"): everything that passes,
         # newest first. There are no words to rank by.
-        docs = [d for d in index.docs if _passes(query, d, keep)]
+        docs = [d for d in index.docs if passes(query, d, keep)]
         return sorted(docs, key=lambda d: _doc_date(d) or "", reverse=True)[:limit]
     # Each ranking goes as deep as the fused list must be long.
     depth = max(FUSE_DEPTH, limit) if SEMANTIC else limit
@@ -219,7 +219,7 @@ def _ranked_docs(query: search.Query, index: search.SearchIndex, keep=None,
     if not SEMANTIC:
         return _phrase_first(bm25, query, index, keep)[:limit]
     SEMANTIC.poke()
-    allowed = [d for d in index.docs if _passes(query, d, keep)]
+    allowed = [d for d in index.docs if passes(query, d, keep)]
     pages = {d["slug"]: d for d in allowed if d.get("type") != "task"}
     tasks = {d["task_id"]: d for d in allowed if d.get("type") == "task"}
     hits = SEMANTIC.search(q, known=pages, limit=depth)
@@ -264,7 +264,7 @@ def _result_meta(d: dict) -> str:
     status ("Deck · done 2026-05-01")."""
     if d.get("type") == "task":
         task = d["task"]
-        status = _task_status(task)
+        status = task_status(task)
         if status != "open":
             status += f" {task['completed_at'][:10]}"
         list_name = deck_module.task_list(task)
@@ -343,14 +343,14 @@ def _section_anchor(heading: str, level: int) -> str:
     (3), whose heading carries no id."""
     if not heading or level > 3:
         return ""
-    return f"#{_heading_id(_plain_heading(heading))}"
+    return f"#{heading_id(plain_heading(heading))}"
 
 
 def _page_chunks(slug: str, content: str, mtime: float) -> list[dict]:
     """A page's sections (embed.chunk_sections) as BM25 documents. A
     section's `key` is the one its vector has in the semantic index."""
     title, body = _semantic_text(content, slug)
-    tags = _page_tags(content)
+    tags = page_tags(content)
     chunks = []
     for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
         chunk = f"{heading}\n{text}" if heading else text
@@ -378,7 +378,7 @@ def _chunk_index() -> search.SearchIndex:
     return _cached_index(_chunk_index_cache, _page_chunk_docs() + deck_module.task_search_docs())
 
 
-def _in_folder(slug: str, folder: str | None) -> bool:
+def in_folder(slug: str, folder: str | None) -> bool:
     """Whether slug is the page `folder` or below it (case ignored)."""
     if not folder:
         return True
@@ -396,25 +396,25 @@ def retrieve(raw: str, limit: int = 8, under: str | None = None) -> list[dict]:
     if not q.strip():
         return []
     index = _chunk_index()
-    keep = (lambda d: d.get("type") != "task" and _in_folder(d["slug"], under)) if under else None
+    keep = (lambda d: d.get("type") != "task" and in_folder(d["slug"], under)) if under else None
     ranked = _bm25(index, query, FUSE_DEPTH, keep)
     if SEMANTIC:
         SEMANTIC.poke()
-        sections = [d for d in index.docs if d.get("type") != "task" and _in_folder(d["slug"], under)
-                    and _passes(query, d)]
+        sections = [d for d in index.docs if d.get("type") != "task" and in_folder(d["slug"], under)
+                    and passes(query, d)]
         by_key = {d["key"]: d for d in sections}
         hits = [(by_key[k], sc) for k, sc in SEMANTIC.search_chunks(
             q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH) if k in by_key]
         task_hits = []
         if not under:
-            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task" and _passes(query, d)}
+            tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task" and passes(query, d)}
             task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
         if hits or task_hits:
             ranked = search.fuse([ranked, _by_similarity(hits, task_hits)[:FUSE_DEPTH]])
     return _phrase_first(ranked, query, index, keep)[:limit]
 
 
-def _task_status(task: dict) -> str:
+def task_status(task: dict) -> str:
     if not task.get("completed_at"):
         return "open"
     return "won't do" if task.get("wont_do") else "done"
@@ -427,5 +427,5 @@ def _result_href(r: dict) -> str:
     slug. By id, not title: titles can repeat or contain #words."""
     if r.get("type") == "task":
         tab = "completed" if r.get("status") == "done" else "open"
-        return _task_href(r["task_id"], tab, r.get("list"), r.get("year"))
+        return task_href(r["task_id"], tab, r.get("list"), r.get("year"))
     return url("page", r['slug'])

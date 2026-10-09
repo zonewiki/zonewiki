@@ -28,7 +28,7 @@ _GIT_ENV = {
 }
 
 
-def _git(*args: str) -> subprocess.CompletedProcess:
+def run_git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(list(args), cwd=config.WIKI_DIR, capture_output=True, text=True, env=_GIT_ENV)
 
 
@@ -36,25 +36,25 @@ def git_setup() -> None:
     if not config.GIT_ENABLED:
         return
     if not (config.WIKI_DIR / ".git").exists():
-        _git("git", "init")
-        _git("git", "config", "user.email", "leaf@localhost")
-        _git("git", "config", "user.name", "Leaf")
+        run_git("git", "init")
+        run_git("git", "config", "user.email", "leaf@localhost")
+        run_git("git", "config", "user.name", "Leaf")
         gitignore = config.WIKI_DIR / ".gitignore"
         if not gitignore.exists():
             gitignore.write_text("", encoding="utf-8")
-        _git("git", "add", ".")
-        _git("git", "commit", "--allow-empty", "-m", "Initial import")
+        run_git("git", "add", ".")
+        run_git("git", "commit", "--allow-empty", "-m", "Initial import")
     else:
-        r = _git("git", "config", "user.name")
+        r = run_git("git", "config", "user.name")
         if not r.stdout.strip():
-            _git("git", "config", "user.email", "leaf@localhost")
-            _git("git", "config", "user.name", "Leaf")
+            run_git("git", "config", "user.email", "leaf@localhost")
+            run_git("git", "config", "user.name", "Leaf")
     if config.GIT_REMOTE:
-        existing = _git("git", "remote", "get-url", "origin")
+        existing = run_git("git", "remote", "get-url", "origin")
         if existing.returncode == 0:
-            _git("git", "remote", "set-url", "origin", config.GIT_REMOTE)
+            run_git("git", "remote", "set-url", "origin", config.GIT_REMOTE)
         else:
-            _git("git", "remote", "add", "origin", config.GIT_REMOTE)
+            run_git("git", "remote", "add", "origin", config.GIT_REMOTE)
 
 
 def git_commit(paths: Path | list[Path], message: str) -> None:
@@ -64,8 +64,8 @@ def git_commit(paths: Path | list[Path], message: str) -> None:
     if isinstance(paths, Path):
         paths = [paths]
     rels = [str(p.relative_to(config.WIKI_DIR)) for p in paths]
-    _git("git", "add", "--", *rels)
-    _git("git", "commit", "-m", message)
+    run_git("git", "add", "--", *rels)
+    run_git("git", "commit", "-m", message)
 
 
 _RENAME_BRACES_RE = re.compile(r"\{([^{}]*) => ([^{}]*)\}")
@@ -90,7 +90,7 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
         return []
     rel = str(path.relative_to(config.WIKI_DIR))
     count_args = ["-n", str(max_count)] if max_count else []
-    r = _git("git", "log", "--follow", *count_args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
+    r = run_git("git", "log", "--follow", *count_args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
              "--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%s", "--", rel)
     entries = []
     for record in r.stdout.split("\x1e")[1:]:
@@ -113,7 +113,7 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
 
 def git_show(sha: str, path: Path) -> str | None:
     rel = str(path.relative_to(config.WIKI_DIR))
-    r = _git("git", "show", f"{sha}:{rel}")
+    r = run_git("git", "show", f"{sha}:{rel}")
     return r.stdout if r.returncode == 0 else None
 
 
@@ -151,7 +151,7 @@ def git_uncommitted_files() -> list[dict]:
     an umlaut, "my file.pdf", and committing that path failed)."""
     if not config.GIT_ENABLED:
         return []
-    r = _git("git", "status", "--porcelain", "-z", "--untracked-files=all")
+    r = run_git("git", "status", "--porcelain", "-z", "--untracked-files=all")
     fields = iter(r.stdout.split("\0"))
     files = []
     for entry in fields:
@@ -169,7 +169,7 @@ def git_uncommitted_files() -> list[dict]:
     return files
 
 
-def _commit_message(filepath: str) -> str:
+def commit_message(filepath: str) -> str:
     """Default commit message for committing a file from the uncommitted list."""
     return f"Save {filepath[:-3]}" if filepath.endswith('.md') else f"Update {filepath}"
 
@@ -179,11 +179,11 @@ def git_diff(sha: str, path: Path, *also: Path) -> str | None:
     when the commit renamed it, so the rename is seen as one (a pure rename
     changes nothing) instead of a new file."""
     rels = [str(p.relative_to(config.WIKI_DIR)) for p in (path, *also)]
-    r = _git("git", "show", "--format=", "--patch", "-M", sha, "--", *dict.fromkeys(rels))
+    r = run_git("git", "show", "--format=", "--patch", "-M", sha, "--", *dict.fromkeys(rels))
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def _uncommitted_entries() -> list[dict]:
+def uncommitted_entries() -> list[dict]:
     """Uncommitted files as {slug, title, filepath, mtime, rel} dicts (slug/title
     resolved for wiki pages; slug is None for assets and other files)."""
     entries = []
@@ -205,7 +205,7 @@ def list_deleted_pages() -> list[dict]:
     """Pages that exist in git history but not on disk, newest deletion first."""
     if not config.GIT_ENABLED:
         return []
-    r = _git("git", "log", "--diff-filter=D", "--format=%H\t%P\t%as", "--name-only")
+    r = run_git("git", "log", "--diff-filter=D", "--format=%H\t%P\t%as", "--name-only")
     if r.returncode != 0:
         return []
     existing_slugs = set(slug for _, slug in iter_pages())
@@ -228,13 +228,13 @@ def list_deleted_pages() -> list[dict]:
             if slug.startswith('_assets'):
                 continue
             seen.add(slug)
-            r2 = _git("git", "show", f"{current_parent}:{line}")
+            r2 = run_git("git", "show", f"{current_parent}:{line}")
             title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
             deleted.append({"slug": slug, "title": title, "sha": current_sha, "date": current_date})
     return deleted
 
 
-def _version_label(entry: dict, entries: list[dict]) -> str:
+def version_label(entry: dict, entries: list[dict]) -> str:
     """What a commit did to the page, in words: Leaf's own commit messages
     ("Update p", "Rename a to b", "Restore p to 1a2b3c4", …) read alike in a
     list, so they are named by kind. Others are shown as written."""
@@ -271,20 +271,20 @@ def _version_label(entry: dict, entries: list[dict]) -> str:
     return msg
 
 
-def _version_index(entries: list[dict], sha: str) -> int | None:
+def version_index(entries: list[dict], sha: str) -> int | None:
     return next((i for i, e in enumerate(entries) if e["sha"].startswith(sha)), None)
 
 
-def _version_path(path: Path, entries: list[dict], sha: str) -> Path:
+def version_path(path: Path, entries: list[dict], sha: str) -> Path:
     """The file's path at a commit: before a rename it had another name."""
-    i = _version_index(entries, sha)
+    i = version_index(entries, sha)
     return config.WIKI_DIR / entries[i]["path"] if i is not None else path
 
 
-def _is_current(path: Path, entries: list[dict]) -> bool:
+def is_current(path: Path, entries: list[dict]) -> bool:
     """Whether the newest commit is what the page holds now (no edits on
     disk since, not deleted)."""
     if not entries or not path.exists():
         return False
-    return git_show(entries[0]["sha"], _version_path(path, entries, entries[0]["sha"])) == \
+    return git_show(entries[0]["sha"], version_path(path, entries, entries[0]["sha"])) == \
         path.read_text(encoding="utf-8")

@@ -704,12 +704,12 @@ class TestHelpers:
         assert gitstore.relative_time(datetime.now() - delta) == expected
 
     def test_diff_to_html_empty(self):
-        assert views._diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
+        assert views.diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
 
     def test_diff_to_html_leaves_out_file_headers(self):
         # Only what comes before the first @@ is a header: a removed line
         # "-- x" reads "--- x" in the diff and stays.
-        out = views._diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
+        out = views.diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
                                    "@@ -1,2 +1,2 @@\n context\n--- x\n+++ y")
         assert out == ('<span class="diff-hunk">⋯</span><span class="diff-ctx"> context</span>'
                        '<span class="diff-del">--- x</span><span class="diff-add">+++ y</span>')
@@ -720,7 +720,7 @@ class TestHelpers:
         ("_assets/a.png", "Update _assets/a.png"),
     ])
     def test_commit_message(self, filepath, expected):
-        assert gitstore._commit_message(filepath) == expected
+        assert gitstore.commit_message(filepath) == expected
 
 
 
@@ -730,4 +730,4 @@ class TestGitDoesNotDetach:
         # commit; with Leaf as the container's PID 1 nobody reaped it, and
         # zombies piled up to the PID limit.
         for key in ("maintenance.autoDetach", "gc.autoDetach"):
-            assert gitstore._git("git", "config", "--get", key).stdout.strip() == "false"
+            assert gitstore.run_git("git", "config", "--get", key).stdout.strip() == "false"

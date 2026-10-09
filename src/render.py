@@ -16,11 +16,11 @@ from mdit_py_plugins.tasklists import tasklists_plugin
 
 import deck as deck_module
 from mdtext import (
-    _heading_id, _mask_code, parse_frontmatter, _plain_heading, _plain_task_title,
-    section_anchor, split_wikilink, _strip_links, _TASK_DONE_ONLY_RE, _TASK_META_SRC_RE,
-    to_slug, _unmask_code, WIKILINK_RE,
+    heading_id, mask_code, parse_frontmatter, plain_heading, plain_task_title,
+    section_anchor, split_wikilink, strip_links, TASK_DONE_ONLY_RE, TASK_META_SRC_RE,
+    to_slug, unmask_code, WIKILINK_RE,
 )
-from pages import all_slugs, hidden_page, _page_deck_lists, url
+from pages import all_slugs, hidden_page, page_deck_lists, url
 
 
 md = (
@@ -83,7 +83,7 @@ def process_wikilinks(text: str) -> str:
 
 
 _TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
-_TOC_RE = re.compile(r'^\[\[toc\]\][^\S\n]*$', re.IGNORECASE | re.MULTILINE)
+TOC_RE = re.compile(r'^\[\[toc\]\][^\S\n]*$', re.IGNORECASE | re.MULTILINE)
 
 
 def _build_toc(text: str, unmask=lambda s: s) -> str:
@@ -97,10 +97,10 @@ def _build_toc(text: str, unmask=lambda s: s) -> str:
     for hashes, title in headings:
         level = len(hashes)
         title = unmask(title)
-        plain = _plain_heading(title.strip())
-        hid = _heading_id(plain)
+        plain = plain_heading(title.strip())
+        hid = heading_id(plain)
         cls = ' class="toc-h3"' if level == 3 else ''
-        label = md.renderInline(_strip_links(title.strip()))
+        label = md.renderInline(strip_links(title.strip()))
         items.append(f'<li{cls}><a href="#{hid}">{label}</a></li>')
     return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
 
@@ -129,8 +129,8 @@ def _render_task_dates(html_str: str) -> str:
     def replace_done_only(m: re.Match) -> str:
         done = m.group(1)
         return f'<span class="task-date task-date-done" title="Done {done}">{done[:10]}</span>'
-    html_str = _TASK_META_SRC_RE.sub(replace_full, html_str)
-    html_str = _TASK_DONE_ONLY_RE.sub(replace_done_only, html_str)
+    html_str = TASK_META_SRC_RE.sub(replace_full, html_str)
+    html_str = TASK_DONE_ONLY_RE.sub(replace_done_only, html_str)
     return html_str
 
 
@@ -161,23 +161,23 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
               prefer_lists: list[str] | None = None) -> str:
     """Render a page's markdown. Task chips link to a task in a list the text
     declares with [[deck list=…]] (or one of `prefer_lists`) when the task is
-    in it, rather than in its first list A–Z (_link_list)."""
+    in it, rather than in its first list A–Z (link_list)."""
     fm_meta, text = parse_frontmatter(text)
-    prefer = [name for name, _ in _page_deck_lists(text)] + list(prefer_lists or [])
+    prefer = [name for name, _ in page_deck_lists(text)] + list(prefer_lists or [])
     fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
 
-    text, code_stash = _mask_code(text)
+    text, code_stash = mask_code(text)
 
     toc_html = ''
-    if _TOC_RE.search(text):
-        toc_html = _build_toc(text, unmask=lambda s: _unmask_code(s, code_stash))
-        text = _TOC_RE.sub(_TOC_PLACEHOLDER, text)
+    if TOC_RE.search(text):
+        toc_html = _build_toc(text, unmask=lambda s: unmask_code(s, code_stash))
+        text = TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
     text, deck_embeds = deck_module.process_deck_embeds(text)
     text, task_refs = _mask_task_refs(text)
 
-    text = _unmask_code(process_wikilinks(text), code_stash)
+    text = unmask_code(process_wikilinks(text), code_stash)
     result = _mark_image_paragraphs(_apply_img_sizes(md.render(text)))
     result = _enable_task_checkboxes(result)
     result = _render_task_dates(result)
@@ -228,7 +228,7 @@ def _short_date(iso: str, today: str) -> str:
     return text if iso[:4] == today[:4] else f"{text}, {d.year}"
 
 
-def _link_list(task: dict, prefer=()) -> str | None:
+def link_list(task: dict, prefer=()) -> str | None:
     """The list a link to a task opens it in: one of `prefer` (the lists the
     page with the link declares) when the task is in it, so a task in two
     lists opens in the one the page is about; else its own (deck.task_list)."""
@@ -244,10 +244,10 @@ def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
     if task is None:
         return (f'<span class="task-ref task-ref-missing" title="No task with id {html.escape(ref)}">'
                 f'task {html.escape(ref)}?</span>')
-    title = html.escape(_plain_task_title(task.get("title", "")))
+    title = html.escape(plain_task_title(task.get("title", "")))
     done, wont = bool(task.get("completed_at")), bool(task.get("wont_do"))
-    list_name = _link_list(task, prefer)
-    href = html.escape(_task_link(task, list_name))
+    list_name = link_list(task, prefer)
+    href = html.escape(task_link(task, list_name))
     cls, badges = "task-ref", []
     if done:
         cls += " task-ref-wontdo" if wont else " task-ref-done"
@@ -278,7 +278,7 @@ def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
             f'<a class="task-ref-title" href="{href}">{title}</a>{"".join(badges)}</span>')
 
 
-def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
+def inject_section_edit_buttons(html_str: str, slug: str) -> str:
     """Wrap each rendered <h2>/<h3> with a .section-header div and append an edit link."""
     counter = [0]
 
@@ -295,7 +295,7 @@ def _inject_section_edit_buttons(html_str: str, slug: str) -> str:
     return re.sub(r'<(h[23])\b[^>]*>.*?</\1>', wrap, html_str, flags=re.DOTALL)
 
 
-def _inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) -> str:
+def inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) -> str:
     """A section that tasks link to (`[[Page#Section]]`) gets a ☑ N chip
     after its heading, opening the list of those tasks (a <details>, no JS)."""
     by_anchor: dict[str, list[dict]] = {}
@@ -311,15 +311,15 @@ def _inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) 
             return m.group(0)
         n = len(tasks)
         items = "".join(
-            f'<li><a href="{html.escape(_task_href(t["id"], "open", _link_list(t, prefer)))}">'
-            f'{html.escape(_plain_task_title(t["title"]))}</a></li>' for t in tasks)
+            f'<li><a href="{html.escape(task_href(t["id"], "open", link_list(t, prefer)))}">'
+            f'{html.escape(plain_task_title(t["title"]))}</a></li>' for t in tasks)
         return (f'{m.group(0)}<details class="section-tasks"><summary title="{n} linked task{"s" if n > 1 else ""}">'
                 f'☑ {n}</summary><ul>{items}</ul></details>')
 
     return re.sub(r'<h([23]) id="([^"]+)">.*?</h\1>', chip, html_str, flags=re.S)
 
 
-def _render_tags_pills_html(tags: list[str]) -> str:
+def render_tags_pills_html(tags: list[str]) -> str:
     """Render a list of tags as clickable pills linking to search. A pill
     searches `#tag`, the pages and tasks with that tag (search.Query), not
     every page that happens to use the word; a tag with a space in it can't
@@ -348,7 +348,7 @@ def _render_frontmatter_html(meta: dict, *, show_tags: bool = True, show_tldr: b
         if tldr:
             parts.append(f'<p class="page-tldr">{html.escape(tldr)}</p>')
     if show_tags:
-        parts.append(_render_tags_pills_html(meta.get('tags', [])))
+        parts.append(render_tags_pills_html(meta.get('tags', [])))
     parts = [p for p in parts if p]
     if not parts:
         return ''
@@ -358,7 +358,7 @@ def _render_frontmatter_html(meta: dict, *, show_tags: bool = True, show_tldr: b
     )
 
 
-def _task_href(task_id: str, tab: str, list_name: str | None,
+def task_href(task_id: str, tab: str, list_name: str | None,
                year: str | None = None) -> str:
     """Link that opens one task in the deck (or its list's page) on `tab`;
     `year` is the Completed year of a task in an earlier year's archive."""
@@ -370,9 +370,9 @@ def _task_href(task_id: str, tab: str, list_name: str | None,
     return "/deck?" + urlencode(params)
 
 
-def _task_link(task: dict, list_name: str | None) -> str:
-    """_task_href for a task as it is now: an open one on Open, a done one
+def task_link(task: dict, list_name: str | None) -> str:
+    """task_href for a task as it is now: an open one on Open, a done one
     on Completed, in its year's archive when that is an earlier year."""
     if not task.get("completed_at"):
-        return _task_href(task["id"], "open", list_name)
-    return _task_href(task["id"], "completed", list_name, deck_module._past_year(task))
+        return task_href(task["id"], "open", list_name)
+    return task_href(task["id"], "completed", list_name, deck_module.past_year(task))

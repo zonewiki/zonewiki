@@ -68,17 +68,17 @@ def split_wikilink(inner: str) -> tuple[str, str, str]:
 
 def section_anchor(section: str) -> str:
     """The heading id a wikilink's #Section points at (as rendered)."""
-    return _heading_id(_plain_heading(section))
+    return heading_id(plain_heading(section))
 
 
-def _heading_id(text: str) -> str:
+def heading_id(text: str) -> str:
     """Match mdit-py-plugins anchors_plugin default slugify."""
     return re.sub(r'[^\w\- ]+', '', text, flags=re.UNICODE).strip().lower().replace(' ', '-')
 
 
-def _plain_heading(text: str) -> str:
+def plain_heading(text: str) -> str:
     """Strip inline markdown and wikilinks from a heading to get plain text for anchor IDs."""
-    text = _strip_links(text)
+    text = strip_links(text)
     text = re.sub(r'!?\[([^\]]*)\]', r'\1', text)                # bare [label]
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'\*(.+?)\*', r'\1', text)
@@ -88,7 +88,7 @@ def _plain_heading(text: str) -> str:
     return text.strip()
 
 
-def _strip_links(text: str) -> str:
+def strip_links(text: str) -> str:
     """Replace wikilinks and markdown links with their label text, keeping other inline markup."""
     text = re.sub(r'\[\[([^\]|]+)\|([^\]]+)\]\]', r'\2', text)  # [[page|label]] → label
     text = re.sub(r'\[\[([^\]]+)\]\]', r'\1', text)              # [[page]] → page
@@ -99,10 +99,10 @@ def _strip_links(text: str) -> str:
 
 # Format stored in markdown: - [ ] task text <!--t:2026-06-12T18:35:00-->
 #                             - [x] task text <!--t:2026-06-12T18:35:00 d:2026-06-12T19:00:00-->
-_TASK_META_SRC_RE = re.compile(r'<!--t:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\s+d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?-->')
+TASK_META_SRC_RE = re.compile(r'<!--t:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\s+d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?-->')
 
 
-_TASK_DONE_ONLY_RE = re.compile(r'<!--d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})-->')
+TASK_DONE_ONLY_RE = re.compile(r'<!--d:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})-->')
 
 
 # Private-use code points: never typed by users, and not matched by any of the
@@ -113,13 +113,13 @@ _CODE_MASK_RE = re.compile('\ue000(\\d+)\ue001')
 _INLINE_CODE_RE = re.compile(r'(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)')
 
 
-def _mask_code(text: str) -> tuple[str, list[str]]:
+def mask_code(text: str) -> tuple[str, list[str]]:
     """Replace fenced code blocks and inline code spans with opaque tokens.
 
     [[wikilinks]], [[toc]] and [[deck]] are rewritten on the raw markdown before
     markdown-it runs, so without this they would also be rewritten inside code
     (showing up as escaped HTML in the block, or embedding a whole deck app in a
-    <pre>). Restore with _unmask_code() before rendering."""
+    <pre>). Restore with unmask_code() before rendering."""
     stash: list[str] = []
 
     def token(s: str) -> str:
@@ -136,7 +136,7 @@ def _mask_code(text: str) -> tuple[str, list[str]]:
     return ''.join(out), stash
 
 
-def _unmask_code(text: str, stash: list[str]) -> str:
+def unmask_code(text: str, stash: list[str]) -> str:
     return _CODE_MASK_RE.sub(lambda m: stash[int(m.group(1))], text)
 
 
@@ -201,7 +201,7 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
     body = body[:m.start(1)] + ('x' if is_checking else ' ') + body[m.end(1):]
 
     now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    meta_m = _TASK_META_SRC_RE.search(body)
+    meta_m = TASK_META_SRC_RE.search(body)
     if is_checking:
         if meta_m:
             # Splice done date into existing comment
@@ -209,7 +209,7 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
                     f'<!--t:{meta_m.group(1)} d:{now}-->' +
                     body[meta_m.end():])
         else:
-            done_m = _TASK_DONE_ONLY_RE.search(body)
+            done_m = TASK_DONE_ONLY_RE.search(body)
             if done_m:
                 body = body[:done_m.start()] + f'<!--d:{now}-->' + body[done_m.end():]
             else:
@@ -222,7 +222,7 @@ def toggle_nth_checkbox(content: str, idx: int) -> str:
                     body[meta_m.end():])
         else:
             # Remove standalone done comment
-            body = _TASK_DONE_ONLY_RE.sub('', body).rstrip()
+            body = TASK_DONE_ONLY_RE.sub('', body).rstrip()
 
     lines[li] = body + eol
     return ''.join(lines)
@@ -357,7 +357,7 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     return meta, "\n".join(rest)
 
 
-def _plain_task_title(title: str) -> str:
+def plain_task_title(title: str) -> str:
     """Task title with wikilinks and /page/ links reduced to their labels.
 
     Used where the whole title is already inside one link (Linked tasks), so
@@ -433,7 +433,7 @@ def add_frontmatter_tags(content: str, tags: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _splice_section(full: str | None, file_hash: str, start_char: int,
+def splice_section(full: str | None, file_hash: str, start_char: int,
                     end_char: int, new_content: str) -> tuple[str, str, int, int] | None:
     """Replace full[start_char:end_char], guarded by a hash check.
 
@@ -456,6 +456,6 @@ def _splice_section(full: str | None, file_hash: str, start_char: int,
     return merged, content_hash(merged), start_char, new_end
 
 
-def _page_tags(content: str) -> list[str]:
+def page_tags(content: str) -> list[str]:
     """A page's frontmatter tags, lowercased, for #tag queries."""
     return [t.lower() for t in parse_frontmatter(content)[0].get("tags", [])]

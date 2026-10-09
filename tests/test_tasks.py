@@ -1911,14 +1911,14 @@ class TestLists:
     def test_declared_by_pages_outside_code(self, client, wiki_dir, shop):
         (wiki_dir / "code.md").write_text("# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
                                           encoding="utf-8")
-        lists = pages._deck_lists()
+        lists = pages.deck_lists()
         assert set(lists) == {"groceries"}
         assert lists["groceries"]["slug"] == "shop"
         assert lists["groceries"]["params"]["keep"] == "1"
 
     def test_first_page_is_the_home(self, client, wiki_dir, shop):
         (wiki_dir / "a-list.md").write_text("# A\n\n[[deck list=groceries]]\n", encoding="utf-8")
-        assert pages._deck_lists()["groceries"]["slug"] == "a-list"
+        assert pages.deck_lists()["groceries"]["slug"] == "a-list"
 
     def test_task_list_is_its_first_list_tag(self, client, wiki_dir, shop):
         (wiki_dir / "home.md").write_text("# Home\n\n[[deck list=chores]]\n", encoding="utf-8")

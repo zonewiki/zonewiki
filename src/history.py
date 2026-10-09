@@ -9,14 +9,14 @@ import config
 from mdtext import page_title, slug_display_name, strip_h1
 from pages import hidden_page, safe_path, url
 from gitstore import (
-    _commit_message, _git, git_commit, git_diff, git_log, git_show, git_uncommitted_files,
-    _is_current, list_deleted_pages, SHA_RE, _uncommitted_entries, _version_index,
-    _version_label, _version_path,
+    commit_message, run_git, git_commit, git_diff, git_log, git_show, git_uncommitted_files,
+    is_current, list_deleted_pages, SHA_RE, uncommitted_entries, version_index,
+    version_label, version_path,
 )
 from render import render_md
 from views import (
-    build_breadcrumb, _change_counts, _commit_form_html, _diff_to_html, hidden_page_view,
-    _index_page, shell, _version_nav,
+    build_breadcrumb, change_counts, commit_form_html, diff_to_html, hidden_page_view,
+    index_page, shell, version_nav,
 )
 
 
@@ -43,7 +43,7 @@ def deleted_pages_route():
         body_inner = f"<ul class='notes-list'>{items}</ul>"
     else:
         body_inner = "<p>No deleted pages in history.</p>"
-    return _index_page('_deleted', 'Deleted Pages', body_inner)
+    return index_page('_deleted', 'Deleted Pages', body_inner)
 
 
 @bp.get("/history/<path:slug>")
@@ -68,7 +68,7 @@ def history_page_route(slug):
     # One row per saved version, newest first. The row opens that version;
     # the page as it is now is marked Current and opens the page itself.
     # "Changes" shows what that save changed.
-    current = _is_current(path, entries)
+    current = is_current(path, entries)
     rows = []
     if page_exists and not current:
         rows.append(
@@ -83,8 +83,8 @@ def history_page_route(slug):
             f'<li class="hist-row{" hist-current" if is_cur else ""}">'
             f'<a class="hist-main" href="{href}">'
             f'<span class="hist-when">{e["time"]}<span class="hist-rel">{html.escape(e["rel"])}</span></span>'
-            f'<span class="hist-what">{html.escape(_version_label(e, entries))}</span>'
-            f'<span class="hist-counts">{_change_counts(e)}</span></a>'
+            f'<span class="hist-what">{html.escape(version_label(e, entries))}</span>'
+            f'<span class="hist-counts">{change_counts(e)}</span></a>'
             + ('<span class="hist-badge">Current</span>' if is_cur else "")
             + f'<a class="hist-changes" href="{url("diff", slug)}/{e["sha"]}" title="What this save changed">Changes</a>'
             f'</li>')
@@ -122,20 +122,20 @@ def revision_view(slug, sha):
     if path is None:
         abort(400)
     entries = git_log(path)
-    i = _version_index(entries, sha)
-    content = git_show(sha, _version_path(path, entries, sha))
+    i = version_index(entries, sha)
+    content = git_show(sha, version_path(path, entries, sha))
     restore_sha = sha
     if content is None:
         # Deletion commit — file absent at this SHA; use parent
-        r_par = _git("git", "rev-parse", "--verify", f"{sha}^")
+        r_par = run_git("git", "rev-parse", "--verify", f"{sha}^")
         if r_par.returncode == 0:
             restore_sha = r_par.stdout.strip()
-            content = git_show(restore_sha, _version_path(path, entries, sha))
+            content = git_show(restore_sha, version_path(path, entries, sha))
         if content is None:
             abort(404)
     title = page_title(content, slug)
     page_exists = path.exists()
-    current = _is_current(path, entries)
+    current = is_current(path, entries)
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
         back_link = f'<a href="{url("history", slug)}" class="btn">← History</a>'
@@ -162,7 +162,7 @@ def revision_view(slug, sha):
                if can_restore else "")
     changes = (f'<a href="{url("diff", slug)}/{sha}" class="version-link">What this save changed</a>'
                if i is not None else "")
-    nav = _version_nav(slug, entries, i, current, "revision") if i is not None else ""
+    nav = version_nav(slug, entries, i, current, "revision") if i is not None else ""
     body = f"""{breadcrumb}
 <header class="page-header">
   <h1>{html.escape(title)}</h1>
@@ -191,13 +191,13 @@ def diff_view(slug, sha):
     if path is None:
         abort(400)
     entries = git_log(path)
-    i = _version_index(entries, sha)
+    i = version_index(entries, sha)
     before = [config.WIKI_DIR / entries[i + 1]["path"]] if i is not None and i + 1 < len(entries) else []
-    diff = git_diff(sha, _version_path(path, entries, sha), *before)
+    diff = git_diff(sha, version_path(path, entries, sha), *before)
     if diff is None:
         abort(404)
     title = slug_display_name(slug)
-    diff_html = _diff_to_html(diff)
+    diff_html = diff_to_html(diff)
     page_exists = path.exists()
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
@@ -206,8 +206,8 @@ def diff_view(slug, sha):
     else:
         back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
         breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, url("history", slug)), ('Changes', None))
-    what = html.escape(_version_label(entries[i], entries)) if i is not None else ""
-    nav = _version_nav(slug, entries, i, False, "diff") if i is not None else ""
+    what = html.escape(version_label(entries[i], entries)) if i is not None else ""
+    nav = version_nav(slug, entries, i, False, "diff") if i is not None else ""
     view = (f'<a href="{url("revision", slug)}/{sha}" class="version-link">View this version</a>'
             if i is not None else "")
     body = f"""{breadcrumb}
@@ -233,7 +233,7 @@ def restore_revision(slug, sha):
     path = safe_path(slug)
     if path is None:
         abort(400)
-    content = git_show(sha, _version_path(path, git_log(path), sha))
+    content = git_show(sha, version_path(path, git_log(path), sha))
     if content is None:
         abort(404)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,7 +248,7 @@ def uncommitted_page():
     if not config.GIT_ENABLED:
         abort(404)
 
-    file_list = [f for f in _uncommitted_entries() if not (f["slug"] and hidden_page(f["slug"]))]
+    file_list = [f for f in uncommitted_entries() if not (f["slug"] and hidden_page(f["slug"]))]
     if file_list:
         rows = "".join(
             f'<tr>'
@@ -292,17 +292,17 @@ def diff_uncommitted(slug):
         abort(404)
 
     rel = str(path.relative_to(config.WIKI_DIR))
-    status_r = _git("git", "status", "--porcelain", "--", rel)
+    status_r = run_git("git", "status", "--porcelain", "--", rel)
     if status_r.stdout.startswith("??"):
-        r = _git("git", "diff", "--no-index", "--", "/dev/null", rel)
+        r = run_git("git", "diff", "--no-index", "--", "/dev/null", rel)
     else:
-        r = _git("git", "diff", "--", rel)
+        r = run_git("git", "diff", "--", rel)
     diff = r.stdout or "(no changes)"
 
     content = path.read_text(encoding="utf-8")
     title = page_title(content, slug)
-    diff_html = _diff_to_html(diff)
-    commit_btn = _commit_form_html(rel, title, "/uncommitted")
+    diff_html = diff_to_html(diff)
+    commit_btn = commit_form_html(rel, title, "/uncommitted")
     body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, '/uncommitted'), ('Diff', None))}
 <header class="page-header">
   <h1>Uncommitted Changes — {html.escape(title)}</h1>
@@ -320,7 +320,7 @@ def api_uncommitted():
     """Return list of files with uncommitted changes."""
     return jsonify([
         {"slug": e["slug"], "title": e["title"], "filepath": e["filepath"]}
-        for e in _uncommitted_entries() if not (e["slug"] and hidden_page(e["slug"]))
+        for e in uncommitted_entries() if not (e["slug"] and hidden_page(e["slug"]))
     ])
 
 
@@ -333,7 +333,7 @@ def api_commit_all():
     committed = []
     for f in git_uncommitted_files():
         filepath = f["filepath"]
-        git_commit(config.WIKI_DIR / filepath, _commit_message(filepath))
+        git_commit(config.WIKI_DIR / filepath, commit_message(filepath))
         committed.append(filepath)
     return jsonify({"committed": len(committed), "files": committed})
 
@@ -354,5 +354,5 @@ def api_commit_file():
         return jsonify({"error": "File is not uncommitted"}), 400
 
     # Message policy lives server-side; the client only sends the filepath.
-    git_commit(config.WIKI_DIR / filepath, _commit_message(filepath))
+    git_commit(config.WIKI_DIR / filepath, commit_message(filepath))
     return jsonify({"success": True})

@@ -11,16 +11,16 @@ from flask import g, has_app_context, has_request_context, request
 import config
 import deck as deck_module
 import retrieval
-from mdtext import is_scratch, page_title, page_wikilink, _plain_task_title, SCRATCH_RE
+from mdtext import is_scratch, page_title, page_wikilink, plain_task_title, SCRATCH_RE
 from pages import (
-    deck_home, deck_home_slug, hidden_page, is_protected, iter_pages, page_folders, _page_meta,
+    deck_home, deck_home_slug, hidden_page, is_protected, iter_pages, page_folders, page_meta,
     safe_path, sharing_on, url,
 )
-from gitstore import _git, git_log, relative_time
-from render import _link_list, _task_href
+from gitstore import run_git, git_log, relative_time
+from render import link_list, task_href
 
 
-def _diff_to_html(diff: str) -> str:
+def diff_to_html(diff: str) -> str:
     """Render a unified diff as classed <span> lines for the diff view.
     git's file headers (everything before a file's first @@) say nothing to
     a reader and are left out; a hunk header becomes a quiet "⋯" between
@@ -46,7 +46,7 @@ def _diff_to_html(diff: str) -> str:
     return ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
 
 
-def _commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool = False) -> str:
+def commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool = False) -> str:
     """Commit button form wired up by leaf.js (posts to /api/commit-file).
     `inline` renders it as a link-styled word that sits at the end of the
     page's "Last changed … — uncommitted" line instead of a separate button."""
@@ -195,7 +195,7 @@ def hidden_page_view() -> str:
     return shell("Hidden page", body)
 
 
-def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict],
+def build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list[dict],
                           prefer=()) -> tuple[str, str]:
     """Return (bl_html, bl_chip) for the backlinks sections and the header chip.
     `prefer`: the lists the page declares, for the Linked tasks' links."""
@@ -219,8 +219,8 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
         # A task linking to a section names it after its title (§ Section,
         # linking to the heading).
         tbl_items = "".join(
-            f'<li><a href="{html.escape(_task_href(t["id"], "open", _link_list(t, prefer)))}">'
-            f'{html.escape(_plain_task_title(t["title"]))}</a>'
+            f'<li><a href="{html.escape(task_href(t["id"], "open", link_list(t, prefer)))}">'
+            f'{html.escape(plain_task_title(t["title"]))}</a>'
             + (f' <a class="task-bl-section" href="#{html.escape(t["anchor"])}">§ {html.escape(t["section"])}</a>'
                if t.get("section") else "")
             + '</li>'
@@ -230,7 +230,7 @@ def _build_backlinks_html(slug: str, backlinks: list[dict], task_backlinks: list
     return bl_html, bl_chip
 
 
-def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
+def build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
     """The "Related" section: the pages most similar in meaning (semantic
     search only). Pages already linked either way are left out; the point is
     connections you haven't written down."""
@@ -238,14 +238,14 @@ def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
         return ""
     retrieval.SEMANTIC.poke()
     pages = {s: p for p, s in iter_pages()}
-    _, outgoing = _page_meta(path, slug)
+    _, outgoing = page_meta(path, slug)
     exclude = outgoing | {b["slug"] for b in backlinks}
     related = retrieval.SEMANTIC.related(slug, known=pages, exclude=exclude)
     if not related:
         return ""
     items = "".join(
         f'<li><a href="{url("page", other)}">'
-        f'{html.escape(_page_meta(pages[other], other)[0])}</a></li>'
+        f'{html.escape(page_meta(pages[other], other)[0])}</a></li>'
         for other, _score in related if not hidden_page(other)
     )
     if not items:
@@ -253,7 +253,7 @@ def _build_related_html(slug: str, path: Path, backlinks: list[dict]) -> str:
     return f'<section class="backlinks" id="related"><h3>Related</h3><ul>{items}</ul></section>'
 
 
-def _build_delete_dialog(slug: str, title: str) -> str:
+def build_delete_dialog(slug: str, title: str) -> str:
     """Return delete-confirmation dialog HTML, or empty string for the index page."""
     if is_protected(slug):
         return ""
@@ -275,7 +275,7 @@ def _wiki_pages_datalist() -> str:
     dialogs (the page to link from, the page to append to)."""
     options = "".join(
         f'<option value="{html.escape(s)}">{html.escape(t)}</option>'
-        for s, t in sorted((s, _page_meta(p, s)[0]) for p, s in iter_pages()
+        for s, t in sorted((s, page_meta(p, s)[0]) for p, s in iter_pages()
                            if not is_scratch(s) and not hidden_page(s)))
     return f'<datalist id="wiki-pages">{options}</datalist>'
 
@@ -353,7 +353,7 @@ PAGE_MENU_BTN = ('<button type="button" class="btn page-menu-btn" aria-haspopup=
                  'aria-label="More actions">⋯</button>')
 
 
-def _build_page_menu(slug: str, title: str, rename_error: str = "",
+def build_page_menu(slug: str, title: str, rename_error: str = "",
                      promote_error: str = "", append_error: str = "") -> str:
     """The page view's ⋯ menu (Present, History, Move to wiki… and Append to
     page… for a scratch note, Rename…, Delete…) and the dialogs behind them. It looks like the deck's ⋯ menu (style.css).
@@ -397,7 +397,7 @@ def _build_page_menu(slug: str, title: str, rename_error: str = "",
             f'{"".join(items)}</div>{rename_dialog}')
 
 
-def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
+def build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
     """Return (last_modified_html, commit_btn_html) for the page meta bar.
 
     If git is disabled or the file has no history yet, both strings are empty.
@@ -407,14 +407,14 @@ def _build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
         return "", ""
     filepath = slug + ".md"
     # Single-file status check — much cheaper than scanning the whole tree.
-    r = _git("git", "status", "--porcelain", "--untracked-files=all", "--", filepath)
+    r = run_git("git", "status", "--porcelain", "--untracked-files=all", "--", filepath)
     if r.stdout.strip() and path.exists():
         mtime_dt = datetime.fromtimestamp(path.stat().st_mtime)
         last_modified = (
             f'<div class="page-meta">Last changed {html.escape(mtime_dt.strftime("%Y-%m-%d"))} '
             f'({html.escape(relative_time(mtime_dt))}) — uncommitted</div>'
         )
-        return last_modified, _commit_form_html(filepath, title, "reload", inline=True)
+        return last_modified, commit_form_html(filepath, title, "reload", inline=True)
     entries = git_log(path, max_count=1)
     if entries:
         e = entries[0]
@@ -702,7 +702,7 @@ def shell(title: str, body: str, *, editor: bool = False, action_buttons: bool =
 </html>"""
 
 
-def _index_page(slug: str, title: str, body_inner: str) -> str:
+def index_page(slug: str, title: str, body_inner: str) -> str:
     """Shared shell for the auto-generated index pages (_scratch, _deleted)."""
     body = f"""{build_breadcrumb(slug, title)}
 <header class="page-header"><h1>{html.escape(title)}</h1></header>
@@ -710,7 +710,7 @@ def _index_page(slug: str, title: str, body_inner: str) -> str:
     return shell(title, body)
 
 
-def _notes_list_html(entries: list[dict], empty_msg: str) -> str:
+def notes_list_html(entries: list[dict], empty_msg: str) -> str:
     if not entries:
         return f"<p>{empty_msg}</p>"
     items = "".join(
@@ -732,7 +732,7 @@ _HEADING_RE = re.compile(r'<h([23]) id="([^"]+)">(.*?)</h\1>', re.S)
 RAIL_TOC_MIN_HEADINGS = 3
 
 
-def _rail_toc_html(article_html: str) -> str:
+def rail_toc_html(article_html: str) -> str:
     """The left column: "On this page", the page's [[toc]], or without one
     its ## and ### headings when there are at least RAIL_TOC_MIN_HEADINGS
     (a long page shouldn't need the directive for this). Empty otherwise;
@@ -758,17 +758,17 @@ def _rail_toc_html(article_html: str) -> str:
 _RAIL_TOP = '<a class="rail-top" href="#" hidden>↑ Back to top</a>'
 
 
-def _outlinks_html(slug: str, path: Path) -> str:
+def outlinks_html(slug: str, path: Path) -> str:
     """The right column's "Links to": the existing pages this page links to,
     A–Z by title, so a page nothing links to still shows its connections."""
-    _, targets = _page_meta(path, slug)
+    _, targets = page_meta(path, slug)
     pages = []
     for target in targets - {slug}:
         if hidden_page(target):
             continue
         target_path = safe_path(target)
         if target_path is not None and target_path.exists():
-            pages.append((_page_meta(target_path, target)[0], target))
+            pages.append((page_meta(target_path, target)[0], target))
     if not pages:
         return ""
     items = "".join(f'<li><a href="{url("page", t)}">{html.escape(title)}</a></li>'
@@ -776,13 +776,13 @@ def _outlinks_html(slug: str, path: Path) -> str:
     return f'<section class="backlinks" data-id="outlinks"><h3>Links to</h3><ul>{items}</ul></section>'
 
 
-def _rail_copy(sections_html: str) -> str:
+def rail_copy(sections_html: str) -> str:
     """The right column's copy of Backlinks, Linked tasks and Related, its
     ids moved to data-id: the anchors (#backlinks) belong to the originals."""
     return sections_html.replace('<section class="backlinks" id="', '<section class="backlinks" data-id="')
 
 
-def _paste_hint_html(slug: str, copied: bool) -> str:
+def paste_hint_html(slug: str, copied: bool) -> str:
     """The editor's hint after Move to wiki (`?paste=<slug>`): the moved
     page's link, copied to the clipboard (`copied`) or to copy, for pasting
     where it belongs on this page. Copy and × in leaf.js."""
@@ -805,7 +805,7 @@ def _paste_hint_html(slug: str, copied: bool) -> str:
             f'<button type="button" class="paste-hint-close" aria-label="Close" title="Close">×</button></div>')
 
 
-def _change_counts(e: dict) -> str:
+def change_counts(e: dict) -> str:
     parts = []
     if e["added"]:
         parts.append(f'<span class="hist-add">+{e["added"]}</span>')
@@ -814,7 +814,7 @@ def _change_counts(e: dict) -> str:
     return " ".join(parts)
 
 
-def _version_nav(slug: str, entries: list[dict], i: int, current: bool, kind: str) -> str:
+def version_nav(slug: str, entries: list[dict], i: int, current: bool, kind: str) -> str:
     """← Older · Newer → between versions (kind: "revision" or "diff");
     the newest, when it is the page as it is now, is the page itself."""
     older = (f'<a href="{url(kind, slug)}/{entries[i + 1]["sha"]}" class="btn">← Older</a>'

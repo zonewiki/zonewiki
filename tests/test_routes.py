@@ -1641,17 +1641,17 @@ class TestTaskBacklinks:
 class TestPlainTaskTitle:
 
     def test_plain_text_unchanged(self):
-        assert mdtext._plain_task_title("a < b & c") == "a < b & c"
+        assert mdtext.plain_task_title("a < b & c") == "a < b & c"
 
     def test_wikilink_and_label(self):
-        assert mdtext._plain_task_title("[[My Page]]") == "My Page"
-        assert mdtext._plain_task_title("[[my-page|Label]]") == "Label"
+        assert mdtext.plain_task_title("[[My Page]]") == "My Page"
+        assert mdtext.plain_task_title("[[my-page|Label]]") == "Label"
 
     def test_markdown_page_link(self):
-        assert mdtext._plain_task_title("see [x](/page/foo) now") == "see x now"
+        assert mdtext.plain_task_title("see [x](/page/foo) now") == "see x now"
 
     def test_external_markdown_link_left_as_text(self):
-        assert mdtext._plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
+        assert mdtext.plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
 
 
 # ===========================================================================

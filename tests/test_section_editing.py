@@ -1,9 +1,9 @@
-"""Extensive tests for section editing — split_sections, _splice_section,
+"""Extensive tests for section editing — split_sections, splice_section,
 content_hash, section_char_range, and the /edit and /api/save HTTP routes."""
 
 import textwrap
 
-from mdtext import split_sections, _splice_section, content_hash, section_char_range
+from mdtext import split_sections, splice_section, content_hash, section_char_range
 from tests.conftest import HOST, section_fields, write_page
 
 
@@ -350,7 +350,7 @@ class TestSectionCharRange:
 
 
 # ===========================================================================
-# _splice_section — unit tests
+# splice_section — unit tests
 # ===========================================================================
 
 class TestSpliceSection:
@@ -361,7 +361,7 @@ class TestSpliceSection:
         return p
 
     def _splice(self, path, section_idx, new_content, full_content=None):
-        """Helper: compute hash + range and call _splice_section."""
+        """Helper: compute hash + range and call splice_section."""
         disk_content = path.read_text(encoding="utf-8") if path.exists() else None
         if full_content is None:
             full_content = disk_content
@@ -369,23 +369,23 @@ class TestSpliceSection:
         rng = section_char_range(full_content, section_idx)
         assert rng is not None
         s, e = rng
-        return _splice_section(disk_content, fh, s, e, new_content)
+        return splice_section(disk_content, fh, s, e, new_content)
 
     # ---- validity guards ----
 
     def test_returns_none_for_missing_file(self, tmp_path):
-        assert _splice_section(None, "abc", 0, 10, "content") is None
+        assert splice_section(None, "abc", 0, 10, "content") is None
 
     def test_returns_none_for_wrong_hash(self, tmp_path):
         content = "pre\n\n## A\n\nbody\n"
         self._write(tmp_path, content)
-        assert _splice_section(content, "wrong_hash", 5, 18, "new") is None
+        assert splice_section(content, "wrong_hash", 5, 18, "new") is None
 
     def test_returns_none_for_out_of_bounds_range(self, tmp_path):
         content = "pre\n\n## A\n\nbody\n"
         self._write(tmp_path, content)
         fh = content_hash(content)
-        assert _splice_section(content, fh, 0, len(content) + 10, "new") is None
+        assert splice_section(content, fh, 0, len(content) + 10, "new") is None
 
     # ---- basic correctness ----
 
@@ -505,7 +505,7 @@ class TestSpliceSection:
         # Simulate another edit changing the file
         changed = "pre\n\n## A\n\nSOMEONE ELSE EDITED\n"
         p.write_text(changed, encoding="utf-8")
-        assert _splice_section(changed, fh, s, e, "## A\n\nmy edit\n") is None
+        assert splice_section(changed, fh, s, e, "## A\n\nmy edit\n") is None
 
     # ---- updated anchors returned ----
 
@@ -527,7 +527,7 @@ class TestSpliceSection:
         merged1, h1, s1, e1 = result1
         p.write_text(merged1, encoding="utf-8")
         # Second splice using returned anchors
-        result2 = _splice_section(merged1, h1, s1, e1, "## A\n\nsecond edit\n")
+        result2 = splice_section(merged1, h1, s1, e1, "## A\n\nsecond edit\n")
         assert result2 is not None
         merged2 = result2[0]
         assert "second edit" in merged2

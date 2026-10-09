@@ -131,7 +131,7 @@ class TestLinkedTasks:
 
 class TestTwoLists:
     """A task in two lists links, from a page declaring one of them, to that
-    list rather than to its first list A–Z (render._link_list)."""
+    list rather than to its first list A–Z (render.link_list)."""
 
     def _setup(self, client, wiki_dir):
         write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
