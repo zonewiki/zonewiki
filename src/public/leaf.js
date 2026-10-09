@@ -102,7 +102,7 @@
 
 // ── Side columns: the section being read ─────────────────────────────────────
 // On big screens a page's table of contents is the left column (views.py
-// rail_toc_html); it marks the section whose heading was scrolled past
+// rail_toc_items, templates/partials/page.html); it marks the section whose heading was scrolled past
 // last, and at the end of the page the last one that came into view.
 
 (function () {
@@ -1006,7 +1006,7 @@ async function copyText(text) {
   return ok;
 }
 
-// The editor's hint after Move to wiki (views.paste_hint_html): Copy puts
+// The editor's hint after Move to wiki (views.paste_hint, templates/partials/page.html): Copy puts
 // the link in the clipboard (again), × closes it; either way it is gone
 // from the URL, so a reload doesn't bring it back.
 (function () {

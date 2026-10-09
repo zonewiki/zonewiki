@@ -1,0 +1,40 @@
+{#- A page (server.view_page). From 1320px wide three columns: the page's
+    contents on the left, the page, and what links to it on the right, both
+    sides sticky (style.css, Side columns). The columns are copies of what
+    smaller screens show inline: the [[toc]] box and the sections at the end. -#}
+{% extends "layout.html" %}
+{% import "partials/page.html" as p %}
+{% block body %}
+{{ breadcrumb_html|safe }}{{ delete_dialog_html|safe }}
+<div class="page-grid">
+{{ p.rail_toc(rail_toc_html) }}
+<div class="page-col">
+<header class="page-header">
+  <h1>{{ title }}</h1>
+  <div class="page-header-actions">
+  {% if from_uncommitted %}
+    {{ p.commit_form(slug ~ ".md", title, "/uncommitted") }}
+    <a href="/uncommitted" class="btn">← Uncommitted</a>
+  {% else %}
+    <a href="{{ url('edit', slug) }}" class="btn">Edit</a>
+    {{ p.menu_button() }}
+  {% endif %}
+  </div>
+</header>
+{{ meta_row_html|safe }}
+<article class="page-content">
+  {{ article_html|safe }}
+</article>
+<div class="page-foot">{{ p.link_sections(link_sections) }}</div>
+</div>
+<aside class="rail rail-context" aria-label="Links">
+{%- if not from_uncommitted %}
+{#- The page's actions again, shown once the header has scrolled away (leaf.js). #}
+<div class="rail-actions" hidden><a href="{{ url('edit', slug) }}" class="btn">Edit</a>{{ p.menu_button() }}</div>
+{%- endif %}
+{{- p.link_sections(link_sections, copy=true) }}
+{%- if outlinks %}{{ p.link_section("outlinks", "Links to", outlinks, copy=true) }}{% endif -%}
+</aside>
+</div>
+{%- if menu %}{{ p.page_menu(menu) }}{% endif %}
+{% endblock %}

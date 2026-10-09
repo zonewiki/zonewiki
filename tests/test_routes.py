@@ -1,6 +1,7 @@
 """Tests for Leaf HTTP routes — page view/edit/save, search, upload, auth,
 rename with reference updates, conflict detection, and API endpoints."""
 
+import html
 import json
 import os
 import re
@@ -701,7 +702,7 @@ class TestRenamePage:
         assert resp.headers["Location"].startswith("/page/page-a?rename_error=")
         body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
         assert '<dialog id="page-rename-dialog" class="scratch-modal" data-open>' in body
-        assert 'A page named &quot;page-b&quot; already exists' in body
+        assert 'A page named "page-b" already exists' in html.unescape(body)
         resp = client.post("/rename/page-a", data={"new_name": "page-a", "from": "page"}, headers=HOST)
         assert resp.headers["Location"] == "/page/page-a"
         resp = client.post("/rename/page-a", data={"new_name": "page-c", "from": "page"}, headers=HOST)

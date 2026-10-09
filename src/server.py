@@ -40,11 +40,10 @@ from render import (
 from retrieval import (
     do_search, SCRATCH_FILTER_LIMIT, SEARCH_LIMIT, SEARCH_MAX_LIMIT, SEARCH_PAGE_LIMIT,
 )
+import views
 from views import (
-    build_backlinks_html, build_breadcrumb, build_delete_dialog, build_page_menu,
-    build_page_meta, build_related_html, commit_form_html, FORMAT_BAR, hidden_page_view,
-    home_link, index_page, notes_list_html, outlinks_html, PAGE_MENU_BTN, paste_hint_html,
-    rail_copy, rail_toc_html, shell,
+    build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view,
+    home_link, index_page, notes_list_html, shell,
 )
 from mcp_tools import mcp_call_tool
 
@@ -296,26 +295,19 @@ def view_page(slug):
         return hidden_page_view()
 
     if not path.exists():
-        # Show a restore prompt if the page was deleted from git history
+        # A page deleted in git history offers to come back.
         if config.GIT_ENABLED:
             rel = slug + ".md"
             r = run_git("git", "log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
             if r.returncode == 0 and r.stdout.strip():
                 parts = r.stdout.strip().split('\t', 2)
                 parent_sha = parts[1].split()[0] if len(parts) > 1 and parts[1].strip() else None
-                del_date = parts[2] if len(parts) > 2 else ''
                 if parent_sha:
                     r2 = run_git("git", "show", f"{parent_sha}:{rel}")
                     title = page_title(r2.stdout, slug) if r2.returncode == 0 else slug_display_name(slug)
-                    body = f"""{build_breadcrumb(slug, title)}
-<header class="page-header"><h1>{html.escape(title)}</h1></header>
-<article class="page-content">
-<p>This page was deleted on {html.escape(del_date)}.</p>
-<form method="post" action="{url("restore", slug)}/{html.escape(parent_sha)}">
-  <button type="submit" class="btn">Restore page</button>
-</form>
-</article>"""
-                    return shell(title, body)
+                    return views.page("deleted_page.html", title, slug=slug, sha=parent_sha,
+                                      date=parts[2] if len(parts) > 2 else "",
+                                      breadcrumb_html=build_breadcrumb(slug, title))
         return redirect(url("edit", slug))
 
     content = path.read_text(encoding="utf-8")
@@ -331,79 +323,34 @@ def view_page(slug):
         if t.get("anchor") in heading_names:
             t["section"] = heading_names[t["anchor"]]
     page_lists = [name for name, _ in page_deck_lists(content)]
-    bl_html, bl_chip = build_backlinks_html(slug, backlinks, task_backlinks, page_lists)
-    bl_html += build_related_html(slug, path, backlinks)
-    delete_dialog = build_delete_dialog(slug, title)
-    _qs = ('?' + request.query_string.decode()) if request.query_string else ''
+    sections = views.link_sections(backlinks, task_backlinks, page_lists)
+    if related := views.related_section(slug, path, backlinks):
+        sections.append(related)
+    chip = views.backlinks_chip(backlinks)
 
-    from_uncommitted = request.args.get('from') == 'uncommitted' and config.GIT_ENABLED
+    # Viewing a page from the uncommitted-changes list: Commit instead of Edit.
+    from_uncommitted = request.args.get("from") == "uncommitted" and config.GIT_ENABLED
     if from_uncommitted:
-        # Viewing a page from the uncommitted-changes list: show commit button
-        breadcrumb = build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, None), right_html=bl_chip)
-        actions = (
-            f'{commit_form_html(slug + ".md", title, "/uncommitted")}\n'
-            f'    <a href="/uncommitted" class="btn">← Uncommitted</a>'
-        )
-        page_meta_html = ""
+        breadcrumb = build_breadcrumb("uncommitted", "Uncommitted Changes", (title, None), right_html=chip)
         article_html = render_md(strip_h1(content))
-        rail_actions = page_menu = ""
+        meta_row_html, menu = "", None
     else:
-        breadcrumb = build_breadcrumb(slug, title, right_html=bl_chip, query_string=_qs)
-        # Edit, and the rarer actions in a ⋯ menu (build_page_menu).
-        actions = f'<a href="{url("edit", slug)}" class="btn">Edit</a>\n    {PAGE_MENU_BTN}'
-        page_menu = build_page_menu(slug, title, request.args.get("rename_error", ""),
-                                     request.args.get("promote_error", ""),
-                                     request.args.get("append_error", ""))
-        # The same, at the top of the right column on big screens, shown
-        # once the header has scrolled away (leaf.js).
-        rail_actions = (
-            f'<div class="rail-actions" hidden>'
-            f'<a href="{url("edit", slug)}" class="btn">Edit</a>{PAGE_MENU_BTN}</div>')
-        last_modified, meta_commit_btn = build_page_meta(slug, path, title)
+        qs = ("?" + request.query_string.decode()) if request.query_string else ""
+        breadcrumb = build_breadcrumb(slug, title, right_html=chip, query_string=qs)
+        menu = views.page_menu(slug, title, request.args.get("rename_error", ""),
+                               request.args.get("promote_error", ""), request.args.get("append_error", ""))
+        changed, commit = views.last_changed(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
-        tags_html = render_tags_pills_html(fm_meta.get('tags', []))
-        # The tldr toggle is a checkbox rendered *before* the meta row with its
-        # label inside it, and the text as a sibling *after* it. Keeping the
-        # three as siblings (rather than a <details> wrapper) is what lets the
-        # label stay put on the tags line while the expanded text takes its own
-        # full-width line below — CSS-only, no overlay, no JS.
-        tldr_text = fm_meta.get('tldr', '')
-        if tldr_text:
-            tldr_checkbox = '<input type="checkbox" id="tldr-toggle" class="tldr-toggle">'
-            tldr_label = '<label class="tldr-label" for="tldr-toggle">tldr</label>'
-            tldr_body = f'<p class="page-tldr">{html.escape(tldr_text)}</p>'
-        else:
-            tldr_checkbox = tldr_label = tldr_body = ''
-        page_meta_html = (
-            f'{tldr_checkbox}'
-            f'<div class="page-meta-wrapper">'
-            f'<div class="page-meta-left">{tags_html}{tldr_label}</div>'
-            f'<div class="page-meta-right">{last_modified}{meta_commit_btn}</div>'
-            f'</div>'
-            f'{tldr_body}'
-            if last_modified or meta_commit_btn or tags_html or tldr_text else ""
-        )
+        meta_row_html = views.macro("partials/page.html", "meta_row")(
+            render_tags_pills_html(fm_meta.get("tags", [])), fm_meta.get("tldr", ""), changed, commit)
         article_html = render_md(strip_h1(content), show_tags=False, show_tldr=False,
                                  edit_slug=slug, section_tasks=task_backlinks)
-
-    body = f"""{breadcrumb}{delete_dialog}
-<div class="page-grid">
-{rail_toc_html(article_html)}<div class="page-col">
-<header class="page-header">
-  <h1>{html.escape(title)}</h1>
-  <div class="page-header-actions">
-    {actions}
-  </div>
-</header>
-{page_meta_html}
-<article class="page-content">
-  {article_html}
-</article>
-<div class="page-foot">{bl_html}</div>
-</div>
-<aside class="rail rail-context" aria-label="Links">{rail_actions}{rail_copy(bl_html)}{outlinks_html(slug, path)}</aside>
-</div>{page_menu}"""
-    return shell(title, body, wide=True)
+    return views.page(
+        "view.html", title, wide=True, slug=slug, from_uncommitted=from_uncommitted,
+        breadcrumb_html=breadcrumb, delete_dialog_html=build_delete_dialog(slug, title),
+        rail_toc_html=views.rail_toc_items(article_html), meta_row_html=meta_row_html,
+        article_html=article_html, link_sections=sections, outlinks=views.outlinks(slug, path),
+        menu=menu)
 
 
 @app.get("/edit/<path:slug>")
@@ -435,77 +382,17 @@ def edit_page(slug):
         else:
             section = None  # invalid index, fall back to full edit
 
-    safe_content = html.escape(content)
-    safe_slug = html.escape(slug)
-    safe_title = html.escape(title)
-    can_rename = not is_protected(slug)
-    can_delete = not is_protected(slug) and not is_new
-    rename_btn = '<button type="button" class="btn" id="rename-toggle">Rename…</button>' if can_rename and not is_new and section is None else ""
-    delete_btn = f'<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{safe_title}" data-git="{"1" if config.GIT_ENABLED else ""}">Delete</button>' if can_delete and section is None else ""
-    # Phones: Rename/Delete fold into a ⋯ menu so Preview and Done keep the
-    # toolbar; on wider screens .editor-more is display:contents (inline).
-    more_btn = ('<button type="button" class="btn mobile-only" id="editor-more-btn" aria-haspopup="true" '
-                'aria-expanded="false" aria-controls="editor-more" title="More actions">⋯</button>'
-                if rename_btn or delete_btn else "")
-    delete_form = f'<form id="delete-form" method="post" action="{url("delete", slug)}" style="display:none"></form>' if can_delete and section is None else ""
-    rename_error = request.args.get("rename_error", "")
-    rename_error_html = f'<span class="rename-error">{html.escape(rename_error)}</span>' if rename_error else ""
-    rename_bar = f"""<div class="rename-bar{' hidden' if not rename_error else ''}" id="rename-bar">
-    <form method="post" action="{url("rename", slug)}" class="rename-form">
-      <label>New name</label>
-      <input type="text" name="new_name" id="rename-input" value="{safe_slug}" autocomplete="off">
-      <button type="submit" class="btn btn-primary">Rename</button>
-      <button type="button" class="btn" id="rename-cancel">Cancel</button>
-      {rename_error_html}
-    </form>
-  </div>""" if can_rename and not is_new and section is None else ""
-    paste_hint = paste_hint_html(request.args.get("paste", ""),
-                                  request.args.get("copied") == "1")
-    form_action = url("edit", slug)
-    # Always embed file_hash for conflict detection (full-file and section edits).
-    # For a full-file edit, `content` still holds the full file text.
-    if not is_new:
-        full_file_hash = content_hash(content) if section is None else file_hash_val
-    else:
-        full_file_hash = ""
-    section_hidden_fields = f'<input type="hidden" name="file_hash" id="section-file-hash" value="{full_file_hash}">'
-    if section is not None:
-        section_hidden_fields += (
-            f'<input type="hidden" name="start_char" id="section-start-char" value="{start_char}">'
-            f'<input type="hidden" name="end_char" id="section-end-char" value="{end_char}">'
-            f'<input type="hidden" name="section_idx" id="section-idx" value="{section}">'
-        )
-    breadcrumb_extra = (f'§ {section}', None) if section is not None else ('Edit', None)
-    body = f"""<div class="editor-wrap">
-  <div class="editor-pane">
-    {build_breadcrumb(slug, title, breadcrumb_extra)}
-    <div class="editor-toolbar">
-      <span class="slug-label" title="{safe_slug}">{safe_slug}</span>
-      <span id="save-dot" class="save-dot">●</span>
-      <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
-      <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
-      {more_btn}
-      <span class="editor-more" id="editor-more">{rename_btn}{delete_btn}</span>
-    </div>
-    {delete_form}
-    {rename_bar}
-    {paste_hint}
-    {FORMAT_BAR}
-    <form id="editor-form" method="post" action="{form_action}">
-      {section_hidden_fields}
-      <textarea id="editor-textarea" name="content" data-new="{'1' if is_new else ''}"
-                spellcheck="false" autocorrect="off" autocapitalize="off">{safe_content}</textarea>
-    </form>
-  </div>
-  <div class="preview-pane">
-    <p class="pane-label">Preview</p>
-    <div id="editor-preview" class="page-content"></div>
-  </div>
-</div>"""
-    # A hidden deck app: Make task (leaf.js) opens its edit modal, and uses
-    # the deck's quick-add parser (deck-core.js) for several lines at once.
-    body += deck.build_deck_embed({}, headless=True)
-    return shell(f"Edit — {title}", body, editor=True)
+    editable = not is_new and section is None   # a whole existing page
+    return views.page(
+        "edit.html", f"Edit — {title}", editor=True, slug=slug, page_title=title, content=content,
+        is_new=is_new, section=section, start_char=start_char, end_char=end_char,
+        # The file's hash for conflict detection, whole page or section edit.
+        file_hash="" if is_new else file_hash_val if section is not None else content_hash(content),
+        can_rename=editable and not is_protected(slug), can_delete=editable and not is_protected(slug),
+        git=config.GIT_ENABLED, rename_error=request.args.get("rename_error", ""),
+        paste=views.paste_hint(request.args.get("paste", ""), request.args.get("copied") == "1"),
+        breadcrumb_html=build_breadcrumb(slug, title, (f"§ {section}", None) if section is not None else ("Edit", None)),
+        format_bar_html=FORMAT_BAR, deck_html=deck.build_deck_embed({}, headless=True))
 
 
 def _posted_content() -> str:
