@@ -354,12 +354,13 @@ def test_edit_modal_is_compact_on_phone(phone):
 # Phones never fire HTML5 drag events; a long press picks the card up instead.
 # Playwright has no touch-move API, so the gestures go through CDP.
 
-def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True):
-    """Long-press the centre of `source`, move to the centre of `target`, lift."""
+def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True, at=0.5):
+    """Long-press the centre of `source`, move to `target` (`at`: how far down
+    it, 0.25 its upper half, 0.75 its lower one), lift."""
     cdp = page.context.new_cdp_session(page)
     s, t = source.bounding_box(), target.bounding_box()
     x0, y0 = s["x"] + s["width"] / 2, s["y"] + s["height"] / 2
-    x1, y1 = t["x"] + t["width"] / 2, t["y"] + t["height"] / 2
+    x1, y1 = t["x"] + t["width"] / 2, t["y"] + t["height"] * at
 
     def send(kind, points):
         cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
@@ -402,10 +403,11 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/page/deck?view=open")
     open_tab(pg, "open")
-    send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False)
-    # Mid-drag: a floating copy follows the finger, the target is marked.
+    send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False, at=0.25)
+    # Mid-drag: a floating copy follows the finger, a line marks where it
+    # lands (above One: the finger is on its upper half).
     expect(pg.locator(".task-touch-ghost")).to_have_count(1)
-    expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drag-over\b"))
+    expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drop-before\b"))
     send("touchEnd", [])
     expect(pg.locator(".task-item .task-title")).to_have_text(["Three", "One", "Two"])
     wait_until(pg, lambda: [t["title"] for t in sorted(
@@ -445,7 +447,7 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     open_tab(pg, "open")
     one = card(pg, "One")
     assert one.evaluate("el => el.draggable")
-    send = touch_drag(pg, card(pg, "Two"), one, release=False)
+    send = touch_drag(pg, card(pg, "Two"), one, release=False, at=0.25)
     assert not pg.locator("#tasks-list .task-dragging").evaluate("el => el.draggable")
     # Picking a card up selects it (visible feedback, as with a mouse press);
     # the carried copy shows the selection too.

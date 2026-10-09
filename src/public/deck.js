@@ -246,15 +246,30 @@ function setSwipe(dx) {
   }
   item.classList.toggle('task-swipe-armed', !!action && Math.abs(dx) >= threshold);
 }
+// A drop on a card in a sorted list (Open, Focus) lands where the pointer
+// is: above the card on its upper half, below it on the lower half. A line
+// shows it while dragging (.task-drop-before / -after).
+function dropSide(item, y) {
+  const r = item.getBoundingClientRect();
+  return y < r.top + r.height / 2 ? 'before' : 'after';
+}
+const DROP_CLASSES = ['task-drag-over', 'board-drop-over', 'task-drop-before', 'task-drop-after'];
+
 function touchDropTarget(x, y) {
   const el = document.elementFromPoint(x, y);
   return el && listEl.contains(el) && touchDrop ? touchDrop.target(el) : null;
 }
 function setTouchTarget(target) {
-  if (target === touchDrag.target) return;
-  touchDrag.target?.classList.remove('task-drag-over', 'board-drop-over');
+  // In a sorted list the side of the card under the finger matters too.
+  const side = target && touchDrop?.sided && target.classList.contains('task-item')
+    ? dropSide(target, touchDrag.y) : null;
+  if (target === touchDrag.target && side === touchDrag.side) return;
+  touchDrag.target?.classList.remove(...DROP_CLASSES);
   touchDrag.target = target;
-  target?.classList.add(target.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over');
+  touchDrag.side = side;
+  if (!target) return;
+  target.classList.add(side ? `task-drop-${side}`
+    : target.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over');
 }
 function startTouchDrag() {
   const t = touchDrag, rect = t.item.getBoundingClientRect();
@@ -308,8 +323,8 @@ function endTouchDrag(drop) {
   t.ghost.remove();
   t.item.classList.remove('task-dragging');
   const target = t.target;
-  target?.classList.remove('task-drag-over', 'board-drop-over');
-  if (drop && target && touchDrop) touchDrop.drop(target);
+  target?.classList.remove(...DROP_CLASSES);
+  if (drop && target && touchDrop) touchDrop.drop(target, t.side);
   draggedId = null;
 }
 listEl.addEventListener('touchstart', e => {
@@ -1130,15 +1145,15 @@ function applySectionList(list, moved) {
   postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
   render();
 }
-// Drop `draggedId` on a task or a section heading (`key`): it takes the
-// target's slot, so a move down lands after the task dropped on and a move
-// up before it. That holds for a task entering Sorted from Unsorted too
-// (a move down); dropping on the Sorted heading puts it first.
-function sectionDrop(key) {
+// Drop `draggedId` on a task (`key`, `side`: before or after it, by the
+// pointer, dropSide) or on a section heading (no side: it takes the
+// heading's slot, so dropping on the Sorted heading puts it first there).
+function sectionDrop(key, side) {
   const list = sectionList();
-  const from = list.indexOf(draggedId), to = list.indexOf(key);
-  if (from === -1 || to === -1 || from === to) return;
+  const from = list.indexOf(draggedId), at = list.indexOf(key);
+  if (from === -1 || at === -1 || from === at) return;
   list.splice(from, 1);
+  const to = side ? list.indexOf(key) + (side === 'after' ? 1 : 0) : at;
   list.splice(to, 0, draggedId);
   applySectionList(list, [draggedId]);
 }
@@ -2764,24 +2779,25 @@ function setupBoardDragAndDrop() {
 
 const DIVIDER_TARGETS = '.list-section';
 function setupDragAndDrop() {
-  function executeDrop(targetId) {
+  function executeDrop(targetId, side) {
     if (!draggedId || targetId === draggedId) return;
-    sectionDrop(targetId);
+    sectionDrop(targetId, side);
   }
   const dropOnDivider = div => executeDrop(sectionKey(div.dataset.section));
   touchDrop = {
+    sided: true,
     target: el => {
       const item = el.closest('.task-item[data-drag]');
       if (item) return item.dataset.id === draggedId ? null : item;
       return el.closest(DIVIDER_TARGETS);
     },
-    drop: target => target.classList.contains('task-item')
-      ? executeDrop(target.dataset.id) : dropOnDivider(target),
+    drop: (target, side) => target.classList.contains('task-item')
+      ? executeDrop(target.dataset.id, side) : dropOnDivider(target),
   };
 
   const items = listEl.querySelectorAll('.task-item[data-drag]');
-  const clearDropOver = () => listEl.querySelectorAll('.task-drag-over, .board-drop-over')
-    .forEach(el => el.classList.remove('task-drag-over', 'board-drop-over'));
+  const clearDropOver = () => listEl.querySelectorAll(DROP_CLASSES.map(c => '.' + c).join(', '))
+    .forEach(el => el.classList.remove(...DROP_CLASSES));
   items.forEach(item => {
     item.addEventListener('dragstart', e => {
       if (lastPointerType === 'touch') { e.preventDefault(); return; }
@@ -2797,17 +2813,18 @@ function setupDragAndDrop() {
     item.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id !== draggedId) {
-        item.classList.add('task-drag-over');
-      }
+      if (item.dataset.id === draggedId) return;
+      const side = dropSide(item, e.clientY);
+      item.classList.toggle('task-drop-before', side === 'before');
+      item.classList.toggle('task-drop-after', side === 'after');
     });
     item.addEventListener('dragleave', () => {
-      item.classList.remove('task-drag-over');
+      item.classList.remove('task-drop-before', 'task-drop-after');
     });
     item.addEventListener('drop', e => {
       e.preventDefault();
-      item.classList.remove('task-drag-over');
-      executeDrop(item.dataset.id);
+      item.classList.remove('task-drop-before', 'task-drop-after');
+      executeDrop(item.dataset.id, dropSide(item, e.clientY));
     });
   });
 

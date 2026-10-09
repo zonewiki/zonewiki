@@ -794,15 +794,15 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
     expect(_focus_titles(page)).to_have_text(["Butter", "Apples", "Cheese", "Eggs"])
     assert task_by_title(page, "Butter")["start_date"] == today
 
-    # Onto Apples from Unsorted (a move down): after it, so right after
-    # Apples in the shop, before Bread, which Focus doesn't show.
-    card(page, "Butter").drag_to(card(page, "Apples"))
+    # Onto Apples' lower half: after it, so right after Apples in the shop,
+    # before Bread, which Focus doesn't show.
+    _drop(card(page, "Butter"), card(page, "Apples"), "after")
     expect(_focus_titles(page)).to_have_text(["Apples", "Butter", "Cheese", "Eggs"])
     wait_until(lambda: _by_order(page, "sort_order") ==
                ["Apples", "Butter", "Bread", "Cheese", "Dates", "Eggs"])
 
-    # Moving to the top: right before the first item, hidden ones stay put.
-    card(page, "Eggs").drag_to(card(page, "Apples"))
+    # Moving to the top: Apples' upper half, right before it; hidden ones stay put.
+    _drop(card(page, "Eggs"), card(page, "Apples"), "before")
     expect(_focus_titles(page)).to_have_text(["Eggs", "Apples", "Butter", "Cheese"])
     wait_until(lambda: _by_order(page, "sort_order") ==
                ["Eggs", "Apples", "Butter", "Bread", "Cheese", "Dates"])
@@ -1009,6 +1009,13 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
     expect(page.locator("#task-edit-inbox")).to_have_count(0)
 
 
+def _drop(source, target, side):
+    """Drag source onto target's upper (side "before") or lower half ("after")."""
+    box = target.bounding_box()
+    source.drag_to(target, target_position={"x": box["width"] / 2,
+                                            "y": box["height"] * (0.25 if side == "before" else 0.75)})
+
+
 def test_open_drag_between_unsorted_and_sorted(page, wiki):
     page.set_viewport_size({"width": 1000, "height": 1200})
     ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
@@ -1020,10 +1027,8 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     # Within Unsorted nothing moves (newest first).
     card(page, "Two").drag_to(card(page, "One"))
     assert _open_titles(page, "unsorted") == ["Two", "One"]
-    # Onto a sorted task: a move down, so it lands after it, as any move down
-    # does. (It once landed before, and dragging it down again onto the same
-    # task then put it after: two drops, two results.)
-    card(page, "One").drag_to(card(page, "Alpha"))
+    # Onto a sorted task: where the pointer is, here its lower half, so after it.
+    _drop(card(page, "One"), card(page, "Alpha"), "after")
     wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
     wait_for_field(page, "One", "sort_order", 1)
     assert task_by_title(page, "Two")["sort_order"] is None
@@ -1041,6 +1046,26 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     assert [t["title"] for t in sorted(
         (t for t in page.request.get("/api/deck").json() if t["sort_order"] is not None),
         key=lambda t: t["sort_order"])] == ["Two", "One"]
+
+
+def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
+    # Regression: a task from Unsorted landed after the task dropped on,
+    # one from within Sorted (moving up) before it. Now the pointer decides,
+    # the same from either section: upper half before, lower half after.
+    page.set_viewport_size({"width": 1000, "height": 1200})
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.request.post("/api/deck", data={"title": "New"})
+    page.goto("/deck?view=open")
+    _drop(card(page, "New"), card(page, "Bravo"), "before")          # from Unsorted
+    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Bravo", "Charlie"])
+    _drop(card(page, "Charlie"), card(page, "Alpha"), "before")      # within Sorted, up
+    wait_until(lambda: _open_titles(page, "sorted") == ["Charlie", "Alpha", "New", "Bravo"])
+    _drop(card(page, "Charlie"), card(page, "New"), "after")         # within Sorted, down
+    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Charlie", "Bravo"])
+    _drop(card(page, "Bravo"), card(page, "Alpha"), "after")         # within Sorted, up
+    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "Bravo", "New", "Charlie"])
+    wait_until(lambda: _by_order(page, "sort_order") == ["Alpha", "Bravo", "New", "Charlie"])
 
 
 def test_open_keyboard_crosses_the_sections(page, wiki):
