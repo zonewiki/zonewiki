@@ -5,6 +5,8 @@ import html
 import json
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1938,9 +1940,28 @@ class TestVersion:
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "· &lt;b&gt;</p>" in body
 
+    @staticmethod
+    def _start(wiki: Path) -> subprocess.CompletedProcess:
+        """Import Leaf in a fresh Python with WIKI_DATA=wiki."""
+        src = Path(__file__).resolve().parent.parent / "src"
+        return subprocess.run([sys.executable, "-c", "import server"], cwd=src, capture_output=True,
+                              text=True, env={**os.environ, "WIKI_DATA": str(wiki)}, timeout=60)
+
+    def test_refuses_a_missing_wiki_folder(self, tmp_path):
+        # Leaf never makes the wiki itself, so a mistyped WIKI_DATA can't
+        # start an empty wiki somewhere else.
+        r = self._start(tmp_path / "nowhere")
+        assert r.returncode != 0
+        assert f"no wiki at {tmp_path / 'nowhere'}" in r.stderr
+        assert not (tmp_path / "nowhere").exists()
+
+    def test_starts_with_an_empty_wiki_folder(self, tmp_path):
+        r = self._start(tmp_path)
+        assert r.returncode == 0, r.stderr
+        assert (tmp_path / "index.md").exists() and (tmp_path / "_assets").is_dir()
+
     @pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
     def test_source_build_from_git(self, tmp_path):
-        import subprocess
         def git(*args):
             subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
                             *args], check=True, capture_output=True, env=gitstore._GIT_ENV)

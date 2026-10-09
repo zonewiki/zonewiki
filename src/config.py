@@ -5,6 +5,7 @@ so a test can point Leaf at another wiki by patching them here."""
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -65,10 +66,12 @@ def _parse_noshare(spec: str) -> tuple[frozenset[str], tuple[str, ...]]:
 # Empty counts as unset (run.sh passes unset settings as empty strings).
 NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or "#noshare")
 
-# The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/).
+# The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/). It
+# must exist: Leaf doesn't make a wiki where a mistyped WIKI_DATA points.
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
+if not WIKI_DIR.is_dir():
+    sys.exit(f"Leaf: no wiki at {WIKI_DIR}. Create the folder, or set WIKI_DATA to your wiki.")
 UPLOADS_DIR = WIKI_DIR / "_assets"
-WIKI_DIR.mkdir(parents=True, exist_ok=True)
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(exist_ok=True)
 
 GIT_ENABLED = shutil.which("git") is not None

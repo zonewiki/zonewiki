@@ -128,7 +128,7 @@ Leaf's version is a semver constant, `VERSION` in `config.py`, bumped by hand. N
 
 ### Data directory
 
-Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before creating directories and starting the container:
+Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Leaf creates it (`config.py` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Leaf uses `$WIKI_DATA`, else `src/data`, which must exist too. In an existing wiki folder Leaf creates what it needs (`_assets/`, `_deck/`, `index.md`):
 
 ```
 WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
@@ -711,7 +711,7 @@ A separate list is a tag that a page declares with `[[deck list=<tag>]]`: a high
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Create and activate virtualenv
 pip install -r src/requirements.txt                  # Install dependencies
-python src/server.py                                 # Start server on http://localhost:5000
+WIKI_DATA=~/leaf python src/server.py               # Start server on http://localhost:5000 (the folder must exist)
 flask --app src/server.py run --debug                # Auto-reload during development
 ```
 

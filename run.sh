@@ -16,8 +16,6 @@ case "$WIKI_DATA" in
     ;;
 esac
 
-# Ensure subdirs exist on the host before the container creates them
-mkdir -p "$WIKI_DATA" "$WIKI_DATA/_assets"
 
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
@@ -87,6 +85,11 @@ case "${1:-up}" in
     podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
     ;;
   up)
+    # The wiki must exist: Leaf doesn't make one where a typo in .env points.
+    if [[ ! -d "$WIKI_DATA" ]]; then
+      echo "No wiki at $WIKI_DATA. Create the folder, or set WIKI_DATA in .env to your wiki." >&2
+      exit 1
+    fi
     podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
     # k8s-file (docker's json-file equivalent) so `podman logs -f` works even
     # when the podman default log driver is journald (logs -f is unsupported).
