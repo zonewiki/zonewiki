@@ -26,7 +26,7 @@ compose() {
          "(podman-compose or docker-compose)." >&2
     exit 1
   fi
-  $ENGINE compose "$@"
+  $ENGINE compose "${COMPOSE_FILES[@]}" "$@"
 }
 
 # The wiki folder from .env, default ~/leaf, with ~ expanded (compose would
@@ -49,14 +49,16 @@ else
 fi
 
 # The user Leaf runs as (compose.yaml), so the files it writes are the host
-# user's. Rootless podman/docker map the container's root to the host user
-# (any other UID would be a subordinate one there): 0. Otherwise the host
-# user's own IDs.
-if [[ "$(id -u)" -ne 0 ]] && { [[ $ENGINE == podman ]] ||
-     $ENGINE info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; }; then
+# user's: your own IDs. Rootless podman maps them into the container as they
+# are (keep-id, compose.podman.yaml). Rootless docker can't: there the
+# container's root is you, and any other UID would be a subordinate one.
+export LEAF_UID="$(id -u)" LEAF_GID="$(id -g)"
+COMPOSE_FILES=(-f compose.yaml)
+if [[ $ENGINE == podman && "$(id -u)" -ne 0 ]]; then
+  COMPOSE_FILES+=(-f compose.podman.yaml)
+elif [[ $ENGINE == docker && "$(id -u)" -ne 0 ]] &&
+     docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; then
   export LEAF_UID=0 LEAF_GID=0
-else
-  export LEAF_UID="$(id -u)" LEAF_GID="$(id -g)"
 fi
 
 # The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with

@@ -24,8 +24,8 @@ services:
     image: leaf
     container_name: leaf
     # Not root: Leaf runs as the host user, so the files it writes in the wiki
-    # are theirs. run.sh sets it: your id -u/-g, or 0 with rootless podman or
-    # docker, where the container's root is your own unprivileged user. Used
+    # are theirs. run.sh sets your id -u/-g (with rootless podman plus
+    # compose.podman.yaml's keep-id, which maps them in unchanged). Used
     # directly, set LEAF_UID/LEAF_GID in .env if yours aren't 1000.
     user: "${LEAF_UID:-1000}:${LEAF_GID:-1000}"
     # A minimal init as PID 1 reaps orphaned processes (Leaf as PID 1
