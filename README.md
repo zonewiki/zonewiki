@@ -52,8 +52,9 @@ in git. No database, no build step, no cloud.
   home screen) and in light and dark mode.
 
 **For AI assistants**
-- An [MCP](https://modelcontextprotocol.io) server at `/mcp`: any MCP client can search your notes and tasks and read
-  pages (read-only), with links back into Leaf.
+- An [MCP](https://modelcontextprotocol.io) server at `/mcp`: any MCP client can search your notes and tasks, read
+  pages, and write: create and edit pages, rename and delete them, add and
+  update tasks. Every write is a git commit, with links back into Leaf.
 
 ## Quick start
 

@@ -62,8 +62,15 @@ class TestHandle:
     def test_tools_list(self):
         r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, _no_tools, "x")
         tools = r["result"]["tools"]
-        assert [t["name"] for t in tools] == ["search_wiki", "search_tasks", "read_page", "list_pages"]
-        assert all(t["annotations"]["readOnlyHint"] for t in tools)
+        assert [t["name"] for t in tools] == [
+            "search_wiki", "search_tasks", "read_page", "list_pages",
+            "write_page", "edit_page", "append_to_page", "rename_page", "delete_page",
+            "create_task", "update_task", "comment_task", "delete_task"]
+        reading = {"search_wiki", "search_tasks", "read_page", "list_pages"}
+        assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
+        adding = {"append_to_page", "create_task", "comment_task"}
+        assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
+                   for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
 
     def test_unknown_method(self):
@@ -517,3 +524,287 @@ class TestTaskComments:
         assert not err
         assert "the notes\n\nComments:\n- " in text
         assert re.search(r"- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: asked alex: 6 people", text)
+
+
+# ── Writing pages ────────────────────────────────────────────────────────────
+
+class TestWritePage:
+    def test_creates_a_page(self, client, wiki_dir):
+        text, err = call(client, "write_page", slug="Tickets/BUG 1234", content="# BUG-1234\n\nCrash on start.")
+        assert not err
+        assert text.startswith("Created page tickets/bug-1234.")
+        assert "url: http://localhost:5000/page/tickets/bug-1234" in text
+        assert f"file: {wiki_dir.resolve()}/tickets/bug-1234.md" in text
+        assert (wiki_dir / "tickets" / "bug-1234.md").read_text() == "# BUG-1234\n\nCrash on start.\n"
+
+    def test_refuses_an_existing_page_without_overwrite(self, client, pages):
+        text, err = call(client, "write_page", slug="golf", content="# Golf\n\nnew")
+        assert err and "already exists" in text and "edit_page" in text
+        assert "Werkstatt" in (pages / "golf.md").read_text()
+
+    def test_overwrite_replaces_the_page(self, client, pages):
+        text, err = call(client, "write_page", slug="golf", content="# Golf\n\nnew", overwrite=True)
+        assert not err and text.startswith("Replaced page golf.")
+        assert (pages / "golf.md").read_text() == "# Golf\n\nnew\n"
+
+    def test_names_pages_with_similar_names(self, client, pages):
+        text, err = call(client, "write_page", slug="notes/git-remotes", content="# Git Remotes\n")
+        assert not err
+        assert "pages with similar names exist" in text and "- git-remote | Git remote" in text
+        text, _ = call(client, "write_page", slug="cooking", content="# Cooking\n")
+        assert "similar names" not in text
+
+    def test_warns_about_wikilinks_to_missing_pages(self, client, pages):
+        text, _ = call(client, "write_page", slug="hub",
+                       content="# Hub\n\n[[Golf]] [[Nowhere]] [[task:abcd1234]] [[toc]] `[[Code]]`")
+        assert "point to pages that don't exist (yet): [[Nowhere]]" in text
+        assert "[[Golf]]" not in text.split("Note:")[1] and "Code" not in text
+
+    def test_refuses_folders_leaf_skips_and_stays_inside(self, client, wiki_dir):
+        for slug in ("_deck/tasks", "_assets/x", "a/_b/c"):
+            text, err = call(client, "write_page", slug=slug, content="# X")
+            assert err and "folders starting with '_'" in text, slug
+        assert not (wiki_dir / "_deck" / "tasks.md").exists()
+        # to_slug drops the dots: the page lands inside the wiki
+        text, err = call(client, "write_page", slug="../outside", content="# X")
+        assert not err and "Created page outside." in text
+        assert not (wiki_dir.parent / "outside.md").exists()
+
+    def test_needs_content(self, client, wiki_dir):
+        text, err = call(client, "write_page", slug="empty", content="  ")
+        assert err and "content" in text
+
+
+class TestEditPage:
+    def test_replaces_unique_text(self, client, pages):
+        text, err = call(client, "edit_page", slug="golf", old_string="Bremsen quietschen.",
+                         new_string="Bremsen getauscht.")
+        assert not err and text.startswith("Edited page golf: replaced 1 occurrence.")
+        assert "Bremsen getauscht." in (pages / "golf.md").read_text()
+
+    def test_not_found(self, client, pages):
+        text, err = call(client, "edit_page", slug="golf", old_string="Reifen", new_string="x")
+        assert err and "not found" in text and "read_page" in text
+
+    def test_ambiguous_needs_replace_all(self, client, pages):
+        write_page(pages, "twice", "# Twice\n\nfoo and foo\n")
+        text, err = call(client, "edit_page", slug="twice", old_string="foo", new_string="bar")
+        assert err and "occurs 2 times" in text
+        assert (pages / "twice.md").read_text() == "# Twice\n\nfoo and foo\n"
+        text, err = call(client, "edit_page", slug="twice", old_string="foo", new_string="bar",
+                         replace_all=True)
+        assert not err and "replaced 2 occurrences" in text
+        assert (pages / "twice.md").read_text() == "# Twice\n\nbar and bar\n"
+
+    def test_empty_new_string_deletes(self, client, pages):
+        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\n\nSet GIT_REMOTE in .env.\n\n",
+                      new_string="")
+        assert not err
+        assert (pages / "git-remote.md").read_text() == "# Git remote\n\n## Pushing\n\nRun git push to back up.\n"
+
+    def test_crlf_in_arguments_matches_lf_files(self, client, pages):
+        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\r\n\r\nSet",
+                      new_string="## Setup\r\n\r\nPut")
+        assert not err and "## Setup\n\nPut GIT_REMOTE" in (pages / "git-remote.md").read_text()
+
+    def test_unknown_page_and_no_op(self, client, pages):
+        text, err = call(client, "edit_page", slug="nope", old_string="a", new_string="b")
+        assert err and "No page 'nope'" in text
+        text, err = call(client, "edit_page", slug="golf", old_string="Golf", new_string="Golf")
+        assert err and "nothing to change" in text
+
+    def test_only_new_broken_links_are_named(self, client, pages):
+        write_page(pages, "links", "# Links\n\n[[Old Missing]]\n")
+        text, _ = call(client, "edit_page", slug="links", old_string="# Links", new_string="# Links [[New Missing]]")
+        assert "[[New Missing]]" in text and "Old Missing" not in text
+
+
+class TestAppendToPage:
+    def test_appends_at_the_end(self, client, pages):
+        text, err = call(client, "append_to_page", slug="golf", content="## Reifen\n\nWinterreifen drauf.")
+        assert not err and text.startswith("Appended to page golf.")
+        assert (pages / "golf.md").read_text().endswith(
+            "Bremsen quietschen.\n\n## Reifen\n\nWinterreifen drauf.\n")
+
+    def test_under_heading_goes_to_the_end_of_that_section(self, client, pages):
+        _, err = call(client, "append_to_page", slug="git-remote", content="- also: git pull",
+                      under_heading="setup")
+        assert not err
+        assert (pages / "git-remote.md").read_text() == (
+            "# Git remote\n\n## Setup\n\nSet GIT_REMOTE in .env.\n\n- also: git pull\n\n"
+            "## Pushing\n\nRun git push to back up.\n")
+
+    def test_subsections_belong_to_the_section(self, client, wiki_dir):
+        write_page(wiki_dir, "log", "# Log\n\n## 2026\n\n### Oct\n\na\n\n```\n## not a heading\n```\n\n## 2025\n\nold\n")
+        call(client, "append_to_page", slug="log", content="b", under_heading="## 2026")
+        assert (wiki_dir / "log.md").read_text() == (
+            "# Log\n\n## 2026\n\n### Oct\n\na\n\n```\n## not a heading\n```\n\nb\n\n## 2025\n\nold\n")
+
+    def test_last_section(self, client, pages):
+        call(client, "append_to_page", slug="git-remote", content="more", under_heading="Pushing")
+        assert (pages / "git-remote.md").read_text().endswith("Run git push to back up.\n\nmore\n")
+
+    def test_missing_heading_lists_the_headings(self, client, pages):
+        text, err = call(client, "append_to_page", slug="git-remote", content="x", under_heading="Nope")
+        assert err and "'Setup', 'Pushing'" in text
+
+
+class TestRenamePage:
+    def test_moves_the_page_and_its_links(self, client, pages):
+        write_page(pages, "hub", "# Hub\n\nSee [[golf]] and [car](golf).\n")
+        tid = client.post("/api/deck", json={"title": "Fix [[golf]]"}, headers=HOST).get_json()["id"]
+        text, err = call(client, "rename_page", slug="golf", new_slug="cars/golf")
+        assert not err and text.startswith("Renamed page golf to cars/golf. Links to it were updated in 2 files.")
+        assert not (pages / "golf.md").exists() and (pages / "cars" / "golf.md").exists()
+        assert (pages / "hub.md").read_text() == "# Hub\n\nSee [[cars/golf]] and [car](cars/golf).\n"
+        assert call(client, "search_tasks", query="Fix")[0].count("[[cars/golf]]") == 1
+        assert tid
+
+    def test_refusals(self, client, pages):
+        assert call(client, "rename_page", slug="index", new_slug="home")[1]
+        text, err = call(client, "rename_page", slug="golf", new_slug="git-remote")
+        assert err and "already exists" in text
+        assert call(client, "rename_page", slug="golf", new_slug="golf")[1]
+
+
+class TestDeletePage:
+    def test_deletes_and_names_pages_still_linking(self, client, pages):
+        write_page(pages, "hub", "# Hub\n\n[[Golf]]\n")
+        text, err = call(client, "delete_page", slug="golf")
+        assert not err and text.startswith("Deleted page golf.")
+        assert "still link to it: hub" in text
+        assert not (pages / "golf.md").exists()
+
+    def test_home_page_stays(self, client, pages):
+        text, err = call(client, "delete_page", slug="index")
+        assert err and (pages / "index.md").exists()
+
+
+@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+class TestWritesCommit:
+    def test_each_write_is_a_commit_marked_mcp(self, client, git_wiki_dir, monkeypatch):
+        import subprocess
+        import gitstore
+
+        def subjects():
+            return subprocess.run(["git", "log", "--format=%s"], cwd=git_wiki_dir, capture_output=True,
+                                  text=True, check=True, env=gitstore._GIT_ENV).stdout.splitlines()
+
+        call(client, "write_page", slug="mcp-notes", content="# MCP notes\n\nfirst", summary="start notes")
+        call(client, "append_to_page", slug="mcp-notes", content="second")
+        call(client, "edit_page", slug="mcp-notes", old_string="first", new_string="1st",
+             summary="  shorten\n wording ")
+        call(client, "rename_page", slug="mcp-notes", new_slug="notes/mcp")
+        tid = call(client, "create_task", title="Ship it", summary="from chat")[0]
+        short = re.search(r"\nid: (\w+)", tid).group(1)
+        call(client, "update_task", id=short, status="done")
+        call(client, "delete_page", slug="notes/mcp")
+        assert subjects()[:7] == [
+            "Delete notes/mcp (MCP)",
+            "Complete deck task (MCP)",
+            "Create deck task: from chat (MCP)",
+            "Rename mcp-notes to notes/mcp (MCP)",
+            "Update mcp-notes: shorten wording (MCP)",
+            "Append to mcp-notes (MCP)",
+            "Create mcp-notes: start notes (MCP)",
+        ]
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=git_wiki_dir, capture_output=True,
+                                text=True, env=gitstore._GIT_ENV).stdout
+        assert status == ""
+
+
+# ── Writing tasks ────────────────────────────────────────────────────────────
+
+def _task_id(text: str) -> str:
+    return re.search(r"\nid: (\w+)", text).group(1)
+
+
+class TestCreateTask:
+    def test_creates_with_fields(self, client, wiki_dir):
+        text, err = call(client, "create_task", title="Renew passport", notes="at the Bürgeramt",
+                         tags=["admin", "#home"], due="2026-11-01", start="2026-10-20")
+        assert not err and text.startswith("Created.\n\nTask: Renew passport\n")
+        assert "status: open · tags: #admin #home · start: 2026-10-20 · due: 2026-11-01" in text
+        assert re.search(r"\nid: [0-9a-f]{8}\n", text)
+        assert "at the Bürgeramt" in text
+
+    def test_repeat_and_keep(self, client, wiki_dir):
+        text, _ = call(client, "create_task", title="Water plants", due="2026-10-10",
+                       repeat="weekly", repeat_every=2, repeat_from="completion")
+        assert "repeats every 2 weeks after completion" in text
+        text, _ = call(client, "create_task", title="Milk", keep=True, repeat="daily")
+        assert "keep task" in text and "repeats" not in text
+
+    def test_bad_input_is_a_tool_error(self, client, wiki_dir):
+        assert "YYYY-MM-DD" in call(client, "create_task", title="x", due="tomorrow")[0]
+        text, err = call(client, "create_task", title="  ")
+        assert err and "title" in text
+        text, err = call(client, "create_task", title="x", repeat="hourly")
+        assert err and "repeat must be" in text
+        assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
+
+
+class TestUpdateTask:
+    def test_changes_only_given_fields(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Report", tags=["work"], due="2026-10-15",
+                            notes="draft")[0])
+        text, err = call(client, "update_task", id=tid, due="2026-10-20", add_tags=["urgent", "WORK"])
+        assert not err
+        assert "tags: #work #urgent · due: 2026-10-20" in text and "draft" in text
+        text, _ = call(client, "update_task", id=tid, remove_tags=["work"], due="", notes="")
+        assert "tags: #urgent" in text and "due:" not in text and "draft" not in text
+
+    def test_status_done_spawns_the_next_occurrence(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Backup", due="2026-10-10", repeat="weekly")[0])
+        text, err = call(client, "update_task", id=tid, status="done")
+        assert not err and "status: done" in text
+        assert "Next occurrence:\n\nTask: Backup\nstatus: open · due: 2026-10-17" in text
+        text, _ = call(client, "update_task", id=tid, status="open")
+        assert "status: open" in text
+        assert call(client, "search_tasks")[0].count("Task: Backup") == 1
+
+    def test_wont_do_and_skip(self, client, wiki_dir):
+        a = _task_id(call(client, "create_task", title="Maybe")[0])
+        assert "status: won't do" in call(client, "update_task", id=a, status="wont_do")[0]
+        b = _task_id(call(client, "create_task", title="Gym", due="2026-10-10", repeat="daily")[0])
+        text, _ = call(client, "update_task", id=b, status="skip")
+        assert "status: won't do" in text and "Next occurrence" in text
+
+    def test_ids_links_and_refs_name_the_task(self, client, wiki_dir):
+        full = client.post("/api/deck", json={"title": "By id"}, headers=HOST).get_json()["id"]
+        for ref in (full, full[:8], f"[[task:{full[:8]}]]", f"http://localhost:5000/deck?task={full}"):
+            text, err = call(client, "update_task", id=ref, notes=ref)
+            assert not err, ref
+
+    def test_errors(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="T")[0])
+        assert "No task with id" in call(client, "update_task", id="deadbeef", title="x")[0]
+        assert "not a task id" in call(client, "update_task", id="hello", title="x")[0]
+        text, err = call(client, "update_task", id=tid)
+        assert err and "Nothing to change" in text
+        assert "status must be" in call(client, "update_task", id=tid, status="finished")[0]
+        assert call(client, "update_task", id=tid, title="")[1]
+
+    def test_ambiguous_prefix(self, client, wiki_dir):
+        import json
+        tasks = [{"id": f"abcd{i}000-0000-0000-0000-000000000000", "title": f"T{i}"} for i in (1, 2)]
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps(tasks))
+        text, err = call(client, "update_task", id="abcd", title="x")
+        assert err and "Several tasks" in text
+        assert not call(client, "update_task", id="abcd1", title="x")[1]
+
+
+class TestCommentAndDeleteTask:
+    def test_comment(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Call Bob")[0])
+        text, err = call(client, "comment_task", id=tid, text="left a voicemail")
+        assert not err and text.startswith("Comment added.")
+        assert re.search(r"Comments:\n- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: left a voicemail", text)
+        assert call(client, "comment_task", id=tid, text=" ")[1]
+
+    def test_delete(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Oops")[0])
+        text, err = call(client, "delete_task", id=tid)
+        assert not err and text == f"Deleted task {tid}: Oops"
+        assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
+        assert call(client, "delete_task", id=tid)[1]

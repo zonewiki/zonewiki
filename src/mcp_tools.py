@@ -1,20 +1,29 @@
-"""The MCP tools (search_wiki, search_tasks, read_page, list_pages); the
-protocol itself is in mcp_server.py, the endpoint in server.py."""
+"""The MCP tools: reading (search_wiki, search_tasks, read_page,
+list_pages) and writing pages (write_page, edit_page, append_to_page,
+rename_page, delete_page) and deck tasks (create_task, update_task,
+comment_task, delete_task). The protocol itself is in mcp_server.py, the
+endpoint in server.py."""
 
+import re
 from datetime import date
+from difflib import SequenceMatcher
+from pathlib import Path
 
 from flask import request
+from werkzeug.exceptions import HTTPException
 
 import config
+import deck
 import decksyntax
 import deckstore
 import pages
 import mcp_server
 import retrieval
 import search
-from mdtext import mask_code, to_slug
-from pages import fmt_date, iter_pages, page_meta, safe_path, url
-from render import task_link
+from gitstore import git_commit, move_page
+from mdtext import iter_fenced_lines, mask_code, page_title, plain_heading, split_wikilink, to_slug, WIKILINK_RE
+from pages import all_slugs, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
+from render import task_link, TOC_RE
 from retrieval import in_folder, passes, retrieve, task_status
 
 
@@ -88,7 +97,8 @@ def _mcp_task_text(task: dict, base: str) -> str:
     if list_name:
         facts.append(f"list: {list_name}")
     url = base + task_link(task, list_name)
-    text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nurl: {url}"
+    short = decksyntax.short_id(task["id"])
+    text = f"Task: {task.get('title', '')}\n{' · '.join(facts)}\nid: {short}\nurl: {url}"
     notes = (task.get("description") or "").strip()
     if notes:
         text += f"\n\n{notes}"
@@ -166,6 +176,365 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
     return f"Today is {date.today()}. {count}:\n\n{body}"
 
 
+# ── Writing ──────────────────────────────────────────────────────────────────
+# Every write is its own git commit, its message ending in "(MCP)" so the
+# history tells the model's changes from the user's. The model's `summary`,
+# when given, says what changed.
+
+def _str_arg(args: dict, name: str, required: bool = True) -> str:
+    """A string argument with CRLF line ends as LF; required ones non-empty."""
+    value = args.get(name, "")
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        raise mcp_server.ToolError(f"{name} must be a string")
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    if required and not value.strip():
+        raise mcp_server.ToolError(f"{name} must be a non-empty string")
+    return value
+
+
+def _msg_suffix(args: dict) -> str:
+    """What follows a write's commit message: the model's summary, then
+    "(MCP)"."""
+    summary = " ".join(_str_arg(args, "summary", required=False).split())[:200]
+    return f": {summary} (MCP)" if summary else " (MCP)"
+
+
+def _commit_msg(action: str, args: dict) -> str:
+    return action + _msg_suffix(args)
+
+
+def _existing_page(args: dict, name: str = "slug") -> tuple[str, Path]:
+    raw = _str_arg(args, name)
+    slug = _mcp_page_slug(raw)
+    if slug is None:
+        raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
+    return slug, safe_path(slug)
+
+
+def _new_slug(raw: str) -> str:
+    """The slug a new page gets from a name or slug ('Tickets/BUG 1234' →
+    'tickets/bug-1234'), refused when it would be outside the wiki or in a
+    folder Leaf skips (_assets, _deck, .git …)."""
+    raw = raw.strip()
+    if "/page/" in raw:
+        raw = raw.split("/page/", 1)[1]
+    raw = raw.split("#", 1)[0].strip("/")
+    if raw.endswith(".md"):
+        raw = raw[:-3]
+    slug = to_slug(raw)
+    if not slug or "" in slug.split("/"):
+        raise mcp_server.ToolError(f"{raw!r} is not a usable page name")
+    if any(part.startswith(("_", ".")) for part in slug.split("/")[:-1]) or safe_path(slug) is None:
+        raise mcp_server.ToolError(f"{slug!r}: pages can't go in folders starting with '_' or '.'")
+    return slug
+
+
+def _page_info(slug: str, base: str) -> str:
+    return f"url: {base}{url('page', slug)}\nfile: {_host_file(slug)}"
+
+
+def _missing_links(content: str, slugs: set[str]) -> set[str]:
+    """The [[wikilinks]] in content whose page doesn't exist (as rendering
+    decides it: the name as a slug, else slugified)."""
+    masked, _ = mask_code(content)
+    for pattern in (TOC_RE, decksyntax.DECK_RE, decksyntax.TASK_REF_RE):
+        masked = pattern.sub("", masked)
+    missing = set()
+    for m in WIKILINK_RE.finditer(masked):
+        name = split_wikilink(m.group(1))[0]
+        if name and name not in slugs and to_slug(name) not in slugs:
+            missing.add(name)
+    return missing
+
+
+def _link_warning(old: str, new: str) -> str:
+    """A note on the wikilinks the write added that lead nowhere, so the
+    model can fix a typo or create the page."""
+    slugs = set(all_slugs())
+    added = _missing_links(new, slugs) - _missing_links(old, slugs)
+    if not added:
+        return ""
+    return ("\nNote: these new wikilinks point to pages that don't exist (yet): "
+            + ", ".join(f"[[{n}]]" for n in sorted(added)))
+
+
+def _norm_title(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _similar_pages(slug: str, title: str) -> list[tuple[str, str]]:
+    """Existing pages whose title or file name is close to a new page's, so
+    the model notices it may be extending a page rather than starting one."""
+    want = {n for n in (_norm_title(title), _norm_title(slug.rsplit("/", 1)[-1])) if n}
+    found = []
+    for md_file, other in iter_pages():
+        if other == slug:
+            continue
+        other_title = page_meta(md_file, other)[0]
+        have = {n for n in (_norm_title(other_title), _norm_title(other.rsplit("/", 1)[-1])) if n}
+        if any(SequenceMatcher(None, a, b).ratio() >= 0.8 for a in want for b in have):
+            found.append((other, other_title))
+    return sorted(found)[:5]
+
+
+def _write_page(args: dict, base: str) -> str:
+    content = _str_arg(args, "content")
+    overwrite = args.get("overwrite", False) is True
+    existing = _mcp_page_slug(_str_arg(args, "slug"))
+    if existing and not overwrite:
+        raise mcp_server.ToolError(
+            f"Page {existing!r} already exists. Change it with edit_page or append_to_page, "
+            "or set overwrite=true to replace all of it.")
+    slug = existing or _new_slug(args["slug"])
+    path = safe_path(slug)
+    old = path.read_text(encoding="utf-8") if existing else ""
+    content = content.rstrip("\n") + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git_commit(path, _commit_msg(f"Update {slug}" if existing else f"Create {slug}", args))
+    out = f"{'Replaced' if existing else 'Created'} page {slug}.\n{_page_info(slug, base)}"
+    if not existing:
+        similar = _similar_pages(slug, page_title(content, slug))
+        if similar:
+            out += ("\nNote: pages with similar names exist; if this one repeats one of them, "
+                    "merge it there (edit_page) and delete_page this one:\n"
+                    + "\n".join(f"- {s} | {t}" for s, t in similar))
+    return out + _link_warning(old, content)
+
+
+def _edit_page(args: dict, base: str) -> str:
+    slug, path = _existing_page(args)
+    old_string = _str_arg(args, "old_string")
+    new_string = _str_arg(args, "new_string", required=False)
+    if old_string == new_string:
+        raise mcp_server.ToolError("old_string and new_string are the same: nothing to change")
+    content = path.read_text(encoding="utf-8")
+    count = content.count(old_string)
+    if count == 0:
+        raise mcp_server.ToolError(
+            f"old_string was not found in {slug}. It must match the page exactly, line breaks "
+            "and whitespace included; read_page shows the current text.")
+    replace_all = args.get("replace_all", False) is True
+    if count > 1 and not replace_all:
+        raise mcp_server.ToolError(
+            f"old_string occurs {count} times in {slug}. Include more of the surrounding text "
+            "to make it unique, or set replace_all=true to change every one.")
+    new = content.replace(old_string, new_string)
+    path.write_text(new, encoding="utf-8")
+    git_commit(path, _commit_msg(f"Update {slug}", args))
+    what = f"{count} occurrences" if count > 1 else "1 occurrence"
+    return f"Edited page {slug}: replaced {what}.\n{_page_info(slug, base)}" + _link_warning(content, new)
+
+
+_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+
+
+def _append_at(content: str, addition: str, heading: str) -> str | None:
+    """content with addition at the end of the section under `heading` (any
+    level; its text compared without markup and case), before the next heading
+    of the same or a higher level. None when the page has no such heading."""
+    lines = content.splitlines(keepends=True)
+    want = plain_heading(heading.lstrip("#").strip()).lower()
+    start = level = None
+    end = len(lines)
+    for i, line, in_fence in iter_fenced_lines(lines):
+        m = None if in_fence else _HEADING_RE.match(line)
+        if not m:
+            continue
+        if start is None:
+            if plain_heading(m.group(2)).lower() == want:
+                start, level = i, len(m.group(1))
+        elif len(m.group(1)) <= level:
+            end = i
+            break
+    if start is None:
+        return None
+    body = "".join(lines[:end]).rstrip("\n")
+    rest = "".join(lines[end:])
+    return body + "\n\n" + addition + "\n" + ("\n" + rest if rest else "")
+
+
+def _append_to_page(args: dict, base: str) -> str:
+    slug, path = _existing_page(args)
+    addition = _str_arg(args, "content").strip("\n")
+    heading = _str_arg(args, "under_heading", required=False).strip()
+    content = path.read_text(encoding="utf-8")
+    if heading:
+        new = _append_at(content, addition, heading)
+        if new is None:
+            headings = [m.group(2) for _i, line, f in iter_fenced_lines(content.splitlines())
+                        if not f and (m := _HEADING_RE.match(line))]
+            raise mcp_server.ToolError(
+                f"{slug} has no heading {heading!r}. Its headings: "
+                + (", ".join(repr(h) for h in headings) or "none")
+                + ". To start a new section, put its heading in content and leave out under_heading.")
+    else:
+        new = content.rstrip("\n") + "\n\n" + addition + "\n"
+    path.write_text(new, encoding="utf-8")
+    git_commit(path, _commit_msg(f"Append to {slug}", args))
+    where = f" under {heading!r}" if heading else ""
+    return f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + _link_warning(content, new)
+
+
+def _rename_page(args: dict, base: str) -> str:
+    slug, path = _existing_page(args)
+    if is_protected(slug):
+        raise mcp_server.ToolError(f"{slug} is the home page; it can't be renamed")
+    new_slug = _new_slug(_str_arg(args, "new_slug"))
+    if new_slug == slug:
+        raise mcp_server.ToolError(f"The page is already called {slug}")
+    new_path = safe_path(new_slug)
+    if new_path.exists():
+        raise mcp_server.ToolError(f"A page {new_slug!r} already exists")
+    changed = move_page(path, new_path, slug, new_slug, _commit_msg(f"Rename {slug} to {new_slug}", args))
+    refs = f" Links to it were updated in {len(changed)} files." if changed else ""
+    return f"Renamed page {slug} to {new_slug}.{refs}\n{_page_info(new_slug, base)}"
+
+
+def _delete_page(args: dict, base: str) -> str:
+    slug, path = _existing_page(args)
+    if is_protected(slug):
+        raise mcp_server.ToolError(f"{slug} is the home page; it can't be deleted")
+    linking = find_backlinks(slug)
+    path.unlink()
+    git_commit(path, _commit_msg(f"Delete {slug}", args))
+    out = f"Deleted page {slug}."
+    if config.GIT_ENABLED:
+        out += " It can be restored from Deleted Pages (git history)."
+    if linking:
+        out += ("\nThese pages still link to it: "
+                + ", ".join(b["slug"] for b in linking))
+    return out
+
+
+_TASK_LINK_RE = re.compile(r"task[:=]([0-9a-f-]{4,36})")
+
+
+def _task_arg(args: dict) -> dict:
+    """The task `id` names: its id or a prefix of it (the 8-character short
+    id the tools show), a [[task:…]] reference or a /deck?task=… link."""
+    raw = _str_arg(args, "id").strip().lower()
+    m = _TASK_LINK_RE.search(raw)
+    ref = m.group(1) if m else raw
+    if not re.fullmatch(r"[0-9a-f][0-9a-f-]{3,35}", ref):
+        raise mcp_server.ToolError(f"{raw!r} is not a task id; search_tasks shows each task's id")
+    found = deckstore.find_tasks(ref)
+    if not found:
+        raise mcp_server.ToolError(f"No task with id {ref!r}. search_tasks shows each task's id.")
+    if len(found) > 1:
+        raise mcp_server.ToolError(f"Several tasks have ids starting with {ref!r}; give more of the id")
+    return found[0]
+
+
+_REPEATS = ("daily", "weekly", "monthly", "yearly")
+
+
+def _task_fields(args: dict, task: dict | None = None) -> dict:
+    """The deck API's fields from the tools' arguments (only those given)."""
+    data = {}
+    for arg, field in (("title", "title"), ("notes", "description"), ("due", "due_date"),
+                       ("start", "start_date")):
+        if arg in args:
+            data[field] = _str_arg(args, arg, required=False).strip() or None
+    if "title" in data and not data["title"]:
+        raise mcp_server.ToolError("title must be a non-empty string")
+    if "description" in data:
+        data["description"] = data["description"] or ""
+    if "keep" in args:
+        if not isinstance(args["keep"], bool):
+            raise mcp_server.ToolError("keep must be true or false")
+        data["keep"] = args["keep"]
+    if "tags" in args:
+        data["tags"] = args["tags"] if args["tags"] is not None else []
+    if task is not None and ("add_tags" in args or "remove_tags" in args):
+        def tag_list(name):
+            val = args.get(name) or []
+            if isinstance(val, str):
+                val = val.split(",")
+            if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+                raise mcp_server.ToolError(f"{name} must be a list of tags")
+            return [v.strip().lstrip("#") for v in val if v.strip().lstrip("#")]
+        tags = list(data.get("tags", task.get("tags") or []))
+        lower = {t.lower() for t in tags}
+        tags += [t for t in tag_list("add_tags") if t.lower() not in lower]
+        drop = {t.lower() for t in tag_list("remove_tags")}
+        data["tags"] = [t for t in tags if t.lower() not in drop]
+    if any(k in args for k in ("repeat", "repeat_every", "repeat_from")):
+        rec = (task or {}).get("recurrence") or {}
+        repeat = args.get("repeat", rec.get("type") or "none")
+        if repeat not in (*_REPEATS, "none"):
+            raise mcp_server.ToolError("repeat must be daily, weekly, monthly, yearly or none")
+        data["rec_type"] = repeat if repeat != "none" else None
+        data["rec_interval"] = args.get("repeat_every", rec.get("interval") or 1)
+        data["rec_from"] = args.get("repeat_from", rec.get("from") or "due")
+        if data["rec_from"] not in ("due", "completion"):
+            raise mcp_server.ToolError("repeat_from must be due or completion")
+    return data
+
+
+def _deck_write(fn, *args):
+    """Run one of deck.py's task writes, its 400s (bad date, empty title …)
+    as tool errors the model can correct."""
+    try:
+        return fn(*args)
+    except HTTPException as e:
+        raise mcp_server.ToolError(e.description or str(e))
+    except deckstore.DeckCorrupt:
+        raise mcp_server.ToolError("The deck's storage can't be read right now; try again")
+
+
+def _create_task(args: dict, base: str) -> str:
+    _str_arg(args, "title")
+    task = _deck_write(deck.create_task, _task_fields(args), _commit_msg("Create deck task", args))
+    return "Created.\n\n" + _mcp_task_text(task, base)
+
+
+_STATUS = {"done": {"completed": True}, "open": {"completed": False},
+           "wont_do": {"wont_do": True}, "skip": {"skip": True}}
+
+
+@deckstore.serialized
+def _update_task(args: dict, base: str) -> str:
+    task = _task_arg(args)
+    data = _task_fields(args, task)
+    if "status" in args:
+        if args["status"] not in _STATUS:
+            raise mcp_server.ToolError("status must be open, done, wont_do or skip")
+        data.update(_STATUS[args["status"]])
+    if not data:
+        raise mcp_server.ToolError("Nothing to change: give the fields to set, or a status")
+    task = _deck_write(deck.update_task, task["id"], data, _msg_suffix(args))
+    out = "Updated.\n\n" + _mcp_task_text(task, base)
+    spawned = [t for t in deckstore.read_deck() if t.get("spawned_from") == task["id"]
+               and not t.get("completed_at")]
+    if args.get("status") in ("done", "skip") and spawned:
+        out += "\n\nNext occurrence:\n\n" + _mcp_task_text(spawned[0], base)
+    return out
+
+
+def _comment_task(args: dict, base: str) -> str:
+    task = _task_arg(args)
+    task = _deck_write(deck.add_comment, task["id"], _str_arg(args, "text"),
+                       _commit_msg("Comment on deck task", args))
+    return "Comment added.\n\n" + _mcp_task_text(task, base)
+
+
+def _delete_task(args: dict, base: str) -> str:
+    task = _task_arg(args)
+    _deck_write(deck.delete_task, task["id"], _commit_msg("Delete deck task", args))
+    return f"Deleted task {decksyntax.short_id(task['id'])}: {task.get('title', '')}"
+
+
+_WRITE_TOOLS = {
+    "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,
+    "rename_page": _rename_page, "delete_page": _delete_page,
+    "create_task": _create_task, "update_task": _update_task,
+    "comment_task": _comment_task, "delete_task": _delete_task,
+}
+
+
 def mcp_call_tool(name: str, args: dict) -> str:
     base = config.LEAF_BASE_URL or request.host_url.rstrip("/")
     if name == "search_wiki":
@@ -221,4 +590,6 @@ def mcp_call_tool(name: str, args: dict) -> str:
         shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
         where = f" under {under}/" if under else ""
         return f"Pages{where}, most recently edited first ({shown}); slug | title | last edit:\n" + "\n".join(lines)
+    if name in _WRITE_TOOLS:
+        return _WRITE_TOOLS[name](args, base)
     raise mcp_server.ToolError(f"Unknown tool: {name}")

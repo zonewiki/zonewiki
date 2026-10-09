@@ -32,7 +32,7 @@ from pages import (
     page_deck_lists, page_from_input, page_link_targets, page_meta, page_task_refs,
     safe_path, update_references, url,
 )
-from gitstore import run_git, git_commit, git_setup
+from gitstore import run_git, git_commit, git_setup, move_page
 from render import (
     render_md, render_tags_pills_html,
 )
@@ -487,16 +487,8 @@ def rename_page(slug):
         abort(400)
     if new_path.exists():
         return redirect(f"{back}?rename_error=A+page+named+%22{new_slug}%22+already+exists")
-    _move_page(old_path, new_path, slug, new_slug, f"Rename {slug} to {new_slug}")
+    move_page(old_path, new_path, slug, new_slug, f"Rename {slug} to {new_slug}")
     return redirect(url("page", new_slug))
-
-
-def _move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message: str) -> None:
-    """Move a page's file, point every link to it at the new slug, and
-    commit the move with the pages and deck files whose links changed."""
-    new_path.parent.mkdir(parents=True, exist_ok=True)
-    old_path.rename(new_path)
-    git_commit([old_path, new_path, *update_references(slug, new_slug)], message)
 
 
 @app.post("/promote/<path:slug>")
@@ -528,7 +520,7 @@ def promote_page(slug):
     link_path = safe_path(link_slug) if link_slug else None
     if raw_link and (not link_path or not link_path.exists() or link_slug == slug):
         return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
-    _move_page(old_path, new_path, slug, new_slug, f"Promote {slug} to {new_slug}")
+    move_page(old_path, new_path, slug, new_slug, f"Promote {slug} to {new_slug}")
     # The page to link it from opens in the editor, the link to paste where
     # it belongs (js/pagemenu.js copied it on Move). A page linking to the note
     # already links here now: nothing to paste.

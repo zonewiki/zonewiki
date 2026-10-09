@@ -600,6 +600,15 @@ def resolve_task_refs(refs) -> dict[str, dict | None]:
     return out
 
 
+def find_tasks(prefix: str) -> list[dict]:
+    """Every task (open, completed, archived) whose id starts with prefix
+    (lowercase); only the one with exactly that id when there is one."""
+    with _LOCK:
+        tasks = read_deck() + _read_completed() + _read_archived()
+    found = [t for t in tasks if t["id"].lower().startswith(prefix)]
+    return [t for t in found if t["id"].lower() == prefix] or found
+
+
 def expand_task_refs(text: str, fmt) -> str:
     """Replace every [[task:…]] in text with fmt(ref, task_or_None)."""
     refs = [m.group(1).lower() for m in TASK_REF_RE.finditer(text)]

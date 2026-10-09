@@ -9,7 +9,7 @@ from pathlib import Path
 
 import config
 from mdtext import page_title, slug_display_name
-from pages import iter_pages
+from pages import iter_pages, update_references
 
 
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
@@ -66,6 +66,17 @@ def git_commit(paths: Path | list[Path], message: str) -> None:
     rels = [str(p.relative_to(config.WIKI_DIR)) for p in paths]
     run_git("git", "add", "--", *rels)
     run_git("git", "commit", "-m", message)
+
+
+def move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message: str) -> list[Path]:
+    """Move a page's file, point every link to it at the new slug, and
+    commit the move with the pages and deck files whose links changed;
+    returns those files."""
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    old_path.rename(new_path)
+    changed = update_references(slug, new_slug)
+    git_commit([old_path, new_path, *changed], message)
+    return changed
 
 
 _RENAME_BRACES_RE = re.compile(r"\{([^{}]*) => ([^{}]*)\}")

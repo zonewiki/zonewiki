@@ -1,7 +1,8 @@
 """MCP (Model Context Protocol) server: lets an LLM client
-read the wiki through tools. Served by server.py at POST /mcp (MCP's
+read and write the wiki through tools. Served by server.py at POST /mcp (MCP's
 "Streamable HTTP" transport, answering each request with plain JSON; no
-event stream, no sessions). Read-only: the tools search and read pages and deck tasks.
+event stream, no sessions). The tools search, read and write pages and deck
+tasks; each write is a git commit.
 
 This module is the protocol only (JSON-RPC in, JSON-RPC out); server.py
 does authentication and implements the tools through call_tool.
@@ -22,10 +23,45 @@ INSTRUCTIONS = (
     "text. Search finds by meaning as well as by keyword, so phrase queries the "
     "way the notes might. For questions about their tasks (what's open for a "
     "project, what's due, what they finished) use search_tasks, which filters by "
-    "tag and status. Cite pages and tasks by their URL."
+    "tag and status. Cite pages and tasks by their URL.\n\n"
+    "You can also write: the wiki is meant to be kept up to date by you. Before "
+    "creating a page, search for one that already covers the topic and extend "
+    "it instead. Change pages with edit_page (exact text replacement, like a "
+    "code editor) or append_to_page (adds text without reading the page "
+    "first; under_heading adds to that section); write_page creates a page "
+    "or, with overwrite, replaces all of it. rename_page keeps links working. "
+    "Tasks: create_task, update_task (fields, done, won't do), comment_task "
+    "for a status line. Every write is a git commit the user can undo; give "
+    "each a short summary, which becomes its commit message."
 )
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
+# Writes that only add (a page, a section, a task, a comment), and those that
+# change or remove what is there.
+_ADDS = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False}
+_CHANGES = {**_ADDS, "destructiveHint": True}
+
+_SUMMARY = {"type": "string", "description": (
+    "What this change does, in a few words (e.g. 'add findings from BUG-1234'); "
+    "it becomes the git commit message.")}
+_PAGE_SLUG = {"type": "string",
+              "description": "The page's slug as search_wiki or list_pages give it, e.g. 'git-remote' or 'journal/2026-09'."}
+_TASK_ID = {"type": "string",
+            "description": "The task's id as search_tasks or search_wiki show it (the 8-character short id is enough)."}
+_TASK_FIELDS = {
+    "notes": {"type": "string", "description": "The task's notes (markdown). Replaces the notes there are."},
+    "tags": {"type": "array", "items": {"type": "string"},
+             "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."},
+    "due": {"type": "string", "description": "Deadline, YYYY-MM-DD; empty to clear."},
+    "start": {"type": "string", "description": "When to start (it shows in Focus from then), YYYY-MM-DD; empty to clear."},
+    "repeat": {"type": "string", "enum": ["daily", "weekly", "monthly", "yearly", "none"],
+               "description": "Repeat the task; done, the next occurrence is created."},
+    "repeat_every": {"type": "integer", "minimum": 1, "description": "Repeat every N days/weeks/months/years (default 1)."},
+    "repeat_from": {"type": "string", "enum": ["due", "completion"],
+                    "description": "Next occurrence counted from the due date (default) or from when it was done."},
+    "keep": {"type": "boolean",
+             "description": "A keep task: done, it goes back to the list instead of being archived (shopping list staples)."},
+}
 
 TOOLS = [
     {
@@ -107,6 +143,168 @@ TOOLS = [
             },
         },
         "annotations": _READ_ONLY,
+    },
+    {
+        "name": "write_page",
+        "title": "Create a page",
+        "description": (
+            "Create a wiki page with the given markdown (start it with '# Title'). "
+            "Fails if the page exists, unless overwrite is true, which replaces all "
+            "of it; to change part of a page use edit_page or append_to_page. Tells "
+            "you about pages with similar names and wikilinks that lead nowhere."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": (
+                    "The new page's slug or name, folders separated by '/', e.g. "
+                    "'tickets/bug-1234' ('Tickets/BUG 1234' becomes that).")},
+                "content": {"type": "string", "description": "The page's full markdown."},
+                "overwrite": {"type": "boolean", "default": False,
+                              "description": "Replace an existing page's whole text."},
+                "summary": _SUMMARY,
+            },
+            "required": ["slug", "content"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "edit_page",
+        "title": "Edit a page",
+        "description": (
+            "Replace exact text in a page: old_string must match the page's markdown "
+            "exactly (whitespace and line breaks included) and occur once, unless "
+            "replace_all is true. Copy old_string from read_page or a search_wiki "
+            "section. An empty new_string deletes the text."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": _PAGE_SLUG,
+                "old_string": {"type": "string", "description": "The text to replace."},
+                "new_string": {"type": "string", "description": "The text to put there."},
+                "replace_all": {"type": "boolean", "default": False,
+                                "description": "Replace every occurrence of old_string."},
+                "summary": _SUMMARY,
+            },
+            "required": ["slug", "old_string", "new_string"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "append_to_page",
+        "title": "Append to a page",
+        "description": (
+            "Add markdown to the end of a page, or with under_heading to the end of "
+            "that heading's section (before the next heading of its level), without "
+            "reading the page first. For logs and adding to a section."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": _PAGE_SLUG,
+                "content": {"type": "string", "description": "The markdown to add."},
+                "under_heading": {"type": "string", "description": (
+                    "The heading whose section gets the text, e.g. 'Findings' (any level, "
+                    "case ignored). Leave it out to add at the end of the page.")},
+                "summary": _SUMMARY,
+            },
+            "required": ["slug", "content"],
+        },
+        "annotations": _ADDS,
+    },
+    {
+        "name": "rename_page",
+        "title": "Rename or move a page",
+        "description": ("Rename a page or move it to another folder. Every link to it, on "
+                        "pages and in tasks, is changed to the new name."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": _PAGE_SLUG,
+                "new_slug": {"type": "string", "description": "The new slug, e.g. 'projects/leaf/mcp'."},
+                "summary": _SUMMARY,
+            },
+            "required": ["slug", "new_slug"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "delete_page",
+        "title": "Delete a page",
+        "description": ("Delete a page (it stays in the git history, restorable from Deleted "
+                        "Pages). Says which pages still link to it."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"slug": _PAGE_SLUG, "summary": _SUMMARY},
+            "required": ["slug"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "create_task",
+        "title": "Create a task",
+        "description": "Add a task to the user's deck. Returns it with its id.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "What to do, in a few words."},
+                **_TASK_FIELDS,
+                "summary": _SUMMARY,
+            },
+            "required": ["title"],
+        },
+        "annotations": _ADDS,
+    },
+    {
+        "name": "update_task",
+        "title": "Update a task",
+        "description": (
+            "Change a deck task: only the fields given change. status: done (a "
+            "repeating task gets its next occurrence), wont_do (abandon it), skip "
+            "(won't do this occurrence, the series goes on), open (reopen)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": _TASK_ID,
+                "title": {"type": "string"},
+                **_TASK_FIELDS,
+                "add_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to add."},
+                "remove_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to remove."},
+                "status": {"type": "string", "enum": ["open", "done", "wont_do", "skip"]},
+                "summary": _SUMMARY,
+            },
+            "required": ["id"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "comment_task",
+        "title": "Comment on a task",
+        "description": "Add a comment (a dated status line) to a deck task, open or done.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": _TASK_ID,
+                "text": {"type": "string", "description": "The comment."},
+                "summary": _SUMMARY,
+            },
+            "required": ["id", "text"],
+        },
+        "annotations": _ADDS,
+    },
+    {
+        "name": "delete_task",
+        "title": "Delete a task",
+        "description": ("Delete a deck task for good (only in the git history after). To end "
+                        "a task use update_task with status done or wont_do instead."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": _TASK_ID, "summary": _SUMMARY},
+            "required": ["id"],
+        },
+        "annotations": _CHANGES,
     },
 ]
 

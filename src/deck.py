@@ -268,9 +268,14 @@ def api_tasks_due_count():
 
 
 @bp.post("/api/deck")
-@serialized
 def api_create_deck_item():
-    data = _json_object()
+    return jsonify(create_task(_json_object())), 201
+
+
+@serialized
+def create_task(data: dict, message: str = "Create deck task") -> dict:
+    """A new open task from the fields in data (as the API takes them).
+    Invalid fields abort with 400, which the MCP tools turn into errors."""
     if not _as_str(data.get("title", ""), "title").strip():
         abort(400, description="Title cannot be empty")
     task = new_task()
@@ -279,8 +284,8 @@ def api_create_deck_item():
     log_event(task, "created")
     active = read_deck_strict()
     active.append(task)
-    write_deck(active, "Create deck task")
-    return jsonify(task), 201
+    write_deck(active, message)
+    return task
 
 
 def _apply_task_fields(task: dict, data: dict) -> None:
@@ -351,9 +356,15 @@ def _apply_task_fields(task: dict, data: dict) -> None:
 
 
 @bp.put("/api/deck/<task_id>")
-@serialized
 def api_update_deck_item(task_id):
-    data = _json_object()
+    return jsonify(update_task(task_id, _json_object()))
+
+
+@serialized
+def update_task(task_id: str, data: dict, suffix: str = "") -> dict:
+    """Change a task's fields and status (complete, won't do, skip, reopen)
+    from data as the API takes it; returns the task. `suffix` goes after the
+    commit message (the MCP tools' summary)."""
     active, completed_list, task = _find_for_write(task_id)
     _apply_task_fields(task, data)
 
@@ -416,8 +427,8 @@ def api_update_deck_item(task_id):
         msg = "Uncomplete deck task" if not data["completed"] else "Complete deck task"
     else:
         msg = "Update deck task"
-    write_both(active, completed_list, msg)
-    return jsonify(task)
+    write_both(active, completed_list, msg + suffix)
+    return task
 
 
 def _find_for_write(task_id: str) -> tuple[list[dict], list[dict], dict]:
@@ -432,15 +443,19 @@ def _find_for_write(task_id: str) -> tuple[list[dict], list[dict], dict]:
 
 
 @bp.post("/api/deck/<task_id>/comments")
-@serialized
 def api_add_comment(task_id):
     """Add a comment (a status line) to a task, open or done; returns the task."""
-    text = _comment_text(_json_object().get("text"))
+    return jsonify(add_comment(task_id, _json_object().get("text"))), 201
+
+
+@serialized
+def add_comment(task_id: str, text, message: str = "Comment on deck task") -> dict:
+    text = _comment_text(text)
     active, completed_list, task = _find_for_write(task_id)
     task["comments"] = clean_comments(task.get("comments")) + [{
         "id": new_comment_id(), "at": datetime.now().strftime("%Y-%m-%dT%H:%M"), "text": text}]
-    write_both(active, completed_list, "Comment on deck task")
-    return jsonify(task), 201
+    write_both(active, completed_list, message)
+    return task
 
 
 def _task_comment(task: dict, comment_id: str) -> dict:
@@ -474,14 +489,18 @@ def api_delete_comment(task_id, comment_id):
 
 
 @bp.delete("/api/deck/<task_id>")
-@serialized
 def api_delete_deck_item(task_id):
+    delete_task(task_id)
+    return "", 204
+
+
+@serialized
+def delete_task(task_id: str, message: str = "Delete deck task") -> None:
     active = read_deck_strict()
     completed_list = read_completed_all_strict()
     active = [t for t in active if t["id"] != task_id]
     completed_list = [t for t in completed_list if t["id"] != task_id]
-    write_both(active, completed_list, "Delete deck task")
-    return "", 204
+    write_both(active, completed_list, message)
 
 
 @bp.post("/api/deck/batch-delete")
