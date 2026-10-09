@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
-from conftest import open_tab
+from conftest import open_tab, real_density
 
 
 def tomorrow() -> str:
@@ -1658,7 +1658,6 @@ COMPACT = re.compile(r"\bdeck-compact\b")
 def test_compact_defaults_per_tab(page, wiki):
     # Open and Completed (long lists) start compact, Focus and Plan with full
     # cards. A switch is remembered per deck and tab, across reloads.
-    from conftest import real_density
     real_density(page)
     _compact_tasks(page)
     app = page.locator(".tasks-app")
@@ -1684,7 +1683,6 @@ def test_compact_defaults_per_tab(page, wiki):
 
 def test_compact_embed_param_and_other_decks(page, wiki):
     # compact=1 starts every tab compact; a choice is per deck.
-    from conftest import real_density
     real_density(page)
     wiki.write("shop", "# Shop\n\n[[deck compact=1 view=focus]]\n")
     _compact_tasks(page)
@@ -1867,6 +1865,7 @@ def test_expanded_task_keeps_its_line(page, wiki):
     page.goto("/deck?view=open")
     page.locator(".deck-density-btn").click()
     item = page.locator(".task-item").first
+    item.locator(".task-content").hover()   # as when clicking it: hover shows the empty 📅 too
     before = {sel: item.locator(sel).first.bounding_box() for sel in (".task-tag", ".task-due")}
     title = item.locator(".task-content")
     text_wider = "el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width > el.clientWidth + 1; }"
@@ -1917,3 +1916,19 @@ def test_compact_on_a_phone_is_two_lines(new_page, wiki):
     assert due["y"] >= title["y"] + title["height"] - 1                  # dates on the second line
     assert 44 <= row["height"] < 64
     assert 44 <= plain.bounding_box()["height"] < 52                     # nothing for a second line
+
+
+def test_empty_dates_show_on_hover_in_lines_too(page, wiki):
+    # With a mouse the empty ⏰ / 📅 placeholders (to set a date) show on
+    # hover, on one-line cards as on full ones.
+    page.request.post("/api/deck", data={"title": "No dates yet"})
+    real_density(page)                       # Open: one line per task
+    page.goto("/deck?view=open")
+    expect(page.locator(".tasks-app")).to_have_class(COMPACT)
+    empty = card(page, "No dates yet").locator(".task-date-empty")
+    page.mouse.move(0, 0)
+    expect(empty.first).to_be_hidden()
+    card(page, "No dates yet").hover()
+    expect(empty).to_have_count(2)
+    expect(empty.first).to_be_visible()
+    expect(empty.last).to_be_visible()

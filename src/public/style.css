@@ -2210,10 +2210,10 @@ div.chip-input > input {
 /* An empty first item, so even the first tag can wrap away. */
 .tasks-app .task-tags-right::before { content: ""; width: 0; height: 1.5em; margin-right: -.2rem; }
 .tasks-app .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; padding-left: .35rem; }
-/* Empty date placeholders (⏰ 📅 to set one): full cards on hover only;
-   compact lines never (⋯ / right-click and the modal set dates). */
+/* Empty date placeholders (⏰ 📅 to set one): on hover, full cards and
+   compact lines alike. */
 .tasks-app .task-date-empty { display: none; }
-.tasks-app:not(.deck-compact) .task-item:hover .task-date-empty { display: inline; }
+.tasks-app .task-item:hover .task-date-empty { display: inline; }
 /* Touch has no hover: there full cards always offer them. */
 @media (hover: none) { .tasks-app:not(.deck-compact) .task-date-empty { display: inline; } }
 /* The latest comments, under the notes. */
@@ -2418,12 +2418,10 @@ div.chip-input > input {
 @media (hover: none) {
   .task-skip-btn { display: none; }
 }
-/* With a mouse the ⋯ button goes (right-click and the menu key open the
-   menu) and ⏭ shows on hover or when the card is selected (or has focus);
-   it keeps its room, so nothing moves when it appears. Touch keeps ⋯. */
+/* With a mouse ⏭ and ⋯ show on hover or when the card is selected (or has
+   focus); they keep their room, so nothing moves when they appear.
+   Right-click and the menu key open the menu too. Touch always shows ⋯. */
 @media (hover: hover) {
-  /* Right-click (or the menu key) opens the menu; no ⋯ needed. */
-  .task-menu-btn { display: none; }
   .task-item .task-actions { opacity: 0; transition: opacity .12s; }
   .task-item:hover .task-actions, .task-item.task-selected .task-actions,
   .task-item .task-actions:focus-within { opacity: 1; }
