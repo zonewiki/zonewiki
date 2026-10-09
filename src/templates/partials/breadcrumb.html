@@ -1,12 +1,10 @@
-{#- A view's breadcrumb (views.build_breadcrumb): the module switcher, the
-    page's folders, the page (a link when more follows), extra crumbs, and
-    what sits at its right end (the backlinks chip). -#}
+{#- A view's breadcrumb: the module switcher, then `crumbs` as (label, href)
+    pairs, the last without a link unless it has one. `key` and `title`
+    name the view for leaf.js's navigation trail (data-slug, data-title);
+    `right_html` sits at the right end (the backlinks chip). -#}
 {%- import "partials/modules.html" as modules -%}
-{%- set sep = '<span class="breadcrumb-sep">›</span>'|safe -%}
-<div class="breadcrumb" data-slug="{{ slug }}" data-title="{{ title }}">
+<div class="breadcrumb"{% if key is not none %} data-slug="{{ key }}" data-title="{{ title }}"{% endif %}>
 {{- modules.switch(module_links, app_name) -}}
-{%- for label, href in folders %}{{ sep }}<a href="{{ href }}">{{ label }}</a>{% endfor -%}
-{{ sep }}{% if extra or query_string %}<a href="{{ url("page", slug) }}{{ query_string }}">{{ title }}</a>{% else %}<span>{{ title }}</span>{% endif -%}
-{%- for label, href in extra %}{{ sep }}{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}{% endfor -%}
+{%- for label, href in crumbs %}<span class="breadcrumb-sep">›</span>{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}{% endfor -%}
 {%- if right_html %}<span class="breadcrumb-right">{{ right_html|safe }}</span>{% endif -%}
 </div>

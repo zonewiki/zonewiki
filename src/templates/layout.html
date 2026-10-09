@@ -1,7 +1,7 @@
 {#- Every view's page: head, the dialogs leaf.js opens (search, new note, new
     page, shortcuts, paste link, upload conflict), the status badges, the top
     actions (desktop) and the action bar (phones). Views extend it and fill
-    the body block; views.shell() wraps HTML built elsewhere. -#}
+    the body block (views.page). -#}
 <!DOCTYPE html>
 <html lang="en"{% if sharing %} class="sharing"{% endif %}>
 <head>
@@ -101,7 +101,7 @@
     {% endif %}
   </div>
   {% if show_actions %}{% include "partials/top_actions.html" %}{% endif %}
-  {% block body %}{{ body_html|safe }}{% endblock %}
+  {% block body %}{% endblock %}
   </main>
   {% if show_actions %}{% include "partials/action_bar.html" %}{% endif %}
 </body>

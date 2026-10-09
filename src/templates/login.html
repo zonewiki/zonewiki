@@ -1,0 +1,12 @@
+{#- The login gate (LEAF_PASSWORD). -#}
+{% extends "layout.html" %}
+{% block body %}
+<div class="login-wrap">
+  <form class="login-form" method="post" action="/login{% if next_url %}?next={{ next_url }}{% endif %}">
+    <h2>Sign in to {{ app_name }}</h2>
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
+    {% if error %}<p class="login-error">{{ error }}</p>{% endif %}
+    <button type="submit" class="btn btn-primary">Sign in</button>
+  </form>
+</div>
+{% endblock %}

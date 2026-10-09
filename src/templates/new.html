@@ -1,0 +1,11 @@
+{#- /new without JavaScript (the New page dialog posts to it too). -#}
+{% extends "layout.html" %}
+{% block body %}
+<h1>New Page</h1>
+<form class="new-page-form" method="post" action="/new">
+  <label for="page-name">Page name</label>
+  <input type="text" id="page-name" name="slug"
+         placeholder="e.g. My New Page" autofocus required>
+  <button type="submit" class="btn btn-primary">Create</button>
+</form>
+{% endblock %}

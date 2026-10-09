@@ -1,7 +1,6 @@
 """HTML building blocks of Leaf's views: the page shell, breadcrumb and
 module switcher, action buttons, menus and dialogs, side columns."""
 
-import html
 import re
 from datetime import datetime
 from pathlib import Path
@@ -117,11 +116,6 @@ def module_links() -> list[dict]:
             for key, label, href in MODULES]
 
 
-def home_link() -> str:
-    """The root of every breadcrumb, the module switcher."""
-    return macro("partials/modules.html", "switch")(module_links(), config.APP_NAME)
-
-
 def current_module() -> str:
     """The module the current request's view belongs to: "deck", "scratch",
     "wiki", or "" for views of none (search results, login)."""
@@ -138,27 +132,28 @@ def current_module() -> str:
     return "wiki"
 
 
+def breadcrumb(crumbs: list[tuple], key: str | None = None, title: str = "", right_html: str = "") -> str:
+    """A breadcrumb: the module switcher, then `crumbs` as (label, href or
+    None). `key` and `title` name the view for leaf.js's navigation trail."""
+    return render("partials/breadcrumb.html", crumbs=crumbs, key=key, title=title, right_html=right_html,
+                  module_links=module_links(), app_name=config.APP_NAME)
+
+
 def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "", query_string: str = "") -> str:
-    """A breadcrumb for a page slug: its folders, the page, and `extra`
-    (label, url or None) crumbs after it. `right_html` sits at its right
-    end; `query_string` is added to the page's own link (e.g. '?tag=task')."""
+    """A page's breadcrumb: its folders, the page, and `extra` (label, url or
+    None) crumbs after it. The page is a link when more follows or with a
+    `query_string` (added to it, e.g. '?tag=task')."""
     parts = slug.split("/")
-    folders = [(part.replace("-", " ").title(), url("page", "/".join(parts[:i + 1])))
-               for i, part in enumerate(parts[:-1])]
-    return render("partials/breadcrumb.html", slug=slug, title=title, folders=folders, extra=extra,
-                  right_html=right_html, query_string=query_string, module_links=module_links(),
-                  app_name=config.APP_NAME)
+    crumbs = [(part.replace("-", " ").title(), url("page", "/".join(parts[:i + 1])))
+              for i, part in enumerate(parts[:-1])]
+    crumbs.append((title, url("page", slug) + query_string if extra or query_string else None))
+    return breadcrumb(crumbs + list(extra), slug, title, right_html)
 
 
 def hidden_page_view() -> str:
     """What a page not for sharing shows in sharing mode: neither its title
     nor its text, and no stop in the navigation trail."""
-    body = (f'<div class="breadcrumb">{home_link()}<span class="breadcrumb-sep">›</span>'
-            '<span>Hidden page</span></div>'
-            '<header class="page-header"><h1>Hidden page</h1></header>'
-            '<article class="page-content"><p class="hidden-page-note">This page is not shown in '
-            'sharing mode. Turn sharing mode off (the eye at the top, or <kbd>S</kbd>) to see it.</p></article>')
-    return shell("Hidden page", body)
+    return page("hidden.html", "Hidden page", breadcrumb_html=breadcrumb([("Hidden page", None)]))
 
 
 def link_sections(backlinks: list[dict], task_backlinks: list[dict], prefer=()) -> list[dict]:
@@ -254,7 +249,10 @@ FORMAT_BAR = render("partials/format_bar.html")
 
 
 def _shell_context(title: str, editor: bool, action_buttons: bool, wide: bool) -> dict:
-    """What templates/layout.html needs besides the view's own content."""
+    """What templates/layout.html needs besides the view's own content.
+    `action_buttons=False` drops the action buttons, new note and search
+    (the login page has nothing to search or write); the editor has its own
+    toolbar instead. `wide`: a page view with side columns on big screens."""
     home = deck_home()
     deck_new = None
     if home:
@@ -272,39 +270,10 @@ def _shell_context(title: str, editor: bool, action_buttons: bool, wide: bool) -
             "module_links": module_links() if show_actions else []}
 
 
-def shell(title: str, body: str, *, editor: bool = False, action_buttons: bool = True,
-          wide: bool = False) -> str:
-    """Wrap body (HTML) in the page skeleton, templates/layout.html.
-    `action_buttons=False` drops the action buttons, new note and search
-    (the editor has its own toolbar; the login page has nothing to search or
-    write). `wide`: a page view with side columns on big screens
-    (`main.wide`, see view_page)."""
-    return render("layout.html", body_html=body, **_shell_context(title, editor, action_buttons, wide))
-
-
 def page(template: str, title: str, *, editor: bool = False, action_buttons: bool = True,
          wide: bool = False, **context) -> str:
     """A view from its template, which extends layout.html."""
     return render(template, **_shell_context(title, editor, action_buttons, wide), **context)
-
-
-def index_page(slug: str, title: str, body_inner: str) -> str:
-    """Shared shell for the auto-generated index pages (_scratch, _deleted)."""
-    body = f"""{build_breadcrumb(slug, title)}
-<header class="page-header"><h1>{html.escape(title)}</h1></header>
-<article class="page-content">{body_inner}</article>"""
-    return shell(title, body)
-
-
-def notes_list_html(entries: list[dict], empty_msg: str) -> str:
-    if not entries:
-        return f"<p>{empty_msg}</p>"
-    items = "".join(
-        f'<li data-slug="{html.escape(n["slug"])}"><a href="{url("page", n["slug"])}">{html.escape(n["title"])}</a>'
-        f'<span class="note-date">{n["date"]}</span></li>'
-        for n in entries
-    )
-    return f"<ul class='notes-list'>{items}</ul>"
 
 
 # Big screens (style.css, "Side columns") show a page view in three columns:

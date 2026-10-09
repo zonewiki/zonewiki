@@ -1,0 +1,20 @@
+{#- /search: up to SEARCH_PAGE_LIMIT results (the modal's "All results").
+    An excerpt is HTML from search.make_excerpt (escaped, <mark>s). -#}
+{% extends "layout.html" %}
+{% block body %}
+<div class="search-results">
+  <h1>Search: {{ q }}</h1>
+  {% if results %}
+  <p class="search-count">{% if results|length == limit %}The first {{ results|length }} results{% else %}{{ results|length }} result{{ "" if results|length == 1 else "s" }}{% endif %}{% if unlinked %} · unlinked pages only{% endif %}</p>
+  {% for r in results %}
+  <div class="search-result-card">
+    <a href="{{ r.href }}">{{ r.title }}</a>
+    <span class="result-meta">{{ r.meta }}</span>
+    <p>{{ r.excerpt|safe }}</p>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p>No results found.</p>
+  {% endif %}
+</div>
+{% endblock %}

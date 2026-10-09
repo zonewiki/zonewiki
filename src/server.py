@@ -3,7 +3,6 @@ the wiki (pages, editor, scratch notes, search, uploads, the deck page,
 /mcp). Version history routes are in history.py, the deck API in deck.py."""
 
 import hmac
-import html
 import json
 import mimetypes
 import os
@@ -41,10 +40,7 @@ from retrieval import (
     do_search, SCRATCH_FILTER_LIMIT, SEARCH_LIMIT, SEARCH_MAX_LIMIT, SEARCH_PAGE_LIMIT,
 )
 import views
-from views import (
-    build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view,
-    home_link, index_page, notes_list_html, shell,
-)
+from views import build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view
 from mcp_tools import mcp_call_tool
 
 
@@ -136,16 +132,8 @@ def login():
                 next_url = "/"
             return redirect(next_url)
         error = "Incorrect password."
-    error_html = f'<p class="login-error">{html.escape(error)}</p>' if error else ""
-    body = f"""<div class="login-wrap">
-  <form class="login-form" method="post" action="/login{f'?next={html.escape(request.args.get("next", ""))}' if request.args.get("next") else ''}">
-    <h2>Sign in to {html.escape(config.APP_NAME)}</h2>
-    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
-    {error_html}
-    <button type="submit" class="btn btn-primary">Sign in</button>
-  </form>
-</div>"""
-    return shell("Sign in", body, action_buttons=False)
+    return views.page("login.html", "Sign in", action_buttons=False, error=error,
+                      next_url=request.args.get("next", ""))
 
 
 @app.post("/logout")
@@ -165,15 +153,8 @@ def scratch_page():
     # query syntax) over scratch notes only; leaf.js (initScratchFilter)
     # shows the matches in ranked order with their excerpts. ?q= keeps the
     # query (Back returns to the filtered list).
-    notes = list_scratch()
-    q = request.args.get("q", "")
-    filt = (f'<div class="scratch-filter"><input type="search" id="scratch-filter" '
-            f'value="{html.escape(q)}" placeholder="Filter scratch notes…" '
-            f'title="Search syntax works: &quot;phrase&quot;, -word, #tag, edited:2026-09 …" '
-            f'aria-label="Filter scratch notes" autocomplete="off" spellcheck="false">'
-            f'<span class="scratch-filter-count" id="scratch-filter-count" aria-live="polite"></span></div>'
-            if notes else "")
-    return index_page('_scratch', 'Scratch', filt + notes_list_html(notes, 'No entries yet.'))
+    return views.page("scratch.html", "Scratch", notes=list_scratch(), q=request.args.get("q", ""),
+                      breadcrumb_html=build_breadcrumb("_scratch", "Scratch"))
 
 
 @app.get("/api/page-preview/<path:slug>")
@@ -195,39 +176,17 @@ def api_page_preview(slug):
 @app.get("/page/_raw")
 def raw_page():
     path = safe_path("_raw")
-    if path is None:
-        abort(400)
     if not path.exists():
         path.write_text("# Raw\n\n", encoding="utf-8")
         git_commit(path, "Create _raw")
     content = path.read_text(encoding="utf-8")
     title = page_title(content, "_raw")
     raw_dir = config.WIKI_DIR / "_raw"
-    subpages = []
-    if raw_dir.is_dir():
-        for f in sorted(raw_dir.glob("*.md"), reverse=True):
-            sc = f.read_text(encoding="utf-8")
-            sub_slug = f"_raw/{f.stem}"
-            subpages.append({"slug": sub_slug, "title": page_title(sc, sub_slug)})
-    if subpages:
-        items = "".join(
-            f'<li><a href="{url("page", p["slug"])}">{html.escape(p["title"])}</a></li>'
-            for p in subpages
-        )
-        sub_html = f'<section class="backlinks"><h3>Snippets</h3><ul>{items}</ul></section>'
-    else:
-        sub_html = ''
-    article_html = render_md(strip_h1(content))
-    body = f"""{build_breadcrumb('_raw', title)}
-<header class="page-header">
-  <h1>{html.escape(title)}</h1>
-  <div class="page-header-actions">
-    <a href="/edit/_raw" class="btn">Edit</a>
-  </div>
-</header>
-<article class="page-content">{article_html}</article>
-{sub_html}"""
-    return shell(title, body)
+    snippets = [{"slug": f"_raw/{f.stem}", "title": page_title(f.read_text(encoding="utf-8"), f"_raw/{f.stem}")}
+                for f in sorted(raw_dir.glob("*.md"), reverse=True)] if raw_dir.is_dir() else []
+    return views.page("raw.html", title, page_title=title, snippets=snippets,
+                      article_html=render_md(strip_h1(content)),
+                      breadcrumb_html=build_breadcrumb("_raw", title))
 
 
 def _append_to_raw(line: str, message: str) -> None:
@@ -477,14 +436,7 @@ def api_save(slug):
 
 @app.get("/new")
 def new_page():
-    body = """<h1>New Page</h1>
-<form class="new-page-form" method="post" action="/new">
-  <label for="page-name">Page name</label>
-  <input type="text" id="page-name" name="slug"
-         placeholder="e.g. My New Page" autofocus required>
-  <button type="submit" class="btn btn-primary">Create</button>
-</form>"""
-    return shell("New Page", body)
+    return views.page("new.html", "New Page")
 
 
 @app.post("/new")
@@ -724,36 +676,23 @@ def api_search():
 @app.get("/deck")
 def deck_page():
     list_name = decksyntax.clean_list(request.args.get("list"))
-    sep = '<span class="breadcrumb-sep">›</span>'
     if list_name:
         # A list looks the same here as on the page that declares it: that
         # embed's params (keep, labels, limit, view, tag) apply.
-        home = deck_lists().get(list_name)
-        params = dict(home["params"]) if home else {}
-        params["list"] = list_name
-        embed = deck.build_deck_embed(params)
+        declared = deck_lists().get(list_name)
+        params = {**(declared["params"] if declared else {}), "list": list_name}
+        home = declared and {"slug": declared["slug"],
+                             "title": page_meta(safe_path(declared["slug"]), declared["slug"])[0]}
         title = f"{list_name} · Deck"
-        crumbs = [home_link(), '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
-        heading = html.escape(list_name)
-        if home:
-            page_link = (f'<a href="{url("page", home["slug"])}">'
-                         f'{html.escape(page_meta(safe_path(home["slug"]), home["slug"])[0])}</a>')
-            note = f'<p class="deck-list-home">A separate list, from {page_link}.</p>'
-        else:
-            note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>: '
-                    f'these are the tasks tagged #{heading}.</p>')
+        crumbs = [("Deck", "/deck"), (list_name, None)]
     else:
-        embed = deck.build_deck_embed({})
-        title = "Deck"
-        crumbs = [home_link(), "<span>Deck</span>"]
-        heading = "Deck"
-        note = ""
-    # data-slug keys the navigation trail (leaf.js); no page has this slug.
+        params, home, title, crumbs = {}, None, "Deck", [("Deck", None)]
+    # The breadcrumb's key names the view for the navigation trail (leaf.js);
+    # no page has it as its slug.
     key = "/deck" + (f"?list={list_name}" if list_name else "")
-    body = f"""<div class="breadcrumb" data-slug="{html.escape(key)}" data-title="{html.escape(title)}">{sep.join(crumbs)}</div>
-<header class="page-header"><h1>{heading}</h1></header>
-<article class="page-content">{note}{embed}</article>"""
-    return shell(title, body)
+    return views.page("deck_page.html", title, heading=list_name or "Deck", list_name=list_name,
+                      home=home, deck_html=deck.build_deck_embed(params),
+                      breadcrumb_html=views.breadcrumb(crumbs, key, title))
 
 
 @app.get("/search")
@@ -761,27 +700,8 @@ def search_page():
     q = request.args.get("q", "").strip()
     unlinked = request.args.get("unlinked") == "1"
     results = do_search(q, unlinked=unlinked, limit=SEARCH_PAGE_LIMIT) if q else []
-
-    if results:
-        shown = (f"The first {len(results)} results" if len(results) == SEARCH_PAGE_LIMIT
-                 else f"{len(results)} result" + ("" if len(results) == 1 else "s"))
-        scope = " · unlinked pages only" if unlinked else ""
-        cards = f'<p class="search-count">{shown}{scope}</p>' + "".join(
-            f"""<div class="search-result-card">
-  <a href="{html.escape(r['href'])}">{html.escape(r['title'])}</a>
-  <span class="result-meta">{html.escape(r['meta'])}</span>
-  <p>{r['excerpt']}</p>
-</div>"""
-            for r in results
-        )
-    else:
-        cards = "<p>No results found.</p>"
-
-    body = f"""<div class="search-results">
-  <h1>Search: {html.escape(q)}</h1>
-  {cards}
-</div>"""
-    return shell(f"Search: {q}", body)
+    return views.page("search.html", f"Search: {q}", q=q, results=results, unlinked=unlinked,
+                      limit=SEARCH_PAGE_LIMIT)
 
 
 @app.post("/api/toggle-checkbox/<path:slug>")
