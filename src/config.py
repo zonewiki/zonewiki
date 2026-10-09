@@ -35,7 +35,7 @@ LEAF_BUILD = os.environ.get("LEAF_BUILD") or _source_build()
 
 # Optional login gate (server.check_auth).
 LEAF_PASSWORD = os.environ.get("LEAF_PASSWORD", "")
-# Bearer token for /mcp (see mcp_endpoint); needed there when LEAF_PASSWORD is set.
+# Bearer token for /mcp (see mcp_endpoint); without it /mcp is off.
 LEAF_MCP_TOKEN = os.environ.get("LEAF_MCP_TOKEN", "")
 # Leaf's address as the user's browser knows it, for links Leaf hands to an
 # LLM (MCP tools). Unset, links use the address the request came in on,
@@ -47,8 +47,22 @@ LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
 LEAF_HOST_DATA = os.environ.get("LEAF_HOST_DATA", "").strip().rstrip("/")
 # A remote for the wiki's git repository (gitstore.git_setup).
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
-# Listen on the LAN: no Host check (server.check_host).
+# Listen on the LAN: no Host check (server.check_host), unless LEAF_HOSTS
+# names the hosts.
 ALLOW_REMOTE = os.environ.get("ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
+# The names Leaf may be reached by besides localhost, e.g. behind a reverse
+# proxy: LEAF_HOSTS=wiki.example.org,leaf.lan (any port; server.check_host).
+# Set, the Host check stays on even with ALLOW_REMOTE.
+def host_name(host: str) -> str:
+    """A Host header's name without its port, lowercase ("[::1]:5000" →
+    "[::1]", "Wiki.Example.org:443" → "wiki.example.org")."""
+    host = host.strip().lower()
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.split(":", 1)[0]
+
+
+LEAF_HOSTS = frozenset(host_name(h) for h in os.environ.get("LEAF_HOSTS", "").split(",") if h.strip())
 
 
 # Sharing mode leaves out the pages LEAF_NOSHARE names (pages.is_noshare):

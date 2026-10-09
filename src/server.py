@@ -3,16 +3,20 @@ the wiki (pages, editor, scratch notes, search, uploads, the deck page,
 /mcp). Version history routes are in history.py, the deck API in deck.py."""
 
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
 import re
+import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
+from flask.sessions import SecureCookieSessionInterface
 
 import config
 import deck
@@ -45,8 +49,26 @@ from mcp_tools import mcp_call_tool
 from templating import macro
 
 
+def _is_https() -> bool:
+    """The browser's connection is HTTPS: Leaf's own (rare), or a reverse
+    proxy's, which says so in X-Forwarded-Proto."""
+    proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+    return request.is_secure or proto == "https"
+
+
+class _SessionInterface(SecureCookieSessionInterface):
+    """The login cookie is Secure (HTTPS only) when the request came over
+    HTTPS, so behind an HTTPS proxy the browser never sends it in the clear;
+    over plain http (localhost, the LAN) it still works. A client faking the
+    header only gets a cookie its own http requests leave out."""
+
+    def get_cookie_secure(self, app) -> bool:
+        return _is_https()
+
+
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.session_interface = _SessionInterface()
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -54,9 +76,15 @@ ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}
 PUBLIC_DIR = Path(__file__).parent / "public"
 
 
+# DNS rebinding: a page on evil.example whose name later resolves to
+# 127.0.0.1 reaches Leaf with "Host: evil.example". Only localhost, and the
+# names in LEAF_HOSTS (a reverse proxy's public name, any port), get in.
+# ALLOW_REMOTE without LEAF_HOSTS turns the check off (LAN access by IP).
 @app.before_request
 def check_host():
-    if not config.ALLOW_REMOTE and request.host not in ALLOWED_HOSTS:
+    if config.ALLOW_REMOTE and not config.LEAF_HOSTS:
+        return
+    if request.host not in ALLOWED_HOSTS and config.host_name(request.host) not in config.LEAF_HOSTS:
         abort(400)
 
 
@@ -127,24 +155,93 @@ def _is_local_path(url: str) -> bool:
     return url.startswith("/") and not url.startswith(("//", "/\\"))
 
 
+def _client_key() -> str:
+    """Who is guessing, for the throttle: the client's address. Behind a
+    reverse proxy (the request comes from a loopback or private address)
+    that is the address the proxy saw and appended last to X-Forwarded-For,
+    so clients aren't all one."""
+    addr = request.remote_addr or ""
+    forwarded = [a.strip() for a in request.headers.get("X-Forwarded-For", "").split(",") if a.strip()]
+    try:
+        local = ipaddress.ip_address(addr).is_private
+    except ValueError:
+        local = False
+    return forwarded[-1] if forwarded and local else addr
+
+
+class Throttle:
+    """Wrong passwords (and MCP tokens) slow the guesser down: after `free`
+    failures in a row from one client, each further try waits, 1 minute,
+    then doubling up to an hour. A success clears the client; a client quiet
+    for a day is forgotten. Per client, so a guesser elsewhere doesn't lock
+    the owner out. In memory: a restart forgets."""
+
+    def __init__(self, free: int = 5, first: float = 60, longest: float = 3600):
+        self.free, self.first, self.longest = free, first, longest
+        self._fails: dict[str, tuple[int, float]] = {}
+        self._lock = threading.Lock()
+
+    def wait(self, key: str) -> float:
+        """Seconds before `key` may try again (0: now)."""
+        with self._lock:
+            count, last = self._fails.get(key, (0, 0.0))
+        if count < self.free:
+            return 0.0
+        delay = min(self.first * 2 ** (count - self.free), self.longest)
+        return max(0.0, last + delay - time.time())
+
+    def failed(self, key: str) -> None:
+        now = time.time()
+        with self._lock:
+            self._fails = {k: v for k, v in self._fails.items() if now - v[1] < 86400}
+            count, _ = self._fails.get(key, (0, 0.0))
+            self._fails[key] = (count + 1, now)
+
+    def succeeded(self, key: str) -> None:
+        with self._lock:
+            self._fails.pop(key, None)
+
+
+LOGIN_THROTTLE = Throttle()
+MCP_THROTTLE = Throttle()
+
+
+def _same_secret(given: str, secret: str) -> bool:
+    """Constant-time comparison; as bytes, so non-ASCII passwords work."""
+    return hmac.compare_digest(given.encode(), secret.encode())
+
+
+def _wait_message(seconds: float) -> str:
+    minutes = max(1, round(seconds / 60))
+    return f"Too many wrong attempts. Try again in {minutes} minute{'s' if minutes > 1 else ''}."
+
+
 @app.get("/login")
 @app.post("/login")
 def login():
     if not config.LEAF_PASSWORD:
         return redirect("/")
-    error = ""
+    error, status = "", 200
     if request.method == "POST":
-        pw = request.form.get("password", "")
-        if hmac.compare_digest(pw, config.LEAF_PASSWORD):
+        key = _client_key()
+        wait = LOGIN_THROTTLE.wait(key)
+        if wait:
+            # Refused unchecked, even the right password: guessing doesn't
+            # go on in the meantime.
+            error, status = _wait_message(wait), 429
+        elif _same_secret(request.form.get("password", ""), config.LEAF_PASSWORD):
+            LOGIN_THROTTLE.succeeded(key)
             session.permanent = True
             session["authenticated"] = True
             next_url = request.args.get("next", "/")
             if not _is_local_path(next_url):
                 next_url = "/"
             return redirect(next_url)
-        error = "Incorrect password."
+        else:
+            LOGIN_THROTTLE.failed(key)
+            error = "Incorrect password."
     return views.page("login.html", "Sign in", action_buttons=False, error=error,
-                      next_url=request.args.get("next", ""))
+                      next_url=request.args.get("next", "")), status
 
 
 @app.post("/logout")
@@ -628,8 +725,8 @@ def _mcp_authorized() -> bool:
     tasks), so /mcp is off until a token is set: open, it would let anything
     that reaches the port change the wiki, password or not."""
     auth = request.headers.get("Authorization", "")
-    return bool(config.LEAF_MCP_TOKEN) and auth.startswith("Bearer ") and hmac.compare_digest(
-        auth[len("Bearer "):].strip().encode(), config.LEAF_MCP_TOKEN.encode())
+    return bool(config.LEAF_MCP_TOKEN) and auth.startswith("Bearer ") and _same_secret(
+        auth[len("Bearer "):].strip(), config.LEAF_MCP_TOKEN)
 
 
 @app.route("/mcp", methods=["GET", "POST", "DELETE"])
@@ -640,9 +737,17 @@ def mcp_endpoint():
     if not config.LEAF_MCP_TOKEN:
         return jsonify({"error": "MCP is off: set LEAF_MCP_TOKEN in .env and send it "
                                  "as 'Authorization: Bearer <token>'"}), 403
+    # Wrong tokens count against the client like wrong passwords (their own
+    # throttle: a client's MCP mistakes don't lock its browser out).
+    key = _client_key()
+    wait = MCP_THROTTLE.wait(key)
+    if wait:
+        return jsonify({"error": _wait_message(wait)}), 429, {"Retry-After": str(int(wait) + 1)}
     if not _mcp_authorized():
+        MCP_THROTTLE.failed(key)
         return (jsonify({"error": "Unauthorized: wrong or missing bearer token"}), 401,
                 {"WWW-Authenticate": "Bearer"})
+    MCP_THROTTLE.succeeded(key)
     if request.method != "POST":
         return "", 405, {"Allow": "POST"}
     try:

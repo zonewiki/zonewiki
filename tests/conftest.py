@@ -39,6 +39,8 @@ def wiki_dir(tmp_path, monkeypatch):
     for cache in (retrieval._search_index_cache, retrieval._chunk_index_cache):
         cache["key"] = None
     deckstore._task_docs_cache.update(key=None, docs=[])
+    for throttle in (server.LOGIN_THROTTLE, server.MCP_THROTTLE):
+        monkeypatch.setattr(throttle, "_fails", {})
     (tmp_path / "_assets").mkdir()
     (tmp_path / "_deck").mkdir()   # tests write deck files directly
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")

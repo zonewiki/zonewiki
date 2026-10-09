@@ -3,7 +3,8 @@
 A local-first personal wiki with a built-in task deck. Your notes are plain
 Markdown files in a folder you choose; Leaf renders them in the browser, lets
 you edit them there or in any editor, searches them, and keeps every version
-in git. No database, no build step, no cloud.
+in git. No database, no build step, no cloud: run it on your machine, or
+self-host it behind HTTPS.
 
 ## Features
 
@@ -90,6 +91,7 @@ Settings go in `.env`, all optional except `WIKI_DATA`:
 |---------|------|
 | `WIKI_DATA` | The wiki folder (default `~/leaf`) |
 | `ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
+| `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `LEAF_PASSWORD` | A login gate; `SECRET_KEY` keeps sessions across restarts |
 | `GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
@@ -105,16 +107,53 @@ Register `http://localhost:5000/mcp` with your MCP client (HTTP transport) and t
 
 ## Security
 
-Leaf is built for one person on their own machine. Out of the box it listens
-on localhost only, refuses requests with a foreign `Host` header (DNS
-rebinding) and cross-site writes (another site posting to `localhost:5000`).
-Beyond that, know what you open up:
+Leaf is for one person: run it on your own machine, or self-host it on a
+server. Out of the box it listens on localhost only, refuses requests with a
+foreign `Host` header (DNS rebinding) and cross-site writes (another site
+posting to `localhost:5000`). Anything reachable beyond localhost belongs
+behind HTTPS, with `LEAF_PASSWORD` set.
+
+**Self-hosting behind HTTPS.** Put a reverse proxy in front that terminates
+HTTPS, passes the original `Host` and sets `X-Forwarded-Proto` and
+`X-Forwarded-For`, and name the public host in `LEAF_HOSTS`. With
+[Caddy](https://caddyserver.com) on the same machine (it does all of that and
+gets the certificate):
+
+```
+wiki.example.org {
+    reverse_proxy localhost:5000
+}
+```
+
+```bash
+# .env
+LEAF_HOSTS=wiki.example.org
+LEAF_PASSWORD=…                        # long and unique
+LEAF_BASE_URL=https://wiki.example.org
+```
+
+Leave `ALLOW_REMOTE` off here: the proxy reaches Leaf on localhost, and port
+5000 stays closed to the network, so nobody can go around HTTPS. A proxy on
+another machine needs `ALLOW_REMOTE=1` too; `LEAF_HOSTS` keeps the `Host`
+check on. Over HTTPS the login cookie is marked secure, and wrong passwords
+slow the guesser down (after 5, a wait that doubles from 1 minute up to an
+hour, per client).
+
+There is one shared password and no second factor. If only you need to
+reach Leaf from outside, a VPN (WireGuard, Tailscale) is safer still than a
+public address.
+
+Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
-  delete everything. With `ALLOW_REMOTE=1` that is your whole network; set
-  `LEAF_PASSWORD` then, and put Leaf behind HTTPS (a reverse proxy) if the
-  network isn't yours. There are no user accounts, so share the password with
-  no one you wouldn't hand the files to.
+  delete everything. With `ALLOW_REMOTE=1` that is your whole network: set
+  `LEAF_PASSWORD`. There are no user accounts, so share the password with no
+  one you wouldn't hand the files to.
+- **Plain `http://` is readable on the network.** The password when you sign
+  in, the login cookie after it, the MCP token and your pages all travel
+  unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN)
+  can read them and sign in as you. That's fine on localhost; anywhere else,
+  use HTTPS or a VPN.
 - **MCP clients can write.** Whoever has `LEAF_MCP_TOKEN` can create, change,
   rename and delete pages and tasks, password or not. Keep the token secret,
   make it long and random, and give it only to clients you trust.

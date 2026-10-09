@@ -172,6 +172,13 @@ class TestAuth:
     def test_get_also_needs_auth(self, client):
         assert client.get("/mcp", headers=HOST).status_code == 401
 
+    def test_wrong_tokens_are_throttled(self, client):
+        for _ in range(5):
+            assert rpc(client, "ping", headers={"Authorization": "Bearer guess"}).status_code == 401
+        resp = rpc(client, "ping")
+        assert resp.status_code == 429 and "Retry-After" in resp.headers
+        assert "Try again in 1 minute" in resp.get_json()["error"]
+
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 

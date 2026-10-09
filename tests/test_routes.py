@@ -1505,6 +1505,87 @@ class TestHostHeader:
             config.ALLOW_REMOTE = old
 
 
+    def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
+        for allow_remote in (False, True):   # set, the check stays on even with ALLOW_REMOTE
+            monkeypatch.setattr(config, "ALLOW_REMOTE", allow_remote)
+            for host in ("wiki.example.org", "Wiki.Example.org:8443", "localhost:5000", "[::1]:5000"):
+                assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
+            for host in ("evil.example", "wiki.example.org.evil.example", "192.168.1.5:5000"):
+                assert client.get("/page/index", headers={"Host": host}).status_code == 400, host
+
+    def test_host_name(self):
+        assert config.host_name("Wiki.Example.org:443") == "wiki.example.org"
+        assert config.host_name("[::1]:5000") == "[::1]"
+        assert config.host_name("leaf.lan") == "leaf.lan"
+
+
+# ===========================================================================
+# Behind an HTTPS proxy: the login cookie, throttling guesses
+# ===========================================================================
+
+class TestHttpsAndThrottle:
+
+    @pytest.fixture()
+    def auth_client(self, client, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_PASSWORD", "pässwört")
+        return client
+
+    def login(self, client, password, **headers):
+        return client.post("/login", data={"password": password}, headers={**HOST, **headers})
+
+    def test_cookie_is_secure_only_over_https(self, auth_client):
+        plain = self.login(auth_client, "pässwört").headers["Set-Cookie"]
+        assert "HttpOnly" in plain and "Secure" not in plain
+        proxied = self.login(auth_client, "pässwört", **{"X-Forwarded-Proto": "https"}).headers["Set-Cookie"]
+        assert "; Secure" in proxied
+
+    def test_non_ascii_password(self, auth_client):
+        assert self.login(auth_client, "pässwört").status_code == 302
+        assert self.login(auth_client, "passwort").status_code == 200
+
+    def test_wrong_passwords_slow_the_guesser_down(self, auth_client, monkeypatch):
+        now = [1_000_000.0]
+        monkeypatch.setattr(server.time, "time", lambda: now[0])
+        for _ in range(5):
+            assert "Incorrect password." in self.login(auth_client, "nope").get_data(as_text=True)
+        resp = self.login(auth_client, "pässwört")      # even the right one waits
+        assert resp.status_code == 429
+        assert "Try again in 1 minute." in resp.get_data(as_text=True)
+        now[0] += 61
+        assert self.login(auth_client, "nope").status_code == 200    # 6th failure: 2 minutes now
+        assert "2 minutes" in self.login(auth_client, "pässwört").get_data(as_text=True)
+        now[0] += 121
+        assert self.login(auth_client, "pässwört").status_code == 302
+        # a success forgets the failures
+        assert self.login(auth_client, "nope").status_code == 200
+
+    def test_longest_wait_is_an_hour(self):
+        t = server.Throttle()
+        for _ in range(30):
+            t.failed("x")
+        assert 3500 < t.wait("x") <= 3600
+
+    def test_each_client_counts_alone(self, auth_client, monkeypatch):
+        # Behind a proxy (requests from 127.0.0.1) the client is the address
+        # the proxy appended last to X-Forwarded-For.
+        for _ in range(5):
+            self.login(auth_client, "nope", **{"X-Forwarded-For": "1.2.3.4, 203.0.113.9"})
+        assert self.login(auth_client, "pässwört", **{"X-Forwarded-For": "203.0.113.9"}).status_code == 429
+        assert self.login(auth_client, "pässwört", **{"X-Forwarded-For": "198.51.100.7"}).status_code == 302
+        assert self.login(auth_client, "pässwört").status_code == 302    # the proxy host itself
+
+    def test_forwarded_for_ignored_from_a_public_address(self, client):
+        # a client on the internet can't pick its own key
+        with server.app.test_request_context(environ_base={"REMOTE_ADDR": "8.8.8.8"},
+                                             headers={"X-Forwarded-For": "10.0.0.1"}):
+            assert server._client_key() == "8.8.8.8"
+        # a proxy in a container network: the last entry is the one it added
+        with server.app.test_request_context(environ_base={"REMOTE_ADDR": "10.0.0.2"},
+                                             headers={"X-Forwarded-For": "1.1.1.1, 9.9.9.9"}):
+            assert server._client_key() == "9.9.9.9"
+
+
 # ===========================================================================
 # Search result hrefs (server-computed destination URLs)
 # ===========================================================================
