@@ -1764,13 +1764,37 @@ def test_compact_selecting_expands_enter_opens(page, wiki):
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
     page.keyboard.press("Escape")
     expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
-    # Moving the selection expands the newly selected task, the previous one closes.
-    page.keyboard.press("j")
-    expect(page.locator(".task-expanded")).to_have_count(1)
-    expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
-    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    # Moving the selection expands the newly selected task (when it has
+    # more to show: "Plain" doesn't), the previous one closes.
+    # (Newest first: "Plain" is above.)
     page.keyboard.press("k")
+    expect(card(page, "Plain")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(page.locator(".task-expanded")).to_have_count(0)
+    page.keyboard.press("j")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
+
+
+def test_compact_task_with_nothing_more_stays_a_line(page, wiki):
+    # No notes, no comments, a title that fits: selecting it changes
+    # nothing (no "expanded" card a few pixels taller); Enter opens it.
+    _expand_setup(page)
+    plain = card(page, "Plain")
+    before = plain.bounding_box()
+    plain.locator(".task-content").click()
+    expect(plain).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(plain).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    assert plain.bounding_box()["height"] == before["height"]
+    page.keyboard.press("Enter")
+    expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Plain")
+
+
+def test_compact_tap_on_nothing_more_opens_at_once(new_page, wiki):
+    from conftest import TOUCH_PHONE
+    phone = new_page(**TOUCH_PHONE)
+    _expand_setup(phone)
+    card(phone, "Plain").locator(".task-content").tap()
+    expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
 
 
 def test_full_cards_enter_opens_the_modal_at_once(page, wiki):

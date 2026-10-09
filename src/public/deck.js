@@ -192,8 +192,8 @@ listEl.addEventListener('click', e => {
   const card = e.target.closest('.task-item');
   if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
   // Compact: the first tap expands the task, a tap on the expanded one
-  // opens the modal.
-  if (compact && expandedId !== card.dataset.id) {
+  // opens the modal; a task with nothing more to show opens at once.
+  if (compact && expandedId !== card.dataset.id && hasMore(card.dataset.id)) {
     setSelected(card.dataset.id);
     setExpanded(card.dataset.id);
     return;
@@ -437,9 +437,19 @@ function applyCompact(view) {
 }
 // In compact view one task at a time is expanded to its full card: the
 // selected one (a click, arrows, j/k; setSelected), or on touch the one
-// tapped first (a tap on it then opens the modal). Esc collapses it until
+// tapped first (a tap on it then opens the modal); only when it has more
+// to show than its line (hasMore). Esc collapses it until
 // another task is selected; Enter opens the modal, as on full cards.
 let expandedId = null;
+// Whether expanding a task shows more than its line: notes, comments, or a
+// title the line cuts off. One with nothing more stays a line.
+function hasMore(id) {
+  const el = listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+  if (!el) return false;
+  if (el.querySelector('.task-desc, .task-card-comments')) return true;
+  const title = el.querySelector('.task-content');
+  return !!title && title.scrollWidth > title.clientWidth + 1;
+}
 function setExpanded(id) {
   expandedId = id;
   listEl?.querySelectorAll('.task-item').forEach(el =>
@@ -1280,7 +1290,7 @@ function setSelected(id) {
   updateSelectionClasses();
   // Compact: the selected task shows its details. Not on touch, where the
   // first tap expands and the second opens the modal (the tap handler).
-  if (compact && id && lastPointerType !== 'touch') setExpanded(id);
+  if (compact && id && lastPointerType !== 'touch' && hasMore(id)) setExpanded(id);
   if (id) {
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (el) el.scrollIntoView({ block: 'nearest' });
