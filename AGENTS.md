@@ -790,7 +790,7 @@ Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with 
 - Flask routes use `<path:slug>` to capture slugs containing `/`.
 - `safe_path()` uses `target.relative_to(pages_root)` to validate the path is inside `WIKI_DIR` (allows subdirs).
 - File writes call `path.parent.mkdir(parents=True, exist_ok=True)` before writing to auto-create subdirectories.
-- `index.md` is the home page and must always exist. Do not allow it to be deleted or renamed via the UI.
+- `index.md` is the home page and must always exist: Leaf creates it (`# Home`, committed) at startup when the wiki has none (`ensure_home_page`), e.g. a new, empty wiki folder. Do not allow it to be deleted or renamed via the UI.
 - All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `WIKI_DIR` before writing (prevent path traversal — use `Path.resolve()` and `relative_to()`).
 - When a page is renamed, every link to it is re-pointed (`rewrite_page_links()` via `update_references()`), so nothing that backlinks count is left broken:
   - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.

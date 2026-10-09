@@ -16,6 +16,7 @@ from tests.conftest import HOST
 import config
 import pages
 import gitstore
+import server
 import views
 
 pytestmark = pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
@@ -164,6 +165,23 @@ class TestWritesCommit:
 # ===========================================================================
 # History / revision / diff / restore
 # ===========================================================================
+
+
+class TestHomePage:
+
+    def test_a_wiki_without_index_gets_one(self, client, wiki_dir):
+        (wiki_dir / "index.md").unlink()
+        git(wiki_dir, "commit", "-qam", "no home")
+        server.ensure_home_page()
+        assert (wiki_dir / "index.md").read_text() == "# Home\n\n"
+        assert commit_messages(wiki_dir)[0] == "Create index"
+        assert client.get("/page/index", headers=HOST).status_code == 200
+
+    def test_an_existing_index_is_left_alone(self, wiki_dir):
+        before = head_sha(wiki_dir)
+        server.ensure_home_page()
+        assert (wiki_dir / "index.md").read_text() == "# Home\n\nWelcome.\n"
+        assert head_sha(wiki_dir) == before
 
 
 class TestDeckFolder:

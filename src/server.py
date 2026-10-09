@@ -100,7 +100,17 @@ def set_cache_headers(response):
     return response
 
 
+def ensure_home_page() -> None:
+    """Give a wiki without index.md (a new one) its home page, committed:
+    "/" opens it, and it can't be renamed or deleted."""
+    path = config.WIKI_DIR / "index.md"
+    if not path.exists():
+        path.write_text("# Home\n\n", encoding="utf-8")
+        git_commit(path, "Create index")
+
+
 git_setup()
+ensure_home_page()
 
 
 # The deck's files are in the wiki; the semantic index's worker reads tasks,
