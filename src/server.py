@@ -151,7 +151,7 @@ def index():
 @app.get("/page/_scratch")
 def scratch_page():
     # The filter runs the search (/api/search?scratch=1: its ranking and
-    # query syntax) over scratch notes only; leaf.js (initScratchFilter)
+    # query syntax) over scratch notes only; js/search.js (initScratchFilter)
     # shows the matches in ranked order with their excerpts. ?q= keeps the
     # query (Back returns to the filtered list).
     return views.page("scratch.html", "Scratch", notes=list_scratch(), q=request.args.get("q", ""),
@@ -520,7 +520,7 @@ def promote_page(slug):
         return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
     _move_page(old_path, new_path, slug, new_slug, f"Promote {slug} to {new_slug}")
     # The page to link it from opens in the editor, the link to paste where
-    # it belongs (leaf.js copied it on Move). A page linking to the note
+    # it belongs (js/pagemenu.js copied it on Move). A page linking to the note
     # already links here now: nothing to paste.
     if link_path and new_slug not in page_link_targets(
             link_path.read_text(encoding="utf-8"), link_slug):
@@ -688,7 +688,7 @@ def deck_page():
         crumbs = [("Deck", "/deck"), (list_name, None)]
     else:
         params, home, title, crumbs = {}, None, "Deck", [("Deck", None)]
-    # The breadcrumb's key names the view for the navigation trail (leaf.js);
+    # The breadcrumb's key names the view for the navigation trail (js/chrome.js);
     # no page has it as its slug.
     key = "/deck" + (f"?list={list_name}" if list_name else "")
     return views.page("deck_page.html", title, heading=list_name or "Deck", list_name=list_name,
@@ -722,7 +722,7 @@ def api_toggle_checkbox(slug):
 def api_preview():
     text = request.get_data(as_text=True)
     # ?lists=a,b: the lists the page declares, so a chip re-rendered on its
-    # own (leaf.js rerenderTaskRef) keeps linking to the page's list.
+    # own (js/page.js rerenderTaskRef) keeps linking to the page's list.
     lists = [n for n in (decksyntax.clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
     return render_md(text, prefer_lists=lists)
 

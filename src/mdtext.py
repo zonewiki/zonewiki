@@ -166,7 +166,7 @@ def iter_fenced_lines(lines: list[str]):
 # A task-list item as markdown-it's tasklists plugin renders it: a list marker
 # (optionally inside blockquotes), then "[ ]"/"[x]" followed by whitespace and
 # text. Only these lines produce checkboxes, so only these may be counted —
-# the Nth rendered checkbox must be the Nth match here. Mirrored in leaf.js
+# the Nth rendered checkbox must be the Nth match here. Mirrored in js/page.js
 # (taskCheckboxOffsets) for toggling inside the editor.
 _TASK_ITEM_RE = re.compile(r'^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\](?=[ \t]+\S)')
 
@@ -372,7 +372,7 @@ def promoted_slug(folder: str, name: str, date: str = "") -> str:
     `date_` (YYYY-MM-DD) in front of the name when the date is kept, as in
     `conversations/2026-07-08_alex-sam-debrief`. The name may not add
     folders of its own: a / in it is a hyphen. Mirrored by promotedSlug in
-    leaf.js for the dialog's preview."""
+    js/pagemenu.js for the dialog's preview."""
     name = to_slug(name.replace("/", "-"))
     if not name:
         return ""
@@ -383,7 +383,7 @@ def promoted_slug(folder: str, name: str, date: str = "") -> str:
 
 def page_wikilink(slug: str, label: str) -> str:
     """`[[slug|label]]`, with what would break a wikilink taken out of the
-    label. Mirrored by the Move to wiki dialog in leaf.js, which copies it."""
+    label. Mirrored by the Move to wiki dialog in js/pagemenu.js, which copies it."""
     label = re.sub(r"[\[\]|]", "", label).strip() or slug
     return f"[[{slug}|{label}]]"
 

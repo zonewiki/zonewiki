@@ -1,5 +1,5 @@
 {#- The editor's formatting bar: one button per markdown construct, applied
-    to the selection by leaf.js (data-fmt, see applyFormat). Line icons, not
+    to the selection by js/editor.js (data-fmt, see applyFormat). Line icons, not
     letters: a letter's height depends on the font. -#}
 {%- macro btn(fmt, label, width="1.4") -%}
 <button type="button" class="fmt-btn" data-fmt="{{ fmt }}" title="{{ label }}" aria-label="{{ label }}">

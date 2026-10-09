@@ -1,4 +1,4 @@
-{#- Every view's page: head, the dialogs leaf.js opens (search, new note, new
+{#- Every view's page: head, the dialogs the client code opens (search, new note, new
     page, shortcuts, paste link, upload conflict), the status badges, the top
     actions (desktop) and the action bar (phones). Views extend it and fill
     the body block (views.page). -#}
@@ -17,14 +17,14 @@
   <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/public/style.css">
   <script src="/public/vendor/highlight/highlight.min.js" defer></script>
-  <script src="/public/leaf.js" defer></script>
+  <script type="module" src="/public/leaf.js"></script>
 </head>
 <body
   {%- if editor %} class="editor-page"{% endif %}
   {%- if module %} data-module="{{ module }}"{% endif %}
   {#- New tasks from any page (c t, the New task button) get the tags the
       deck's home gives them, are keep tasks if it makes them, and start
-      today when its "+ New" would (leaf.js openHomeTask). #}
+      today when its "+ New" would (js/actions.js openHomeTask). #}
   {%- if deck_new is not none %} data-deck-tags="{{ deck_new.tags }}"
     {%- if deck_new.keep %} data-deck-keep="1"{% endif %}
     {%- if deck_new.today %} data-deck-today="1"{% endif %}

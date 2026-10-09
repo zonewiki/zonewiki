@@ -210,10 +210,9 @@ def _year_arg() -> str:
 @bp.get("/api/deck/headless")
 def api_headless():
     """A hidden deck app, for a page without one that wants its edit modal
-    (leaf.js openHomeTask: c t, the New task button). The HTML without its
-    <script> tags; the page loads deck-core.js and deck.js itself."""
-    html_out = re.sub(r"<script\b[^>]*></script>", "", build_deck_embed({}, headless=True))
-    return Response(html_out, mimetype="text/html")
+    (js/actions.js openHomeTask: c t, the New task button), which starts it
+    with deck.js's initDecks."""
+    return Response(build_deck_embed({}, headless=True), mimetype="text/html")
 
 
 @bp.get("/api/deck/completed")

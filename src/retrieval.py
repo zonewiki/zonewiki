@@ -322,7 +322,7 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
         r["meta"] = _result_meta(d)
         r["href"] = _result_href(r)
         if d.get("type") != "task":
-            # The page highlights what matched (leaf.js); before the #anchor.
+            # The page highlights what matched (js/search.js); before the #anchor.
             words = search.matched_words(d["excerpt_text"], q)
             if words:
                 r["href"] += "?" + urlencode([("hl", w) for w in words])

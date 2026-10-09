@@ -29,7 +29,7 @@
 </div>
 <aside class="rail rail-context" aria-label="Links">
 {%- if not from_uncommitted %}
-{#- The page's actions again, shown once the header has scrolled away (leaf.js). #}
+{#- The page's actions again, shown once the header has scrolled away (js/chrome.js). #}
 <div class="rail-actions" hidden><a href="{{ url('edit', slug) }}" class="btn">Edit</a>{{ p.menu_button() }}</div>
 {%- endif %}
 {{- p.link_sections(link_sections, copy=true) }}

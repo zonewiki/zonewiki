@@ -40,7 +40,6 @@ class TestTasksLinkRender:
         html = render.render_md("[[deck]]\n")
         assert "tasks-app" in html
         assert "tasks-list" in html
-        assert "deck.js" in html
 
     def test_eleven_embeds_each_render_their_own(self, wiki_dir):
         # Regression: placeholder _1 is a prefix of _10, so the 11th embed
@@ -226,7 +225,6 @@ class TestPageViewLink:
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
         assert 'data-init-tag="test"' in body
-        assert "deck.js" in body
 
     def test_preview_with_deck_embed(self, client, wiki_dir):
         """Preview endpoint renders [[deck]] as the full embed."""
@@ -238,7 +236,6 @@ class TestPageViewLink:
         )
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
-        assert "deck.js" in body
 
     def test_deck_embed_with_params(self, client, wiki_dir):
         """[[deck tag=work list=proj view=due]] passes all data attrs."""

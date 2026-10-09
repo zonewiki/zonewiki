@@ -205,8 +205,7 @@ class TestMakeTask:
         body = client.get("/edit/notes", headers=HOST).data.decode()
         assert 'data-fmt="maketask"' in body and 'data-fmt="taskref"' in body
         # A hidden deck app: its edit modal for one item, and deck-core.js
-        # parses `tomorrow #work due:fri` for several lines.
+        # (imported by the editor) parses `tomorrow #work due:fri` for
+        # several lines.
         assert 'data-headless="1" style="display:none"' in body
         assert 'id="task-edit-modal"' in body
-        assert body.count('<script src="/public/deck-core.js" defer></script>') == 1
-        assert '<script src="/public/deck.js" defer></script>' in body

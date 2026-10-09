@@ -1,13 +1,13 @@
 """Tests for the pure client-side deck logic in src/public/deck-core.js.
 
-The module is DOM-free and exports via module.exports under Node, so these
-tests run it with ``node -e`` and compare JSON output. They skip automatically
-when Node is not installed.
+The module is DOM-free, so these tests import it in Node (``node -e``) and
+compare JSON output. They skip automatically when Node is not installed.
 """
 
 import json
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -18,13 +18,19 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None,
                                 reason="node not installed")
 
 
+# deck-core.js as an .mjs file: an older Node only loads a file as an ES
+# module by that extension (there is no package.json to say so).
+CORE_MJS = Path(tempfile.mkdtemp(prefix="deckcore_")) / "deck-core.mjs"
+CORE_MJS.write_text(CORE.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 def run_core(expr: str) -> object:
     """Evaluate an expression against DeckCore in Node and return it as JSON."""
     script = (
-        f"const DeckCore = require({json.dumps(str(CORE))});"
+        f"import DeckCore from {json.dumps(CORE_MJS.as_uri())};"
         f"process.stdout.write(JSON.stringify({expr}));"
     )
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 

@@ -129,7 +129,6 @@ def test_quote_toggles(page, wiki):
 def test_link_from_text_offers_pages(page, wiki):
     wiki.write("target-page", "# Target\n")
     textarea = _edit(page, wiki, "see the docs", 8, 12)
-    page.wait_for_function("() => wikiPages.length > 0")   # slugs for the autocomplete
     _click(page, "link")
     assert _body(textarea) == "see the [docs]()"
     item = page.locator(".wikilink-ac-item", has_text="target-page")
@@ -149,7 +148,6 @@ def test_link_from_url_asks_for_the_text(page, wiki):
 def test_wikilink_button(page, wiki):
     wiki.write("target-page", "# Target\n")
     textarea = _edit(page, wiki, "Target Page", 0, 11)
-    page.wait_for_function("() => wikiPages.length > 0")
     _click(page, "wikilink")
     assert _body(textarea) == "[[Target Page]]"
     page.keyboard.press("Enter")

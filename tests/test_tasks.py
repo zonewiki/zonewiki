@@ -731,7 +731,7 @@ class TestDeckPage:
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
         assert "task-add-btn" in body
-        assert "deck.js" in body
+        assert '<script type="module" src="/public/leaf.js"></script>' in body   # it loads deck.js
 
 
 # ── Dates ────────────────────────────────────────────────────────────────────
@@ -1424,12 +1424,13 @@ class TestLimitParam:
     def test_invalid_limit_is_empty(self, client, wiki_dir):
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck limit=lots]]")
 
-    def test_embed_loads_deck_core(self, client, wiki_dir):
-        (wiki_dir / "board.md").write_text("# Board\n\n[[deck]]\n", encoding="utf-8")
+    def test_deck_code_comes_with_leaf_js(self, client, wiki_dir):
+        # The embed carries no script of its own: leaf.js, an ES module on
+        # every page, imports deck.js, which imports deck-core.js.
+        (wiki_dir / "board.md").write_text("# Board\n\n[[deck]]\n[[deck]]\n", encoding="utf-8")
         html_out = client.get("/page/board").get_data(as_text=True)
-        core = html_out.index('src="/public/deck-core.js"')
-        app = html_out.index('src="/public/deck.js"')
-        assert core < app
+        assert html_out.count("<script") == 2   # highlight.js and leaf.js
+        assert '<script type="module" src="/public/leaf.js"></script>' in html_out
 
 
 # ── Round 2: completed-task year archives ─────────────────────────────────────

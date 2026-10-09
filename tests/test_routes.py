@@ -1788,7 +1788,6 @@ class TestDeckPage:
         assert 'data-init-list=""' in body
         assert 'data-init-tag=""' in body
         assert 'data-init-view=""' in body   # ?view= / session / Today decide
-        assert '<script src="/public/deck.js" defer></script>' in body
         assert "<h1>Deck</h1>" in body
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):

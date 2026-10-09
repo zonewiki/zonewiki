@@ -1,0 +1,162 @@
+import { initDecks, openDeckEdit } from '../deck.js';
+import { closeOnBackdropClick, localDate, showToast } from './util.js';
+import { openSearchModal } from './search.js';
+
+// ── Quick-task modal ──────────────────────────────────────────────────────────
+
+// A new task in the deck's home, from any page (c t, the New task button).
+// On the home page its own "+ New" (so the view's tags and dates apply);
+// where a deck app is loaded (an embed, the editor's hidden one) its edit
+// modal, with the tags and keep the home gives new tasks (the server puts
+// them on <body>: data-deck-tags, data-deck-keep; none without a home);
+// elsewhere the home page (or /deck) opens with the modal.
+// A page without a deck app loads a hidden one first (/api/deck/headless,
+// started by deck.js's initDecks), so you stay on the page; a toast says
+// where the task went. Should that fail, the home page opens instead.
+export async function openHomeTask() {
+  const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
+  if (homeAdd) { homeAdd.click(); return; }
+  const { deckTags = '', deckKeep, deckToday } = document.body.dataset;
+  // The start date as the home's "+ New" gives it (today on Focus); without
+  // a home, as /deck's Focus does.
+  const homeless = !('deckTags' in document.body.dataset);
+  const opts = { tags: deckTags, keep: deckKeep === '1',
+                 start_date: homeless || deckToday === '1' ? localDate() : null };
+  if (!document.querySelector('.tasks-app[data-ready]')) {
+    try {
+      await loadHeadlessDeck();
+    } catch (err) {
+      window.location.href = deckHomeHref() + '?new=1';
+      return;
+    }
+    opts.onCreated = task => {
+      if (task) showToast(`Added “${task.title}” to your deck`);
+    };
+  }
+  openDeckEdit(null, opts);
+}
+
+// The hidden deck app (/api/deck/headless), added to the page and started.
+let headlessDeck = null;
+function loadHeadlessDeck() {
+  headlessDeck ??= (async () => {
+    const res = await fetch('/api/deck/headless');
+    if (!res.ok) throw new Error(res.status);
+    const holder = document.createElement('div');
+    holder.innerHTML = await res.text();
+    document.body.append(...holder.childNodes);
+    if (!initDecks()) throw new Error('no deck');
+  })().catch(err => { headlessDeck = null; throw err; });
+  return headlessDeck;
+}
+
+// Where the Deck module links go: the deck's home page, else /deck.
+export const deckHomeHref = () =>
+  document.querySelector('.module-link[data-module="deck"]')?.getAttribute('href') || '/deck';
+
+// ── Scratch modal ───────────────────────────────────────────────────────────────
+
+const scratchModal  = document.getElementById('scratch-modal');
+const scratchForm   = document.getElementById('scratch-form');
+const scratchTitle  = document.getElementById('scratch-title');
+const scratchCancel = document.getElementById('scratch-cancel');
+
+scratchCancel?.addEventListener('click', () => scratchModal.close());
+closeOnBackdropClick(scratchModal);
+
+export function openScratch() {
+  if (!scratchModal) return;
+  scratchTitle.value = '';
+  scratchModal.showModal();
+  scratchTitle.focus();
+}
+
+scratchForm?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = scratchTitle.value.trim() || 'Untitled';
+  const data = new FormData();
+  data.append('title', title);
+  try {
+    const res = await fetch('/api/scratch', { method: 'POST', body: data });
+    const { slug } = await res.json();
+    window.location.href = `/edit/${slug}`;
+  } catch (_) {}
+});
+
+// ── New-page modal ─────────────────────────────────────────────────────────────
+
+const newPageModal  = document.getElementById('new-page-modal');
+const newPageInput  = document.getElementById('new-page-input');
+const newPageCancel = document.getElementById('new-page-cancel');
+
+newPageCancel?.addEventListener('click', () => newPageModal.close());
+closeOnBackdropClick(newPageModal);
+
+export function openNewPage() {
+  if (!newPageModal) return;
+  newPageInput.value = '';
+  newPageModal.showModal();
+  newPageInput.focus();
+}
+
+// ── Action bar ───────────────────────────────────────────────────────────────
+// Search is Ctrl+P. New creates the current module's kind of thing: a task
+// in the deck (its own "+ New", so the view's tags and dates apply; on the
+// deck's home page the home embed's), a
+// scratch note in scratch (`c s`), else a page (Ctrl+N).
+
+const deckAddButton = () =>
+  document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
+  || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
+
+const NEW_ACTIONS = {
+  deck:    { label: 'New task (n)', run: () => deckAddButton()?.click() },
+  scratch: { label: 'New scratch note (c s)', run: openScratch },
+  wiki:    { label: 'New page (Ctrl+N)', run: openNewPage },
+};
+
+(function () {
+  const btn = document.querySelector('.action-new');
+  if (!btn) return;
+  let action = NEW_ACTIONS[document.body.dataset.module] || NEW_ACTIONS.scratch;
+  // A deck page without its deck app (it failed to load) still gets a note.
+  if (action === NEW_ACTIONS.deck && !deckAddButton()) action = NEW_ACTIONS.scratch;
+  btn.title = action.label;
+  btn.setAttribute('aria-label', action.label.replace(/ \(.*\)$/, ''));
+  btn.addEventListener('click', action.run);
+}());
+document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
+
+// ── Sharing mode ─────────────────────────────────────────────────────────────
+// For sharing the screen: everything that shows other pages around the one
+// on screen is hidden (style.css, html.sharing): the trail of visited pages,
+// backlinks, Related, Links to, linked tasks, the empty search modal's
+// recent pages, the editor's page list before anything is typed, the
+// status counts. And the server leaves out the pages not for sharing
+// (LEAF_NOSHARE). It is a cookie, so the server knows: it renders
+// <html class="sharing"> from the first paint, and switching reloads the
+// page, rendered for the new mode.
+const sharingBtn = document.querySelector('.top-sharing');
+export const sharingOn = () => document.documentElement.classList.contains('sharing');
+function syncSharingButton() {
+  const on = sharingOn();
+  sharingBtn?.setAttribute('aria-pressed', String(on));
+  if (sharingBtn) sharingBtn.title = on ? 'Sharing mode is on: click to show everything again (S)'
+                                        : 'Sharing mode: hide what is around the page (S)';
+}
+export function toggleSharing() {
+  const on = !sharingOn();
+  document.cookie = `leaf-sharing=${on ? '1' : '0'}; path=/; SameSite=Lax; max-age=${on ? 31536000 : 0}`;
+  location.reload();
+}
+sharingBtn?.addEventListener('click', toggleSharing);
+syncSharingButton();
+// The desktop's buttons at the top right (views.py top_actions_html).
+document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
+document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
+document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
+// The search pill names its shortcut; on a Mac that is ⌘P.
+if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+  const key = document.querySelector('.top-search-key');
+  if (key) key.textContent = '⌘P';
+}

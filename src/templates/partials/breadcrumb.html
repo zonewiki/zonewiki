@@ -1,6 +1,6 @@
 {#- A view's breadcrumb: the module switcher, then `crumbs` as (label, href)
     pairs, the last without a link unless it has one. `key` and `title`
-    name the view for leaf.js's navigation trail (data-slug, data-title);
+    name the view for the navigation trail (js/chrome.js: data-slug, data-title);
     `right_html` sits at the right end (the backlinks chip). -#}
 {%- import "partials/modules.html" as modules -%}
 <div class="breadcrumb"{% if key is not none %} data-slug="{{ key }}" data-title="{{ title }}"{% endif %}>

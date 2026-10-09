@@ -1,6 +1,6 @@
 {#- Parts of the page view (view.html) and the editor (edit.html). -#}
 
-{#- Commit form wired up by leaf.js (posts to /api/commit-file). `inline`:
+{#- Commit form wired up by js/git.js (posts to /api/commit-file). `inline`:
     a link-styled word at the end of "Last changed … — uncommitted". #}
 {% macro commit_form(filepath, title, on_success, inline=false) -%}
 <form class="commit-file-form" style="display:inline" data-filepath="{{ filepath }}" data-title="{{ title }}" data-on-success="{{ on_success }}"><button type="submit" class="{{ 'commit-link' if inline else 'btn btn-primary' }}">Commit</button></form>
@@ -21,7 +21,7 @@
 {#- The "Move to wiki" dialog of a scratch note: a folder (suggesting the
     existing ones), the name (the note's title, not its timestamped slug),
     whether to keep the date in front of it, a preview of the page's slug,
-    and the page to link it from (leaf.js suggests the folder's index, and
+    and the page to link it from (js/pagemenu.js suggests the folder's index, and
     copies the link on Move). Posts to /promote/<slug>. #}
 {% macro promote_dialog(slug, title, date, folders, error_msg) -%}
 <dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="{{ title }}"{% if error_msg %} data-open{% endif %}><p class="scratch-label">Move to wiki</p><form method="post" action="{{ url('promote', slug) }}">
@@ -46,7 +46,7 @@
 
 {#- The page view's ⋯ menu (Present, History, Move to wiki… and Append to
     page… for a scratch note, Rename…, Delete…) and the dialogs behind it,
-    styled like the deck's ⋯ menu. One hidden element that leaf.js opens
+    styled like the deck's ⋯ menu. One hidden element that js/pagemenu.js opens
     under whichever ⋯ was pressed (header or right column); Present shows
     only on a page with headings. Outside the page grid: the middle column
     is a size container, which would anchor position: fixed. #}
@@ -86,7 +86,7 @@
 {%- endmacro %}
 
 {#- The left column on big screens: "On this page" (`items_html`, the
-    page's [[toc]] list or its headings), and ↑ Back to top, which leaf.js
+    page's [[toc]] list or its headings), and ↑ Back to top, which js/chrome.js
     shows once the page has scrolled a screen down. #}
 {% macro rail_toc(items_html) -%}
 <aside class="rail rail-left">{% if items_html %}<nav class="rail-toc" aria-label="On this page"><p class="rail-label">On this page</p>{{ items_html|safe }}</nav>{% endif %}<a class="rail-top" href="#" hidden>↑ Back to top</a></aside>
@@ -94,7 +94,7 @@
 
 {#- The editor's hint after Move to wiki (`?paste=<slug>`): the moved
     page's link, copied to the clipboard (`copied`) or to copy, for pasting
-    where it belongs on this page. Copy and × in leaf.js. #}
+    where it belongs on this page. Copy and × in js/pagemenu.js. #}
 {% macro paste_hint(link, copied) -%}
 <div class="paste-hint" role="status" data-link="{{ link }}"><svg class="paste-hint-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="9" height="12" rx="1.5"/><path d="M6 2.5h4v2H6z"/><path d="M6 8.5l1.5 1.5L10.5 7"/></svg><div class="paste-hint-text"><p>
 {%- if copied %}<strong>Link copied.</strong> Paste it where it belongs on this page.{% else %}<strong>Moved to the wiki.</strong> Copy its link and paste it where it belongs.{% endif -%}

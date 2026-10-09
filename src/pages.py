@@ -20,7 +20,7 @@ from mdtext import (
 )
 
 
-# For sharing the screen (leaf.js toggleSharing, a cookie): the CSS hides what
+# For sharing the screen (js/actions.js toggleSharing, a cookie): the CSS hides what
 # is around the page (html.sharing), and the server leaves out the pages that
 # are not for sharing, which LEAF_NOSHARE names (config.NOSHARE_TAGS,
 # config.NOSHARE_FOLDERS).

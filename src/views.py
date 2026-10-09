@@ -44,14 +44,14 @@ def diff_to_html(diff: str) -> str:
 
 
 def commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool = False) -> str:
-    """Commit button form wired up by leaf.js (posts to /api/commit-file)."""
+    """Commit button form wired up by js/git.js (posts to /api/commit-file)."""
     return macro("partials/page.html", "commit_form")(filepath, title, on_success, inline)
 
 
 # Leaf's three modules: the wiki, the deck and the scratch notes. Every view
 # names the one it belongs to (`<body data-module>`, `current_module()`);
-# leaf.js marks the matching links as current (aria-current) and makes the
-# "New" button create that module's kind of thing.
+# the server marks the matching links as current (aria-current), and
+# js/actions.js makes the "New" button create that module's kind of thing.
 MODULES = (("wiki", "Wiki", "/"), ("scratch", "Scratch", "/page/_scratch"), ("deck", "Deck", "/deck"))
 
 
@@ -65,7 +65,7 @@ def _module_href(key: str, href: str) -> str:
 
 def _deck_counts_title(c: dict) -> str:
     """The Deck links' tooltip, e.g. "Deck: 5 in Focus · 1 overdue · 1 due
-    today" (leaf.js builds the same, deckCountsTitle)."""
+    today" (js/chrome.js builds the same, deckCountsTitle)."""
     parts = [f"{c['focus']} in Focus"] if c["focus"] else []
     if c["overdue"]:
         parts.append(f"{c['overdue']} overdue")
@@ -77,7 +77,7 @@ def _deck_counts_title(c: dict) -> str:
 def _deck_counts() -> dict:
     """The Deck links' counts (deck.deck_counts) with their tooltip, once per
     request. Rendered by the server, so the link doesn't change width after
-    the page has painted; leaf.js refreshes them."""
+    the page has painted; js/chrome.js refreshes them."""
     if has_app_context() and "deck_counts" in g:
         return g.deck_counts
     c = dict(deck.deck_counts())
@@ -115,7 +115,7 @@ def current_module() -> str:
 
 def breadcrumb(crumbs: list[tuple], key: str | None = None, title: str = "", right_html: str = "") -> str:
     """A breadcrumb: the module switcher, then `crumbs` as (label, href or
-    None). `key` and `title` name the view for leaf.js's navigation trail."""
+    None). `key` and `title` name the view for the navigation trail (js/chrome.js)."""
     return render("partials/breadcrumb.html", crumbs=crumbs, key=key, title=title, right_html=right_html,
                   module_links=module_links(), app_name=config.APP_NAME)
 

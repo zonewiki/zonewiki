@@ -1,7 +1,7 @@
 {#- Links to Leaf's three modules (views.module_links): the breadcrumb's
     module switcher (desktop) and the action bar (phones). The current
     module's link is aria-current from the first paint; the Deck's carries
-    the due and Focus counts, which leaf.js refreshes. -#}
+    the due and Focus counts, which js/chrome.js refreshes. -#}
 {% import "partials/icons.html" as icons %}
 
 {% macro counts(c) -%}
@@ -14,7 +14,7 @@
 
 {#- The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
     then Scratch and Deck. Phones and the editor show the logo only
-    (style.css). The trail code in leaf.js keeps it as the first crumb. #}
+    (style.css). The trail code in js/chrome.js keeps it as the first crumb. #}
 {% macro switch(links, app_name) -%}
 <nav class="breadcrumb-home module-switch" aria-label="{{ app_name }}">
 {%- for m in links -%}
@@ -25,7 +25,7 @@
 </nav>
 {%- endmacro %}
 
-{#- The phone's bottom tab bar: the modules, New (leaf.js: a page in the
+{#- The phone's bottom tab bar: the modules, New (js/actions.js: a page in the
     wiki, a task in the deck, a scratch note in scratch) and Search. Hidden
     on desktop, which has the switcher and the top actions. #}
 {% macro action_bar(links, app_name) -%}

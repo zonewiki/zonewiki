@@ -113,7 +113,7 @@ def _edit_with_cursor(page, wiki, text, at, end=None):
     off = len("# Notes\n\n")
     page.locator("#editor-textarea").evaluate(
         f"ta => ta.setSelectionRange({off + at}, {off + (at if end is None else end)})")
-    page.wait_for_function("() => window.DeckCore")
+    page.locator(".tasks-app[data-ready]").wait_for(state="attached")   # the hidden deck has started
 
 
 def _save_modal(page):
@@ -242,7 +242,7 @@ def test_make_task_modal_takes_more_fields_and_cancel_changes_nothing(page, wiki
 def test_hidden_deck_does_not_take_the_editors_keys(page, wiki):
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")
-    page.wait_for_function("() => window.openDeckEdit")
+    page.locator(".tasks-app[data-ready]").wait_for(state="attached")
     page.keyboard.press("Control+End")
     page.keyboard.type("n/#")   # the deck's new task / filter keys
     expect(page.locator("#task-edit-modal")).to_be_hidden()

@@ -1,6 +1,7 @@
 {#- The deck app (deck.build_deck_embed): an [[deck …]] embed, /deck, or
     hidden (`headless`) for the edit modal alone (the editor's Make task,
-    c t on any page). Its params reach deck.js as data-init-* attributes;
+    c t on any page). Its params reach deck.js (which leaf.js loads on
+    every page) as data-init-* attributes;
     ids get a -<n> suffix (`sfx`) after a page's first embed. -#}
 <div class="tasks-app" id="tasks-app{{ sfx }}"{% if headless %} data-headless="1" style="display:none"{% endif %} data-init-tag="{{ tag }}" data-init-list="{{ list }}" data-lists="{{ lists_json }}" data-list-homes="{{ homes_json }}" data-init-view="{{ view }}" data-init-limit="{{ limit }}" data-init-keep="{{ keep }}" data-init-compact="{{ compact }}" data-init-new="" data-instance="{{ instance_id }}"{% if home %} data-home="1"{% endif %}>
   <div class="deck-header">
@@ -121,5 +122,3 @@
     <button type="button" class="btn" id="task-deadline-cancel{{ sfx }}">Cancel</button>
   </div>
 </dialog>
-<script src="/public/deck-core.js" defer></script>
-<script src="/public/deck.js" defer></script>

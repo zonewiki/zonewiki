@@ -281,7 +281,7 @@ def link_list(task: dict, prefer=()) -> str | None:
 
 def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
     """A task as an inline chip: its checkbox (completes it in the deck,
-    leaf.js), its title linking to it in the deck, and badges for what the
+    js/page.js), its title linking to it in the deck, and badges for what the
     deck card shows at a glance (deadline, a later start, repeat, keep)."""
     if task is None:
         return (f'<span class="task-ref task-ref-missing" title="No task with id {html.escape(ref)}">'
