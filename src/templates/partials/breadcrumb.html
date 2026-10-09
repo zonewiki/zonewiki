@@ -1,0 +1,12 @@
+{#- A view's breadcrumb (views.build_breadcrumb): the module switcher, the
+    page's folders, the page (a link when more follows), extra crumbs, and
+    what sits at its right end (the backlinks chip). -#}
+{%- import "partials/modules.html" as modules -%}
+{%- set sep = '<span class="breadcrumb-sep">›</span>'|safe -%}
+<div class="breadcrumb" data-slug="{{ slug }}" data-title="{{ title }}">
+{{- modules.switch(module_links, app_name) -}}
+{%- for label, href in folders %}{{ sep }}<a href="{{ href }}">{{ label }}</a>{% endfor -%}
+{{ sep }}{% if extra or query_string %}<a href="{{ url("page", slug) }}{{ query_string }}">{{ title }}</a>{% else %}<span>{{ title }}</span>{% endif -%}
+{%- for label, href in extra %}{{ sep }}{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span>{{ label }}</span>{% endif %}{% endfor -%}
+{%- if right_html %}<span class="breadcrumb-right">{{ right_html|safe }}</span>{% endif -%}
+</div>

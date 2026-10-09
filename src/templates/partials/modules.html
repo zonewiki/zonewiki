@@ -1,0 +1,39 @@
+{#- Links to Leaf's three modules (views.module_links): the breadcrumb's
+    module switcher (desktop) and the action bar (phones). The current
+    module's link is aria-current from the first paint; the Deck's carries
+    the due and Focus counts, which leaf.js refreshes. -#}
+{% import "partials/icons.html" as icons %}
+
+{% macro counts(c) -%}
+<span class="module-counts"><span class="module-due"{% if not c.count %} hidden{% endif %}>{{ c.count or "" }}</span><span class="module-focus"{% if not c.focus %} hidden{% endif %}>{{ c.focus or "" }}</span></span>
+{%- endmacro %}
+
+{% macro attrs(m) -%}
+{% if m.counts %} title="{{ m.counts.title }}"{% endif %}{% if m.current %} aria-current="page"{% endif %}
+{%- endmacro %}
+
+{#- The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
+    then Scratch and Deck. Phones and the editor show the logo only
+    (style.css). The trail code in leaf.js keeps it as the first crumb. #}
+{% macro switch(links, app_name) -%}
+<nav class="breadcrumb-home module-switch" aria-label="{{ app_name }}">
+{%- for m in links -%}
+<a href="{{ m.href }}" class="module-link" data-module="{{ m.key }}"{{ attrs(m) }}
+{%- if m.key == "wiki" %} aria-label="{{ m.label }} ({{ app_name }} home)">{{ icons.leaf() }}{% else %}>{% endif -%}
+<span class="module-label">{{ m.label }}</span>{% if m.counts %}{{ counts(m.counts) }}{% endif %}</a>
+{%- endfor -%}
+</nav>
+{%- endmacro %}
+
+{#- The phone's bottom tab bar: the modules, New (leaf.js: a page in the
+    wiki, a task in the deck, a scratch note in scratch) and Search. Hidden
+    on desktop, which has the switcher and the top actions. #}
+{% macro action_bar(links, app_name) -%}
+<nav class="action-buttons" aria-label="{{ app_name }}">
+{%- for m in links -%}
+<a href="{{ m.href }}" class="action-module module-link" data-module="{{ m.key }}"{{ attrs(m) }}>{{ icons.module(m.key) }}<span class="action-label">{{ m.label }}</span>{% if m.counts %}{{ counts(m.counts) }}{% endif %}</a>
+{%- endfor -%}
+<button type="button" class="action-new" aria-label="New" title="New">{% call icons.svg() %}<line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>{% endcall %}<span class="action-label">New</span></button>
+<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{ icons.search() }}<span class="action-label">Search</span></button>
+</nav>
+{%- endmacro %}

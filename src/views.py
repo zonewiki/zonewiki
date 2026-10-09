@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import g, has_app_context, has_request_context, request
+from jinja2 import Environment, FileSystemLoader
 
 import config
 import deck
@@ -19,6 +20,25 @@ from pages import (
 )
 from gitstore import run_git, git_log, relative_time
 from render import link_list, task_href
+
+
+# Leaf's views are Jinja2 templates in src/templates, auto-escaped. A
+# variable holding HTML that Leaf built itself ends in _html and is the only
+# kind marked |safe there. Not Flask's render_template: helpers here render
+# outside a request too (tests, and Python callers that embed the result).
+_env = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
+                   autoescape=True, trim_blocks=True, lstrip_blocks=True)
+_env.globals.update(url=url, config=config)
+
+
+def render(name: str, **context) -> str:
+    """A template rendered to HTML."""
+    return _env.get_template(name).render(**context)
+
+
+def macro(template: str, name: str):
+    """A macro of a template, to call from Python (returns HTML)."""
+    return getattr(_env.get_template(template).module, name)
 
 
 def diff_to_html(diff: str) -> str:
@@ -62,12 +82,6 @@ def commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool
     )
 
 
-_LEAF_LOGO = """<svg class="site-logo" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M12.8 1.7C9.6 1.8 7.1 3 5.5 5.1c-1.8 2.4-2.2 5.3-2.2 7.5 0 .4.3.7.7.7 2.2 0 5.1-.4 7.5-2.2 2.1-1.6 3.3-4.1 3.4-7.3 0-.4-.3-.8-.7-.8-.5-.1-.9-.1-1.4-.1Zm-6 9.5c-.2 0-.4-.1-.5-.3-.2-.3-.2-.7.2-1l5.1-3.8c.3-.2.7-.1 1 .2.2.3.1.7-.2 1l-5.1 3.8c-.2.1-.3.1-.5.1Z" fill="currentColor"/>
-    <path d="M3.5 12.5 Q3 15 2 15" stroke="black" stroke-width="1.1" stroke-linecap="round" fill="none"/>
-  </svg>"""
-
-
 # Leaf's three modules: the wiki, the deck and the scratch notes. Every view
 # names the one it belongs to (`<body data-module>`, `current_module()`);
 # leaf.js marks the matching links as current (aria-current) and makes the
@@ -94,49 +108,32 @@ def _deck_counts_title(c: dict) -> str:
     return "Deck: " + " · ".join(parts) if parts else "Deck"
 
 
-def _deck_counts_html() -> tuple[str, str]:
-    """(title attribute, counts HTML) for the Deck links: the due count
-    (orange) and the Focus count (muted), each hidden at zero. Rendered by the
-    server, so the link doesn't change width after the page has painted;
-    leaf.js refreshes them. Once per request."""
+def _deck_counts() -> dict:
+    """The Deck links' counts (deck.deck_counts) with their tooltip, once per
+    request. Rendered by the server, so the link doesn't change width after
+    the page has painted; leaf.js refreshes them."""
     if has_app_context() and "deck_counts" in g:
         return g.deck_counts
-    c = deck.deck_counts()
-    hide = lambda n: "" if n else " hidden"
-    out = (f' title="{html.escape(_deck_counts_title(c))}"',
-           f'<span class="module-counts"><span class="module-due"{hide(c["count"])}>{c["count"] or ""}</span>'
-           f'<span class="module-focus"{hide(c["focus"])}>{c["focus"] or ""}</span></span>')
+    c = dict(deck.deck_counts())
+    c["title"] = _deck_counts_title(c)
     if has_app_context():
-        g.deck_counts = out
-    return out
+        g.deck_counts = c
+    return c
 
 
-def _module_link_extras(key: str) -> tuple[str, str]:
-    """(extra attributes, extra content) of a module link: aria-current on
-    the current module's (rendered, not set by script, so the highlight is
-    there at first paint), the Deck's counts."""
-    attrs, content = _deck_counts_html() if key == "deck" else ("", "")
-    if has_request_context() and current_module() == key:
-        attrs += ' aria-current="page"'
-    return attrs, content
+def module_links() -> list[dict]:
+    """The three module links (templates/partials/modules.html): where each
+    goes, whether it is the current view's (aria-current at first paint),
+    and the Deck's counts."""
+    current = current_module() if has_request_context() else None
+    return [{"key": key, "label": label, "href": _module_href(key, href), "current": current == key,
+             "counts": _deck_counts() if key == "deck" else None}
+            for key, label, href in MODULES]
 
 
 def home_link() -> str:
-    """The root of every breadcrumb, the module switcher: the leaf logo with
-    "Wiki" (the home page), then Scratch and Deck. Phones and the editor show
-    the logo only (style.css); phones have the bottom bar (action_bar_html()).
-    The trail code in leaf.js keeps it (`.breadcrumb-home`) as the first
-    crumb."""
-    links = []
-    for key, label, href in MODULES:
-        attrs, counts = _module_link_extras(key)
-        if key == "wiki":
-            attrs += f' aria-label="{label} ({config.APP_NAME} home)">{_LEAF_LOGO}'
-        else:
-            attrs += ">"
-        links.append(f'<a href="{_module_href(key, href)}" class="module-link" data-module="{key}"{attrs}'
-                     f'<span class="module-label">{label}</span>{counts}</a>')
-    return f'<nav class="breadcrumb-home module-switch" aria-label="{config.APP_NAME}">{"".join(links)}</nav>'
+    """The root of every breadcrumb, the module switcher."""
+    return macro("partials/modules.html", "switch")(module_links(), config.APP_NAME)
 
 
 def current_module() -> str:
@@ -156,33 +153,15 @@ def current_module() -> str:
 
 
 def build_breadcrumb(slug: str, title: str, *extra: tuple, right_html: str = "", query_string: str = "") -> str:
-    """Build a breadcrumb for a page slug.
-    slug/title are the page; extra is zero or more (label, url_or_None) pairs appended after.
-    right_html is optional HTML appended inside the breadcrumb div with margin-left: auto.
-    query_string is appended to the page's own link (e.g. '?tag=task').
-    """
-    sep = '<span class="breadcrumb-sep">›</span>'
-    parts = slug.split('/')
-    crumbs = [home_link()]
-    page_href = f'{url("page", slug)}{html.escape(query_string)}'
-    for i, part in enumerate(parts[:-1]):
-        ancestor = '/'.join(parts[:i + 1])
-        label = part.replace('-', ' ').title()
-        crumbs.append(f'<a href="{url("page", ancestor)}">{html.escape(label)}</a>')
-    # Page itself — link if extra crumbs follow or query_string present, plain span otherwise
-    if extra:
-        crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
-        for label, href in extra:
-            if href:
-                crumbs.append(f'<a href="{html.escape(href)}">{html.escape(label)}</a>')
-            else:
-                crumbs.append(f'<span>{html.escape(label)}</span>')
-    elif query_string:
-        crumbs.append(f'<a href="{page_href}">{html.escape(title)}</a>')
-    else:
-        crumbs.append(f'<span>{html.escape(title)}</span>')
-    right = f'<span class="breadcrumb-right">{right_html}</span>' if right_html else ""
-    return f'<div class="breadcrumb" data-slug="{html.escape(slug)}" data-title="{html.escape(title)}">{sep.join(crumbs)}{right}</div>'
+    """A breadcrumb for a page slug: its folders, the page, and `extra`
+    (label, url or None) crumbs after it. `right_html` sits at its right
+    end; `query_string` is added to the page's own link (e.g. '?tag=task')."""
+    parts = slug.split("/")
+    folders = [(part.replace("-", " ").title(), url("page", "/".join(parts[:i + 1])))
+               for i, part in enumerate(parts[:-1])]
+    return render("partials/breadcrumb.html", slug=slug, title=title, folders=folders, extra=extra,
+                  right_html=right_html, query_string=query_string, module_links=module_links(),
+                  app_name=config.APP_NAME)
 
 
 def hidden_page_view() -> str:
@@ -423,284 +402,42 @@ def build_page_meta(slug: str, path: Path, title: str) -> tuple[str, str]:
     return "", ""
 
 
-_SVG = ('<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
-        'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
+FORMAT_BAR = render("partials/format_bar.html")
 
 
-_SEARCH_ICON = _SVG + '<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>'
-
-
-# The action bar (`.action-buttons`), the phone's bottom tab bar: the modules
-# plus New (leaf.js: a page in the wiki, a task in the deck, a scratch note in
-# scratch) and Search (openSearchModal). Hidden on desktop, which has the
-# module switcher in the breadcrumb and the top actions. Styled in style.css.
-_MODULE_ICONS = {
-    "wiki": _SVG + '<path d="M13 2.5C8 2.6 4.5 5.5 4.5 11.5c6 0 8.5-3.5 8.5-9z"/>'
-            '<path d="M3 13.5 9 7.5"/></svg>',
-    "deck": _SVG + '<rect x="2.5" y="2.5" width="11" height="11" rx="2"/>'
-            '<polyline points="5.25 8.25 7.25 10.25 10.75 6"/></svg>',
-    "scratch": _SVG + '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/>'
-               '<polyline points="9.5 1.5 9.5 5 13 5"/><line x1="5.5" y1="8.5" x2="10.5" y2="8.5"/>'
-               '<line x1="5.5" y1="11" x2="9" y2="11"/></svg>',
-}
-
-
-def top_actions_html() -> str:
-    """The desktop's action buttons, at the top right of the page (in line
-    with the breadcrumb), in three groups: sharing mode (a mode, set apart by
-    a divider), the two "new" actions (a scratch note, a task in the deck's
-    home) and search, the one used most, as a labelled pill with its
-    shortcut. Name and shortcut are in each tooltip. Phones have the action
-    bar at the bottom instead (see the 640px media query)."""
-    return (
-        '<div class="top-actions">'
-        f'<button type="button" class="top-sharing" aria-pressed="false" aria-label="Sharing mode" title="Sharing mode: hide what is around the page (S)">{_SVG}'
-        '<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></button>'
-        '<span class="top-sep" aria-hidden="true"></span>'
-        f'<button type="button" class="top-scratch" aria-label="New scratch note" title="New scratch note (c s)">{_SVG}'
-        '<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/>'
-        '<line x1="8" y1="7.5" x2="8" y2="12"/><line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/></svg></button>'
-        # A checkbox with a + at its corner: "new task", not "task done".
-        f'<button type="button" class="top-task" aria-label="Add a task to your deck" title="Add a task to your deck (c t)">{_SVG}'
-        '<path d="M11.5 8.5v-4a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h4"/>'
-        '<polyline points="4.75 7 6.5 8.75 9.25 5.5"/>'
-        '<line x1="12.5" y1="10" x2="12.5" y2="15"/><line x1="10" y1="12.5" x2="15" y2="12.5"/></svg></button>'
-        f'<button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{_SEARCH_ICON}'
-        '<span class="top-search-label" aria-hidden="true">Search</span>'
-        '<kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>'
-        '</div>')
-
-
-def action_bar_html() -> str:
-    """The action bar's HTML (see above)."""
-    links = []
-    for key, label, href in MODULES:
-        attrs, counts = _module_link_extras(key)
-        links.append(f'<a href="{_module_href(key, href)}" class="action-module module-link" data-module="{key}"'
-                     f'{attrs}>{_MODULE_ICONS[key]}<span class="action-label">{label}</span>{counts}</a>')
-    return (
-        f'<nav class="action-buttons" aria-label="{config.APP_NAME}">{"".join(links)}'
-        f'<button type="button" class="action-new" aria-label="New" title="New">{_SVG}'
-        '<line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>'
-        '<span class="action-label">New</span></button>'
-        f'<button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{_SEARCH_ICON}'
-        '<span class="action-label">Search</span></button>'
-        '</nav>')
-
-
-# Editor formatting bar: one button per markdown construct, applied to the
-# selection by leaf.js (`data-fmt`, see applyFormat). Line icons, not
-# letters: a letter's height depends on the font. `None` = a separator.
-_FMT_ICON = ('<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" '
-             'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">')
-
-
-_FORMAT_BUTTONS = (
-    ("bold", "Bold (Ctrl+B)", _FMT_ICON.replace('1.4', '2') + '<path d="M4.5 2.5h4.25a2.75 2.75 0 0 1 0 5.5H4.5z"/>'
-     '<path d="M4.5 8h5a2.75 2.75 0 0 1 0 5.5h-5z"/></svg>'),
-    ("italic", "Italic (Ctrl+I)", _FMT_ICON + '<line x1="6.5" y1="2.5" x2="12.5" y2="2.5"/>'
-     '<line x1="3.5" y1="13.5" x2="9.5" y2="13.5"/><line x1="9.75" y1="2.5" x2="6.25" y2="13.5"/></svg>'),
-    ("strike", "Strikethrough", _FMT_ICON + '<path d="M10.7 2.7H6.3a2.2 2.2 0 0 0-1.6 3.7"/>'
-     '<path d="M9.3 8a2.7 2.7 0 0 1 0 5.3H4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/></svg>'),
-    ("heading", "Heading (## / ### / none)", _FMT_ICON + '<line x1="4" y1="8" x2="12" y2="8"/>'
-     '<line x1="4" y1="2.7" x2="4" y2="13.3"/><line x1="12" y1="2.7" x2="12" y2="13.3"/></svg>'),
-    None,
-    ("ul", "Bulleted list", _FMT_ICON + '<line x1="6" y1="4" x2="14" y2="4"/><line x1="6" y1="8" x2="14" y2="8"/>'
-     '<line x1="6" y1="12" x2="14" y2="12"/><circle cx="2.5" cy="4" r=".6" fill="currentColor"/>'
-     '<circle cx="2.5" cy="8" r=".6" fill="currentColor"/><circle cx="2.5" cy="12" r=".6" fill="currentColor"/></svg>'),
-    ("ol", "Numbered list", _FMT_ICON + '<line x1="6" y1="4" x2="14" y2="4"/><line x1="6" y1="8" x2="14" y2="8"/>'
-     '<line x1="6" y1="12" x2="14" y2="12"/><path d="M1.8 2.8 2.8 2.2v3.3"/><path d="M1.8 10.4c.3-.5 1.7-.6 1.7.4 0 .7-1.7 1.4-1.7 2.2h1.8"/></svg>'),
-    ("task", "Checklist (Ctrl+Shift+X ticks)", _FMT_ICON + '<rect x="1.5" y="2.5" width="4" height="4" rx=".8"/>'
-     '<path d="m2.4 4.5 1 1 1.4-2"/><rect x="1.5" y="9.5" width="4" height="4" rx=".8"/>'
-     '<line x1="8" y1="4.5" x2="14.5" y2="4.5"/><line x1="8" y1="11.5" x2="14.5" y2="11.5"/></svg>'),
-    ("quote", "Quote", _FMT_ICON + '<line x1="2.5" y1="3" x2="2.5" y2="13"/><line x1="6" y1="5" x2="14" y2="5"/>'
-     '<line x1="6" y1="8" x2="14" y2="8"/><line x1="6" y1="11" x2="11" y2="11"/></svg>'),
-    None,
-    ("code", "Inline code", _FMT_ICON + '<polyline points="5 4.5 1.5 8 5 11.5"/><polyline points="11 4.5 14.5 8 11 11.5"/></svg>'),
-    ("codeblock", "Code block", _FMT_ICON + '<rect x="1.5" y="2" width="13" height="12" rx="1.5"/>'
-     '<polyline points="6 6 4 8 6 10"/><polyline points="10 6 12 8 10 10"/></svg>'),
-    ("table", "Table", _FMT_ICON + '<rect x="1.5" y="2.5" width="13" height="11" rx="1.2"/><line x1="1.5" y1="6.2" x2="14.5" y2="6.2"/>'
-     '<line x1="1.5" y1="9.9" x2="14.5" y2="9.9"/><line x1="8" y1="2.5" x2="8" y2="13.5"/></svg>'),
-    None,
-    ("link", "Link (Ctrl+K)", _FMT_ICON + '<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/>'
-     '<path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8A3 3 0 0 0 7.2 13l.9-.9"/></svg>'),
-    ("wikilink", "Link to a wiki page", '<span class="fmt-wiki">[[ ]]</span>'),
-    ("taskref", "Link to a deck task", _FMT_ICON + '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/>'
-     '<path d="m4 8 1.5 1.5L8.5 6.5"/><line x1="10" y1="8" x2="12.5" y2="8"/></svg>'),
-    ("maketask", "Make a deck task from the line or selection", _FMT_ICON
-     + '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="8" y1="5.25" x2="8" y2="10.75"/>'
-     '<line x1="5.25" y1="8" x2="10.75" y2="8"/></svg>'),
-    ("attach", "Attach a file or image", _FMT_ICON + '<path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l5.6-5.6a2.3 2.3 0 0 1 3.3 3.3L6.3 11.3a1.2 1.2 0 0 1-1.7-1.7L9.8 4.4"/></svg>'),
-)
-
-
-FORMAT_BAR = (
-    '<div class="format-bar" id="format-bar" role="toolbar" aria-label="Formatting">'
-    + "".join('<span class="fmt-sep" aria-hidden="true"></span>' if b is None else
-              f'<button type="button" class="fmt-btn" data-fmt="{b[0]}" title="{b[1]}" '
-              f'aria-label="{b[1]}">{b[2]}</button>'
-              for b in _FORMAT_BUTTONS)
-    + '<input type="file" id="fmt-attach-input" multiple hidden>'
-    '</div>')
+def _shell_context(title: str, editor: bool, action_buttons: bool, wide: bool) -> dict:
+    """What templates/layout.html needs besides the view's own content."""
+    home = deck_home()
+    deck_new = None
+    if home:
+        # Its "+ New" on Focus (its view, or the default one) starts the
+        # task today; elsewhere a new task has no start date.
+        deck_new = {"tags": ",".join(decksyntax.new_task_tags(home["params"])),
+                    "keep": decksyntax.is_true(home["params"].get("keep")),
+                    "today": decksyntax.embed_view(home["params"]) in ("", "focus")}
+    show_actions = action_buttons and not editor
+    return {"title": title, "editor": editor, "wide": wide, "show_actions": show_actions,
+            "module": "" if editor else current_module(), "deck_new": deck_new,
+            "sharing": sharing_on(), "app_name": config.APP_NAME, "version": config.VERSION,
+            "build": config.LEAF_BUILD, "allow_remote": config.ALLOW_REMOTE,
+            "sign_out": bool(config.LEAF_PASSWORD),
+            "module_links": module_links() if show_actions else []}
 
 
 def shell(title: str, body: str, *, editor: bool = False, action_buttons: bool = True,
           wide: bool = False) -> str:
-    """Wrap body in the page skeleton. `action_buttons=False` drops the
-    action buttons, new note and search (the editor has its own toolbar; the
-    login page has nothing to search or write). `wide`: a page view with
-    side columns on big screens (`main.wide`, see view_page)."""
-    body_class = ' class="editor-page"' if editor else ""
-    module = "" if editor else current_module()
-    body_attrs = body_class + (f' data-module="{module}"' if module else "")
-    # New tasks from any page (c t, the New task button) get the tags the
-    # deck's home gives them, and are keep tasks if it makes them (leaf.js).
-    home = deck_home()
-    if home:
-        body_attrs += f' data-deck-tags="{html.escape(",".join(decksyntax.new_task_tags(home["params"])))}"'
-        if decksyntax.is_true(home["params"].get("keep")):
-            body_attrs += ' data-deck-keep="1"'
-        # Its "+ New" on Focus (its view, or the default one) starts the
-        # task today; elsewhere a new task has no start date.
-        if decksyntax.embed_view(home["params"]) in ("", "focus"):
-            body_attrs += ' data-deck-today="1"'
-    show_actions = action_buttons and not editor
-    safe_title = html.escape(title)
-    return f"""<!DOCTYPE html>
-<html lang="en"{' class="sharing"' if sharing_on() else ""}>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-  <meta name="generator" content="{config.APP_NAME} {config.VERSION}">
-  <title>{safe_title} — {config.APP_NAME}</title>
-  <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
-  <link rel="manifest" href="/public/manifest.json">
-  <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-title" content="Leaf">
-  <link rel="stylesheet" href="/public/vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
-  <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
-  <link rel="stylesheet" href="/public/style.css">
-  <script src="/public/vendor/highlight/highlight.min.js" defer></script>
-  <script src="/public/leaf.js" defer></script>
-</head>
-<body{body_attrs}>
-  <dialog id="search-modal" class="search-modal">
-    <div class="search-modal-controls">
-      <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">
-      <select id="modal-sort">
-        <option value="mtime-desc">Recently edited</option>
-        <option value="title-asc">Title A–Z</option>
-        <option value="title-desc">Title Z–A</option>
-        <option value="links-desc">Most linked</option>
-      </select>
-      <label class="unlinked-label">
-        <input type="checkbox" id="modal-unlinked"> Unlinked only
-      </label>
-    </div>
-    <div class="modal-results">
-      <ul id="modal-page-list" class="page-list"></ul>
-      <div id="modal-content-matches" class="content-matches hidden"></div>
-    </div>
-    <div id="modal-preview" class="search-preview" aria-live="polite"></div>
-  </dialog>
-  <dialog id="scratch-modal" class="scratch-modal">
-    <p class="scratch-label">New scratch note</p>
-    <form id="scratch-form">
-      <input type="text" id="scratch-title" placeholder="Title…" autocomplete="off" spellcheck="false">
-      <div class="scratch-actions">
-        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="scratch-cancel">Cancel</button>
-      </div>
-    </form>
-  </dialog>
-  <dialog id="new-page-modal" class="scratch-modal">
-    <p class="scratch-label">New page</p>
-    <form method="post" action="/new" id="new-page-form">
-      <input type="text" id="new-page-input" name="slug" placeholder="Page name…" autocomplete="off" spellcheck="false" required>
-      <div class="scratch-actions">
-        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="new-page-cancel">Cancel</button>
-      </div>
-    </form>
-  </dialog>
-  <dialog id="shortcuts-modal" class="shortcuts-modal">
-    <p class="scratch-label">Keyboard shortcuts</p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
-      <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
-      <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
-      <tr><td><kbd>c t</kbd></td><td>New task in your deck</td></tr>
-      <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
-      <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
-      <tr><td><kbd>g d</kbd></td><td>Go to Deck (every task)</td></tr>
-      <tr><td><kbd>g t</kbd></td><td>Go to your deck</td></tr>
+    """Wrap body (HTML) in the page skeleton, templates/layout.html.
+    `action_buttons=False` drops the action buttons, new note and search
+    (the editor has its own toolbar; the login page has nothing to search or
+    write). `wide`: a page view with side columns on big screens
+    (`main.wide`, see view_page)."""
+    return render("layout.html", body_html=body, **_shell_context(title, editor, action_buttons, wide))
 
-      <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
-      <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
-      <tr><td><kbd>Ctrl+S</kbd></td><td>Done / go to page view (editor)</td></tr>
-      <tr><td><kbd>Ctrl+B</kbd> / <kbd>Ctrl+I</kbd></td><td>Bold / italic (editor)</td></tr>
-      <tr><td><kbd>Ctrl+K</kbd></td><td>Link (editor)</td></tr>
-      <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
-      <tr><td><kbd>S</kbd></td><td>Sharing mode: hide what is around the page</td></tr>
-      <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
-      <tr><td><kbd>]</kbd> / <kbd>[</kbd></td><td>Next / previous section</td></tr>
-      <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
-      <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
-      <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
-      <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search highlight (page opened from search)</td></tr>
-      <tr><td><kbd>v</kbd></td><td>One line per task / full cards (deck)</td></tr>
-      <tr><td><kbd>Shift+F10</kbd> / menu key</td><td>Actions of the selected task (deck; right-click too)</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Clear search highlights</td></tr>
-    </table>
-    <p class="scratch-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>/date</kbd></td><td>Insert current date</td></tr>
-      <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
-      <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
-    </table>
-    <p class="scratch-label">Search syntax</p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>"exact phrase"</kbd></td><td>Words in this order</td></tr>
-      <tr><td><kbd>-word</kbd></td><td>Leave out results with it (also <kbd>-"phrase"</kbd>)</td></tr>
-      <tr><td><kbd>#tag</kbd></td><td>Only pages and tasks with this tag</td></tr>
-      <tr><td><kbd>-#tag</kbd></td><td>None with this tag</td></tr>
-      <tr><td><kbd>edited:2026-09</kbd></td><td>Last edited then (year, month or day); alone: all of it, newest first</td></tr>
-      <tr><td><kbd>after:</kbd> / <kbd>before:</kbd></td><td>Edited on or after / before a day, month or year</td></tr>
-    </table>
-    <p class="leaf-version">{config.APP_NAME} {config.VERSION}{f" · {html.escape(config.LEAF_BUILD)}" if config.LEAF_BUILD != "unknown" else ""}</p>
-  </dialog>
-  <dialog id="url-name-modal" class="scratch-modal">
-    <p class="scratch-label">Paste link</p>
-    <code id="url-name-href" class="url-name-href"></code>
-    <input type="text" id="url-name-input" placeholder="Display name (optional)" autocomplete="off" spellcheck="false">
-    <div class="scratch-actions">
-      <button type="button" class="btn btn-primary" id="url-name-confirm">Insert</button>
-      <button type="button" class="btn" id="url-name-cancel">Plain URL</button>
-    </div>
-  </dialog>
-  <dialog id="upload-conflict-modal" class="scratch-modal">
-    <p class="scratch-label">File already exists</p>
-    <p id="upload-conflict-msg" class="upload-conflict-msg"></p>
-    <input type="text" id="upload-conflict-name" autocomplete="off" spellcheck="false">
-    <div class="scratch-actions">
-      <button type="button" class="btn btn-primary" id="upload-conflict-confirm">Upload</button>
-      <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
-    </div>
-  </dialog>
-  <main{' class="wide"' if wide else ""}>
-  {'<div class="remote-badge" title="Remote access enabled">🌐</div>' if config.ALLOW_REMOTE else ''}
-  <div class="top-badges">
-    <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
-        <span id="uncommitted-count">0</span>
-      </a>
-      {'<form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>' if config.LEAF_PASSWORD else ''}
-    </div>
-    {top_actions_html() if show_actions else ""}{body}
-  </main>
-  {action_bar_html() if show_actions else ""}
-</body>
-</html>"""
+
+def page(template: str, title: str, *, editor: bool = False, action_buttons: bool = True,
+         wide: bool = False, **context) -> str:
+    """A view from its template, which extends layout.html."""
+    return render(template, **_shell_context(title, editor, action_buttons, wide), **context)
 
 
 def index_page(slug: str, title: str, body_inner: str) -> str:
