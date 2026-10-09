@@ -435,9 +435,10 @@ function applyCompact(view) {
     densityBtn.setAttribute('aria-label', label);
   }
 }
-// In compact view one task at a time can be expanded to its full card
-// (Enter, a tap): the details in place. Moving the selection moves the
-// expansion along; Esc collapses it; Enter on it opens the modal.
+// In compact view one task at a time is expanded to its full card: the
+// selected one (a click, arrows, j/k; setSelected), or on touch the one
+// tapped first (a tap on it then opens the modal). Esc collapses it until
+// another task is selected; Enter opens the modal, as on full cards.
 let expandedId = null;
 function setExpanded(id) {
   expandedId = id;
@@ -1268,10 +1269,8 @@ function updateSelectionClasses() {
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
   });
-  // An expanded task hands its expansion on to the next one selected
-  // (arrows, j/k, a click), so you can read through tasks; several
-  // selected, or none, close it.
-  if (expandedId && expandedId !== selectedId) setExpanded(selectedIds.size === 1 ? selectedId : null);
+  // Several selected, none, or another one: the expanded task closes.
+  if (expandedId && (selectedIds.size !== 1 || expandedId !== selectedId)) setExpanded(null);
 }
 
 function setSelected(id) {
@@ -1279,6 +1278,9 @@ function setSelected(id) {
   anchorId   = id;
   selectedIds = new Set(id ? [id] : []);
   updateSelectionClasses();
+  // Compact: the selected task shows its details. Not on touch, where the
+  // first tap expands and the second opens the modal (the tap handler).
+  if (compact && id && lastPointerType !== 'touch') setExpanded(id);
   if (id) {
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (el) el.scrollIntoView({ block: 'nearest' });
@@ -2975,9 +2977,7 @@ document.addEventListener('keydown', async e => {
     }
   } else if (e.key === 'Enter' && selectedId) {
     e.preventDefault();
-    // Compact: the first Enter expands the task, the next opens the modal.
-    if (compact && selectedIds.size === 1 && expandedId !== selectedId) setExpanded(selectedId);
-    else openEditModal(selectedId);
+    openEditModal(selectedId);
   } else if (e.key === 'Delete' && selectedIds.size) {
     e.preventDefault();
     await deleteWithUndo([...selectedIds], () => {

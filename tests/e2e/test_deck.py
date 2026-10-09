@@ -1737,13 +1737,14 @@ def _expand_setup(page):
     page.locator(".deck-density-btn").click()
 
 
-def test_compact_enter_expands_then_opens(page, wiki):
+def test_compact_selecting_expands_enter_opens(page, wiki):
+    # Compact: the selected task is expanded to its full card; Enter opens
+    # the modal, as on full cards.
     _expand_setup(page)
     passport = card(page, "Renew passport")
     one_line = passport.bounding_box()["height"]
     expect(passport.locator(".task-desc")).to_be_hidden()
-    passport.locator(".task-content").click()                      # select
-    page.keyboard.press("Enter")                                    # expand
+    passport.locator(".task-content").click()                      # select: expands
     expect(passport).to_have_class(re.compile(r"\btask-expanded\b"))
     expect(passport.locator(".task-desc")).to_be_visible()
     assert passport.bounding_box()["height"] > one_line + 30
@@ -1752,26 +1753,24 @@ def test_compact_enter_expands_then_opens(page, wiki):
     passport.locator("input[data-desc-check]").check()
     wait_for_field(page, "Renew passport", "description", "At the shop.\n- [x] old passport")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
-    page.keyboard.press("Enter")                                    # then the modal
+    page.keyboard.press("Enter")                                    # the modal
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Renew passport")
     page.keyboard.press("Escape")
-    # Esc collapses (the selection stays); moving the selection collapses too.
+    # Esc collapses (the selection stays); Enter still opens the modal.
     page.keyboard.press("Escape")
     expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-selected\b"))
     page.keyboard.press("Enter")
-    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
-    # Moving the selection moves the expansion along, the previous one closes.
+    expect(page.locator(".task-edit-modal[open]")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    # Moving the selection expands the newly selected task, the previous one closes.
     page.keyboard.press("j")
     expect(page.locator(".task-expanded")).to_have_count(1)
     expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
     expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
     page.keyboard.press("k")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
-    # After Esc, moving doesn't expand.
-    page.keyboard.press("Escape")
-    page.keyboard.press("j")
-    expect(page.locator(".task-expanded")).to_have_count(0)
 
 
 def test_full_cards_enter_opens_the_modal_at_once(page, wiki):
@@ -1870,8 +1869,7 @@ def test_expanded_task_keeps_its_line(page, wiki):
     title = item.locator(".task-content")
     text_wider = "el => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width > el.clientWidth + 1; }"
     assert title.evaluate(text_wider)                                    # cut off in the line
-    item.locator(".task-content").click()
-    page.keyboard.press("Enter")
+    item.locator(".task-content").click()                            # select: expands
     expect(item).to_have_class(re.compile(r"\btask-expanded\b"))
     for sel, box in before.items():
         after = item.locator(sel).first.bounding_box()
@@ -1890,8 +1888,7 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
     expect(passport.locator(".task-card-comments p")).to_have_count(3)   # full cards show them
     page.locator(".deck-density-btn").click()
     expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
-    passport.locator(".task-content").click()
-    page.keyboard.press("Enter")
+    passport.locator(".task-content").click()                       # select: expands
     comments = passport.locator(".task-card-comments p")
     expect(comments).to_have_count(3)                                # the latest 3, newest first
     expect(comments.first).to_contain_text("Paid the fee")
