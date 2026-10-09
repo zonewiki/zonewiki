@@ -6,56 +6,99 @@ you edit them there or in any editor, searches them, and keeps every version
 in git. No database, no build step, no cloud: run it on your machine, or
 self-host it behind HTTPS.
 
-## Features
+## How Leaf is organised
 
-**Wiki**
-- Markdown pages, rendered on the server: `[[wikilinks]]` (also to a section,
-  `[[Page#Section]]`), backlinks, `[[toc]]`, callouts, sortable tables, image
-  sizing, frontmatter tags and a one-line summary.
-- Edit in the browser (split view with live preview, auto-save, a formatting
-  bar, link and page completion, per-section editing) or in any text editor:
-  changes on disk show up immediately.
-- Paste or drop files and images into the editor to upload them.
-- Folders for structure; renaming a page updates every link to it.
-- Version history with diffs and one-click restore; deleted pages can be
-  brought back. Every save is a git commit, so `git push` backs it all up.
+Leaf has three modules: the **Wiki** for your notes, **Scratch** for quick
+capture, and the **Deck** for your tasks. You switch between them in the top
+left corner (on a phone, in the tab bar at the bottom), and **New** creates
+whatever the module you're in holds: a page, a scratch note, a task. Search,
+history, keyboard shortcuts and AI access work across all three.
 
-**Search**
-- Full-text search across pages and tasks (BM25 with English stemming,
-  prefixes, typo tolerance and accent folding), opening the matching section
-  with the words highlighted.
-- Query syntax: `"exact phrase"`, `-word`, `#tag`, `edited:2026-09`,
-  `after:` / `before:`.
-- Optional semantic search with a local embedding model, fused with the
-  keyword ranking, plus "Related pages". Nothing leaves your machine.
-- A quick switcher (Ctrl+P) with fuzzy matching and a preview pane.
+### Wiki: your notes
 
-**Deck (tasks)**
-- A task list with start dates and deadlines kept apart: **Open** (all, in
-  your own order), **Plan** (a day board: drag tasks onto days), **Focus**
-  (what you're working on today).
-- Recurring tasks, "keep" tasks for lists you reuse (shopping), comments,
-  notes with checklists, tags, and separate lists declared on a page.
+Pages are Markdown files in folders, linked to each other. Leaf renders them,
+shows what links where, and lets you edit them in the browser or in any text
+editor; a change on disk shows up immediately.
+
+- `[[Wikilinks]]`, also to a section (`[[Page#Section]]`). Links to a page
+  that doesn't exist yet show up red; following one creates the page.
+- Backlinks, "Linked tasks" (tasks that mention the page) and, with semantic
+  search, "Related pages". On wide screens the table of contents sits on the
+  left and the links on the right, both following as you scroll.
+- Callouts (`> [!WARNING]`), sortable tables, image sizing, `[[toc]]`,
+  frontmatter tags and a one-line summary.
+- An editor with live preview and auto-save, a formatting bar, completion
+  for links and pages, snippets (`/date`), list continuation, and editing a
+  single section from its heading. Paste or drop files and images to upload
+  them.
+- Renaming or moving a page updates every link to it, on other pages and in
+  tasks.
+- Every page's version history: what each save changed, any version, and
+  one-click restore. Deleted pages can be brought back.
+- Present a page as slides, one per heading.
+
+### Scratch: quick capture
+
+For a thought, a call, a link: write it down first, decide where it belongs
+later.
+
+- `c s` opens a new scratch note, named by its time; the Scratch list shows
+  them newest first, with a filter.
+- **Move to wiki** turns a note into a page (pick a folder and a name, keep
+  the date if you like); **Append to page** adds it to an existing page as a
+  section. Either way, links to the note follow it.
+- A paste inbox at `/page/_raw`: paste a URL to keep it as a bookmark, any
+  other text to keep it as a snippet.
+
+### Deck: your tasks
+
+A task list built around two different dates: the day you start on a task,
+and its deadline. It has three views:
+
+- **Open**: every task, in an order you set by dragging.
+- **Plan**: a board of the coming days (today, tomorrow, the week, later);
+  drag a task onto the day you'll do it.
+- **Focus**: what's on today, started or due.
+
+Done tasks go to a yearly archive. Beyond that:
+
 - Quick-add shorthand: `Call Bob tomorrow #work due:fri`.
-- Embed a deck in any page (`[[deck tag=work view=plan]]`), show a single
-  task inline (`[[task:…]]`), or turn lines of meeting notes into tasks.
-- Compact or full cards, keyboard-driven, with touch gestures on phones
-  (swipe to plan, long-press to drag).
+- Repeating tasks (by due date or from when you finish them; skip one
+  occurrence without ending the series), "keep" tasks that go back on the
+  list when done (shopping staples), and "won't do".
+- Notes with checklists, comments as a dated status log, a history of every
+  date change, and undo for completing and deleting.
+- Separate lists declared on a page (`[[deck list=groceries keep=1]]`), and
+  your own deck as the home of the Deck module, with an optional limit on
+  how much is in Focus.
+- Decks inside any page (`[[deck tag=work view=plan]]`), a single task inline
+  as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
+  to turn lines of meeting notes into tasks.
+- The Deck link shows how many tasks are due today or overdue.
+- Compact or full cards, fully keyboard-driven; on phones, swipe to plan and
+  long-press to drag.
 
-**Everyday use**
-- Scratch notes for quick capture, moved into the wiki or appended to a page
-  later.
-- Keyboard shortcuts for everything (`?` lists them), presentation mode from
-  a page's headings.
-- Sharing mode: hides links to other pages and pages marked not for sharing
-  while you share your screen.
-- Works on phones (a responsive layout with a tab bar, installable on the
-  home screen) and in light and dark mode.
+### Across Leaf
 
-**For AI assistants**
-- An [MCP](https://modelcontextprotocol.io) server at `/mcp`: any MCP client can search your notes and tasks, read
-  pages, and write: create and edit pages, rename and delete them, add and
-  update tasks. Every write is a git commit, with links back into Leaf.
+- **Search** (Ctrl+P) across pages and tasks: fuzzy matching on names, full
+  text with stemming, typo tolerance and accent folding, and the opened page
+  scrolled to the matching section with the words highlighted. Query syntax:
+  `"exact phrase"`, `-word`, `#tag`, `edited:2026-09`, `after:` / `before:`.
+- **Semantic search** (optional) with a local embedding model, mixed into the
+  keyword ranking. Nothing leaves your machine.
+- **Git underneath**: every finished edit (Done or Ctrl+S; auto-save doesn't
+  commit), task change and rename is a commit, so history, restore and
+  `git push` backups come for free.
+- **AI assistants** through an [MCP](https://modelcontextprotocol.io) server at
+  `/mcp`: any MCP client can search and read
+  your notes and tasks, and write: create and edit pages, rename and delete
+  them, add and update tasks. Every write is a commit marked `(MCP)`, with
+  links back into Leaf.
+- **Keyboard shortcuts** for everything; `?` lists them.
+- **Sharing mode** for screen sharing: hides the trail of visited pages,
+  backlinks and counts, and pages you've marked as not for sharing.
+- **Phones**: a responsive layout with a tab bar, installable on the home
+  screen. Light and dark mode follow your system.
 
 ## Quick start
 
