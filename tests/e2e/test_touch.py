@@ -56,9 +56,20 @@ def open_menu(page, title):
     return menu
 
 
-def test_tap_card_opens_editor(phone):
-    card(phone, "Water plants").locator(".task-title").tap()
+def test_first_tap_selects_second_opens_editor(phone):
+    water = card(phone, "Water plants")
+    water.locator(".task-title").tap()
+    expect(water).to_contain_class("task-selected")
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    card(phone, "Weekly review").locator(".task-title").tap()          # another card: selects it
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    expect(water).not_to_contain_class("task-selected")
+    water.locator(".task-title").tap()
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    water.locator(".task-title").tap()                                  # the selected one: opens
     expect(phone.locator("#task-edit-modal")).to_be_visible()
+    # A double tap is just these two taps: the title is not edited in place.
+    expect(water.locator(".task-inline-input")).to_have_count(0)
     expect(phone.locator("#task-edit-title")).to_have_value("Water plants")
 
 
@@ -182,7 +193,8 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
 # including Save — was unreachable: the fixed dialog could not be scrolled.
 
 def open_editor(page, title="Weekly review"):
-    card(page, title).locator(".task-title").tap()
+    card(page, title).locator(".task-title").tap()     # selects
+    card(page, title).locator(".task-title").tap()     # opens
     modal = page.locator("#task-edit-modal")
     expect(modal).to_be_visible()
     return modal
@@ -478,7 +490,9 @@ def test_tap_outside_only_closes_the_card_date_picker(phone):
     card(phone, "Weekly review").locator(".task-title").tap()
     expect(picker).to_have_count(0)
     expect(phone.locator("#task-edit-modal")).to_be_hidden()
-    # The next tap works normally again.
+    # The next taps work normally again: select, then open.
+    card(phone, "Weekly review").locator(".task-title").tap()
+    expect(card(phone, "Weekly review")).to_contain_class("task-selected")
     card(phone, "Weekly review").locator(".task-title").tap()
     expect(phone.locator("#task-edit-modal")).to_be_visible()
 

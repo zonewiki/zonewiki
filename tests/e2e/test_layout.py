@@ -258,8 +258,9 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     last = crumbs.nth(2)
     assert last.evaluate("el => el.scrollWidth > el.clientWidth"), "long titles are cut off"
 
-    pg.locator(".task-item").filter(has=pg.get_by_text("Water plants", exact=True)) \
-        .locator(".task-content").tap()
+    water = pg.locator(".task-item").filter(has=pg.get_by_text("Water plants", exact=True)).locator(".task-content")
+    water.tap()     # selects
+    water.tap()     # opens
     modal = pg.locator("#task-edit-modal")
     expect(modal).to_be_visible()
     box = modal.bounding_box()

@@ -171,11 +171,17 @@ listEl.addEventListener('change', e => {
   if (task) updateTask(id, { description: toggleDescCheck(task.description, +cb.dataset.descCheck) });
 });
 
-// Touch: a tap on a card opens the editor (double-click, the desktop
-// gesture, is unreliable on phones). Mouse clicks keep selecting cards.
+// Touch: the first tap on a card selects it (and expands it in compact
+// view), a tap on the selected card opens the editor (double-click, the
+// desktop gesture, is unreliable on phones). Mouse clicks keep selecting.
 let lastPointerType = 'mouse';
+// Whether the press started on the one selected card: the compat mousedown
+// that touch fires before the click selects it, so the click can't tell.
+let pressedSelected = false;
 listEl.addEventListener('pointerdown', e => {
   lastPointerType = e.pointerType;
+  const pressed = e.target.closest('.task-item');
+  pressedSelected = !!pressed && selectedIds.size === 1 && selectedId === pressed.dataset.id;
   // Under a finger a card is not natively draggable: phone browsers (Chrome
   // on Android, iOS Safari) start their own HTML5 drag on a long press, which
   // cancels the touch drag below mid-gesture, so the first drop was lost.
@@ -191,14 +197,10 @@ listEl.addEventListener('click', e => {
   if (lastPointerType !== 'touch') return;
   const card = e.target.closest('.task-item');
   if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
-  // Compact: the first tap expands the task, a tap on the expanded one
-  // opens the modal; a task with nothing more to show opens at once.
-  if (compact && expandedId !== card.dataset.id && hasMore(card.dataset.id)) {
-    setSelected(card.dataset.id);
-    setExpanded(card.dataset.id);
-    return;
-  }
-  openEditModal(card.dataset.id);
+  const id = card.dataset.id;
+  if (pressedSelected) { openEditModal(id); return; }
+  setSelected(id);
+  if (compact && hasMore(id)) setExpanded(id);
 });
 
 // Touch drag. Phones do not fire HTML5 drag events reliably, so a long press picks a
@@ -1307,8 +1309,8 @@ function setSelected(id) {
   anchorId   = id;
   selectedIds = new Set(id ? [id] : []);
   updateSelectionClasses();
-  // Compact: the selected task shows its details. Not on touch, where the
-  // first tap expands and the second opens the modal (the tap handler).
+  // Compact: the selected task shows its details. On touch the tap handler
+  // does it, since the compat mousedown selects without the click.
   if (compact && id && lastPointerType !== 'touch' && hasMore(id)) setExpanded(id);
   if (id) {
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
@@ -1820,7 +1822,8 @@ function render() {
 
   listEl.querySelectorAll('.task-title').forEach(el => {
     el.addEventListener('dblclick', e => {
-      if (e.target.closest('a')) return;
+      // Touch: two taps select and open (the tap handler), never more.
+      if (e.target.closest('a') || lastPointerType === 'touch') return;
       startInlineEdit(e.currentTarget);
     });
   });
@@ -1829,6 +1832,7 @@ function render() {
   // in place) and its controls opens the modal.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('dblclick', e => {
+      if (lastPointerType === 'touch') return;
       if (e.target.closest('.task-title, input, button, a, label, .task-clickable-date, .task-inline-input, .task-desc')) return;
       openEditModal(el.dataset.id);
     });

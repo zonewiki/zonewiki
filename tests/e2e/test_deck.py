@@ -1817,11 +1817,18 @@ def test_compact_task_with_nothing_more_stays_a_line(page, wiki):
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Plain")
 
 
-def test_compact_tap_on_nothing_more_opens_at_once(new_page, wiki):
+def test_compact_tap_on_nothing_more_selects_then_opens(new_page, wiki):
+    # A task with nothing more to show stays a line: the first tap only
+    # selects it, the second opens the modal.
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     _expand_setup(phone)
-    card(phone, "Plain").locator(".task-content").tap()
+    plain = card(phone, "Plain")
+    plain.locator(".task-content").tap()
+    expect(plain).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(plain).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
+    plain.locator(".task-content").tap()
     expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
 
 
