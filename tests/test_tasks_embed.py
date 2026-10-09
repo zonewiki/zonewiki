@@ -2,7 +2,7 @@
 
 import re
 
-import deck as deck_module
+import decksyntax
 from tests.conftest import create_task
 import render
 
@@ -12,22 +12,22 @@ import render
 
 class TestParseParams:
     def test_empty(self):
-        assert deck_module.parse_deck_params("") == {}
+        assert decksyntax.parse_deck_params("") == {}
 
     def test_single(self):
-        result = deck_module.parse_deck_params("tag=work")
+        result = decksyntax.parse_deck_params("tag=work")
         assert result == {"tag": "work"}
 
     def test_multiple(self):
-        result = deck_module.parse_deck_params("tag=work view=due limit=5 sort=due_date")
+        result = decksyntax.parse_deck_params("tag=work view=due limit=5 sort=due_date")
         assert result == {"tag": "work", "view": "due", "limit": "5", "sort": "due_date"}
 
     def test_list(self):
-        result = deck_module.parse_deck_params("list=groceries")
+        result = decksyntax.parse_deck_params("list=groceries")
         assert result == {"list": "groceries"}
 
     def test_case_insensitive_keys(self):
-        result = deck_module.parse_deck_params("Tag=work FILTER=due")
+        result = decksyntax.parse_deck_params("Tag=work FILTER=due")
         assert result == {"tag": "work", "filter": "due"}
 
 

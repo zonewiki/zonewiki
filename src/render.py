@@ -14,7 +14,13 @@ from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.gfm_autolink import gfm_autolink_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
-import deck as deck_module
+import deck
+
+import decksyntax
+
+import deckstore
+
+import pages
 from mdtext import (
     heading_id, mask_code, parse_frontmatter, plain_heading, plain_task_title,
     section_anchor, split_wikilink, strip_links, TASK_DONE_ONLY_RE, TASK_META_SRC_RE,
@@ -210,7 +216,7 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
         text = TOC_RE.sub(_TOC_PLACEHOLDER, text)
 
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
-    text, deck_embeds = deck_module.process_deck_embeds(text)
+    text, deck_embeds = deck.process_deck_embeds(text)
     text, task_refs = _mask_task_refs(text)
 
     text = unmask_code(process_wikilinks(text), code_stash)
@@ -221,11 +227,11 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     if deck_embeds:
-        result = deck_module.inject_deck_embeds(result, deck_embeds)
+        result = deck.inject_deck_embeds(result, deck_embeds)
     return fm_html + result
 
 
-# [[task:<id>]] references (deck.TASK_REF_RE): masked with private-use tokens
+# [[task:<id>]] references (decksyntax.TASK_REF_RE): masked with private-use tokens
 # before rendering, so markdown never touches the chip, then swapped for it.
 _TASK_REF_TOKEN_RE = re.compile('\ue002(\\d+)\ue003')
 
@@ -240,13 +246,13 @@ def _mask_task_refs(text: str) -> tuple[str, list[str]]:
     def token(m: re.Match) -> str:
         refs.append(m.group(1).lower())
         return f'\ue002{len(refs) - 1}\ue003'
-    return deck_module.TASK_REF_RE.sub(token, text), refs
+    return decksyntax.TASK_REF_RE.sub(token, text), refs
 
 
 def _inject_task_refs(html_str: str, refs: list[str], prefer: list[str] = ()) -> str:
     if not refs:
         return html_str
-    tasks = deck_module.resolve_task_refs(refs)
+    tasks = deckstore.resolve_task_refs(refs)
     today = date.today().isoformat()
     html_str = _TASK_REF_ITEM_RE.sub('<li class="task-ref-item">', html_str)
     return _TASK_REF_TOKEN_RE.sub(
@@ -267,10 +273,10 @@ def _short_date(iso: str, today: str) -> str:
 def link_list(task: dict, prefer=()) -> str | None:
     """The list a link to a task opens it in: one of `prefer` (the lists the
     page with the link declares) when the task is in it, so a task in two
-    lists opens in the one the page is about; else its own (deck.task_list)."""
+    lists opens in the one the page is about; else its own (pages.task_list)."""
     tags = {t.lower() for t in task.get("tags") or []}
     hits = sorted(tags & {p.lower() for p in prefer})
-    return hits[0] if hits else deck_module.task_list(task)
+    return hits[0] if hits else pages.task_list(task)
 
 
 def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
@@ -388,4 +394,4 @@ def task_link(task: dict, list_name: str | None) -> str:
     on Completed, in its year's archive when that is an earlier year."""
     if not task.get("completed_at"):
         return task_href(task["id"], "open", list_name)
-    return task_href(task["id"], "completed", list_name, deck_module.past_year(task))
+    return task_href(task["id"], "completed", list_name, deckstore.past_year(task))

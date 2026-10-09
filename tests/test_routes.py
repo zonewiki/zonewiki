@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 import server
-import deck as deck_module
+import decksyntax
+import deckstore
 from mdtext import content_hash, section_char_range
 from tests.conftest import HOST, write_page
 import config
@@ -418,18 +419,18 @@ class TestPagePreview:
 
 
 class TestNewTaskTags:
-    """deck.new_task_tags: what a new task in an embed gets, as its "+ New"."""
+    """decksyntax.new_task_tags: what a new task in an embed gets, as its "+ New"."""
 
     def test_list_then_single_tags(self):
-        assert deck_module.new_task_tags({"list": "Shop", "tag": "weekly, food"}) == ["shop", "weekly", "food"]
+        assert decksyntax.new_task_tags({"list": "Shop", "tag": "weekly, food"}) == ["shop", "weekly", "food"]
 
     def test_excluded_and_any_of_add_nothing(self):
-        assert deck_module.new_task_tags({"tag": "work,-mary"}) == ["work"]
-        assert deck_module.new_task_tags({"list": "task", "tag": "a|b"}) == ["task"]
+        assert decksyntax.new_task_tags({"tag": "work,-mary"}) == ["work"]
+        assert decksyntax.new_task_tags({"list": "task", "tag": "a|b"}) == ["task"]
 
     def test_nothing(self):
-        assert deck_module.new_task_tags({}) == []
-        assert deck_module.new_task_tags({"list": "task", "tag": "Task"}) == ["task"]
+        assert decksyntax.new_task_tags({}) == []
+        assert decksyntax.new_task_tags({"list": "task", "tag": "Task"}) == ["task"]
 
 
 # ===========================================================================
@@ -1604,12 +1605,12 @@ class TestTaskBacklinks:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Chores",
                                        "description": "see [[garden|the beds]]"}, headers=HOST)
-        assert [t["title"] for t in pages.find_task_backlinks("garden")] == ["Chores"]
+        assert [t["title"] for t in deckstore.find_task_backlinks("garden")] == ["Chores"]
 
     def test_markdown_page_link_counts(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
-        assert len(pages.find_task_backlinks("garden")) == 1
+        assert len(deckstore.find_task_backlinks("garden")) == 1
 
     def test_completed_and_unrelated_tasks_excluded(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
@@ -1975,7 +1976,7 @@ class TestVersion:
     ("a|b", ["c"], False),
 ])
 def test_tag_param_matches(raw, tags, expected):
-    assert deck_module.tag_param_matches({"tags": tags}, raw) is expected
+    assert decksyntax.tag_param_matches({"tags": tags}, raw) is expected
 
 
 class TestNoshare:

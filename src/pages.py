@@ -12,7 +12,8 @@ from urllib.parse import quote
 from flask import g, has_app_context, has_request_context, request
 
 import config
-import deck as deck_module
+import decksyntax
+import deckstore
 from mdtext import (
     mask_code, page_title, parse_frontmatter, SCRATCH_RE, section_anchor, slug_display_name,
     split_wikilink, to_slug, unmask_code, WIKILINK_RE,
@@ -133,8 +134,8 @@ def hidden_page(slug: str) -> bool:
 def page_task_refs(content: str) -> set[str]:
     """Ids of the tasks a page refers to with [[task:…]], code excluded."""
     masked, _ = mask_code(content)
-    refs = [m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)]
-    return {t["id"] for t in deck_module.resolve_task_refs(refs).values() if t}
+    refs = [m.group(1).lower() for m in decksyntax.TASK_REF_RE.finditer(masked)]
+    return {t["id"] for t in deckstore.resolve_task_refs(refs).values() if t}
 
 
 def _resolve_relative_link(href: str, source_slug: str) -> str | None:
@@ -196,14 +197,14 @@ _page_meta_cache: dict[str, tuple[float, str, set[str], list]] = {}
 def _page_deck_embeds(content: str) -> list[dict]:
     """The params of each [[deck …]] on a page, outside code."""
     masked, _ = mask_code(content)
-    return [deck_module.parse_deck_params(m.group(1) or "")
-            for m in deck_module.DECK_RE.finditer(masked)]
+    return [decksyntax.parse_deck_params(m.group(1) or "")
+            for m in decksyntax.DECK_RE.finditer(masked)]
 
 
 def _embeds_lists(embeds: list[dict]) -> list[tuple[str, dict]]:
     """(list name, embed params) of each embed that declares a list."""
     return [(name, params) for params in embeds
-            if (name := deck_module.clean_list(params.get("list")))]
+            if (name := decksyntax.clean_list(params.get("list")))]
 
 
 def page_deck_lists(content: str) -> list[tuple[str, dict]]:
@@ -248,6 +249,20 @@ def deck_lists() -> dict[str, dict]:
     return out
 
 
+def list_names() -> set[str]:
+    """Every declared list name."""
+    return set(deck_lists())
+
+
+def task_list(task: dict, names: set[str] | None = None) -> str | None:
+    """The separate list a task belongs to: the first (A–Z) of its tags that
+    a page declares as a list ([[deck list=<tag>]]), or None. Otherwise a
+    list tag is a tag: the main deck shows its tasks like any other."""
+    names = list_names() if names is None else names
+    hits = sorted({t.lower() for t in task.get("tags") or []} & names)
+    return hits[0] if hits else None
+
+
 def lookup_deck_home() -> dict | None:
     """The deck's home: the page with a [[deck … home=1]] embed, the user's
     own deck, as {"slug", "title", "params": that embed's params}; the first
@@ -255,7 +270,7 @@ def lookup_deck_home() -> dict | None:
     for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
         _, title, _, embeds = _page_meta_entry(md_file, slug)
         for params in embeds:
-            if deck_module.is_true(params.get("home")):
+            if decksyntax.is_true(params.get("home")):
                 return {"slug": slug, "title": title, "params": params}
     return None
 
@@ -297,11 +312,6 @@ def find_backlinks(slug: str) -> list[dict]:
             results.append({"slug": file_slug, "title": title})
     results.sort(key=lambda r: r["title"].lower())
     return results
-
-
-def find_task_backlinks(slug: str) -> list[dict]:
-    """Return deck tasks whose title or description contain a wikilink to slug."""
-    return deck_module.find_task_backlinks(slug, to_slug)
 
 
 # A markdown link (not an image): prefix, label, href up to any #anchor/?query
@@ -369,7 +379,7 @@ def update_references(old_slug: str, new_slug: str, section: str = "") -> list[P
         if new_content != content:
             md_file.write_text(new_content, encoding="utf-8")
             modified.append(md_file)
-    modified += deck_module.rename_page_refs(
+    modified += deckstore.rename_page_refs(
         old_slug, new_slug, lambda text: rewrite_page_links(text, old_slug, new_slug, section=section))
     return modified
 

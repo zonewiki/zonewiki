@@ -6,7 +6,9 @@ from datetime import date
 from flask import request
 
 import config
-import deck as deck_module
+import decksyntax
+import deckstore
+import pages
 import mcp_server
 import retrieval
 import search
@@ -74,7 +76,7 @@ def _mcp_task_text(task: dict, base: str) -> str:
     if task.get("keep"):
         facts.append("keep task (back to the list when done"
                      + (f", last done {task['last_done']})" if task.get("last_done") else ")"))
-    list_name = deck_module.task_list(task)
+    list_name = pages.task_list(task)
     if list_name:
         facts.append(f"list: {list_name}")
     url = base + task_link(task, list_name)
@@ -94,10 +96,10 @@ def _mcp_task_refs(content: str, base: str) -> str:
     """For read_page: what each [[task:…]] on the page stands for, since the
     raw markdown holds only the id."""
     masked, _ = mask_code(content)
-    refs = list(dict.fromkeys(m.group(1).lower() for m in deck_module.TASK_REF_RE.finditer(masked)))
+    refs = list(dict.fromkeys(m.group(1).lower() for m in decksyntax.TASK_REF_RE.finditer(masked)))
     if not refs:
         return ""
-    tasks = deck_module.resolve_task_refs(refs)
+    tasks = deckstore.resolve_task_refs(refs)
     lines = []
     for ref in refs:
         task = tasks[ref]
@@ -106,7 +108,7 @@ def _mcp_task_refs(content: str, base: str) -> str:
             continue
         facts = [task_status(task)]
         facts += [f"{k} {task[k + '_date']}" for k in ("start", "due") if task.get(k + "_date")]
-        url = base + task_link(task, deck_module.task_list(task))
+        url = base + task_link(task, pages.task_list(task))
         lines.append(f"- [[task:{ref}]]: {task.get('title', '')} ({', '.join(facts)}) {url}")
     return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + "\n".join(lines)
 
@@ -130,7 +132,7 @@ def _mcp_search_tasks(args: dict, base: str) -> str:
         return want <= {t.lower() for t in task.get("tags") or []}
 
     parsed = search.Query(query)
-    docs = [d for d in deck_module.task_search_docs()
+    docs = [d for d in deckstore.task_search_docs()
             if matches(d["task"]) and passes(parsed, d)]
     if parsed.text.strip():
         ranked = [d for _s, d in search.SearchIndex(docs).search(parsed.text, limit=max(len(docs), 1))]

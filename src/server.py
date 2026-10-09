@@ -16,7 +16,9 @@ from urllib.parse import quote, urlparse
 from flask import Flask, abort, jsonify, redirect, request, send_from_directory, session, url_for
 
 import config
-import deck as deck_module
+import deck
+import decksyntax
+import deckstore
 import mcp_server
 import retrieval
 import history
@@ -27,8 +29,7 @@ from mdtext import (
     toggle_nth_checkbox, unmask_code,
 )
 from pages import (
-    all_backlink_counts, all_slugs, lookup_deck_home, deck_lists, find_backlinks,
-    find_task_backlinks, fmt_date, hidden_page, is_protected, iter_pages, list_scratch,
+    all_backlink_counts, all_slugs, deck_lists, find_backlinks, fmt_date, hidden_page, is_protected, iter_pages, list_scratch,
     page_deck_lists, page_from_input, page_link_targets, page_meta, page_task_refs,
     safe_path, update_references, url,
 )
@@ -106,15 +107,11 @@ def set_cache_headers(response):
 git_setup()
 
 
-# Initialize deck module and register its blueprint
-deck_module.init_deck(config.WIKI_DIR, config.GIT_ENABLED, git_commit)
-
-
-app.register_blueprint(deck_module.bp)
+# The deck's files are in the wiki; the semantic index's worker reads tasks,
+# so it starts once the deck is set up.
+deckstore.init_deck(config.WIKI_DIR, config.GIT_ENABLED, git_commit)
+app.register_blueprint(deck.bp)
 app.register_blueprint(history.bp)
-deck_module.LISTS_FN = deck_lists
-deck_module.HOME_FN = lookup_deck_home
-deck_module.ANCHOR_FN = section_anchor
 retrieval.start_semantic()
 
 
@@ -190,7 +187,7 @@ def api_page_preview(slug):
         abort(404)
     content = path.read_text(encoding="utf-8")
     masked, stash = mask_code(content)
-    masked = deck_module.DECK_RE.sub("*(deck)*", masked)
+    masked = decksyntax.DECK_RE.sub("*(deck)*", masked)
     html_out = render_md(strip_h1(unmask_code(masked, stash)))
     html_out = re.sub(r'(<h[1-6]\b[^>]*?) id="', r'\1 data-pid="', html_out)
     return jsonify({"title": page_title(content, slug), "html": html_out})
@@ -326,7 +323,7 @@ def view_page(slug):
     backlinks = [b for b in find_backlinks(slug) if not hidden_page(b["slug"])]
     # Tasks the page shows inline already aren't repeated under Linked tasks.
     inline = page_task_refs(content)
-    task_backlinks = [t for t in find_task_backlinks(slug) if t["id"] not in inline]
+    task_backlinks = [t for t in deckstore.find_task_backlinks(slug) if t["id"] not in inline]
     # A section a task links to is named as the page's heading says it.
     heading_names = {section_anchor(h): plain_heading(h)
                      for h in re.findall(r"^#{2,3}\s+(.+?)\s*#*\s*$", mask_code(content)[0], re.M)}
@@ -507,7 +504,7 @@ def edit_page(slug):
 </div>"""
     # A hidden deck app: Make task (leaf.js) opens its edit modal, and uses
     # the deck's quick-add parser (deck-core.js) for several lines at once.
-    body += deck_module.build_deck_embed({}, headless=True)
+    body += deck.build_deck_embed({}, headless=True)
     return shell(f"Edit — {title}", body, editor=True)
 
 
@@ -839,15 +836,15 @@ def api_search():
 
 @app.get("/deck")
 def deck_page():
-    list_name = deck_module.clean_list(request.args.get("list"))
+    list_name = decksyntax.clean_list(request.args.get("list"))
     sep = '<span class="breadcrumb-sep">›</span>'
     if list_name:
         # A list looks the same here as on the page that declares it: that
         # embed's params (keep, labels, limit, view, tag) apply.
-        home = deck_module.LISTS_FN().get(list_name)
+        home = deck_lists().get(list_name)
         params = dict(home["params"]) if home else {}
         params["list"] = list_name
-        embed = deck_module.build_deck_embed(params)
+        embed = deck.build_deck_embed(params)
         title = f"{list_name} · Deck"
         crumbs = [home_link(), '<a href="/deck">Deck</a>', f"<span>{html.escape(list_name)}</span>"]
         heading = html.escape(list_name)
@@ -859,7 +856,7 @@ def deck_page():
             note = (f'<p class="deck-list-home">No page declares <code>[[deck list={heading}]]</code>: '
                     f'these are the tasks tagged #{heading}.</p>')
     else:
-        embed = deck_module.build_deck_embed({})
+        embed = deck.build_deck_embed({})
         title = "Deck"
         crumbs = [home_link(), "<span>Deck</span>"]
         heading = "Deck"
@@ -918,7 +915,7 @@ def api_preview():
     text = request.get_data(as_text=True)
     # ?lists=a,b: the lists the page declares, so a chip re-rendered on its
     # own (leaf.js rerenderTaskRef) keeps linking to the page's list.
-    lists = [n for n in (deck_module.clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
+    lists = [n for n in (decksyntax.clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
     return render_md(text, prefer_lists=lists)
 
 

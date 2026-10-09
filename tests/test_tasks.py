@@ -9,7 +9,7 @@ from datetime import date, timedelta
 import pytest
 
 import server
-import deck as deck_module
+import deckstore
 from tests.conftest import create_task
 import pages
 
@@ -1056,7 +1056,7 @@ class TestBatchTag:
 #
 # The Flask dev server is threaded, so two task mutations can run at once. The
 # original storage layer did an unguarded read-modify-write on _deck.json with a
-# truncate-in-place write, and _read_deck() swallowed a torn/empty read as an
+# truncate-in-place write, and read_deck() swallowed a torn/empty read as an
 # empty list. A create landing in that window read [], appended its one task,
 # and overwrote every other task — exactly what wiped the deck in production.
 
@@ -1447,7 +1447,7 @@ class TestCompletedArchive:
             {"id": "old2", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"},
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
-        deck_module._archive_old_completed()
+        deckstore.archive_old_completed()
         hot = json.loads((wiki_dir / "_deck" / "completed.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in hot] == ["new1"]
         arch1 = json.loads((wiki_dir / "_deck" / f"completed-{year-2}.json").read_text(encoding="utf-8"))
@@ -1463,7 +1463,7 @@ class TestCompletedArchive:
         self._seed_completed(wiki_dir, [
             {"id": "old", "title": "Old", "completed_at": f"{year-1}-06-01T10:00:00"},
         ])
-        deck_module._archive_old_completed()
+        deckstore.archive_old_completed()
         arch = json.loads((wiki_dir / "_deck" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch] == ["prior", "old"]
 
@@ -1472,7 +1472,7 @@ class TestCompletedArchive:
         self._seed_completed(wiki_dir, [
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
-        deck_module._archive_old_completed()
+        deckstore.archive_old_completed()
         assert not list((wiki_dir / "_deck").glob("completed-*.json"))
 
     def test_archived_tasks_stay_searchable(self, client, wiki_dir):
@@ -1481,7 +1481,7 @@ class TestCompletedArchive:
             {"id": "old1", "title": "Zephyrscale audit",
              "completed_at": f"{year-1}-05-01T10:00:00"},
         ])
-        deck_module._archive_old_completed()
+        deckstore.archive_old_completed()
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
 
@@ -1773,9 +1773,9 @@ class TestLists:
 
     def test_task_list_is_its_first_list_tag(self, client, wiki_dir, shop):
         (wiki_dir / "home.md").write_text("# Home\n\n[[deck list=chores]]\n", encoding="utf-8")
-        assert deck_module.task_list({"tags": ["work"]}) is None
-        assert deck_module.task_list({"tags": ["GROCERIES"]}) == "groceries"
-        assert deck_module.task_list({"tags": ["groceries", "chores"]}) == "chores"
+        assert pages.task_list({"tags": ["work"]}) is None
+        assert pages.task_list({"tags": ["GROCERIES"]}) == "groceries"
+        assert pages.task_list({"tags": ["groceries", "chores"]}) == "chores"
 
     def test_tag_without_a_page_is_no_list(self, client):
         today = date.today().isoformat()
@@ -2091,14 +2091,13 @@ class TestHistory:
 
 class TestLastActivity:
     def test_completion_history_creation(self):
-        import deck
-        assert deck._last_activity({"created_at": "2026-01-02T10:00:00"}) == "2026-01-02"
-        assert deck._last_activity({"created_at": "2026-01-02T10:00:00",
+        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00"}) == "2026-01-02"
+        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
                                     "history": [{"at": "2026-03-04T09:00", "event": "start"}]}) == "2026-03-04"
-        assert deck._last_activity({"created_at": "2026-01-02T10:00:00",
+        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
                                     "completed_at": "2026-05-06T08:00:00",
                                     "history": [{"at": "2026-03-04T09:00"}, "junk"]}) == "2026-05-06"
-        assert deck._last_activity({}) is None
+        assert deckstore.last_activity({}) is None
 
 
 # ---------- Comments ----------
@@ -2137,7 +2136,7 @@ class TestComments:
         cid = client.post(self._url(tid), json={"text": "x"}).get_json()["comments"][0]["id"]
         assert client.put(self._url(tid, cid), json={"text": ""}).status_code == 400
         long = client.post(self._url(tid), json={"text": "y" * 5000}).get_json()["comments"][-1]
-        assert len(long["text"]) == deck_module.COMMENT_MAX
+        assert len(long["text"]) == deckstore.COMMENT_MAX
 
     def test_on_a_completed_task(self, client):
         tid = create_task(client).get_json()["id"]
@@ -2186,5 +2185,5 @@ class TestComments:
         client.post(self._url(tid), json={"text": "asked alex about headcount"})
         results = client.get("/api/search?q=headcount", headers={"Host": "localhost:5000"}).get_json()
         assert [r.get("task_id") for r in results] == [tid]
-        assert deck_module._last_activity({"created_at": "2026-01-02T10:00:00",
+        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
                                            "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}) == "2026-04-01"

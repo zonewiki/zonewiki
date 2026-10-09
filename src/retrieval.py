@@ -5,7 +5,9 @@ LLMs (retrieve, sections rather than pages)."""
 from urllib.parse import urlencode
 
 import config
-import deck as deck_module
+import decksyntax
+import deckstore
+import pages
 import embed
 import search
 from mdtext import (
@@ -25,7 +27,7 @@ _search_doc_cache: dict[str, tuple[float, dict, tuple]] = {}
 def _task_refs_as_titles(content: str) -> str:
     """Page text with each [[task:…]] replaced by its task's title: what
     the reader sees there, and what search and embeddings should match."""
-    return deck_module.expand_task_refs(
+    return deckstore.expand_task_refs(
         content, lambda ref, task: plain_task_title(task.get("title", "")) if task else "")
 
 
@@ -67,7 +69,7 @@ def _page_search_doc(slug: str, content: str, mtime: float) -> dict:
         "slug": slug,
         "title": title,
         "mtime": mtime,
-        "task_refs": bool(deck_module.TASK_REF_RE.search(content)),
+        "task_refs": bool(decksyntax.TASK_REF_RE.search(content)),
         "tags": page_tags(content),
         "excerpt_text": text,
         "tokens": search.tokenize(text)
@@ -80,7 +82,7 @@ def _page_search_docs() -> list[dict]:
     """Every page as a BM25 document (_page_search_doc). A page with
     [[task:…]] is indexed with the tasks' titles, so it is stale when the
     deck changes too."""
-    deck_key = deck_module.deck_mtimes()
+    deck_key = deckstore.deck_mtimes()
     return _per_page(_search_doc_cache, _page_search_doc, key=deck_key,
                      fresh=lambda doc, key: not doc["task_refs"] or key == deck_key)
 
@@ -102,7 +104,7 @@ def _cached_index(cache: dict, docs: list[dict]) -> search.SearchIndex:
 
 
 def _search_index() -> search.SearchIndex:
-    return _cached_index(_search_index_cache, _page_search_docs() + deck_module.task_search_docs())
+    return _cached_index(_search_index_cache, _page_search_docs() + deckstore.task_search_docs())
 
 
 def _semantic_text(content: str, slug: str) -> tuple[str, str]:
@@ -112,7 +114,7 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     holding nothing but a deck embed came out as each other's closest match."""
     meta, body = parse_frontmatter(_task_refs_as_titles(content))
     lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
-    body = TOC_RE.sub("", deck_module.DECK_RE.sub("", strip_h1(body)))
+    body = TOC_RE.sub("", decksyntax.DECK_RE.sub("", strip_h1(body)))
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
 
 
@@ -128,7 +130,7 @@ def start_semantic() -> None:
     SEMANTIC = embed.from_env(
         config.WIKI_DIR, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
         # A task is embedded as its search text: title, notes and #tags.
-        tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deck_module.task_search_docs()])
+        tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deckstore.task_search_docs()])
     if SEMANTIC:
         SEMANTIC.start()
 
@@ -267,7 +269,7 @@ def _result_meta(d: dict) -> str:
         status = task_status(task)
         if status != "open":
             status += f" {task['completed_at'][:10]}"
-        list_name = deck_module.task_list(task)
+        list_name = pages.task_list(task)
         where = f"Deck › {list_name}" if list_name else "Deck"
         return f"{where} · {status}"
     folder = d["slug"].rpartition("/")[0]
@@ -303,7 +305,7 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
     docs = _ranked_docs(query, _search_index(), keep, limit)
     sections = _best_sections(query, {d["slug"] for d in docs if d.get("type") != "task"})
     results = []
-    names = deck_module.list_names()
+    names = pages.list_names()
     for d in docs:
         section = sections.get(d["slug"]) if d.get("type") != "task" else None
         text = f"{section['heading']}\n{section['text']}".strip() if section else d["excerpt_text"]
@@ -315,7 +317,7 @@ def do_search(raw: str, unlinked: bool = False, limit: int = SEARCH_LIMIT,
         for k in ("type", "task_id", "status", "year"):
             if d.get(k) is not None:
                 r[k] = d[k]
-        if d.get("type") == "task" and (list_name := deck_module.task_list(d["task"], names)):
+        if d.get("type") == "task" and (list_name := pages.task_list(d["task"], names)):
             r["list"] = list_name
         r["meta"] = _result_meta(d)
         r["href"] = _result_href(r)
@@ -375,7 +377,7 @@ _chunk_index_cache: dict = {"key": None, "index": None}
 def _chunk_index() -> search.SearchIndex:
     """BM25 over page sections and deck tasks (a task is one result, like a
     section), as the browser search ranks pages and tasks together."""
-    return _cached_index(_chunk_index_cache, _page_chunk_docs() + deck_module.task_search_docs())
+    return _cached_index(_chunk_index_cache, _page_chunk_docs() + deckstore.task_search_docs())
 
 
 def in_folder(slug: str, folder: str | None) -> bool:

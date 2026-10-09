@@ -9,7 +9,8 @@ from pathlib import Path
 from flask import g, has_app_context, has_request_context, request
 
 import config
-import deck as deck_module
+import deck
+import decksyntax
 import retrieval
 from mdtext import is_scratch, page_title, page_wikilink, plain_task_title, SCRATCH_RE
 from pages import (
@@ -100,7 +101,7 @@ def _deck_counts_html() -> tuple[str, str]:
     leaf.js refreshes them. Once per request."""
     if has_app_context() and "deck_counts" in g:
         return g.deck_counts
-    c = deck_module.deck_counts()
+    c = deck.deck_counts()
     hide = lambda n: "" if n else " hidden"
     out = (f' title="{html.escape(_deck_counts_title(c))}"',
            f'<span class="module-counts"><span class="module-due"{hide(c["count"])}>{c["count"] or ""}</span>'
@@ -556,12 +557,12 @@ def shell(title: str, body: str, *, editor: bool = False, action_buttons: bool =
     # deck's home gives them, and are keep tasks if it makes them (leaf.js).
     home = deck_home()
     if home:
-        body_attrs += f' data-deck-tags="{html.escape(",".join(deck_module.new_task_tags(home["params"])))}"'
-        if deck_module.is_true(home["params"].get("keep")):
+        body_attrs += f' data-deck-tags="{html.escape(",".join(decksyntax.new_task_tags(home["params"])))}"'
+        if decksyntax.is_true(home["params"].get("keep")):
             body_attrs += ' data-deck-keep="1"'
         # Its "+ New" on Focus (its view, or the default one) starts the
         # task today; elsewhere a new task has no start date.
-        if deck_module.embed_view(home["params"]) in ("", "focus"):
+        if decksyntax.embed_view(home["params"]) in ("", "focus"):
             body_attrs += ' data-deck-today="1"'
     show_actions = action_buttons and not editor
     safe_title = html.escape(title)

@@ -14,7 +14,7 @@ import time
 import pytest
 
 from tests.conftest import HOST, write_page
-import deck as deck_module
+import deckstore
 import embed
 import embed_setup
 import search
@@ -65,7 +65,7 @@ def make_index(wiki, embedder=None, **kw):
         lambda: [(s, p) for p, s in pages.iter_pages()],
         retrieval._semantic_text,
         tasks_fn=kw.pop("tasks_fn", lambda: [(d["task_id"], d["excerpt_text"])
-                                             for d in deck_module.task_search_docs()]),
+                                             for d in deckstore.task_search_docs()]),
         min_score=kw.pop("min_score", 0.5),
         task_min_score=kw.pop("task_min_score", 0.5),
         related_min_score=kw.pop("related_min_score", 0.5),

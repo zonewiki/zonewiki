@@ -15,7 +15,7 @@ os.environ["ALLOW_REMOTE"] = "1"   # no Host check against the test client's
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import config  # noqa: E402
-import deck as deck_module  # noqa: E402
+import deckstore  # noqa: E402
 import gitstore  # noqa: E402
 import mdtext  # noqa: E402
 import pages  # noqa: E402
@@ -31,14 +31,14 @@ def wiki_dir(tmp_path, monkeypatch):
     with every cache derived from pages or tasks emptied."""
     monkeypatch.setattr(config, "WIKI_DIR", tmp_path)
     monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_assets")
-    monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
+    monkeypatch.setattr(deckstore, "WIKI_DIR", tmp_path)
+    monkeypatch.setattr(deckstore, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
     for cache in (retrieval._search_doc_cache, retrieval._chunk_doc_cache,
                   pages._page_meta_cache, pages._noshare_tag_cache):
         cache.clear()
     for cache in (retrieval._search_index_cache, retrieval._chunk_index_cache):
         cache["key"] = None
-    deck_module._task_docs_cache.update(key=None, docs=[])
+    deckstore._task_docs_cache.update(key=None, docs=[])
     (tmp_path / "_assets").mkdir()
     (tmp_path / "_deck").mkdir()   # tests write deck files directly
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
@@ -49,7 +49,7 @@ def wiki_dir(tmp_path, monkeypatch):
 def git_wiki_dir(wiki_dir, monkeypatch):
     """wiki_dir as a git repository, so every git code path runs."""
     monkeypatch.setattr(config, "GIT_REMOTE", "")
-    monkeypatch.setattr(deck_module, "GIT_ENABLED", True)
+    monkeypatch.setattr(deckstore, "GIT_ENABLED", True)
     gitstore.git_setup()
     return wiki_dir
 
