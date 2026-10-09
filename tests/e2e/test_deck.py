@@ -1778,6 +1778,9 @@ def test_compact_selecting_expands_enter_opens(page, wiki):
     passport.locator("input[data-desc-check]").check()
     wait_for_field(page, "Renew passport", "description", "At the shop.\n- [x] old passport")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    # The deck ignores its keys while an input has focus: the ticked box
+    # keeps it until the save re-renders the card.
+    expect(page.locator("input[data-desc-check]:focus")).to_have_count(0)
     page.keyboard.press("Enter")                                    # the modal
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Renew passport")
     page.keyboard.press("Escape")
