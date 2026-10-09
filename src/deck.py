@@ -44,7 +44,7 @@ def _locked(fn):
             return fn(*args, **kwargs)
     return wrapper
 
-# These are set by init_deck() from server.py
+# These are set by init_deck() from server.py at startup
 WIKI_DIR: Path = Path(".")
 DECK_FILE: Path = Path("_deck/tasks.json")   # the open tasks; the rest sit beside it
 DECK_DIR_NAME = "_deck"
@@ -780,7 +780,7 @@ _FILTER_ALIASES = {
 # Separate lists. A list is a tag that a page declares with [[deck list=<tag>]]:
 # that page shows the tasks carrying the tag, and marks the tag as a list
 # everywhere. Otherwise a list tag is a tag: the main deck shows its tasks like
-# any other. The server scans pages for the declarations (server._deck_lists) and
+# any other. The server scans pages for the declarations (pages._deck_lists) and
 # installs the lookup here, since deck.py doesn't read pages itself.
 # LISTS_FN() returns {name: {"slug": declaring page, "title": its title,
 # "params": its embed's params}}; names are lowercase.
@@ -788,7 +788,7 @@ LISTS_FN = lambda: {}
 
 
 # The deck's home: the page whose [[deck … home=1]] embed is the user's own
-# deck, where the Deck module link goes (server._deck_home installs the
+# deck, where the Deck module link goes (pages._deck_home installs the
 # lookup). HOME_FN() returns {"slug", "title", "params"} or None (then the
 # Deck link goes to /deck).
 HOME_FN = lambda: None
@@ -1134,7 +1134,7 @@ def find_task_backlinks(slug: str, to_slug_fn) -> list[dict]:
 
 # A page refers to one task as [[task:<id>]]: the first SHORT_ID_LEN
 # characters of its id (like a short git hash), or the whole id. The server
-# renders it as a live chip (server._task_ref_html).
+# renders it as a live chip (render._task_ref_html).
 TASK_REF_RE = re.compile(r"\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]")
 SHORT_ID_LEN = 8
 
@@ -1209,12 +1209,12 @@ def task_search_docs() -> list[dict]:
     """Return all tasks as search documents for the shared BM25 index.
 
     Documents carry pre-tokenized ``tokens`` (title boosted by TITLE_WEIGHT) plus
-    passthrough fields (type/task_id/status) that server.do_search formats into
+    passthrough fields (type/task_id/status) that retrieval.do_search formats into
     results. Ranking and excerpting happen in the unified index, not here.
 
     Tokenizing every task on each search request is wasted work, so results are
     cached against the deck files' mtimes (same pattern as the page-token cache
-    in server.py)."""
+    in retrieval.py)."""
     key = _deck_mtimes()
     if _task_docs_cache["key"] == key:
         return _task_docs_cache["docs"]

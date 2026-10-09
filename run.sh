@@ -46,8 +46,8 @@ IMAGE=leaf
 CONTAINER=leaf
 
 # The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
-# uncommitted source changes), shown next to server.py's VERSION; same format
-# as server.py's _source_build().
+# uncommitted source changes), shown next to config.py's VERSION; same format
+# as config.py's _source_build().
 LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
 if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
   LEAF_BUILD="$LEAF_BUILD +dirty"

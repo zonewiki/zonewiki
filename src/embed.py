@@ -13,7 +13,7 @@ or touched without changes re-embeds nothing. Embedding runs in a background
 thread (SemanticIndex.start); requests only poke it and query whatever is
 ready, so a slow model never blocks a page view.
 
-server.py fuses these results with BM25 (search.fuse) and shows each page's
+retrieval.py fuses these results with BM25 (search.fuse) and shows each page's
 nearest neighbours as "Related" pages.
 
 The model choice and its download live in embed_setup.py (run at image
@@ -130,7 +130,7 @@ def chunk_page(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
 
 def chunk_key(title: str, chunk: str) -> str:
     """A chunk's identity: the hash its vector is stored under. Retrieval
-    (server.py) uses it to match keyword hits with semantic ones."""
+    (retrieval.py) uses it to match keyword hits with semantic ones."""
     return _hash(f"{title}\n{chunk}") if chunk else _hash(title)
 
 
@@ -243,7 +243,7 @@ class SemanticIndex:
     """Section vectors of every page, kept fresh by a background worker.
 
     pages_fn() lists the current pages as (slug, path); prepare(content, slug)
-    turns a file into (title, body text). Both come from server.py. A page's
+    turns a file into (title, body text). Both come from retrieval.py. A page's
     sections are embedded as "title\\nsection", so each carries its page's
     topic along. tasks_fn(), when given, lists deck tasks as (id, text); each
     task is one vector, found by search_tasks.

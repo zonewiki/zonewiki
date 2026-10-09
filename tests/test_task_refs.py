@@ -1,12 +1,12 @@
 """Task references: [[task:<id>]] in a page renders the deck task as a live
-chip (server._task_ref_html), and search, Linked tasks and MCP know them.
+chip (render._task_ref_html), and search, Linked tasks and MCP know them.
 """
 
 import re
 from datetime import date, timedelta
 
 from tests.conftest import HOST, write_page
-import server
+import render
 
 
 def task(client, **fields):
@@ -72,7 +72,7 @@ class TestRendering:
         body = view(client)
         m = re.search(r'class="task-ref" data-task-id="([^"]+)"', body)
         assert m and m.group(1) != t["id"], "should be the spawned next occurrence, open"
-        assert f"⏰ {server._short_date(day(7), day(0))}" in body
+        assert f"⏰ {render._short_date(day(7), day(0))}" in body
 
     def test_badges(self, client, wiki_dir):
         late = task(client, title="Late", due_date=day(-2))
@@ -87,7 +87,7 @@ class TestRendering:
         assert 'class="task-ref-badge task-ref-due overdue"' in body
         assert 'class="task-ref-badge task-ref-due due-today"' in body
         assert 'class="task-ref-badge task-ref-start start-later"' in body
-        assert f"⟲ ✓ {server._short_date(day(0), day(0))}" in body
+        assert f"⟲ ✓ {render._short_date(day(0), day(0))}" in body
         assert f'href="/deck?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
         assert '<span class="task-ref-badge task-ref-list">groceries</span>' in body
 
@@ -131,7 +131,7 @@ class TestLinkedTasks:
 
 class TestTwoLists:
     """A task in two lists links, from a page declaring one of them, to that
-    list rather than to its first list A–Z (server._link_list)."""
+    list rather than to its first list A–Z (render._link_list)."""
 
     def _setup(self, client, wiki_dir):
         write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")

@@ -3,9 +3,9 @@
 import json
 import re
 
-import server
 import deck as deck_module
 from tests.conftest import create_task
+import render
 
 
 # ── Param parsing ───────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ class TestParseParams:
 class TestTasksLinkRender:
     def test_basic_embed_no_tasks(self, wiki_dir):
         """[[deck]] renders the full deck app embed."""
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert "tasks-app" in html
         assert "tasks-list" in html
         assert "deck.js" in html
@@ -46,7 +46,7 @@ class TestTasksLinkRender:
     def test_eleven_embeds_each_render_their_own(self, wiki_dir):
         # Regression: placeholder _1 is a prefix of _10, so the 11th embed
         # was replaced by (part of) the 2nd one's HTML.
-        html = server.render_md("\n\n".join(f"[[deck tag=t{i}]]" for i in range(11)) + "\n")
+        html = render.render_md("\n\n".join(f"[[deck tag=t{i}]]" for i in range(11)) + "\n")
         assert "LEAFDECKPLACEHOLDER" not in html
         for i in range(11):
             sfx = f"-{i}" if i else ""
@@ -54,37 +54,37 @@ class TestTasksLinkRender:
             assert f'id="tasks-app{sfx}" data-init-tag="t{i}"' in html
 
     def test_no_list_field_or_show_lists_checkbox(self, wiki_dir):
-        html = server.render_md("[[deck]]\n[[deck]]\n")
+        html = render.render_md("[[deck]]\n[[deck]]\n")
         assert "task-show-lists" not in html
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_compact_param_and_density_button(self, wiki_dir):
         """[[deck compact=1]] starts one line per task; every deck has the switch."""
-        assert 'data-init-compact="1"' in server.render_md("[[deck compact=1]]\n")
-        html = server.render_md("[[deck]]\n")
+        assert 'data-init-compact="1"' in render.render_md("[[deck compact=1]]\n")
+        html = render.render_md("[[deck]]\n")
         assert 'data-init-compact=""' in html
         assert 'class="btn deck-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""
         create_task(client, title="Write code", tags=["work"])
-        html = server.render_md("[[deck tag=work]]\n")
+        html = render.render_md("[[deck tag=work]]\n")
         assert 'data-init-tag="work"' in html
         assert "tasks-app" in html
 
     def test_embed_with_multi_tag_filter(self, client, wiki_dir):
         """[[deck tag=a,b]] passes comma-separated tags as data attribute."""
-        html = server.render_md("[[deck tag=q3-launch,BUG-10002]]\n")
+        html = render.render_md("[[deck tag=q3-launch,BUG-10002]]\n")
         assert 'data-init-tag="q3-launch,BUG-10002"' in html
 
     def test_embed_filter_param(self, client, wiki_dir):
         """[[deck view=due]] passes filter as data attribute."""
-        html = server.render_md("[[deck view=due]]\n")
+        html = render.render_md("[[deck view=due]]\n")
         assert 'data-init-view="due"' in html
 
     def test_embed_filter_completed(self, client, wiki_dir):
         """[[deck view=completed]] passes filter as data attribute."""
-        html = server.render_md("[[deck view=completed]]\n")
+        html = render.render_md("[[deck view=completed]]\n")
         assert 'data-init-view="completed"' in html
 
     def test_embed_filter_label_aliases(self, wiki_dir):
@@ -99,11 +99,11 @@ class TestTasksLinkRender:
             "completed": "completed",
         }
         for label, expected in cases.items():
-            html = server.render_md(f"[[deck view={label}]]\n")
+            html = render.render_md(f"[[deck view={label}]]\n")
             assert f'data-init-view="{expected}"' in html, label
 
     def test_view_tabs_are_a_segmented_control_in_order(self, wiki_dir):
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-filter="(\w+)"[^>]*>([^<]+)</button>', html)
         assert tabs == [("open", "Open"), ("due", "Plan"), ("focus", "Focus")]
@@ -112,18 +112,18 @@ class TestTasksLinkRender:
 
     def test_embed_filter_alias_case_insensitive(self, wiki_dir):
         """Filter label matching is case-insensitive."""
-        html = server.render_md("[[deck view=All]]\n")
+        html = render.render_md("[[deck view=All]]\n")
         assert 'data-init-view="open"' in html
 
     def test_embed_filter_internal_names_still_work(self, wiki_dir):
         """Internal names (open/due) remain accepted for back-compat."""
         for name in ("open", "due"):
-            html = server.render_md(f"[[deck view={name}]]\n")
+            html = render.render_md(f"[[deck view={name}]]\n")
             assert f'data-init-view="{name}"' in html
 
     def test_embed_no_deferred_tab(self, wiki_dir):
         """The Deferred tab is gone — nothing in the deck hides tasks now."""
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert 'value="hidden"' not in html
         assert "Deferred" not in html
 
@@ -131,27 +131,27 @@ class TestTasksLinkRender:
         """The Open tab's "Unplanned only" toggle is gone: unplanned tasks are
         the Plan board's Unplanned section. A leftover `unplanned=` param in an
         embed is ignored."""
-        html = server.render_md("[[deck view=open unplanned=1]]\n")
+        html = render.render_md("[[deck view=open unplanned=1]]\n")
         assert 'id="task-unplanned' not in html
         assert "data-init-unplanned" not in html
         assert 'data-init-view="open"' in html
 
     def test_embed_legacy_filter_param(self, wiki_dir):
         """`filter=` is the old name of `view=` and still works; view wins."""
-        assert 'data-init-view="due"' in server.render_md("[[deck filter=plan]]\n")
-        html = server.render_md("[[deck view=focus filter=plan]]\n")
+        assert 'data-init-view="due"' in render.render_md("[[deck filter=plan]]\n")
+        html = render.render_md("[[deck view=focus filter=plan]]\n")
         assert 'data-init-view="focus"' in html
 
     def test_embed_filter_unknown_passthrough(self, wiki_dir):
         """An unrecognized filter value passes through unchanged (client ignores it)."""
-        html = server.render_md("[[deck view=bogus]]\n")
+        html = render.render_md("[[deck view=bogus]]\n")
         assert 'data-init-view="bogus"' in html
 
     def test_multiple_embeds_only_first(self, client, wiki_dir):
         """Multiple [[deck]] on one page: all render with unique instance IDs."""
         create_task(client, title="A", tags=["alpha"])
         md = "## Alpha\n\n[[deck tag=alpha]]\n\n## Beta\n\n[[deck tag=beta]]\n"
-        html = server.render_md(md)
+        html = render.render_md(md)
         # Both embeds should be present with unique IDs
         assert 'id="tasks-app"' in html
         assert 'id="tasks-app-1"' in html
@@ -164,7 +164,7 @@ class TestTasksLinkRender:
         (cross-instance refresh relies on this)."""
         create_task(client, title="A", tags=["alpha"])
         md = "[[deck tag=alpha]]\n\n[[deck tag=beta]]\n"
-        html = server.render_md(md)
+        html = render.render_md(md)
         # Instance 0 uses no suffix; instance 1 uses "-1".
         for base in ("tasks-list", "tasks-tabs", "task-edit-modal"):
             assert f'id="{base}"' in html, f"missing {base} for instance 0"
@@ -176,29 +176,29 @@ class TestTasksLinkRender:
     def test_embed_not_inside_paragraph(self, client, wiki_dir):
         """[[deck]] on its own line should NOT be wrapped in <p>."""
         create_task(client, title="T1")
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert "<p>" not in html.split('id="tasks-app"')[0].split('\n')[-1]
 
     def test_embed_case_insensitive(self, client, wiki_dir):
         """[[Deck]] and [[DECK]] work too."""
         for variant in ["[[Deck]]\n", "[[DECK]]\n", "[[deck]]\n"]:
-            html = server.render_md(variant)
+            html = render.render_md(variant)
             assert "tasks-app" in html
 
     def test_embed_works_inline(self):
         """[[deck]] inline is also replaced (renders embed)."""
-        html = server.render_md("Here are the [[deck]] for today.\n")
+        html = render.render_md("Here are the [[deck]] for today.\n")
         assert "tasks-app" in html
 
     def test_embed_works_in_list(self):
         """[[deck]] inside a list item renders embed."""
-        html = server.render_md("- [[deck tag=work]]\n")
+        html = render.render_md("- [[deck tag=work]]\n")
         assert "tasks-app" in html
         assert 'data-init-tag="work"' in html
 
     def test_embed_page_param_is_ignored(self, wiki_dir):
         """page= was removed: it no longer narrows the embed."""
-        html = server.render_md("[[deck page=my-project]]\n")
+        html = render.render_md("[[deck page=my-project]]\n")
         assert "data-init-page" not in html
 
 
@@ -290,14 +290,14 @@ class TestPageViewLink:
         assert 'data-init-view="due"' in body
 
     def test_embed_has_single_filter_field(self, wiki_dir):
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert 'id="task-filter-search"' in html
         assert "task-filter-tag" not in html
 
     def test_embed_contains_start_date_field(self, wiki_dir):
         """Edit modal has a Start (start_date) field and an unstored
         days-before-due helper; the old lead/anchor fields are gone."""
-        html = server.render_md("[[deck]]\n")
+        html = render.render_md("[[deck]]\n")
         assert 'id="task-edit-start"' in html
         assert 'name="start_date"' in html
         assert 'data-date-trigger="task-edit-start"' in html

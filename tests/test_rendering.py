@@ -10,23 +10,14 @@ import re
 
 import pytest
 
-import server
-from server import (
-    _apply_img_sizes,
-    _build_toc,
-    _render_frontmatter_html,
-    _render_tags_pills_html,
-    _render_task_dates,
-    build_breadcrumb,
-    page_title,
-    parse_frontmatter,
-    process_wikilinks,
-    render_md,
-    strip_h1,
-    to_slug,
-    toggle_nth_checkbox,
-)
+from mdtext import page_title, parse_frontmatter, strip_h1, to_slug, toggle_nth_checkbox
+from render import _apply_img_sizes, _build_toc, _render_frontmatter_html, _render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
+from views import build_breadcrumb
 from tests.conftest import write_page
+import config
+import mdtext
+import pages
+import render
 
 
 # ===========================================================================
@@ -659,20 +650,20 @@ class TestAutolinks:
     saw: files edited on disk, unnamed pastes, URLs inside pasted text."""
 
     def test_bare_url_www_and_email(self, wiki_dir):
-        html = server.render_md("see https://example.com/a?b=1. and www.x.org, or me@x.org\n")
+        html = render.render_md("see https://example.com/a?b=1. and www.x.org, or me@x.org\n")
         assert '<a href="https://example.com/a?b=1" target="_blank" rel="noopener noreferrer">https://example.com/a?b=1</a>.' in html
         assert '<a href="http://www.x.org" target="_blank" rel="noopener noreferrer">www.x.org</a>' in html
         assert '<a href="mailto:me@x.org">me@x.org</a>' in html
 
     def test_code_and_existing_links_untouched(self, wiki_dir):
-        html = server.render_md("`https://code.org` and [named](https://y.org)\n\n```\nhttps://fenced.org\n```\n")
+        html = render.render_md("`https://code.org` and [named](https://y.org)\n\n```\nhttps://fenced.org\n```\n")
         assert "<code>https://code.org</code>" in html
         assert html.count("<a ") == 1 and '<a href="https://y.org" target="_blank" rel="noopener noreferrer">named</a>' in html
         assert "https://fenced.org" in html and 'href="https://fenced.org"' not in html
 
     def test_wikilinks_still_work_next_to_urls(self, wiki_dir):
         (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
-        html = server.render_md("[[Garden]] https://example.com\n")
+        html = render.render_md("[[Garden]] https://example.com\n")
         assert 'href="/page/garden"' in html
         assert '<a href="https://example.com" target="_blank" rel="noopener noreferrer">' in html
 
@@ -680,18 +671,18 @@ class TestAutolinks:
 class TestCallouts:
     @pytest.mark.parametrize("kind", ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"])
     def test_each_kind(self, wiki_dir, kind):
-        html = server.render_md(f"> [!{kind}]\n> Mind **this**.\n")
+        html = render.render_md(f"> [!{kind}]\n> Mind **this**.\n")
         assert f'<div class="markdown-alert markdown-alert-{kind.lower()}">' in html
         assert f'<p class="markdown-alert-title">{kind.title()}</p>' in html
         assert "<strong>this</strong>" in html
 
     def test_plain_quote_stays_a_quote(self, wiki_dir):
-        html = server.render_md("> just a quote\n")
+        html = render.render_md("> just a quote\n")
         assert "<blockquote>" in html and "markdown-alert" not in html
 
     def test_wikilink_inside_callout(self, wiki_dir):
         (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
-        html = server.render_md("> [!TIP]\n> See [[Garden]].\n")
+        html = render.render_md("> [!TIP]\n> See [[Garden]].\n")
         assert "markdown-alert-tip" in html and 'href="/page/garden"' in html
 
 
@@ -700,13 +691,13 @@ class TestImageParagraphs:
     grow beyond the text; one inside a sentence is not."""
 
     def test_alone_is_marked(self):
-        from server import render_md
+        from render import render_md
         html_out = render_md("![Map](/_assets/map.png)\n\nSee ![icon](/_assets/i.png) here.\n")
         assert '<p class="img-block"><img src="/_assets/map.png" alt="Map" /></p>' in html_out
         assert "<p>See <img" in html_out
 
     def test_sized_image_alone_is_marked_too(self):
-        from server import render_md
+        from render import render_md
         assert '<p class="img-block"><img ' in render_md("![a|300](/a.png)\n")
 
 
@@ -715,7 +706,7 @@ class TestWikilinkSections:
     one on this page."""
 
     def test_split(self):
-        from server import split_wikilink
+        from mdtext import split_wikilink
         assert split_wikilink("Garden") == ("Garden", "", "Garden")
         assert split_wikilink("Garden|the garden") == ("Garden", "", "the garden")
         assert split_wikilink("Garden#Beds") == ("Garden", "Beds", "Garden › Beds")
@@ -723,28 +714,26 @@ class TestWikilinkSections:
         assert split_wikilink("#Beds") == ("", "Beds", "Beds")
 
     def test_rendered_links(self, tmp_path, monkeypatch):
-        import server
-        monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
+        monkeypatch.setattr(config, "PAGES_DIR", tmp_path)
         (tmp_path / "garden.md").write_text("# Garden\n")
-        out = server.render_md("[[Garden#Raised beds!]] [[Garden#Beds|beds]] [[#Notes]] [[Nowhere#Beds]]\n")
+        out = render.render_md("[[Garden#Raised beds!]] [[Garden#Beds|beds]] [[#Notes]] [[Nowhere#Beds]]\n")
         assert '<a href="/page/garden#raised-beds" class="wikilink">Garden › Raised beds!</a>' in out
         assert '<a href="/page/garden#beds" class="wikilink">beds</a>' in out
         assert '<a href="#notes" class="wikilink">Notes</a>' in out
         assert '<a href="/page/nowhere#beds" class="wikilink wikilink-missing">' in out
 
     def test_section_link_is_a_backlink_and_survives_a_rename(self):
-        import server
-        assert server._page_link_targets("[[Garden#Beds]] [[#Here]]", "x") == {"garden"}
-        assert server.rewrite_page_links("[[garden#Beds|b]] [[Garden#Paths]] [[#garden]]", "garden", "yard") == \
+        assert pages._page_link_targets("[[Garden#Beds]] [[#Here]]", "x") == {"garden"}
+        assert pages.rewrite_page_links("[[garden#Beds|b]] [[Garden#Paths]] [[#garden]]", "garden", "yard") == \
             "[[yard#Beds|b]] [[yard#Paths]] [[#garden]]"
-        assert server._plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"
+        assert mdtext._plain_task_title("Weed [[Garden#Beds]] and [[Yard|the yard]]") == "Weed Garden › Beds and the yard"
 
 
 class TestExternalLinks:
     """Links to other sites open in a new tab; Leaf's own links don't."""
 
     def test_marked_in_rendered_pages(self):
-        from server import render_md
+        from render import render_md
         out = render_md("[a](https://example.com) https://x.org www.y.org [p](/page/x) [[Home]] [m](mailto:a@b.c)\n")
         ext = ' target="_blank" rel="noopener noreferrer"'
         assert f'<a href="https://example.com"{ext}>a</a>' in out
@@ -755,6 +744,6 @@ class TestExternalLinks:
     def test_full_url_to_leaf_itself_stays(self):
         import server
         with server.app.test_request_context("/page/x", headers={"Host": "localhost:5000"}):
-            out = server.render_md("[me](http://localhost:5000/page/y) [other](http://other:5000/)\n")
+            out = render.render_md("[me](http://localhost:5000/page/y) [other](http://other:5000/)\n")
         assert '<a href="http://localhost:5000/page/y">me</a>' in out
         assert '<a href="http://other:5000/" target="_blank"' in out

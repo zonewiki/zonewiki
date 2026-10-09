@@ -10,8 +10,9 @@ import pytest
 
 from tests.conftest import HOST, write_page
 import mcp_server
-import server
 from tests.test_semantic import make_index
+import config
+import retrieval
 
 
 def rpc(client, method, params=None, id_=1, headers=None):
@@ -127,26 +128,26 @@ class TestEndpoint:
 
 class TestAuth:
     def test_password_without_token_closes_mcp(self, client, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(config, "LEAF_PASSWORD", "pw")
         resp = rpc(client, "ping")
         assert resp.status_code == 401
         assert "LEAF_MCP_TOKEN" in resp.get_json()["error"]
 
     def test_token_required_when_set(self, client, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
+        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
         assert rpc(client, "ping").status_code == 401
         assert rpc(client, "ping", headers={"Authorization": "Bearer wrong"}).status_code == 401
         assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
 
     def test_token_works_with_password(self, client, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_PASSWORD", "pw")
-        monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
+        monkeypatch.setattr(config, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
         assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
         # and the rest of the wiki still wants a login
         assert client.get("/page/index", headers=HOST).status_code == 302
 
     def test_get_also_needs_auth(self, client, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_MCP_TOKEN", "s3cret")
+        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
         assert client.get("/mcp", headers=HOST).status_code == 401
 
 
@@ -232,13 +233,13 @@ class TestSearchWiki:
     def test_finds_by_meaning_with_semantic_on(self, client, pages, monkeypatch):
         idx = make_index(pages)
         idx.sync()
-        monkeypatch.setattr(server, "SEMANTIC", idx)
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
         text, _ = call(client, "search_wiki", query="car repair")
         assert text.startswith("[1] Golf › Werkstatt")
         assert "#werkstatt" in text
 
     def test_keywords_only_without_semantic(self, client, pages, monkeypatch):
-        monkeypatch.setattr(server, "SEMANTIC", None)
+        monkeypatch.setattr(retrieval, "SEMANTIC", None)
         assert call(client, "search_wiki", query="car repair")[0].startswith("No matching")
 
 
@@ -320,7 +321,7 @@ class TestTasksInSearchWiki:
     def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):
         idx = make_index(pages)
         idx.sync()
-        monkeypatch.setattr(server, "SEMANTIC", idx)
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
         task(client, title="Call the mechaniker")
         text, _ = call(client, "search_wiki", query="mechaniker")
         assert "Task: Call the mechaniker" in text and "Golf › Werkstatt" in text
@@ -330,7 +331,7 @@ class TestTasksByMeaning:
     @pytest.fixture()
     def semantic_on(self, pages, monkeypatch):
         idx = make_index(pages)
-        monkeypatch.setattr(server, "SEMANTIC", idx)
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
         return idx
 
     def test_search_wiki_finds_task_by_meaning(self, client, semantic_on):
@@ -425,7 +426,7 @@ class TestSearchTasks:
 
 class TestBaseUrl:
     def test_links_use_request_address_by_default(self, client, pages, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_BASE_URL", "")
+        monkeypatch.setattr(config, "LEAF_BASE_URL", "")
         resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000"}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
@@ -433,7 +434,7 @@ class TestBaseUrl:
             resp.get_json()["result"]["content"][0]["text"]
 
     def test_base_url_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_BASE_URL", "http://wiki.lan:5000")
+        monkeypatch.setattr(config, "LEAF_BASE_URL", "http://wiki.lan:5000")
         assert "url: http://wiki.lan:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
         assert "url: http://wiki.lan:5000/page/git-remote#pushing" in \
             call(client, "search_wiki", query="git push")[0]

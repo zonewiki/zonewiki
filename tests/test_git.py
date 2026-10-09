@@ -13,11 +13,14 @@ from pathlib import Path
 
 import pytest
 
-import server
 import deck as deck_module
 from tests.conftest import HOST
+import config
+import pages
+import gitstore
+import views
 
-pytestmark = pytest.mark.skipif(not server.GIT_ENABLED, reason="git not installed")
+pytestmark = pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
 
 
 @pytest.fixture()
@@ -27,7 +30,7 @@ def wiki_dir(git_wiki_dir):
 
 def git(wiki_dir: Path, *args: str) -> str:
     r = subprocess.run(["git", *args], cwd=wiki_dir, capture_output=True, text=True, check=True,
-                       env=server._GIT_ENV)  # no detached maintenance: it would linger as a zombie
+                       env=gitstore._GIT_ENV)  # no detached maintenance: it would linger as a zombie
     return r.stdout
 
 
@@ -63,20 +66,20 @@ class TestGitSetup:
         assert is_clean(wiki_dir)
 
     def test_rerun_is_idempotent(self, wiki_dir):
-        server.git_setup()
+        gitstore.git_setup()
         assert commit_messages(wiki_dir) == ["Initial import"]
 
     def test_rerun_restores_missing_identity(self, wiki_dir):
         git(wiki_dir, "config", "--unset", "user.name")
-        server.git_setup()
+        gitstore.git_setup()
         assert git(wiki_dir, "config", "user.name").strip() == "Leaf"
 
     def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "GIT_REMOTE", "https://example.invalid/a.git")
-        server.git_setup()
+        monkeypatch.setattr(config, "GIT_REMOTE", "https://example.invalid/a.git")
+        gitstore.git_setup()
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/a.git"
-        monkeypatch.setattr(server, "GIT_REMOTE", "https://example.invalid/b.git")
-        server.git_setup()
+        monkeypatch.setattr(config, "GIT_REMOTE", "https://example.invalid/b.git")
+        gitstore.git_setup()
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/b.git"
 
 
@@ -182,7 +185,7 @@ class TestDeckFolderMigration:
 
     def test_moves_old_files_in_one_commit_keeping_history(self, client, wiki_dir, monkeypatch):
         self._old_wiki(wiki_dir)
-        deck_module.init_deck(wiki_dir, True, server.git_commit)
+        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
         assert not list(wiki_dir.glob("_deck*.json"))
         assert sorted(p.name for p in (wiki_dir / "_deck").iterdir()) == \
             ["completed-2025.json", "completed.json", "tasks.json"]
@@ -198,14 +201,14 @@ class TestDeckFolderMigration:
         assert client.get("/api/deck/completed-years", headers=HOST).get_json()["years"][-1] == "2025"
         # A second start finds nothing to move.
         before = head_sha(wiki_dir)
-        deck_module.init_deck(wiki_dir, True, server.git_commit)
+        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
         assert head_sha(wiki_dir) == before
 
     def test_a_taken_new_name_leaves_the_old_file(self, client, wiki_dir):
         self._old_wiki(wiki_dir)
         (wiki_dir / "_deck").mkdir()
         (wiki_dir / "_deck" / "tasks.json").write_text("[]", encoding="utf-8")
-        deck_module.init_deck(wiki_dir, True, server.git_commit)
+        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
         assert (wiki_dir / "_deck.json").exists()                 # not overwritten, not lost
         assert (wiki_dir / "_deck" / "tasks.json").read_text() == "[]"
         assert (wiki_dir / "_deck" / "completed.json").exists()   # the others moved
@@ -290,13 +293,13 @@ class TestHistory:
     def test_history_follows_renames(self, client, wiki_dir):
         save(client, "before", "# Page\n\nv1\n")
         client.post("/rename/before", data={"new_name": "after"}, headers=HOST)
-        entries = server.git_log(wiki_dir / "after.md")
+        entries = gitstore.git_log(wiki_dir / "after.md")
         assert [e["msg"] for e in entries] == ["Rename before to after", "Update before"]
 
     def test_git_log_max_count(self, client, wiki_dir):
         save(client, "p", "v1\n")
         save(client, "p", "v2\n")
-        assert len(server.git_log(wiki_dir / "p.md", max_count=1)) == 1
+        assert len(gitstore.git_log(wiki_dir / "p.md", max_count=1)) == 1
 
     def test_history_of_uncommitted_page_shows_empty_state(self, client, wiki_dir):
         (wiki_dir / "loose.md").write_text("# Loose\n", encoding="utf-8")
@@ -431,8 +434,8 @@ class TestDiff:
     def test_diffs_hidden_in_sharing_mode(self, client, wiki_dir, monkeypatch):
         # Regression: history and revisions said "Hidden page", but a diff
         # showed what a page not for sharing said.
-        monkeypatch.setattr(server, "NOSHARE_TAGS", frozenset({"noshare"}))
-        server._noshare_tag_cache.clear()
+        monkeypatch.setattr(config, "NOSHARE_TAGS", frozenset({"noshare"}))
+        pages._noshare_tag_cache.clear()
         save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nold words\n")
         save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nnew words\n")
         client.post("/api/save/secret", data={"content": "---\ntags: noshare\n---\n# Secret\n\nunsaved words\n"},
@@ -492,14 +495,14 @@ class TestDeletedPages:
             save(client, slug, f"# {slug}\n")
         client.post("/delete/first", headers=HOST)
         client.post("/delete/second", headers=HOST)
-        assert [p["slug"] for p in server.list_deleted_pages()] == ["second", "first"]
+        assert [p["slug"] for p in gitstore.list_deleted_pages()] == ["second", "first"]
 
     def test_page_deleted_twice_listed_once(self, client, wiki_dir):
         save(client, "gone", "# Gone\n")
         client.post("/delete/gone", headers=HOST)
         save(client, "gone", "# Gone again\n")
         client.post("/delete/gone", headers=HOST)
-        pages = server.list_deleted_pages()
+        pages = gitstore.list_deleted_pages()
         assert [p["slug"] for p in pages] == ["gone"]
         assert pages[0]["title"] == "Gone again"
 
@@ -507,26 +510,26 @@ class TestDeletedPages:
         save(client, "gone", "# Gone\n")
         client.post("/delete/gone", headers=HOST)
         save(client, "gone", "# Back\n")
-        assert server.list_deleted_pages() == []
+        assert gitstore.list_deleted_pages() == []
 
     def test_deleted_assets_not_listed(self, client, wiki_dir):
         (wiki_dir / "_assets" / "note.md").write_text("x", encoding="utf-8")
-        server.git_commit(wiki_dir / "_assets" / "note.md", "add")
+        gitstore.git_commit(wiki_dir / "_assets" / "note.md", "add")
         (wiki_dir / "_assets" / "note.md").unlink()
-        server.git_commit(wiki_dir / "_assets" / "note.md", "rm")
-        assert server.list_deleted_pages() == []
+        gitstore.git_commit(wiki_dir / "_assets" / "note.md", "rm")
+        assert gitstore.list_deleted_pages() == []
 
     def test_restore_from_deleted_list_roundtrip(self, client, wiki_dir):
         save(client, "gone", "# Gone\n\nbody\n")
         client.post("/delete/gone", headers=HOST)
-        entry = server.list_deleted_pages()[0]
+        entry = gitstore.list_deleted_pages()[0]
         # The listed sha is the deletion commit; the revision view resolves to
         # its parent for the actual restore.
         html = client.get(f"/revision/gone/{entry['sha']}", headers=HOST).get_data(as_text=True)
         restore_sha = html.split('action="/restore/gone/')[1].split('"')[0]
         client.post(f"/restore/gone/{restore_sha}", headers=HOST)
         assert (wiki_dir / "gone.md").read_text() == "# Gone\n\nbody\n"
-        assert server.list_deleted_pages() == []
+        assert gitstore.list_deleted_pages() == []
 
     def test_visiting_deleted_page_offers_restore(self, client, wiki_dir):
         save(client, "gone", "# Gone\n")
@@ -645,7 +648,7 @@ class TestGitDisabled:
 
     @pytest.fixture()
     def nogit(self, client, monkeypatch):
-        monkeypatch.setattr(server, "GIT_ENABLED", False)
+        monkeypatch.setattr(config, "GIT_ENABLED", False)
         return client
 
     @pytest.mark.parametrize("url", [
@@ -673,9 +676,9 @@ class TestGitDisabled:
         assert "Last changed" not in html
 
     def test_helpers_return_empty(self, nogit, wiki_dir):
-        assert server.git_log(wiki_dir / "index.md") == []
-        assert server.git_uncommitted_files() == []
-        assert server.list_deleted_pages() == []
+        assert gitstore.git_log(wiki_dir / "index.md") == []
+        assert gitstore.git_uncommitted_files() == []
+        assert gitstore.list_deleted_pages() == []
 
 
 # ===========================================================================
@@ -698,15 +701,15 @@ class TestHelpers:
         (timedelta(days=800), "2 years ago"),
     ])
     def test_relative_time(self, delta, expected):
-        assert server.relative_time(datetime.now() - delta) == expected
+        assert gitstore.relative_time(datetime.now() - delta) == expected
 
     def test_diff_to_html_empty(self):
-        assert server._diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
+        assert views._diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
 
     def test_diff_to_html_leaves_out_file_headers(self):
         # Only what comes before the first @@ is a header: a removed line
         # "-- x" reads "--- x" in the diff and stays.
-        out = server._diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
+        out = views._diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
                                    "@@ -1,2 +1,2 @@\n context\n--- x\n+++ y")
         assert out == ('<span class="diff-hunk">⋯</span><span class="diff-ctx"> context</span>'
                        '<span class="diff-del">--- x</span><span class="diff-add">+++ y</span>')
@@ -717,7 +720,7 @@ class TestHelpers:
         ("_assets/a.png", "Update _assets/a.png"),
     ])
     def test_commit_message(self, filepath, expected):
-        assert server._commit_message(filepath) == expected
+        assert gitstore._commit_message(filepath) == expected
 
 
 
@@ -727,4 +730,4 @@ class TestGitDoesNotDetach:
         # commit; with Leaf as the container's PID 1 nobody reaped it, and
         # zombies piled up to the PID limit.
         for key in ("maintenance.autoDetach", "gc.autoDetach"):
-            assert server._git("git", "config", "--get", key).stdout.strip() == "false"
+            assert gitstore._git("git", "config", "--get", key).stdout.strip() == "false"

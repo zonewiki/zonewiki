@@ -21,6 +21,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 from werkzeug.serving import make_server  # noqa: E402
 
 import server  # noqa: E402  (tests/conftest.py set up its import)
+import gitstore  # noqa: E402
 
 SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
@@ -66,7 +67,7 @@ class Wiki:
 
     def git(self, *args: str) -> str:
         return subprocess.run(["git", *args], cwd=self.root, capture_output=True,
-                              text=True, check=True, env=server._GIT_ENV).stdout
+                              text=True, check=True, env=gitstore._GIT_ENV).stdout
 
     def head(self) -> str:
         return self.git("rev-parse", "HEAD").strip()

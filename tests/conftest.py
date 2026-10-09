@@ -14,7 +14,12 @@ os.environ.setdefault("WIKI_DATA", tempfile.mkdtemp(prefix="leaf_test_"))
 os.environ["ALLOW_REMOTE"] = "1"   # no Host check against the test client's
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import config  # noqa: E402
 import deck as deck_module  # noqa: E402
+import gitstore  # noqa: E402
+import mdtext  # noqa: E402
+import pages  # noqa: E402
+import retrieval  # noqa: E402
 import server  # noqa: E402
 
 HOST = {"Host": "localhost:5000"}
@@ -24,15 +29,15 @@ HOST = {"Host": "localhost:5000"}
 def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server and the deck point at,
     with every cache derived from pages or tasks emptied."""
-    monkeypatch.setattr(server, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
-    monkeypatch.setattr(server, "UPLOADS_DIR", tmp_path / "_assets")
+    monkeypatch.setattr(config, "WIKI_DIR", tmp_path)
+    monkeypatch.setattr(config, "PAGES_DIR", tmp_path)
+    monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_assets")
     monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
     monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
-    for cache in (server._search_doc_cache, server._chunk_doc_cache,
-                  server._page_meta_cache, server._noshare_tag_cache):
+    for cache in (retrieval._search_doc_cache, retrieval._chunk_doc_cache,
+                  pages._page_meta_cache, pages._noshare_tag_cache):
         cache.clear()
-    for cache in (server._search_index_cache, server._chunk_index_cache):
+    for cache in (retrieval._search_index_cache, retrieval._chunk_index_cache):
         cache["key"] = None
     deck_module._task_docs_cache.update(key=None, docs=[])
     (tmp_path / "_assets").mkdir()
@@ -44,9 +49,9 @@ def wiki_dir(tmp_path, monkeypatch):
 @pytest.fixture()
 def git_wiki_dir(wiki_dir, monkeypatch):
     """wiki_dir as a git repository, so every git code path runs."""
-    monkeypatch.setattr(server, "GIT_REMOTE", "")
+    monkeypatch.setattr(config, "GIT_REMOTE", "")
     monkeypatch.setattr(deck_module, "GIT_ENABLED", True)
-    server.git_setup()
+    gitstore.git_setup()
     return wiki_dir
 
 
@@ -72,7 +77,7 @@ def create_task(client, **kwargs):
 def section_fields(full_content: str, section_idx: int) -> dict:
     """The editor's hidden fields for editing one section (file_hash,
     start_char, end_char)."""
-    rng = server.section_char_range(full_content, section_idx)
+    rng = mdtext.section_char_range(full_content, section_idx)
     assert rng is not None, f"no section {section_idx}"
     start, end = rng
-    return {"file_hash": server.content_hash(full_content), "start_char": str(start), "end_char": str(end)}
+    return {"file_hash": mdtext.content_hash(full_content), "start_char": str(start), "end_char": str(end)}

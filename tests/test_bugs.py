@@ -3,9 +3,11 @@
 import pytest
 import re
 
-import server
-from server import split_sections, toggle_nth_checkbox, find_backlinks, _page_link_targets
+from mdtext import split_sections, toggle_nth_checkbox
+from pages import find_backlinks, _page_link_targets
 from tests.conftest import HOST, section_fields, write_page
+import config
+import render
 
 
 # ===========================================================================
@@ -312,12 +314,12 @@ class TestBareSlugBacklinks:
         write_page(wiki_dir, "ivo-petrenko", "# Ivo Petrenko\n")
         write_page(wiki_dir, "state", "# State\n\n- [Ivo](ivo-petrenko)\n")
 
-        old_pages = server.PAGES_DIR
-        server.PAGES_DIR = wiki_dir
+        old_pages = config.PAGES_DIR
+        config.PAGES_DIR = wiki_dir
         try:
             backlinks = find_backlinks("ivo-petrenko")
         finally:
-            server.PAGES_DIR = old_pages
+            config.PAGES_DIR = old_pages
 
         slugs = [b["slug"] for b in backlinks]
         assert "state" in slugs, f"Expected 'state' in backlinks, got {slugs}"
@@ -396,8 +398,7 @@ class TestToggleCheckboxOnlyTaskItems:
 
     def test_index_matches_rendered_checkboxes(self, tmp_path, monkeypatch):
         """The Nth rendered checkbox must be the Nth line the toggle counts."""
-        import server
-        monkeypatch.setattr(server, "PAGES_DIR", tmp_path)
+        monkeypatch.setattr(config, "PAGES_DIR", tmp_path)
         content = (
             "Intro with [x] and [ ] in prose.\n\n"
             "- [ ] first\n"
@@ -408,7 +409,7 @@ class TestToggleCheckboxOnlyTaskItems:
             "> - [ ] fourth\n"
             "- [ ] fifth [x] trailing\n"
         )
-        html = server.render_md(content)
+        html = render.render_md(content)
         rendered = re.findall(r'<input[^>]*task-list-item-checkbox[^>]*>', html)
         assert len(rendered) == 5
         labels = ["first", "second", "third", "fourth", "fifth"]

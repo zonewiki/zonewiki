@@ -1832,7 +1832,7 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // A link to another site opens in a new tab (as server.py _is_external
+  // A link to another site opens in a new tab (as render.py _is_external
   // marks them in pages); a full URL to Leaf itself stays.
   const extAttrs = href => {
     try {

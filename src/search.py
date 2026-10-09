@@ -2,7 +2,7 @@
 
 Pure-Python BM25 with light stemming, prefix (partial-word) matching, and an
 edit-distance fuzzy fallback for typos. No database, no external dependencies —
-just stdlib (re, math, difflib). Used by both page search (server.py) and task
+just stdlib (re, math, difflib). Used by both page search (retrieval.py) and task
 search (deck.py) so results share one comparable relevance scale.
 
 Design notes:

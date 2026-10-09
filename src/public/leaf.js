@@ -101,7 +101,7 @@
 }());
 
 // ── Side columns: the section being read ─────────────────────────────────────
-// On big screens a page's table of contents is the left column (server.py
+// On big screens a page's table of contents is the left column (views.py
 // _rail_toc_html); it marks the section whose heading was scrolled past
 // last, and at the end of the page the last one that came into view.
 
@@ -221,7 +221,7 @@
   const links = document.querySelectorAll('.module-link[data-module="deck"]');
   if (!links.length) return;
 
-  // Same as server.py's _deck_counts_title.
+  // Same as views.py's _deck_counts_title.
   function deckCountsTitle({ focus, overdue, today }) {
     const parts = [];
     if (focus > 0) parts.push(`${focus} in Focus`);
@@ -338,11 +338,11 @@ function toSlug(name) {
 }
 window.toSlug = toSlug;
 
-// A heading's id as rendered (server.py _heading_id, mdit-py-plugins'
+// A heading's id as rendered (mdtext.py _heading_id, mdit-py-plugins'
 // anchors slugify): no punctuation, lowercase, spaces → hyphens.
 const headingId = text => text.replace(/[^\p{L}\p{N}\p{M}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');
 
-// A wikilink's inside → { href, label }, as server.py split_wikilink and
+// A wikilink's inside → { href, label }, as mdtext.py split_wikilink and
 // process_wikilinks: `Page`, `Page|Label`, `Page#Section` (that heading),
 // `#Section` (a heading on this page).
 function wikilinkHref(inner) {
@@ -780,7 +780,7 @@ function titleMatch(q, p) {
 // for a name), then the shorter name, which the query covers more of. So
 // "alex" puts "Alex Morgan" before "Alex 1:1 Kickoff" (three folders
 // down) and the scratch note "alex_prep".
-const SCRATCH_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // server.py SCRATCH_RE
+const SCRATCH_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // mdtext.py SCRATCH_RE
 
 function tieBreak(p, field) {
   const name = p.slug.split('/').pop();
@@ -853,7 +853,7 @@ function applyModalControls() {
   }
 }
 
-const MODAL_RESULTS = 15;  // server.py SEARCH_LIMIT
+const MODAL_RESULTS = 15;  // retrieval.py SEARCH_LIMIT
 
 async function fetchModalContentMatches(q) {
   const seq = ++modalCMSeq;
@@ -976,7 +976,7 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 
-// server.promoted_slug: where a scratch note moved to the wiki goes.
+// mdtext.promoted_slug: where a scratch note moved to the wiki goes.
 function promotedSlug(folder, name, date) {
   let n = toSlug(name.replace(/\//g, '-'));
   if (!n) return '';
@@ -1006,7 +1006,7 @@ async function copyText(text) {
   return ok;
 }
 
-// The editor's hint after Move to wiki (server._paste_hint_html): Copy puts
+// The editor's hint after Move to wiki (views._paste_hint_html): Copy puts
 // the link in the clipboard (again), × closes it; either way it is gone
 // from the URL, so a reload doesn't bring it back.
 (function () {
@@ -1115,7 +1115,7 @@ async function copyText(text) {
     fields.forEach(f => f.addEventListener('input', update));
     update();
     // With a page to link from, Move copies the new page's link first: the
-    // editor opens on that page to paste it (server.page_wikilink).
+    // editor opens on that page to paste it (mdtext.page_wikilink).
     const form = promote.querySelector('form');
     form.addEventListener('submit', async e => {
       if (!linkFrom.value.trim() || form.dataset.copying) return;
@@ -1244,7 +1244,7 @@ function toggleSharing() {
 }
 sharingBtn?.addEventListener('click', toggleSharing);
 syncSharingButton();
-// The desktop's buttons at the top right (server.py top_actions_html).
+// The desktop's buttons at the top right (views.py top_actions_html).
 document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
 document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
@@ -1588,7 +1588,7 @@ if (textarea && previewPane) {
   });
 
   // ── Formatting bar ──────────────────────────────────────────────────────────
-  // Buttons above the textarea (FORMAT_BAR in server.py) and Ctrl+B/I/K. Every
+  // Buttons above the textarea (FORMAT_BAR in views.py) and Ctrl+B/I/K. Every
   // change goes through execCommand('insertText'), so Ctrl+Z undoes it in one
   // step and the input event drives preview and auto-save as typing does.
 
@@ -2521,7 +2521,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Task list checkboxes ───────────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order. Mirrors server.py's _task_item_lines/_TASK_ITEM_RE: only
+// in rendered order. Mirrors mdtext.py's _task_item_lines/_TASK_ITEM_RE: only
 // list items whose text starts with the box produce a checkbox, fenced code
 // and a leading frontmatter block are skipped — so the Nth rendered checkbox
 // is the Nth offset here.

@@ -10,8 +10,13 @@ import pytest
 
 import server
 import deck as deck_module
-from server import content_hash, section_char_range
+from mdtext import content_hash, section_char_range
 from tests.conftest import HOST, write_page
+import config
+import mdtext
+import pages
+import gitstore
+import retrieval
 
 
 # ===========================================================================
@@ -381,12 +386,12 @@ class TestViewPage:
         assert '<a href="/edit/garden" class="btn">Edit</a>' in header
         assert body.count('class="btn page-menu-btn"') == 2
         menu = body.split('<div class="page-menu" id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * server.GIT_ENABLED + ["Rename…", "Delete…"]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * config.GIT_ENABLED + ["Rename…", "Delete…"]
         assert 'id="page-rename-dialog"' in body and 'id="page-delete-dialog"' in body
         # The home page can't be renamed or deleted: only Present is left.
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * server.GIT_ENABLED
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * config.GIT_ENABLED
         assert 'id="page-rename-dialog"' not in body
 
     def test_only_page_views_are_wide(self, client, wiki_dir):
@@ -821,8 +826,8 @@ class TestIterPages:
         write_page(wiki_dir, "a/b/deep", "# Deep\n")
         for skipped in ("_assets/x", "_index/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"):
             write_page(wiki_dir, skipped, "# no\n")
-        assert sorted(slug for _p, slug in server.iter_pages()) == ["a/b/deep", "index", "top"]
-        assert all(p.is_file() and p.suffix == ".md" for p, _s in server.iter_pages())
+        assert sorted(slug for _p, slug in pages.iter_pages()) == ["a/b/deep", "index", "top"]
+        assert all(p.is_file() and p.suffix == ".md" for p, _s in pages.iter_pages())
 
 
 class TestSearch:
@@ -1096,11 +1101,11 @@ class TestSearch:
 
     def test_index_is_reused_until_something_changes(self, client, wiki_dir):
         path = write_page(wiki_dir, "cached", "# Cached\n\nzzqold\n")
-        first = server._search_index()
-        assert server._search_index() is first
+        first = retrieval._search_index()
+        assert retrieval._search_index() is first
         path.write_text("# Cached\n\nzzqnew\n", encoding="utf-8")
         os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 5))
-        assert server._search_index() is not first
+        assert retrieval._search_index() is not first
         assert [r["slug"] for r in client.get("/api/search?q=zzqnew", headers=HOST).get_json()] == ["cached"]
         assert client.get("/api/search?q=zzqold", headers=HOST).get_json() == []
 
@@ -1290,12 +1295,12 @@ class TestAuth:
 
     @pytest.fixture()
     def auth_client(self, wiki_dir):
-        old_pw = server.LEAF_PASSWORD
-        server.LEAF_PASSWORD = "testpassword"
+        old_pw = config.LEAF_PASSWORD
+        config.LEAF_PASSWORD = "testpassword"
         server.app.config["TESTING"] = True
         with server.app.test_client() as c:
             yield c
-        server.LEAF_PASSWORD = old_pw
+        config.LEAF_PASSWORD = old_pw
 
     def test_login_page_has_no_action_buttons(self, auth_client):
         assert 'class="action-buttons"' not in auth_client.get("/login", headers=HOST).data.decode()
@@ -1386,12 +1391,12 @@ class TestUpdateReferences:
         ref = write_page(wiki_dir, "referencer", "# Ref\n\n[[old-page]]\n")
         write_page(wiki_dir, "no-link", "# No Link\n\nbody\n")
 
-        old_pages = server.PAGES_DIR
-        server.PAGES_DIR = wiki_dir
+        old_pages = config.PAGES_DIR
+        config.PAGES_DIR = wiki_dir
         try:
-            modified = server.update_references("old-page", "new-page")
+            modified = pages.update_references("old-page", "new-page")
         finally:
-            server.PAGES_DIR = old_pages
+            config.PAGES_DIR = old_pages
 
         assert ref in modified
         assert len(modified) == 1  # only the referencing page was modified
@@ -1400,12 +1405,12 @@ class TestUpdateReferences:
         write_page(wiki_dir, "target", "# T\n\ncontent\n")
         write_page(wiki_dir, "no-ref", "# No Ref\n\nbody only\n")
 
-        old_pages = server.PAGES_DIR
-        server.PAGES_DIR = wiki_dir
+        old_pages = config.PAGES_DIR
+        config.PAGES_DIR = wiki_dir
         try:
-            modified = server.update_references("target", "new-target")
+            modified = pages.update_references("target", "new-target")
         finally:
-            server.PAGES_DIR = old_pages
+            config.PAGES_DIR = old_pages
 
         assert modified == []
 
@@ -1475,22 +1480,22 @@ class TestSpecialPages:
 class TestHostHeader:
 
     def test_bad_host_returns_400(self, client):
-        old_allow_remote = server.ALLOW_REMOTE
-        server.ALLOW_REMOTE = False
+        old_allow_remote = config.ALLOW_REMOTE
+        config.ALLOW_REMOTE = False
         try:
             resp = client.get("/page/index", headers={"Host": "evil.com"})
             assert resp.status_code == 400
         finally:
-            server.ALLOW_REMOTE = old_allow_remote
+            config.ALLOW_REMOTE = old_allow_remote
 
     def test_allow_remote_skips_check(self, client):
-        old = server.ALLOW_REMOTE
-        server.ALLOW_REMOTE = True
+        old = config.ALLOW_REMOTE
+        config.ALLOW_REMOTE = True
         try:
             resp = client.get("/page/index", headers={"Host": "any.host.example"})
             assert resp.status_code != 400
         finally:
-            server.ALLOW_REMOTE = old
+            config.ALLOW_REMOTE = old
 
 
 # ===========================================================================
@@ -1609,12 +1614,12 @@ class TestTaskBacklinks:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Chores",
                                        "description": "see [[garden|the beds]]"}, headers=HOST)
-        assert [t["title"] for t in server.find_task_backlinks("garden")] == ["Chores"]
+        assert [t["title"] for t in pages.find_task_backlinks("garden")] == ["Chores"]
 
     def test_markdown_page_link_counts(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
-        assert len(server.find_task_backlinks("garden")) == 1
+        assert len(pages.find_task_backlinks("garden")) == 1
 
     def test_completed_and_unrelated_tasks_excluded(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
@@ -1636,17 +1641,17 @@ class TestTaskBacklinks:
 class TestPlainTaskTitle:
 
     def test_plain_text_unchanged(self):
-        assert server._plain_task_title("a < b & c") == "a < b & c"
+        assert mdtext._plain_task_title("a < b & c") == "a < b & c"
 
     def test_wikilink_and_label(self):
-        assert server._plain_task_title("[[My Page]]") == "My Page"
-        assert server._plain_task_title("[[my-page|Label]]") == "Label"
+        assert mdtext._plain_task_title("[[My Page]]") == "My Page"
+        assert mdtext._plain_task_title("[[my-page|Label]]") == "Label"
 
     def test_markdown_page_link(self):
-        assert server._plain_task_title("see [x](/page/foo) now") == "see x now"
+        assert mdtext._plain_task_title("see [x](/page/foo) now") == "see x now"
 
     def test_external_markdown_link_left_as_text(self):
-        assert server._plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
+        assert mdtext._plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
 
 
 # ===========================================================================
@@ -1692,7 +1697,7 @@ class TestRawPage:
 
     def test_snippet_pages_hidden_from_page_iteration(self, client, wiki_dir):
         resp = client.post("/api/raw/create-page", data={"text": "x"}, headers=HOST).get_json()
-        assert resp["slug"] not in server.all_slugs()
+        assert resp["slug"] not in pages.all_slugs()
 
 
 # ===========================================================================
@@ -1725,14 +1730,14 @@ class TestRenameUpdatesAllReferences:
         self.rename(client, "notes/old", "archive/new")
         assert sibling.read_text() == "[s](../archive/new) [s2](../archive/new.md)\n"
         assert cousin.read_text() == "[c](../archive/new)\n"
-        assert server.find_backlinks("archive/new") and len(server.find_backlinks("archive/new")) == 2
+        assert pages.find_backlinks("archive/new") and len(pages.find_backlinks("archive/new")) == 2
 
     def test_backlinks_survive_rename(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         write_page(wiki_dir, "ref", "# Ref\n\n[x](old.md) and [[old]]\n")
-        assert [b["slug"] for b in server.find_backlinks("old")] == ["ref"]
+        assert [b["slug"] for b in pages.find_backlinks("old")] == ["ref"]
         self.rename(client, "old", "new")
-        assert [b["slug"] for b in server.find_backlinks("new")] == ["ref"]
+        assert [b["slug"] for b in pages.find_backlinks("new")] == ["ref"]
 
     def test_links_inside_code_untouched(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
@@ -1920,11 +1925,11 @@ class TestCrossSiteWrites:
 
 class TestVersion:
     def test_version_is_semver(self):
-        assert re.fullmatch(r"\d+\.\d+\.\d+", server.VERSION)
+        assert re.fullmatch(r"\d+\.\d+\.\d+", config.VERSION)
 
     def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "VERSION", "1.2.3")
-        monkeypatch.setattr(server, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert '<p class="leaf-version">Leaf 1.2.3 · abc1234 2026-09-26 12:00</p>' in body
         assert '<meta name="generator" content="Leaf 1.2.3">' in body
@@ -1932,37 +1937,37 @@ class TestVersion:
             "version": "1.2.3", "build": "abc1234 2026-09-26 12:00"}
 
     def test_unknown_build_shows_version_only(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "VERSION", "1.2.3")
-        monkeypatch.setattr(server, "LEAF_BUILD", "unknown")
+        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert '<p class="leaf-version">Leaf 1.2.3</p>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(server, "LEAF_BUILD", "<b>")
+        monkeypatch.setattr(config, "LEAF_BUILD", "<b>")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "· &lt;b&gt;</p>" in body
 
-    @pytest.mark.skipif(not server.GIT_ENABLED, reason="git not installed")
+    @pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
     def test_source_build_from_git(self, tmp_path):
         import subprocess
         def git(*args):
             subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
-                            *args], check=True, capture_output=True, env=server._GIT_ENV)
+                            *args], check=True, capture_output=True, env=gitstore._GIT_ENV)
         git("init", "-q")
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "a.py").write_text("x\n")
         git("add", "-A")
         git("commit", "-q", "-m", "c")
-        v = server._source_build(tmp_path)
+        v = config._source_build(tmp_path)
         assert re.fullmatch(r"[0-9a-f]{7,} \d{4}-\d\d-\d\d \d\d:\d\d", v), v
         (tmp_path / "src" / "a.py").write_text("y\n")
-        assert server._source_build(tmp_path) == v + " +dirty"
+        assert config._source_build(tmp_path) == v + " +dirty"
         (tmp_path / "README").write_text("outside src\n")
         (tmp_path / "src" / "a.py").write_text("x\n")
-        assert server._source_build(tmp_path) == v   # only src/ counts
+        assert config._source_build(tmp_path) == v   # only src/ counts
 
     def test_source_build_without_git_repo(self, tmp_path):
-        assert server._source_build(tmp_path) == "unknown"
+        assert config._source_build(tmp_path) == "unknown"
 
 
 # ===========================================================================
@@ -1988,10 +1993,10 @@ class TestNoshare:
 
     @pytest.fixture(autouse=True)
     def _config(self, monkeypatch):
-        tags, folders = server._parse_noshare("#noshare, #People ,personal/")
-        monkeypatch.setattr(server, "NOSHARE_TAGS", tags)
-        monkeypatch.setattr(server, "NOSHARE_FOLDERS", folders)
-        server._noshare_tag_cache.clear()
+        tags, folders = config._parse_noshare("#noshare, #People ,personal/")
+        monkeypatch.setattr(config, "NOSHARE_TAGS", tags)
+        monkeypatch.setattr(config, "NOSHARE_FOLDERS", folders)
+        pages._noshare_tag_cache.clear()
 
     def _wiki(self, wiki_dir):
         write_page(wiki_dir, "home2", "# Home2\n\n[[Bob]], [[personal/diary|my diary]] and [[Garden]].\n")
@@ -2000,8 +2005,8 @@ class TestNoshare:
         write_page(wiki_dir, "garden", "# Garden\n\nBeds. See [[Home2]].\n")
 
     def test_parse(self):
-        assert server._parse_noshare("#a, b ,x/,/y/ ,") == (frozenset({"a", "b"}), ("x/", "y/"))
-        assert server._parse_noshare("") == (frozenset(), ())
+        assert config._parse_noshare("#a, b ,x/,/y/ ,") == (frozenset({"a", "b"}), ("x/", "y/"))
+        assert config._parse_noshare("") == (frozenset(), ())
 
     def test_off_everything_shows(self, client, wiki_dir):
         self._wiki(wiki_dir)
@@ -2072,11 +2077,11 @@ class TestPromotePage:
         assert "Move to wiki" not in body
 
     def test_promoted_slug(self):
-        assert server.promoted_slug("", "Meeting with Alex") == "meeting-with-alex"
-        assert server.promoted_slug("conversations/", "Alex & Sam", "2026-07-08") == \
+        assert mdtext.promoted_slug("", "Meeting with Alex") == "meeting-with-alex"
+        assert mdtext.promoted_slug("conversations/", "Alex & Sam", "2026-07-08") == \
             "conversations/2026-07-08_alex-sam"
-        assert server.promoted_slug("A/B", "x/y") == "a/b/x-y"
-        assert server.promoted_slug("people", "  ") == ""
+        assert mdtext.promoted_slug("A/B", "x/y") == "a/b/x-y"
+        assert mdtext.promoted_slug("people", "  ") == ""
 
     def test_promote_moves_the_note_and_its_links(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
@@ -2109,9 +2114,9 @@ class TestPromotePage:
         assert (wiki_dir / f"{SCRATCH}.md").exists()
 
     def test_page_wikilink(self):
-        assert server.page_wikilink("a/b", "Title") == "[[a/b|Title]]"
-        assert server.page_wikilink("b", "x | [y]") == "[[b|x  y]]"
-        assert server.page_wikilink("b", "[]") == "[[b|b]]"
+        assert mdtext.page_wikilink("a/b", "Title") == "[[a/b|Title]]"
+        assert mdtext.page_wikilink("b", "x | [y]") == "[[b|x  y]]"
+        assert mdtext.page_wikilink("b", "[]") == "[[b|b]]"
 
     def test_promote_opens_the_page_to_link_from(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Alex sync\n")
@@ -2185,14 +2190,14 @@ class TestAppendToPage:
     def test_note_as_section(self):
         note = ("---\ntags: alex, 1on1\ntldr: All good\n---\n# Title\n\nIntro\n\n"
                 "## Topics\n\n### Detail\n\n```\n# not a heading\n```\n")
-        section, tags = server.note_as_section(note, "Alex 1:1 (2026-10-08)")
+        section, tags = mdtext.note_as_section(note, "Alex 1:1 (2026-10-08)")
         assert section == ("## Alex 1:1 (2026-10-08)\n\n_All good_\n\nIntro\n\n"
                            "### Topics\n\n#### Detail\n\n```\n# not a heading\n```\n")
         assert tags == ["alex", "1on1"]
-        assert server.note_as_section("# Only a title\n", "H") == ("## H\n", [])
+        assert mdtext.note_as_section("# Only a title\n", "H") == ("## H\n", [])
 
     def test_add_frontmatter_tags(self):
-        add = server.add_frontmatter_tags
+        add = mdtext.add_frontmatter_tags
         assert add("# P\n", ["a"]) == "---\ntags: a\n---\n# P\n"
         assert add("---\ntags: [A, b]\n---\n# P\n", ["a", "c"]) == "---\ntags: A, b, c\n---\n# P\n"
         assert add("---\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: c\ntldr: x\n---\n# P\n"

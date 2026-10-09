@@ -3,7 +3,7 @@ content_hash, section_char_range, and the /edit and /api/save HTTP routes."""
 
 import textwrap
 
-from server import split_sections, _splice_section, content_hash, section_char_range
+from mdtext import split_sections, _splice_section, content_hash, section_char_range
 from tests.conftest import HOST, section_fields, write_page
 
 

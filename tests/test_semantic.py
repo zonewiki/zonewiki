@@ -18,7 +18,8 @@ import deck as deck_module
 import embed
 import embed_setup
 import search
-import server
+import pages
+import retrieval
 
 # word -> concept axis; other words don't count.
 CONCEPTS = {
@@ -61,8 +62,8 @@ def make_index(wiki, embedder=None, **kw):
     return embed.SemanticIndex(
         embedder or FakeEmbedder(),
         wiki / "_index" / "embeddings.json",
-        lambda: [(s, p) for p, s in server.iter_pages()],
-        server._semantic_text,
+        lambda: [(s, p) for p, s in pages.iter_pages()],
+        retrieval._semantic_text,
         tasks_fn=kw.pop("tasks_fn", lambda: [(d["task_id"], d["excerpt_text"])
                                              for d in deck_module.task_search_docs()]),
         min_score=kw.pop("min_score", 0.5),
@@ -82,7 +83,7 @@ def semantic(wiki_dir, monkeypatch):
     write_page(wiki_dir, "money", "# Budget\n\nRent and savings.\n")
     idx = make_index(wiki_dir)
     idx.sync()
-    monkeypatch.setattr(server, "SEMANTIC", idx)
+    monkeypatch.setattr(retrieval, "SEMANTIC", idx)
     return idx
 
 
@@ -122,16 +123,16 @@ class TestChunkPage:
 class TestSemanticText:
     def test_deck_and_toc_directives_dropped(self):
         # Pages holding only a deck embed were each other's closest match.
-        title, body = server._semantic_text(
+        title, body = retrieval._semantic_text(
             "# Leaf\n\n[[toc]]\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
         assert "deck" not in body.lower() and "toc" not in body
         assert "Notes  here." in body
 
     def test_only_a_deck_embed_leaves_no_body(self):
-        assert server._semantic_text("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf")[1].strip() == ""
+        assert retrieval._semantic_text("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf")[1].strip() == ""
 
     def test_frontmatter_and_h1_dropped_tldr_and_tags_lead(self):
-        title, body = server._semantic_text(
+        title, body = retrieval._semantic_text(
             "---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")
         assert title == "Golf"
         assert body.startswith("Notes on the car\ncars repair")
@@ -364,7 +365,7 @@ class TestConfig:
     def test_thresholds_per_model(self, wiki_dir):
         e = FakeEmbedder()
         e.model_name = embed.DEFAULT_FASTEMBED_MODEL
-        idx = embed.SemanticIndex(e, wiki_dir / "c.json", lambda: [], server._semantic_text)
+        idx = embed.SemanticIndex(e, wiki_dir / "c.json", lambda: [], retrieval._semantic_text)
         assert (idx.min_score, idx.related_min_score, idx.task_min_score) == \
             embed.THRESHOLDS[embed.DEFAULT_FASTEMBED_MODEL]
 
@@ -423,11 +424,24 @@ class TestConfig:
 
     def test_off_by_default(self, monkeypatch, wiki_dir):
         monkeypatch.delenv("LEAF_EMBEDDINGS", raising=False)
-        assert embed.from_env(wiki_dir, lambda: [], server._semantic_text) is None
+        assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
+
+    def test_startup_starts_the_worker(self, monkeypatch, wiki_dir):
+        # The index LEAF_EMBEDDINGS asks for is set up at startup and its
+        # worker started (retrieval.start_semantic, called by server.py).
+        started = []
+
+        class Index:
+            def start(self):
+                started.append(self)
+        monkeypatch.setattr(embed, "from_env", lambda *a, **k: Index())
+        monkeypatch.setattr(retrieval, "SEMANTIC", None)
+        retrieval.start_semantic()
+        assert started == [retrieval.SEMANTIC]
 
     def test_bad_setting_is_not_fatal(self, monkeypatch, wiki_dir):
         monkeypatch.setenv("LEAF_EMBEDDINGS", "bogus:x")
-        assert embed.from_env(wiki_dir, lambda: [], server._semantic_text) is None
+        assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
 
     def test_cache_dir_excluded_from_git(self, wiki_dir):
         (wiki_dir / ".git" / "info").mkdir(parents=True)
@@ -478,7 +492,7 @@ class TestHybridSearch:
         assert all(r["slug"] != "golf" for r in _search(client, "car repair"))
 
     def test_without_semantic_keywords_only(self, client, semantic, monkeypatch):
-        monkeypatch.setattr(server, "SEMANTIC", None)
+        monkeypatch.setattr(retrieval, "SEMANTIC", None)
         assert _search(client, "car repair") == []
         assert _search(client, "werkstatt")[0]["slug"] == "golf"
 
@@ -543,12 +557,12 @@ class TestRelated:
         write_page(wiki_dir, "car-tasks", "# Golf tasks\n\n[[deck tag=golf]]\n")
         idx = make_index(wiki_dir, related_min_chars=embed.RELATED_MIN_CHARS)
         idx.sync()
-        monkeypatch.setattr(server, "SEMANTIC", idx)
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
         assert _related(client, "car-tasks") is None
         assert _related(client, "golf") is None  # car-tasks isn't offered either
 
     def test_absent_without_semantic(self, client, semantic, wiki_dir, monkeypatch):
         write_page(wiki_dir, "brakes", "# Brakes\n\nBremsen beim Mechaniker.\n")
         semantic.sync()
-        monkeypatch.setattr(server, "SEMANTIC", None)
+        monkeypatch.setattr(retrieval, "SEMANTIC", None)
         assert _related(client, "golf") is None
