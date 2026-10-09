@@ -45,7 +45,7 @@ def page_title(content: str, slug: str) -> str:
     a code example ("# install deps") never becomes the page title."""
     lines = content.splitlines()
     start = _body_start(lines)
-    for i, line, in_fence in _iter_fenced_lines(lines):
+    for i, line, in_fence in iter_fenced_lines(lines):
         if i >= start and not in_fence:
             m = _H1_RE.match(line)
             if m:
@@ -127,7 +127,7 @@ def mask_code(text: str) -> tuple[str, list[str]]:
         return f'\ue000{len(stash) - 1}\ue001'
 
     out = []
-    for _, line, in_fence in _iter_fenced_lines(text.splitlines(keepends=True)):
+    for _, line, in_fence in iter_fenced_lines(text.splitlines(keepends=True)):
         if in_fence:
             body = line.rstrip('\n')
             out.append(token(body) + line[len(body):])
@@ -140,7 +140,7 @@ def unmask_code(text: str, stash: list[str]) -> str:
     return _CODE_MASK_RE.sub(lambda m: stash[int(m.group(1))], text)
 
 
-def _iter_fenced_lines(lines: list[str]):
+def iter_fenced_lines(lines: list[str]):
     """Yield (index, line, in_fence) for each line, where in_fence is True for
     fence delimiter lines (``` / ~~~) and everything between them."""
     in_fence = False
@@ -176,7 +176,7 @@ def _task_item_lines(lines: list[str]) -> list[tuple[int, re.Match]]:
     leading frontmatter block and fenced code."""
     start = _body_start(lines)
     found = []
-    for i, line, in_fence in _iter_fenced_lines(lines):
+    for i, line, in_fence in iter_fenced_lines(lines):
         if i < start or in_fence:
             continue
         m = _TASK_ITEM_RE.match(line)
@@ -238,7 +238,7 @@ def split_sections(content: str) -> list[str]:
     heading_lines: list[int] = []
     prev_text_line_idx: int | None = None   # for setext h2 detection
 
-    for i, line, in_fence in _iter_fenced_lines(lines):
+    for i, line, in_fence in iter_fenced_lines(lines):
         stripped = line.strip()
         if in_fence:
             prev_text_line_idx = None
@@ -395,11 +395,11 @@ def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
     headings move down so the highest is a ###: they are subsections now."""
     meta, body = parse_frontmatter(content)
     lines = strip_h1(body).strip("\n").split("\n")
-    levels = [len(m.group(1)) for _, line, fenced in _iter_fenced_lines(lines)
+    levels = [len(m.group(1)) for _, line, fenced in iter_fenced_lines(lines)
               if not fenced and (m := re.match(r"^(#{1,6})[ \t]", line))]
     shift = max(0, 3 - min(levels)) if levels else 0
     if shift:
-        for i, line, fenced in list(_iter_fenced_lines(lines)):
+        for i, line, fenced in list(iter_fenced_lines(lines)):
             m = None if fenced else re.match(r"^(#{1,6})([ \t])", line)
             if m:
                 lines[i] = "#" * min(6, len(m.group(1)) + shift) + line[len(m.group(1)):]

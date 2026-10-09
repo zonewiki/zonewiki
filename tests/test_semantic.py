@@ -99,6 +99,13 @@ class TestChunkPage:
         assert len(chunks) == 1
         assert "# a comment" in chunks[0]
 
+    def test_fence_closes_only_on_its_own_kind(self):
+        # Regression: any backtick line ended a fence, so a ```python line
+        # inside a ```` block closed it, and a "# comment" after it became a
+        # section of its own. The rendered page (mdtext) never split there.
+        text = "## Example\n\n````md\n```python\n# not a heading\n```\n````\n\n## Next\n\nText.\n"
+        assert [h for h, _b, _l in embed.chunk_sections(text)] == ["Example", "Next"]
+
     def test_empty_sections_are_skipped(self):
         assert embed.chunk_page("## Empty\n\n## Full\n\nText.\n") == ["Full\nText."]
 

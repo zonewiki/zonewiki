@@ -39,6 +39,7 @@ except ImportError:  # e.g. a local venv without fastembed: plain Python, ~25x s
     np = None
 
 from embed_setup import DEFAULT_FASTEMBED_MODEL, parse_spec  # noqa: F401 (re-exported)
+from mdtext import iter_fenced_lines
 
 
 # Similarity floors per model, (search, related, tasks):
@@ -84,7 +85,6 @@ MAX_CHUNK_CHARS = 800
 CACHE_VERSION = 1
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
-_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 _LINK_TARGET_RE = re.compile(r"(!?\[[^\]]*\])\([^)]*\)")
 
 
@@ -138,16 +138,8 @@ def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[st
     """chunk_page's pieces as (heading, body, heading level); before the first
     heading that is ("", body, 0)."""
     sections: list[list[str]] = [[]]
-    fence = None
-    for line in text.split("\n"):
-        m = _FENCE_RE.match(line)
-        if m:
-            marker = m.group(1)
-            if fence is None:
-                fence = marker[0]
-            elif marker[0] == fence:
-                fence = None
-        elif fence is None and _HEADING_RE.match(line):
+    for _i, line, in_fence in iter_fenced_lines(text.split("\n")):
+        if not in_fence and _HEADING_RE.match(line):
             sections.append([])
         sections[-1].append(line)
     chunks = []
