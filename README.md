@@ -6,6 +6,8 @@ you edit them there or in any editor, searches them, and keeps every version
 in git. No database, no build step, no cloud: run it on your machine, or
 self-host it behind HTTPS.
 
+![A wiki page in Leaf: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
+
 ## How Leaf is organised
 
 Leaf has three modules: the **Wiki** for your notes, **Scratch** for quick
@@ -37,6 +39,8 @@ editor; a change on disk shows up immediately.
   one-click restore. Deleted pages can be brought back.
 - Present a page as slides, one per heading.
 
+![The editor in dark mode: Markdown on the left, the live preview on the right](docs/screenshots/editor.png)
+
 ### Scratch: quick capture
 
 For a thought, a call, a link: write it down first, decide where it belongs
@@ -66,15 +70,18 @@ Done tasks go to a yearly archive. Beyond that:
   list when done (shopping staples), and "won't do".
 - Notes with checklists, comments as a dated status log, a history of every
   date change, and undo for completing and deleting.
-- Separate lists declared on a page (`[[deck list=groceries keep=1]]`), and
-  your own deck as the home of the Deck module, with an optional limit on
-  how much is in Focus.
+- Separate lists declared on a page (`[[deck list=groceries keep=1]]`).
+- Your own deck on a page of yours, which the Deck module then opens, with
+  an optional limit on how much is in Focus:
+  `[[deck view=focus limit=8 home=1]]`.
 - Decks inside any page (`[[deck tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
 - The Deck link shows how many tasks are due today or overdue.
 - Compact or full cards, fully keyboard-driven; on phones, swipe to plan and
   long-press to drag.
+
+![The deck's Plan board: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
 
 ### Across Leaf
 
@@ -91,32 +98,35 @@ Done tasks go to a yearly archive. Beyond that:
   `/mcp`: any MCP client can search and read
   your notes and tasks, and write: create and edit pages, rename and delete
   them, add and update tasks. Every write is a commit marked `(MCP)`, with
-  links back into Leaf.
+  links back into Leaf. It's off until you set a token (see
+  [Connect an AI assistant](#connect-an-ai-assistant)).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,
   backlinks and counts, and pages you've marked as not for sharing.
 - **Phones**: a responsive layout with a tab bar, installable on the home
   screen. Light and dark mode follow your system.
 
+![Leaf on a phone: a wiki page, and the deck's Focus view](docs/screenshots/phone.png)
+
 ## Quick start
 
-Leaf runs in a container, built and started with compose: Docker Compose,
-or Podman with a compose provider (`podman-compose`). `run.sh` uses
-whichever engine is installed:
+You need either **Docker** with Compose, or **Podman** with `podman-compose`.
+`run.sh` uses whichever is installed.
 
 ```bash
+git clone <this repository> leaf && cd leaf
 mkdir -p ~/leaf                       # your wiki folder (Leaf won't create it)
 echo 'WIKI_DATA=~/leaf' > .env
 ./run.sh up                           # build and start
 ```
 
-Open <http://localhost:5000>. `./run.sh down` stops it, `./run.sh logs`
-follows the log. `run.sh` fills in what `compose.yaml` can't work out
-itself (the build's commit, your timezone, the bind address); plain
-`docker compose up -d --build` works too, with `WIKI_DATA` as an absolute
-path, and `LEAF_BIND=0.0.0.0` next to `ALLOW_REMOTE=1` for network access.
+Open <http://localhost:5000>. `./run.sh down` stops Leaf, `./run.sh logs`
+follows its log. To update: `git pull && ./run.sh up`.
 
-Without a container:
+To point Leaf at an existing folder of Markdown notes, set `WIKI_DATA` to
+it; Leaf makes it a git repository (if it isn't one) and adds a home page.
+
+Without a container, you need Python 3.10 or newer and git:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -134,18 +144,50 @@ Settings go in `.env`, all optional except `WIKI_DATA`:
 | `ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `_leaf/` (never in git); `SECRET_KEY` sets one instead |
-| `LEAF_UID`, `LEAF_GID` | The user Leaf runs as, if you use `compose.yaml` without `run.sh` and your IDs aren't 1000 |
 | `GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
+| `LEAF_EMBED_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
 | `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
 | `LEAF_NOSHARE` | Pages hidden in sharing mode, e.g. `#noshare,people/` |
-| `TZ` | The timezone for "today" (default: the host's) |
+| `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
 
-Connect an MCP client: set a token in `.env` (e.g. `LEAF_MCP_TOKEN=$(openssl rand -hex 32)`),
-restart with `./run.sh up`, then
+### Without run.sh
 
-Register `http://localhost:5000/mcp` with your MCP client (HTTP transport) and the header `Authorization: Bearer <LEAF_MCP_TOKEN>`.
+`run.sh` fills in what `compose.yaml` can't work out itself: the commit the
+image is built from, your timezone, your user ID, and the network address
+from `ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
+`.env`:
+
+| Setting | Does |
+|---------|------|
+| `WIKI_DATA` | As an absolute path (no `~`) |
+| `LEAF_BIND=0.0.0.0` | Together with `ALLOW_REMOTE=1`, for network access |
+| `LEAF_UID`, `LEAF_GID` | Your user and group ID (`id -u`, `id -g`), if they aren't 1000 |
+| `TZ` | Your timezone; otherwise UTC |
+
+With rootless Podman, add the file that keeps your user ID inside the
+container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`.
+
+## Connect an AI assistant
+
+Leaf's MCP server lets an AI assistant (any MCP
+client) search, read and write your wiki and tasks. It needs a token: create
+one, restart Leaf, then register Leaf with your client.
+
+```bash
+echo "LEAF_MCP_TOKEN=$(openssl rand -hex 32)" >> .env    # once: it appends
+./run.sh up
+```
+
+In your client, add an MCP server with the HTTP transport at
+`http://localhost:5000/mcp` and the header
+`Authorization: Bearer <LEAF_MCP_TOKEN>` (the token from `.env`).
+
+Set `LEAF_BASE_URL` to Leaf's address as your browser knows it, so the links
+in the assistant's answers open (it matters when the client runs in a
+container or on another machine). Before you connect, read the MCP points
+under [Security](#security).
 
 ## Security
 
@@ -177,9 +219,10 @@ LEAF_BASE_URL=https://wiki.example.org
 Leave `ALLOW_REMOTE` off here: the proxy reaches Leaf on localhost, and port
 5000 stays closed to the network, so nobody can go around HTTPS. A proxy on
 another machine needs `ALLOW_REMOTE=1` too; `LEAF_HOSTS` keeps the `Host`
-check on. Over HTTPS the login cookie is marked secure, and wrong passwords
-slow the guesser down (after 5, a wait that doubles from 1 minute up to an
-hour, per client).
+check on. Over HTTPS the login cookie is marked secure, so the browser never
+sends it unencrypted. Wrong passwords slow a guesser down, with or without
+HTTPS: after 5, each try waits, from 1 minute doubling up to an hour, per
+client.
 
 There is one shared password and no second factor. If only you need to
 reach Leaf from outside, a VPN (WireGuard, Tailscale) is safer still than a
@@ -214,18 +257,26 @@ Also know this:
 
 ## Your data
 
-Everything is files in `WIKI_DATA`: pages are `.md` files (in folders if you
-like), uploads are in `_assets/`, tasks in `_deck/` as JSON. The folder is a
-git repository. Stop using Leaf and your notes are still just Markdown.
+Everything is files in `WIKI_DATA`, which is a git repository:
+
+- Pages are `.md` files, in folders if you like.
+- Uploads are in `_assets/`, tasks in `_deck/` as JSON.
+- `_leaf/` holds the key that keeps you signed in across restarts; it is
+  never committed.
+- `_index/` is the semantic search cache (only with `LEAF_EMBEDDINGS`); it is
+  never committed and can be deleted at any time.
+
+Stop using Leaf and your notes are still just Markdown.
 
 ## Development
 
 ```bash
 ./run.sh test     # unit and API tests (pytest) in the app image
 ./run.sh e2e      # browser tests (Playwright) and the deck logic tests (Node)
+./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ```
 
-Both run in containers (Podman or Docker, no compose needed).
+All three run in containers (Podman or Docker, no compose needed).
 
 Python with Flask and markdown-it-py, plain ES modules in the browser, and
 one hand-written stylesheet; no bundler, no npm. `AGENTS.md` describes how
