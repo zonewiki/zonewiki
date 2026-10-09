@@ -47,8 +47,6 @@ later.
 - **Move to wiki** turns a note into a page (pick a folder and a name, keep
   the date if you like); **Append to page** adds it to an existing page as a
   section. Either way, links to the note follow it.
-- A paste inbox at `/page/_raw`: paste a URL to keep it as a bookmark, any
-  other text to keep it as a snippet.
 
 ### Deck: your tasks
 
