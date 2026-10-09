@@ -31,7 +31,8 @@ md = (
     .enable("strikethrough")
     .enable("smartquotes")
     .enable("replacements")
-    .use(tasklists_plugin)
+    # enabled: clickable checkboxes (page view and editor preview toggle them).
+    .use(tasklists_plugin, enabled=True)
     .use(footnote_plugin)
     .use(deflist_plugin)
     .use(anchors_plugin, max_level=3)
@@ -60,6 +61,72 @@ def _link_open(self, tokens, idx, options, env):
 
 
 md.add_render_rule("link_open", _link_open)
+
+
+_IMG_WIDTH_RE = re.compile(r"^(.*)\|(\d+)$", re.S)
+
+
+def _images(state) -> None:
+    """Images, on the parsed tokens: `![alt|300](url)` is 300px wide (never
+    wider than the text), and an image alone in its paragraph gets
+    `<p class="img-block">`, which on big screens may grow beyond the text
+    width (style.css, Side columns); an image within a sentence may not."""
+    tokens = state.tokens
+    for i, tok in enumerate(tokens):
+        if tok.type != "inline" or not tok.children:
+            continue
+        for img in tok.children:
+            m = img.type == "image" and _IMG_WIDTH_RE.match(img.content)
+            if m:
+                img.content = m.group(1)
+                last = img.children[-1] if img.children else None
+                if last is not None and last.type == "text":
+                    last.content = _IMG_WIDTH_RE.sub(r"\1", last.content)
+                img.attrSet("style", f"max-width:100%;width:{m.group(2)}px")
+        if (len(tok.children) == 1 and tok.children[0].type == "image"
+                and i and tokens[i - 1].type == "paragraph_open"):
+            tokens[i - 1].attrSet("class", "img-block")
+
+
+md.core.ruler.push("leaf_images", _images)
+
+
+def _html(self, tokens, idx, options, env):
+    # Raw HTML as written, but the task-date comments become chips.
+    return _render_task_dates(tokens[idx].content)
+
+
+md.add_render_rule("html_inline", _html)
+md.add_render_rule("html_block", _html)
+
+
+def _heading_open(self, tokens, idx, options, env):
+    tok = tokens[idx]
+    out = self.renderToken(tokens, idx, options, env)
+    if (env or {}).get("edit_slug") and tok.tag in ("h2", "h3"):
+        out = f'<div class="section-header section-header-{tok.tag}">{out}'
+    return out
+
+
+def _heading_close(self, tokens, idx, options, env):
+    """After a ## or ### heading: its ☑ N chip when tasks link to it, and
+    on the page view the ✎ that edits the section (numbered as
+    mdtext.split_sections counts them) inside the heading's wrapper."""
+    tok, env = tokens[idx], env or {}
+    out = self.renderToken(tokens, idx, options, env)
+    if tok.tag not in ("h2", "h3"):
+        return out
+    chip = env.get("section_chips", {}).get(tokens[idx - 2].attrGet("id") or "", "")
+    if not env.get("edit_slug"):
+        return out.rstrip("\n") + chip + "\n" if chip else out
+    env["sections"] += 1
+    btn = (f'<a href="{url("edit", env["edit_slug"])}?section={env["sections"]}" '
+           f'class="section-edit-btn" title="Edit section">✎</a>')
+    return f'{out.rstrip(chr(10))}{chip}{btn}</div>\n'
+
+
+md.add_render_rule("heading_open", _heading_open)
+md.add_render_rule("heading_close", _heading_close)
 
 
 def process_wikilinks(text: str) -> str:
@@ -105,21 +172,9 @@ def _build_toc(text: str, unmask=lambda s: s) -> str:
     return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
 
 
-_IMG_PARA_RE = re.compile(r'<p>(<img\b[^>]*>)</p>')
-
-
-def _mark_image_paragraphs(html_text: str) -> str:
-    """An image alone in its paragraph gets `<p class="img-block">`: on big
-    screens such an image may grow beyond the text width (style.css, Side
-    columns), an image within a sentence may not."""
-    return _IMG_PARA_RE.sub(r'<p class="img-block">\1</p>', html_text)
-
-
-_IMG_SIZE_RE = re.compile(r'<img\b[^>]*\balt="([^"]*)\|(\d+)"[^>]*>', re.IGNORECASE)
-
-
 def _render_task_dates(html_str: str) -> str:
-    """Convert task metadata HTML comments to visible date chips."""
+    """Task metadata comments (<!--t:… d:…-->, written when a checkbox is
+    ticked, mdtext.toggle_nth_checkbox) as visible date chips."""
     def replace_full(m: re.Match) -> str:
         created, done = m.group(1), m.group(2)
         chips = f'<span class="task-date task-date-created" title="Created {created}">{created[:10]}</span>'
@@ -134,34 +189,15 @@ def _render_task_dates(html_str: str) -> str:
     return html_str
 
 
-def _apply_img_sizes(html_str: str) -> str:
-    """Rewrite <img src=... alt="text|300"> → same tag with |300 stripped and style added."""
-    def fix(m: re.Match) -> str:
-        tag = m.group(0)
-        alt_text = m.group(1)
-        width = m.group(2)
-        tag = tag.replace(f'{alt_text}|{width}"', f'{alt_text}"', 1)
-        tag = tag[:-1] + f' style="max-width:100%;width:{width}px">'
-        return tag
-    return _IMG_SIZE_RE.sub(fix, html_str)
-
-
-# markdown-it's tasklists plugin renders checkboxes disabled; page view and the
-# editor preview make them clickable, so drop the attribute — on those inputs
-# only, never elsewhere in the document.
-_TASK_CHECKBOX_RE = re.compile(r'<input\b[^>]*\btask-list-item-checkbox\b[^>]*>')
-
-
-def _enable_task_checkboxes(html_str: str) -> str:
-    return _TASK_CHECKBOX_RE.sub(
-        lambda m: re.sub(r'\s+disabled(?:="[^"]*")?', '', m.group(0)), html_str)
-
-
 def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
-              prefer_lists: list[str] | None = None) -> str:
+              prefer_lists: list[str] | None = None, edit_slug: str = "",
+              section_tasks: list[dict] = ()) -> str:
     """Render a page's markdown. Task chips link to a task in a list the text
     declares with [[deck list=…]] (or one of `prefer_lists`) when the task is
-    in it, rather than in its first list A–Z (link_list)."""
+    in it, rather than in its first list A–Z (link_list). The page view
+    passes `edit_slug`, which gives each ## and ### heading its ✎ (edit
+    the section), and `section_tasks` (find_task_backlinks), which gives a
+    heading that tasks link to its ☑ N chip."""
     fm_meta, text = parse_frontmatter(text)
     prefer = [name for name, _ in page_deck_lists(text)] + list(prefer_lists or [])
     fm_html = _render_frontmatter_html(fm_meta, show_tags=show_tags, show_tldr=show_tldr)
@@ -178,9 +214,9 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
     text, task_refs = _mask_task_refs(text)
 
     text = unmask_code(process_wikilinks(text), code_stash)
-    result = _mark_image_paragraphs(_apply_img_sizes(md.render(text)))
-    result = _enable_task_checkboxes(result)
-    result = _render_task_dates(result)
+    env = {"edit_slug": edit_slug, "sections": 0,
+           "section_chips": _section_task_chips(section_tasks, prefer)}
+    result = md.render(text, env)
     result = _inject_task_refs(result, task_refs, prefer)
     if toc_html:
         result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
@@ -191,11 +227,11 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
 
 # [[task:<id>]] references (deck.TASK_REF_RE): masked with private-use tokens
 # before rendering, so markdown never touches the chip, then swapped for it.
-_TASK_REF_TOKEN_RE = re.compile('(\\d+)')
+_TASK_REF_TOKEN_RE = re.compile('\ue002(\\d+)\ue003')
 
 
 # A reference alone in a list item is a row of its own (a checklist of tasks).
-_TASK_REF_ITEM_RE = re.compile(r'<li>(?=(?:\s|<p>)*\d+(?:\s|</p>)*</li>)')
+_TASK_REF_ITEM_RE = re.compile(r'<li>(?=(?:\s|<p>)*\ue002\d+\ue003(?:\s|</p>)*</li>)')
 
 
 def _mask_task_refs(text: str) -> tuple[str, list[str]]:
@@ -203,7 +239,7 @@ def _mask_task_refs(text: str) -> tuple[str, list[str]]:
 
     def token(m: re.Match) -> str:
         refs.append(m.group(1).lower())
-        return f'{len(refs) - 1}'
+        return f'\ue002{len(refs) - 1}\ue003'
     return deck_module.TASK_REF_RE.sub(token, text), refs
 
 
@@ -278,45 +314,22 @@ def _task_ref_html(ref: str, task: dict | None, today: str, prefer=()) -> str:
             f'<a class="task-ref-title" href="{href}">{title}</a>{"".join(badges)}</span>')
 
 
-def inject_section_edit_buttons(html_str: str, slug: str) -> str:
-    """Wrap each rendered <h2>/<h3> with a .section-header div and append an edit link."""
-    counter = [0]
-
-    def wrap(m: re.Match) -> str:
-        counter[0] += 1
-        n = counter[0]
-        level = m.group(1)[1]  # '2' or '3' (strip leading 'h')
-        btn = (
-            f'<a href="{url("edit", slug)}?section={n}" '
-            f'class="section-edit-btn" title="Edit section">✎</a>'
-        )
-        return f'<div class="section-header section-header-h{level}">{m.group(0)}{btn}</div>'
-
-    return re.sub(r'<(h[23])\b[^>]*>.*?</\1>', wrap, html_str, flags=re.DOTALL)
-
-
-def inject_section_tasks(html_str: str, task_backlinks: list[dict], prefer=()) -> str:
-    """A section that tasks link to (`[[Page#Section]]`) gets a ☑ N chip
-    after its heading, opening the list of those tasks (a <details>, no JS)."""
+def _section_task_chips(task_backlinks: list[dict], prefer=()) -> dict[str, str]:
+    """{heading id: its ☑ N chip}: a section that tasks link to
+    (`[[Page#Section]]`) lists them in a <details> after its heading (no JS)."""
     by_anchor: dict[str, list[dict]] = {}
     for t in task_backlinks:
         if t.get("anchor"):
             by_anchor.setdefault(t["anchor"], []).append(t)
-    if not by_anchor:
-        return html_str
-
-    def chip(m: re.Match) -> str:
-        tasks = by_anchor.get(html.unescape(m.group(2)))
-        if not tasks:
-            return m.group(0)
+    chips = {}
+    for anchor, tasks in by_anchor.items():
         n = len(tasks)
         items = "".join(
             f'<li><a href="{html.escape(task_href(t["id"], "open", link_list(t, prefer)))}">'
             f'{html.escape(plain_task_title(t["title"]))}</a></li>' for t in tasks)
-        return (f'{m.group(0)}<details class="section-tasks"><summary title="{n} linked task{"s" if n > 1 else ""}">'
-                f'☑ {n}</summary><ul>{items}</ul></details>')
-
-    return re.sub(r'<h([23]) id="([^"]+)">.*?</h\1>', chip, html_str, flags=re.S)
+        chips[anchor] = (f'<details class="section-tasks"><summary title="{n} linked task{"s" if n > 1 else ""}">'
+                         f'☑ {n}</summary><ul>{items}</ul></details>')
+    return chips
 
 
 def render_tags_pills_html(tags: list[str]) -> str:

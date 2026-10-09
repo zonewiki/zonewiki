@@ -34,7 +34,7 @@ from pages import (
 )
 from gitstore import run_git, git_commit, git_setup
 from render import (
-    inject_section_edit_buttons, inject_section_tasks, render_md, render_tags_pills_html,
+    render_md, render_tags_pills_html,
 )
 from retrieval import (
     do_search, SCRATCH_FILTER_LIMIT, SEARCH_LIMIT, SEARCH_MAX_LIMIT, SEARCH_PAGE_LIMIT,
@@ -386,9 +386,8 @@ def view_page(slug):
             f'{tldr_body}'
             if last_modified or meta_commit_btn or tags_html or tldr_text else ""
         )
-        article_html = inject_section_tasks(inject_section_edit_buttons(
-            render_md(strip_h1(content), show_tags=False, show_tldr=False), slug
-        ), task_backlinks, page_lists)
+        article_html = render_md(strip_h1(content), show_tags=False, show_tldr=False,
+                                 edit_slug=slug, section_tasks=task_backlinks)
 
     body = f"""{breadcrumb}{delete_dialog}
 <div class="page-grid">

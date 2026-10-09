@@ -1,6 +1,6 @@
 """Tests for Leaf markdown rendering helpers.
 
-Covers: render_md, process_wikilinks, _build_toc, _apply_img_sizes,
+Covers: render_md, process_wikilinks, _build_toc, image widths,
         _render_task_dates, toggle_nth_checkbox (metadata), page_title,
         to_slug, build_breadcrumb, strip_h1, _render_task_title,
         parse_frontmatter, _render_frontmatter_html.
@@ -11,7 +11,7 @@ import re
 import pytest
 
 from mdtext import page_title, parse_frontmatter, strip_h1, to_slug, toggle_nth_checkbox
-from render import _apply_img_sizes, _build_toc, _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
+from render import _build_toc, _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
 from views import build_breadcrumb
 from tests.conftest import write_page
 import mdtext
@@ -268,32 +268,33 @@ class TestProcessWikilinks:
 
 
 # ===========================================================================
-# _apply_img_sizes
+# Image widths: ![alt|300](url)
 # ===========================================================================
 
-class TestApplyImgSizes:
+class TestImageWidths:
 
-    def test_sets_width_from_alt_pipe(self):
-        html = '<img src="/img.png" alt="photo|300">'
-        result = _apply_img_sizes(html)
+    def test_sets_width_from_alt_pipe(self, wiki_dir):
+        result = render_md("![photo|300](/img.png)\n")
         assert 'width:300px' in result
         assert 'alt="photo"' in result
         assert '|300' not in result
 
-    def test_no_pipe_in_alt_unchanged(self):
-        html = '<img src="/img.png" alt="just a photo">'
-        result = _apply_img_sizes(html)
-        assert result == html
+    def test_no_pipe_in_alt_unchanged(self, wiki_dir):
+        result = render_md("![just a photo](/img.png)\n")
+        assert 'alt="just a photo"' in result and "style=" not in result
 
-    def test_max_width_always_set(self):
-        html = '<img src="/img.png" alt="x|100">'
-        assert 'max-width:100%' in _apply_img_sizes(html)
+    def test_max_width_always_set(self, wiki_dir):
+        assert 'max-width:100%' in render_md("![x|100](/img.png)\n")
 
-    def test_multiple_images(self):
-        html = '<img src="/a.png" alt="a|200"> <img src="/b.png" alt="b|400">'
-        result = _apply_img_sizes(html)
+    def test_multiple_images(self, wiki_dir):
+        result = render_md("![a|200](/a.png) ![b|400](/b.png)\n")
         assert 'width:200px' in result
         assert 'width:400px' in result
+        assert 'class="img-block"' not in result   # two images: not alone
+
+    def test_alone_in_its_paragraph_is_a_block(self, wiki_dir):
+        assert '<p class="img-block"><img src="/a.png" alt="a" style="max-width:100%;width:200px" /></p>' \
+            in render_md("![a|200](/a.png)\n")
 
 
 # ===========================================================================
