@@ -624,14 +624,12 @@ def api_pages_list():
 
 
 def _mcp_authorized() -> bool:
-    """With LEAF_MCP_TOKEN set, /mcp needs it as a bearer token. Without
-    one it is as open as the wiki's pages are, so a LEAF_PASSWORD-protected
-    wiki keeps /mcp closed until a token is set."""
-    if config.LEAF_MCP_TOKEN:
-        auth = request.headers.get("Authorization", "")
-        return auth.startswith("Bearer ") and hmac.compare_digest(
-            auth[len("Bearer "):].strip().encode(), config.LEAF_MCP_TOKEN.encode())
-    return not config.LEAF_PASSWORD
+    """/mcp needs LEAF_MCP_TOKEN as a bearer token. The tools write (pages,
+    tasks), so /mcp is off until a token is set: open, it would let anything
+    that reaches the port change the wiki, password or not."""
+    auth = request.headers.get("Authorization", "")
+    return bool(config.LEAF_MCP_TOKEN) and auth.startswith("Bearer ") and hmac.compare_digest(
+        auth[len("Bearer "):].strip().encode(), config.LEAF_MCP_TOKEN.encode())
 
 
 @app.route("/mcp", methods=["GET", "POST", "DELETE"])
@@ -639,10 +637,12 @@ def mcp_endpoint():
     """MCP over HTTP (see mcp_server.py): one JSON-RPC message per POST,
     answered with JSON. GET (a server-sent event stream) and DELETE (ending
     a session) aren't offered: there are no notifications and no sessions."""
+    if not config.LEAF_MCP_TOKEN:
+        return jsonify({"error": "MCP is off: set LEAF_MCP_TOKEN in .env and send it "
+                                 "as 'Authorization: Bearer <token>'"}), 403
     if not _mcp_authorized():
-        hint = ("set LEAF_MCP_TOKEN and send it as 'Authorization: Bearer <token>'"
-                if not config.LEAF_MCP_TOKEN else "wrong or missing bearer token")
-        return jsonify({"error": f"Unauthorized: {hint}"}), 401, {"WWW-Authenticate": "Bearer"}
+        return (jsonify({"error": "Unauthorized: wrong or missing bearer token"}), 401,
+                {"WWW-Authenticate": "Bearer"})
     if request.method != "POST":
         return "", 405, {"Allow": "POST"}
     try:

@@ -1309,6 +1309,19 @@ class TestAuth:
     def test_login_page_has_no_action_buttons(self, auth_client):
         assert 'class="action-buttons"' not in auth_client.get("/login", headers=HOST).data.decode()
 
+    def test_sign_out_only_when_signed_in(self, auth_client):
+        assert "signout-form" not in auth_client.get("/login", headers=HOST).data.decode()
+        auth_client.post("/login", data={"password": "testpassword"}, headers=HOST)
+        assert "signout-form" in auth_client.get("/page/index", headers=HOST).data.decode()
+
+    def test_login_page_shows_remote_badge_in_its_form(self, auth_client, monkeypatch):
+        monkeypatch.setattr(config, "ALLOW_REMOTE", True)
+        body = auth_client.get("/login", headers=HOST).data.decode()
+        assert body.count('class="remote-badge"') == 1
+        assert re.search(r'<h2>Sign in to Leaf<span class="remote-badge"[^>]*>🌐</span></h2>', body)
+        monkeypatch.setattr(config, "ALLOW_REMOTE", False)
+        assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
+
     def test_unauthenticated_redirects_to_login(self, auth_client):
         resp = auth_client.get("/page/index", headers=HOST)
         assert resp.status_code in (301, 302)
@@ -1934,6 +1947,20 @@ class TestVersion:
         monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert '<p class="leaf-version">Leaf 1.2.3</p>' in body
+
+    def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        for path in ("/page/index", "/deck", "/edit/index"):
+            body = client.get(path, headers=HOST).get_data(as_text=True)
+            assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
+                    'Leaf 1.2.3 · abc1234</div>') in body, path
+        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert ">Leaf 1.2.3 · abc1234+dirty</div>" in body
+        monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert '<div class="leaf-build">Leaf 1.2.3</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(config, "LEAF_BUILD", "<b>")

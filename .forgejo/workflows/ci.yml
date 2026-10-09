@@ -2,11 +2,12 @@
 # then built and pushed to this Forgejo's container registry.
 #
 # Needs a runner with the `docker` label whose job containers get the
-# docker socket (`container.docker_host: automount`); the host's engine
-# trusts git.example.org via /etc/docker/certs.d. Plus two repo settings:
+# docker socket (`container.docker_host: automount`); the host's engine must
+# trust the registry's certificate (e.g. via /etc/docker/certs.d). Repo settings:
+#   variable REGISTRY        registry host, e.g. git.example.org (Forgejo's
+#                            public address); without it no image is built
 #   secret   REGISTRY_TOKEN  access token with package write scope
 #   variable REGISTRY_USER   (optional) its owner, default: the repo owner
-#   variable REGISTRY        (optional) registry host, default: git.example.org
 name: CI
 
 on:
@@ -58,7 +59,8 @@ jobs:
 
   image:
     needs: [test, e2e]
-    if: github.event_name != 'pull_request'
+    # Only with a registry to push to (forks and clones without one just test).
+    if: github.event_name != 'pull_request' && vars.REGISTRY != ''
     runs-on: docker
     container:
       # The official docker CLI image; the build runs on the host's engine
@@ -78,7 +80,7 @@ jobs:
         env:
           # Forgejo's public address: the host's engine logs in and pushes,
           # and GITHUB_SERVER_URL is the runner's internal one (http://web:3000).
-          REGISTRY: ${{ vars.REGISTRY || 'git.example.org' }}
+          REGISTRY: ${{ vars.REGISTRY }}
         run: |
           registry="$REGISTRY"
           image="$registry/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"

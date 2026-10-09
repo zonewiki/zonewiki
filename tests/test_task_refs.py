@@ -6,6 +6,7 @@ import re
 from datetime import date, timedelta
 
 from tests.conftest import HOST, write_page
+import config
 import render
 
 
@@ -186,10 +187,11 @@ class TestSearch:
 
 
 class TestMcp:
-    def test_read_page_lists_the_referenced_tasks(self, client, wiki_dir):
+    def test_read_page_lists_the_referenced_tasks(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "t")
         t = task(client, title="Book flights", due_date="2030-01-02")
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]] and [[task:deadbeef]]\n")
-        resp = client.post("/mcp", headers=HOST, json={
+        resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer t"}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "notes"}}})
         text = resp.get_json()["result"]["content"][0]["text"]

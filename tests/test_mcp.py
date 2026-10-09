@@ -15,11 +15,21 @@ import config
 import retrieval
 
 
+TOKEN = "test-token"
+AUTH = {"Authorization": f"Bearer {TOKEN}"}
+
+
+@pytest.fixture(autouse=True)
+def mcp_token(monkeypatch):
+    """/mcp is off without LEAF_MCP_TOKEN: every test here has one."""
+    monkeypatch.setattr(config, "LEAF_MCP_TOKEN", TOKEN)
+
+
 def rpc(client, method, params=None, id_=1, headers=None):
     msg = {"jsonrpc": "2.0", "id": id_, "method": method}
     if params is not None:
         msg["params"] = params
-    return client.post("/mcp", json=msg, headers={**HOST, **(headers or {})})
+    return client.post("/mcp", json=msg, headers={**HOST, **AUTH, **(headers or {})})
 
 
 def call(client, name, **args):
@@ -108,53 +118,58 @@ class TestEndpoint:
 
     def test_notification_is_202(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"},
-                           headers=HOST)
+                           headers={**HOST, **AUTH})
         assert resp.status_code == 202 and resp.data == b""
 
     def test_batch(self, client):
-        resp = client.post("/mcp", headers=HOST, json=[
+        resp = client.post("/mcp", headers={**HOST, **AUTH}, json=[
             {"jsonrpc": "2.0", "id": 1, "method": "ping"},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
         ])
         assert resp.get_json() == [{"jsonrpc": "2.0", "id": 1, "result": {}}]
 
     def test_parse_error(self, client):
-        resp = client.post("/mcp", data="{nope", content_type="application/json", headers=HOST)
+        resp = client.post("/mcp", data="{nope", content_type="application/json", headers={**HOST, **AUTH})
         assert resp.status_code == 400
         assert resp.get_json()["error"]["code"] == -32700
 
     def test_get_and_delete_not_offered(self, client):
-        assert client.get("/mcp", headers=HOST).status_code == 405
-        assert client.delete("/mcp", headers=HOST).status_code == 405
+        assert client.get("/mcp", headers={**HOST, **AUTH}).status_code == 405
+        assert client.delete("/mcp", headers={**HOST, **AUTH}).status_code == 405
 
     def test_cross_site_post_refused(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
-                           headers={**HOST, "Origin": "https://evil.example"})
+                           headers={**HOST, **AUTH, "Origin": "https://evil.example"})
         assert resp.status_code == 403
 
 
 class TestAuth:
-    def test_password_without_token_closes_mcp(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_PASSWORD", "pw")
-        resp = rpc(client, "ping")
-        assert resp.status_code == 401
-        assert "LEAF_MCP_TOKEN" in resp.get_json()["error"]
+    def test_off_without_a_token(self, client, wiki_dir, monkeypatch):
+        # The tools write, so /mcp is never open: not without a password either.
+        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "")
+        for headers in ({}, {"Authorization": "Bearer "}, AUTH):
+            resp = rpc(client, "ping", headers=headers)
+            assert resp.status_code == 403
+            assert "set LEAF_MCP_TOKEN" in resp.get_json()["error"]
+        resp = client.post("/mcp", headers=HOST, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "write_page", "arguments": {"slug": "x", "content": "# X"}}})
+        assert resp.status_code == 403 and not (wiki_dir / "x.md").exists()
 
-    def test_token_required_when_set(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
-        assert rpc(client, "ping").status_code == 401
+    def test_token_required(self, client):
+        assert client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                           headers=HOST).status_code == 401
         assert rpc(client, "ping", headers={"Authorization": "Bearer wrong"}).status_code == 401
-        assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+        assert rpc(client, "ping", headers={"Authorization": TOKEN}).status_code == 401
+        assert rpc(client, "ping").status_code == 200
 
     def test_token_works_with_password(self, client, monkeypatch):
         monkeypatch.setattr(config, "LEAF_PASSWORD", "pw")
-        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
-        assert rpc(client, "ping", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+        assert rpc(client, "ping").status_code == 200
         # and the rest of the wiki still wants a login
         assert client.get("/page/index", headers=HOST).status_code == 302
 
-    def test_get_also_needs_auth(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "s3cret")
+    def test_get_also_needs_auth(self, client):
         assert client.get("/mcp", headers=HOST).status_code == 401
 
 
@@ -434,7 +449,7 @@ class TestSearchTasks:
 class TestBaseUrl:
     def test_links_use_request_address_by_default(self, client, pages, monkeypatch):
         monkeypatch.setattr(config, "LEAF_BASE_URL", "")
-        resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000"}, json={
+        resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000", **AUTH}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
         assert "url: http://host.containers.internal:5000/page/golf\n" in \

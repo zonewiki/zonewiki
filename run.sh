@@ -1,47 +1,52 @@
 #!/usr/bin/env bash
+# Build and run Leaf with compose (compose.yaml), and run its tests. This
+# script works out what compose can't: the build string from git, the port's
+# bind address from ALLOW_REMOTE, the host's timezone, and the wiki path.
 set -e
 
 cd "$(dirname "$0")"
-
-# Read WIKI_DATA from .env, fall back to ~/leaf
-WIKI_DATA=$(grep '^WIKI_DATA=' .env 2>/dev/null | cut -d= -f2-)
-WIKI_DATA="${WIKI_DATA:-~/leaf}"
-
-case "$WIKI_DATA" in
-  "~")
-    WIKI_DATA="$HOME"
-    ;;
-  "~/"*)
-    WIKI_DATA="$HOME/${WIKI_DATA:2}"
-    ;;
-esac
-
-
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
 
 # Read an optional KEY from .env (empty when unset).
 env_val() {
   grep "^$1=" .env 2>/dev/null | cut -d= -f2-
 }
 
-# Derive the port-binding address from ALLOW_REMOTE.
-# ALLOW_REMOTE=1 → bind on all interfaces (LAN accessible).
-# Unset/empty   → bind on loopback only (localhost only, more secure).
-ALLOW_REMOTE=$(env_val ALLOW_REMOTE)
-if [[ "${ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
-  BIND_ADDR="0.0.0.0"
+# Podman if it's there, else Docker; each with its compose.
+if command -v podman >/dev/null 2>&1; then
+  ENGINE=podman
+elif command -v docker >/dev/null 2>&1; then
+  ENGINE=docker
 else
-  BIND_ADDR="127.0.0.1"
-fi
-
-if ! command -v podman >/dev/null 2>&1; then
-  echo "Error: 'podman' is not installed."
+  echo "Error: neither podman nor docker is installed." >&2
   exit 1
 fi
+compose() {
+  if ! $ENGINE compose version >/dev/null 2>&1; then
+    echo "Error: '$ENGINE compose' doesn't work: install a compose provider" \
+         "(podman-compose or docker-compose)." >&2
+    exit 1
+  fi
+  $ENGINE compose "$@"
+}
 
-IMAGE=leaf
-CONTAINER=leaf
+# The wiki folder from .env, default ~/leaf, with ~ expanded (compose would
+# hand LEAF_HOST_DATA a literal ~).
+WIKI_DATA=$(env_val WIKI_DATA)
+WIKI_DATA="${WIKI_DATA:-~/leaf}"
+case "$WIKI_DATA" in
+  "~") WIKI_DATA="$HOME" ;;
+  "~/"*) WIKI_DATA="$HOME/${WIKI_DATA:2}" ;;
+esac
+export WIKI_DATA
+
+# The port's bind address from ALLOW_REMOTE: 1 → all interfaces (LAN),
+# unset/empty → loopback only (localhost only, more secure).
+ALLOW_REMOTE=$(env_val ALLOW_REMOTE)
+if [[ "${ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
+  export LEAF_BIND="0.0.0.0"
+else
+  export LEAF_BIND="127.0.0.1"
+fi
 
 # The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
 # uncommitted source changes), shown next to config.py's VERSION; same format
@@ -50,39 +55,24 @@ LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/
 if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
   LEAF_BUILD="$LEAF_BUILD +dirty"
 fi
-# Semantic search (see src/embed.py): the image installs the model at build
-# time, so the setting is a build arg as well as an env var.
-LEAF_EMBEDDINGS=$(env_val LEAF_EMBEDDINGS)
-BUILD_ARGS=(--build-arg "LEAF_BUILD=${LEAF_BUILD:-unknown}" --build-arg "LEAF_EMBEDDINGS=${LEAF_EMBEDDINGS}")
+export LEAF_BUILD="${LEAF_BUILD:-unknown}"
 
-# Give the container the host's timezone, so "today" (due badge, deck
-# dates, scratch-note names, "Last changed") matches the user's day instead
-# of UTC. TZ in .env (e.g. Europe/Berlin) overrides; without either, UTC.
-TZ_FLAGS=()
-TZ_VAL=$(env_val TZ)
-if [[ -n "$TZ_VAL" ]]; then
-  TZ_FLAGS=(--tz "$TZ_VAL")
-elif [[ -e /etc/localtime ]]; then
-  TZ_FLAGS=(--tz local)
+# The user's timezone, so "today" (due badge, deck dates, scratch-note names,
+# "Last changed") is their day instead of UTC: TZ in .env (e.g. Europe/Berlin),
+# else the host's, else UTC.
+TZ=$(env_val TZ)
+if [[ -z "$TZ" ]]; then
+  if [[ -r /etc/timezone ]]; then
+    TZ=$(head -n1 /etc/timezone)
+  elif [[ -L /etc/localtime ]]; then
+    TZ=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')
+  fi
 fi
-
-# Rootless podman already maps in-container root to the host user, so files
-# written to the mounted volume are owned by the host user. Only a rootful
-# podman (host user is root) needs an explicit --user to match that.
-USER_FLAGS=()
-if [[ "$HOST_UID" -eq 0 ]]; then
-  USER_FLAGS=(--user "${HOST_UID}:${HOST_GID}")
-fi
-
-# Relabel the mounted volume when SELinux is enforcing.
-VOLUME="${WIKI_DATA}:/wiki-data"
-if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
-  VOLUME="${VOLUME}:Z"
-fi
+export TZ="${TZ:-UTC}"
 
 case "${1:-up}" in
   build)
-    podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
+    compose build
     ;;
   up)
     # The wiki must exist: Leaf doesn't make one where a typo in .env points.
@@ -90,44 +80,32 @@ case "${1:-up}" in
       echo "No wiki at $WIKI_DATA. Create the folder, or set WIKI_DATA in .env to your wiki." >&2
       exit 1
     fi
-    podman build "${BUILD_ARGS[@]}" -t "$IMAGE" .
-    # k8s-file (docker's json-file equivalent) so `podman logs -f` works even
-    # when the podman default log driver is journald (logs -f is unsupported).
-    # --init: a minimal init as PID 1 reaps orphaned processes (Leaf as PID 1
-    # wouldn't, and they would pile up as zombies until the PID limit).
-    podman run -d --init --name "$CONTAINER" --replace --restart unless-stopped \
-      --log-driver k8s-file \
-      "${USER_FLAGS[@]}" \
-      "${TZ_FLAGS[@]}" \
-      -p "${BIND_ADDR}:5000:5000" \
-      -v "$VOLUME" \
-      -e FLASK_ENV=production \
-      -e WIKI_DATA=/wiki-data \
-      -e "LEAF_PASSWORD=$(env_val LEAF_PASSWORD)" \
-      -e "SECRET_KEY=$(env_val SECRET_KEY)" \
-      -e "GIT_REMOTE=$(env_val GIT_REMOTE)" \
-      -e "ALLOW_REMOTE=${ALLOW_REMOTE}" \
-      -e "LEAF_EMBEDDINGS=${LEAF_EMBEDDINGS}" \
-      -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" \
-      -e "LEAF_MCP_TOKEN=$(env_val LEAF_MCP_TOKEN)" \
-      -e "LEAF_BASE_URL=$(env_val LEAF_BASE_URL)" \
-      -e "LEAF_HOST_DATA=${WIKI_DATA}" \
-      -e "LEAF_NOSHARE=$(env_val LEAF_NOSHARE)" \
-      "$IMAGE"
+    if [[ ! -f .env ]]; then
+      echo "No .env: create one (e.g. echo 'WIKI_DATA=~/leaf' > .env, see README)." >&2
+      exit 1
+    fi
+    # A container named leaf that compose didn't create (an older run.sh
+    # started it with podman run) would block compose's.
+    if $ENGINE container inspect leaf >/dev/null 2>&1 &&
+       ! $ENGINE container inspect leaf --format '{{json .Config.Labels}}' | grep -q 'compose'; then
+      $ENGINE rm -f leaf >/dev/null
+    fi
+    compose up -d --build
     echo "Leaf running at http://localhost:5000"
     echo "Leaf data: $WIKI_DATA"
     ;;
   down)
-    podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    compose down
     ;;
   logs)
-    podman logs -f "$CONTAINER"
+    compose logs -f
     ;;
   test)
     # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
-    podman build -q "${BUILD_ARGS[@]}" -t "$IMAGE" . >/dev/null
-    podman run --rm -v "$PWD:/repo:z" -w /repo "$IMAGE" sh -c \
+    # Built without compose, which would want a .env the tests don't need.
+    $ENGINE build -q --build-arg "LEAF_BUILD=$LEAF_BUILD" -t leaf . >/dev/null
+    $ENGINE run --rm -v "$PWD:/repo:z" -w /repo leaf sh -c \
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests "$@"
@@ -137,8 +115,8 @@ case "${1:-up}" in
     # Browser tests (headless Chromium via Playwright) plus the Node-run
     # deck-core.js tests, in a separate test image that has both.
     # Screenshots land in tests/e2e/_screenshots/.
-    podman build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
-    podman run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
+    $ENGINE build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
+    $ENGINE run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
   *)

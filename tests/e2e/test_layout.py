@@ -115,6 +115,25 @@ def test_mobile_preview_button_only_on_phone(new_page, wiki):
     expect(desktop.locator("#mobile-preview-btn")).to_be_hidden()
 
 
+def test_version_bottom_left_only_beside_the_column(new_page, wiki):
+    wide = new_page(viewport=DESKTOP)
+    wide.goto("/page/index")
+    build = wide.locator(".leaf-build")
+    expect(build).to_be_visible()
+    expect(build).to_have_text(re.compile(r"^Leaf \d+\.\d+\.\d+"))
+    box, col = build.bounding_box(), wide.locator("main").bounding_box()
+    assert box["x"] < 20 and box["y"] + box["height"] > DESKTOP["height"] - 20, "bottom left"
+    assert box["x"] + box["width"] < col["x"] + 40, "left of the text column"
+    wide.goto("/edit/index")
+    expect(wide.locator(".leaf-build")).to_be_hidden()
+    narrow = new_page(viewport={"width": 1000, "height": 700})
+    narrow.goto("/page/index")
+    expect(narrow.locator(".leaf-build")).to_be_hidden()
+    phone = new_page(viewport=PHONE)
+    phone.goto("/page/index")
+    expect(phone.locator(".leaf-build")).to_be_hidden()
+
+
 def test_tldr_toggle_reveals_text_below_tags(page, wiki):
     wiki.write("stress", STRESS)
     page.goto("/page/stress")

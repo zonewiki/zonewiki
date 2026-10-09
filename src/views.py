@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from flask import g, has_app_context, has_request_context, request
+from flask import g, has_app_context, has_request_context, request, session
 
 import config
 import deck
@@ -247,7 +247,8 @@ def _shell_context(title: str, editor: bool, action_buttons: bool, wide: bool) -
             "module": "" if editor else current_module(), "deck_new": deck_new,
             "sharing": sharing_on(), "app_name": config.APP_NAME, "version": config.VERSION,
             "build": config.LEAF_BUILD, "allow_remote": config.ALLOW_REMOTE,
-            "sign_out": bool(config.LEAF_PASSWORD),
+            # Only signed in: the login page has no one to sign out.
+            "sign_out": bool(config.LEAF_PASSWORD) and bool(session.get("authenticated")),
             "module_links": module_links() if show_actions else []}
 
 

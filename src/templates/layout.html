@@ -88,9 +88,11 @@
     </div>
   </dialog>
   <main{% if wide %} class="wide"{% endif %}>
-  {% if allow_remote %}
+  {#- The login page shows it in its form instead: it has no breadcrumb
+      row for it to sit beside. -#}
+  {% block remote_badge %}{% if allow_remote %}
   <div class="remote-badge" title="Remote access enabled">🌐</div>
-  {% endif %}
+  {% endif %}{% endblock %}
   <div class="top-badges">
     <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
@@ -104,5 +106,9 @@
   {% block body %}{% endblock %}
   </main>
   {% if show_actions %}{% include "partials/action_bar.html" %}{% endif %}
+  {#- Version and the commit it was built from, quietly in the corner; the
+      full build (commit date, +dirty) on hover and in the ? modal. -#}
+  {% set commit = build.split()[0] if build and build != "unknown" else "" %}
+  <div class="leaf-build"{% if commit %} title="Build {{ build }}"{% endif %}>{{ app_name }} {{ version }}{% if commit %} · {{ commit }}{% if "+dirty" in build %}+dirty{% endif %}{% endif %}</div>
 </body>
 </html>

@@ -46,7 +46,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
 | Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck/*.json`) |
-| Container           | Podman (Ubuntu 26.04 LTS base image)        |
+| Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 
 No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
 
@@ -60,9 +60,10 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── README.md               # For people who find the repo: what Leaf is, features, quick start
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── Containerfile           # Ubuntu 26.04 LTS-based container image (built by podman)
+├── Containerfile           # Ubuntu 26.04 LTS-based container image
+├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── Containerfile.e2e       # Test-only image: Playwright + Chromium for browser tests, Node for deck-core tests
-├── run.sh                  # Helper script: build/up/down/logs/test/e2e (drives podman directly)
+├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e
 ├── .env                    # Host data path configuration
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: tests, e2e, build + push the image
 └── src/
@@ -105,21 +106,22 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 ---
 
-## Podman / Container Setup
+## Container Setup (compose)
 
 ### Files
 
-- **`Containerfile`** — Ubuntu 26.04 LTS base, installs Python + pip via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`. Built with `podman build` (podman reads `Containerfile` by default).
-- **`run.sh`** — convenience script driving `podman build` and `podman run` directly (no Compose dependency). It reads `WIKI_DATA` and the optional env vars (`LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`, `TZ`, `LEAF_EMBEDDINGS`, `LEAF_EMBED_MIN_SCORE`, `LEAF_MCP_TOKEN`, `LEAF_BASE_URL`, `LEAF_NOSHARE`) from `.env`, mounts `$WIKI_DATA` to `/wiki-data`, and passes `WIKI_DATA=/wiki-data` as an env var so the server knows where data lives, plus the host path as `LEAF_HOST_DATA` (for the MCP tools' `file:` lines). `up` uses `--replace`, so re-running it rebuilds and restarts the existing container, and `--init`, so a minimal init is PID 1 and reaps orphaned processes (with Leaf as PID 1 they piled up as zombies; see Version history in `docs/spec/rendering.md`). The container gets the host's timezone (`podman run --tz local`; a `TZ` in `.env`, e.g. `Europe/Berlin`, overrides it), so "today" on the server (due count, deck dates, scratch-note names, "Last changed") is the user's day, not UTC. Without `/etc/localtime` on the host and no `TZ`, it stays UTC.
-- **`.env`** — sets `WIKI_DATA` (default `~/leaf`) for the host wiki directory. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically; `run.sh` only passes an explicit `--user UID:GID` when podman runs rootful. When SELinux is enforcing, the volume is mounted with `:Z` relabelling.
+- **`Containerfile`** — Ubuntu 26.04 LTS base, installs Python + pip + git + `tzdata` via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`. Build args `LEAF_EMBEDDINGS` and `LEAF_BUILD` (last layer).
+- **`compose.yaml`** — builds the image (`build:` with those args) and runs the `leaf` container: `env_file: .env` passes every setting, `environment` adds `WIKI_DATA=/wiki-data` (overriding `.env`'s), `LEAF_HOST_DATA` (the host path, for the MCP tools' `file:` lines) and `TZ`; the port is `${LEAF_BIND:-127.0.0.1}:5000:5000`; the wiki is a bind mount with `create_host_path: false` (a mistyped path errors instead of starting an empty wiki) and `selinux: Z`; `init: true` (a minimal init as PID 1 reaps orphaned processes; with Leaf as PID 1 they piled up as zombies, see Version history in `docs/spec/rendering.md`); `restart: unless-stopped`; log driver `json-file` (Docker's default, podman's alias for k8s-file, so `logs -f` works on both). It works on its own (`docker compose up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`. With docker compose the settings reach the container through the API; podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so there the secrets are on a command line for that moment.
+- **`run.sh`** — the entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for build/up/down/logs. It works out and exports what compose interpolates: `WIKI_DATA` from `.env` with `~` expanded (default `~/leaf`), `LEAF_BIND` from `ALLOW_REMOTE` (`0.0.0.0`, else `127.0.0.1`), `LEAF_BUILD` from git (see Version), and `TZ` (`.env`'s, else the host's from `/etc/timezone` or the `/etc/localtime` link, else UTC), so "today" on the server (due count, deck dates, scratch-note names, "Last changed") is the user's day. `up` refuses a missing wiki folder or `.env`, removes a `leaf` container an older run.sh started without compose (it would block the name), then `compose up -d --build`. `test`/`e2e` use the engine directly (no `.env` needed).
+- **`.env`** — every setting (`WIKI_DATA`, default `~/leaf`, plus the optional `LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`, `TZ`, `LEAF_EMBEDDINGS`, `LEAF_EMBED_MIN_SCORE`, `LEAF_MCP_TOKEN`, `LEAF_BASE_URL`, `LEAF_NOSHARE`); gitignored. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically.
 
 ### Commands
 
 ```bash
 ./run.sh            # build image and start Leaf (default: "up")
-./run.sh build      # build the container image only
-./run.sh up         # build and start in detached mode
-./run.sh down       # stop and remove the container
+./run.sh build      # build the container image only (compose build)
+./run.sh up         # build and start in detached mode (compose up -d --build)
+./run.sh down       # stop and remove the container (compose down)
 ./run.sh logs       # follow container logs
 ./run.sh test       # run unit/API tests inside the app image (extra args go to pytest; a tests/… path replaces the default whole suite)
 ./run.sh e2e        # run browser tests + deck-core.js (Node) tests in the test image (extra args go to pytest)
@@ -129,7 +131,7 @@ Leaf is available at **http://localhost:5000** after `./run.sh up`.
 
 ### CI (Forgejo Actions)
 
-`.forgejo/workflows/ci.yml` runs on every push and pull request: **test** (unit/API tests plus the Node deck-core tests in an `ubuntu:26.04` job container, the app image's base) and **e2e** (browser tests in the Playwright image, mirroring `Containerfile.e2e`; keep the two in sync, including the version pin). On `main` and `v*` tags, once both pass, **image** builds the `Containerfile` with `LEAF_EMBEDDINGS=fastembed` and the `LEAF_BUILD` string `run.sh` would compute, and pushes it to the Forgejo registry as `git.example.org/<owner>/leaf:<short-sha>` (the public host, repo variable `REGISTRY` overrides it: the host's engine pushes, and the runner's server URL is the internal `http://web:3000`), plus `:latest` (main) or `:<version>` (tag `v1.2.3` → `1.2.3`). Builds run in the official `docker:cli` image (plus `nodejs`, `git`, `bash` from apk) and use plain `docker build -f Containerfile`/`docker push` against the host engine through the socket mounted into job containers (runner label `docker`, runner config `container.docker_host: automount`; the host's engine trusts the internal certificate via `/etc/docker/certs.d/git.example.org/ca.crt`, which the runner also mounts read-only into job containers via `container.options`; checkout goes over the runner's internal `http://web:3000`, so the test job needs no `ca-certificates` package), so layers are cached between runs. Repo settings: secret `REGISTRY_TOKEN` (token with package write scope), optional variable `REGISTRY_USER` (default: the repo owner).
+`.forgejo/workflows/ci.yml` runs on every push and pull request: **test** (unit/API tests plus the Node deck-core tests in an `ubuntu:26.04` job container, the app image's base) and **e2e** (browser tests in the Playwright image, mirroring `Containerfile.e2e`; keep the two in sync, including the version pin). On `main` and `v*` tags, once both pass, **image** builds the `Containerfile` with `LEAF_EMBEDDINGS=fastembed` and the `LEAF_BUILD` string `run.sh` would compute, and pushes it to the Forgejo registry as `<REGISTRY>/<owner>/leaf:<short-sha>` (repo variable `REGISTRY`, Forgejo's public host, e.g. `git.example.org`: the host's engine pushes, and the runner's server URL is the internal `http://web:3000`; without the variable the image job is skipped, so forks just test), plus `:latest` (main) or `:<version>` (tag `v1.2.3` → `1.2.3`). Builds run in the official `docker:cli` image (plus `nodejs`, `git`, `bash` from apk) and use plain `docker build -f Containerfile`/`docker push` against the host engine through the socket mounted into job containers (runner label `docker`, runner config `container.docker_host: automount`; the host's engine trusts the internal certificate via `/etc/docker/certs.d/<REGISTRY>/ca.crt`, which the runner also mounts read-only into job containers via `container.options`; checkout goes over the runner's internal `http://web:3000`, so the test job needs no `ca-certificates` package), so layers are cached between runs. Repo settings: variable `REGISTRY` (the registry host; required for the image), secret `REGISTRY_TOKEN` (token with package write scope), optional variable `REGISTRY_USER` (default: the repo owner).
 
 ### Mobile / phone access
 
@@ -137,7 +139,7 @@ Set `ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all i
 
 ### Version
 
-Leaf's version is a semver constant, `VERSION` in `config.py`, bumped by hand. Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `src/` had uncommitted changes (a commit can't contain its own hash, so this part can't be a committed constant). The shortcuts modal (`?`) shows both (`Leaf 1.0.0 · c28ec9e 2026-09-26 19:22`), the `<meta name="generator">` tag the version, and `/api/version` returns `{ version, build }`. The image has no `.git`, so `run.sh` computes the build string and passes it as the `LEAF_BUILD` build arg (the `Containerfile` sets it as an env var in its last layer, so a new commit only rebuilds that layer). Without the container, `config.py` reads the same string from git itself (`_source_build()`); `$LEAF_BUILD` wins when set, and with neither the modal shows the version alone.
+Leaf's version is a semver constant, `VERSION` in `config.py`, bumped by hand. Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `src/` had uncommitted changes (a commit can't contain its own hash, so this part can't be a committed constant). The shortcuts modal (`?`) shows both (`Leaf 1.0.0 · c28ec9e 2026-09-26 19:22`), every page's bottom-left corner the version and short hash (`Leaf 1.0.0 · c28ec9e`, `+dirty` when so, the full build on hover; `.leaf-build` in `layout.html`, faint, only from 1140px wide where the margin beside the text column has room, not in the editor), the `<meta name="generator">` tag the version, and `/api/version` returns `{ version, build }`. The image has no `.git`, so `run.sh` computes the build string and passes it as the `LEAF_BUILD` build arg (the `Containerfile` sets it as an env var in its last layer, so a new commit only rebuilds that layer). Without the container, `config.py` reads the same string from git itself (`_source_build()`); `$LEAF_BUILD` wins when set, and with neither the modal shows the version alone.
 
 ### Home-screen app
 
@@ -247,9 +249,10 @@ Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with 
 ## Key Constraints
 
 - Do not use a database. Files are the only storage.
-- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-left corner when auth is enabled (the bottom-right holds the New/Search buttons; bottom-right only on pages without them); on phones it sits in the status-badge row at the top, hidden while typing.
+- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` can also be set to keep sessions across restarts; if absent, a random key is generated per-process. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, hidden while typing. With `ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
+- `/mcp` requires `LEAF_MCP_TOKEN` (a bearer token): without one set it is off (403), whether or not `LEAF_PASSWORD` is set, because its tools write pages and tasks. Don't make it open again (see Auth in `docs/spec/mcp.md`).
 - Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
-- `ALLOW_REMOTE` is the single knob for network access. When unset, `run.sh` sets `BIND_ADDR=127.0.0.1` so podman only exposes port 5000 on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` sets `BIND_ADDR=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. The port mapping passed to `podman run` is `-p ${BIND_ADDR}:5000:5000`.
+- `ALLOW_REMOTE` is the single knob for network access (with `run.sh`). When unset, `run.sh` exports `LEAF_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` exports `LEAF_BIND=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. `compose.yaml` maps `${LEAF_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `LEAF_BIND=0.0.0.0` must be set in `.env` alongside `ALLOW_REMOTE=1`.
 - A `before_request` hook in `server.py` (`check_host`) validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks. Set `ALLOW_REMOTE=1` in `.env` to skip this check and allow access from any host.
 - **Cross-site writes are refused** (`check_origin`, a `before_request` hook after the Host check): a POST/PUT/PATCH/DELETE whose `Origin` header names another site, or is `null` (sandboxed iframe), gets 403. Without it any web page could post a form to `localhost:5000` and delete or overwrite pages, or write deck tasks (the deck API parses text/plain bodies, which need no CORS preflight), and raw HTML in markdown would turn an overwrite into a stored script. Requests without `Origin` (curl, scripts) are allowed. Behind a reverse proxy the proxy must pass the original `Host` through, or same-origin writes would be refused.
 - Do not add a build step or bundler.
