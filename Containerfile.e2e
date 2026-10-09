@@ -10,7 +10,7 @@
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
 # Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js).
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs git \
  && rm -rf /var/lib/apt/lists/*
 
 COPY src/requirements.txt /tmp/requirements.txt

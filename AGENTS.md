@@ -60,10 +60,11 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── README.md               # For people who find the repo: what Leaf is, features, quick start
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
+├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
-├── Containerfile.e2e       # Test-only image: Playwright + Chromium for browser tests, Node for deck-core tests
+├── Containerfile.e2e       # Test-only image: Playwright + Chromium for browser tests, Node for deck-core tests, git
 ├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e
 ├── .env                    # Host data path configuration
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: tests, e2e, build + push the image
@@ -126,6 +127,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh logs       # follow container logs
 ./run.sh test       # run unit/API tests inside the app image (extra args go to pytest; a tests/… path replaces the default whole suite)
 ./run.sh e2e        # run browser tests + deck-core.js (Node) tests in the test image (extra args go to pytest)
+./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the test image
 ```
 
 Leaf is available at **http://localhost:5000** after `./run.sh up`.

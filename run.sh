@@ -132,14 +132,22 @@ case "${1:-up}" in
     $ENGINE run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
+  screenshots)
+    # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
+    # in the test image (Playwright).
+    $ENGINE build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
+    $ENGINE run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
+      python3 docs/screenshots/make_screenshots.py
+    ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|screenshots]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
     echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
     echo "  e2e    - run browser tests in the Playwright image (extra args go to pytest)"
+    echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     exit 1
     ;;
 esac

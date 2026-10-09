@@ -1,0 +1,236 @@
+"""Render the README's screenshots (docs/screenshots/*.png) from a small
+sample wiki, so they can be redone whenever the UI changes:
+
+    ./run.sh screenshots
+
+It runs Leaf on a throwaway wiki (pages, tasks dated around today, a git
+repo) and photographs it with headless Chromium (Playwright), as the browser
+tests do: in the test image, which has both.
+"""
+
+import os
+import subprocess
+import sys
+import tempfile
+import threading
+import json
+import base64
+import urllib.request
+from datetime import date, timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = Path(__file__).resolve().parent
+
+WIKI = Path(tempfile.mkdtemp(prefix="leaf_screenshots_"))
+# LEAF_HOSTS, not ALLOW_REMOTE (which would show its badge): the server listens
+# on a random port, and the Host check compares names only.
+os.environ.update(WIKI_DATA=str(WIKI), LEAF_HOSTS="127.0.0.1")
+os.environ.pop("ALLOW_REMOTE", None)
+# The commit the screenshots show at the bottom left, without "+dirty".
+os.environ["LEAF_BUILD"] = subprocess.run(
+    ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
+    capture_output=True, text=True).stdout.strip() or "unknown"
+sys.path.insert(0, str(ROOT / "src"))
+
+TODAY = date.today()
+
+
+def day(n: int) -> str:
+    return (TODAY + timedelta(days=n)).isoformat()
+
+
+PAGES = {
+    "index": """# Home
+
+What's going on:
+
+- [[Projects/Garden shed]]: building it this spring
+- [[Recipes/Sourdough]]: the weekend loaf
+- [[Reading list]]
+""",
+    "projects/garden-shed": """---
+tags: project, garden
+tldr: A 2×3 m timber shed at the back of the garden, built over a few spring weekends.
+---
+# Garden shed
+
+> [!NOTE]
+> No permit needed below 10 m²: checked with the town office on 3 March.
+
+## Plan
+
+| Step | When | Status |
+|------|------|--------|
+| Foundation: gravel and pavers | Week 1 | done |
+| Floor frame | Week 2 | done |
+| Walls and roof | Weeks 3–4 | in progress |
+| Stain and gutter | Week 5 | |
+
+## Materials
+
+- [x] Pressure-treated timber 45×95, 24 pieces
+- [x] Roofing felt, 2 rolls
+- [ ] Screws 5×80, a box of 500
+- [ ] Wood stain, grey
+
+## Roof
+
+A single slope towards the back, 15°, so the rain runs off towards the
+[[Garden/Rain barrel]]. Felt over 18 mm OSB, battens every 40 cm.
+
+## Open questions
+
+- Gutter into the rain barrel or into the drain?
+- Shelves now, or once the walls are stained?
+
+## Log
+
+- **Week 1**: foundation level within 3 mm over the whole length.
+- **Week 2**: floor frame up; one joist replaced (warped).
+""",
+    "garden/rain-barrel": """# Rain barrel
+
+300 litres, next to the [[Projects/Garden shed]]. Overflow into the gravel bed.
+""",
+    "recipes/sourdough": """---
+tags: recipe, baking
+---
+# Sourdough
+
+A slow, forgiving loaf: mix in the evening, bake the next morning.
+
+## Ingredients
+
+| | Amount |
+|---|---|
+| Bread flour | 450 g |
+| Whole wheat | 50 g |
+| Water | 360 g |
+| Starter, active | 100 g |
+| Salt | 10 g |
+
+## Method
+
+1. Mix flour and water, rest 1 hour.
+2. Add starter and salt, then four sets of folds, 30 minutes apart.
+3. Shape, into the banneton, overnight in the fridge.
+4. Bake at 250 °C: 20 minutes covered, 25 uncovered.
+
+> [!TIP]
+> The dough is ready to shape when it has grown by half and jiggles.
+""",
+    "reading-list": """# Reading list
+
+- *The Overstory*, Richard Powers
+- *A Pattern Language*, Christopher Alexander
+- [[Projects/Garden shed]] links: *The Backyard Builder*
+""",
+    "tasks": "# Tasks\n\n[[deck view=focus home=1]]\n",
+}
+
+TASKS = [
+    {"title": "Order screws for the shed", "tags": ["garden"], "start_date": day(0),
+     "description": "5×80, a box of 500. For [[Projects/Garden shed]]."},
+    {"title": "Call the roofer about the gutter", "tags": ["garden"], "start_date": day(1),
+     "due_date": day(3)},
+    {"title": "Feed the starter", "tags": ["kitchen"], "start_date": day(0), "rec_type": "daily"},
+    {"title": "Renew passport", "tags": ["admin"], "due_date": day(12)},
+    {"title": "Book flights to Lisbon", "tags": ["travel"], "start_date": day(2)},
+    {"title": "Return library books", "tags": ["errands"], "due_date": day(0)},
+    {"title": "Plan Ana's birthday dinner", "tags": ["family"], "start_date": day(4)},
+    {"title": "Back up the photo library", "tags": ["admin"], "due_date": day(6),
+     "rec_type": "monthly"},
+    {"title": "Stain the shed walls", "tags": ["garden"], "start_date": day(5),
+     "description": "Grey, two coats. [[Projects/Garden shed]]"},
+    {"title": "Read The Overstory, chapter 5", "tags": ["reading"]},
+]
+
+
+def build_wiki():
+    for slug, text in PAGES.items():
+        path = WIKI / f"{slug}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+def post(base, path, data):
+    req = urllib.request.Request(base + path, data=json.dumps(data).encode(),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read() or b"null")
+
+
+def main():
+    from playwright.sync_api import sync_playwright
+    from werkzeug.serving import make_server
+
+    build_wiki()                     # before the import: Leaf's first commit takes them in
+    import server                    # noqa: E402
+    import gitstore                  # noqa: E402
+
+    srv = make_server("127.0.0.1", 0, server.app, threaded=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+
+    ids = [post(base, "/api/deck", t)["id"] for t in TASKS]
+    post(base, f"/api/deck/{ids[0]}/comments", {"text": "Hardware store has them on Saturday."})
+    # A task inline on the page, as a chip.
+    shed = WIKI / "projects/garden-shed.md"
+    shed.write_text(shed.read_text().replace(
+        "- Shelves now, or once the walls are stained?\n",
+        f"- Shelves now, or once the walls are stained?\n\nNext: [[task:{ids[0][:8]}]]\n"))
+    gitstore.git_commit(shed, "Next step")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+
+        def page(width, height, scheme="light", scale=1, **opts):
+            ctx = browser.new_context(base_url=base, viewport={"width": width, "height": height},
+                                      color_scheme=scheme, device_scale_factor=scale, **opts)
+            return ctx.new_page()
+
+        def settle(pg):
+            pg.wait_for_load_state("networkidle")
+            pg.wait_for_timeout(300)
+
+        # 1. A page on a wide screen: contents left, links right.
+        pg = page(1440, 900)
+        pg.goto("/page/projects/garden-shed")
+        settle(pg)
+        pg.screenshot(path=OUT / "page.png")
+
+        # 2. The deck's Plan board.
+        pg = page(1280, 820)
+        pg.goto("/deck")
+        pg.locator("#tasks-tabs [data-filter='due']").click()
+        settle(pg)
+        pg.screenshot(path=OUT / "deck.png")
+
+        # 3. The editor with live preview, in dark mode.
+        pg = page(1440, 820, scheme="dark")
+        pg.goto("/edit/recipes/sourdough")
+        settle(pg)
+        pg.screenshot(path=OUT / "editor.png")
+
+        # 4. On a phone: a page and the deck's Focus, side by side.
+        shots = []
+        for url, tab in (("/page/projects/garden-shed", None), ("/page/tasks", None)):
+            pg = page(390, 780, scale=2, is_mobile=True, has_touch=True)
+            pg.goto(url)
+            settle(pg)
+            shots.append(base64.b64encode(pg.screenshot()).decode())
+        frame = page(900, 820, scale=2)
+        frame.set_content(f"""<body style="margin:0;background:#e9ecef;display:flex;gap:40px;
+            justify-content:center;align-items:center;height:100vh">
+            {''.join(f'<img src="data:image/png;base64,{s}" style="width:390px;border-radius:28px;'
+                     f'box-shadow:0 8px 30px rgba(0,0,0,.18)">' for s in shots)}</body>""")
+        frame.screenshot(path=OUT / "phone.png")
+
+        browser.close()
+    srv.shutdown()
+    print("wrote", ", ".join(sorted(p.name for p in OUT.glob("*.png"))))
+
+
+if __name__ == "__main__":
+    main()
