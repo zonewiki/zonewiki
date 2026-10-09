@@ -11,7 +11,7 @@ from pathlib import Path
 
 APP_NAME = "Leaf"
 # Leaf's version (semver), bumped by hand when a change is worth a number.
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def _source_build(root: Path = Path(__file__).resolve().parent.parent) -> str:
