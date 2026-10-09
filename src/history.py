@@ -1,11 +1,10 @@
 """Routes for version history and uncommitted changes: a page's
 history, revisions, diffs, restore, deleted pages, committing."""
 
-import html
-
 from flask import Blueprint, abort, jsonify, redirect, request
 
 import config
+import views
 from mdtext import page_title, slug_display_name, strip_h1
 from pages import hidden_page, safe_path, url
 from gitstore import (
@@ -14,10 +13,7 @@ from gitstore import (
     version_label, version_path,
 )
 from render import render_md
-from views import (
-    build_breadcrumb, change_counts, commit_form_html, diff_to_html, hidden_page_view,
-    index_page, shell, version_nav,
-)
+from views import build_breadcrumb, hidden_page_view
 
 
 bp = Blueprint("history", __name__)
@@ -29,21 +25,8 @@ def deleted_pages_route():
         abort(404)
     # Sharing mode: a deleted page's tags are gone with it; its folder still counts.
     pages = [p for p in list_deleted_pages() if not hidden_page(p["slug"])]
-    if pages:
-        items = "".join(
-            f'<li>'
-            f'<span class="deleted-page-info">'
-            f'<a href="{url("revision", p["slug"])}/{html.escape(p["sha"])}" class="deleted-page-title">{html.escape(p["title"])}</a>'
-            f'<span class="note-date">{html.escape(p["slug"])} &middot; {html.escape(p["date"])}</span></span>'
-            f'<form method="post" action="{url("restore", p["slug"])}/{html.escape(p["sha"])}">'
-            f'<button type="submit" class="btn btn-sm">Restore</button>'
-            f'</form></li>'
-            for p in pages
-        )
-        body_inner = f"<ul class='notes-list'>{items}</ul>"
-    else:
-        body_inner = "<p>No deleted pages in history.</p>"
-    return index_page('_deleted', 'Deleted Pages', body_inner)
+    return views.page("history/deleted.html", "Deleted Pages", pages=pages,
+                      breadcrumb_html=build_breadcrumb("_deleted", "Deleted Pages"))
 
 
 @bp.get("/history/<path:slug>")
@@ -65,49 +48,15 @@ def history_page_route(slug):
     if not entries and not page_exists:
         abort(404)
 
-    # One row per saved version, newest first. The row opens that version;
-    # the page as it is now is marked Current and opens the page itself.
-    # "Changes" shows what that save changed.
     current = is_current(path, entries)
-    rows = []
-    if page_exists and not current:
-        rows.append(
-            f'<li class="hist-row hist-current">'
-            f'<a class="hist-main" href="{url("page", slug)}"><span class="hist-when">Now</span>'
-            f'<span class="hist-what">Not committed yet</span></a>'
-            f'<span class="hist-badge">Current</span></li>')
-    for i, e in enumerate(entries):
-        is_cur = current and i == 0
-        href = url('page', slug) if is_cur else f"{url('revision', slug)}/{e['sha']}"
-        rows.append(
-            f'<li class="hist-row{" hist-current" if is_cur else ""}">'
-            f'<a class="hist-main" href="{href}">'
-            f'<span class="hist-when">{e["time"]}<span class="hist-rel">{html.escape(e["rel"])}</span></span>'
-            f'<span class="hist-what">{html.escape(version_label(e, entries))}</span>'
-            f'<span class="hist-counts">{change_counts(e)}</span></a>'
-            + ('<span class="hist-badge">Current</span>' if is_cur else "")
-            + f'<a class="hist-changes" href="{url("diff", slug)}/{e["sha"]}" title="What this save changed">Changes</a>'
-            f'</li>')
-    if entries:
-        table = (f'<p class="hist-intro">Every saved version of this page, newest first. '
-                 f'Open one to read it, step through older ones or bring it back.</p>'
-                 f'<ol class="hist-list">{"".join(rows)}</ol>')
-    else:
-        table = '<p class="hist-empty">No history yet — history is recorded from this point forward.</p>'
-
-    if page_exists:
-        back_link = f'<a href="{url("page", slug)}" class="btn">← Page</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', None))
-    else:
-        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
-        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
-    body = f"""{breadcrumb}
-<header class="page-header">
-  <h1>History — {html.escape(title)}</h1>
-  {back_link}
-</header>
-{table}"""
-    return shell(f"History — {title}", body)
+    rows = [{"e": e, "label": version_label(e, entries), "current": current and i == 0,
+             "href": url("page", slug) if current and i == 0 else f"{url('revision', slug)}/{e['sha']}"}
+            for i, e in enumerate(entries)]
+    breadcrumb = (build_breadcrumb(slug, title, ("History", None)) if page_exists
+                  else build_breadcrumb("_deleted", "Deleted Pages", (title, None)))
+    return views.page("history/history.html", f"History — {title}", slug=slug, page_title=title,
+                      page_exists=page_exists, rows=rows, uncommitted=page_exists and not current,
+                      breadcrumb_html=breadcrumb)
 
 
 @bp.get("/revision/<path:slug>/<sha>")
@@ -138,45 +87,16 @@ def revision_view(slug, sha):
     current = is_current(path, entries)
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
-        back_link = f'<a href="{url("history", slug)}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', url("history", slug)), (when, None))
+        breadcrumb = build_breadcrumb(slug, title, ("History", url("history", slug)), (when, None))
     else:
-        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
-        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, None))
-    # Where this version stands: the current one, n versions back, or the last
-    # version of a deleted page. Restoring is offered for every other one.
-    if i is None:
-        where = f"Version <code>{sha[:7]}</code>"
-    elif current and i == 0:
-        where = f"The current version, saved {when}"
-    elif not page_exists and restore_sha != sha:
-        where = f"The last version before the page was deleted ({when})"
-    else:
-        back = i + (0 if current else 1) if page_exists else i
-        where = (f"The version of {when}"
-                 + (f" · {back} {'version' if back == 1 else 'versions'} back" if page_exists and back else ""))
-    can_restore = not (current and i == 0)
-    restore = (f'<form method="post" action="{url("restore", slug)}/{restore_sha}" class="version-restore" '
-               f'data-confirm="Make this version the page again? The page as it is now stays in its history.">'
-               f'<button type="submit" class="btn">Restore this version</button></form>'
-               if can_restore else "")
-    changes = (f'<a href="{url("diff", slug)}/{sha}" class="version-link">What this save changed</a>'
-               if i is not None else "")
-    nav = version_nav(slug, entries, i, current, "revision") if i is not None else ""
-    body = f"""{breadcrumb}
-<header class="page-header">
-  <h1>{html.escape(title)}</h1>
-  <div class="page-header-actions">{back_link}</div>
-</header>
-<div class="version-bar">
-  <p class="version-where">{where}</p>
-  <div class="version-actions">{changes}{restore}</div>
-  {nav}
-</div>
-<article class="page-content">
-  {render_md(strip_h1(content))}
-</article>"""
-    return shell(f"{when} — {title}", body)
+        breadcrumb = build_breadcrumb("_deleted", "Deleted Pages", (title, None))
+    # Where this version stands: n versions back (the newest is 0 while it is
+    # the page as it is now).
+    back = (i + (0 if current else 1) if page_exists else i) if i is not None else 0
+    return views.page("history/revision.html", f"{when} — {title}", slug=slug, sha=sha,
+                      restore_sha=restore_sha, page_title=title, page_exists=page_exists,
+                      entries=entries, i=i, current=current, when=when, back=back,
+                      article_html=render_md(strip_h1(content)), breadcrumb_html=breadcrumb)
 
 
 @bp.get("/diff/<path:slug>/<sha>")
@@ -197,31 +117,16 @@ def diff_view(slug, sha):
     if diff is None:
         abort(404)
     title = slug_display_name(slug)
-    diff_html = diff_to_html(diff)
     page_exists = path.exists()
     when = entries[i]["time"] if i is not None else sha[:7]
     if page_exists:
-        back_link = f'<a href="{url("history", slug)}" class="btn">← History</a>'
-        breadcrumb = build_breadcrumb(slug, title, ('History', url("history", slug)), ('Changes', None))
+        breadcrumb = build_breadcrumb(slug, title, ("History", url("history", slug)), ("Changes", None))
     else:
-        back_link = '<a href="/page/_deleted" class="btn">← Deleted pages</a>'
-        breadcrumb = build_breadcrumb('_deleted', 'Deleted Pages', (title, url("history", slug)), ('Changes', None))
-    what = html.escape(version_label(entries[i], entries)) if i is not None else ""
-    nav = version_nav(slug, entries, i, False, "diff") if i is not None else ""
-    view = (f'<a href="{url("revision", slug)}/{sha}" class="version-link">View this version</a>'
-            if i is not None else "")
-    body = f"""{breadcrumb}
-<header class="page-header">
-  <h1>Changes — {html.escape(title)}</h1>
-  <div class="page-header-actions">{back_link}</div>
-</header>
-<div class="version-bar">
-  <p class="version-where">What the save of {when} changed{f" ({what[:1].lower() + what[1:]})" if what else ""}: <span class="hist-del">red</span> was taken out, <span class="hist-add">green</span> put in.</p>
-  <div class="version-actions">{view}</div>
-  {nav}
-</div>
-<pre class="diff-view">{diff_html}</pre>"""
-    return shell(f"Changes {when} — {title}", body)
+        breadcrumb = build_breadcrumb("_deleted", "Deleted Pages", (title, url("history", slug)), ("Changes", None))
+    return views.page("history/diff.html", f"Changes {when} — {title}", slug=slug, sha=sha, page_title=title,
+                      page_exists=page_exists, entries=entries, i=i, when=when,
+                      what=version_label(entries[i], entries) if i is not None else "",
+                      diff_lines=views.diff_lines(diff), breadcrumb_html=breadcrumb)
 
 
 @bp.post("/restore/<path:slug>/<sha>")
@@ -247,36 +152,9 @@ def uncommitted_page():
     """Show all files with uncommitted changes."""
     if not config.GIT_ENABLED:
         abort(404)
-
-    file_list = [f for f in uncommitted_entries() if not (f["slug"] and hidden_page(f["slug"]))]
-    if file_list:
-        rows = "".join(
-            f'<tr>'
-            f'<td class="hist-date">{html.escape(f["mtime"])}</td>'
-            f'<td class="hist-rel">{html.escape(f["rel"])}</td>'
-            f'<td class="hist-msg">{html.escape(f["title"])}'
-            + (f'<br><span class="hist-filepath">{html.escape(f["filepath"])}</span>' if f["title"] != f["filepath"] else '')
-            + '</td>'
-            '<td style="white-space:nowrap">'
-            + (f'<a href="{url("diff-uncommitted", f["slug"])}" class="btn">Diff</a> ' if f["slug"] else '')
-            + (f'<a href="{url("page", f["slug"])}?from=uncommitted" class="btn">View</a> ' if f["slug"] else '')
-            + '</td>'
-            '</tr>'
-            for f in file_list
-        )
-        table = f'<table class="hist-table"><tbody>{rows}</tbody></table>'
-        commit_all_btn = '<button type="button" class="btn btn-primary" id="commit-all-btn">Commit All</button>'
-    else:
-        table = '<p class="hist-empty">No uncommitted changes</p>'
-        commit_all_btn = ''
-
-    body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes')}
-<header class="page-header">
-  <h1>Uncommitted Changes</h1>
-  <div class="page-header-actions">{commit_all_btn}</div>
-</header>
-{table}"""
-    return shell("Uncommitted Changes", body)
+    files = [f for f in uncommitted_entries() if not (f["slug"] and hidden_page(f["slug"]))]
+    return views.page("history/uncommitted.html", "Uncommitted Changes", files=files,
+                      breadcrumb_html=build_breadcrumb("uncommitted", "Uncommitted Changes"))
 
 
 @bp.get("/diff-uncommitted/<path:slug>")
@@ -299,20 +177,11 @@ def diff_uncommitted(slug):
         r = run_git("git", "diff", "--", rel)
     diff = r.stdout or "(no changes)"
 
-    content = path.read_text(encoding="utf-8")
-    title = page_title(content, slug)
-    diff_html = diff_to_html(diff)
-    commit_btn = commit_form_html(rel, title, "/uncommitted")
-    body = f"""{build_breadcrumb('uncommitted', 'Uncommitted Changes', (title, '/uncommitted'), ('Diff', None))}
-<header class="page-header">
-  <h1>Uncommitted Changes — {html.escape(title)}</h1>
-  <div class="page-header-actions">
-    {commit_btn}
-    <a href="/uncommitted" class="btn">← Uncommitted</a>
-  </div>
-</header>
-<div class="diff-view">{diff_html}</div>"""
-    return shell(f"Diff — {title}", body)
+    title = page_title(path.read_text(encoding="utf-8"), slug)
+    return views.page("history/diff_uncommitted.html", f"Diff — {title}", page_title=title, filepath=rel,
+                      diff_lines=views.diff_lines(diff),
+                      breadcrumb_html=build_breadcrumb("uncommitted", "Uncommitted Changes",
+                                                       (title, "/uncommitted"), ("Diff", None)))
 
 
 @bp.get("/api/uncommitted")

@@ -41,30 +41,26 @@ def macro(template: str, name: str):
     return getattr(_env.get_template(template).module, name)
 
 
-def diff_to_html(diff: str) -> str:
-    """Render a unified diff as classed <span> lines for the diff view.
-    git's file headers (everything before a file's first @@) say nothing to
-    a reader and are left out; a hunk header becomes a quiet "⋯" between
-    the parts of the page that changed."""
-    lines = []
-    in_header = False
+def diff_lines(diff: str) -> list[tuple[str, str]]:
+    """A unified diff as (class, line) pairs for the diff views: git's file
+    headers (everything before a file's first @@) say nothing to a reader
+    and are left out; a hunk header becomes a quiet "⋯" between the parts of
+    the page that changed."""
+    lines, in_header = [], False
     for line in diff.splitlines():
-        if line.startswith('diff --git '):
+        if line.startswith("diff --git "):
             in_header = True
-        if line.startswith('@@'):
+        if line.startswith("@@"):
             in_header = False
-            lines.append('<span class="diff-hunk">⋯</span>')
-            continue
-        if in_header:
-            continue
-        if line.startswith('+'):
-            cls = 'diff-add'
-        elif line.startswith('-'):
-            cls = 'diff-del'
-        else:
-            cls = 'diff-ctx'
-        lines.append(f'<span class="{cls}">{html.escape(line)}</span>')
-    return ''.join(lines) or '<span class="diff-ctx">(no changes)</span>'
+            lines.append(("diff-hunk", "⋯"))
+        elif not in_header:
+            lines.append(("diff-add" if line.startswith("+") else
+                          "diff-del" if line.startswith("-") else "diff-ctx", line))
+    return lines
+
+
+def diff_to_html(diff: str) -> str:
+    return macro("partials/history.html", "diff")(diff_lines(diff))
 
 
 def commit_form_html(filepath: str, title: str, on_success: str, *, inline: bool = False) -> str:
@@ -361,26 +357,3 @@ def paste_hint(slug: str, copied: bool) -> dict | None:
     if not path or not path.exists() or hidden_page(slug):
         return None
     return {"link": page_wikilink(slug, page_title(path.read_text(encoding="utf-8"), slug)), "copied": copied}
-
-
-def change_counts(e: dict) -> str:
-    parts = []
-    if e["added"]:
-        parts.append(f'<span class="hist-add">+{e["added"]}</span>')
-    if e["deleted"]:
-        parts.append(f'<span class="hist-del">−{e["deleted"]}</span>')
-    return " ".join(parts)
-
-
-def version_nav(slug: str, entries: list[dict], i: int, current: bool, kind: str) -> str:
-    """← Older · Newer → between versions (kind: "revision" or "diff");
-    the newest, when it is the page as it is now, is the page itself."""
-    older = (f'<a href="{url(kind, slug)}/{entries[i + 1]["sha"]}" class="btn">← Older</a>'
-             if i + 1 < len(entries) else '<span class="btn" aria-disabled="true">← Older</span>')
-    if i == 0:
-        newer = '<span class="btn" aria-disabled="true">Newer →</span>'
-    elif i == 1 and current and kind == "revision":
-        newer = f'<a href="{url("page", slug)}" class="btn">Current →</a>'
-    else:
-        newer = f'<a href="{url(kind, slug)}/{entries[i - 1]["sha"]}" class="btn">Newer →</a>'
-    return f'<nav class="version-nav" aria-label="Versions">{older}{newer}</nav>'

@@ -1,0 +1,12 @@
+{#- Pages deleted in git history, newest deletion first, with Restore. -#}
+{% extends "layout.html" %}
+{% block body %}
+{{ breadcrumb_html|safe }}
+<header class="page-header"><h1>Deleted Pages</h1></header>
+<article class="page-content">
+{%- if pages %}<ul class='notes-list'>
+{%- for p in pages %}<li><span class="deleted-page-info"><a href="{{ url('revision', p.slug) }}/{{ p.sha }}" class="deleted-page-title">{{ p.title }}</a><span class="note-date">{{ p.slug }} &middot; {{ p.date }}</span></span><form method="post" action="{{ url('restore', p.slug) }}/{{ p.sha }}"><button type="submit" class="btn btn-sm">Restore</button></form></li>{% endfor -%}
+</ul>
+{%- else %}<p>No deleted pages in history.</p>{% endif -%}
+</article>
+{% endblock %}

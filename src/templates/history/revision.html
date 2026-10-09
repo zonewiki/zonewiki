@@ -1,0 +1,27 @@
+{#- One saved version of a page, read-only, with where it stands, what
+    its save changed, Restore and ← Older / Newer →. -#}
+{% extends "layout.html" %}
+{% import "partials/history.html" as h %}
+{% block body %}
+{{ breadcrumb_html|safe }}
+<header class="page-header">
+  <h1>{{ page_title }}</h1>
+  <div class="page-header-actions">{{ h.back(slug, page_exists) }}</div>
+</header>
+<div class="version-bar">
+  <p class="version-where">
+  {%- if i is none %}Version <code>{{ sha[:7] }}</code>
+  {%- elif current and i == 0 %}The current version, saved {{ when }}
+  {%- elif not page_exists and restore_sha != sha %}The last version before the page was deleted ({{ when }})
+  {%- else %}The version of {{ when }}{% if page_exists and back %} · {{ back }} {{ "version" if back == 1 else "versions" }} back{% endif %}
+  {%- endif %}</p>
+  <div class="version-actions">
+  {%- if i is not none %}<a href="{{ url('diff', slug) }}/{{ sha }}" class="version-link">What this save changed</a>{% endif -%}
+  {%- if not (current and i == 0) %}<form method="post" action="{{ url('restore', slug) }}/{{ restore_sha }}" class="version-restore" data-confirm="Make this version the page again? The page as it is now stays in its history."><button type="submit" class="btn">Restore this version</button></form>{% endif -%}
+  </div>
+  {% if i is not none %}{{ h.version_nav(slug, entries, i, current, "revision") }}{% endif %}
+</div>
+<article class="page-content">
+  {{ article_html|safe }}
+</article>
+{% endblock %}
