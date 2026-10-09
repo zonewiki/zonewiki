@@ -206,7 +206,7 @@ def raw_page():
         git_commit(path, "Create _raw")
     content = path.read_text(encoding="utf-8")
     title = page_title(content, "_raw")
-    raw_dir = config.PAGES_DIR / "_raw"
+    raw_dir = config.WIKI_DIR / "_raw"
     subpages = []
     if raw_dir.is_dir():
         for f in sorted(raw_dir.glob("*.md"), reverse=True):

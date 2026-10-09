@@ -14,7 +14,6 @@ from mdtext import page_title, parse_frontmatter, strip_h1, to_slug, toggle_nth_
 from render import _apply_img_sizes, _build_toc, _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
 from views import build_breadcrumb
 from tests.conftest import write_page
-import config
 import mdtext
 import pages
 import render
@@ -713,9 +712,8 @@ class TestWikilinkSections:
         assert split_wikilink(" Garden # Raised beds | beds") == ("Garden", "Raised beds", "beds")
         assert split_wikilink("#Beds") == ("", "Beds", "Beds")
 
-    def test_rendered_links(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(config, "PAGES_DIR", tmp_path)
-        (tmp_path / "garden.md").write_text("# Garden\n")
+    def test_rendered_links(self, wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n")
         out = render.render_md("[[Garden#Raised beds!]] [[Garden#Beds|beds]] [[#Notes]] [[Nowhere#Beds]]\n")
         assert '<a href="/page/garden#raised-beds" class="wikilink">Garden › Raised beds!</a>' in out
         assert '<a href="/page/garden#beds" class="wikilink">beds</a>' in out

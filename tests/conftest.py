@@ -30,7 +30,6 @@ def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server and the deck point at,
     with every cache derived from pages or tasks emptied."""
     monkeypatch.setattr(config, "WIKI_DIR", tmp_path)
-    monkeypatch.setattr(config, "PAGES_DIR", tmp_path)
     monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_assets")
     monkeypatch.setattr(deck_module, "WIKI_DIR", tmp_path)
     monkeypatch.setattr(deck_module, "DECK_FILE", tmp_path / "_deck" / "tasks.json")

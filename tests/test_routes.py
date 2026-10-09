@@ -1391,12 +1391,7 @@ class TestUpdateReferences:
         ref = write_page(wiki_dir, "referencer", "# Ref\n\n[[old-page]]\n")
         write_page(wiki_dir, "no-link", "# No Link\n\nbody\n")
 
-        old_pages = config.PAGES_DIR
-        config.PAGES_DIR = wiki_dir
-        try:
-            modified = pages.update_references("old-page", "new-page")
-        finally:
-            config.PAGES_DIR = old_pages
+        modified = pages.update_references("old-page", "new-page")
 
         assert ref in modified
         assert len(modified) == 1  # only the referencing page was modified
@@ -1405,12 +1400,7 @@ class TestUpdateReferences:
         write_page(wiki_dir, "target", "# T\n\ncontent\n")
         write_page(wiki_dir, "no-ref", "# No Ref\n\nbody only\n")
 
-        old_pages = config.PAGES_DIR
-        config.PAGES_DIR = wiki_dir
-        try:
-            modified = pages.update_references("target", "new-target")
-        finally:
-            config.PAGES_DIR = old_pages
+        modified = pages.update_references("target", "new-target")
 
         assert modified == []
 

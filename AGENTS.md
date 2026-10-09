@@ -13,7 +13,7 @@ A local-first, browser-based wiki. Markdown files are served and rendered at run
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in `pages/` are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+- **Markdown is the source of truth** — `.md` files in the data directory (`$WIKI_DATA`) are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -149,9 +149,9 @@ In the editor, pasting a file from the clipboard or dropping a file onto the tex
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
 | GET    | `/deck`               | The built-in deck page (`deck_page()`): the full main deck (every open task, list tasks included), independent of the wiki's pages. `?list=<name>` shows that separate list instead, with the params of the page that declares it (keep, labels, limit, …) and a line linking to that page; `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the deck" goes here (the Deck module links without a deck home, search results, Linked tasks, `g d`). |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
-| POST   | `/edit/<slug>`        | Save edited content to `pages/<slug>.md`        |
+| POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
-| POST   | `/new`                | Create `pages/<slug>.md` and redirect to it     |
+| POST   | `/new`                | Create `<slug>.md` and redirect to it           |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |
@@ -373,7 +373,7 @@ The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag
 - The editor toolbar includes a "Rename" button that reveals an inline rename form (hidden by default); the page view's ⋯ menu has **Rename…**, which opens a dialog (`#page-rename-dialog`) with the same form plus `from=page`.
 - The form has a single text input pre-filled with the current slug, and a "Rename" submit button.
 - On submit, POSTs to `POST /rename/<slug>` with field `new_name` (human-readable name accepted, converted to slug server-side).
-- Server renames the file (`pages/<old>.md` → `pages/<new>.md`), updates wikilink references in all other pages (see Key Constraints), then redirects to `/page/<new-slug>`.
+- Server renames the file (`<old>.md` → `<new>.md`), updates wikilink references in all other pages (see Key Constraints), then redirects to `/page/<new-slug>`.
 - Renaming `index` is forbidden — the server returns 400 if the old slug is `index`.
 - If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_error=…` (to the editor, which shows the rename bar with the error, or with `from=page` to the page view, whose rename dialog reopens with it). An unchanged name goes back the same way.
 - Validate new slug with `safe_path()` before renaming.
@@ -479,7 +479,7 @@ Defined in the `keydown` listener in `leaf.js`. Bare-key shortcuts are suppresse
 ## Search
 
 - **Ranking is BM25**, implemented in pure Python (`src/search.py`, stdlib only — no database, no external deps). Pages and deck tasks are scored in **one combined index** so their relevance scores are directly comparable.
-- `GET /api/search?q=...` collects every `.md` file in `pages/` **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, meta, type? }]`. `meta` (`_result_meta`) is the small line under a result's title in the modal and on `/search`, telling alike titles apart: a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`), a task's list and status (`Deck › zoo · done 2026-05-01`). `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
+- `GET /api/search?q=...` collects every page **and** all deck task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, meta, type? }]`. `meta` (`_result_meta`) is the small line under a result's title in the modal and on `/search`, telling alike titles apart: a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`), a task's list and status (`Deck › zoo · done 2026-05-01`). `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
 - **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
 - **Exact phrase first** (`Query.phrase`, `retrieval._phrase_first`): a document containing the query's words as a phrase (case, accents and spacing ignored, stopwords included) moves to the front, in BM25 order, even one the ranking had cut off: "alex again" puts the note saying "Alex again" above notes with both words apart. Browser search and `search_wiki` alike; the result opens the section with the phrase (`_best_sections`). The squashed text is cached on the doc (`_squashed`).
 - **Words in any script**: `search.tokenize` splits on runs of letters/digits (`[^\W_]+`), so "Müller" is one word, and folds case and accents (`search.fold`: ü→u, é→e, ß→ss), so `muller`, `MÜLLER` and `Müller` match each other.
@@ -747,13 +747,13 @@ Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with 
 - A `before_request` hook in `server.py` (`check_host`) validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}`, defeating DNS rebinding attacks. Set `ALLOW_REMOTE=1` in `.env` to skip this check and allow access from any host.
 - **Cross-site writes are refused** (`check_origin`, a `before_request` hook after the Host check): a POST/PUT/PATCH/DELETE whose `Origin` header names another site, or is `null` (sandboxed iframe), gets 403. Without it any web page could post a form to `localhost:5000` and delete or overwrite pages, or write deck tasks (the deck API parses text/plain bodies, which need no CORS preflight), and raw HTML in markdown would turn an overwrite into a stored script. Requests without `Origin` (curl, scripts) are allowed. Behind a reverse proxy the proxy must pass the original `Host` through, or same-origin writes would be refused.
 - Do not add a build step or bundler.
-- Slugs are derived from file paths relative to `PAGES_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).
+- Slugs are derived from file paths relative to `WIKI_DIR`: `journal/my-page.md` → slug `journal/my-page`. Slugs are URL-safe (lowercase, hyphens, forward slashes only).
 - Subdirectories are fully supported. `to_slug()` preserves `/` as a path separator while slugifying each component. `iter_pages()` does a recursive `rglob("*.md")` and skips `_*` subdirectories.
 - Flask routes use `<path:slug>` to capture slugs containing `/`.
-- `safe_path()` uses `target.relative_to(pages_root)` to validate the path is inside `PAGES_DIR` (allows subdirs).
+- `safe_path()` uses `target.relative_to(pages_root)` to validate the path is inside `WIKI_DIR` (allows subdirs).
 - File writes call `path.parent.mkdir(parents=True, exist_ok=True)` before writing to auto-create subdirectories.
-- `pages/index.md` is the home page and must always exist. Do not allow it to be deleted or renamed via the UI.
-- All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `pages/` before writing (prevent path traversal — use `Path.resolve()` and `relative_to()`).
+- `index.md` is the home page and must always exist. Do not allow it to be deleted or renamed via the UI.
+- All file writes use `open(..., 'w', encoding='utf-8')`. Validate that the resolved path is inside `WIKI_DIR` before writing (prevent path traversal — use `Path.resolve()` and `relative_to()`).
 - When a page is renamed, every link to it is re-pointed (`rewrite_page_links()` via `update_references()`), so nothing that backlinks count is left broken:
   - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
   - Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`). Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory. Images are never touched.

@@ -44,9 +44,9 @@ def is_protected(slug: str) -> bool:
 
 
 def safe_path(slug: str) -> Path | None:
-    """Return resolved path only if it's safely inside PAGES_DIR."""
-    pages_root = config.PAGES_DIR.resolve()
-    target = (config.PAGES_DIR / f"{slug}.md").resolve()
+    """Return resolved path only if it's safely inside WIKI_DIR."""
+    pages_root = config.WIKI_DIR.resolve()
+    target = (config.WIKI_DIR / f"{slug}.md").resolve()
     try:
         target.relative_to(pages_root)
         return target
@@ -59,7 +59,7 @@ def iter_pages():
     the semantic index) and hidden ones. It prunes them instead of walking
     them: rglob went through every object in .git on each call, and a search
     lists the pages several times."""
-    root = str(config.PAGES_DIR)
+    root = str(config.WIKI_DIR)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not d.startswith(('_', '.'))]
         rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
@@ -77,7 +77,7 @@ def list_scratch() -> list[dict]:
     """All scratch notes as {slug, title, date}, newest first (in sharing
     mode without the ones not for sharing)."""
     entries = []
-    for md_file in config.PAGES_DIR.glob("*.md"):
+    for md_file in config.WIKI_DIR.glob("*.md"):
         m = SCRATCH_RE.match(md_file.stem)
         if not m or hidden_page(md_file.stem):
             continue

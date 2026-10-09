@@ -67,9 +67,8 @@ NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or
 
 # The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/).
 WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
-PAGES_DIR = WIKI_DIR
 UPLOADS_DIR = WIKI_DIR / "_assets"
-PAGES_DIR.mkdir(parents=True, exist_ok=True)
+WIKI_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 GIT_ENABLED = shutil.which("git") is not None
