@@ -2241,3 +2241,131 @@ class TestAppendToPage:
         client.post(f"/append/{SCRATCH}", data={"page": "garden", "heading": "Notes"}, headers=HOST)
         titles = [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()]
         assert titles == ["Follow up [[garden#Notes]]"]
+
+
+# ===========================================================================
+# Bug: rename_page crashes when new slug is in a new subdirectory
+# ===========================================================================
+
+class TestRenamePageMkdir:
+
+    def test_rename_to_existing_flat_slug_works(self, client, wiki_dir):
+        write_page(wiki_dir, "flat-old", "# Old\n\ncontent\n")
+        resp = client.post(
+            "/rename/flat-old",
+            data={"new_name": "flat-new"},
+            headers=HOST,
+        )
+        assert resp.status_code in (301, 302, 303)
+        assert (wiki_dir / "flat-new.md").exists()
+        assert not (wiki_dir / "flat-old.md").exists()
+
+    def test_rename_to_new_subdirectory_does_not_crash(self, client, wiki_dir):
+        """Renaming my-page to journal/my-page must create the journal/ dir."""
+        write_page(wiki_dir, "my-page", "# My Page\n\ncontent\n")
+        resp = client.post(
+            "/rename/my-page",
+            data={"new_name": "journal/my-page"},
+            headers=HOST,
+        )
+        # Must redirect, not 500
+        assert resp.status_code in (301, 302, 303)
+        new_file = wiki_dir / "journal" / "my-page.md"
+        assert new_file.exists(), "File was not moved to the new subdirectory"
+        assert not (wiki_dir / "my-page.md").exists()
+
+    def test_rename_to_deeply_nested_subdirectory(self, client, wiki_dir):
+        write_page(wiki_dir, "src", "# Src\n\ncontent\n")
+        resp = client.post(
+            "/rename/src",
+            data={"new_name": "a/b/c/src"},
+            headers=HOST,
+        )
+        assert resp.status_code in (301, 302, 303)
+        assert (wiki_dir / "a" / "b" / "c" / "src.md").exists()
+
+    def test_rename_within_same_subdirectory(self, client, wiki_dir):
+        write_page(wiki_dir, "notes/old-note", "# Old\n\ncontent\n")
+        resp = client.post(
+            "/rename/notes/old-note",
+            data={"new_name": "notes/new-note"},
+            headers=HOST,
+        )
+        assert resp.status_code in (301, 302, 303)
+        assert (wiki_dir / "notes" / "new-note.md").exists()
+        assert not (wiki_dir / "notes" / "old-note.md").exists()
+
+    def test_rename_preserves_content(self, client, wiki_dir):
+        write_page(wiki_dir, "preserve", "# Title\n\nUnique content 12345.\n")
+        client.post(
+            "/rename/preserve",
+            data={"new_name": "subdir/preserve"},
+            headers=HOST,
+        )
+        new_file = wiki_dir / "subdir" / "preserve.md"
+        assert new_file.exists()
+        assert "Unique content 12345." in new_file.read_text(encoding="utf-8")
+
+
+# ===========================================================================
+# Bug: backlinks not detected when link is a bare slug (no .md extension)
+# e.g. [Ivo](ivo-petrenko) — not a wikilink, not a .md link
+# ===========================================================================
+
+class TestBareSlugBacklinks:
+
+    def test_bare_slug_link_detected_as_target(self, wiki_dir):
+        """[Label](slug) with no extension must appear in page_link_targets."""
+        targets = pages.page_link_targets(
+            "- [Ivo](ivo-petrenko)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" in targets
+
+    def test_bare_slug_backlink_shows_in_find_backlinks(self, wiki_dir):
+        """find_backlinks must return the source page when it contains [Label](slug)."""
+        write_page(wiki_dir, "ivo-petrenko", "# Ivo Petrenko\n")
+        write_page(wiki_dir, "state", "# State\n\n- [Ivo](ivo-petrenko)\n")
+
+        backlinks = pages.find_backlinks("ivo-petrenko")
+
+        slugs = [b["slug"] for b in backlinks]
+        assert "state" in slugs, f"Expected 'state' in backlinks, got {slugs}"
+
+    def test_bare_slug_in_list_item(self, wiki_dir):
+        """Bare slug inside a list item must be detected."""
+        targets = pages.page_link_targets(
+            "## Team\n\n- Kim\n  - [Ivo](ivo-petrenko)\n    - [ ] task\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" in targets
+
+    def test_external_url_not_counted_as_backlink(self, wiki_dir):
+        """External http links must never be treated as page targets."""
+        targets = pages.page_link_targets(
+            "[link](https://example.com/ivo-petrenko)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "ivo-petrenko" not in targets
+
+    def test_bare_slug_not_in_known_slugs_is_ignored(self, wiki_dir):
+        """A bare link whose target page doesn't exist must not appear in targets."""
+        targets = pages.page_link_targets(
+            "[Ghost](nonexistent-page)\n",
+            "state",
+            known_slugs={"ivo-petrenko"},
+        )
+        assert "nonexistent-page" not in targets
+
+    def test_wikilink_still_works_alongside_bare_link(self, wiki_dir):
+        """Both [[wikilink]] and bare slug links must be detected in the same page."""
+        targets = pages.page_link_targets(
+            "[[Signals]]\n[Ivo](ivo-petrenko)\n",
+            "state",
+            known_slugs={"signals", "ivo-petrenko"},
+        )
+        assert "signals" in targets
+        assert "ivo-petrenko" in targets

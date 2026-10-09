@@ -746,3 +746,144 @@ class TestExternalLinks:
             out = render.render_md("[me](http://localhost:5000/page/y) [other](http://other:5000/)\n")
         assert '<a href="http://localhost:5000/page/y">me</a>' in out
         assert '<a href="http://other:5000/" target="_blank"' in out
+
+
+# ===========================================================================
+# Bug: toggle_nth_checkbox counts [x] / [ ] inside fenced code blocks
+# ===========================================================================
+
+class TestToggleCheckboxInCodeBlocks:
+
+    def _cb(self, content, idx):
+        return toggle_nth_checkbox(content, idx)
+
+    def test_toggle_works_normally_without_code_blocks(self):
+        content = "- [ ] task1\n- [ ] task2\n- [x] task3\n"
+        assert "- [x] task1" in self._cb(content, 0)
+        assert "- [x] task2" in self._cb(content, 1)
+        assert "- [ ] task3" in self._cb(content, 2)
+
+    def test_checkbox_inside_backtick_fence_is_skipped(self):
+        # The [x] inside the fence must NOT be counted as a real checkbox.
+        content = (
+            "- [ ] real task 1\n"
+            "```\n"
+            "[x] this is code, not a checkbox\n"
+            "```\n"
+            "- [ ] real task 2\n"
+        )
+        # idx=1 must toggle real task 2, not the code-block [x]
+        result = self._cb(content, 1)
+        assert "- [x] real task 2" in result, "task2 was not toggled"
+        assert "[x] this is code" in result, "code block was wrongly toggled"
+
+    def test_checkbox_inside_tilde_fence_is_skipped(self):
+        content = (
+            "- [ ] real task\n"
+            "~~~python\n"
+            "status = '[x] done'\n"
+            "~~~\n"
+            "- [ ] another task\n"
+        )
+        # idx=0 toggles real task, idx=1 toggles another task (not the string in code)
+        r0 = self._cb(content, 0)
+        assert "- [x] real task" in r0
+        r1 = self._cb(content, 1)
+        assert "- [x] another task" in r1
+        assert "'[x] done'" in r1, "code inside tilde fence should be unchanged"
+
+    def test_unchecked_in_code_block_not_counted(self):
+        content = (
+            "- [ ] task A\n"
+            "```\n"
+            "- [ ] fake checkbox\n"
+            "```\n"
+        )
+        # Only 1 real checkbox; idx=0 toggles task A
+        result = self._cb(content, 0)
+        assert "- [x] task A" in result
+        # idx=1 is out of range — content unchanged
+        assert self._cb(content, 1) == content
+
+    def test_multiple_code_blocks_only_real_checkboxes_counted(self):
+        content = (
+            "- [ ] first\n"
+            "```\n"
+            "[x] fake1\n"
+            "[ ] fake2\n"
+            "```\n"
+            "- [x] second\n"
+            "```\n"
+            "[ ] fake3\n"
+            "```\n"
+            "- [ ] third\n"
+        )
+        # Real checkboxes: first(0), second(1), third(2)
+        assert "- [x] first"  in self._cb(content, 0)
+        assert "- [ ] second" in self._cb(content, 1)
+        assert "- [x] third"  in self._cb(content, 2)
+        # idx=3 is out of range
+        assert self._cb(content, 3) == content
+
+    def test_toggle_preserves_rest_of_content(self):
+        content = "intro\n\n- [ ] task\n\n```\n[x] code\n```\n\noutro\n"
+        result = self._cb(content, 0)
+        assert "intro\n" in result
+        assert "outro\n" in result
+        assert "```\n[x] code\n```\n" in result   # code block unchanged
+
+
+# ===========================================================================
+# Bug: toggle_nth_checkbox counted any "[x]"/"[ ]" on a line, not just
+# task-list items, so its index disagreed with the rendered checkboxes and a
+# click toggled the wrong line.
+# ===========================================================================
+
+class TestToggleCheckboxOnlyTaskItems:
+
+    def test_bracket_in_prose_is_not_a_checkbox(self):
+        content = "Press [x] to close.\n\n- [ ] task\n"
+        out = toggle_nth_checkbox(content, 0)
+        assert out.startswith("Press [x] to close.\n")
+        assert "- [x] task" in out
+
+    def test_second_bracket_on_a_task_line_is_not_a_checkbox(self):
+        content = "- [ ] a [x] b\n- [ ] c\n"
+        out = toggle_nth_checkbox(content, 1)
+        assert out.startswith("- [ ] a [x] b\n")
+        assert "- [x] c" in out
+
+    def test_plain_list_item_with_brackets_is_not_a_checkbox(self):
+        content = "- see [ ] here\n- [ ] real\n"
+        assert "- [x] real" in toggle_nth_checkbox(content, 0)
+
+    def test_frontmatter_brackets_ignored(self):
+        content = "---\ntags: [a, b]\ntldr: [x] marks\n---\n# T\n\n- [ ] one\n"
+        assert "- [x] one" in toggle_nth_checkbox(content, 0)
+
+    @pytest.mark.parametrize("line", ["* [ ] star", "+ [ ] plus", "1. [ ] num",
+                                      "2) [ ] paren", "  - [ ] nested", "> - [ ] quoted"])
+    def test_task_item_variants_are_counted(self, line):
+        out = toggle_nth_checkbox(f"{line}\n", 0)
+        assert "[x]" in out
+
+    def test_index_matches_rendered_checkboxes(self, wiki_dir):
+        """The Nth rendered checkbox must be the Nth line the toggle counts."""
+        content = (
+            "Intro with [x] and [ ] in prose.\n\n"
+            "- [ ] first\n"
+            "- plain [ ] item\n"
+            "  - [x] second (nested)\n"
+            "\n```\n- [ ] in code\n```\n\n"
+            "1. [ ] third\n"
+            "> - [ ] fourth\n"
+            "- [ ] fifth [x] trailing\n"
+        )
+        html = render.render_md(content)
+        rendered = re.findall(r'<input[^>]*task-list-item-checkbox[^>]*>', html)
+        assert len(rendered) == 5
+        labels = ["first", "second", "third", "fourth", "fifth"]
+        for i, label in enumerate(labels):
+            out = toggle_nth_checkbox(content, i)
+            changed = [a for a, b in zip(content.splitlines(), out.splitlines()) if a != b]
+            assert len(changed) == 1 and label in changed[0], (i, changed)

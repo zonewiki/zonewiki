@@ -1054,3 +1054,137 @@ class TestFullFileConflict:
         resp = client.post("/api/save/ffc6", data={"content": "new\n"}, headers=HOST)
         assert resp.status_code == 204
         assert page.read_text(encoding="utf-8") == "new\n"
+
+
+# ===========================================================================
+# Bug: split_sections misses setext-style h2 headings
+# (lines followed by a line of dashes: "Title\n------")
+# ===========================================================================
+
+class TestSplitSectionsSetextHeadings:
+
+    def test_setext_h2_is_split_point(self):
+        content = "Preamble.\n\nSection One\n-----------\n\nContent 1.\n"
+        parts = split_sections(content)
+        assert len(parts) == 2, f"Expected 2 parts, got {len(parts)}: {parts}"
+        assert parts[0].strip() == "Preamble."
+        assert parts[1].startswith("Section One")
+
+    def test_two_setext_h2_headings(self):
+        content = (
+            "Preamble.\n\n"
+            "Section One\n-----------\n\nContent 1.\n\n"
+            "Section Two\n-----------\n\nContent 2.\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 3, f"Expected 3 parts, got {len(parts)}"
+        assert parts[1].startswith("Section One")
+        assert parts[2].startswith("Section Two")
+
+    def test_setext_join_reproduces_original(self):
+        content = (
+            "Preamble.\n\n"
+            "Heading A\n---------\n\nBody A.\n\n"
+            "Heading B\n---------\n\nBody B.\n"
+        )
+        parts = split_sections(content)
+        assert "".join(parts) == content
+
+    def test_horizontal_rule_without_preceding_text_is_not_a_heading(self):
+        """--- after an empty line is a thematic break, not a setext heading."""
+        content = "## Real\n\nbody\n\n---\n\nmore body\n"
+        parts = split_sections(content)
+        assert len(parts) == 2   # only the real ## heading
+        assert "more body" in parts[1]
+
+    def test_setext_heading_inside_code_fence_is_ignored(self):
+        content = (
+            "Preamble.\n\n"
+            "```\n"
+            "Not a heading\n"
+            "-------------\n"
+            "```\n\n"
+            "## Real\n\nbody\n"
+        )
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert parts[1].startswith("## Real")
+
+    def test_setext_section_edit_route_uses_correct_index(self, client, wiki_dir):
+        """Regression: clicking a setext-section's edit button must load that section,
+        not silently discard the edit."""
+        content = (
+            "Preamble.\n\n"
+            "Alpha Section\n-------------\n\nalpha body\n\n"
+            "Beta Section\n------------\n\nbeta body\n"
+        )
+        write_page(wiki_dir, "setext_page", content)
+        # The GET /edit route should serve section 1 correctly
+        resp = client.get("/edit/setext_page?section=1", headers=HOST)
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "alpha body" in html
+        assert "beta body" not in html
+
+    def test_setext_section_save_does_not_silently_drop(self, client, wiki_dir):
+        """Setext sections must save correctly with the new splice approach."""
+        content = (
+            "Preamble.\n\n"
+            "Alpha\n-----\n\nalpha body\n\n"
+            "Beta\n----\n\nbeta body\n"
+        )
+        page = write_page(wiki_dir, "setext_save", content)
+        fields = section_fields(content, 1)
+        fields["content"] = "Alpha\n-----\n\nUPDATED alpha body\n"
+        resp = client.post("/edit/setext_save", data=fields, headers=HOST)
+        assert resp.status_code in (301, 302, 303)
+        saved = page.read_text(encoding="utf-8")
+        assert "UPDATED alpha body" in saved, "Edit was silently dropped (data loss bug)"
+        assert "beta body" in saved
+
+
+# ===========================================================================
+# Bug: split_sections misses indented ATX headings (up to 3 leading spaces)
+# ===========================================================================
+
+class TestSplitSectionsIndentedHeadings:
+
+    def test_one_space_before_h2_is_split_point(self):
+        content = "pre\n\n ## Indented One\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+        assert parts[1].startswith(" ## Indented One") or \
+               parts[1].startswith("## Indented One")  # either representation ok
+
+    def test_two_spaces_before_h2_is_split_point(self):
+        content = "pre\n\n  ## Two Spaces\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+
+    def test_three_spaces_before_h2_is_split_point(self):
+        content = "pre\n\n   ## Three Spaces\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 2
+
+    def test_four_spaces_before_h2_is_code_not_heading(self):
+        """4+ spaces = indented code block in CommonMark; must NOT be a split point."""
+        content = "pre\n\n    ## Four Spaces — code\n\nbody\n"
+        parts = split_sections(content)
+        assert len(parts) == 1   # no heading split
+
+    def test_indented_h2_join_reproduces_original(self):
+        content = "pre\n\n  ## A\n\nbody a\n\n  ## B\n\nbody b\n"
+        parts = split_sections(content)
+        assert "".join(parts) == content
+
+    def test_indented_section_save_does_not_drop(self, client, wiki_dir):
+        """Indented ATX heading: edit must reach the correct section."""
+        content = "preamble\n\n  ## Section A\n\nbody a\n\n  ## Section B\n\nbody b\n"
+        page = write_page(wiki_dir, "indented_page", content)
+        fields = section_fields(content, 1)
+        fields["content"] = "  ## Section A\n\nUPDATED body a\n"
+        resp = client.post("/edit/indented_page", data=fields, headers=HOST)
+        assert resp.status_code in (301, 302, 303)
+        saved = page.read_text(encoding="utf-8")
+        assert "UPDATED body a" in saved, "Edit was silently dropped"
+        assert "body b" in saved
