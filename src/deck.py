@@ -64,61 +64,7 @@ def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     DECK_FILE = wiki_dir / DECK_DIR_NAME / "tasks.json"
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn
-    _move_into_deck_dir()
-    _migrate_completed_split()
-    _migrate_deck_files()
     _archive_old_completed()
-
-
-# Before the _deck/ folder, the files sat in the wiki's root.
-_OLD_ROOT_FILES_RE = re.compile(r"_deck(?:_completed(?:-(\d{4}))?)?\.json")
-
-
-def _move_into_deck_dir() -> None:
-    """One-time move of the deck files from the wiki's root into _deck/
-    (_deck.json → tasks.json, _deck_completed.json → completed.json,
-    _deck_completed-YYYY.json → completed-YYYY.json), in one commit, so git
-    sees renames and each file keeps its history. A file whose new name is
-    taken already stays where it is."""
-    moves = []
-    for old in sorted(WIKI_DIR.glob("_deck*.json")):
-        m = _OLD_ROOT_FILES_RE.fullmatch(old.name)
-        if not m:
-            continue
-        name = ("tasks.json" if old.name == "_deck.json"
-                else f"completed-{m.group(1)}.json" if m.group(1) else "completed.json")
-        new = DECK_FILE.parent / name
-        if new.exists():
-            print(f"[deck] {old.name} not moved: {new} exists", flush=True)
-            continue
-        moves.append((old, new))
-    if not moves:
-        return
-    DECK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    for old, new in moves:
-        os.replace(old, new)
-    if GIT_ENABLED and _git_commit_fn:
-        _git_commit_fn([p for move in moves for p in move], "Move deck files into _deck/")
-
-
-def _migrate_completed_split() -> None:
-    """One-time migration: move completed tasks from tasks.json into completed.json."""
-    completed_file = _completed_path()
-    if completed_file.exists() or not DECK_FILE.exists():
-        return
-    try:
-        data = json.loads(DECK_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, list):
-            return
-    except (json.JSONDecodeError, ValueError):
-        return
-    completed = [t for t in data if t.get("completed_at")]
-    active = [t for t in data if not t.get("completed_at")]
-    if not completed:
-        _atomic_write(completed_file, "[]")
-        return
-    _write_tasks(DECK_FILE, active)
-    _write_tasks(completed_file, completed)
 
 
 # ── Storage ───────────────────────────────────────────────────────────────────
@@ -192,78 +138,13 @@ def clean_list(name) -> str | None:
     return name or None
 
 
-def _normalize_task(task: dict) -> bool:
-    """Upgrade a task in place to the current format; True if it changed.
-
-    Older decks stored the start date as ``focus_date``, a derivation rule
-    ``defer_days`` (start N days before due) and ``recurrence.anchor`` (which
-    date a cycle advances). The start date is now ``start_date``; the rule is
-    gone because every derived date was already stored, and recurring spawns
-    carry the start→due gap instead; the anchor is implied by which dates the
-    task has. Tags are cleaned (_clean_tags): older decks allowed spaces.
-    The ``page`` field (a linked page slug) is gone: a wikilink in the notes
-    does the same, so the slug becomes ``[[slug]]`` there unless the title or
-    notes already link to it. ``focus_order`` (a place in Focus's own order,
-    the Lineup) is gone: Focus uses Open's order."""
-    changed = False
-    if "page" in task:
-        slug = task.pop("page")
-        changed = True
-        if isinstance(slug, str) and slug.strip():
-            slug = slug.strip()
-            text = f"{task.get('title') or ''}\n{task.get('description') or ''}"
-            linked = re.search(r"\[\[\s*" + re.escape(slug) + r"\s*(\||\]\])", text, re.I) \
-                or f"/page/{slug})" in text
-            if not linked:
-                desc = (task.get("description") or "").rstrip()
-                task["description"] = f"{desc}\n\n[[{slug}]]" if desc else f"[[{slug}]]"
-    if "focus_date" in task:
-        task.setdefault("start_date", task["focus_date"])
-        del task["focus_date"]
-        changed = True
-    if "defer_days" in task:
-        del task["defer_days"]
-        changed = True
-    rec = task.get("recurrence")
-    if isinstance(rec, dict) and "anchor" in rec:
-        del rec["anchor"]
-        changed = True
-    tags = task.get("tags")
-    if isinstance(tags, list) and _clean_tags(tags) != tags:
-        task["tags"] = _clean_tags(tags)
-        changed = True
-    if "focus_order" in task:
-        del task["focus_order"]
-        changed = True
-    return changed
-
-
 def _normalize_list(tasks: list) -> list:
+    """Tasks as read from a file, their tags cleaned (_clean_tags): a file
+    edited by hand may have "local llm" or "#work"."""
     for t in tasks:
-        if isinstance(t, dict):
-            _normalize_task(t)
+        if isinstance(t, dict) and isinstance(t.get("tags"), list):
+            t["tags"] = _clean_tags(t["tags"])
     return tasks
-
-
-def _migrate_deck_files() -> None:
-    """One-time rewrite of every deck file into the current format
-    (_normalize_task: date model, clean tags), so the files on disk (and in
-    git) stop carrying the old shapes. Reads normalize too, so this is
-    tidiness, not correctness. A no-op once the files are current."""
-    with _LOCK:
-        changed = []
-        for path in [DECK_FILE, _completed_path(), *_archive_glob()]:
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError, ValueError):
-                continue
-            if not isinstance(data, list):
-                continue
-            if any([_normalize_task(t) for t in data if isinstance(t, dict)]):
-                _write_tasks(path, data)
-                changed.append(path)
-        if changed and GIT_ENABLED and _git_commit_fn:
-            _git_commit_fn(changed, "Normalize deck files (date model, tags, page links, Lineup)")
 
 
 def _read_deck_strict() -> list[dict]:
@@ -719,25 +600,13 @@ def _complete_task(task: dict, now: str | None = None) -> dict | None:
 
 def _uncomplete_task(task: dict, active: list[dict],
                      protect_ids: frozenset = frozenset()) -> list[dict]:
-    """Clear task's completion state and return active with the open recurring
-    instance that was spawned at completion time removed. Instances carry
-    spawned_from (the completed task's id) for an exact match; instances from
-    before that field existed fall back to the old heuristic (title, recurrence,
-    creation after completion). protect_ids are never removed."""
+    """Clear task's completion state and return active without the open
+    recurring instance spawned when it was completed (the one whose
+    spawned_from is its id). protect_ids are never removed."""
     if task.get("recurrence"):
-        exact = [t for t in active
-                 if t.get("spawned_from") == task["id"] and not t.get("completed_at")]
-        if exact:
-            drop = {t["id"] for t in exact} - set(protect_ids)
-            active = [t for t in active if t["id"] not in drop]
-        else:
-            completed_at = task["completed_at"]
-            active = [t for t in active if t["id"] in protect_ids or not (
-                t.get("title") == task["title"] and
-                t.get("recurrence") == task.get("recurrence") and
-                not t.get("completed_at") and
-                t.get("created_at", "") >= completed_at
-            )]
+        drop = {t["id"] for t in active
+                if t.get("spawned_from") == task["id"] and not t.get("completed_at")} - set(protect_ids)
+        active = [t for t in active if t["id"] not in drop]
     task["completed_at"] = None
     task["wont_do"] = False
     _log(task, "reopened")
@@ -1578,7 +1447,6 @@ def _sanitize_snapshot(snap: dict) -> dict | None:
     title = str(snap.get("title") or "").strip()
     if not title:
         return None
-    _normalize_task(snap)   # before reading fields: it may rewrite the notes
     task = _new_task(title=title)
     task["description"] = str(snap.get("description") or "")
     task["tags"] = _clean_tags(snap.get("tags") if isinstance(snap.get("tags"), list) else [])

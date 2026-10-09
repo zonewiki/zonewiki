@@ -1,6 +1,5 @@
 """Tests for [[deck]] embed directive and page field on tasks."""
 
-import json
 import re
 
 import deck as deck_module
@@ -202,52 +201,15 @@ class TestTasksLinkRender:
         assert "data-init-page" not in html
 
 
-# ── Page field removed (now a wikilink in the notes) ───────────────────────────
+# ── No page field (a wikilink in the notes links a page) ─────────────────────
 
 
-class TestPageFieldRemoved:
+class TestNoPageField:
     def test_page_in_request_is_ignored(self, client, wiki_dir):
         data = create_task(client, title="T", page="my-project").get_json()
         assert "page" not in data
         resp = client.put(f"/api/deck/{data['id']}", json={"page": "x"})
         assert resp.status_code == 200 and "page" not in resp.get_json()
-
-    def test_stored_page_becomes_wikilink(self, client, wiki_dir):
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "a", "title": "Prune", "description": "Roses", "page": "garden"},
-            {"id": "b", "title": "Bare", "page": "garden"},
-            {"id": "c", "title": "Water [[Garden]]", "page": "garden"},
-            {"id": "d", "title": "Seeds", "description": "[see](/page/garden)", "page": "garden"},
-            {"id": "e", "title": "None", "page": None},
-        ]), encoding="utf-8")
-        tasks = {t["id"]: t for t in client.get("/api/deck").get_json()}
-        assert all("page" not in t for t in tasks.values())
-        assert tasks["a"]["description"] == "Roses\n\n[[garden]]"
-        assert tasks["b"]["description"] == "[[garden]]"
-        assert tasks["c"].get("description", "") == ""     # title already links it
-        assert tasks["d"]["description"] == "[see](/page/garden)"
-        assert "description" not in tasks["e"] or tasks["e"]["description"] == ""
-
-    def test_migrated_task_is_linked_task(self, client, wiki_dir):
-        (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "a", "title": "Prune", "page": "garden"}]), encoding="utf-8")
-        body = client.get("/page/garden").get_data(as_text=True)
-        assert 'id="task-backlinks"' in body and "Prune" in body
-
-    def test_startup_migration_rewrites_file(self, wiki_dir):
-        path = wiki_dir / "_deck" / "tasks.json"
-        path.write_text(json.dumps([{"id": "a", "title": "P", "page": "garden"}]), encoding="utf-8")
-        deck_module._migrate_deck_files()
-        stored = json.loads(path.read_text(encoding="utf-8"))
-        assert stored == [{"id": "a", "title": "P", "description": "[[garden]]"}]
-
-    def test_restore_snapshot_with_page(self, client, wiki_dir):
-        snap = {"id": "old", "title": "Old", "description": "Notes", "page": "garden"}
-        restored = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
-        assert restored[0]["description"] == "Notes\n\n[[garden]]"
-        assert "page" not in restored[0]
-
 
 # ── Page view rendering ────────────────────────────────────────────────────────
 

@@ -648,15 +648,6 @@ class TestNoFocusOrder:
         task = client.put(f"/api/deck/{tid}", json={"focus_order": 3}).get_json()
         assert "focus_order" not in task
 
-    def test_stored_one_is_dropped_on_read(self, client, wiki_dir):
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "f", "title": "Focus", "start_date": date.today().isoformat(),
-             "focus_order": 1, "sort_order": 4},
-        ]), encoding="utf-8")
-        task = client.get("/api/deck").get_json()[0]
-        assert "focus_order" not in task and task["sort_order"] == 4
-
-
 # ---------- Completed Count ----------
 
 
@@ -766,73 +757,6 @@ class TestIndependentDates:
         assert t["start_date"] is None
         assert "focus_date" not in t and "defer_days" not in t
         assert "anchor" not in t["recurrence"]
-
-
-class TestDateModelMigration:
-    """Decks written before start_date: focus_date → start_date, defer_days and
-    recurrence.anchor dropped — on read and, at startup, on disk."""
-
-    OLD = {"id": "old-1", "title": "Old", "description": "", "tags": [],
-           "due_date": "2027-07-01", "defer_days": 3, "focus_date": "2027-06-28",
-           "created_at": "2026-01-01T00:00:00", "completed_at": None,
-           "wont_do": False, "focus_order": None, "sort_order": 0, "page": None,
-           "recurrence": {"type": "weekly", "interval": 1, "from": "due", "anchor": "due"},
-           "spawned_from": None}
-
-    def _assert_new(self, t):
-        assert t["start_date"] == "2027-06-28"
-        assert "focus_date" not in t and "defer_days" not in t
-        assert t["recurrence"] == {"type": "weekly", "interval": 1, "from": "due"}
-
-    def test_read_normalizes(self, client, wiki_dir):
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
-        [t] = client.get("/api/deck").get_json()
-        self._assert_new(t)
-
-    def test_write_persists_normalized(self, client, wiki_dir):
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
-        client.put("/api/deck/old-1", json={"title": "Renamed"})
-        [t] = json.loads((wiki_dir / "_deck" / "tasks.json").read_text(encoding="utf-8"))
-        self._assert_new(t)
-
-    def test_startup_migration_rewrites_every_file(self, client, wiki_dir):
-        done = {**self.OLD, "id": "old-2", "completed_at": "2026-02-01T00:00:00"}
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([self.OLD]), encoding="utf-8")
-        (wiki_dir / "_deck" / "completed.json").write_text(json.dumps([done]), encoding="utf-8")
-        (wiki_dir / "_deck" / "completed-2025.json").write_text(json.dumps([done]), encoding="utf-8")
-        deck_module._migrate_deck_files()
-        for name in ("tasks.json", "completed.json", "completed-2025.json"):
-            [t] = json.loads((wiki_dir / "_deck" / name).read_text(encoding="utf-8"))
-            self._assert_new(t)
-
-    def test_startup_migration_leaves_new_files_untouched(self, client, wiki_dir):
-        create_task(client, title="New", start_date="2027-01-01")
-        path = wiki_dir / "_deck" / "tasks.json"
-        before = path.stat().st_mtime_ns
-        deck_module._migrate_deck_files()
-        assert path.stat().st_mtime_ns == before
-
-    def test_old_recurring_task_carries_gap(self, client, wiki_dir):
-        old = {**self.OLD, "due_date": "2099-01-10", "focus_date": "2099-01-07"}
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([old]), encoding="utf-8")
-        client.put("/api/deck/old-1", json={"completed": True})
-        [spawned] = client.get("/api/deck").get_json()
-        assert spawned["due_date"] == "2099-01-17"
-        assert spawned["start_date"] == "2099-01-14"
-
-    def test_old_plan_anchored_series_steps_start_date(self, client, wiki_dir):
-        old = {**self.OLD, "due_date": None, "defer_days": None, "focus_date": "2099-01-07",
-               "recurrence": {"type": "weekly", "interval": 1, "from": "due", "anchor": "plan"}}
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([old]), encoding="utf-8")
-        client.put("/api/deck/old-1", json={"completed": True})
-        [spawned] = client.get("/api/deck").get_json()
-        assert spawned["start_date"] == "2099-01-14"
-        assert spawned["due_date"] is None
-
-    def test_restore_accepts_old_snapshot(self, client):
-        resp = client.post("/api/deck/restore", json={"tasks": [self.OLD]})
-        assert resp.status_code == 201
-        self._assert_new(resp.get_json()[0])
 
 
 class TestYearlyRecurrence:
@@ -1029,57 +953,6 @@ class TestCompletedStorage:
 
 
 # ── Migration: legacy single-file → split files ────────────────────────────────
-
-
-class TestCompletedMigration:
-    """Coverage for _migrate_completed_split() (one-time startup migration)."""
-
-    def _completed_file(self):
-        return deck_module.DECK_FILE.parent / "completed.json"
-
-    def test_migration_splits_mixed_file(self, wiki_dir):
-        import json
-        deck_module.DECK_FILE.write_text(json.dumps([
-            {"id": "1", "title": "active", "completed_at": None},
-            {"id": "2", "title": "done", "completed_at": "2026-01-01T00:00:00"},
-        ]), encoding="utf-8")
-        deck_module._migrate_completed_split()
-        active = json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))
-        completed = json.loads(self._completed_file().read_text(encoding="utf-8"))
-        assert [t["id"] for t in active] == ["1"]
-        assert [t["id"] for t in completed] == ["2"]
-
-    def test_migration_no_completed_writes_empty_file(self, wiki_dir):
-        import json
-        deck_module.DECK_FILE.write_text(json.dumps([
-            {"id": "1", "title": "active", "completed_at": None},
-        ]), encoding="utf-8")
-        deck_module._migrate_completed_split()
-        # Active file untouched, completed file created empty
-        assert len(json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))) == 1
-        assert json.loads(self._completed_file().read_text(encoding="utf-8")) == []
-
-    def test_migration_skipped_when_completed_exists(self, wiki_dir):
-        import json
-        deck_module.DECK_FILE.write_text(json.dumps([
-            {"id": "2", "title": "done", "completed_at": "2026-01-01T00:00:00"},
-        ]), encoding="utf-8")
-        self._completed_file().write_text("[]", encoding="utf-8")
-        deck_module._migrate_completed_split()
-        # Already-migrated: deck.json is left alone, completed stays empty
-        assert len(json.loads(deck_module.DECK_FILE.read_text(encoding="utf-8"))) == 1
-        assert json.loads(self._completed_file().read_text(encoding="utf-8")) == []
-
-    def test_migration_noop_when_deck_absent(self, wiki_dir):
-        # No _deck.json on disk (fixture doesn't create one)
-        assert not deck_module.DECK_FILE.exists()
-        deck_module._migrate_completed_split()
-        assert not self._completed_file().exists()
-
-    def test_migration_handles_invalid_json(self, wiki_dir):
-        deck_module.DECK_FILE.write_text("{ not valid json", encoding="utf-8")
-        deck_module._migrate_completed_split()  # must not raise
-        assert not self._completed_file().exists()
 
 
 # ── Focus date (Today planning) ────────────────────────────────────────────────
@@ -1387,21 +1260,6 @@ class TestSpawnedFrom:
         spawned_left = [t for t in client.get("/api/deck").get_json()
                         if t.get("spawned_from") == task["id"]]
         assert spawned_left == []
-
-    def test_uncomplete_legacy_instance_uses_heuristic(self, client, wiki_dir):
-        """Spawned instances from before spawned_from existed are still removed."""
-        task = create_task(client, title="Legacy", due_date=_future(5),
-                           rec_type="daily", rec_interval=1).get_json()
-        client.put(f"/api/deck/{task['id']}", json={"completed": True})
-        deck_file = wiki_dir / "_deck" / "tasks.json"
-        data = json.loads(deck_file.read_text(encoding="utf-8"))
-        for t in data:
-            t.pop("spawned_from", None)
-        deck_file.write_text(json.dumps(data), encoding="utf-8")
-        client.put(f"/api/deck/{task['id']}", json={"completed": False})
-        tasks = client.get("/api/deck").get_json()
-        assert [t["id"] for t in tasks] == [task["id"]]
-
 
 class TestRestore:
     def test_restore_roundtrips_all_fields(self, client):
@@ -1879,19 +1737,12 @@ class TestTagCleaning:
         [t] = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
         assert t["tags"] == ["a-b", "c"]
 
-    def test_old_file_is_cleaned_on_read_and_migrated_once(self, client, wiki_dir):
-        old = {"id": "old-tags", "title": "Old", "tags": ["locallm xxx", "x"],
-               "created_at": "2026-01-01T00:00:00"}
-        path = wiki_dir / "_deck" / "tasks.json"
-        path.write_text(json.dumps([old]), encoding="utf-8")
+    def test_hand_edited_file_is_cleaned_on_read(self, client, wiki_dir):
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
+            {"id": "t", "title": "T", "tags": ["locallm xxx", "#x"], "created_at": "2026-01-01T00:00:00"},
+        ]), encoding="utf-8")
         [t] = client.get("/api/deck").get_json()
         assert t["tags"] == ["locallm-xxx", "x"]
-        deck_module._migrate_deck_files()
-        [stored] = json.loads(path.read_text(encoding="utf-8"))
-        assert stored["tags"] == ["locallm-xxx", "x"]
-        before = path.stat().st_mtime_ns
-        deck_module._migrate_deck_files()
-        assert path.stat().st_mtime_ns == before
 
 
 # ---------- Separate lists ----------

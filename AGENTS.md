@@ -338,7 +338,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 The deck itself is `/deck`; embeds are for custom views on ordinary pages (a tag deck, a list with notes around it). Nothing links to a `deck.md` page.
 
-**Task ↔ page linking** is a `[[wikilink]]` (or `/page/` link) in the task's title or notes, which lists the task under the page's "Linked tasks". The other way round, a page shows one task inline with `[[task:<id>]]` (see Task references). There is no `page` field: `_normalize_task()` turns a legacy stored `page` into `[[slug]]` in the notes, and `page` in embeds or API bodies is ignored.
+**Task ↔ page linking** is a `[[wikilink]]` (or `/page/` link) in the task's title or notes, which lists the task under the page's "Linked tasks". The other way round, a page shows one task inline with `[[task:<id>]]` (see Task references). There is no `page` field: `page` in embeds or API bodies is ignored.
 
 ---
 
@@ -547,10 +547,10 @@ Several embeds per page work: each instance keeps its own task array, and a writ
 
 ### Storage
 
-- The deck's files live in the `_deck/` folder (`deck.DECK_FILE` and paths derived from it): open tasks in `tasks.json`, completed ones in `completed.json` (flat JSON arrays, committed to git on change). Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive). Until 2026-10 the files sat in the wiki's root as `_deck/tasks.json`, `_deck_completed.json` and `_deck_completed-YYYY.json`; on startup `_move_into_deck_dir()` moves them into `_deck/` in one commit (git sees renames, `--follow` keeps the history), leaving a file in place if its new name is taken. `_atomic_write` creates the folder, so a new wiki gets it on the first write. Write routes read every completed file (`_read_completed_all_strict`) and `_write_completed` files each task by its completion year, writing only files whose content changed; startup does the same split (`_archive_old_completed`) for a year change without writes. So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
+- The deck's files live in the `_deck/` folder (`deck.DECK_FILE` and paths derived from it): open tasks in `tasks.json`, completed ones in `completed.json` (flat JSON arrays, committed to git on change). Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive). `_atomic_write` creates the folder, so a new wiki gets it on the first write. Write routes read every completed file (`_read_completed_all_strict`) and `_write_completed` files each task by its completion year, writing only files whose content changed; startup does the same split (`_archive_old_completed`) for a year change without writes. So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
 - All mutations go through a module lock (`_LOCK`) and atomic writes (temp file + `os.replace`); the dev server is threaded. Write paths use a strict reader that raises `_DeckCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - Request bodies are validated (`_json_object`, `_as_str`, `_as_int`, `_as_str_list`, `_id_list`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
-- `_normalize_task()` upgrades legacy fields on every read and restore (`focus_date` → `start_date`, `defer_days`, `recurrence.anchor`, `page`); `_migrate_deck_files()` rewrites the files once at startup in its own commit.
+- Reads clean the tags (`_normalize_list`, `_clean_tags`), since a file edited by hand may have `"local llm"` or `#work`. Older data formats are no longer converted: the conversions (deck files in the wiki's root, completed tasks in `tasks.json`, `focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`, spawns without `spawned_from`) were removed in 2026-10. A wiki last used before then must be opened once with an earlier Leaf (git history) first.
 
 ### Dates
 
@@ -575,7 +575,7 @@ The edit modal's "Days before due" is just another way to enter the start date (
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
 | `created_at` | ISO datetime | |
 | `completed_at` | ISO datetime / `null` | |
-| `sort_order` | number / `null` | Position in the Sorted section (Open's and Focus's); `null` = Unsorted. Focus has no order of its own: a `focus_order` (the old Lineup) is dropped on read. |
+| `sort_order` | number / `null` | Position in the Sorted section (Open's and Focus's); `null` = Unsorted. Focus has no order of its own. |
 | `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`. Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless type or primary date changes. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |

@@ -5,7 +5,6 @@ Unlike the other test modules, the wiki here is a real git repo
 (git_wiki_dir), so every git code path actually executes.
 """
 
-import json
 import re
 import subprocess
 from datetime import datetime, timedelta
@@ -13,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-import deck as deck_module
 from tests.conftest import HOST
 import config
 import pages
@@ -168,53 +166,10 @@ class TestWritesCommit:
 # ===========================================================================
 
 
-class TestDeckFolderMigration:
-    """The deck files moved from the wiki's root into _deck/ (tasks.json,
-    completed.json, completed-YYYY.json); init_deck moves an old wiki's."""
-
-    OLD = {"_deck.json": [{"id": "a", "title": "Open one"}],
-           "_deck_completed.json": [{"id": "b", "title": "Done", "completed_at": "2026-01-02T10:00:00"}],
-           "_deck_completed-2025.json": [{"id": "c", "title": "Old", "completed_at": "2025-03-04T10:00:00"}]}
-
-    def _old_wiki(self, wiki_dir):
-        (wiki_dir / "_deck").rmdir()   # a wiki from before the folder
-        for name, tasks in self.OLD.items():
-            (wiki_dir / name).write_text(json.dumps(tasks), encoding="utf-8")
-        git(wiki_dir, "add", "-A")
-        git(wiki_dir, "commit", "-qm", "old layout")
-
-    def test_moves_old_files_in_one_commit_keeping_history(self, client, wiki_dir, monkeypatch):
-        self._old_wiki(wiki_dir)
-        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
-        assert not list(wiki_dir.glob("_deck*.json"))
-        assert sorted(p.name for p in (wiki_dir / "_deck").iterdir()) == \
-            ["completed-2025.json", "completed.json", "tasks.json"]
-        assert commit_messages(wiki_dir)[0] == "Move deck files into _deck/"
-        status = git(wiki_dir, "show", "-M", "--name-status", "--format=", "HEAD").split("\n")
-        assert {line.split("\t", 1)[1] for line in status if line.startswith("R")} == {
-            "_deck.json\t_deck/tasks.json", "_deck_completed.json\t_deck/completed.json",
-            "_deck_completed-2025.json\t_deck/completed-2025.json"}
-        assert "old layout" in git(wiki_dir, "log", "--follow", "--format=%s", "--", "_deck/tasks.json")
-        assert is_clean(wiki_dir)
-        # The deck reads them where they are now, archive included.
-        assert [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()] == ["Open one"]
-        assert client.get("/api/deck/completed-years", headers=HOST).get_json()["years"][-1] == "2025"
-        # A second start finds nothing to move.
-        before = head_sha(wiki_dir)
-        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
-        assert head_sha(wiki_dir) == before
-
-    def test_a_taken_new_name_leaves_the_old_file(self, client, wiki_dir):
-        self._old_wiki(wiki_dir)
-        (wiki_dir / "_deck").mkdir()
-        (wiki_dir / "_deck" / "tasks.json").write_text("[]", encoding="utf-8")
-        deck_module.init_deck(wiki_dir, True, gitstore.git_commit)
-        assert (wiki_dir / "_deck.json").exists()                 # not overwritten, not lost
-        assert (wiki_dir / "_deck" / "tasks.json").read_text() == "[]"
-        assert (wiki_dir / "_deck" / "completed.json").exists()   # the others moved
+class TestDeckFolder:
 
     def test_a_new_wiki_gets_the_folder_on_first_write(self, client, wiki_dir):
-        (wiki_dir / "_deck").rmdir()
+        (wiki_dir / "_deck").rmdir()   # as in a wiki without tasks yet
         client.post("/api/deck", json={"title": "First"}, headers=HOST)
         assert (wiki_dir / "_deck" / "tasks.json").exists()
         assert not list(wiki_dir.glob("_deck*.json"))
