@@ -111,6 +111,7 @@ case "${1:-up}" in
       -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" \
       -e "LEAF_MCP_TOKEN=$(env_val LEAF_MCP_TOKEN)" \
       -e "LEAF_BASE_URL=$(env_val LEAF_BASE_URL)" \
+      -e "LEAF_HOST_DATA=${WIKI_DATA}" \
       -e "LEAF_NOSHARE=$(env_val LEAF_NOSHARE)" \
       "$IMAGE"
     echo "Leaf running at http://localhost:5000"

@@ -440,13 +440,39 @@ class TestBaseUrl:
             call(client, "search_wiki", query="git push")[0]
 
 
+class TestHostFile:
+    def test_wiki_path_without_host_data(self, client, pages, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_HOST_DATA", "")
+        first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]
+        assert f"#pushing\nfile: {pages.resolve()}/git-remote.md\n\nRun git push" in first
+
+    def test_host_data_wins(self, client, pages, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_HOST_DATA", "/home/me/leaf")
+        assert "\nfile: /home/me/leaf/git-remote.md\n" in call(client, "search_wiki", query="git push")[0]
+        assert "\nfile: /home/me/leaf/golf.md\n" in call(client, "read_page", slug="golf")[0]
+
+    def test_subfolder_and_odd_names_kept(self, client, pages, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_HOST_DATA", "/home/me/leaf")
+        write_page(pages, "notes/My Notes", "# My Notes\n\n## Part\n\nZebrafish facts.\n")
+        assert "\nfile: /home/me/leaf/notes/My Notes.md\n" in \
+            call(client, "search_wiki", query="zebrafish")[0]
+        assert "\nfile: /home/me/leaf/notes/My Notes.md\n" in \
+            call(client, "read_page", slug="notes/My Notes")[0]
+
+    def test_tasks_have_no_file_line(self, client, pages):
+        task(client, title="Buy zebrafish food")
+        text = call(client, "search_wiki", query="zebrafish food")[0]
+        assert "Task: Buy zebrafish food" in text and "file:" not in text
+
+
 class TestReadPage:
     @pytest.mark.parametrize("slug", ["golf", "/page/golf", "http://localhost:5000/page/golf#werkstatt",
                                       "golf.md", "Golf"])
     def test_slug_forms(self, client, pages, slug):
         text, err = call(client, "read_page", slug=slug)
         assert not err
-        assert text.startswith("slug: golf\nurl: http://localhost:5000/page/golf\n\n# Golf\n")
+        assert text.startswith("slug: golf\nurl: http://localhost:5000/page/golf\n"
+                               f"file: {pages.resolve()}/golf.md\n\n# Golf\n")
 
     def test_page_name_with_spaces(self, client, pages):
         assert call(client, "read_page", slug="Git Remote")[0].startswith("slug: git-remote")

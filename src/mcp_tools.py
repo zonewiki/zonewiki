@@ -54,7 +54,15 @@ def _mcp_page_slug(raw: str) -> str | None:
     return None
 
 
-_RECURRENCE_UNITS = {"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}
+def _host_file(slug: str) -> str:
+    """A page's file as the host sees it, so a client on the host can open
+    or edit it: the host's wiki folder (LEAF_HOST_DATA) plus the slug, which
+    is the file's path relative to the wiki."""
+    root = config.LEAF_HOST_DATA or str(config.WIKI_DIR.resolve())
+    return f"{root}/{slug}.md"
+
+
+_RECURRENCE_UNITS ={"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}
 
 
 def _mcp_task_text(task: dict, base: str) -> str:
@@ -179,7 +187,8 @@ def mcp_call_tool(name: str, args: dict) -> str:
             anchor = d["anchor"]
             where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
             out.append(f"[{i}] {where}\nslug: {d['slug']}\nedited: {fmt_date(d['mtime'])}\n"
-                       f"url: {base}{url('page', d['slug'])}{anchor}\n\n{d['text']}")
+                       f"url: {base}{url('page', d['slug'])}{anchor}\n"
+                       f"file: {_host_file(d['slug'])}\n\n{d['text']}")
         return "\n\n---\n\n".join(out)
     if name == "search_tasks":
         return _mcp_search_tasks(args, base)
@@ -191,7 +200,8 @@ def mcp_call_tool(name: str, args: dict) -> str:
         if slug is None:
             raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
         content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
-        return f"slug: {slug}\nurl: {base}{url('page', slug)}\n\n{content}" + _mcp_task_refs(content, base)
+        return (f"slug: {slug}\nurl: {base}{url('page', slug)}\nfile: {_host_file(slug)}\n\n{content}"
+                + _mcp_task_refs(content, base))
     if name == "list_pages":
         limit = _mcp_int(args, "limit", 100, 1000)
         under = _clean_folder(args.get("under", ""))

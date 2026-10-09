@@ -41,6 +41,10 @@ LEAF_MCP_TOKEN = os.environ.get("LEAF_MCP_TOKEN", "")
 # LLM (MCP tools). Unset, links use the address the request came in on,
 # which for a client in a container is e.g. host.containers.internal.
 LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
+# The wiki folder as the host sees it (run.sh passes it), for the file paths
+# the MCP tools give; inside the container WIKI_DIR is only /wiki-data.
+# Unset, the MCP tools use WIKI_DIR itself (mcp_tools._host_file).
+LEAF_HOST_DATA = os.environ.get("LEAF_HOST_DATA", "").strip().rstrip("/")
 # A remote for the wiki's git repository (gitstore.git_setup).
 GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
 # Listen on the LAN: no Host check (server.check_host).
