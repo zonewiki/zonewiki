@@ -32,6 +32,10 @@ COPY src/ .
 ARG LEAF_BUILD=unknown
 ENV LEAF_BUILD=$LEAF_BUILD
 
+# compose.yaml runs Leaf as the host user's UID (any UID, maybe without an
+# account here): git and Python get a HOME they can use.
+ENV HOME=/tmp
+
 EXPOSE 5000
 
 CMD ["python3", "server.py"]

@@ -23,12 +23,17 @@ services:
         LEAF_EMBEDDINGS: ${LEAF_EMBEDDINGS:-}
     image: leaf
     container_name: leaf
+    # Not root: Leaf runs as the host user, so the files it writes in the wiki
+    # are theirs. run.sh sets it: your id -u/-g, or 0 with rootless podman or
+    # docker, where the container's root is your own unprivileged user. Used
+    # directly, set LEAF_UID/LEAF_GID in .env if yours aren't 1000.
+    user: "${LEAF_UID:-1000}:${LEAF_GID:-1000}"
     # A minimal init as PID 1 reaps orphaned processes (Leaf as PID 1
     # wouldn't, and they would pile up as zombies until the PID limit).
     init: true
     restart: unless-stopped
-    # Secrets and settings go to the container from the file, not from a
-    # command line (where ps would show them).
+    # Every setting, secrets included. Docker compose hands them over through
+    # its API; podman-compose as podman -e arguments (briefly visible in ps).
     env_file: .env
     environment:
       WIKI_DATA: /wiki-data
@@ -36,7 +41,6 @@ services:
       LEAF_HOST_DATA: ${WIKI_DATA:-~/leaf}
       # The user's timezone, so "today" is their day; run.sh sets the host's.
       TZ: ${TZ:-UTC}
-      FLASK_ENV: production
     ports:
       # Localhost only unless ALLOW_REMOTE (run.sh sets LEAF_BIND=0.0.0.0).
       - "${LEAF_BIND:-127.0.0.1}:5000:5000"
@@ -49,6 +53,15 @@ services:
           create_host_path: false
           # Relabel for SELinux (ignored where SELinux is off).
           selinux: Z
+    # Reported as unhealthy when Leaf stops answering (compose ps); restarting
+    # then is podman's --health-on-failure or an autoheal container's job.
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/public/manifest.json', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       # Docker's default, and podman's name for its k8s-file driver: `logs -f`
       # works with both (podman's journald default doesn't follow everywhere).

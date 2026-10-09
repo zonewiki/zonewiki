@@ -92,7 +92,8 @@ Settings go in `.env`, all optional except `WIKI_DATA`:
 | `WIKI_DATA` | The wiki folder (default `~/leaf`) |
 | `ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
-| `LEAF_PASSWORD` | A login gate; `SECRET_KEY` keeps sessions across restarts |
+| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `_leaf/` (never in git); `SECRET_KEY` sets one instead |
+| `LEAF_UID`, `LEAF_GID` | The user Leaf runs as, if you use `compose.yaml` without `run.sh` and your IDs aren't 1000 |
 | `GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |

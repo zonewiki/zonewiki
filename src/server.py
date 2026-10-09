@@ -45,6 +45,7 @@ from retrieval import (
 )
 import views
 from views import build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view
+from embed import exclude_from_git
 from mcp_tools import mcp_call_tool
 from templating import macro
 
@@ -66,8 +67,33 @@ class _SessionInterface(SecureCookieSessionInterface):
         return _is_https()
 
 
+def _secret_key() -> bytes:
+    """The key that signs session cookies: SECRET_KEY, else one Leaf made
+    once and keeps in _leaf/secret_key in the wiki folder (owner-only, kept
+    out of git), so a restart doesn't sign everyone out. A wiki folder Leaf
+    can't write to gets a new key per start."""
+    if os.environ.get("SECRET_KEY"):
+        return os.environ["SECRET_KEY"].encode()
+    path = config.WIKI_DIR / "_leaf" / "secret_key"
+    try:
+        key = path.read_bytes().strip()
+        if len(key) >= 32:
+            return key
+    except OSError:
+        pass
+    key = os.urandom(32).hex().encode()
+    try:
+        path.parent.mkdir(exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(key)
+    except OSError:
+        pass
+    return key
+
+
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.secret_key = _secret_key()
 app.session_interface = _SessionInterface()
 app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 60 * 60  # 30 days
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -128,6 +154,20 @@ def set_cache_headers(response):
     return response
 
 
+# Clickjacking: another site could load Leaf invisibly in a frame and trick a
+# signed-in user into clicking Delete or Commit. Only Leaf's own pages may
+# frame it (a page's raw HTML may show an upload in an <iframe>).
+@app.after_request
+def deny_framing(response):
+    csp = response.headers.get("Content-Security-Policy")
+    if not csp:
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+    elif "frame-ancestors" not in csp:
+        response.headers["Content-Security-Policy"] = csp + "; frame-ancestors 'self'"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"   # browsers without CSP
+    return response
+
+
 def ensure_home_page() -> None:
     """Give a wiki without index.md (a new one) its home page, committed:
     "/" opens it, and it can't be renamed or deleted."""
@@ -138,6 +178,7 @@ def ensure_home_page() -> None:
 
 
 git_setup()
+exclude_from_git(config.WIKI_DIR, "/_leaf/")   # the secret key (_secret_key)
 ensure_home_page()
 
 
@@ -907,8 +948,16 @@ def serve_upload(filename):
 
 
 if __name__ == "__main__":
-    # Always bind to all interfaces so the container's network bridge can
-    # forward connections. LAN exposure is controlled by run.sh's port
-    # mapping (127.0.0.1:5000:5000 = localhost only, 0.0.0.0:5000:5000 = LAN).
-    # The host-header check (ALLOWED_HOSTS) is the DNS-rebinding defence.
-    app.run(host="0.0.0.0", port=5000)
+    # waitress, a production server (Flask's own is for development: a thread
+    # per connection without limit or timeouts). One process, a fixed pool of
+    # threads: the deck's lock, the caches, the login throttle and the
+    # semantic-search worker live in this process's memory, so Leaf must never
+    # run as several worker processes. Idle connections are closed after a
+    # minute, and connections beyond the limit wait.
+    # All interfaces, so the container's network bridge can forward
+    # connections; exposure is the port mapping's (compose.yaml: LEAF_BIND,
+    # 127.0.0.1 = localhost only), the Host check the DNS-rebinding defence.
+    from waitress import serve
+    print(f"Leaf {config.VERSION} ({config.LEAF_BUILD}) listening on port 5000", flush=True)
+    serve(app, host="0.0.0.0", port=5000, threads=8, connection_limit=100,
+          channel_timeout=60, ident="Leaf")

@@ -1524,6 +1524,41 @@ class TestHostHeader:
 # Behind an HTTPS proxy: the login cookie, throttling guesses
 # ===========================================================================
 
+class TestProduction:
+
+    def test_no_framing_by_other_sites(self, client, wiki_dir):
+        for path in ("/page/index", "/deck", "/api/version", "/login"):
+            resp = client.get(path, headers=HOST)
+            assert resp.headers["Content-Security-Policy"] == "frame-ancestors 'self'", path
+            assert resp.headers["X-Frame-Options"] == "SAMEORIGIN", path
+
+    def test_framing_rule_joins_an_existing_policy(self, client, wiki_dir):
+        (wiki_dir / "_assets" / "x.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+        csp = client.get("/_assets/x.svg", headers=HOST).headers["Content-Security-Policy"]
+        assert csp.startswith("sandbox; default-src 'none'") and csp.endswith("; frame-ancestors 'self'")
+
+    def test_secret_key_is_made_once_and_kept(self, wiki_dir, monkeypatch):
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        key = server._secret_key()
+        path = wiki_dir / "_leaf" / "secret_key"
+        assert len(key) == 64 and path.read_bytes() == key
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert server._secret_key() == key           # a restart keeps it
+        monkeypatch.setenv("SECRET_KEY", "from-env")
+        assert server._secret_key() == b"from-env"
+        assert "_leaf" not in [slug.split("/")[0] for slug in pages.all_slugs()]
+
+    def test_secret_key_without_a_writable_wiki(self, wiki_dir, monkeypatch):
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        (wiki_dir / "_leaf").write_text("not a folder")
+        first, second = server._secret_key(), server._secret_key()
+        assert len(first) == len(second) == 64 and first != second   # works, not kept
+
+    def test_production_server_is_installed(self):
+        import importlib.util
+        assert importlib.util.find_spec("waitress")   # server.py's __main__ serves with it
+
+
 class TestHttpsAndThrottle:
 
     @pytest.fixture()

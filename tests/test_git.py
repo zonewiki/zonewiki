@@ -704,3 +704,19 @@ class TestGitDoesNotDetach:
         # zombies piled up to the PID limit.
         for key in ("maintenance.autoDetach", "gc.autoDetach"):
             assert gitstore.run_git("git", "config", "--get", key).stdout.strip() == "false"
+
+
+def test_secret_key_folder_is_kept_out_of_git(wiki_dir):
+    server.exclude_from_git(wiki_dir, "/_leaf/")
+    (wiki_dir / "_leaf").mkdir(exist_ok=True)
+    (wiki_dir / "_leaf" / "secret_key").write_text("x" * 64)
+    assert "_leaf" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
+
+
+def test_hung_git_counts_as_failed(wiki_dir, monkeypatch):
+    def hang(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs.get("timeout"))
+    monkeypatch.setattr(gitstore.subprocess, "run", hang)
+    r = gitstore.run_git("git", "status")
+    assert r.returncode != 0 and "timed out" in r.stderr
+    gitstore.git_commit(wiki_dir / "index.md", "no hang")   # returns instead of blocking

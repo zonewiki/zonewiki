@@ -28,8 +28,17 @@ _GIT_ENV = {
 }
 
 
+# A git that hangs (a stale lock, a slow disk) must not hold its request
+# forever: after this long it counts as failed, which every caller handles.
+GIT_TIMEOUT = 60
+
+
 def run_git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(list(args), cwd=config.WIKI_DIR, capture_output=True, text=True, env=_GIT_ENV)
+    try:
+        return subprocess.run(list(args), cwd=config.WIKI_DIR, capture_output=True, text=True,
+                              env=_GIT_ENV, timeout=GIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(list(args), 124, "", f"git timed out after {GIT_TIMEOUT}s")
 
 
 def git_setup() -> None:

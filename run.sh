@@ -48,6 +48,17 @@ else
   export LEAF_BIND="127.0.0.1"
 fi
 
+# The user Leaf runs as (compose.yaml), so the files it writes are the host
+# user's. Rootless podman/docker map the container's root to the host user
+# (any other UID would be a subordinate one there): 0. Otherwise the host
+# user's own IDs.
+if [[ "$(id -u)" -ne 0 ]] && { [[ $ENGINE == podman ]] ||
+     $ENGINE info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; }; then
+  export LEAF_UID=0 LEAF_GID=0
+else
+  export LEAF_UID="$(id -u)" LEAF_GID="$(id -g)"
+fi
+
 # The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
 # uncommitted source changes), shown next to config.py's VERSION; same format
 # as config.py's _source_build().

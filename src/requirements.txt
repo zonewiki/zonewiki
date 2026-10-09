@@ -2,3 +2,4 @@ flask>=3.0
 jinja2>=3.1          # comes with Flask; Leaf's views are templates
 markdown-it-py>=3.0
 mdit-py-plugins>=0.4
+waitress>=3.0        # the production server (server.py's __main__)
