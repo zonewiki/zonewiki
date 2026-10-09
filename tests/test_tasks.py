@@ -1805,9 +1805,9 @@ class TestLists:
     def test_embed_carries_list_and_declared_lists(self, client, wiki_dir, shop):
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body
-        assert 'data-lists="[&quot;groceries&quot;]"' in body
+        assert 'data-lists="[&#34;groceries&#34;]"' in body
         # The home page's title, for the list tag's tooltip.
-        assert 'data-list-homes="{&quot;groceries&quot;: &quot;Shop&quot;}"' in body
+        assert 'data-list-homes="{&#34;groceries&#34;: &#34;Shop&#34;}"' in body
         assert 'id="task-edit-list"' not in body
         assert "task-show-lists" not in body       # the main deck hides nothing
 

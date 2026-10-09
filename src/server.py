@@ -42,6 +42,7 @@ from retrieval import (
 import views
 from views import build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view
 from mcp_tools import mcp_call_tool
+from templating import macro
 
 
 app = Flask(__name__, static_folder=None)
@@ -300,7 +301,7 @@ def view_page(slug):
                                request.args.get("promote_error", ""), request.args.get("append_error", ""))
         changed, commit = views.last_changed(slug, path, title)
         fm_meta, _ = parse_frontmatter(content)
-        meta_row_html = views.macro("partials/page.html", "meta_row")(
+        meta_row_html = macro("partials/page.html", "meta_row")(
             render_tags_pills_html(fm_meta.get("tags", [])), fm_meta.get("tldr", ""), changed, commit)
         article_html = render_md(strip_h1(content), show_tags=False, show_tldr=False,
                                  edit_slug=slug, section_tasks=task_backlinks)

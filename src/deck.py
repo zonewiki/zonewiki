@@ -7,7 +7,6 @@ Provides:
 - Task backlink resolution
 - API route registration via Blueprint"""
 
-import html
 import json
 import re
 from datetime import date, datetime
@@ -15,6 +14,7 @@ from datetime import date, datetime
 from flask import Blueprint, Response, abort, jsonify, request
 
 from pages import deck_home, deck_lists
+from templating import render
 from decksyntax import (
     clean_list, clean_tags, DECK_RE, embed_view, in_scope, is_true, parse_deck_params,
     tag_param_matches,
@@ -114,9 +114,6 @@ def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False)
     Make task opens it, window.openDeckEdit); deck.js then skips the deck's
     keyboard shortcuts.
     """
-    tag_val = params.get("tag", "")
-    list_val = clean_list(params.get("list")) or ""
-    filt = embed_view(params)
     # `limit=N` turns on the WIP limit (Focus warning, Plan day flags); without
     # it there is none. `capacity=` is its old name, still accepted.
     try:
@@ -132,149 +129,24 @@ def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False)
         name = name.replace("_", " ").strip()[:30]
         if name:
             tab_labels[i] = name
-    open_label, plan_label, focus_label = (html.escape(n) for n in tab_labels)
-    # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
-    # staples); the edit modal's checkbox still turns it off per task.
-    keep = "1" if is_true(params.get("keep")) else ""
-    # `compact=1`: one line per task until the viewer switches (deck.js).
-    compact = "1" if is_true(params.get("compact")) else ""
-    # `home=1`: this embed is the user's own deck (pages.deck_home); the module bar's
-    # New clicks this embed's "+ New".
-    home_attr = ' data-home="1"' if is_true(params.get("home")) else ""
-    init_tag = html.escape(tag_val)
-    init_filter = html.escape(filt)
-    # Every declared list: their tags are marked as lists (deck.js).
-    # Each one's home page title is for the list tag's tooltip.
+    # Every declared list: their tags are marked as lists (deck.js), each
+    # one's home page title is the list tag's tooltip.
     lists = deck_lists()
-    lists_json = html.escape(json.dumps(sorted(lists)))
-    homes_json = html.escape(json.dumps(
-        {n: l.get("title") or l.get("slug") or "" for n, l in sorted(lists.items())}))
-
-    # Use instance suffix for unique IDs when multiple embeds exist
-    sfx = f"-{instance_id}" if instance_id > 0 else ""
-
-    hide = ' data-headless="1" style="display:none"' if headless else ""
-    return f"""<div class="tasks-app" id="tasks-app{sfx}"{hide} data-init-tag="{init_tag}" data-init-list="{html.escape(list_val)}" data-lists="{lists_json}" data-list-homes="{homes_json}" data-init-view="{init_filter}" data-init-limit="{limit}" data-init-keep="{keep}" data-init-compact="{compact}" data-init-new="" data-instance="{instance_id}"{home_attr}>
-  <div class="deck-header">
-    <div class="view-tabs" id="tasks-tabs{sfx}" role="tablist" aria-label="View">
-      <button type="button" role="tab" data-filter="open" aria-selected="false">{open_label}</button>
-      <button type="button" role="tab" data-filter="due" aria-selected="false">{plan_label}</button>
-      <button type="button" role="tab" data-filter="focus" aria-selected="false">{focus_label}</button>
-    </div>
-    <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{sfx}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
-      <button type="button" class="btn deck-density-btn" id="task-density-btn{sfx}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
-      <button class="btn btn-primary" id="task-add-btn{sfx}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
-    </div>
-  </div>
-  <ul class="tasks-list" id="tasks-list{sfx}"></ul>
-  <div class="deck-footer">
-    <button type="button" class="deck-completed-link" id="task-completed-link{sfx}">✓ Completed</button>
-  </div>
-</div>
-<dialog id="task-edit-modal{sfx}" class="task-edit-modal">
-  <form id="task-edit-form{sfx}" class="task-edit-form">
-    <input type="hidden" id="task-edit-id{sfx}" name="id">
-    <div class="task-field">
-      <label for="task-edit-title{sfx}">Title</label>
-      <input type="text" id="task-edit-title{sfx}" name="title" required autocomplete="off">
-      <div class="task-quick-preview" id="task-edit-quick{sfx}" hidden></div>
-    </div>
-    <div class="task-field task-edit-batch" id="task-edit-batch{sfx}" style="display:none">
-      <label id="task-edit-batch-label{sfx}">Tasks</label>
-      <ul class="task-edit-batch-list" id="task-edit-batch-list{sfx}"></ul>
-      <span class="field-hint">One task per line; the fields below apply to all of them.</span>
-    </div>
-    <div class="task-field">
-      <label for="task-edit-desc{sfx}">Notes</label>
-      <textarea id="task-edit-desc{sfx}" name="description" rows="6"></textarea>
-    </div>
-    <div class="task-field task-comments" id="task-edit-comments{sfx}" hidden>
-      <label for="task-edit-comment{sfx}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{sfx}"></span></label>
-      <div class="task-comment-add">
-        <input type="text" id="task-edit-comment{sfx}" placeholder="Add a status line" autocomplete="off" maxlength="2000">
-        <button type="button" class="btn" id="task-edit-comment-add{sfx}">Add</button>
-      </div>
-      <ul class="task-comment-list" id="task-edit-comment-list{sfx}"></ul>
-    </div>
-    <div class="task-field">
-      <label for="task-edit-tags{sfx}">Tags <span class="field-hint">(Tab completes, comma adds)</span></label>
-      <input type="text" id="task-edit-tags{sfx}" name="tags" autocomplete="off">
-    </div>
-    <div class="task-field-row task-row-dates">
-      <div class="task-field">
-        <label>Due date</label>
-        <input type="hidden" id="task-edit-due{sfx}" name="due_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-due{sfx}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field">
-        <label>Start</label>
-        <input type="hidden" id="task-edit-start{sfx}" name="start_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{sfx}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field task-field-lead" title="Start this many days before the due date. Just another way to set the start date; recurring tasks keep this gap.">
-        <label for="task-edit-lead{sfx}">Days before due</label>
-        <input type="number" id="task-edit-lead{sfx}" min="0" placeholder="—">
-      </div>
-    </div>
-    <div class="task-date-warning" id="task-edit-date-warn{sfx}" hidden>
-      <span id="task-edit-date-warn-text{sfx}"></span>
-      <button type="button" class="btn" id="task-edit-date-warn-fix{sfx}"></button>
-    </div>
-    <div class="task-field-row task-row-repeat">
-      <div class="task-field">
-        <label for="task-edit-rec-type{sfx}">Repeat</label>
-        <select id="task-edit-rec-type{sfx}" name="rec_type">
-          <option value="">—</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-      </div>
-      <div class="task-field">
-        <label for="task-edit-rec-interval{sfx}">Every N</label>
-        <input type="number" id="task-edit-rec-interval{sfx}" name="rec_interval" min="1" value="1">
-      </div>
-      <div class="task-field task-field-check" title="Repeat from the completion date instead of the due (or start) date">
-        <label for="task-edit-rec-from{sfx}">From done</label>
-        <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{sfx}" name="rec_from"></span>
-      </div>
-    </div>
-    <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
-      <input type="checkbox" id="task-edit-keep{sfx}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
-    </label>
-    <div class="task-edit-extras">
-    <details class="task-edit-links task-edit-history" id="task-edit-history{sfx}" hidden>
-      <summary>History<span class="task-edit-links-summary" id="task-edit-history-count{sfx}"></span></summary>
-      <ul class="task-history" id="task-edit-history-list{sfx}"></ul>
-    </details>
-    </div>
-    <div class="task-edit-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn" id="task-edit-cancel{sfx}">Cancel</button>
-      <button type="button" class="btn btn-danger" id="task-edit-delete{sfx}" style="display:none">Delete</button>
-    </div>
-  </form>
-</dialog>
-<dialog id="task-delete-modal{sfx}" class="task-edit-modal scratch-modal">
-  <div class="scratch-label">Delete task?</div>
-  <div id="task-delete-title{sfx}" class="task-delete-title"></div>
-  <div class="task-edit-actions">
-    <button type="button" class="btn btn-danger" id="task-delete-confirm{sfx}">Delete</button>
-    <button type="button" class="btn" id="task-delete-cancel{sfx}">Cancel</button>
-  </div>
-</dialog>
-<dialog id="task-deadline-modal{sfx}" class="task-edit-modal scratch-modal">
-  <div class="scratch-label">Move the deadline too?</div>
-  <div id="task-deadline-text{sfx}" class="task-delete-title"></div>
-  <div class="task-edit-actions">
-    <button type="button" class="btn btn-primary" id="task-deadline-confirm{sfx}">Move deadline</button>
-    <button type="button" class="btn" id="task-deadline-cancel{sfx}">Cancel</button>
-  </div>
-</dialog>
-<script src="/public/deck-core.js" defer></script>
-<script src="/public/deck.js" defer></script>"""
+    return render(
+        "deck_embed.html", tag=params.get("tag", ""), list=clean_list(params.get("list")) or "",
+        view=embed_view(params), limit=limit, labels=tab_labels, instance_id=instance_id,
+        # Ids get a suffix after a page's first embed, so a page can hold several.
+        sfx=f"-{instance_id}" if instance_id > 0 else "", headless=headless,
+        # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
+        # staples); the edit modal's checkbox still turns it off per task.
+        keep="1" if is_true(params.get("keep")) else "",
+        # `compact=1`: one line per task until the viewer switches (deck.js).
+        compact="1" if is_true(params.get("compact")) else "",
+        # `home=1`: this embed is the user's own deck (pages.deck_home); the
+        # module bar's New clicks this embed's "+ New".
+        home=is_true(params.get("home")),
+        lists_json=json.dumps(sorted(lists)),
+        homes_json=json.dumps({n: l.get("title") or l.get("slug") or "" for n, l in sorted(lists.items())}))
 
 
 def process_deck_embeds(text: str) -> tuple[str, list[tuple[str, str]]]:
