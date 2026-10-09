@@ -51,9 +51,6 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/revision/<slug>/<sha>` | A page as one save left it (read-only), with ← Older / Newer → and Restore |
 | GET    | `/diff/<slug>/<sha>`  | What one save changed in a page |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
-| GET    | `/page/_raw`          | The `_raw` inbox: paste a URL or text to collect it (see Scratch) |
-| POST   | `/api/raw/append-url` | Add `- [title](url)` to `_raw.md`; fields `url`, `title` |
-| POST   | `/api/raw/create-page` | Save pasted text as `_raw/<uuid>.md` and link it from `_raw.md`; fields `text`, `title`; returns `{ slug, title }` |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
 Every page view includes:

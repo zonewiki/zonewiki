@@ -12,5 +12,4 @@ import './js/shortcuts.js';   // keyboard shortcuts
 import './js/editor.js';      // the editor
 import './js/page.js';        // the page view: checkboxes, task chips, tables, lightbox
 import './js/present.js';     // presentation mode
-import './js/raw.js';         // the _raw inbox
 import './deck.js';           // deck apps on the page

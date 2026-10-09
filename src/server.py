@@ -322,62 +322,6 @@ def api_page_preview(slug):
     return jsonify({"title": page_title(content, slug), "html": html_out})
 
 
-@app.get("/page/_raw")
-def raw_page():
-    path = safe_path("_raw")
-    if not path.exists():
-        path.write_text("# Raw\n\n", encoding="utf-8")
-        git_commit(path, "Create _raw")
-    content = path.read_text(encoding="utf-8")
-    title = page_title(content, "_raw")
-    raw_dir = config.WIKI_DIR / "_raw"
-    snippets = [{"slug": f"_raw/{f.stem}", "title": page_title(f.read_text(encoding="utf-8"), f"_raw/{f.stem}")}
-                for f in sorted(raw_dir.glob("*.md"), reverse=True)] if raw_dir.is_dir() else []
-    return views.page("raw.html", title, page_title=title, snippets=snippets,
-                      article_html=render_md(strip_h1(content)),
-                      breadcrumb_html=build_breadcrumb("_raw", title))
-
-
-def _append_to_raw(line: str, message: str) -> None:
-    """Add a line to the _raw inbox page (created when missing), committed."""
-    path = safe_path("_raw")
-    content = path.read_text(encoding="utf-8") if path.exists() else "# Raw\n\n"
-    if not content.endswith("\n"):
-        content += "\n"
-    path.write_text(content + line + "\n", encoding="utf-8")
-    git_commit(path, message)
-
-
-@app.post("/api/raw/append-url")
-def api_raw_append_url():
-    url = request.form.get("url", "").strip()
-    title = request.form.get("title", "").strip() or url
-    if not url:
-        abort(400)
-    _append_to_raw(f"- [{title}]({url})", f"Add URL to _raw: {title[:60]}")
-    return jsonify({"ok": True})
-
-
-@app.post("/api/raw/create-page")
-def api_raw_create_page():
-    text = request.form.get("text", "").strip()
-    title = request.form.get("title", "").strip()
-    if not text:
-        abort(400)
-    uid = uuid.uuid4().hex
-    if not title:
-        title = text.split("\n")[0].strip()[:80] or uid
-    slug = f"_raw/{uid}"
-    path = safe_path(slug)
-    if path is None:
-        abort(400)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
-    git_commit(path, f"Create raw snippet {uid[:8]}: {title[:60]}")
-    _append_to_raw(f"- [{title}](/page/{slug})", f"Add snippet link to _raw: {title[:60]}")
-    return jsonify({"slug": slug, "title": title})
-
-
 @app.post("/api/scratch")
 def api_scratch():
     title = request.form.get("title", "").strip() or "Untitled"

@@ -1778,49 +1778,19 @@ class TestPlainTaskTitle:
 
 
 # ===========================================================================
-# _raw inbox (URL + snippet capture)
+# The _raw inbox is gone
 # ===========================================================================
 
-class TestRawPage:
-
-    def test_created_on_first_visit(self, client, wiki_dir):
-        resp = client.get("/page/_raw", headers=HOST)
-        assert resp.status_code == 200
-        assert (wiki_dir / "_raw.md").read_text() == "# Raw\n\n"
-        assert "<h3>Snippets</h3>" not in resp.get_data(as_text=True)
-
-    def test_append_url(self, client, wiki_dir):
-        resp = client.post("/api/raw/append-url",
-                           data={"url": "https://example.com", "title": "Ex"}, headers=HOST)
-        assert resp.get_json() == {"ok": True}
-        assert "- [Ex](https://example.com)\n" in (wiki_dir / "_raw.md").read_text()
-
-    def test_append_url_title_defaults_to_url(self, client, wiki_dir):
-        (wiki_dir / "_raw.md").write_text("# Raw", encoding="utf-8")  # no trailing newline
-        client.post("/api/raw/append-url", data={"url": "https://e.x"}, headers=HOST)
-        assert (wiki_dir / "_raw.md").read_text() == "# Raw\n- [https://e.x](https://e.x)\n"
-
-    def test_append_url_requires_url(self, client):
-        assert client.post("/api/raw/append-url", data={}, headers=HOST).status_code == 400
-
-    def test_create_snippet_page_and_link(self, client, wiki_dir):
-        resp = client.post("/api/raw/create-page",
-                           data={"text": "first line\nsecond"}, headers=HOST).get_json()
-        assert resp["title"] == "first line"
-        assert resp["slug"].startswith("_raw/")
-        snippet = wiki_dir / f"{resp['slug']}.md"
-        assert snippet.read_text() == "# first line\n\nfirst line\nsecond\n"
-        assert f"- [first line](/page/{resp['slug']})" in (wiki_dir / "_raw.md").read_text()
-        html = client.get("/page/_raw", headers=HOST).get_data(as_text=True)
-        assert "<h3>Snippets</h3>" in html
-        assert f'href="/page/{resp["slug"]}"' in html
-
-    def test_create_snippet_requires_text(self, client):
-        assert client.post("/api/raw/create-page", data={"text": "  "}, headers=HOST).status_code == 400
-
-    def test_snippet_pages_hidden_from_page_iteration(self, client, wiki_dir):
-        resp = client.post("/api/raw/create-page", data={"text": "x"}, headers=HOST).get_json()
-        assert resp["slug"] not in pages.all_slugs()
+def test_raw_inbox_is_gone(client, wiki_dir):
+    # Removed: an old _raw.md is an ordinary page now, nothing is created,
+    # and the paste endpoints are gone.
+    assert client.post("/api/raw/append-url", data={"url": "https://e.x"}, headers=HOST).status_code in (404, 405)
+    assert client.post("/api/raw/create-page", data={"text": "x"}, headers=HOST).status_code in (404, 405)
+    assert client.get("/page/_raw", headers=HOST).status_code == 302   # to the editor, like any missing page
+    assert not (wiki_dir / "_raw.md").exists()
+    (wiki_dir / "_raw.md").write_text("# Raw\n\n- [Ex](https://example.com)\n", encoding="utf-8")
+    body = client.get("/page/_raw", headers=HOST).get_data(as_text=True)
+    assert 'href="https://example.com"' in body
 
 
 # ===========================================================================
