@@ -1877,21 +1877,23 @@ def test_compact_tags_follow_the_title(page, wiki):
 # ── Card actions with a mouse ────────────────────────────────────────────────
 
 def test_card_actions_on_hover_and_right_click_menu(page, wiki):
-    page.request.post("/api/deck", data={"title": "Water plants", "description": "See https://example.com"})
+    # ⋯ is always shown; ⏭ on hover and on the selected card.
+    page.request.post("/api/deck", data={"title": "Water plants", "description": "See https://example.com",
+                                          "due_date": "2026-11-12", "rec_type": "weekly", "rec_interval": 1})
     page.request.post("/api/deck", data={"title": "Other"})
     page.goto("/deck?view=open")
     water = card(page, "Water plants")
-    actions = water.locator(".task-actions")
+    skip = water.locator(".task-skip-btn")
     expect(water.locator(".task-wontdo-btn")).to_have_count(0)        # no ✗ on cards
-    opacity = lambda: actions.evaluate("el => getComputedStyle(el).opacity")
     page.mouse.move(0, 0)
-    page.wait_for_function("el => getComputedStyle(el).opacity === '0'", arg=actions.element_handle())
+    expect(water.locator(".task-menu-btn")).to_be_visible()
+    expect(skip).to_be_hidden()
     water.hover()
-    page.wait_for_function("el => getComputedStyle(el).opacity === '1'", arg=actions.element_handle())
+    expect(skip).to_be_visible()
     water.locator(".task-content").click()                             # selected: stays shown
     page.mouse.move(0, 0)
     page.wait_for_timeout(200)
-    assert opacity() == "1"
+    expect(skip).to_be_visible()
     # Right-click: the same menu, at the pointer; its actions work.
     box = card(page, "Other").locator(".task-title").bounding_box()
     page.mouse.click(box["x"] + 10, box["y"] + 5, button="right")
@@ -1905,6 +1907,52 @@ def test_card_actions_on_hover_and_right_click_menu(page, wiki):
     # A link in a card keeps the browser's menu.
     water.locator("a[href='https://example.com']").click(button="right")
     expect(page.locator(".task-menu")).to_have_count(0)
+
+
+def test_dates_end_at_the_right_edge(page, wiki):
+    # What is always shown ends at the same place on every card, just left
+    # of ⋯ at the right end, a recurring card's (which has ⏭) too. Hover
+    # adds ⏭ and the empty 📅 left of it, so nothing on the card moves.
+    page.request.post("/api/deck", data={"title": "Weekly review", "due_date": "2026-11-12",
+                                          "rec_type": "weekly", "rec_interval": 1, "tags": "work"})
+    page.request.post("/api/deck", data={"title": "Call the plumber", "due_date": "2026-11-14"})
+    page.goto("/deck?view=open")
+    page.mouse.move(0, 0)
+    ends = []
+    for title in ("Weekly review", "Call the plumber"):
+        menu, due = card(page, title).locator(".task-menu-btn").bounding_box(), card(page, title).locator(".task-due").bounding_box()
+        ends.append(menu["x"] - (due["x"] + due["width"]))
+    assert abs(ends[0] - ends[1]) < 1 and 0 <= ends[0] < 20
+    weekly = card(page, "Weekly review")
+    shown = (".task-tag", ".task-recurring", ".task-due", ".task-title", ".task-menu-btn")
+    before = {sel: weekly.locator(sel).bounding_box() for sel in shown}
+    weekly.locator(".task-title").hover()
+    expect(weekly.locator(".task-skip-btn")).to_be_visible()
+    for sel, box in before.items():
+        after = weekly.locator(sel).bounding_box()
+        assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 1, sel
+    boxes = [weekly.locator(sel).bounding_box() for sel in
+             (".task-skip-btn", ".task-focus-info.task-date-empty", ".task-recurring", ".task-due", ".task-menu-btn")]
+    assert all(l["x"] + l["width"] <= r["x"] + 1 for l, r in zip(boxes, boxes[1:]))    # left to right
+    dots, title = weekly.locator(".task-menu-btn svg").bounding_box(), weekly.locator(".task-title").bounding_box()
+    assert abs((dots["y"] + dots["height"] / 2) - (title["y"] + title["height"] / 2)) < 1.5   # ⋯ on the line's centre
+
+
+def test_compact_line_marks_notes(page, wiki):
+    # 📝 says a task has notes, which a compact line hides; every card shows
+    # it, so expanding a line changes nothing on it.
+    page.request.post("/api/deck", data={"title": "Has notes", "description": "Some details"})
+    page.request.post("/api/deck", data={"title": "No notes"})
+    page.goto("/deck?view=open")
+    marker = card(page, "Has notes").locator(".task-has-notes")
+    expect(marker).to_be_visible()                                       # full card
+    page.locator(".deck-density-btn").click()
+    expect(marker).to_be_visible()
+    expect(marker).to_have_attribute("title", "Has notes")
+    expect(card(page, "No notes").locator(".task-has-notes")).to_have_count(0)
+    card(page, "Has notes").locator(".task-content").click()            # expanded
+    expect(card(page, "Has notes").locator(".task-desc")).to_be_visible()
+    expect(marker).to_be_visible()
 
 
 def test_expanded_task_keeps_its_line(page, wiki):

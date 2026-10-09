@@ -456,6 +456,10 @@ function applyCompact(view) {
 // to show than its line (hasMore). Esc collapses it until
 // another task is selected; Enter opens the modal, as on full cards.
 let expandedId = null;
+// ⋯ on cards: three dots drawn, so they sit on the line's centre whatever
+// the font (the ⋯ character sat low in some).
+const MORE_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="currentColor">' +
+  '<circle cx="2.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="13.5" cy="8" r="1.1"/></svg>';
 // Whether expanding a task shows more than its line: notes, comments, or a
 // title the line cuts off. One with nothing more stays a line.
 function hasMore(id) {
@@ -1650,12 +1654,19 @@ function render() {
           : `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>`)
       : '';
 
+    // Marks that there are notes, which a compact line hides; on every card
+    // alike, so expanding a line changes nothing on it.
+    const notesDisplay = task.description?.trim()
+      ? '<span class="task-has-notes" title="Has notes" aria-label="Has notes">📝</span>' : '';
+    const skipBtnHtml = (!task.completed_at && task.recurrence)
+      ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
+      : '';
     const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
     const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-      task.keep || task.completed_at || commentsDisplay);
-    const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight;
+      task.keep || task.completed_at || commentsDisplay || notesDisplay);
+    const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight || notesDisplay;
     const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-    const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}${recIcon}<span class="task-meta-right">${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+    const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
     const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
     // The latest comments, newest first: shown only when a compact task is
     // expanded (full cards have the 💬 count; the modal has them all).
@@ -1664,9 +1675,6 @@ function render() {
       ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
           `<p><span class="task-comment-when">${esc(commentWhen(c.at))}</span> ${esc(c.text)}</p>`).join('')}` +
         (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
-      : '';
-    const skipBtnHtml = (!task.completed_at && task.recurrence)
-      ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
     return `
@@ -1678,7 +1686,7 @@ function render() {
           <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
         </div>
         <div class="task-actions">
-          ${skipBtnHtml}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">⋯</button>
+          <button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">${MORE_ICON}</button>
         </div>
         ${metaHtml}${descHtml}${commentsHtml}
       </li>`;

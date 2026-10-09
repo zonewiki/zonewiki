@@ -145,17 +145,12 @@ def test_desktop_click_selects_does_not_edit(page, wiki):
 
 
 def test_desktop_menu_popover_and_keyboard(page, wiki):
-    # With a mouse ⋯ shows on hover (or on the selected card); right-click
-    # (or the menu key, or Shift+F10 on the selected card) opens the menu
-    # as a popover too.
+    # With a mouse ⋯ is always shown; right-click (or the menu key, or
+    # Shift+F10 on the selected card) opens the menu as a popover too.
     page.request.post("/api/deck", data={"title": "Water plants"})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=open")
-    actions = card(page, "Water plants").locator(".task-actions")
     page.mouse.move(0, 0)
-    expect(actions).to_have_css("opacity", "0")
-    card(page, "Water plants").hover()
-    expect(actions).to_have_css("opacity", "1")
     expect(card(page, "Water plants").locator(".task-menu-btn")).to_be_visible()
     title = card(page, "Water plants").locator(".task-title")
     tb = title.bounding_box()
