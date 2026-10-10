@@ -2477,6 +2477,22 @@ class TestBareSlugBacklinks:
         )
         assert "ivo-petrenko" in targets
 
+    def test_absolute_page_link_is_a_backlink(self, wiki_dir):
+        """[Label](/page/slug) counts, as a rename re-points it; anchors and
+        titles aside. It once didn't, so such pages showed as unlinked."""
+        write_page(wiki_dir, "people/ivo", "# Ivo\n")
+        write_page(wiki_dir, "state", '# State\n\n[Ivo](/page/people/ivo#role "Ivo") and [x](/page/)\n')
+        assert [b["slug"] for b in pages.find_backlinks("people/ivo")] == ["state"]
+        assert pages.all_backlink_counts().get("people/ivo") == 1
+
+    def test_link_with_anchor_or_title_is_a_backlink(self, wiki_dir):
+        """The href up to an #anchor or a title counts; the pattern once
+        wanted ")" right after it, so these were no backlinks at all."""
+        write_page(wiki_dir, "golf", "# Golf\n")
+        write_page(wiki_dir, "a", "# A\n\n[Golf](golf.md#werkstatt)\n")
+        write_page(wiki_dir, "b", '# B\n\n[Golf](golf "the car")\n')
+        assert [b["slug"] for b in pages.find_backlinks("golf")] == ["a", "b"]
+
     def test_external_url_not_counted_as_backlink(self, wiki_dir):
         """External http links must never be treated as page targets."""
         targets = pages.page_link_targets(

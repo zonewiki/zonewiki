@@ -28,7 +28,7 @@ SHARING_COOKIE = "leaf-sharing"
 
 
 # Matches any markdown link href (bare slugs, .md, etc.) — used for backlink scanning
-_ANY_MD_LINK_RE = re.compile(r'\[(?:[^\]]*)\]\(([^)#?\s]+)\)')
+_ANY_MD_LINK_RE = re.compile(r'\[(?:[^\]]*)\]\(([^)#?\s]+)[^)]*\)')
 
 
 def url(*parts: str) -> str:
@@ -175,7 +175,10 @@ def page_link_targets(content: str, file_slug: str, known_slugs: set[str] | None
             targets.add(to_slug(page))
     for m in _ANY_MD_LINK_RE.finditer(content):
         href = m.group(1)
-        if href.endswith('.md'):
+        if href.startswith('/page/'):
+            # Absolute, as rewrite_page_links re-points it on a rename.
+            resolved = href[len('/page/'):] or None
+        elif href.endswith('.md'):
             resolved = _resolve_md_link(href, file_slug)
         else:
             resolved = _resolve_bare_link(href, file_slug)
