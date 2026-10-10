@@ -219,9 +219,10 @@ In your client, add an MCP server with the HTTP transport at
 `http://localhost:5000/mcp` and the header
 `Authorization: Bearer <LEAF_MCP_TOKEN>` (the token from `.env`).
 
-To teach the assistant how *your* wiki is kept, write a page called
-`wiki-guide`. Leaf adds it to what the assistant is told when it connects, so
-it's followed in every session and with any MCP client. For example:
+To give the assistant your wiki's conventions (where things go, what's
+private, how pages are tagged), write them on a page called `wiki-guide`.
+Leaf adds it to what the assistant is told when it connects, so it's followed
+in every session and with any MCP client. For example:
 
 ```markdown
 # Wiki guide
@@ -321,7 +322,8 @@ Everything is files in `LEAF_DATA`, which is a git repository:
 - `_index/` is the semantic search cache (only with `LEAF_EMBEDDINGS`); it is
   never committed and can be deleted at any time.
 
-Stop using Leaf and your notes are still just Markdown.
+Nothing is locked in: if you stop using Leaf, your pages are plain Markdown
+files that any editor opens, with their history in git.
 
 ## Development
 
