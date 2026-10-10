@@ -25,15 +25,20 @@
 </nav>
 {%- endmacro %}
 
-{#- The phone's bottom tab bar: the modules, New (js/actions.js: a page in the
-    wiki, a task in the deck, a scratch note in scratch) and Search. Hidden
-    on desktop, which has the switcher and the top actions. #}
+{#- The phone's bottom tab bar in three groups, each set apart by a divider:
+    the modules (navigation), the two "new" actions the desktop has at the
+    top right with the same icons (a scratch note, a task; js/actions.js),
+    and Search. Hidden on desktop,
+    which has the switcher and the top actions. #}
 {% macro action_bar(links, app_name) -%}
 <nav class="action-buttons" aria-label="{{ app_name }}">
 {%- for m in links -%}
 <a href="{{ m.href }}" class="action-module module-link" data-module="{{ m.key }}"{{ attrs(m) }}>{{ icons.module(m.key) }}<span class="action-label">{{ m.label }}</span>{% if m.counts %}{{ counts(m.counts) }}{% endif %}</a>
 {%- endfor -%}
-<button type="button" class="action-new" aria-label="New" title="New">{% call icons.svg() %}<line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>{% endcall %}<span class="action-label">New</span></button>
+<span class="action-sep" aria-hidden="true"></span>
+<button type="button" class="action-scratch" aria-label="New scratch note" title="New scratch note (c s)">{{ icons.new_note() }}<span class="action-label" aria-hidden="true">Note</span></button>
+<button type="button" class="action-task" aria-label="New task" title="New task (c t)">{{ icons.new_task() }}<span class="action-label" aria-hidden="true">Task</span></button>
+<span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{ icons.search() }}<span class="action-label">Search</span></button>
 </nav>
 {%- endmacro %}

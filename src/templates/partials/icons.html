@@ -10,6 +10,16 @@
 {%- endif %}
 {%- endmacro %}
 
+{#- The two "new" actions (desktop top actions, phone tab bar): a page with a
+    +, and a checkbox with a + at its corner ("new task", not "task done"). #}
+{% macro new_note() -%}
+{% call svg() %}<path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><polyline points="9.5 1.5 9.5 5 13 5"/><line x1="8" y1="7.5" x2="8" y2="12"/><line x1="5.75" y1="9.75" x2="10.25" y2="9.75"/>{% endcall %}
+{%- endmacro %}
+
+{% macro new_task() -%}
+{% call svg() %}<path d="M11.5 8.5v-4a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h4"/><polyline points="4.75 7 6.5 8.75 9.25 5.5"/><line x1="12.5" y1="10" x2="12.5" y2="15"/><line x1="10" y1="12.5" x2="15" y2="12.5"/>{% endcall %}
+{%- endmacro %}
+
 {% macro search() -%}
 {% call svg() %}<circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>{% endcall %}
 {%- endmacro %}

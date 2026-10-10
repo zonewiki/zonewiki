@@ -100,31 +100,20 @@ export function openNewPage() {
 }
 
 // ── Action bar ───────────────────────────────────────────────────────────────
-// Search is Ctrl+P. New creates the current module's kind of thing: a task
-// in the deck (its own "+ New", so the view's tags and dates apply; on the
-// deck's home page the home embed's), a
-// scratch note in scratch (`c s`), else a page (Ctrl+N).
+// The phone's actions, as the desktop's top actions: a new scratch note, a
+// new task and Search (Ctrl+P). In the deck the new task comes from its own
+// "+ New" (so the view's tags and dates apply; on the deck's home page the
+// home embed's), elsewhere it goes to your deck (openHomeTask).
 
 const deckAddButton = () =>
   document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
-const NEW_ACTIONS = {
-  deck:    { label: 'New task (n)', run: () => deckAddButton()?.click() },
-  scratch: { label: 'New scratch note (c s)', run: openScratch },
-  wiki:    { label: 'New page (Ctrl+N)', run: openNewPage },
-};
-
-(function () {
-  const btn = document.querySelector('.action-new');
-  if (!btn) return;
-  let action = NEW_ACTIONS[document.body.dataset.module] || NEW_ACTIONS.scratch;
-  // A deck page without its deck app (it failed to load) still gets a note.
-  if (action === NEW_ACTIONS.deck && !deckAddButton()) action = NEW_ACTIONS.scratch;
-  btn.title = action.label;
-  btn.setAttribute('aria-label', action.label.replace(/ \(.*\)$/, ''));
-  btn.addEventListener('click', action.run);
-}());
+document.querySelector('.action-scratch')?.addEventListener('click', openScratch);
+document.querySelector('.action-task')?.addEventListener('click', () => {
+  const add = document.body.dataset.module === 'deck' && deckAddButton();
+  if (add) add.click(); else openHomeTask();
+});
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
 
 // ── Sharing mode ─────────────────────────────────────────────────────────────

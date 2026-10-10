@@ -1720,36 +1720,103 @@ def test_compact_embed_param_and_other_decks(page, wiki):
     expect(page.locator(".tasks-app")).not_to_have_class(COMPACT)
 
 
-def test_compact_on_a_phone_clips_tags_never_dates(new_page, wiki):
+def test_phone_cards_show_every_tag_never_clip_dates(new_page, wiki):
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     _compact_tasks(phone)
+    phone.request.post("/api/deck", data={"title": "Pack for the trip", "due_date": "2026-11-15",
+                                          "tags": "admin,travel,family,urgent,paperwork,portugal"})
     phone.goto("/deck?view=open")
     tid = task_by_title(phone, "Renew passport")["id"]
     phone.request.put(f"/api/deck/{tid}", data={"rec_type": "yearly", "rec_interval": 10})
     phone.request.post(f"/api/deck/{tid}/comments", data={"text": "Shop closes at 6"})
     phone.request.post("/api/deck", data={"title": "Review the canary dashboards carefully", "start_date": tomorrow()})
     phone.reload()
-    phone.locator(".deck-density-btn").tap()
-    passport = card(phone, "Renew passport")
-    box = passport.bounding_box()
-    assert box["height"] >= 44                                   # finger-sized
-    assert phone.evaluate("document.documentElement.scrollWidth") <= 390
-    # Regression: with markers (↻ 💬) or a "📅 Tomorrow" the dates were
-    # cut at the line's end; every line's meta fits.
-    for item in phone.locator(".task-item").all():
-        assert item.evaluate("el => { const m = el.querySelector('.task-meta'); return !m || m.scrollWidth <= m.clientWidth + 1; }"), item.inner_text()
-    due = passport.locator(".task-due")
-    d = due.bounding_box()
-    assert due.evaluate("el => el.scrollWidth <= el.clientWidth + 1") and d["x"] + d["width"] <= box["x"] + box["width"]
-    # A tag shows whole or not at all.
-    tags = passport.locator(".task-tags-right")
-    t = tags.bounding_box()
-    for tag in passport.locator(".task-tag").all():
+    expect(card(phone, "Pack for the trip")).to_be_visible()
+    for switch in (False, True):                       # both densities
+        if switch:
+            phone.locator(".deck-density-btn").tap()
+        assert phone.evaluate("document.documentElement.scrollWidth") <= 390
+        for item in phone.locator(".task-item").all():
+            box = item.bounding_box()
+            assert box["height"] >= 44                                   # finger-sized
+            # Regression: with markers (↻ 💬) or a "📅 Tomorrow" the dates
+            # were cut at the line's end; every line's meta fits.
+            assert item.evaluate("el => { const m = el.querySelector('.task-meta'); return !m || m.scrollWidth <= m.clientWidth + 1; }"), item.inner_text()
+            due = item.locator(".task-due:not(.task-date-empty)")
+            if due.count():
+                d = due.bounding_box()
+                assert due.evaluate("el => el.scrollWidth <= el.clientWidth + 1") and d["x"] + d["width"] <= box["x"] + box["width"]
+            # Every tag shows, whole: tags wrap onto more lines rather than
+            # drop out when the line is short.
+            for tag in item.locator(".task-tag").all():
+                expect(tag).to_be_visible()
+                b = tag.bounding_box()
+                assert tag.evaluate("el => el.scrollWidth <= el.clientWidth + 1"), tag.inner_text()
+                assert box["x"] <= b["x"] and b["x"] + b["width"] <= box["x"] + box["width"]
+                assert b["y"] + b["height"] <= box["y"] + box["height"]
+        trip = card(phone, "Pack for the trip")
+        tags = [t.bounding_box() for t in trip.locator(".task-tag").all()]
+        assert len(tags) == 6 and tags[-1]["y"] > tags[0]["y"]          # on two lines
+
+
+def test_phone_card_menu_sits_on_the_title_line(new_page, wiki):
+    # ⋯ belongs to the first line (the title's), so the second line, with
+    # tags and dates, has the card's whole width; the first line doesn't
+    # grow for the finger-sized button.
+    from conftest import TOUCH_PHONE
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/api/deck", data={"title": "Pay rent", "tags": "home,money", "due_date": "2026-11-15"})
+    phone.request.post("/api/deck", data={"title": "Plain"})
+    phone.goto("/deck?view=open")
+    expect(card(phone, "Pay rent")).to_be_visible()
+    for switch in (False, True):                       # both densities
+        if switch:
+            phone.locator(".deck-density-btn").tap()
+        compact = "deck-compact" in phone.locator(".tasks-app").get_attribute("class")
+        rent = card(phone, "Pay rent")
+        title, menu = rent.locator(".task-content").bounding_box(), rent.locator(".task-menu-btn").bounding_box()
+        meta = rent.locator(".task-meta").bounding_box()
+        assert abs((menu["y"] + menu["height"] / 2) - (title["y"] + title["height"] / 2)) < 2, (menu, title)
+        assert menu["width"] >= 40 and menu["height"] >= 40
+        assert meta["y"] >= title["y"] + title["height"] - 1
+        assert meta["x"] + meta["width"] > menu["x"]                    # the line runs under ⋯
+        # A line with nothing but a title stays one finger-sized line (full
+        # cards on touch offer the empty ⏰ 📅 in a second line).
+        if compact:
+            assert card(phone, "Plain").bounding_box()["height"] < 56
+
+
+def test_full_cards_show_every_tag_compact_lines_stay_one_line(page, wiki):
+    # Short of room, a full card's tags wrap onto more lines (the dates stay
+    # at the first line's end); a compact line stays one line, its tags give
+    # way.
+    page.set_viewport_size({"width": 800, "height": 800})
+    page.request.post("/api/deck", data={"title": "Call the insurance about the broken window in the kitchen",
+                                         "tags": "home,insurance,money,calls,waiting,landlord,repairs",
+                                         "due_date": tomorrow()})
+    page.goto("/deck?view=open")
+    app, item = page.locator(".tasks-app"), card(page, "Call the insurance about the broken window in the kitchen")
+    if "deck-compact" in app.get_attribute("class"):
+        page.locator(".deck-density-btn").click()
+    expect(app).not_to_have_class(COMPACT)
+    box, due = item.bounding_box(), item.locator(".task-due").bounding_box()
+    tags = item.locator(".task-tag")
+    expect(tags).to_have_count(7)
+    for tag in tags.all():
         b = tag.bounding_box()
-        visible = b["y"] < t["y"] + t["height"] and b["x"] < t["x"] + t["width"]
-        if visible:
-            assert b["x"] + b["width"] <= t["x"] + t["width"] + 0.5 and b["y"] + b["height"] <= t["y"] + t["height"] + 0.5
+        assert box["x"] <= b["x"] and b["x"] + b["width"] <= due["x"]     # whole, left of the dates
+        assert b["y"] + b["height"] <= box["y"] + box["height"]           # inside the card
+    first = tags.first.bounding_box()
+    assert tags.last.bounding_box()["y"] > first["y"]                    # wrapped
+    assert abs((due["y"] + due["height"] / 2) - (first["y"] + first["height"] / 2)) < 2
+    page.locator(".deck-density-btn").click()
+    expect(app).to_have_class(COMPACT)
+    line = item.bounding_box()
+    assert line["height"] < box["height"]
+    t = item.locator(".task-tags-right").bounding_box()
+    hidden = [b for b in (tag.bounding_box() for tag in tags.all()) if b["y"] >= t["y"] + t["height"]]
+    assert hidden                                                       # some gave way
 
 
 # ── Compact: expand a task in place ──────────────────────────────────────────

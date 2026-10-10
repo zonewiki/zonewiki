@@ -136,13 +136,15 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         bar = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split(
             '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
-        assert re.findall(r'class="action-label">(\w+)<', bar) == ["Wiki", "Scratch", "Deck", "New", "Search"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Scratch", "Deck", "Note", "Task", "Search"]
+        # Navigation, a divider, then the actions.
+        assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
 
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/deck"):
             body = client.get(url, headers=HOST).data.decode()
-            assert 'class="action-new"' in body and 'class="action-search"' in body
+            assert all(f'class="action-{a}"' in body for a in ("scratch", "task", "search"))
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 

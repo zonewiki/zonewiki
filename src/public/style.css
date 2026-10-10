@@ -101,7 +101,7 @@ body {
   position: fixed; z-index: 300;
   right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom));
 }
-.action-buttons .action-module { display: none; }
+.action-buttons .action-module, .action-sep { display: none; }
 .action-label {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;
@@ -1749,9 +1749,10 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
-  /* The action bar becomes a bottom tab bar: Wiki, Scratch, Deck, New,
-     Search, each an icon over its label, the current module in the accent
-     colour. The breadcrumb's switcher shrinks to the logo. */
+  /* The action bar becomes a bottom tab bar: Wiki, Scratch, Deck | New
+     note, New task | Search, each an icon over its label,
+     the current module in the accent colour. The breadcrumb's switcher
+     shrinks to the logo. */
   .action-buttons {
     left: 0; right: 0; bottom: 0; gap: 0;
     padding: .2rem .25rem calc(.2rem + env(safe-area-inset-bottom));
@@ -1767,11 +1768,22 @@ body.editor-page main {
     text-decoration: none; cursor: pointer;
   }
   .action-buttons button:hover { box-shadow: none; }
+  /* Navigation, the "new" actions, Search: three groups, as on desktop. */
+  .action-sep { display: block; flex: none; align-self: center; width: 1px; height: 2rem; margin: 0 .25rem; background: var(--border); }
   .action-buttons .action-module[aria-current] { color: var(--btn-primary); font-weight: 600; }
   .action-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
-  .action-buttons .module-counts { position: absolute; top: .15rem; left: calc(50% + .45rem); margin: 0; gap: .15rem; }
+  /* The Deck tab's counts stand right of its icon, due above Focus, centred
+     on the icon (which sits .45rem above the tab's centre, the label below
+     it), so they never cover it. They reach past the tab's edge into extra
+     room before the divider; the tabs keep one width, so the icons stay
+     evenly spaced. */
+  .action-buttons .module-counts {
+    position: absolute; top: calc(50% - .45rem); left: calc(50% + .9rem); transform: translateY(-50%);
+    flex-direction: column; align-items: flex-start; margin: 0; gap: .1rem; pointer-events: none;
+  }
+  .action-buttons .action-module:has(.module-counts > :not([hidden])) + .action-sep { margin-left: 1.1rem; }
   .action-buttons :is(.module-due, .module-focus) {
-    min-width: 1rem; height: 1rem; padding: 0 .25rem; font-size: .65rem;
+    min-width: .9rem; height: .85rem; padding: 0 .2rem; font-size: .6rem;
   }
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label { display: none; }
   /* Keep the end of the page and the toasts clear of the bar. */
@@ -2196,8 +2208,8 @@ div.chip-input > input {
    comments hidden), except the expanded one (Enter, a tap), which looks
    exactly like a full card; so does a card in full view.
    The title is as wide as it needs (at least 6rem), the meta column never
-   narrower than its dates and markers (the tags in it have no minimum):
-   short of room, only tags give way, never a date. */
+   narrower than its dates and markers plus the widest tag: short of room,
+   the title wraps (or, in a compact line, is cut off), never a date. */
 .tasks-app .task-item {
   grid-template-columns: auto minmax(6rem, max-content) minmax(min-content, 1fr) auto;
   grid-template-areas: "check title meta actions" ". desc desc desc" ". comments comments comments";
@@ -2218,17 +2230,26 @@ div.chip-input > input {
   /* No wrap inside "📅 Tomorrow": its column's minimum is the whole line. */
   white-space: nowrap;
 }
-/* Tags that don't fit drop out whole: they wrap onto a second line, which
-   the one-line height hides (never half a tag). */
+/* In a compact line, tags that don't fit drop out whole: they wrap onto a
+   second line, which the one-line height hides (never half a tag). The
+   widest tag counts toward the column, so the line keeps room for one and
+   expanding it (where they all show) moves nothing. */
 .tasks-app .task-tags-right {
   flex-wrap: wrap; min-width: 0; flex: 1 1 auto; overflow: hidden;
   height: 1.5em; align-content: flex-start; row-gap: 1em;
-  /* Its own width doesn't count toward the column's: the tags only fill
-     what the title, dates and markers leave. */
-  contain: inline-size;
 }
 /* An empty first item, so even the first tag can wrap away. */
 .tasks-app .task-tags-right::before { content: ""; width: 0; height: 1.5em; margin-right: -.2rem; }
+/* Full cards (and the expanded task) show every tag: the tags wrap onto
+   more lines under the first; the dates stay at the first line's right
+   end. Only a compact line, one line by definition, lets tags give way. */
+:is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-meta { align-items: flex-start; }
+:is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-tags-right {
+  height: auto; row-gap: .2rem;
+  padding-block: calc((var(--line) - 1.5em) / 2);
+}
+:is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-tags-right::before { content: none; }
+:is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-meta-right { min-height: var(--line); }
 .tasks-app .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; padding-left: .35rem; }
 /* Empty date placeholders (⏰ 📅 to set one): on hover, full cards and
    compact lines alike. */
@@ -2261,22 +2282,34 @@ div.chip-input > input {
 @media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }
 /* A phone's line is too short for title and dates: the title gets the
    first line to itself (beside the checkbox and ⋯), tags, markers and dates
-   go to a second line; a card with none of them stays one line. The same
-   in compact view, so an expanded task still looks like a full card. */
+   go to a second line, which has the card's whole width; a card with none
+   of them stays one line. The same in compact view, so an expanded task
+   still looks like a full card. */
 @media (max-width: 640px) {
   .tasks-app .task-item {
     grid-template-columns: auto minmax(0, 1fr) auto;
-    /* ⋯ (finger-sized) spans the title's line and the second one, so it
-       doesn't make the first line tall. */
-    grid-template-areas: "check title actions" ". meta actions" ". desc desc" ". comments comments";
+    grid-template-areas: "check title actions" ". meta meta" ". desc desc" ". comments comments";
   }
-  .tasks-app .task-item .task-actions { align-self: center; }
+  /* ⋯ stays finger-sized but takes only the title line's height: its
+     target reaches into the card's padding instead of making the line tall. */
+  .tasks-app .task-item .task-menu-btn { margin-block: calc((var(--line) - 2.5rem) / 2); }
   .tasks-app .task-item .task-meta,
   .tasks-app .task-item .task-meta--hover-only,
   .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
   .tasks-app.deck-compact .task-item:not(.task-expanded) {
-    grid-template-areas: "check title actions" ". meta actions";
+    grid-template-areas: "check title actions" ". meta meta";
   }
+  /* Every tag shows: they wrap onto more lines rather than drop out; the
+     dates follow the last tag, at the right end, or take the next line. */
+  .tasks-app .task-item .task-meta { flex-wrap: wrap; gap: .2rem; }
+  /* The tags flow in the line itself, so the dates fit in after the last
+     one when there is room. */
+  .tasks-app .task-tags-right { display: contents; }
+  .tasks-app .task-tags-right::before { content: none; }
+  /* Tags and dates share the lines here: one alignment for both. */
+  :is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-meta { align-items: center; }
+  :is(.tasks-app:not(.deck-compact) .task-item, .tasks-app .task-item.task-expanded) .task-meta-right { min-height: 0; }
+  .tasks-app .task-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   /* Two short lines instead of one tall one: the finger-sized minimum is
      the row's, not each line's. */
   .tasks-app .task-item { --line: 1.75rem; min-height: 2.75rem; padding-block: .3rem; }
