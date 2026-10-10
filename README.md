@@ -8,6 +8,30 @@ self-host it behind HTTPS.
 
 ![A wiki page in Leaf: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
+## Why Leaf
+
+- **Notes and tasks in one place.** The wiki and the task deck share links,
+  search and history. A page can show a task as a chip, and a task can link to
+  a page, with no plugins to combine.
+- **Plain files, full history.** Pages are Markdown you can edit in any
+  editor. Finishing an edit commits it to git, so you can see,
+  diff and restore what changed. Tasks are plain JSON files in the same
+  repository.
+- **Made to be written by an AI too.** An [MCP server](#connect-an-ai-assistant)
+  lets an assistant search, read, create and edit pages and tasks. Edits are
+  precise (exact-text replace, append under a heading), warn about broken
+  links, and show up as commits marked `(MCP)` that you can review or undo.
+- **Any browser, nothing to install on the client.** Open a URL on your
+  phone or another computer. The server is one Python process, with no
+  database and no build step, small enough to read and change.
+- **Local first, self-hostable.** Runs on your machine by default. To reach it
+  from elsewhere, put it behind HTTPS with a password (see
+  [Security](#security)).
+
+Leaf is not a plugin platform or a native app, and it has no graph view or
+real-time collaboration. It aims to be a small, readable tool for one
+person's notes and tasks.
+
 ## How Leaf is organised
 
 Leaf has three modules: the **Wiki** for your notes, **Scratch** for quick
