@@ -3,7 +3,7 @@
 A local-first personal wiki with a built-in task deck. Your notes are plain
 Markdown files in a folder you choose; Leaf renders them in the browser, lets
 you edit them there or in any editor, searches them, and keeps every version
-in git. No database, no build step, no cloud: run it on your machine, or
+in git. No database, no frontend build, no cloud: run it on your machine, or
 self-host it behind HTTPS.
 
 ![A wiki page in Leaf: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
@@ -23,7 +23,8 @@ self-host it behind HTTPS.
   links, and show up as commits marked `(MCP)` that you can review or undo.
 - **Any browser, nothing to install on the client.** Open a URL on your
   phone or another computer. The server is one Python process, with no
-  database and no build step, small enough to read and change.
+  database, and no npm or bundler for the frontend. It is small enough to
+  read and change.
 - **Local first, self-hostable.** Runs on your machine by default. To reach it
   from elsewhere, put it behind HTTPS with a password (see
   [Security](#security)).
