@@ -129,6 +129,19 @@ def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
     assert " fake-image gitleaks " in run
 
 
+def test_every_build_names_its_containerfile(sandbox):
+    # docker, unlike podman, looks only for a Dockerfile when -f is missing.
+    repo, env, log = sandbox
+    for check, file in (("test", "Containerfile"), ("e2e", "Containerfile.tools"),
+                        ("screenshots", "Containerfile.tools")):
+        log.unlink(missing_ok=True)
+        r = subprocess.run(["./run.sh", check], cwd=repo, env=env,
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        (build,) = _engine_calls(log, "build")
+        assert f" -f {file} " in build
+
+
 def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):
     repo, env, log = sandbox
     env["FAKE_BUILD_FAILS"] = "1"

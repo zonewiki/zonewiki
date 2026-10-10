@@ -161,7 +161,8 @@ case "${1:-up}" in
     # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
     # Built without compose, which would want a .env the tests don't need.
-    image=$(build_image leaf --build-arg "LEAF_BUILD=$LEAF_BUILD")
+    # -f: docker, unlike podman, doesn't fall back to Containerfile.
+    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD")
     in_image "$image" -- sh -c \
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
