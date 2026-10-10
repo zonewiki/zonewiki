@@ -22,43 +22,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    # Same base and packages as the app image; nodejs runs actions/checkout
-    # and tests/test_deck_core.py. No ca-certificates needed: checkout uses
-    # the runner's internal http://web:3000 and pip brings its own CA bundle.
+  checks:
+    # The checks run through run.sh, as on your machine, in images built from
+    # the repo's Containerfiles: test in the app image, e2e (browser and
+    # deck-core tests) in the tools image. So CI keeps no package lists or commands of its own. Like
+    # the image job, the builds run on the host's engine through the socket,
+    # so layers come from its cache unless the dependencies changed.
+    # LEAF_COPY_REPO: the checkout lives in this job container, not on the
+    # host, so run.sh copies it into the container instead of mounting it.
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [test, e2e]
+    name: ${{ matrix.check }}
     runs-on: docker
     container:
-      image: ubuntu:26.04
+      image: docker:cli
     steps:
       - name: Install system packages
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends python3 python3-pip git nodejs
+        # Alpine: nodejs runs actions/checkout, bash run.sh, git its build string.
+        run: apk add --no-cache nodejs git bash
       - uses: actions/checkout@v4
-      - name: Install Python packages
-        run: pip install --break-system-packages -r src/requirements.txt pytest
-      - name: Unit and API tests
-        run: python3 -m pytest -q tests
-
-  e2e:
-    # The environment of Containerfile.e2e (keep the two in sync).
-    runs-on: docker
-    container:
-      image: mcr.microsoft.com/playwright/python:v1.63.0-noble
-      options: --shm-size=1g
-    steps:
-      - name: Install system packages
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends nodejs git
-      - uses: actions/checkout@v4
-      - name: Install Python packages
-        run: pip install --break-system-packages -r src/requirements.txt pytest playwright==1.63.0
-      - name: Browser tests
-        run: python3 -m pytest tests/e2e -v -p no:cacheprovider
+      - name: ./run.sh ${{ matrix.check }}
+        env:
+          LEAF_COPY_REPO: 1
+        run: ./run.sh ${{ matrix.check }}
 
   image:
-    needs: [test, e2e]
+    needs: [checks]
     # Only with a registry to push to (forks and clones without one just test).
     if: github.event_name != 'pull_request' && vars.REGISTRY != ''
     runs-on: docker

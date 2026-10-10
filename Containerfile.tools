@@ -1,9 +1,11 @@
-# Browser test image: Microsoft's Playwright image (Ubuntu, Chromium + system
-# deps preinstalled) plus Leaf's Python deps. Test-only — the app image
-# (Containerfile) stays browser-free. The repo is bind-mounted at /repo at run
-# time, so the image only needs rebuilding when dependencies change.
+# Tools image: what checking Leaf needs beyond the app itself. Microsoft's
+# Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Leaf's
+# Python deps for the browser tests and Node for the deck-core tests.
+# Test-only — the app image (Containerfile)
+# stays browser-free. The repo is bind-mounted at /repo at run time, so the
+# image only needs rebuilding when dependencies change.
 #
-#   ./run.sh e2e            # build (cached) and run tests/e2e
+#   ./run.sh e2e            # build (cached) and run tests/e2e + deck-core
 #
 # Keep the playwright pip version in lockstep with the image tag: the Python
 # package only works with the browser build that ships in the matching image.

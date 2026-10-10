@@ -67,8 +67,8 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
-├── Containerfile.e2e       # Test-only image: Playwright + Chromium for browser tests, Node for deck-core tests, git
-├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e
+├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, git
+├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e (CI runs these too)
 ├── .env                    # Host data path configuration
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: tests, e2e, build + push the image
 └── src/
@@ -116,7 +116,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh            # build the image and start Leaf (default: "up"), via compose
 ./run.sh build|up|down|logs
 ./run.sh test       # unit/API tests in the app image (extra args go to pytest)
-./run.sh e2e        # browser tests + deck-core.js (Node) tests in the test image
+./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ```
 
@@ -159,7 +159,7 @@ pytest tests/test_mcp.py -q           # one module
 ./run.sh e2e                          # browser tests (Playwright) and deck-core.js under Node
 ```
 
-Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `write_page`, …). Browser tests skip without Playwright, Node tests without Node. Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `Containerfile.e2e` equal to its image tag, and the CI's e2e job in sync with that file.
+Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `write_page`, …). Browser tests skip without Playwright, Node tests without Node. Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `Containerfile.tools` equal to its image tag. CI runs the same `run.sh` commands in the images the two Containerfiles build, so a dependency or a test command changes in one place.
 
 ---
 

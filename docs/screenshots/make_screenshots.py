@@ -5,7 +5,7 @@ sample wiki, so they can be redone whenever the UI changes:
 
 It runs Leaf on a throwaway wiki (pages, tasks dated around today, a git
 repo) and photographs it with headless Chromium (Playwright), as the browser
-tests do: in the test image, which has both.
+tests do: in the tools image, which has both.
 """
 
 import os

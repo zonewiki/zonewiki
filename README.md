@@ -326,7 +326,7 @@ Stop using Leaf and your notes are still just Markdown.
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ```
 
-All three run in containers (Podman or Docker, no compose needed).
+All three run in containers (Podman or Docker, no compose needed); CI runs the same commands.
 
 Python with Flask and markdown-it-py, plain ES modules in the browser, and
 one stylesheet; no bundler, no npm.

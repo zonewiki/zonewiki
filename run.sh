@@ -83,6 +83,33 @@ if [[ -z "$TZ" ]]; then
 fi
 export TZ="${TZ:-UTC}"
 
+# Run a command in an image with the repo at /repo: in_image IMAGE [OPTION…]
+# -- COMMAND…, the options going to the engine. The repo is bind-mounted, or
+# with LEAF_COPY_REPO=1 (CI) copied in: there the engine is the host's while
+# the checkout lives in the job container, so a mount would name a host path.
+# Copied, nothing the command writes comes back.
+in_image() {
+  local image=$1 opts=()
+  shift
+  while [[ $1 != -- ]]; do opts+=("$1"); shift; done
+  shift
+  if [[ -n "$LEAF_COPY_REPO" ]]; then
+    local c
+    c=$($ENGINE create "${opts[@]}" -w /repo "$image" "$@")
+    trap "$ENGINE rm -f $c >/dev/null" EXIT
+    $ENGINE cp ./. "$c:/repo"
+    $ENGINE start -a "$c"
+  else
+    $ENGINE run --rm "${opts[@]}" -v "$PWD:/repo:z" -w /repo "$image" "$@"
+  fi
+}
+
+# Build an image quietly and print its ID; commands run it by ID, so two
+# builds at once (CI runs on one engine) can't swap a shared tag under them.
+build_image() {
+  $ENGINE build -q "$@" .
+}
+
 case "${1:-up}" in
   build)
     compose build
@@ -117,8 +144,8 @@ case "${1:-up}" in
     # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
     # Built without compose, which would want a .env the tests don't need.
-    $ENGINE build -q --build-arg "LEAF_BUILD=$LEAF_BUILD" -t leaf . >/dev/null
-    $ENGINE run --rm -v "$PWD:/repo:z" -w /repo leaf sh -c \
+    image=$(build_image --build-arg "LEAF_BUILD=$LEAF_BUILD" -t leaf)
+    in_image "$image" -- sh -c \
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests "$@"
@@ -126,18 +153,17 @@ case "${1:-up}" in
     ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
-    # deck-core.js tests, in a separate test image that has both.
+    # deck-core.js tests, in the tools image (Containerfile.tools).
     # Screenshots land in tests/e2e/_screenshots/.
-    $ENGINE build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
-    $ENGINE run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
+    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    in_image "$image" --ipc=host -- \
       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
   screenshots)
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
-    # in the test image (Playwright).
-    $ENGINE build -q -t leaf-e2e -f Containerfile.e2e . >/dev/null
-    $ENGINE run --rm --ipc=host -v "$PWD:/repo:z" -w /repo leaf-e2e \
-      python3 docs/screenshots/make_screenshots.py
+    # in the tools image (Playwright).
+    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   *)
     echo "Usage: $0 [build|up|down|logs|test|e2e|screenshots]"
@@ -146,7 +172,7 @@ case "${1:-up}" in
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
     echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
-    echo "  e2e    - run browser tests in the Playwright image (extra args go to pytest)"
+    echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     exit 1
     ;;
