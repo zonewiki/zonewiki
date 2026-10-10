@@ -850,6 +850,58 @@ class TestWritesCommit:
         assert status == ""
 
 
+@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+class TestOpenInTheEditor:
+    """The editor auto-saves without committing. A model's write must neither
+    take that draft into its own commit nor lose it."""
+
+    @pytest.fixture()
+    def draft(self, client, git_wiki_dir):
+        call(client, "write_page", slug="p", content="# P\n\nline one")
+        resp = client.post("/api/save/p", data={"content": "# P\n\nline one\nMY DRAFT\n"}, headers=HOST)
+        assert resp.status_code == 204
+        return git_wiki_dir
+
+    def log(self, wiki):
+        import subprocess
+        import gitstore
+        return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True, text=True,
+                              env=gitstore._GIT_ENV).stdout.splitlines()
+
+    def test_draft_committed_as_the_users_first(self, client, draft):
+        import gitstore
+        text, err = call(client, "edit_page", slug="p", old_string="line one", new_string="line ONE")
+        assert not err and 'committed first, as "Save p", and kept' in text
+        assert self.log(draft)[:2] == ["Update p (MCP)", "Save p"]
+        diff = gitstore.git_diff(gitstore.git_log(draft / "p.md")[0]["sha"], draft / "p.md")
+        assert "+line ONE" in diff and "+MY DRAFT" not in diff
+
+    def test_overwrite_keeps_the_draft_in_history(self, client, draft):
+        import gitstore
+        call(client, "write_page", slug="p", content="# P\n\nreplaced", overwrite=True)
+        saved = gitstore.git_log(draft / "p.md")[1]
+        assert saved["msg"] == "Save p"
+        assert "MY DRAFT" in gitstore.git_show(saved["sha"], draft / "p.md")
+
+    def test_delete_keeps_the_draft_in_history(self, client, draft):
+        call(client, "delete_page", slug="p")
+        assert self.log(draft)[:2] == ["Delete p (MCP)", "Save p"]
+
+    def test_editor_then_sees_a_conflict(self, client, draft):
+        import server
+        hash_before = server.content_hash("# P\n\nline one\nMY DRAFT\n")
+        call(client, "append_to_page", slug="p", content="from the model")
+        resp = client.post("/api/save/p", data={"content": "# P\n\nmine\n", "file_hash": hash_before},
+                           headers=HOST)
+        assert resp.status_code == 409          # the editor shows "File was modified" instead of overwriting
+        assert "from the model" in (draft / "p.md").read_text()
+
+    def test_nothing_pending_no_note(self, client, git_wiki_dir):
+        call(client, "write_page", slug="q", content="# Q")
+        text, _ = call(client, "edit_page", slug="q", old_string="# Q", new_string="# Q2")
+        assert "Note" not in text and self.log(git_wiki_dir)[0] == "Update q (MCP)"
+
+
 # ── Writing tasks ────────────────────────────────────────────────────────────
 
 def _task_id(text: str) -> str:

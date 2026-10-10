@@ -20,7 +20,7 @@ import pages
 import mcp_server
 import retrieval
 import search
-from gitstore import git_commit, grep_pages, GrepError, move_page
+from gitstore import git_commit, grep_pages, GrepError, is_uncommitted, move_page
 from mdtext import is_scratch, iter_fenced_lines, mask_code, page_title, plain_heading, split_wikilink, to_slug, WIKILINK_RE
 from pages import all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
 from render import task_link, TOC_RE
@@ -205,6 +205,19 @@ def _commit_msg(action: str, args: dict) -> str:
     return action + _msg_suffix(args)
 
 
+def _save_pending(path: Path, slug: str) -> str:
+    """Before a write: commit what the page holds that isn't committed yet
+    (the browser editor auto-saves without committing; or edits on disk), as
+    the user's own "Save <slug>". Else that text would end up in the model's
+    commit, or be lost to an overwrite or a delete. Returns a note for the
+    model: the user may have the page open."""
+    if not path.exists() or not is_uncommitted(path):
+        return ""
+    git_commit(path, f"Save {slug}")
+    return (f"\nNote: {slug} had changes that weren't committed yet (the user may be editing it "
+            f"in the browser); they were committed first, as \"Save {slug}\", and kept.")
+
+
 def _existing_page(args: dict, name: str = "slug") -> tuple[str, Path]:
     raw = _str_arg(args, name)
     slug = _mcp_page_slug(raw)
@@ -289,6 +302,7 @@ def _write_page(args: dict, base: str) -> str:
             "or set overwrite=true to replace all of it.")
     slug = existing or _new_slug(args["slug"])
     path = safe_path(slug)
+    pending = _save_pending(path, slug) if existing else ""
     old = path.read_text(encoding="utf-8") if existing else ""
     content = content.rstrip("\n") + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,7 +315,7 @@ def _write_page(args: dict, base: str) -> str:
             out += ("\nNote: pages with similar names exist; if this one repeats one of them, "
                     "merge it there (edit_page) and delete_page this one:\n"
                     + "\n".join(f"- {s} | {t}" for s, t in similar))
-    return out + _link_warning(old, content)
+    return out + pending + _link_warning(old, content)
 
 
 def _edit_page(args: dict, base: str) -> str:
@@ -310,6 +324,7 @@ def _edit_page(args: dict, base: str) -> str:
     new_string = _str_arg(args, "new_string", required=False)
     if old_string == new_string:
         raise mcp_server.ToolError("old_string and new_string are the same: nothing to change")
+    pending = _save_pending(path, slug)
     content = path.read_text(encoding="utf-8")
     count = content.count(old_string)
     if count == 0:
@@ -325,7 +340,7 @@ def _edit_page(args: dict, base: str) -> str:
     path.write_text(new, encoding="utf-8")
     git_commit(path, _commit_msg(f"Update {slug}", args))
     what = f"{count} occurrences" if count > 1 else "1 occurrence"
-    return f"Edited page {slug}: replaced {what}.\n{_page_info(slug, base)}" + _link_warning(content, new)
+    return f"Edited page {slug}: replaced {what}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
 
 
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
@@ -360,6 +375,7 @@ def _append_to_page(args: dict, base: str) -> str:
     slug, path = _existing_page(args)
     addition = _str_arg(args, "content").strip("\n")
     heading = _str_arg(args, "under_heading", required=False).strip()
+    pending = _save_pending(path, slug)
     content = path.read_text(encoding="utf-8")
     if heading:
         new = _append_at(content, addition, heading)
@@ -375,7 +391,7 @@ def _append_to_page(args: dict, base: str) -> str:
     path.write_text(new, encoding="utf-8")
     git_commit(path, _commit_msg(f"Append to {slug}", args))
     where = f" under {heading!r}" if heading else ""
-    return f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + _link_warning(content, new)
+    return f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
 
 
 def _rename_page(args: dict, base: str) -> str:
@@ -388,9 +404,10 @@ def _rename_page(args: dict, base: str) -> str:
     new_path = safe_path(new_slug)
     if new_path.exists():
         raise mcp_server.ToolError(f"A page {new_slug!r} already exists")
+    pending = _save_pending(path, slug)
     changed = move_page(path, new_path, slug, new_slug, _commit_msg(f"Rename {slug} to {new_slug}", args))
     refs = f" Links to it were updated in {len(changed)} files." if changed else ""
-    return f"Renamed page {slug} to {new_slug}.{refs}\n{_page_info(new_slug, base)}"
+    return f"Renamed page {slug} to {new_slug}.{refs}\n{_page_info(new_slug, base)}" + pending
 
 
 def _delete_page(args: dict, base: str) -> str:
@@ -398,6 +415,7 @@ def _delete_page(args: dict, base: str) -> str:
     if is_protected(slug):
         raise mcp_server.ToolError(f"{slug} is the home page; it can't be deleted")
     linking = find_backlinks(slug)
+    pending = _save_pending(path, slug)
     path.unlink()
     git_commit(path, _commit_msg(f"Delete {slug}", args))
     out = f"Deleted page {slug}."
@@ -406,7 +424,7 @@ def _delete_page(args: dict, base: str) -> str:
     if linking:
         out += ("\nThese pages still link to it: "
                 + ", ".join(b["slug"] for b in linking))
-    return out
+    return out + pending
 
 
 _TASK_LINK_RE = re.compile(r"task[:=]([0-9a-f-]{4,36})")

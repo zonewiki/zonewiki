@@ -189,6 +189,15 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
     return entries
 
 
+def is_uncommitted(path: Path) -> bool:
+    """Whether the file differs from its last commit (or was never
+    committed): edits auto-saved by the editor, or made on disk."""
+    if not config.GIT_ENABLED:
+        return False
+    r = run_git("git", "status", "--porcelain", "--", str(path.relative_to(config.LEAF_DATA)))
+    return r.returncode == 0 and bool(r.stdout.strip())
+
+
 def git_show(sha: str, path: Path) -> str | None:
     rel = str(path.relative_to(config.LEAF_DATA))
     r = run_git("git", "show", f"{sha}:{rel}")
