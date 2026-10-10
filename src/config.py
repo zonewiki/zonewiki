@@ -42,8 +42,8 @@ LEAF_MCP_TOKEN = os.environ.get("LEAF_MCP_TOKEN", "")
 # which for a client in a container is e.g. host.containers.internal.
 LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
 # The wiki folder as the host sees it (run.sh passes it), for the file paths
-# the MCP tools give; inside the container WIKI_DIR is only /wiki-data.
-# Unset, the MCP tools use WIKI_DIR itself (mcp_tools._host_file).
+# the MCP tools give; inside the container LEAF_DATA is only /wiki-data.
+# Unset, the MCP tools use LEAF_DATA itself (mcp_tools._host_file).
 LEAF_HOST_DATA = os.environ.get("LEAF_HOST_DATA", "").strip().rstrip("/")
 # A remote for the wiki's git repository (gitstore.git_setup).
 LEAF_GIT_REMOTE = os.environ.get("LEAF_GIT_REMOTE", "")
@@ -86,10 +86,10 @@ NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or
 
 # The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/). It
 # must exist: Leaf doesn't make a wiki where a mistyped LEAF_DATA points.
-WIKI_DIR = Path(os.environ.get("LEAF_DATA", Path(__file__).parent / "data"))
-if not WIKI_DIR.is_dir():
-    sys.exit(f"Leaf: no wiki at {WIKI_DIR}. Create the folder, or set LEAF_DATA to your wiki.")
-UPLOADS_DIR = WIKI_DIR / "_assets"
+LEAF_DATA = Path(os.environ.get("LEAF_DATA", Path(__file__).parent / "data"))
+if not LEAF_DATA.is_dir():
+    sys.exit(f"Leaf: no wiki at {LEAF_DATA}. Create the folder, or set LEAF_DATA to your wiki.")
+UPLOADS_DIR = LEAF_DATA / "_assets"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 GIT_ENABLED = shutil.which("git") is not None

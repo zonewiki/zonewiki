@@ -128,7 +128,7 @@ def start_semantic() -> None:
     worker (server.py, once the deck is set up: the worker reads tasks)."""
     global SEMANTIC
     SEMANTIC = embed.from_env(
-        config.WIKI_DIR, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
+        config.LEAF_DATA, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
         # A task is embedded as its search text: title, notes and #tags.
         tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deckstore.task_search_docs()])
     if SEMANTIC:

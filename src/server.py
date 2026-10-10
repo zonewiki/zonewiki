@@ -74,7 +74,7 @@ def _secret_key() -> bytes:
     can't write to gets a new key per start."""
     if os.environ.get("LEAF_SECRET_KEY"):
         return os.environ["LEAF_SECRET_KEY"].encode()
-    path = config.WIKI_DIR / "_leaf" / "secret_key"
+    path = config.LEAF_DATA / "_leaf" / "secret_key"
     try:
         key = path.read_bytes().strip()
         if len(key) >= 32:
@@ -171,20 +171,20 @@ def deny_framing(response):
 def ensure_home_page() -> None:
     """Give a wiki without index.md (a new one) its home page, committed:
     "/" opens it, and it can't be renamed or deleted."""
-    path = config.WIKI_DIR / "index.md"
+    path = config.LEAF_DATA / "index.md"
     if not path.exists():
         path.write_text("# Home\n\n", encoding="utf-8")
         git_commit(path, "Create index")
 
 
 git_setup()
-exclude_from_git(config.WIKI_DIR, "/_leaf/")   # the secret key (_secret_key)
+exclude_from_git(config.LEAF_DATA, "/_leaf/")   # the secret key (_secret_key)
 ensure_home_page()
 
 
 # The deck's files are in the wiki; the semantic index's worker reads tasks,
 # so it starts once the deck is set up.
-deckstore.init_deck(config.WIKI_DIR, config.GIT_ENABLED, git_commit)
+deckstore.init_deck(config.LEAF_DATA, config.GIT_ENABLED, git_commit)
 app.register_blueprint(deck.bp)
 app.register_blueprint(history.bp)
 retrieval.start_semantic()

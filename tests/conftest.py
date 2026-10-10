@@ -29,9 +29,9 @@ HOST = {"Host": "localhost:5000"}
 def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server and the deck point at,
     with every cache derived from pages or tasks emptied."""
-    monkeypatch.setattr(config, "WIKI_DIR", tmp_path)
+    monkeypatch.setattr(config, "LEAF_DATA", tmp_path)
     monkeypatch.setattr(config, "UPLOADS_DIR", tmp_path / "_assets")
-    monkeypatch.setattr(deckstore, "WIKI_DIR", tmp_path)
+    monkeypatch.setattr(deckstore, "LEAF_DATA", tmp_path)
     monkeypatch.setattr(deckstore, "DECK_FILE", tmp_path / "_deck" / "tasks.json")
     for cache in (retrieval._search_doc_cache, retrieval._chunk_doc_cache,
                   pages._page_meta_cache, pages._noshare_tag_cache):

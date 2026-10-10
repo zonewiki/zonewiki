@@ -37,7 +37,7 @@ def serialized(fn):
 
 
 # These are set by init_deck() from server.py at startup
-WIKI_DIR: Path = Path(".")
+LEAF_DATA: Path = Path(".")
 
 
 DECK_FILE: Path = Path("_deck/tasks.json")   # the open tasks; the rest sit beside it
@@ -53,8 +53,8 @@ def _completed_path() -> Path:
 
 def init_deck(wiki_dir: Path, git_enabled: bool, git_commit_fn) -> None:
     """Initialize module-level state from the main server."""
-    global WIKI_DIR, DECK_FILE, GIT_ENABLED, _git_commit_fn
-    WIKI_DIR = wiki_dir
+    global LEAF_DATA, DECK_FILE, GIT_ENABLED, _git_commit_fn
+    LEAF_DATA = wiki_dir
     DECK_FILE = wiki_dir / DECK_DIR_NAME / "tasks.json"
     GIT_ENABLED = git_enabled
     _git_commit_fn = git_commit_fn

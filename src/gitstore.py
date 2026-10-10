@@ -35,7 +35,7 @@ GIT_TIMEOUT = 60
 
 def run_git(*args: str) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(list(args), cwd=config.WIKI_DIR, capture_output=True, text=True,
+        return subprocess.run(list(args), cwd=config.LEAF_DATA, capture_output=True, text=True,
                               env=_GIT_ENV, timeout=GIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(list(args), 124, "", f"git timed out after {GIT_TIMEOUT}s")
@@ -44,11 +44,11 @@ def run_git(*args: str) -> subprocess.CompletedProcess:
 def git_setup() -> None:
     if not config.GIT_ENABLED:
         return
-    if not (config.WIKI_DIR / ".git").exists():
+    if not (config.LEAF_DATA / ".git").exists():
         run_git("git", "init")
         run_git("git", "config", "user.email", "leaf@localhost")
         run_git("git", "config", "user.name", "Leaf")
-        gitignore = config.WIKI_DIR / ".gitignore"
+        gitignore = config.LEAF_DATA / ".gitignore"
         if not gitignore.exists():
             gitignore.write_text("", encoding="utf-8")
         run_git("git", "add", ".")
@@ -72,7 +72,7 @@ def git_commit(paths: Path | list[Path], message: str) -> None:
         return
     if isinstance(paths, Path):
         paths = [paths]
-    rels = [str(p.relative_to(config.WIKI_DIR)) for p in paths]
+    rels = [str(p.relative_to(config.LEAF_DATA)) for p in paths]
     run_git("git", "add", "--", *rels)
     run_git("git", "commit", "-m", message)
 
@@ -108,7 +108,7 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
     to the wiki), which differs from today's before a rename."""
     if not config.GIT_ENABLED:
         return []
-    rel = str(path.relative_to(config.WIKI_DIR))
+    rel = str(path.relative_to(config.LEAF_DATA))
     count_args = ["-n", str(max_count)] if max_count else []
     r = run_git("git", "log", "--follow", *count_args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
              "--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%s", "--", rel)
@@ -132,7 +132,7 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
 
 
 def git_show(sha: str, path: Path) -> str | None:
-    rel = str(path.relative_to(config.WIKI_DIR))
+    rel = str(path.relative_to(config.LEAF_DATA))
     r = run_git("git", "show", f"{sha}:{rel}")
     return r.stdout if r.returncode == 0 else None
 
@@ -164,7 +164,7 @@ def relative_time(dt: datetime) -> str:
 
 def git_uncommitted_files() -> list[dict]:
     """Files with uncommitted changes (modified, added, deleted, untracked),
-    as dicts with 'filepath' (relative to WIKI_DIR), 'mtime' (YYYY-MM-DD)
+    as dicts with 'filepath' (relative to LEAF_DATA), 'mtime' (YYYY-MM-DD)
     and 'rel' (relative time); both empty for a deleted file.
 
     -z: paths come unquoted (without it git quotes a name with a space or
@@ -180,7 +180,7 @@ def git_uncommitted_files() -> list[dict]:
             next(fields, None)   # a rename's or copy's old path
         if not status.strip() or not filepath or filepath.endswith("/"):
             continue
-        fpath = config.WIKI_DIR / filepath
+        fpath = config.LEAF_DATA / filepath
         mtime = rel = ""
         if fpath.exists():
             mtime_dt = datetime.fromtimestamp(fpath.stat().st_mtime)
@@ -198,7 +198,7 @@ def git_diff(sha: str, path: Path, *also: Path) -> str | None:
     """What a commit changed in a file. `also`: its name before the commit,
     when the commit renamed it, so the rename is seen as one (a pure rename
     changes nothing) instead of a new file."""
-    rels = [str(p.relative_to(config.WIKI_DIR)) for p in (path, *also)]
+    rels = [str(p.relative_to(config.LEAF_DATA)) for p in (path, *also)]
     r = run_git("git", "show", "--format=", "--patch", "-M", sha, "--", *dict.fromkeys(rels))
     return r.stdout.strip() if r.returncode == 0 else None
 
@@ -211,7 +211,7 @@ def uncommitted_entries() -> list[dict]:
         filepath = f["filepath"]
         if filepath.endswith('.md') and not filepath.startswith('_assets'):
             slug = filepath[:-3]
-            fpath = config.WIKI_DIR / filepath
+            fpath = config.LEAF_DATA / filepath
             title = page_title(fpath.read_text(encoding="utf-8"), slug) if fpath.exists() else slug_display_name(slug)
             entries.append({"slug": slug, "title": title, "filepath": filepath,
                             "mtime": f["mtime"], "rel": f["rel"]})
@@ -298,7 +298,7 @@ def version_index(entries: list[dict], sha: str) -> int | None:
 def version_path(path: Path, entries: list[dict], sha: str) -> Path:
     """The file's path at a commit: before a rename it had another name."""
     i = version_index(entries, sha)
-    return config.WIKI_DIR / entries[i]["path"] if i is not None else path
+    return config.LEAF_DATA / entries[i]["path"] if i is not None else path
 
 
 def is_current(path: Path, entries: list[dict]) -> bool:

@@ -112,7 +112,7 @@ def diff_view(slug, sha):
         abort(400)
     entries = git_log(path)
     i = version_index(entries, sha)
-    before = [config.WIKI_DIR / entries[i + 1]["path"]] if i is not None and i + 1 < len(entries) else []
+    before = [config.LEAF_DATA / entries[i + 1]["path"]] if i is not None and i + 1 < len(entries) else []
     diff = git_diff(sha, version_path(path, entries, sha), *before)
     if diff is None:
         abort(404)
@@ -169,7 +169,7 @@ def diff_uncommitted(slug):
     if path is None or not path.exists():
         abort(404)
 
-    rel = str(path.relative_to(config.WIKI_DIR))
+    rel = str(path.relative_to(config.LEAF_DATA))
     status_r = run_git("git", "status", "--porcelain", "--", rel)
     if status_r.stdout.startswith("??"):
         r = run_git("git", "diff", "--no-index", "--", "/dev/null", rel)
@@ -202,7 +202,7 @@ def api_commit_all():
     committed = []
     for f in git_uncommitted_files():
         filepath = f["filepath"]
-        git_commit(config.WIKI_DIR / filepath, commit_message(filepath))
+        git_commit(config.LEAF_DATA / filepath, commit_message(filepath))
         committed.append(filepath)
     return jsonify({"committed": len(committed), "files": committed})
 
@@ -223,5 +223,5 @@ def api_commit_file():
         return jsonify({"error": "File is not uncommitted"}), 400
 
     # Message policy lives server-side; the client only sends the filepath.
-    git_commit(config.WIKI_DIR / filepath, commit_message(filepath))
+    git_commit(config.LEAF_DATA / filepath, commit_message(filepath))
     return jsonify({"success": True})
