@@ -271,6 +271,11 @@ def _read_all() -> list[dict]:
         return read_deck() + _read_completed()
 
 
+def all_tasks() -> list[dict]:
+    """Every task: open, completed and archived (completed-YYYY.json)."""
+    return _read_all() + _read_archived()
+
+
 def write_deck(tasks: list[dict], message: str = "Update deck") -> None:
     _write_tasks(DECK_FILE, tasks)
     if GIT_ENABLED and _git_commit_fn:

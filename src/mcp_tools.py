@@ -20,8 +20,11 @@ import pages
 import mcp_server
 import retrieval
 import search
-from gitstore import git_commit, grep_pages, GrepError, is_uncommitted, move_page
-from mdtext import is_scratch, iter_fenced_lines, mask_code, page_title, plain_heading, split_wikilink, to_slug, WIKILINK_RE
+from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_uncommitted_files,
+                      grep_pages, GrepError, is_uncommitted, move_page, SHA_RE, version_index,
+                      version_path)
+from mdtext import (is_scratch, iter_fenced_lines, mask_code, page_tags, page_title, plain_heading,
+                    split_wikilink, to_slug, WIKILINK_RE)
 from pages import all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
 from render import task_link, TOC_RE
 from retrieval import in_folder, passes, retrieve, task_status
@@ -318,39 +321,57 @@ def _write_page(args: dict, base: str) -> str:
     return out + pending + _link_warning(old, content)
 
 
-def _edit_page(args: dict, base: str) -> str:
-    slug, path = _existing_page(args)
-    old_string = _str_arg(args, "old_string")
-    new_string = _str_arg(args, "new_string", required=False)
+def _apply_edit(content: str, slug: str, edit: dict, which: str = "") -> tuple[str, int]:
+    """content with one edit applied (old_string → new_string, replace_all),
+    and how many places it changed. `which` names the edit in errors."""
+    old_string = _str_arg(edit, "old_string")
+    new_string = _str_arg(edit, "new_string", required=False)
     if old_string == new_string:
-        raise mcp_server.ToolError("old_string and new_string are the same: nothing to change")
-    pending = _save_pending(path, slug)
-    content = path.read_text(encoding="utf-8")
+        raise mcp_server.ToolError(f"{which}old_string and new_string are the same: nothing to change")
     count = content.count(old_string)
     if count == 0:
         raise mcp_server.ToolError(
-            f"old_string was not found in {slug}. It must match the page exactly, line breaks "
+            f"{which}old_string was not found in {slug}. It must match the page exactly, line breaks "
             "and whitespace included; read_page shows the current text.")
-    replace_all = args.get("replace_all", False) is True
-    if count > 1 and not replace_all:
+    if count > 1 and edit.get("replace_all", False) is not True:
         raise mcp_server.ToolError(
-            f"old_string occurs {count} times in {slug}. Include more of the surrounding text "
+            f"{which}old_string occurs {count} times in {slug}. Include more of the surrounding text "
             "to make it unique, or set replace_all=true to change every one.")
-    new = content.replace(old_string, new_string)
+    return content.replace(old_string, new_string), count
+
+
+def _edit_page(args: dict, base: str) -> str:
+    slug, path = _existing_page(args)
+    edits = args.get("edits")
+    if edits is not None:
+        if not isinstance(edits, list) or not edits or not all(isinstance(e, dict) for e in edits):
+            raise mcp_server.ToolError("edits must be a non-empty list of {old_string, new_string, replace_all}")
+        if "old_string" in args:
+            raise mcp_server.ToolError("give either old_string/new_string or edits, not both")
+    pending = _save_pending(path, slug)
+    content = path.read_text(encoding="utf-8")
+    new, counts = content, []
+    # All or nothing: each edit applies to the text the ones before it left,
+    # and the page is written only when every one of them matched.
+    for i, edit in enumerate(edits or [args], 1):
+        new, count = _apply_edit(new, slug, edit, f"Edit {i}: " if edits else "")
+        counts.append(count)
     path.write_text(new, encoding="utf-8")
     git_commit(path, _commit_msg(f"Update {slug}", args))
-    what = f"{count} occurrences" if count > 1 else "1 occurrence"
-    return f"Edited page {slug}: replaced {what}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+    total = sum(counts)
+    what = f"{total} occurrences" if total > 1 else "1 occurrence"
+    done = f"applied {len(counts)} edits, {what}" if edits else f"replaced {what}"
+    return f"Edited page {slug}: {done}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
 
 
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
 
 
-def _append_at(content: str, addition: str, heading: str) -> str | None:
-    """content with addition at the end of the section under `heading` (any
-    level; its text compared without markup and case), before the next heading
-    of the same or a higher level. None when the page has no such heading."""
-    lines = content.splitlines(keepends=True)
+def _section_lines(lines: list[str], heading: str) -> tuple[int, int] | None:
+    """The lines of the section under `heading` (any level; its text compared
+    without markup and case), from the heading to before the next heading of
+    the same or a higher level, subsections included. None when the page
+    has no such heading."""
     want = plain_heading(heading.lstrip("#").strip()).lower()
     start = level = None
     end = len(lines)
@@ -364,8 +385,25 @@ def _append_at(content: str, addition: str, heading: str) -> str | None:
         elif len(m.group(1)) <= level:
             end = i
             break
-    if start is None:
+    return None if start is None else (start, end)
+
+
+def _no_heading(slug: str, content: str, heading: str) -> str:
+    """The error for a heading the page doesn't have, naming those it has."""
+    headings = [m.group(2) for _i, line, f in iter_fenced_lines(content.splitlines())
+                if not f and (m := _HEADING_RE.match(line))]
+    return (f"{slug} has no heading {heading!r}. Its headings: "
+            + (", ".join(repr(h) for h in headings) or "none") + ".")
+
+
+def _append_at(content: str, addition: str, heading: str) -> str | None:
+    """content with addition at the end of the section under `heading`. None
+    when the page has no such heading."""
+    lines = content.splitlines(keepends=True)
+    found = _section_lines(lines, heading)
+    if found is None:
         return None
+    end = found[1]
     body = "".join(lines[:end]).rstrip("\n")
     rest = "".join(lines[end:])
     return body + "\n\n" + addition + "\n" + ("\n" + rest if rest else "")
@@ -380,12 +418,9 @@ def _append_to_page(args: dict, base: str) -> str:
     if heading:
         new = _append_at(content, addition, heading)
         if new is None:
-            headings = [m.group(2) for _i, line, f in iter_fenced_lines(content.splitlines())
-                        if not f and (m := _HEADING_RE.match(line))]
             raise mcp_server.ToolError(
-                f"{slug} has no heading {heading!r}. Its headings: "
-                + (", ".join(repr(h) for h in headings) or "none")
-                + ". To start a new section, put its heading in content and leave out under_heading.")
+                _no_heading(slug, content, heading)
+                + " To start a new section, put its heading in content and leave out under_heading.")
     else:
         new = content.rstrip("\n") + "\n\n" + addition + "\n"
     path.write_text(new, encoding="utf-8")
@@ -671,13 +706,161 @@ def _grep_wiki(args: dict, base: str) -> str:
     return head + ":\n" + "\n".join(out)
 
 
-_READ_TOOLS = {"grep_wiki": _grep_wiki, "list_pages": _list_pages, "check_links": _check_links}
+def _read_page(args: dict, base: str) -> str:
+    raw = args.get("slug")
+    if not isinstance(raw, str) or not raw.strip():
+        raise mcp_server.ToolError("slug must be a non-empty string")
+    slug = _mcp_page_slug(raw)
+    if slug is None:
+        raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
+    content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
+    head = f"slug: {slug}\nurl: {base}{url('page', slug)}\nfile: {_host_file(slug)}\n"
+    heading = _str_arg(args, "heading", required=False).strip()
+    if heading:
+        lines = content.splitlines(keepends=True)
+        found = _section_lines(lines, heading)
+        if found is None:
+            raise mcp_server.ToolError(_no_heading(slug, content, heading) + " Leave out heading for the whole page.")
+        start, end = found
+        # Line numbers as grep_wiki gives them, so the two fit together.
+        head += f"section: lines {start + 1}–{end} of {len(lines)}\n"
+        content = "".join(lines[start:end]).rstrip("\n") + "\n"
+    return f"{head}\n{content}" + _mcp_task_refs(content, base) + _page_links(slug, content)
+
+
+def _date_arg(args: dict, name: str) -> str | None:
+    value = _str_arg(args, name, required=False).strip()
+    if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise mcp_server.ToolError(f"{name} must be a date, YYYY-MM-DD")
+    return value or None
+
+
+def _file_label(filepath: str) -> str:
+    """A changed file as the model knows it: a page by its slug, the deck's
+    files as tasks."""
+    if filepath.startswith("_deck/"):
+        return "deck tasks"
+    return filepath[:-3] if filepath.endswith(".md") else filepath
+
+
+def _history(args: dict, base: str) -> str:
+    if not config.GIT_ENABLED:
+        raise mcp_server.ToolError("There is no history: git isn't installed where Leaf runs.")
+    limit = _mcp_int(args, "limit", 20, 200)
+    raw = _str_arg(args, "slug", required=False).strip()
+    version = _str_arg(args, "version", required=False).strip().lower()
+    if version and not raw:
+        raise mcp_server.ToolError("version needs the page's slug too")
+    if not raw:
+        return _recent_changes(_date_arg(args, "since"), _clean_folder(args.get("under", "")), limit)
+    slug = _mcp_page_slug(raw) or _new_slug(raw)       # a deleted page has a history too
+    path = safe_path(slug)
+    entries = git_log(path)
+    if not entries:
+        raise mcp_server.ToolError(f"No history for {raw!r}. Use list_pages to find its slug.")
+    if version:
+        return _page_change(slug, path, entries, version)
+    rows = [f"{e['sha'][:7]} | {e['time']} | +{e['added']} -{e['deleted']} | {e['msg']}"
+            for e in entries[:limit]]
+    shown = f"{len(rows)} of {len(entries)}" if len(rows) < len(entries) else f"all {len(entries)}"
+    state = "" if path.exists() else " (deleted: restore_page brings back a version)"
+    if path.exists() and is_uncommitted(path):
+        state = " (it has changes not committed yet, newer than the first version listed)"
+    return (f"Versions of {slug}{state}, newest first ({shown}); version | when | lines added and "
+            "removed | what (\"(MCP)\": written by an assistant). history with a version shows "
+            "what it changed:\n" + "\n".join(rows))
+
+
+def _page_change(slug: str, path: Path, entries: list[dict], version: str) -> str:
+    """What one version changed on the page, as a diff."""
+    i = version_index(entries, version) if SHA_RE.match(version) else None
+    if i is None:
+        raise mcp_server.ToolError(f"{version!r} is not a version of {slug}; history lists them.")
+    before = [config.LEAF_DATA / entries[i + 1]["path"]] if i + 1 < len(entries) else []
+    diff = git_diff(entries[i]["sha"], version_path(path, entries, entries[i]["sha"]), *before) or "(no changes)"
+    e = entries[i]
+    return f"{slug}, version {e['sha'][:7]} of {e['time']}: {e['msg']}\n\n{diff}"
+
+
+def _recent_changes(since: str | None, under: str | None, limit: int) -> str:
+    entries = git_log_all(since, under, limit)
+    pending = [f for f in git_uncommitted_files() if not under or in_folder(_file_label(f["filepath"]), under)]
+    out = []
+    if pending:
+        out.append("Not committed yet (edited in the browser or on disk): "
+                   + ", ".join(f"{_file_label(f['filepath'])} ({f['rel']})" if f["rel"] else
+                               f"{_file_label(f['filepath'])} (deleted)" for f in pending))
+    where = f" under {under}/" if under else ""
+    when = f" since {since}" if since else ""
+    if not entries:
+        out.append(f"No changes{where}{when}.")
+        return "\n\n".join(out)
+    rows = [f"{e['time']} | {e['sha'][:7]} | {e['msg']} | "
+            + ", ".join(dict.fromkeys(_file_label(f) for f in e["files"])) for e in entries]
+    out.append(f"Changes{where}{when}, newest first ({len(rows)}{', the limit' if len(rows) == limit else ''}); "
+               "when | version | what (\"(MCP)\": written by an assistant) | pages:\n" + "\n".join(rows))
+    return "\n\n".join(out)
+
+
+def _restore_page(args: dict, base: str) -> str:
+    if not config.GIT_ENABLED:
+        raise mcp_server.ToolError("There is no history: git isn't installed where Leaf runs.")
+    raw = _str_arg(args, "slug")
+    version = _str_arg(args, "version").strip().lower()
+    slug = _mcp_page_slug(raw) or _new_slug(raw)
+    path = safe_path(slug)
+    entries = git_log(path)
+    i = version_index(entries, version) if SHA_RE.match(version) else None
+    if i is None:
+        raise mcp_server.ToolError(f"{version!r} is not a version of {slug}; history(slug) lists them.")
+    sha = entries[i]["sha"]
+    content = git_show(sha, version_path(path, entries, sha))
+    if content is None:
+        raise mcp_server.ToolError(f"Version {sha[:7]} of {slug} has no text (the page was deleted then); "
+                                   "pick the version before it.")
+    existed = path.exists()
+    pending = _save_pending(path, slug)
+    old = path.read_text(encoding="utf-8") if existed else ""
+    if existed and old == content:
+        raise mcp_server.ToolError(f"{slug} already reads as version {sha[:7]}.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git_commit(path, _commit_msg(f"Restore {slug} to {sha[:7]}", args))
+    what = "Restored" if existed else "Brought back the deleted page"
+    return (f"{what} {slug} as of version {sha[:7]} ({entries[i]['time']}).\n{_page_info(slug, base)}"
+            + pending + _link_warning(old, content))
+
+
+def _list_tags(args: dict, base: str) -> str:
+    counts: dict[str, list[int]] = {}             # tag → [pages, open tasks, done tasks]
+    for md_file, _slug in iter_pages():
+        try:
+            tags = page_tags(md_file.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        for tag in set(tags):
+            counts.setdefault(tag, [0, 0, 0])[0] += 1
+    for task in deckstore.all_tasks():
+        column = 1 if task_status(task) == "open" else 2
+        for tag in {t.lower() for t in task.get("tags") or []}:
+            counts.setdefault(tag, [0, 0, 0])[column] += 1
+    if not counts:
+        return "No tags yet: neither pages (frontmatter tags:) nor tasks have any."
+    lists = {n.lower() for n in pages.list_names()}
+    rows = sorted(counts.items(), key=lambda kv: (-sum(kv[1]), kv[0]))
+    lines = [f"{tag}{' (a list)' if tag in lists else ''} | {p} | {o} | {d}" for tag, (p, o, d) in rows]
+    return ("Tags in use, most used first; reuse these rather than inventing near-duplicates. "
+            "tag | pages | open tasks | done tasks:\n" + "\n".join(lines))
+
+
+_READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _list_pages,
+               "check_links": _check_links, "history": _history, "list_tags": _list_tags}
 
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,
     "rename_page": _rename_page, "delete_page": _delete_page,
     "create_task": _create_task, "update_task": _update_task,
-    "comment_task": _comment_task, "delete_task": _delete_task,
+    "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,
 }
 
 
@@ -707,16 +890,6 @@ def mcp_call_tool(name: str, args: dict) -> str:
         return "\n\n---\n\n".join(out)
     if name == "search_tasks":
         return _mcp_search_tasks(args, base)
-    if name == "read_page":
-        raw = args.get("slug")
-        if not isinstance(raw, str) or not raw.strip():
-            raise mcp_server.ToolError("slug must be a non-empty string")
-        slug = _mcp_page_slug(raw)
-        if slug is None:
-            raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
-        content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
-        return (f"slug: {slug}\nurl: {base}{url('page', slug)}\nfile: {_host_file(slug)}\n\n{content}"
-                + _mcp_task_refs(content, base) + _page_links(slug, content))
     if name in _READ_TOOLS:
         return _READ_TOOLS[name](args, base)
     if name in _WRITE_TOOLS:

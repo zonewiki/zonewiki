@@ -20,14 +20,16 @@ INSTRUCTIONS = (
     "Leaf is the user's personal wiki: their notes, in markdown, plus the Deck, "
     "their task list. Use search_wiki when a question may be answered by something "
     "the user wrote down (it finds tasks too), then read_page for a page's full "
-    "text. Search finds by meaning as well as by keyword, so phrase queries the "
+    "text (with heading, just one section of a long page). Search finds by meaning as well as by keyword, so phrase queries the "
     "way the notes might. For questions about their tasks (what's open for a "
     "project, what's due, what they finished) use search_tasks, which filters by "
     "tag and status. To find every occurrence of exact text (a ticket id, a name, "
     "a TODO), not the most relevant sections, use grep_wiki, which takes a regex. "
     "read_page shows which pages link to a page; list_pages counts the links and, "
     "with orphans, lists pages nothing links to; check_links reports wikilinks that "
-    "lead nowhere. Cite pages and tasks by their URL.\n\n"
+    "lead nowhere; list_tags shows the tags in use. history shows recent changes "
+    "and a page's versions (restore_page goes back to one). Cite pages and tasks "
+    "by their URL.\n\n"
     "You can also write: the wiki is meant to be kept up to date by you. Before "
     "creating a page, search for one that already covers the topic and extend "
     "it instead. Change pages with edit_page (exact text replacement, like a "
@@ -147,12 +149,15 @@ TOOLS = [
         "name": "read_page",
         "title": "Read a page",
         "description": ("Return a wiki page's full markdown, frontmatter included, by its slug, "
-                        "followed by the pages that link to it and its wikilinks that lead nowhere."),
+                        "followed by the pages that link to it and its wikilinks that lead nowhere. "
+                        "With heading, only that section (subsections included): cheaper for long pages."),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "slug": {"type": "string",
                          "description": "The page's slug as search_wiki or list_pages give it, e.g. 'git-remote' or 'journal/2026-09'."},
+                "heading": {"type": "string",
+                            "description": "A heading's text (any level, without '#'): return only its section."},
             },
             "required": ["slug"],
         },
@@ -192,6 +197,36 @@ TOOLS = [
         "annotations": _READ_ONLY,
     },
     {
+        "name": "list_tags",
+        "title": "List tags",
+        "description": ("List the tags in use, on pages (frontmatter tags:) and tasks, with how "
+                        "often each occurs. Check it before tagging, to reuse a tag instead of "
+                        "inventing a near-duplicate."),
+        "inputSchema": {"type": "object", "properties": {}},
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "history",
+        "title": "Show history",
+        "description": (
+            "The wiki's git history. Without slug: recent changes across the wiki "
+            "(what, when, which pages; '(MCP)' marks an assistant's), plus pages "
+            "with changes not committed yet. With slug: that page's versions. With "
+            "slug and version: what that version changed, as a diff. restore_page "
+            "goes back to a version."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": "A page, also a deleted one."},
+                "version": {"type": "string", "description": "A version (commit) as history lists it, e.g. '1a2b3c4'."},
+                "since": {"type": "string", "description": "Recent changes from this day on, YYYY-MM-DD."},
+                "under": {"type": "string", "description": "Recent changes in this folder only, e.g. 'tickets'."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 20},
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
         "name": "write_page",
         "title": "Create a page",
         "description": (
@@ -222,7 +257,8 @@ TOOLS = [
             "Replace exact text in a page: old_string must match the page's markdown "
             "exactly (whitespace and line breaks included) and occur once, unless "
             "replace_all is true. Copy old_string from read_page or a search_wiki "
-            "section. An empty new_string deletes the text."
+            "section. An empty new_string deletes the text. For several changes to "
+            "one page, pass edits instead: applied in order, all or none, one commit."
         ),
         "inputSchema": {
             "type": "object",
@@ -232,9 +268,16 @@ TOOLS = [
                 "new_string": {"type": "string", "description": "The text to put there."},
                 "replace_all": {"type": "boolean", "default": False,
                                 "description": "Replace every occurrence of old_string."},
+                "edits": {"type": "array", "description": (
+                    "Instead of old_string/new_string: several replacements, each on the "
+                    "text the ones before it left. If one doesn't match, nothing is changed."),
+                    "items": {"type": "object", "properties": {
+                        "old_string": {"type": "string"}, "new_string": {"type": "string"},
+                        "replace_all": {"type": "boolean", "default": False}},
+                        "required": ["old_string", "new_string"]}},
                 "summary": _SUMMARY,
             },
-            "required": ["slug", "old_string", "new_string"],
+            "required": ["slug"],
         },
         "annotations": _CHANGES,
     },
@@ -285,6 +328,22 @@ TOOLS = [
             "type": "object",
             "properties": {"slug": _PAGE_SLUG, "summary": _SUMMARY},
             "required": ["slug"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "restore_page",
+        "title": "Restore a page version",
+        "description": ("Set a page back to an earlier version (history lists them), or bring "
+                        "back a deleted page. A new commit: the versions after it stay in the history."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": "The page, also a deleted one."},
+                "version": {"type": "string", "description": "The version to go back to, e.g. '1a2b3c4'."},
+                "summary": _SUMMARY,
+            },
+            "required": ["slug", "version"],
         },
         "annotations": _CHANGES,
     },

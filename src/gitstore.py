@@ -189,6 +189,29 @@ def git_log(path: Path, max_count: int | None = None) -> list[dict]:
     return entries
 
 
+def git_log_all(since: str | None = None, under: str | None = None, max_count: int = 30) -> list[dict]:
+    """The wiki's commits, newest first: sha, time (YYYY-MM-DD HH:MM), msg
+    and the files each changed (relative to the wiki). `since` a date
+    (YYYY-MM-DD, from its start), `under` a folder."""
+    if not config.GIT_ENABLED:
+        return []
+    args = ["git", "log", "-n", str(max_count), "--name-only", "--date=format:%Y-%m-%d %H:%M",
+            "--format=\x1e%H\x1f%ad\x1f%s"]
+    if since:
+        args.append(f"--since={since} 00:00")
+    if under:
+        args += ["--", f"{under}/"]
+    r = run_git(*args)
+    entries = []
+    for record in r.stdout.split("\x1e")[1:]:
+        head, _, names = record.partition("\n")
+        parts = head.split("\x1f", 2)
+        if len(parts) == 3:
+            entries.append({"sha": parts[0], "time": parts[1], "msg": parts[2],
+                            "files": [n for n in names.splitlines() if n.strip()]})
+    return entries
+
+
 def is_uncommitted(path: Path) -> bool:
     """Whether the file differs from its last commit (or was never
     committed): edits auto-saved by the editor, or made on disk."""

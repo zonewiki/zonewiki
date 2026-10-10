@@ -75,9 +75,11 @@ class TestHandle:
         tools = r["result"]["tools"]
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-            "write_page", "edit_page", "append_to_page", "rename_page", "delete_page",
+            "list_tags", "history",
+            "write_page", "edit_page", "append_to_page", "rename_page", "delete_page", "restore_page",
             "create_task", "update_task", "comment_task", "delete_task"]
-        reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links"}
+        reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
+                   "list_tags", "history"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
         adding = {"append_to_page", "create_task", "comment_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
@@ -556,6 +558,48 @@ class TestListPages:
         assert call(client, "list_pages", orphans="yes")[1]
 
 
+class TestReadSection:
+    @pytest.fixture()
+    def long(self, pages):
+        write_page(pages, "long", "# Long\n\nIntro.\n\n## Setup\n\nSteps.\n\n### Detail\n\nMore.\n"
+                                  "\n```\n## not a heading\n```\n\n## Usage\n\nUse [[Nowhere]].\n")
+        return pages
+
+    def test_one_section_with_its_subsections(self, client, long):
+        text, err = call(client, "read_page", slug="long", heading="setup")
+        assert not err
+        head, _, rest = text.partition("\n\n")
+        assert head.endswith("\nsection: lines 5–16 of 19")
+        assert rest.startswith("## Setup\n\nSteps.\n\n### Detail\n\nMore.\n\n```\n## not a heading\n```\n")
+        assert "## Usage" not in rest and "Broken wikilinks" not in rest
+
+    def test_heading_with_hashes_and_its_links(self, client, long):
+        text = call(client, "read_page", slug="long", heading="## Usage")[0]
+        assert "\n\n## Usage\n\nUse [[Nowhere]].\n" in text
+        assert text.endswith("Broken wikilinks (no such page): [[Nowhere]]")
+
+    def test_missing_heading_lists_headings(self, client, long):
+        text, err = call(client, "read_page", slug="long", heading="Install")
+        assert err and "'Setup', 'Detail', 'Usage'" in text
+
+
+class TestListTags:
+    def test_pages_and_tasks_most_used_first(self, client, pages):
+        write_page(pages, "a", "---\ntags: [Backend, infra]\n---\n# A\n")
+        write_page(pages, "b", "---\ntags: backend\n---\n# B\n")
+        write_page(pages, "shop", "# Shop\n\n[[deck list=shopping]]\n")
+        task(client, title="t1", tags=["backend"])
+        close(client, task(client, title="t2", tags=["backend", "infra"])["id"], completed=True)
+        task(client, title="milk", tags=["shopping"])
+        text, err = call(client, "list_tags")
+        assert not err
+        assert text.splitlines()[1:] == ["backend | 2 | 1 | 1", "infra | 1 | 0 | 1",
+                                         "shopping (a list) | 0 | 1 | 0"]
+
+    def test_none(self, client, pages):
+        assert call(client, "list_tags")[0].startswith("No tags yet")
+
+
 class TestReadPageLinks:
     def test_linked_from_and_broken_links(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]], [[Nowhere]], [[golf#Werkstatt|the garage]]\n"
@@ -739,6 +783,25 @@ class TestEditPage:
         assert not err
         assert (pages / "git-remote.md").read_text() == "# Git remote\n\n## Pushing\n\nRun git push to back up.\n"
 
+    def test_several_edits_all_or_nothing(self, client, pages):
+        text, err = call(client, "edit_page", slug="golf", edits=[
+            {"old_string": "Werkstatt", "new_string": "Garage"},
+            {"old_string": "## Garage", "new_string": "## Garage (Mai)"},   # sees the edit before it
+            {"old_string": "quietschen", "new_string": "neu"}])
+        assert not err and text.startswith("Edited page golf: applied 3 edits, 3 occurrences.")
+        assert (pages / "golf.md").read_text() == "# Golf\n\n## Garage (Mai)\n\nTermin beim Mechaniker, Bremsen neu.\n"
+        text, err = call(client, "edit_page", slug="golf", edits=[
+            {"old_string": "Golf", "new_string": "Polo"}, {"old_string": "Reifen", "new_string": "x"}])
+        assert err and text.startswith("Edit 2: old_string was not found")
+        assert "Polo" not in (pages / "golf.md").read_text()
+
+    def test_edits_arguments(self, client, pages):
+        assert call(client, "edit_page", slug="golf", edits=[])[1]
+        assert call(client, "edit_page", slug="golf", edits=["x"])[1]
+        assert "not both" in call(client, "edit_page", slug="golf", old_string="Golf", new_string="x",
+                                  edits=[{"old_string": "a", "new_string": "b"}])[0]
+        assert call(client, "edit_page", slug="golf")[1]
+
     def test_crlf_in_arguments_matches_lf_files(self, client, pages):
         _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\r\n\r\nSet",
                       new_string="## Setup\r\n\r\nPut")
@@ -900,6 +963,78 @@ class TestOpenInTheEditor:
         call(client, "write_page", slug="q", content="# Q")
         text, _ = call(client, "edit_page", slug="q", old_string="# Q", new_string="# Q2")
         assert "Note" not in text and self.log(git_wiki_dir)[0] == "Update q (MCP)"
+
+
+@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+class TestHistory:
+    @pytest.fixture()
+    def versions(self, client, git_wiki_dir):
+        call(client, "write_page", slug="notes/p", content="# P\n\nv1", summary="first")
+        call(client, "edit_page", slug="notes/p", old_string="v1", new_string="v2")
+        call(client, "write_page", slug="other", content="# Other")
+        call(client, "create_task", title="A task")
+        return git_wiki_dir
+
+    def test_recent_changes(self, client, versions):
+        text, err = call(client, "history")
+        assert not err
+        rows = text.splitlines()
+        assert rows[0].startswith("Changes, newest first (")
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create deck task \(MCP\) \| deck tasks", rows[1])
+        assert rows[2].endswith("| Create other (MCP) | other")
+        assert rows[4].endswith("| Create notes/p: first (MCP) | notes/p")
+        assert call(client, "history", under="notes")[0].count("\n") == 2
+        from datetime import date, timedelta
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        assert call(client, "history", since=tomorrow)[0] == f"No changes since {tomorrow}."
+        assert call(client, "history", since="yesterday")[1]
+
+    def test_lists_uncommitted(self, client, versions):
+        (versions / "other.md").write_text("# Other\n\nedited on disk\n")
+        text = call(client, "history")[0]
+        assert text.startswith("Not committed yet (edited in the browser or on disk): other (")
+
+    def test_page_versions_and_a_diff(self, client, versions):
+        text, err = call(client, "history", slug="notes/p")
+        assert not err
+        rows = text.splitlines()
+        assert rows[0].startswith("Versions of notes/p, newest first (all 2)")
+        assert rows[1].endswith("| +1 -1 | Update notes/p (MCP)")
+        sha = rows[2].split(" | ")[0]
+        diff = call(client, "history", slug="notes/p", version=sha)[0]
+        assert diff.startswith(f"notes/p, version {sha} of ") and "+v1" in diff
+        assert call(client, "history", slug="notes/p", version="deadbeef")[1]
+        assert call(client, "history", version=sha)[1]
+        assert call(client, "history", slug="nope")[1]
+
+    def test_restore_a_version(self, client, versions):
+        sha = call(client, "history", slug="notes/p")[0].splitlines()[2].split(" | ")[0]
+        text, err = call(client, "restore_page", slug="notes/p", version=sha, summary="undo")
+        assert not err and text.startswith(f"Restored notes/p as of version {sha}")
+        assert (versions / "notes" / "p.md").read_text() == "# P\n\nv1\n"
+        assert self_log(versions)[0] == f"Restore notes/p to {sha}: undo (MCP)"
+        assert "already reads as" in call(client, "restore_page", slug="notes/p", version=sha)[0]
+
+    def test_bring_back_a_deleted_page(self, client, versions):
+        call(client, "delete_page", slug="other")
+        rows = call(client, "history", slug="other")[0].splitlines()
+        assert "(deleted" in rows[0]
+        deleted_sha, created_sha = rows[1].split(" | ")[0], rows[2].split(" | ")[0]
+        assert "pick the version before it" in call(client, "restore_page", slug="other", version=deleted_sha)[0]
+        text, err = call(client, "restore_page", slug="other", version=created_sha)
+        assert not err and text.startswith("Brought back the deleted page other")
+        assert (versions / "other.md").read_text() == "# Other\n"
+
+    def test_without_git(self, client, pages, monkeypatch):
+        monkeypatch.setattr(config, "GIT_ENABLED", False)
+        assert "git isn't installed" in call(client, "history")[0]
+
+
+def self_log(wiki):
+    import subprocess
+    import gitstore
+    return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True, text=True,
+                          env=gitstore._GIT_ENV).stdout.splitlines()
 
 
 # ── Writing tasks ────────────────────────────────────────────────────────────
