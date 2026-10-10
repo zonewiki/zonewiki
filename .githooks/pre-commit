@@ -13,10 +13,6 @@
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git --pre-commit --staged --redact --no-banner --exit-code 3 .
 elif command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
-  engine=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
-  if ! $engine image inspect leaf-tools >/dev/null 2>&1; then
-    echo "pre-commit: building the tools image for the secret scan (once; takes a few minutes)…" >&2
-  fi
   ./run.sh leaks --pre-commit --staged
 else
   echo "pre-commit: no gitleaks, podman or docker; secrets not checked." >&2

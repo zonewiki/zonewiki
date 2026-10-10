@@ -106,10 +106,25 @@ in_image() {
   fi
 }
 
-# Build an image quietly and print its ID; commands run it by ID, so two
-# builds at once (CI runs on one engine) can't swap a shared tag under them.
+# Build an image and print its ID: build_image TAG [OPTION…]. Commands run
+# it by ID, so two builds at once (CI runs on one engine) can't swap a shared
+# tag under them. The build's output (podman's -q still shows what RUN steps
+# print, e.g. apt's) is shown only when it fails; a first build, which takes
+# minutes, says so.
 build_image() {
-  $ENGINE build -q "$@" .
+  local tag=$1 log iid
+  shift
+  if ! $ENGINE image inspect "$tag" >/dev/null 2>&1; then
+    echo "Building the $tag image (first time; takes a few minutes)…" >&2
+  fi
+  log=$(mktemp) iid=$(mktemp)
+  if ! $ENGINE build -q --iidfile "$iid" -t "$tag" "$@" . >"$log" 2>&1; then
+    cat "$log" >&2
+    rm -f "$log" "$iid"
+    return 1
+  fi
+  cat "$iid"
+  rm -f "$log" "$iid"
 }
 
 case "${1:-up}" in
@@ -146,7 +161,7 @@ case "${1:-up}" in
     # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
     # Built without compose, which would want a .env the tests don't need.
-    image=$(build_image --build-arg "LEAF_BUILD=$LEAF_BUILD" -t leaf)
+    image=$(build_image leaf --build-arg "LEAF_BUILD=$LEAF_BUILD")
     in_image "$image" -- sh -c \
       'pip install --break-system-packages -q pytest 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
@@ -157,7 +172,7 @@ case "${1:-up}" in
     # Browser tests (headless Chromium via Playwright) plus the Node-run
     # deck-core.js tests, in the tools image (Containerfile.tools).
     # Screenshots land in tests/e2e/_screenshots/.
-    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- \
       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
@@ -179,7 +194,7 @@ case "${1:-up}" in
         *) echo "leaks: the index $GIT_INDEX_FILE is outside the repo." >&2; exit 2 ;;
       esac
     fi
-    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
       -e GIT_CONFIG_VALUE_0='*' -- \
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
@@ -187,7 +202,7 @@ case "${1:-up}" in
   screenshots)
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
     # in the tools image (Playwright).
-    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   *)

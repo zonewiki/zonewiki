@@ -18,7 +18,11 @@ REPO = Path(__file__).resolve().parent.parent
 FAKE_ENGINE = """#!/bin/sh
 echo "$*" >> "$FAKE_LOG"
 case "$1" in
-  build) echo fake-image ;;
+  build)
+    echo "debconf: noise a RUN step prints"
+    [ -z "$FAKE_BUILD_FAILS" ] || exit 1
+    while [ "$1" != --iidfile ]; do shift; done
+    echo fake-image > "$2" ;;
   create) echo fake-container ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
@@ -112,6 +116,29 @@ def test_copy_mode_creates_a_self_removing_container(sandbox):
     assert _engine_calls(log, "start") == ["start -a fake-container"]
 
 
+def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "debconf" not in r.stdout + r.stderr
+    assert "Building the leaf-tools image (first time" in r.stderr
+    (build,) = _engine_calls(log, "build")
+    assert "-t leaf-tools -f Containerfile.tools" in build
+    (run,) = _engine_calls(log, "run")
+    assert " fake-image gitleaks " in run
+
+
+def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):
+    repo, env, log = sandbox
+    env["FAKE_BUILD_FAILS"] = "1"
+    r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env=env,
+                       capture_output=True, text=True)
+    assert r.returncode != 0
+    assert "debconf: noise a RUN step prints" in r.stderr
+    assert not _engine_calls(log, "run")
+
+
 def _no_local_gitleaks(env):
     return shutil.which("gitleaks", path=env["PATH"]) is None
 
@@ -129,7 +156,6 @@ def test_hook_scans_the_temporary_index_of_commit_a_and_commit_path(sandbox, com
     (run,) = _engine_calls(log, "run")
     assert "-e GIT_INDEX_FILE=/repo/.git/" in run
     assert "--pre-commit --staged" in run
-    assert "building the tools image" in r.stderr
 
 
 def test_hook_refuses_a_leak_and_only_warns_when_the_scan_fails(sandbox):
