@@ -243,7 +243,7 @@ def _new_slug(raw: str) -> str:
     slug = to_slug(raw)
     if not slug or "" in slug.split("/"):
         raise mcp_server.ToolError(f"{raw!r} is not a usable page name")
-    if any(part.startswith(("_", ".")) for part in slug.split("/")[:-1]) or safe_path(slug) is None:
+    if safe_path(slug) is None:
         raise mcp_server.ToolError(f"{slug!r}: pages can't go in folders starting with '_' or '.'")
     return slug
 

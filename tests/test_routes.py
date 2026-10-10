@@ -835,6 +835,25 @@ class TestIterPages:
         assert sorted(slug for _p, slug in pages.iter_pages()) == ["a/b/deep", "index", "top"]
         assert all(p.is_file() and p.suffix == ".md" for p, _s in pages.iter_pages())
 
+    @pytest.mark.parametrize("slug", [".leaf/index/n", ".git/n", "_deck/n", "a/_drafts/n", "a/.hidden/n",
+                                      "a/../.leaf/n"])
+    def test_pages_in_skipped_folders_are_not_served(self, client, wiki_dir, slug):
+        """What iter_pages skips no route reads or writes, even by direct URL."""
+        path = wiki_dir / (slug.replace("a/../", "") + ".md")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# secret\n\nhidden_token_q\n", encoding="utf-8")
+        assert pages.safe_path(slug) is None
+        for url in (f"/page/{slug}", f"/edit/{slug}", f"/api/page-preview/{slug}"):
+            resp = client.get(url, headers=HOST)
+            assert b"hidden_token_q" not in resp.data and resp.status_code in (400, 404), url
+        resp = client.post(f"/api/save/{slug}", json={"content": "# x\n"}, headers=HOST)
+        assert resp.status_code in (400, 404)
+        assert path.read_text(encoding="utf-8") == "# secret\n\nhidden_token_q\n"
+
+    def test_pages_named_with_underscore_at_any_level_still_work(self, wiki_dir):
+        assert pages.safe_path("_notes") is not None
+        assert pages.safe_path("a/_notes") is not None
+
 
 class TestSearch:
 

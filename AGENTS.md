@@ -192,6 +192,6 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
 - `LEAF_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `GIT_TIMEOUT` (60s, `run_git`): a hung git counts as failed (returncode 124).
 - Slugs are file paths relative to `LEAF_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `to_slug()` keeps `/` and slugifies each part; `iter_pages()` skips `_*` and hidden folders. Flask routes use `<path:slug>`.
-- **Writes stay inside the wiki**: resolve the path and check it with `safe_path()` (`relative_to`) before writing; create parent folders (`mkdir(parents=True, exist_ok=True)`); write with `encoding="utf-8"`.
+- **Writes stay inside the wiki**: resolve the path and check it with `safe_path()` (`relative_to`; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_deck/` …) before reading or writing; create parent folders (`mkdir(parents=True, exist_ok=True)`); write with `encoding="utf-8"`.
 - `index.md` is the home page and must always exist (Leaf creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).

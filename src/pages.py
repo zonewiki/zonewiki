@@ -45,14 +45,18 @@ def is_protected(slug: str) -> bool:
 
 
 def safe_path(slug: str) -> Path | None:
-    """Return resolved path only if it's safely inside LEAF_DATA."""
+    """Return resolved path only if it's safely inside LEAF_DATA and not in a
+    folder iter_pages skips (_assets, _deck, .leaf, .git …): those are no
+    pages, so no route reads or writes a .md file there."""
     pages_root = config.LEAF_DATA.resolve()
     target = (config.LEAF_DATA / f"{slug}.md").resolve()
     try:
-        target.relative_to(pages_root)
-        return target
+        rel = target.relative_to(pages_root)
     except ValueError:
         return None
+    if any(part.startswith(("_", ".")) for part in rel.parts[:-1]):
+        return None
+    return target
 
 
 def iter_pages():

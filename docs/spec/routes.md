@@ -53,6 +53,8 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
+A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_deck/`, `.leaf/`, `.git/`, `a/_drafts/` …) names no page: `safe_path()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview). These are the folders `iter_pages()` skips. A file name starting with `_` (`_notes`, `a/_notes`) is still a page.
+
 Every page view includes:
 - **Breadcrumb** — `Wiki Deck Scratch › Page Title` above the page header: its root is the module switcher (see Modules), the green leaf logo in front of Wiki, the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen deck edit modal's buttons off-screen.
 - **Backlinks** — section at the bottom listing all pages that link to the current page (`pages.find_backlinks`, `page_link_targets`): a `[[wikilink]]`, or a markdown link that is relative (`page`, `../dir/page`, `page.md`) or absolute (`/page/<slug>`), with or without an `#anchor` or a title; the forms a rename re-points. Shows "No pages link here." when empty.
