@@ -10,28 +10,32 @@ self-host it behind HTTPS.
 
 ## Why Leaf
 
+Leaf is a wiki an AI can write in, and you can check its work. An
+[MCP server](#connect-an-ai-assistant) lets an assistant search, read, create
+and edit your pages and tasks. Its edits are precise (exact-text replace,
+append under a heading), warn about broken links, and land as git commits
+marked `(MCP)` that you can review, diff or undo.
+
+That works because of one rule: **files are the source of truth.** Pages are
+Markdown, tasks are JSON, history is git. Everything else (search indexes,
+caches) can be rebuilt, so you can edit in the browser, in any editor, or
+through an assistant, and all of it ends up in the same files.
+
 - **Notes and tasks in one place.** The wiki and the task deck share links,
   search and history. A page can show a task as a chip, and a task can link to
   a page, with no plugins to combine.
-- **Plain files, full history.** Pages are Markdown you can edit in any
-  editor. Finishing an edit commits it to git, so you can see,
-  diff and restore what changed. Tasks are plain JSON files in the same
-  repository.
-- **Made to be written by an AI too.** An [MCP server](#connect-an-ai-assistant)
-  lets an assistant search, read, create and edit pages and tasks. Edits are
-  precise (exact-text replace, append under a heading), warn about broken
-  links, and show up as commits marked `(MCP)` that you can review or undo.
 - **Any browser, nothing to install on the client.** Open a URL on your
-  phone or another computer. The server is one Python process, with no
-  database, and no npm or bundler for the frontend. It is small enough to
+  phone or another computer. The server is one Python process with no
+  database, and the frontend has no npm or bundler. It is small enough to
   read and change.
 - **Your files, your server.** Runs on your machine by default, with no cloud
   and no account. To reach it from elsewhere, put it behind HTTPS with a
   password (see [Security](#security)).
 
-Leaf is not a plugin platform or a native app, and it has no graph view or
-real-time collaboration. It aims to be a small, readable tool for one
-person's notes and tasks.
+Leaf is for one person's notes and tasks on a server you run. It is
+deliberately a single process with no plugins, no graph view and no real-time
+collaboration, so it isn't a team product or a plugin platform. That keeps it
+small and readable.
 
 ## How Leaf is organised
 
@@ -285,7 +289,10 @@ Also know this:
 Everything is files in `LEAF_DATA`, which is a git repository:
 
 - Pages are `.md` files, in folders if you like.
-- Uploads are in `_assets/`, tasks in `_deck/` as JSON.
+- Uploads are in `_assets/`. Tasks are in `_deck/` as JSON, not Markdown: they
+  have fields (dates, repeats, tags) and are written safely when several
+  things change them at once. They are still plain files in the git
+  repository.
 - `_leaf/` holds the key that keeps you signed in across restarts; it is
   never committed.
 - `_index/` is the semantic search cache (only with `LEAF_EMBEDDINGS`); it is
