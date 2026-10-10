@@ -201,9 +201,9 @@ container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`
 
 ## Connect an AI assistant
 
-Leaf's MCP server lets an AI assistant (any MCP
-client) search, read and write your wiki and tasks. It needs a token: create
-one, restart Leaf, then register Leaf with your client.
+Leaf's MCP server lets an AI assistant (any MCP client) search, read and write
+your wiki and tasks. It needs a token: create one, restart Leaf, then
+register Leaf with your client.
 
 ```bash
 echo "LEAF_MCP_TOKEN=$(openssl rand -hex 32)" >> .env    # once: it appends
