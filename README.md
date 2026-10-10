@@ -329,8 +329,21 @@ Stop using Leaf and your notes are still just Markdown.
 All three run in containers (Podman or Docker, no compose needed).
 
 Python with Flask and markdown-it-py, plain ES modules in the browser, and
-one hand-written stylesheet; no bundler, no npm. `AGENTS.md` describes how
-the project is built, and `docs/spec/` describes every feature in detail.
+one stylesheet; no bundler, no npm.
+
+### How Leaf is made
+
+Leaf is AI-engineered: its code is written by AI coding agents, carefully
+guided by its maintainer, who sets the direction
+and makes the design decisions. The guardrails live in the repository,
+where you can check them:
+
+- `AGENTS.md` holds the principles, constraints and conventions every change
+  has to follow.
+- `docs/spec/` describes every feature in detail and is updated with the
+  change that alters it.
+- Every feature and fix comes with tests (unit, API and browser tests),
+  and the whole suite runs before and after each change.
 
 ## License
 
