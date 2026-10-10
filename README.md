@@ -141,7 +141,9 @@ Done tasks go to a yearly archive. Beyond that:
 ## Quick start
 
 You need either **Docker** with Compose, or **Podman** with `podman-compose`.
-`run.sh` uses whichever is installed.
+`run.sh` uses whichever is installed. Linux is the only tested platform.
+`run.sh` should also work on macOS (its stock bash 3.2 is enough) and on
+Windows in WSL2, which Docker Desktop and Podman use there anyway.
 
 ```bash
 git clone <this repository> leaf && cd leaf
@@ -163,6 +165,9 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r src/requirements.txt
 LEAF_DATA=~/leaf python src/server.py
 ```
+
+In Windows PowerShell: `.venv\Scripts\Activate.ps1` activates the venv, and
+`$env:LEAF_DATA="$HOME\leaf"; python src/server.py` starts Leaf.
 
 ## Configuration
 

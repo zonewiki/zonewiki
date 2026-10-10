@@ -40,13 +40,13 @@ esac
 export LEAF_DATA
 
 # The port's bind address from LEAF_ALLOW_REMOTE: 1 → all interfaces (LAN),
-# unset/empty → loopback only (localhost only, more secure).
-LEAF_ALLOW_REMOTE=$(env_val LEAF_ALLOW_REMOTE)
-if [[ "${LEAF_ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
-  export LEAF_BIND="0.0.0.0"
-else
-  export LEAF_BIND="127.0.0.1"
-fi
+# unset/empty → loopback only (localhost only, more secure). Lowercased with
+# tr, not ${,,}: macOS ships bash 3.2, which this script must run on.
+LEAF_ALLOW_REMOTE=$(env_val LEAF_ALLOW_REMOTE | tr '[:upper:]' '[:lower:]')
+case "$LEAF_ALLOW_REMOTE" in
+  1|true|yes) export LEAF_BIND="0.0.0.0" ;;
+  *) export LEAF_BIND="127.0.0.1" ;;
+esac
 
 # The user Leaf runs as (compose.yaml), so the files it writes are the host
 # user's: your own IDs. Rootless podman maps them into the container as they

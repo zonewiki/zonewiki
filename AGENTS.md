@@ -68,8 +68,9 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, gitleaks, git
-├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too)
+├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
+├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env                    # Host data path configuration
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
 └── src/
