@@ -635,6 +635,30 @@ class TestListTags:
         assert call(client, "list_tags")[0].startswith("No tags yet")
 
 
+class TestRelatedByMeaning:
+    """With semantic search: read_page names pages close in meaning that
+    aren't linked."""
+
+    @pytest.fixture()
+    def semantic_on(self, pages, monkeypatch):
+        write_page(pages, "brakes", "# Brakes\n\nThe bremsen need the mechaniker.\n")
+        write_page(pages, "budget", "# Budget\n\nRent and savings.\n")
+        idx = make_index(pages)
+        idx.sync()
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        return idx
+
+    def test_read_page_lists_related_not_linked(self, client, pages, semantic_on):
+        assert call(client, "read_page", slug="golf")[0].endswith(
+            "\nRelated, not linked (close in meaning): brakes")
+        write_page(pages, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, [[brakes]].\n")
+        semantic_on.sync()
+        assert "Related, not linked" not in call(client, "read_page", slug="golf")[0]
+
+    def test_without_semantic_nothing(self, client, pages):
+        assert "Related" not in call(client, "read_page", slug="golf")[0]
+
+
 class TestReadPageLinks:
     def test_linked_from_and_broken_links(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]], [[Nowhere]], [[golf#Werkstatt|the garage]]\n"

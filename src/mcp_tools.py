@@ -592,9 +592,18 @@ def _page_links(slug: str, content: str) -> str:
     if len(linking) > _BACKLINKS_SHOWN:
         shown += f", … and {len(linking) - _BACKLINKS_SHOWN} more"
     out = f"\n\n---\nLinked from ({len(linking)}): {shown}"
-    missing = _missing_links(content, set(all_slugs()))
+    slugs = set(all_slugs())
+    missing = _missing_links(content, slugs)
     if missing:
         out += "\nBroken wikilinks (no such page): " + ", ".join(f"[[{n}]]" for n in sorted(missing))
+    if retrieval.SEMANTIC:
+        # As the page view's Related: pages close in meaning that aren't
+        # linked either way, the connections not written down yet.
+        retrieval.SEMANTIC.poke()
+        linked = set(linking) | page_meta(safe_path(slug), slug)[1]
+        related = retrieval.SEMANTIC.related(slug, known=slugs, exclude=linked)
+        if related:
+            out += "\nRelated, not linked (close in meaning): " + ", ".join(s for s, _ in related)
     return out
 
 
