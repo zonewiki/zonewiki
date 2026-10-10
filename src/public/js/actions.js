@@ -116,6 +116,58 @@ document.querySelector('.action-task')?.addEventListener('click', () => {
 });
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
 
+// A tap on the tab bar acts on its touchend and cancels the browser's own
+// click. Firefox for Android, as an installed app with its toolbar scrolled
+// away, draws the bar lower than it lays it out: a touch on the strip under
+// the labels lands below the bar's box, on the page there (a deck card, which
+// got selected and scrolled into view). So a touch on the bar, or below its
+// box where nothing covers the bar, goes to the tab at its x, before the page
+// sees it. A long press or a move is left to the browser (its link menu, a
+// scroll).
+(function () {
+  const bar = document.querySelector('.action-buttons');
+  if (!bar) return;
+  const tabAt = (target, x, y) => {
+    if (!bar.contains(target)) {
+      // Below the bar's box, and the bar not covered there (a menu's bottom
+      // sheet, a dialog): the browser's hit test missed the bar.
+      const r = bar.getBoundingClientRect();
+      if (!r.height || y < r.bottom || x < r.left || x > r.right) return null;
+      if (!bar.contains(document.elementFromPoint(x, r.bottom - 1))) return null;
+    }
+    let best = null, dist = Infinity;
+    for (const item of bar.querySelectorAll('a, button')) {
+      const b = item.getBoundingClientRect();
+      const d = x < b.left ? b.left - x : x > b.right ? x - b.right : 0;
+      if (d < dist) { best = item; dist = d; }
+    }
+    return best;
+  };
+  let tap = null;
+  document.addEventListener('touchstart', e => {
+    tap = null;
+    if (e.touches.length !== 1) return;
+    const p = e.touches[0];
+    const item = tabAt(e.target, p.clientX, p.clientY);
+    if (!item) return;
+    e.stopPropagation();   // not the page's (a card's drag or swipe)
+    tap = { item, x: p.clientX, y: p.clientY, t: e.timeStamp };
+  }, { capture: true, passive: true });
+  document.addEventListener('touchmove', e => {
+    const p = e.touches[0];
+    if (tap && Math.hypot(p.clientX - tap.x, p.clientY - tap.y) > 10) tap = null;
+  }, { capture: true, passive: true });
+  document.addEventListener('touchcancel', () => { tap = null; }, true);
+  document.addEventListener('touchend', e => {
+    const t = tap;
+    tap = null;
+    if (!t || !e.cancelable || e.timeStamp - t.t > 500) return;
+    e.preventDefault();   // no compatibility mouse events, no click
+    e.stopPropagation();
+    t.item.click();
+  }, true);
+}());
+
 // ── Sharing mode ─────────────────────────────────────────────────────────────
 // For sharing the screen: everything that shows other pages around the one
 // on screen is hidden (style.css, html.sharing): the trail of visited pages,

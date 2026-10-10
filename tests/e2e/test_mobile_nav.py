@@ -171,6 +171,70 @@ def test_deck_tab_shows_the_due_count(new_page, wiki):
     assert tab["x"] <= d["x"] and d["x"] + d["width"] <= tab["x"] + tab["width"]
 
 
+def _count_trusted_clicks(phone):
+    """From now on, count the clicks the browser itself dispatches
+    (isTrusted), wherever they land; kept across a navigation."""
+    phone.evaluate("""() => { sessionStorage.trusted = 0;
+        document.addEventListener('click', e => { if (e.isTrusted) sessionStorage.trusted++; }, true); }""")
+
+
+def _touch_tap(phone, locator, below=0):
+    """A tap with real touch events, near the bottom edge of `locator`, or
+    `below` px under it."""
+    b = locator.bounding_box()
+    y = b["y"] + b["height"] + below if below else b["y"] + b["height"] - 4
+    cdp = phone.context.new_cdp_session(phone)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [
+        {"x": b["x"] + b["width"] / 2, "y": y}]})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
+
+def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
+    # Regression: Firefox for Android (installed app, toolbar scrolled away)
+    # sent the click of a tap on the bar to the deck card under it, which got
+    # selected and scrolled into view. The bar acts on the touch and cancels
+    # the browser's click, so where the browser would send it doesn't matter.
+    phone = new_page(**TOUCH_PHONE)
+    for i in range(30):
+        phone.request.post("/api/deck", data={"title": f"Task {i}"})
+    phone.goto("/deck")
+    open_tab(phone, "open")
+    phone.evaluate("scrollTo(0, 400)")
+    _count_trusted_clicks(phone)
+    with phone.expect_navigation():
+        _touch_tap(phone, phone.locator(".action-module[data-module=scratch]"))
+    assert phone.url.endswith("/page/_scratch")
+    assert phone.evaluate("sessionStorage.trusted") == "0"
+    phone.goto("/deck")
+    _count_trusted_clicks(phone)
+    _touch_tap(phone, phone.locator(".action-scratch"))
+    expect(phone.locator("#scratch-modal")).to_be_visible()      # opened once, by the touch
+    assert phone.evaluate("sessionStorage.trusted") == "0"
+    expect(phone.locator(".task-item.task-selected")).to_have_count(0)
+
+
+def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
+    # Regression: Firefox for Android (installed app, toolbar scrolled away)
+    # draws the bar lower than it lays it out, so a tap on the strip under
+    # the labels landed below the bar's box, on a deck card, which got
+    # selected. Here the bar's box is lifted to leave that strip over the
+    # cards, as Firefox has it: the tap still goes to the tab above.
+    phone = new_page(**TOUCH_PHONE)
+    for i in range(30):
+        phone.request.post("/api/deck", data={"title": f"Task {i}"})
+    phone.goto("/deck")
+    open_tab(phone, "open")
+    phone.evaluate("scrollTo(0, 400)")
+    phone.evaluate("document.querySelector('.action-buttons').style.bottom = '40px'")
+    tab = phone.locator(".action-module[data-module=scratch]")
+    b = tab.bounding_box()
+    under = phone.evaluate(f"document.elementFromPoint({b['x'] + b['width'] / 2}, {b['y'] + b['height'] + 20}).closest('.task-item') !== null")
+    assert under   # a card is what the browser finds there
+    with phone.expect_navigation():
+        _touch_tap(phone, tab, below=20)
+    assert phone.url.endswith("/page/_scratch")
+
+
 # ── Action buttons on desktop ────────────────────────────────────────────────
 # At the top right, in line with the breadcrumb: New scratch note, New task
 # and Search, as icons. The bottom bar is the phone's.
