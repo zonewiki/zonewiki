@@ -1517,7 +1517,7 @@ class TestHostHeader:
     def test_host_name(self):
         assert config.host_name("Wiki.Example.org:443") == "wiki.example.org"
         assert config.host_name("[::1]:5000") == "[::1]"
-        assert config.host_name("leaf.lan") == "leaf.lan"
+        assert config.host_name("leaf.home.arpa") == "leaf.home.arpa"
 
 
 # ===========================================================================

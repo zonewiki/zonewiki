@@ -466,9 +466,9 @@ class TestBaseUrl:
             resp.get_json()["result"]["content"][0]["text"]
 
     def test_base_url_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_BASE_URL", "http://wiki.lan:5000")
-        assert "url: http://wiki.lan:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
-        assert "url: http://wiki.lan:5000/page/git-remote#pushing" in \
+        monkeypatch.setattr(config, "LEAF_BASE_URL", "http://wiki.example.org:5000")
+        assert "url: http://wiki.example.org:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
+        assert "url: http://wiki.example.org:5000/page/git-remote#pushing" in \
             call(client, "search_wiki", query="git push")[0]
 
 

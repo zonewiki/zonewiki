@@ -51,7 +51,7 @@ LEAF_GIT_REMOTE = os.environ.get("LEAF_GIT_REMOTE", "")
 # names the hosts.
 LEAF_ALLOW_REMOTE = os.environ.get("LEAF_ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
 # The names Leaf may be reached by besides localhost, e.g. behind a reverse
-# proxy: LEAF_HOSTS=wiki.example.org,leaf.lan (any port; server.check_host).
+# proxy: LEAF_HOSTS=wiki.example.org,leaf.home.arpa (any port; server.check_host).
 # Set, the Host check stays on even with LEAF_ALLOW_REMOTE.
 def host_name(host: str) -> str:
     """A Host header's name without its port, lowercase ("[::1]:5000" →
