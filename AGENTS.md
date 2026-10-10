@@ -123,7 +123,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ```
 
-Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache in `_index/`, the session key in `_leaf/`. Details: `docs/spec/deployment.md`.
+Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
 
 Without the container:
 
@@ -183,7 +183,7 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
 - Do not use a database. Files are the only storage.
 - Do not add a build step or bundler.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
-  - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `_leaf/secret_key` (0600, excluded from git).
+  - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
   - `/mcp` requires `LEAF_MCP_TOKEN`: without one it is off (403), password or not. Don't make it open again.
   - `check_host` validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
   - `check_origin` refuses cross-site writes (an `Origin` of another site, or `null`).

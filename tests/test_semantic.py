@@ -61,7 +61,7 @@ class FakeEmbedder:
 def make_index(wiki, embedder=None, **kw):
     return embed.SemanticIndex(
         embedder or FakeEmbedder(),
-        wiki / "_index" / "embeddings.json",
+        wiki / ".leaf" / "index" / "embeddings.json",
         lambda: [(s, p) for p, s in pages.iter_pages()],
         retrieval._semantic_text,
         tasks_fn=kw.pop("tasks_fn", lambda: [(d["task_id"], d["excerpt_text"])
@@ -221,8 +221,8 @@ class TestSemanticIndex:
         assert other.calls  # everything embedded again
 
     def test_corrupt_cache_ignored(self, wiki_dir):
-        cache = wiki_dir / "_index" / "embeddings.json"
-        cache.parent.mkdir()
+        cache = wiki_dir / ".leaf" / "index" / "embeddings.json"
+        cache.parent.mkdir(parents=True)
         cache.write_text("{not json", encoding="utf-8")
         idx = make_index(wiki_dir)
         assert not idx.ready
@@ -466,7 +466,7 @@ class TestConfig:
         (wiki_dir / ".git" / "info" / "exclude").write_text("# *~", encoding="utf-8")
         embed.exclude_from_git(wiki_dir)
         embed.exclude_from_git(wiki_dir)
-        assert (wiki_dir / ".git" / "info" / "exclude").read_text() == "# *~\n/_index/\n"
+        assert (wiki_dir / ".git" / "info" / "exclude").read_text() == "# *~\n/.leaf/\n"
 
     def test_no_git_no_exclude(self, wiki_dir):
         embed.exclude_from_git(wiki_dir)

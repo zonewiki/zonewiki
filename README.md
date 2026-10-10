@@ -178,7 +178,7 @@ Settings go in `.env`, all optional except `LEAF_DATA`:
 | `LEAF_DATA` | The wiki folder (default `~/leaf`) |
 | `LEAF_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
-| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `_leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
+| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `.leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
 | `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
 | `LEAF_EMBED_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
@@ -317,10 +317,9 @@ Everything is files in `LEAF_DATA`, which is a git repository:
   have fields (dates, repeats, tags) and are written safely when several
   things change them at once. They are still plain files in the git
   repository.
-- `_leaf/` holds the key that keeps you signed in across restarts; it is
-  never committed.
-- `_index/` is the semantic search cache (only with `LEAF_EMBEDDINGS`); it is
-  never committed and can be deleted at any time.
+- `.leaf/` is Leaf's own state, never committed: `secret_key` keeps you signed
+  in across restarts, `index/` is the semantic search cache (only with
+  `LEAF_EMBEDDINGS`; it can be deleted at any time).
 
 Nothing is locked in: if you stop using Leaf, your pages are plain Markdown
 files that any editor opens, with their history in git.

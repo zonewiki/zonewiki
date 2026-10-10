@@ -57,7 +57,7 @@ def safe_path(slug: str) -> Path | None:
 
 def iter_pages():
     """Yield (path, slug) for all pages, skipping _* subdirectories (assets,
-    the semantic index) and hidden ones. It prunes them instead of walking
+    the deck) and hidden ones (.leaf, .git). It prunes them instead of walking
     them: rglob went through every object in .git on each call, and a search
     lists the pages several times."""
     root = str(config.LEAF_DATA)

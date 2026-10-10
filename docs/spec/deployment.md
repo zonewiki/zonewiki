@@ -59,6 +59,6 @@ Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$LEAF_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$LEAF_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
 - `$LEAF_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/deck.md`)
-- `$LEAF_DATA/_index/` — the semantic search cache (rebuildable, not in git)
+- `$LEAF_DATA/.leaf/` — Leaf's own state, not in git: `secret_key` (session key) and `index/` (the semantic search cache, rebuildable)
 
 Uploaded image URLs use `/_assets/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.

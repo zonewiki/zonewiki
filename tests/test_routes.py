@@ -830,7 +830,7 @@ class TestIterPages:
     def test_skips_underscore_and_hidden_folders(self, wiki_dir):
         write_page(wiki_dir, "top", "# Top\n")
         write_page(wiki_dir, "a/b/deep", "# Deep\n")
-        for skipped in ("_assets/x", "_index/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"):
+        for skipped in ("_assets/x", ".leaf/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"):
             write_page(wiki_dir, skipped, "# no\n")
         assert sorted(slug for _p, slug in pages.iter_pages()) == ["a/b/deep", "index", "top"]
         assert all(p.is_file() and p.suffix == ".md" for p, _s in pages.iter_pages())
@@ -1542,17 +1542,17 @@ class TestProduction:
     def test_secret_key_is_made_once_and_kept(self, wiki_dir, monkeypatch):
         monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
         key = server._secret_key()
-        path = wiki_dir / "_leaf" / "secret_key"
+        path = wiki_dir / ".leaf" / "secret_key"
         assert len(key) == 64 and path.read_bytes() == key
         assert path.stat().st_mode & 0o777 == 0o600
         assert server._secret_key() == key           # a restart keeps it
         monkeypatch.setenv("LEAF_SECRET_KEY", "from-env")
         assert server._secret_key() == b"from-env"
-        assert "_leaf" not in [slug.split("/")[0] for slug in pages.all_slugs()]
+        assert ".leaf" not in [slug.split("/")[0] for slug in pages.all_slugs()]
 
     def test_secret_key_without_a_writable_wiki(self, wiki_dir, monkeypatch):
         monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
-        (wiki_dir / "_leaf").write_text("not a folder")
+        (wiki_dir / ".leaf").write_text("not a folder")
         first, second = server._secret_key(), server._secret_key()
         assert len(first) == len(second) == 64 and first != second   # works, not kept
 

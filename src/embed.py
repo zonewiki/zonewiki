@@ -4,7 +4,7 @@ Opt-in via LEAF_EMBEDDINGS (see from_env). Each page is split into sections
 (chunk_page), each section is turned into a vector by an embedding model, and
 a query is compared against every vector (cosine similarity, brute force).
 That is plenty fast at wiki scale, so there is no vector database: the
-vectors live in memory and in a rebuildable cache file, _index/embeddings.json
+vectors live in memory and in a rebuildable cache file, .leaf/index/embeddings.json
 in the wiki directory (kept out of git via .git/info/exclude).
 
 Vectors are content-addressed: a section's vector is keyed by a hash of its
@@ -588,8 +588,8 @@ class SemanticIndex:
         return scored[:limit]
 
 
-def exclude_from_git(wiki_dir: Path, entry: str = "/_index/") -> None:
-    """List the cache dir in .git/info/exclude (not .gitignore, which would
+def exclude_from_git(wiki_dir: Path, entry: str = "/.leaf/") -> None:
+    """List the .leaf dir (cache, secret key) in .git/info/exclude (not .gitignore, which would
     itself show up as an uncommitted change)."""
     info = wiki_dir / ".git" / "info"
     if not info.parent.is_dir():
@@ -629,5 +629,5 @@ def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex 
             log("LEAF_EMBED_MIN_SCORE is not a number; using the default")
     exclude_from_git(wiki_dir)
     log(f"semantic search on, model {embedder.name}")
-    return SemanticIndex(embedder, wiki_dir / "_index" / "embeddings.json",
+    return SemanticIndex(embedder, wiki_dir / ".leaf" / "index" / "embeddings.json",
                          pages_fn, prepare, tasks_fn=tasks_fn, min_score=min_score)

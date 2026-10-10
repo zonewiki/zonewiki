@@ -69,12 +69,12 @@ class _SessionInterface(SecureCookieSessionInterface):
 
 def _secret_key() -> bytes:
     """The key that signs session cookies: LEAF_SECRET_KEY, else one Leaf made
-    once and keeps in _leaf/secret_key in the wiki folder (owner-only, kept
+    once and keeps in .leaf/secret_key in the wiki folder (owner-only, kept
     out of git), so a restart doesn't sign everyone out. A wiki folder Leaf
     can't write to gets a new key per start."""
     if os.environ.get("LEAF_SECRET_KEY"):
         return os.environ["LEAF_SECRET_KEY"].encode()
-    path = config.LEAF_DATA / "_leaf" / "secret_key"
+    path = config.LEAF_DATA / ".leaf" / "secret_key"
     try:
         key = path.read_bytes().strip()
         if len(key) >= 32:
@@ -178,7 +178,7 @@ def ensure_home_page() -> None:
 
 
 git_setup()
-exclude_from_git(config.LEAF_DATA, "/_leaf/")   # the secret key (_secret_key)
+exclude_from_git(config.LEAF_DATA)   # .leaf/: the secret key (_secret_key)
 ensure_home_page()
 
 

@@ -707,10 +707,10 @@ class TestGitDoesNotDetach:
 
 
 def test_secret_key_folder_is_kept_out_of_git(wiki_dir):
-    server.exclude_from_git(wiki_dir, "/_leaf/")
-    (wiki_dir / "_leaf").mkdir(exist_ok=True)
-    (wiki_dir / "_leaf" / "secret_key").write_text("x" * 64)
-    assert "_leaf" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
+    server.exclude_from_git(wiki_dir)
+    (wiki_dir / ".leaf").mkdir(exist_ok=True)
+    (wiki_dir / ".leaf" / "secret_key").write_text("x" * 64)
+    assert ".leaf" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
 
 
 def test_hung_git_counts_as_failed(wiki_dir, monkeypatch):
