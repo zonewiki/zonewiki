@@ -1,19 +1,38 @@
 # Tools image: what checking Leaf needs beyond the app itself. Microsoft's
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Leaf's
-# Python deps for the browser tests and Node for the deck-core tests.
-# Test-only — the app image (Containerfile)
+# Python deps for the browser tests, Node for the deck-core tests, and
+# gitleaks for the secret scan. Test-only — the app image (Containerfile)
 # stays browser-free. The repo is bind-mounted at /repo at run time, so the
 # image only needs rebuilding when dependencies change.
 #
 #   ./run.sh e2e            # build (cached) and run tests/e2e + deck-core
+#   ./run.sh leaks          # scan the git history for secrets
 #
 # Keep the playwright pip version in lockstep with the image tag: the Python
 # package only works with the browser build that ships in the matching image.
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
-# Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js).
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs git \
+# Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js);
+# curl fetches gitleaks below.
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
+
+# gitleaks, a pinned release checked against its published checksums. To
+# update it, change the version and both sums (gitleaks_<v>_checksums.txt).
+ARG TARGETARCH=amd64
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA256_X64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
+RUN case "$TARGETARCH" in \
+      amd64) arch=x64 sum=$GITLEAKS_SHA256_X64 ;; \
+      arm64) arch=arm64 sum=$GITLEAKS_SHA256_ARM64 ;; \
+      *) echo "no gitleaks build for $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && curl -sSfL -o /tmp/gitleaks.tgz \
+      "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${arch}.tar.gz" \
+ && echo "$sum  /tmp/gitleaks.tgz" | sha256sum -c - \
+ && tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks \
+ && rm /tmp/gitleaks.tgz
 
 COPY src/requirements.txt /tmp/requirements.txt
 RUN pip install --break-system-packages --no-cache-dir \

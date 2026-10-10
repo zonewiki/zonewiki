@@ -159,6 +159,17 @@ case "${1:-up}" in
     in_image "$image" --ipc=host -- \
       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
     ;;
+  leaks)
+    # Secrets in the git history (gitleaks, in the tools image); extra args
+    # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
+    # only (the pre-commit hook). A leak exits with 3, so the hook can tell
+    # it from an engine that doesn't work. safe.directory: the repo belongs
+    # to the host user, not the container's.
+    image=$(build_image -t leaf-tools -f Containerfile.tools)
+    in_image "$image" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+      -e GIT_CONFIG_VALUE_0='*' -- \
+      gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
+    ;;
   screenshots)
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
     # in the tools image (Playwright).
@@ -166,13 +177,14 @@ case "${1:-up}" in
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|screenshots]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
     echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
     echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
+    echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     exit 1
     ;;

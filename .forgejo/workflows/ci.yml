@@ -1,5 +1,5 @@
-# Tests on every push and pull request; on main (and v* tags) the image is
-# then built and pushed to this Forgejo's container registry.
+# Tests and a secret scan on every push and pull request; on main (and v*
+# tags) the image is then built and pushed to this Forgejo's container registry.
 #
 # Needs a runner with the `docker` label whose job containers get the
 # docker socket (`container.docker_host: automount`); the host's engine must
@@ -25,7 +25,8 @@ jobs:
   checks:
     # The checks run through run.sh, as on your machine, in images built from
     # the repo's Containerfiles: test in the app image, e2e (browser and
-    # deck-core tests) in the tools image. So CI keeps no package lists or commands of its own. Like
+    # deck-core tests) and leaks (gitleaks over the whole history) in the
+    # tools image. So CI keeps no package lists or commands of its own. Like
     # the image job, the builds run on the host's engine through the socket,
     # so layers come from its cache unless the dependencies changed.
     # LEAF_COPY_REPO: the checkout lives in this job container, not on the
@@ -33,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [test, e2e]
+        check: [test, e2e, leaks]
     name: ${{ matrix.check }}
     runs-on: docker
     container:
@@ -43,6 +44,8 @@ jobs:
         # Alpine: nodejs runs actions/checkout, bash run.sh, git its build string.
         run: apk add --no-cache nodejs git bash
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # leaks scans every commit
       - name: ./run.sh ${{ matrix.check }}
         env:
           LEAF_COPY_REPO: 1

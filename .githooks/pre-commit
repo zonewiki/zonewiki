@@ -1,0 +1,26 @@
+#!/bin/sh
+# Refuses a commit whose staged changes contain a secret (gitleaks). Turn it
+# on once per clone:
+#
+#   git config core.hooksPath .githooks
+#
+# Uses a local gitleaks if there is one, else the tools image (./run.sh
+# leaks; the first build takes a while). A leak (exit 3) blocks the commit;
+# when neither works, it only warns. Skip it once: git commit --no-verify.
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner --exit-code 3 .
+elif command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+  ./run.sh leaks --pre-commit --staged
+else
+  echo "pre-commit: no gitleaks, podman or docker; secrets not checked." >&2
+  exit 0
+fi
+status=$?
+case $status in
+  0) ;;
+  3) echo "pre-commit: gitleaks found a secret in the staged changes (above); commit refused." >&2
+     exit 1 ;;
+  *) echo "pre-commit: the secret scan didn't run (exit $status); secrets not checked." >&2 ;;
+esac
+exit 0

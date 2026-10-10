@@ -323,10 +323,13 @@ Stop using Leaf and your notes are still just Markdown.
 ```bash
 ./run.sh test     # unit and API tests (pytest) in the app image
 ./run.sh e2e      # browser tests (Playwright) and the deck logic tests (Node)
+./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ```
 
-All three run in containers (Podman or Docker, no compose needed); CI runs the same commands.
+All of them run in containers (Podman or Docker, no compose needed); CI runs the same commands. To have
+commits with a secret in them refused, turn on the pre-commit hook once:
+`git config core.hooksPath .githooks`.
 
 Python with Flask and markdown-it-py, plain ES modules in the browser, and
 one stylesheet; no bundler, no npm.
