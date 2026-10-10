@@ -704,7 +704,10 @@ def test_history_flow(page, wiki):
     expect(page.locator("article.page-content")).to_have_text("v1")
     page.get_by_role("link", name="Newer →").click()
     expect(page.locator("article.page-content")).to_have_text("v2")
-    # Declining the question changes nothing; accepting restores.
+    # Declining the question changes nothing; accepting restores. The question
+    # is asked by a module, so wait until the page's modules have run: a click
+    # before that submits the form unasked.
+    page.wait_for_load_state("load")
     page.once("dialog", lambda d: d.dismiss())
     page.get_by_role("button", name="Restore this version").click()
     expect(page.locator(".version-where")).to_contain_text("1 version back")
