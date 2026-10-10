@@ -87,7 +87,9 @@ export TZ="${TZ:-UTC}"
 # -- COMMAND…, the options going to the engine. The repo is bind-mounted, or
 # with LEAF_COPY_REPO=1 (CI) copied in: there the engine is the host's while
 # the checkout lives in the job container, so a mount would name a host path.
-# Copied, nothing the command writes comes back.
+# Copied, nothing the command writes comes back; --rm has the engine remove
+# the container even when this script is killed (a cancelled CI job), the
+# trap removes one that never started.
 in_image() {
   local image=$1 opts=()
   shift
@@ -95,7 +97,7 @@ in_image() {
   shift
   if [[ -n "$LEAF_COPY_REPO" ]]; then
     local c
-    c=$($ENGINE create "${opts[@]}" -w /repo "$image" "$@")
+    c=$($ENGINE create --rm "${opts[@]}" -w /repo "$image" "$@")
     trap "$ENGINE rm -f $c >/dev/null" EXIT
     $ENGINE cp ./. "$c:/repo"
     $ENGINE start -a "$c"
@@ -164,9 +166,21 @@ case "${1:-up}" in
     # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
     # only (the pre-commit hook). A leak exits with 3, so the hook can tell
     # it from an engine that doesn't work. safe.directory: the repo belongs
-    # to the host user, not the container's.
+    # to the host user, not the container's. GIT_INDEX_FILE: for commit -a
+    # or commit <path>, git hands the hook a temporary index (a host path);
+    # without it, git in the container would scan .git/index, which lacks
+    # those changes. One outside the repo can't be reached: exit 2.
+    idx=()
+    if [[ -n "$GIT_INDEX_FILE" ]]; then
+      repo=$(pwd -P)
+      index="$(cd "$(dirname "$GIT_INDEX_FILE")" && pwd -P)/$(basename "$GIT_INDEX_FILE")"
+      case "$index" in
+        "$repo"/*) idx=(-e "GIT_INDEX_FILE=/repo/${index#"$repo"/}") ;;
+        *) echo "leaks: the index $GIT_INDEX_FILE is outside the repo." >&2; exit 2 ;;
+      esac
+    fi
     image=$(build_image -t leaf-tools -f Containerfile.tools)
-    in_image "$image" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+    in_image "$image" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
       -e GIT_CONFIG_VALUE_0='*' -- \
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
     ;;

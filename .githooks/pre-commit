@@ -7,10 +7,16 @@
 # Uses a local gitleaks if there is one, else the tools image (./run.sh
 # leaks; the first build takes a while). A leak (exit 3) blocks the commit;
 # when neither works, it only warns. Skip it once: git commit --no-verify.
+# In a git worktree (.git is a file naming a host path) the tools image
+# can't reach the repo, so there only a local gitleaks checks.
 
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git --pre-commit --staged --redact --no-banner --exit-code 3 .
 elif command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+  engine=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+  if ! $engine image inspect leaf-tools >/dev/null 2>&1; then
+    echo "pre-commit: building the tools image for the secret scan (once; takes a few minutes)…" >&2
+  fi
   ./run.sh leaks --pre-commit --staged
 else
   echo "pre-commit: no gitleaks, podman or docker; secrets not checked." >&2

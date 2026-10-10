@@ -71,7 +71,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .env                    # Host data path configuration
-├── .forgejo/workflows/ci.yml  # Forgejo Actions: tests, e2e, build + push the image
+├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
 └── src/
     ├── requirements.txt
     ├── server.py           # Flask app: request checks, wiki routes (pages, editor, scratch, search, uploads, /deck, /mcp)
