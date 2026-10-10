@@ -1,6 +1,6 @@
 # Leaf
 
-A local-first personal wiki with a built-in task deck. Your notes are plain
+A self-hosted personal wiki with a built-in task deck. Your notes are plain
 Markdown files in a folder you choose; Leaf renders them in the browser, lets
 you edit them there or in any editor, searches them, and keeps every version
 in git. No database, no frontend build, no cloud: run it on your machine, or
@@ -25,9 +25,9 @@ self-host it behind HTTPS.
   phone or another computer. The server is one Python process, with no
   database, and no npm or bundler for the frontend. It is small enough to
   read and change.
-- **Local first, self-hostable.** Runs on your machine by default. To reach it
-  from elsewhere, put it behind HTTPS with a password (see
-  [Security](#security)).
+- **Your files, your server.** Runs on your machine by default, with no cloud
+  and no account. To reach it from elsewhere, put it behind HTTPS with a
+  password (see [Security](#security)).
 
 Leaf is not a plugin platform or a native app, and it has no graph view or
 real-time collaboration. It aims to be a small, readable tool for one

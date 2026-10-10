@@ -1,7 +1,7 @@
 {
   "name": "Leaf",
   "short_name": "Leaf",
-  "description": "A local-first wiki with a task deck",
+  "description": "A self-hosted wiki with a task deck",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
