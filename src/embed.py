@@ -543,8 +543,38 @@ class SemanticIndex:
         me = page_vecs.get(slug)
         if me is None or not self._has_content(pages.get(slug)):
             return []
+        return self._nearest(me, pages, page_vecs, set(exclude) | {slug}, known, limit)
+
+    def related_to_text(self, slug: str, content: str, known: Iterable[str] | None = None,
+                        exclude: Iterable[str] = (), limit: int = 5) -> list[tuple[str, float]]:
+        """related() for a page's text, which the index may not have yet (a
+        page just written; the worker catches up later): its sections are
+        embedded now, those the index knows reused. [] for little prose, or
+        when embedding fails."""
+        if not self.ready:
+            return []
+        title, body = self.prepare(content, slug)
+        chunks = chunk_page(body)
+        if sum(prose_chars(c) for c in chunks) < self.related_min_chars:
+            return []
+        with self._lock:
+            pages, vecs, page_vecs = self._pages, self._vecs, self._page_vecs
+        keyed = [(chunk_key(title, c), f"{title}\n{c}".strip()) for c in chunks]
+        missing = [(h, t) for h, t in keyed if h not in vecs]
+        try:
+            new = {h: _normalize(v) for (h, _t), v in
+                   zip(missing, self.embedder.embed_docs([t for _h, t in missing]) if missing else [])}
+        except Exception as e:
+            log(f"embedding failed, no related pages for {slug}: {e}")
+            return []
+        me = _mean([vecs[h] if h in vecs else new[h] for h, _t in keyed])
+        if me is None:
+            return []
+        return self._nearest(me, pages, page_vecs, set(exclude) | {slug}, known, limit)
+
+    def _nearest(self, me: array, pages: dict, page_vecs: dict, skip: set[str],
+                 known: Iterable[str] | None, limit: int) -> list[tuple[str, float]]:
         known = set(known) if known is not None else None
-        skip = set(exclude) | {slug}
         scored = []
         for other, v in page_vecs.items():
             if other in skip or (known is not None and other not in known):

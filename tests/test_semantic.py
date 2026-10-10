@@ -250,6 +250,17 @@ class TestSemanticIndex:
         assert [s for s, _ in semantic.related("golf")] == ["brakes"]
         assert semantic.related("golf", exclude={"brakes"}) == []
 
+    def test_related_to_a_text_not_indexed_yet(self, semantic, wiki_dir):
+        text = "# Brakes\n\nBremsen beim Mechaniker.\n"
+        assert [s for s, _ in semantic.related_to_text("brakes", text)] == ["golf"]
+        before = len(semantic.embedder.calls)
+        semantic.related_to_text("brakes", text)
+        assert len(semantic.embedder.calls) == before + 1      # its section, not the whole wiki
+        assert [s for s, _ in semantic.related_to_text("x", "# Sleep\n\nTired in bed.\n")] == ["evening"]
+        assert semantic.related_to_text("x", "# Notes\n\nNothing in particular.\n") == []
+        semantic.embedder.fail = True
+        assert semantic.related_to_text("brakes", text) == []
+
     def test_thin_pages_take_no_part_in_related(self, wiki_dir):
         long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
         write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")

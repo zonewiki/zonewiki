@@ -637,7 +637,7 @@ class TestListTags:
 
 class TestRelatedByMeaning:
     """With semantic search: read_page names pages close in meaning that
-    aren't linked."""
+    aren't linked, and a new page names the pages closest in content."""
 
     @pytest.fixture()
     def semantic_on(self, pages, monkeypatch):
@@ -655,8 +655,23 @@ class TestRelatedByMeaning:
         semantic_on.sync()
         assert "Related, not linked" not in call(client, "read_page", slug="golf")[0]
 
+    def test_new_page_names_pages_close_in_content(self, client, semantic_on):
+        text, err = call(client, "write_page", slug="car-trouble",
+                         content="# Car trouble\n\nThe car needs a repair, bremsen again.")
+        assert not err
+        assert "\nNote: the pages closest to it in content: golf, brakes. If one already covers" in text
+        assert "car-trouble" not in text.split("closest")[1]          # not itself
+        text = call(client, "write_page", slug="sleep", content="# Sleep\n\nTired every evening.")[0]
+        assert "closest to it in content" not in text                 # nothing close enough
+
+    def test_linked_pages_left_out(self, client, semantic_on):
+        text = call(client, "write_page", slug="car-trouble",
+                    content="# Car trouble\n\nThe car needs a repair, see [[golf]].")[0]
+        assert "closest to it in content: brakes." in text
+
     def test_without_semantic_nothing(self, client, pages):
         assert "Related" not in call(client, "read_page", slug="golf")[0]
+        assert "closest" not in call(client, "write_page", slug="x", content="# X\n\ncar repair")[0]
 
 
 class TestReadPageLinks:

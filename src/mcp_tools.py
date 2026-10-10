@@ -25,7 +25,8 @@ from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_
                       version_path)
 from mdtext import (is_scratch, iter_fenced_lines, mask_code, page_tags, page_title, plain_heading,
                     split_wikilink, to_slug, WIKILINK_RE)
-from pages import all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
+from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
+                   iter_pages, page_link_targets, page_meta, safe_path, url)
 from render import task_link, TOC_RE
 from retrieval import in_folder, passes, retrieve, task_status
 
@@ -295,6 +296,24 @@ def _similar_pages(slug: str, title: str) -> list[tuple[str, str]]:
     return sorted(found)[:5]
 
 
+def _close_in_content(slug: str, content: str, named: set[str]) -> str:
+    """For a new page (semantic search only): the existing pages closest to
+    it in meaning, which a similar name doesn't catch (a crash analysis
+    written up anew when the ticket's page already covers it). Pages it
+    links to, or already named for a similar name, are left out."""
+    if not retrieval.SEMANTIC:
+        return ""
+    slugs = set(all_slugs())
+    linked = page_link_targets(content, slug, slugs)
+    close = retrieval.SEMANTIC.related_to_text(slug, content, known=slugs - {slug},
+                                               exclude=linked | named, limit=3)
+    if not close:
+        return ""
+    return ("\nNote: the pages closest to it in content: " + ", ".join(s for s, _ in close)
+            + ". If one already covers this topic, merge this page there (edit_page) and "
+            "delete_page this one; else consider linking them.")
+
+
 def _write_page(args: dict, base: str) -> str:
     content = _str_arg(args, "content")
     overwrite = args.get("overwrite", False) is True
@@ -318,6 +337,7 @@ def _write_page(args: dict, base: str) -> str:
             out += ("\nNote: pages with similar names exist; if this one repeats one of them, "
                     "merge it there (edit_page) and delete_page this one:\n"
                     + "\n".join(f"- {s} | {t}" for s, t in similar))
+        out += _close_in_content(slug, content, {s for s, _t in similar})
     return out + pending + _link_warning(old, content)
 
 
