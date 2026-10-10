@@ -1,0 +1,33 @@
+# Tests
+
+Part of Leaf's spec (see `AGENTS.md` for the index).
+
+How the suite is set up and what each module covers. The rules (run it, add tests with every change) are in `AGENTS.md`.
+
+## Shared setup
+
+`tests/conftest.py` holds the shared setup: it imports Leaf against a throwaway `LEAF_DATA`, and gives every test a fresh temp wiki (`wiki_dir`: the server and the deck pointed at it, every page/task cache emptied, just `index.md`; `git_wiki_dir`: the same as a git repo; `client`), plus helpers (`HOST`, `write_page`, `create_task`, `section_fields`) that modules import from `tests.conftest`. The browser tests' `wiki` fixture builds on `git_wiki_dir`.
+
+`tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules use the plain `wiki_dir`, so git calls there are silent no-ops.
+
+`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, the wiki-guide page in the instructions, the reading tools (tasks created through `/api/deck`; with and without the fake semantic index from `test_semantic.py`; read_page's links and one section, list_pages' link counts and orphans, check_links, list_tags, grep_wiki with regexes, limits, a bad pattern, the timeout and the no-git fallback, history: recent changes, a page's versions and a diff), and the writing tools: pages (create/overwrite, exact-text edit, append under a heading, rename with links, delete, similar-name and broken-wikilink notes) and tasks (create, update fields and status, id prefixes, comment, delete), several edits at once, restore_page (a version, a deleted page), a page open in the editor (its auto-saved draft committed first as the user's, the editor's 409 after), plus one commit per write marked `(MCP)`.
+
+`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges, done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`. `tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, batch mode for several lines with shared tags and per-line shorthand, headings skipped, inline selection, undo, the hidden deck leaving the editor's keys alone).
+
+`tests/test_semantic.py` covers semantic search with a fake embedder (words mapped to a few "concept" axes), so it needs neither fastembed nor a model: chunking, the content-addressed cache, failure fallback, the worker, rank fusion, hybrid `/api/search` and the Related section. It swaps `retrieval.SEMANTIC` for an index over the temp wiki.
+
+To run the suite without a local venv: `./run.sh test` (runs inside the app image with the repo mounted).
+
+## Browser tests (`tests/e2e/`)
+
+End-to-end tests drive the real app in headless Chromium via Playwright. They run in a separate test image (`Containerfile.e2e`, based on Microsoft's Playwright image) so the app image stays browser-free and the app still has no build step or npm. `./run.sh e2e` builds that image (cached) and runs them with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k deck`). Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
+
+- `conftest.py` serves `server.app` on a background thread (werkzeug `make_server`, random port) and points it at a fresh temp wiki with its own git repo per test; each test gets a fresh browser context. A request to any other host is aborted (offline, deterministic) and fails the test: Leaf loads nothing from a CDN. Uncaught page JS errors fail the test.
+- Coverage: Scratch filter (`test_search.py`), modules (breadcrumb switcher and current module, phone tab bar, New per module, due count on the Deck links, the deck home, desktop top actions, New task/`c t`/`g t` following the deck home; `test_mobile_nav.py`), side columns (sticky TOC and links from 1320px, active section, code and tables growing only when needed, none below 1320px; `test_layout.py`), editor (formatting bar and Ctrl+B/I/K, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter), deck (Plan-board drag to a day and to Unplanned, touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, long press is not a tap), board grouping by start date, modal "Days before due", Plan board in Open's order with in-section drops ignored, view tabs, start-date Today, touch: tap-to-edit, ⋯ menu/bottom sheet, target sizes, editor scrolling/compact phone layout, date picker placement), sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview), layout (no horizontal page scroll at 390px phone width on page/editor/deck views, mobile Preview button, tldr toggle geometry).
+- Density: the test setup (`_new_page`'s init script) makes decks open with full cards, as before the per-tab defaults, since most tests exercise cards; a test of the real defaults calls `real_density(page)` first.
+- Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
+- `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review. It asserts nothing about appearance.
+- Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
+- Keep the `playwright==` pin in `Containerfile.e2e` equal to the image tag version.
+
+`tests/test_deck_core.py` exercises the pure client logic in `src/public/deck-core.js` by running it under Node (`node -e`); those tests skip automatically when Node is not installed. The app image has no Node, so `./run.sh test` skips them; `./run.sh e2e` runs them, since the test image (`Containerfile.e2e`) installs Ubuntu's `nodejs`.

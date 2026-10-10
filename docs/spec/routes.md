@@ -19,7 +19,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
-| GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version) |
+| GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version in `docs/spec/deployment.md`) |
 | POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |

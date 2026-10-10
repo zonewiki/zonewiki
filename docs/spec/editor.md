@@ -41,10 +41,15 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 - The editor toolbar includes a "Rename" button that reveals an inline rename form (hidden by default); the page view's ⋯ menu has **Rename…**, which opens a dialog (`#page-rename-dialog`) with the same form plus `from=page`.
 - The form has a single text input pre-filled with the current slug, and a "Rename" submit button.
 - On submit, POSTs to `POST /rename/<slug>` with field `new_name` (human-readable name accepted, converted to slug server-side).
-- Server renames the file (`<old>.md` → `<new>.md`), updates wikilink references in all other pages (see Key Constraints), then redirects to `/page/<new-slug>`.
+- Server renames the file (`<old>.md` → `<new>.md`), re-points every link to it (see Links below), then redirects to `/page/<new-slug>`.
 - Renaming `index` is forbidden — the server returns 400 if the old slug is `index`.
 - If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_error=…` (to the editor, which shows the rename bar with the error, or with `from=page` to the page view, whose rename dialog reopens with it). An unchanged name goes back the same way.
 - Validate new slug with `safe_path()` before renaming.
+
+**Links** — when a page is renamed, every link to it is re-pointed (`rewrite_page_links()` via `update_references()`), so nothing that backlinks count is left broken:
+- `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
+- Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`). Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory. Images are never touched.
+- Links inside fenced code and inline code are left alone (`mask_code`).
 
 ### File paste and drag & drop
 
