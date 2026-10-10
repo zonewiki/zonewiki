@@ -41,6 +41,64 @@ def run_git(*args: str) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(list(args), 124, "", f"git timed out after {GIT_TIMEOUT}s")
 
 
+# A pattern search (grep_pages) gets far less time than other git calls: a
+# pattern that backtracks badly is killed, instead of a whole minute of work.
+GREP_TIMEOUT = 10
+# Whether this git has Perl-style patterns (grep -P, built with PCRE); else
+# grep_pages uses extended regexes (-E). Found out on the first search.
+_grep_perl: bool | None = None
+
+
+class GrepError(ValueError):
+    """A grep_pages pattern git refused (bad syntax) or that took too long."""
+
+
+def grep_pages(pattern: str, ignore_case: bool = False) -> list[tuple[str, int, str]]:
+    """Every line of every page matching a regex, as (slug, line number,
+    line), in file order. git matches (`git grep --no-index`, so pages not
+    yet committed count too) in its own process, which a timeout can kill;
+    Python's re can't be stopped mid-match and would hold up the server.
+    Without git, the pattern is matched as plain text."""
+    global _grep_perl
+    slugs = {path: slug for path, slug in iter_pages()}
+    if not config.GIT_ENABLED:
+        needle = pattern.lower() if ignore_case else pattern
+        hits = []
+        for path, slug in sorted(slugs.items(), key=lambda p: p[1]):
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            hits += [(slug, n, line) for n, line in enumerate(lines, 1)
+                     if needle in (line.lower() if ignore_case else line)]
+        return hits
+    for perl in ((True, False) if _grep_perl is None else (_grep_perl,)):
+        args = ["git", "grep", "--no-index", "--no-color", "-I", "-n", "-z", "-P" if perl else "-E"]
+        if ignore_case:
+            args.append("-i")
+        try:
+            r = subprocess.run([*args, "-e", pattern, "--", "*.md"], cwd=config.LEAF_DATA,
+                               capture_output=True, encoding="utf-8", errors="replace",
+                               env=_GIT_ENV, timeout=GREP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise GrepError(f"the search took longer than {GREP_TIMEOUT}s; try a simpler pattern")
+        if perl and r.returncode not in (0, 1) and "PCRE" in r.stderr:
+            continue                 # this git has no -P: extended regexes instead
+        _grep_perl = perl
+        break
+    if r.returncode not in (0, 1):
+        raise GrepError(r.stderr.strip().removeprefix("fatal: ") or f"git grep failed ({r.returncode})")
+    root = config.LEAF_DATA
+    hits = []
+    for row in r.stdout.splitlines():
+        parts = row.split("\0", 2)
+        if len(parts) == 3 and parts[1].isdigit():
+            slug = slugs.get(root / parts[0])
+            if slug is not None:     # pages only: not _assets/, _deck/, …
+                hits.append((slug, int(parts[1]), parts[2]))
+    return hits
+
+
 def git_setup() -> None:
     if not config.GIT_ENABLED:
         return

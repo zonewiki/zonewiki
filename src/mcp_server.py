@@ -23,7 +23,11 @@ INSTRUCTIONS = (
     "text. Search finds by meaning as well as by keyword, so phrase queries the "
     "way the notes might. For questions about their tasks (what's open for a "
     "project, what's due, what they finished) use search_tasks, which filters by "
-    "tag and status. Cite pages and tasks by their URL.\n\n"
+    "tag and status. To find every occurrence of exact text (a ticket id, a name, "
+    "a TODO), not the most relevant sections, use grep_wiki, which takes a regex. "
+    "read_page shows which pages link to a page; list_pages counts the links and, "
+    "with orphans, lists pages nothing links to; check_links reports wikilinks that "
+    "lead nowhere. Cite pages and tasks by their URL.\n\n"
     "You can also write: the wiki is meant to be kept up to date by you. Before "
     "creating a page, search for one that already covers the topic and extend "
     "it instead. Change pages with edit_page (exact text replacement, like a "
@@ -116,9 +120,34 @@ TOOLS = [
         "annotations": _READ_ONLY,
     },
     {
+        "name": "grep_wiki",
+        "title": "Find lines in the wiki",
+        "description": (
+            "Find every line of every page that matches a regular expression, as "
+            "page slug, line number and line: for exact text and all its occurrences "
+            "(ticket ids, names, TODOs, an old term to replace), where search_wiki "
+            "gives only the most relevant sections. Perl-style regex (\\d, \\b, "
+            "(?:…), lookarounds); escape . ( [ and such to match them literally. "
+            "Pages only, not deck tasks."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "The regex, e.g. 'BUG-\\d{4,5}' or '^- \\[ \\]'."},
+                "ignore_case": {"type": "boolean", "default": False},
+                "under": {"type": "string",
+                          "description": "Only pages in this folder and its subfolders, e.g. 'tickets'."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50,
+                          "description": "How many lines to show; the total is always given."},
+            },
+            "required": ["pattern"],
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
         "name": "read_page",
         "title": "Read a page",
-        "description": "Return a wiki page's full markdown, frontmatter included, by its slug.",
+        "description": ("Return a wiki page's full markdown, frontmatter included, by its slug, "
+                        "followed by the pages that link to it and its wikilinks that lead nowhere."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -132,14 +161,32 @@ TOOLS = [
     {
         "name": "list_pages",
         "title": "List pages",
-        "description": ("List the wiki's pages (slug, title, last edited), most recently edited "
-                        "first; with `under`, one folder's. Slugs show the folder structure."),
+        "description": ("List the wiki's pages (slug, title, last edited, how many pages link "
+                        "to it), most recently edited first; with `under`, one folder's; with "
+                        "`orphans`, only pages no other page links to. Slugs show the folder structure."),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100},
                 "under": {"type": "string",
                           "description": "Only pages in this folder and its subfolders, e.g. 'tickets' or 'projects' (the slug part before a '/')."},
+                "orphans": {"type": "boolean", "default": False, "description": (
+                    "Only pages no other page links to (the home page, the deck's home "
+                    "and scratch notes aside): candidates to link from somewhere.")},
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "check_links",
+        "title": "Find broken wikilinks",
+        "description": ("List every [[wikilink]] in the wiki that points to a page that doesn't "
+                        "exist, by page, with the existing page it was probably meant for."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "under": {"type": "string",
+                          "description": "Only pages in this folder and its subfolders, e.g. 'tickets'."},
             },
         },
         "annotations": _READ_ONLY,

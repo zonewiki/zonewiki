@@ -1,12 +1,12 @@
-"""The MCP tools: reading (search_wiki, search_tasks, read_page,
-list_pages) and writing pages (write_page, edit_page, append_to_page,
+"""The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
+list_pages, check_links) and writing pages (write_page, edit_page, append_to_page,
 rename_page, delete_page) and deck tasks (create_task, update_task,
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
 import re
 from datetime import date
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher, get_close_matches
 from pathlib import Path
 
 from flask import request
@@ -20,9 +20,9 @@ import pages
 import mcp_server
 import retrieval
 import search
-from gitstore import git_commit, move_page
-from mdtext import iter_fenced_lines, mask_code, page_title, plain_heading, split_wikilink, to_slug, WIKILINK_RE
-from pages import all_slugs, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
+from gitstore import git_commit, grep_pages, GrepError, move_page
+from mdtext import is_scratch, iter_fenced_lines, mask_code, page_title, plain_heading, split_wikilink, to_slug, WIKILINK_RE
+from pages import all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected, iter_pages, page_meta, safe_path, url
 from render import task_link, TOC_RE
 from retrieval import in_folder, passes, retrieve, task_status
 
@@ -527,6 +527,134 @@ def _delete_task(args: dict, base: str) -> str:
     return f"Deleted task {decksyntax.short_id(task['id'])}: {task.get('title', '')}"
 
 
+# How many linking pages read_page names before "… and N more".
+_BACKLINKS_SHOWN = 50
+
+
+def _page_links(slug: str, content: str) -> str:
+    """For read_page: the pages that link to it and its wikilinks that lead
+    nowhere, so the model sees where a page sits without reading others."""
+    linking = [b["slug"] for b in find_backlinks(slug)]
+    shown = ", ".join(linking[:_BACKLINKS_SHOWN]) or "no other page"
+    if len(linking) > _BACKLINKS_SHOWN:
+        shown += f", … and {len(linking) - _BACKLINKS_SHOWN} more"
+    out = f"\n\n---\nLinked from ({len(linking)}): {shown}"
+    missing = _missing_links(content, set(all_slugs()))
+    if missing:
+        out += "\nBroken wikilinks (no such page): " + ", ".join(f"[[{n}]]" for n in sorted(missing))
+    return out
+
+
+def _bool_arg(args: dict, name: str) -> bool:
+    value = args.get(name, False)
+    if not isinstance(value, bool):
+        raise mcp_server.ToolError(f"{name} must be true or false")
+    return value
+
+
+def _is_orphan(slug: str, counts: dict[str, int], home: str | None) -> bool:
+    """No other page links to it. The home page, the deck's home and scratch
+    notes are reached otherwise (the module switcher), so they never are."""
+    return not counts.get(slug) and not is_protected(slug) and slug != home and not is_scratch(slug)
+
+
+def _list_pages(args: dict, base: str) -> str:
+    limit = _mcp_int(args, "limit", 100, 1000)
+    under = _clean_folder(args.get("under", ""))
+    orphans = _bool_arg(args, "orphans")
+    counts = all_backlink_counts()
+    home = deck_home_slug()
+    pages = []
+    for md_file, slug in iter_pages():
+        if not in_folder(slug, under) or (orphans and not _is_orphan(slug, counts, home)):
+            continue
+        try:
+            mtime = md_file.stat().st_mtime
+        except OSError:
+            continue
+        pages.append((mtime, slug, page_meta(md_file, slug)[0]))
+    pages.sort(reverse=True)
+    where = f" under {under}/" if under else ""
+    if not pages:
+        if orphans:
+            return f"Every page{where} is linked from another page."
+        return f"No pages under {under!r}." if under else "The wiki has no pages."
+    lines = [f"{slug} | {title} | edited {fmt_date(mtime)} | {counts.get(slug, 0)}"
+             for mtime, slug, title in pages[:limit]]
+    shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
+    what = ("Pages no other page links to (the home page, the deck's home and scratch notes aside)"
+            if orphans else "Pages")
+    return (f"{what}{where}, most recently edited first ({shown}); "
+            "slug | title | last edit | pages linking to it:\n" + "\n".join(lines))
+
+
+def _check_links(args: dict, base: str) -> str:
+    under = _clean_folder(args.get("under", ""))
+    slugs = set(all_slugs())
+    found = []
+    for md_file, slug in sorted(iter_pages(), key=lambda p: p[1]):
+        if not in_folder(slug, under):
+            continue
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if missing := _missing_links(content, slugs):
+            found.append((slug, sorted(missing)))
+    where = f" under {under}/" if under else ""
+    if not found:
+        return f"No broken wikilinks{where}."
+    out = []
+    for slug, names in found:
+        links = []
+        for name in names:
+            near = get_close_matches(to_slug(name), slugs, n=1, cutoff=0.8)
+            links.append(f"[[{name}]]" + (f" (maybe [[{near[0]}]]?)" if near else ""))
+        out.append(f"{slug}: " + ", ".join(links))
+    total = sum(len(names) for _s, names in found)
+    return (f"{total} wikilinks{where} point to pages that don't exist, on {len(found)} pages "
+            "(fix the link, or create the page):\n" + "\n".join(out))
+
+
+# How much of a long line grep_wiki shows.
+_GREP_LINE_CHARS = 300
+
+
+def _grep_wiki(args: dict, base: str) -> str:
+    pattern = args.get("pattern")
+    if not isinstance(pattern, str) or not pattern.strip():
+        raise mcp_server.ToolError("pattern must be a non-empty string")
+    under = _clean_folder(args.get("under", ""))
+    limit = _mcp_int(args, "limit", 50, 500)
+    try:
+        hits = [h for h in grep_pages(pattern, _bool_arg(args, "ignore_case")) if in_folder(h[0], under)]
+    except GrepError as e:
+        raise mcp_server.ToolError(f"grep_wiki: {e}")
+    where = f" under {under}/" if under else ""
+    if not hits:
+        return f"No line{where} matches {pattern!r}."
+    out, last = [], None
+    for slug, number, line in hits[:limit]:
+        if slug != last:
+            if out:
+                out.append("")
+            out.append(slug)
+            last = slug
+        line = line.strip()
+        if len(line) > _GREP_LINE_CHARS:
+            line = line[:_GREP_LINE_CHARS] + " …"
+        out.append(f"  {number}: {line}")
+    pages = len({h[0] for h in hits})
+    head = f"{len(hits)} matching lines on {pages} pages{where}"
+    if len(hits) > limit:
+        head += f", the first {limit} shown (raise limit, or narrow the pattern or folder)"
+    if not config.GIT_ENABLED:
+        head += "; git isn't installed, so the pattern was matched as plain text"
+    return head + ":\n" + "\n".join(out)
+
+
+_READ_TOOLS = {"grep_wiki": _grep_wiki, "list_pages": _list_pages, "check_links": _check_links}
+
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,
     "rename_page": _rename_page, "delete_page": _delete_page,
@@ -570,26 +698,9 @@ def mcp_call_tool(name: str, args: dict) -> str:
             raise mcp_server.ToolError(f"No page {raw!r}. Use search_wiki or list_pages to find its slug.")
         content = safe_path(slug).read_text(encoding="utf-8", errors="replace")
         return (f"slug: {slug}\nurl: {base}{url('page', slug)}\nfile: {_host_file(slug)}\n\n{content}"
-                + _mcp_task_refs(content, base))
-    if name == "list_pages":
-        limit = _mcp_int(args, "limit", 100, 1000)
-        under = _clean_folder(args.get("under", ""))
-        pages = []
-        for md_file, slug in iter_pages():
-            if not in_folder(slug, under):
-                continue
-            try:
-                mtime = md_file.stat().st_mtime
-            except OSError:
-                continue
-            pages.append((mtime, slug, page_meta(md_file, slug)[0]))
-        pages.sort(reverse=True)
-        lines = [f"{slug} | {title} | edited {fmt_date(mtime)}" for mtime, slug, title in pages[:limit]]
-        if not pages:
-            return f"No pages under {under!r}." if under else "The wiki has no pages."
-        shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
-        where = f" under {under}/" if under else ""
-        return f"Pages{where}, most recently edited first ({shown}); slug | title | last edit:\n" + "\n".join(lines)
+                + _mcp_task_refs(content, base) + _page_links(slug, content))
+    if name in _READ_TOOLS:
+        return _READ_TOOLS[name](args, base)
     if name in _WRITE_TOOLS:
         return _WRITE_TOOLS[name](args, base)
     raise mcp_server.ToolError(f"Unknown tool: {name}")

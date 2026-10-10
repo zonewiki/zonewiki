@@ -1,6 +1,7 @@
 """Tests for the MCP server: the protocol handler (src/mcp_server.py), the
 /mcp endpoint with its auth, and the tools (search_wiki, search_tasks,
-read_page, list_pages) backed by section-level retrieval in server.py.
+read_page, list_pages, grep_wiki, check_links) backed by section-level
+retrieval in server.py, and the writing tools.
 """
 
 import os
@@ -73,10 +74,10 @@ class TestHandle:
         r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, _no_tools, "x")
         tools = r["result"]["tools"]
         assert [t["name"] for t in tools] == [
-            "search_wiki", "search_tasks", "read_page", "list_pages",
+            "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "write_page", "edit_page", "append_to_page", "rename_page", "delete_page",
             "create_task", "update_task", "comment_task", "delete_task"]
-        reading = {"search_wiki", "search_tasks", "read_page", "list_pages"}
+        reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
         adding = {"append_to_page", "create_task", "comment_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
@@ -534,6 +535,120 @@ class TestListPages:
     def test_limit(self, client, pages):
         text, _ = call(client, "list_pages", limit=1)
         assert "(1 of 3)" in text and len(text.splitlines()) == 2
+
+    def test_counts_pages_linking_to_each(self, client, pages):
+        write_page(pages, "a", "# A\n\n[[golf]] and [[Git Remote]].\n")
+        write_page(pages, "b", "# B\n\nSee [Golf](golf.md), and [[b]] itself.\n")
+        lines = call(client, "list_pages")[0].splitlines()
+        assert lines[0].endswith("slug | title | last edit | pages linking to it:")
+        rows = {line.split(" | ")[0]: line.rsplit(" | ", 1)[1] for line in lines[1:]}
+        assert rows == {"golf": "2", "git-remote": "1", "a": "0", "b": "0", "index": "0"}
+
+    def test_orphans(self, client, pages):
+        write_page(pages, "a", "# A\n\n[[golf]]\n")
+        write_page(pages, "2026-10-08_14-03-11_idea", "# Idea\n")       # a scratch note
+        write_page(pages, "tasks", "# Tasks\n\n[[deck home=1]]\n")     # the deck's home
+        text, err = call(client, "list_pages", orphans=True)
+        assert not err and text.startswith("Pages no other page links to")
+        assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote"]
+        assert call(client, "list_pages", orphans=True, under="golf")[0] == \
+            "Every page under golf/ is linked from another page."
+        assert call(client, "list_pages", orphans="yes")[1]
+
+
+class TestReadPageLinks:
+    def test_linked_from_and_broken_links(self, client, pages):
+        write_page(pages, "a", "# A\n\n[[golf]], [[Nowhere]], [[golf#Werkstatt|the garage]]\n"
+                               "\n`[[In Code]]`\n\n[[toc]]\n")
+        write_page(pages, "b", "# B\n\n[Golf](golf.md)\n")
+        text = call(client, "read_page", slug="golf")[0]
+        assert text.endswith("\n\n---\nLinked from (2): a, b")
+        text = call(client, "read_page", slug="a")[0]
+        assert text.endswith("\n\n---\nLinked from (0): no other page\n"
+                             "Broken wikilinks (no such page): [[Nowhere]]")
+
+    def test_long_list_is_cut(self, client, pages, monkeypatch):
+        import mcp_tools
+        monkeypatch.setattr(mcp_tools, "_BACKLINKS_SHOWN", 2)
+        for name in "cde":
+            write_page(pages, name, "[[golf]]\n")
+        assert call(client, "read_page", slug="golf")[0].endswith(
+            "Linked from (3): c, d, … and 1 more")
+
+
+class TestCheckLinks:
+    def test_reports_broken_links_with_a_guess(self, client, pages):
+        write_page(pages, "a", "# A\n\n[[Golff]] and [[Nowhere At All]] and [[golf]]\n")
+        write_page(pages, "tickets/t", "# T\n\n[[Missing]]\n\n```\n[[In Code]]\n```\n")
+        text, err = call(client, "check_links")
+        assert not err
+        assert text.splitlines() == [
+            "3 wikilinks point to pages that don't exist, on 2 pages (fix the link, or create the page):",
+            "a: [[Golff]] (maybe [[golf]]?), [[Nowhere At All]]",
+            "tickets/t: [[Missing]]"]
+        assert call(client, "check_links", under="tickets")[0].endswith("\ntickets/t: [[Missing]]")
+
+    def test_none(self, client, pages):
+        assert call(client, "check_links")[0] == "No broken wikilinks."
+        assert call(client, "check_links", under="golf")[0] == "No broken wikilinks under golf/."
+
+
+class TestGrepWiki:
+    @pytest.fixture()
+    def notes(self, pages):
+        write_page(pages, "tickets/bug-1", "# BUG-1\n\nSee BUG-12345 and bug-777.\n- [ ] follow up\n")
+        write_page(pages, "log", "# Log\n\nBUG-99 is old, BUG-12345 again.\n")
+        write_page(pages, "_assets/notes", "BUG-55555 in an asset folder\n")
+        return pages
+
+    def test_regex_lines_by_page(self, client, notes):
+        text, err = call(client, "grep_wiki", pattern=r"BUG-\d{4,}")
+        assert not err
+        assert text == ("2 matching lines on 2 pages:\n"
+                        "log\n  3: BUG-99 is old, BUG-12345 again.\n\n"
+                        "tickets/bug-1\n  3: See BUG-12345 and bug-777.")
+
+    def test_ignore_case_and_under(self, client, notes):
+        text = call(client, "grep_wiki", pattern=r"\bbug-\d+", ignore_case=True, under="tickets")[0]
+        assert text.startswith("2 matching lines on 1 pages under tickets/:")
+        assert "log" not in text
+        assert call(client, "grep_wiki", pattern=r"^- \[ \]")[0].endswith("  4: - [ ] follow up")
+
+    def test_limit_says_how_many_more(self, client, notes):
+        text = call(client, "grep_wiki", pattern="BUG", limit=2)[0]
+        assert text.startswith("3 matching lines on 2 pages, the first 2 shown")
+        assert len([line for line in text.splitlines() if line.startswith("  ")]) == 2
+
+    def test_long_lines_are_cut(self, client, pages):
+        write_page(pages, "long", "x" * 500 + " needle\n")
+        assert call(client, "grep_wiki", pattern="x+")[0].endswith("x" * 300 + " …")
+
+    def test_no_match_and_bad_pattern(self, client, notes):
+        assert call(client, "grep_wiki", pattern="zebra")[0] == "No line matches 'zebra'."
+        text, err = call(client, "grep_wiki", pattern="(unclosed")
+        assert err and text.startswith("grep_wiki: ")
+        assert call(client, "grep_wiki", pattern=" ")[1]
+        assert call(client, "grep_wiki", pattern="a", ignore_case="no")[1]
+
+    def test_finds_uncommitted_pages(self, client, git_wiki_dir):
+        write_page(git_wiki_dir, "fresh", "# Fresh\n\nnot committed yet\n")
+        assert "fresh\n  3: not committed yet" in call(client, "grep_wiki", pattern="committed")[0]
+
+    def test_slow_pattern_is_stopped(self, client, pages, monkeypatch):
+        import gitstore
+        import subprocess
+
+        def hang(*args, **kwargs):
+            raise subprocess.TimeoutExpired(args[0], gitstore.GREP_TIMEOUT)
+        monkeypatch.setattr(gitstore.subprocess, "run", hang)
+        text, err = call(client, "grep_wiki", pattern="(a+)+$")
+        assert err and "took longer than 10s" in text
+
+    def test_without_git_plain_text(self, client, notes, monkeypatch):
+        monkeypatch.setattr(config, "GIT_ENABLED", False)
+        text = call(client, "grep_wiki", pattern="bug-12345", ignore_case=True)[0]
+        assert text.startswith("2 matching lines on 2 pages; git isn't installed")
+        assert call(client, "grep_wiki", pattern=r"BUG-\d+")[0] == r"No line matches 'BUG-\\d+'."
 
 
 class TestTaskComments:

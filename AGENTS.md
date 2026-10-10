@@ -74,11 +74,11 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
     ├── config.py           # Settings from the environment, the wiki's directories (read as config.X, so tests can patch them)
     ├── mdtext.py           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
     ├── pages.py            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home, url()
-    ├── gitstore.py         # Git: commits, moving a page (move_page), a page's log, versions, diffs, uncommitted files, deleted pages
+    ├── gitstore.py         # Git: commits, moving a page (move_page), grep over pages (grep_pages), a page's log, versions, diffs, uncommitted files, deleted pages
     ├── render.py           # Markdown → HTML: wikilinks, [[toc]], [[deck]], [[task:…]], post-processing
     ├── retrieval.py        # Search and LLM retrieval (BM25 + optional semantic index)
     ├── views.py            # HTML building blocks: shell, breadcrumb, modules, menus, dialogs, side columns
-    ├── mcp_tools.py        # The MCP tools: read and write pages and deck tasks (the protocol is mcp_server.py)
+    ├── mcp_tools.py        # The MCP tools: search (also grep), read, link checks, write pages and deck tasks (the protocol is mcp_server.py)
     ├── history.py          # Blueprint: history, revisions, diffs, restore, deleted pages, uncommitted changes
     ├── templating.py       # The Jinja2 environment: render(), macro()
     ├── templates/          # Jinja2 templates of every view (layout.html, view.html, edit.html, …; partials/, history/)
@@ -204,7 +204,7 @@ pytest tests/test_section_editing.py -v              # Run section-editing tests
 
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules use the plain `wiki_dir`, so git calls there are silent no-ops.
 
-`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, the four reading tools (tasks created through `/api/deck`; with and without the fake semantic index from `test_semantic.py`), and the writing tools: pages (create/overwrite, exact-text edit, append under a heading, rename with links, delete, similar-name and broken-wikilink notes) and tasks (create, update fields and status, id prefixes, comment, delete), plus one commit per write marked `(MCP)`.
+`tests/test_mcp.py` covers the MCP server: the protocol handler, the HTTP transport and auth, the reading tools (tasks created through `/api/deck`; with and without the fake semantic index from `test_semantic.py`; read_page's links, list_pages' link counts and orphans, check_links, grep_wiki with regexes, limits, a bad pattern, the timeout and the no-git fallback), and the writing tools: pages (create/overwrite, exact-text edit, append under a heading, rename with links, delete, similar-name and broken-wikilink notes) and tasks (create, update fields and status, id prefixes, comment, delete), plus one commit per write marked `(MCP)`.
 
 `tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges, done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`. `tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, batch mode for several lines with shared tags and per-line shorthand, headings skipped, inline selection, undo, the hidden deck leaving the editor's keys alone).
 
