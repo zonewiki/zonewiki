@@ -27,7 +27,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in the data directory (`$WIKI_DATA`) are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+- **Markdown is the source of truth** — `.md` files in the data directory (`$LEAF_DATA`) are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -45,7 +45,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
-| Storage             | Plain `.md` files in `$WIKI_DATA` (deck tasks in `_deck/*.json`) |
+| Storage             | Plain `.md` files in `$LEAF_DATA` (deck tasks in `_deck/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 
 No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
@@ -102,7 +102,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
         └── vendor/highlight/  # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
 ```
 
-Page content does not live in the repo tree. It lives in the host directory pointed to by `WIKI_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
+Page content does not live in the repo tree. It lives in the host directory pointed to by `LEAF_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
 
@@ -113,9 +113,9 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ### Files
 
 - **`Containerfile`** — Ubuntu 26.04 LTS base, installs Python + pip + git + `tzdata` via `apt`, installs `requirements.txt`, copies the `src/` directory into `/app`, sets `HOME=/tmp` (Leaf may run as a UID without an account). Build args `LEAF_EMBEDDINGS` and `LEAF_BUILD` (last layer).
-- **`compose.yaml`** — builds the image (`build:` with those args) and runs the `leaf` container: `env_file: .env` passes every setting, `environment` adds `WIKI_DATA=/wiki-data` (overriding `.env`'s), `LEAF_HOST_DATA` (the host path, for the MCP tools' `file:` lines) and `TZ`; the port is `${LEAF_BIND:-127.0.0.1}:5000:5000`; the wiki is a bind mount with `create_host_path: false` (a mistyped path errors instead of starting an empty wiki) and `selinux: Z`; `init: true` (a minimal init as PID 1 reaps orphaned processes; with Leaf as PID 1 they piled up as zombies, see Version history in `docs/spec/rendering.md`); `restart: unless-stopped`; `user: ${LEAF_UID:-1000}:${LEAF_GID:-1000}` (not root: Leaf writes the wiki as the host user); a healthcheck fetching `/public/manifest.json` (reported by `compose ps`; restarting an unhealthy container is podman's `--health-on-failure` or an autoheal container's job); log driver `json-file` (Docker's default, podman's alias for k8s-file, so `logs -f` works on both). It works on its own (`docker compose up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`. With docker compose the settings reach the container through the API; podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so there the secrets are on a command line for that moment.
-- **`run.sh`** — the entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for build/up/down/logs. It works out and exports what compose interpolates: `WIKI_DATA` from `.env` with `~` expanded (default `~/leaf`), `LEAF_BIND` from `ALLOW_REMOTE` (`0.0.0.0`, else `127.0.0.1`), `LEAF_BUILD` from git (see Version), and `TZ` (`.env`'s, else the host's from `/etc/timezone` or the `/etc/localtime` link, else UTC), so "today" on the server (due count, deck dates, scratch-note names, "Last changed") is the user's day. `LEAF_UID`/`LEAF_GID`: `id -u`/`id -g`; with rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Leaf runs as you and the wiki's files stay yours); with rootless docker, which has no keep-id, 0 (the container's root is the host user there; another UID would be a subordinate one). `up` refuses a missing wiki folder or `.env`, removes a `leaf` container an older run.sh started without compose (it would block the name), then `compose up -d --build`. `test`/`e2e` use the engine directly (no `.env` needed).
-- **`.env`** — every setting (`WIKI_DATA`, default `~/leaf`, plus the optional `LEAF_PASSWORD`, `SECRET_KEY`, `GIT_REMOTE`, `ALLOW_REMOTE`, `LEAF_HOSTS`, `TZ`, `LEAF_EMBEDDINGS`, `LEAF_EMBED_MIN_SCORE`, `LEAF_MCP_TOKEN`, `LEAF_BASE_URL`, `LEAF_NOSHARE`); gitignored. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically.
+- **`compose.yaml`** — builds the image (`build:` with those args) and runs the `leaf` container: `env_file: .env` passes every setting, `environment` adds `LEAF_DATA=/wiki-data` (overriding `.env`'s), `LEAF_HOST_DATA` (the host path, for the MCP tools' `file:` lines) and `TZ`; the port is `${LEAF_BIND:-127.0.0.1}:5000:5000`; the wiki is a bind mount with `create_host_path: false` (a mistyped path errors instead of starting an empty wiki) and `selinux: Z`; `init: true` (a minimal init as PID 1 reaps orphaned processes; with Leaf as PID 1 they piled up as zombies, see Version history in `docs/spec/rendering.md`); `restart: unless-stopped`; `user: ${LEAF_UID:-1000}:${LEAF_GID:-1000}` (not root: Leaf writes the wiki as the host user); a healthcheck fetching `/public/manifest.json` (reported by `compose ps`; restarting an unhealthy container is podman's `--health-on-failure` or an autoheal container's job); log driver `json-file` (Docker's default, podman's alias for k8s-file, so `logs -f` works on both). It works on its own (`docker compose up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`. With docker compose the settings reach the container through the API; podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so there the secrets are on a command line for that moment.
+- **`run.sh`** — the entry point, driving `<engine> compose` (podman if installed, else docker; a compose provider must be installed) for build/up/down/logs. It works out and exports what compose interpolates: `LEAF_DATA` from `.env` with `~` expanded (default `~/leaf`), `LEAF_BIND` from `LEAF_ALLOW_REMOTE` (`0.0.0.0`, else `127.0.0.1`), `LEAF_BUILD` from git (see Version), and `TZ` (`.env`'s, else the host's from `/etc/timezone` or the `/etc/localtime` link, else UTC), so "today" on the server (due count, deck dates, scratch-note names, "Last changed") is the user's day. `LEAF_UID`/`LEAF_GID`: `id -u`/`id -g`; with rootless podman it adds `compose.podman.yaml` (`userns_mode: keep-id`: the host user keeps its UID inside, so Leaf runs as you and the wiki's files stay yours); with rootless docker, which has no keep-id, 0 (the container's root is the host user there; another UID would be a subordinate one). `up` refuses a missing wiki folder or `.env`, removes a `leaf` container an older run.sh started without compose (it would block the name), then `compose up -d --build`. `test`/`e2e` use the engine directly (no `.env` needed).
+- **`.env`** — every setting (`LEAF_DATA`, default `~/leaf`, plus the optional `LEAF_PASSWORD`, `LEAF_SECRET_KEY`, `LEAF_GIT_REMOTE`, `LEAF_ALLOW_REMOTE`, `LEAF_HOSTS`, `TZ`, `LEAF_EMBEDDINGS`, `LEAF_EMBED_MIN_SCORE`, `LEAF_MCP_TOKEN`, `LEAF_BASE_URL`, `LEAF_NOSHARE`); gitignored. In rootless podman (the normal case) in-container root maps to the host user, so files written to the mounted wiki directory are owned by the host user automatically.
 
 ### Commands
 
@@ -138,7 +138,7 @@ Leaf is available at **http://localhost:5000** after `./run.sh up`.
 
 ### Mobile / phone access
 
-Set `ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check is skipped. Phones on the same network reach Leaf at `http://<host-LAN-IP>:5000`. The UI is responsive down to phone widths and the editor works on mobile. The viewport meta sets `interactive-widget=resizes-content`, so on Android the on-screen keyboard shrinks the layout viewport rather than only the visual one. Without it, full-screen views (the deck edit modal, the mobile editor) keep their full height and their bottom bars end up behind the keyboard. iOS Safari ignores the setting. There is no auth by default — for LAN use consider setting `LEAF_PASSWORD` in `.env` to get a login gate.
+Set `LEAF_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check is skipped. Phones on the same network reach Leaf at `http://<host-LAN-IP>:5000`. The UI is responsive down to phone widths and the editor works on mobile. The viewport meta sets `interactive-widget=resizes-content`, so on Android the on-screen keyboard shrinks the layout viewport rather than only the visual one. Without it, full-screen views (the deck edit modal, the mobile editor) keep their full height and their bottom bars end up behind the keyboard. iOS Safari ignores the setting. There is no auth by default — for LAN use consider setting `LEAF_PASSWORD` in `.env` to get a login gate.
 
 ### Version
 
@@ -150,17 +150,17 @@ Leaf's version is a semver constant, `VERSION` in `config.py`, bumped by hand. N
 
 ### Data directory
 
-Set `WIKI_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Leaf creates it (`config.py` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Leaf uses `$WIKI_DATA`, else `src/data`, which must exist too. In an existing wiki folder Leaf creates what it needs (`_assets/`, `_deck/`, `index.md`):
+Set `LEAF_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Leaf creates it (`config.py` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Leaf uses `$LEAF_DATA`, else `src/data`, which must exist too. In an existing wiki folder Leaf creates what it needs (`_assets/`, `_deck/`, `index.md`):
 
 ```
-WIKI_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
+LEAF_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 ```
 
 Inside the container it is always mounted at `/wiki-data`. Layout:
-- `$WIKI_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
-- `$WIKI_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
-- `$WIKI_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/deck.md`)
-- `$WIKI_DATA/_index/` — the semantic search cache (rebuildable, not in git)
+- `$LEAF_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
+- `$LEAF_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
+- `$LEAF_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/deck.md`)
+- `$LEAF_DATA/_index/` — the semantic search cache (rebuildable, not in git)
 
 Uploaded image URLs use `/_assets/<filename>` (served by a Flask route from `UPLOADS_DIR`), not the static file path.
 
@@ -184,7 +184,7 @@ Uploaded image URLs use `/_assets/<filename>` (served by a Flask route from `UPL
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Create and activate virtualenv
 pip install -r src/requirements.txt                  # Install dependencies
-WIKI_DATA=~/leaf python src/server.py               # Start server on http://localhost:5000 (the folder must exist)
+LEAF_DATA=~/leaf python src/server.py               # Start server on http://localhost:5000 (the folder must exist)
 flask --app src/server.py run --debug                # Auto-reload during development
 ```
 
@@ -200,7 +200,7 @@ pytest tests/ -v                                     # Run all tests
 pytest tests/test_section_editing.py -v              # Run section-editing tests only
 ```
 
-`tests/conftest.py` holds the shared setup: it imports Leaf against a throwaway `WIKI_DATA`, and gives every test a fresh temp wiki (`wiki_dir`: the server and the deck pointed at it, every page/task cache emptied, just `index.md`; `git_wiki_dir`: the same as a git repo; `client`), plus helpers (`HOST`, `write_page`, `create_task`, `section_fields`) that modules import from `tests.conftest`. The browser tests' `wiki` fixture builds on `git_wiki_dir`.
+`tests/conftest.py` holds the shared setup: it imports Leaf against a throwaway `LEAF_DATA`, and gives every test a fresh temp wiki (`wiki_dir`: the server and the deck pointed at it, every page/task cache emptied, just `index.md`; `git_wiki_dir`: the same as a git repo; `client`), plus helpers (`HOST`, `write_page`, `create_task`, `section_fields`) that modules import from `tests.conftest`. The browser tests' `wiki` fixture builds on `git_wiki_dir`.
 
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. The other test modules use the plain `wiki_dir`, so git calls there are silent no-ops.
 
@@ -256,11 +256,11 @@ Optional: `fastembed` (pulls in onnxruntime and NumPy) for semantic search with 
 ## Key Constraints
 
 - Do not use a database. Files are the only storage.
-- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `SECRET_KEY` signs the session cookie; without it Leaf makes a key once and keeps it in `$WIKI_DATA/_leaf/secret_key` (mode 0600, listed in `.git/info/exclude` so it never reaches git or a `GIT_REMOTE`; `_secret_key()`), so restarts don't sign anyone out. A wiki folder Leaf can't write to gets a new key per start. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, hidden while typing. With `ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
+- Optional password auth: set `LEAF_PASSWORD` in `.env` to enable a login gate. If unset, no auth is required. `LEAF_SECRET_KEY` signs the session cookie; without it Leaf makes a key once and keeps it in `$LEAF_DATA/_leaf/secret_key` (mode 0600, listed in `.git/info/exclude` so it never reaches git or a `LEAF_GIT_REMOTE`; `_secret_key()`), so restarts don't sign anyone out. A wiki folder Leaf can't write to gets a new key per start. Routes `/login` (GET/POST) and `/logout` (POST) handle the session. A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, hidden while typing. With `LEAF_ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
 - `/mcp` requires `LEAF_MCP_TOKEN` (a bearer token): without one set it is off (403), whether or not `LEAF_PASSWORD` is set, because its tools write pages and tasks. Don't make it open again (see Auth in `docs/spec/mcp.md`).
-- Optional git remote: set `GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
-- `ALLOW_REMOTE` is the single knob for network access (with `run.sh`). When unset, `run.sh` exports `LEAF_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `ALLOW_REMOTE=1`, `run.sh` exports `LEAF_BIND=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. `compose.yaml` maps `${LEAF_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `LEAF_BIND=0.0.0.0` must be set in `.env` alongside `ALLOW_REMOTE=1`.
-- A `before_request` hook in `server.py` (`check_host`) validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}` plus the names in `LEAF_HOSTS` (comma-separated, compared without port and case, `config.host_name`), defeating DNS rebinding attacks. `ALLOW_REMOTE=1` without `LEAF_HOSTS` skips the check (LAN access by IP); with `LEAF_HOSTS` set the check stays on. Behind a reverse proxy on the same host, `LEAF_HOSTS` alone is enough (the port stays on loopback).
+- Optional git remote: set `LEAF_GIT_REMOTE` in `.env` to a remote URL (e.g. `git@github.com:user/wiki.git`). On startup, `git_setup()` adds or updates `origin` to that URL, so `git push` works from the terminal.
+- `LEAF_ALLOW_REMOTE` is the single knob for network access (with `run.sh`). When unset, `run.sh` exports `LEAF_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any non-localhost `Host` header. When `LEAF_ALLOW_REMOTE=1`, `run.sh` exports `LEAF_BIND=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped. `compose.yaml` maps `${LEAF_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `LEAF_BIND=0.0.0.0` must be set in `.env` alongside `LEAF_ALLOW_REMOTE=1`.
+- A `before_request` hook in `server.py` (`check_host`) validates the `Host` header against `ALLOWED_HOSTS = {"localhost:5000", "127.0.0.1:5000"}` plus the names in `LEAF_HOSTS` (comma-separated, compared without port and case, `config.host_name`), defeating DNS rebinding attacks. `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips the check (LAN access by IP); with `LEAF_HOSTS` set the check stays on. Behind a reverse proxy on the same host, `LEAF_HOSTS` alone is enough (the port stays on loopback).
 - **Clickjacking**: every response carries `Content-Security-Policy: frame-ancestors 'self'` (added to an existing policy, e.g. an SVG upload's) and `X-Frame-Options: SAMEORIGIN` (`deny_framing`), so no other site can frame Leaf.
 - **Git calls time out** after `GIT_TIMEOUT` (60s, `run_git`): a hung git counts as failed (returncode 124) instead of holding its request.
 - **Self-hosting behind HTTPS**: the session cookie is `Secure` when the request came over HTTPS, Leaf's own or a proxy's `X-Forwarded-Proto: https` (`_SessionInterface.get_cookie_secure`); over plain http (localhost, LAN) it works as before. Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `LOGIN_THROTTLE`/`MCP_THROTTLE`, in memory): after 5 failures in a row each try waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`); a success clears the client. The client (`_client_key`) is the remote address, or, when that is loopback/private (a proxy), the last `X-Forwarded-For` entry (the one the proxy appended). Secrets are compared as bytes (`_same_secret`), so non-ASCII passwords work.

@@ -46,13 +46,13 @@ LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
 # Unset, the MCP tools use WIKI_DIR itself (mcp_tools._host_file).
 LEAF_HOST_DATA = os.environ.get("LEAF_HOST_DATA", "").strip().rstrip("/")
 # A remote for the wiki's git repository (gitstore.git_setup).
-GIT_REMOTE = os.environ.get("GIT_REMOTE", "")
+LEAF_GIT_REMOTE = os.environ.get("LEAF_GIT_REMOTE", "")
 # Listen on the LAN: no Host check (server.check_host), unless LEAF_HOSTS
 # names the hosts.
-ALLOW_REMOTE = os.environ.get("ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
+LEAF_ALLOW_REMOTE = os.environ.get("LEAF_ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
 # The names Leaf may be reached by besides localhost, e.g. behind a reverse
 # proxy: LEAF_HOSTS=wiki.example.org,leaf.lan (any port; server.check_host).
-# Set, the Host check stays on even with ALLOW_REMOTE.
+# Set, the Host check stays on even with LEAF_ALLOW_REMOTE.
 def host_name(host: str) -> str:
     """A Host header's name without its port, lowercase ("[::1]:5000" →
     "[::1]", "Wiki.Example.org:443" → "wiki.example.org")."""
@@ -85,10 +85,10 @@ def _parse_noshare(spec: str) -> tuple[frozenset[str], tuple[str, ...]]:
 NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or "#noshare")
 
 # The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/). It
-# must exist: Leaf doesn't make a wiki where a mistyped WIKI_DATA points.
-WIKI_DIR = Path(os.environ.get("WIKI_DATA", Path(__file__).parent / "data"))
+# must exist: Leaf doesn't make a wiki where a mistyped LEAF_DATA points.
+WIKI_DIR = Path(os.environ.get("LEAF_DATA", Path(__file__).parent / "data"))
 if not WIKI_DIR.is_dir():
-    sys.exit(f"Leaf: no wiki at {WIKI_DIR}. Create the folder, or set WIKI_DATA to your wiki.")
+    sys.exit(f"Leaf: no wiki at {WIKI_DIR}. Create the folder, or set LEAF_DATA to your wiki.")
 UPLOADS_DIR = WIKI_DIR / "_assets"
 UPLOADS_DIR.mkdir(exist_ok=True)
 

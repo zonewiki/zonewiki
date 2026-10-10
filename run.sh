@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and run Leaf with compose (compose.yaml), and run its tests. This
 # script works out what compose can't: the build string from git, the port's
-# bind address from ALLOW_REMOTE, the host's timezone, and the wiki path.
+# bind address from LEAF_ALLOW_REMOTE, the host's timezone, and the wiki path.
 set -e
 
 cd "$(dirname "$0")"
@@ -31,18 +31,18 @@ compose() {
 
 # The wiki folder from .env, default ~/leaf, with ~ expanded (compose would
 # hand LEAF_HOST_DATA a literal ~).
-WIKI_DATA=$(env_val WIKI_DATA)
-WIKI_DATA="${WIKI_DATA:-~/leaf}"
-case "$WIKI_DATA" in
-  "~") WIKI_DATA="$HOME" ;;
-  "~/"*) WIKI_DATA="$HOME/${WIKI_DATA:2}" ;;
+LEAF_DATA=$(env_val LEAF_DATA)
+LEAF_DATA="${LEAF_DATA:-~/leaf}"
+case "$LEAF_DATA" in
+  "~") LEAF_DATA="$HOME" ;;
+  "~/"*) LEAF_DATA="$HOME/${LEAF_DATA:2}" ;;
 esac
-export WIKI_DATA
+export LEAF_DATA
 
-# The port's bind address from ALLOW_REMOTE: 1 → all interfaces (LAN),
+# The port's bind address from LEAF_ALLOW_REMOTE: 1 → all interfaces (LAN),
 # unset/empty → loopback only (localhost only, more secure).
-ALLOW_REMOTE=$(env_val ALLOW_REMOTE)
-if [[ "${ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
+LEAF_ALLOW_REMOTE=$(env_val LEAF_ALLOW_REMOTE)
+if [[ "${LEAF_ALLOW_REMOTE,,}" =~ ^(1|true|yes)$ ]]; then
   export LEAF_BIND="0.0.0.0"
 else
   export LEAF_BIND="127.0.0.1"
@@ -89,12 +89,12 @@ case "${1:-up}" in
     ;;
   up)
     # The wiki must exist: Leaf doesn't make one where a typo in .env points.
-    if [[ ! -d "$WIKI_DATA" ]]; then
-      echo "No wiki at $WIKI_DATA. Create the folder, or set WIKI_DATA in .env to your wiki." >&2
+    if [[ ! -d "$LEAF_DATA" ]]; then
+      echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
       exit 1
     fi
     if [[ ! -f .env ]]; then
-      echo "No .env: create one (e.g. echo 'WIKI_DATA=~/leaf' > .env, see README)." >&2
+      echo "No .env: create one (e.g. echo 'LEAF_DATA=~/leaf' > .env, see README)." >&2
       exit 1
     fi
     # A container named leaf that compose didn't create (an older run.sh
@@ -105,7 +105,7 @@ case "${1:-up}" in
     fi
     compose up -d --build
     echo "Leaf running at http://localhost:5000"
-    echo "Leaf data: $WIKI_DATA"
+    echo "Leaf data: $LEAF_DATA"
     ;;
   down)
     compose down

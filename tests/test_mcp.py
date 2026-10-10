@@ -185,7 +185,7 @@ class TestAuth:
 @pytest.fixture()
 def pages(wiki_dir):
     write_page(wiki_dir, "git-remote",
-               "# Git remote\n\n## Setup\n\nSet GIT_REMOTE in .env.\n\n## Pushing\n\nRun git push to back up.\n")
+               "# Git remote\n\n## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n## Pushing\n\nRun git push to back up.\n")
     write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
     return wiki_dir
 
@@ -619,7 +619,7 @@ class TestEditPage:
         assert (pages / "twice.md").read_text() == "# Twice\n\nbar and bar\n"
 
     def test_empty_new_string_deletes(self, client, pages):
-        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\n\nSet GIT_REMOTE in .env.\n\n",
+        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n",
                       new_string="")
         assert not err
         assert (pages / "git-remote.md").read_text() == "# Git remote\n\n## Pushing\n\nRun git push to back up.\n"
@@ -627,7 +627,7 @@ class TestEditPage:
     def test_crlf_in_arguments_matches_lf_files(self, client, pages):
         _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\r\n\r\nSet",
                       new_string="## Setup\r\n\r\nPut")
-        assert not err and "## Setup\n\nPut GIT_REMOTE" in (pages / "git-remote.md").read_text()
+        assert not err and "## Setup\n\nPut LEAF_GIT_REMOTE" in (pages / "git-remote.md").read_text()
 
     def test_unknown_page_and_no_op(self, client, pages):
         text, err = call(client, "edit_page", slug="nope", old_string="a", new_string="b")
@@ -653,7 +653,7 @@ class TestAppendToPage:
                       under_heading="setup")
         assert not err
         assert (pages / "git-remote.md").read_text() == (
-            "# Git remote\n\n## Setup\n\nSet GIT_REMOTE in .env.\n\n- also: git pull\n\n"
+            "# Git remote\n\n## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n- also: git pull\n\n"
             "## Pushing\n\nRun git push to back up.\n")
 
     def test_subsections_belong_to_the_section(self, client, wiki_dir):

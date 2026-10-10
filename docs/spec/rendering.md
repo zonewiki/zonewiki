@@ -101,7 +101,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Version history
 
-- Git is installed in the container image. On startup, `git_setup()` initializes a bare repo in `WIKI_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
+- Git is installed in the container image. On startup, `git_setup()` initializes a bare repo in `LEAF_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
 - Every write operation (Done/save, create, rename, delete, restore, upload) calls `git_commit()` (a rename or move through `_move_page()`, with the pages and deck files whose links changed) to stage and commit the change. **Auto-save (`/api/save`) is the exception** — it writes the file to disk but does not create a git commit. Assets are tracked like pages — a `git push` backs up everything.
 - `GIT_ENABLED = shutil.which("git") is not None` — all git paths are no-ops when git is absent (graceful degradation).
 - git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (`_GIT_ENV`, also used by the tests' own git calls): git 2.47+ starts its automatic maintenance after a commit as a detached process, which nobody reaped with Leaf as the container's PID 1, so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions). Not detached, git reaps its own children; `run.sh`'s `--init` covers anything else.

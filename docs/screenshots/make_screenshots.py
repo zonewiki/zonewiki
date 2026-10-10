@@ -23,10 +23,10 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 
 WIKI = Path(tempfile.mkdtemp(prefix="leaf_screenshots_"))
-# LEAF_HOSTS, not ALLOW_REMOTE (which would show its badge): the server listens
+# LEAF_HOSTS, not LEAF_ALLOW_REMOTE (which would show its badge): the server listens
 # on a random port, and the Host check compares names only.
-os.environ.update(WIKI_DATA=str(WIKI), LEAF_HOSTS="127.0.0.1")
-os.environ.pop("ALLOW_REMOTE", None)
+os.environ.update(LEAF_DATA=str(WIKI), LEAF_HOSTS="127.0.0.1")
+os.environ.pop("LEAF_ALLOW_REMOTE", None)
 # The commit the screenshots show at the bottom left, without "+dirty".
 os.environ["LEAF_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],

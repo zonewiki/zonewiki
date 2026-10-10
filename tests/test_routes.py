@@ -1315,11 +1315,11 @@ class TestAuth:
         assert "signout-form" in auth_client.get("/page/index", headers=HOST).data.decode()
 
     def test_login_page_shows_remote_badge_in_its_form(self, auth_client, monkeypatch):
-        monkeypatch.setattr(config, "ALLOW_REMOTE", True)
+        monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", True)
         body = auth_client.get("/login", headers=HOST).data.decode()
         assert body.count('class="remote-badge"') == 1
         assert re.search(r'<h2>Sign in to Leaf<span class="remote-badge"[^>]*>🌐</span></h2>', body)
-        monkeypatch.setattr(config, "ALLOW_REMOTE", False)
+        monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", False)
         assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
 
     def test_unauthenticated_redirects_to_login(self, auth_client):
@@ -1487,28 +1487,28 @@ class TestSpecialPages:
 class TestHostHeader:
 
     def test_bad_host_returns_400(self, client):
-        old_allow_remote = config.ALLOW_REMOTE
-        config.ALLOW_REMOTE = False
+        old_allow_remote = config.LEAF_ALLOW_REMOTE
+        config.LEAF_ALLOW_REMOTE = False
         try:
             resp = client.get("/page/index", headers={"Host": "evil.com"})
             assert resp.status_code == 400
         finally:
-            config.ALLOW_REMOTE = old_allow_remote
+            config.LEAF_ALLOW_REMOTE = old_allow_remote
 
     def test_allow_remote_skips_check(self, client):
-        old = config.ALLOW_REMOTE
-        config.ALLOW_REMOTE = True
+        old = config.LEAF_ALLOW_REMOTE
+        config.LEAF_ALLOW_REMOTE = True
         try:
             resp = client.get("/page/index", headers={"Host": "any.host.example"})
             assert resp.status_code != 400
         finally:
-            config.ALLOW_REMOTE = old
+            config.LEAF_ALLOW_REMOTE = old
 
 
     def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
         monkeypatch.setattr(config, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
-        for allow_remote in (False, True):   # set, the check stays on even with ALLOW_REMOTE
-            monkeypatch.setattr(config, "ALLOW_REMOTE", allow_remote)
+        for allow_remote in (False, True):   # set, the check stays on even with LEAF_ALLOW_REMOTE
+            monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", allow_remote)
             for host in ("wiki.example.org", "Wiki.Example.org:8443", "localhost:5000", "[::1]:5000"):
                 assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
             for host in ("evil.example", "wiki.example.org.evil.example", "192.168.1.5:5000"):
@@ -1538,18 +1538,18 @@ class TestProduction:
         assert csp.startswith("sandbox; default-src 'none'") and csp.endswith("; frame-ancestors 'self'")
 
     def test_secret_key_is_made_once_and_kept(self, wiki_dir, monkeypatch):
-        monkeypatch.delenv("SECRET_KEY", raising=False)
+        monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
         key = server._secret_key()
         path = wiki_dir / "_leaf" / "secret_key"
         assert len(key) == 64 and path.read_bytes() == key
         assert path.stat().st_mode & 0o777 == 0o600
         assert server._secret_key() == key           # a restart keeps it
-        monkeypatch.setenv("SECRET_KEY", "from-env")
+        monkeypatch.setenv("LEAF_SECRET_KEY", "from-env")
         assert server._secret_key() == b"from-env"
         assert "_leaf" not in [slug.split("/")[0] for slug in pages.all_slugs()]
 
     def test_secret_key_without_a_writable_wiki(self, wiki_dir, monkeypatch):
-        monkeypatch.delenv("SECRET_KEY", raising=False)
+        monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
         (wiki_dir / "_leaf").write_text("not a folder")
         first, second = server._secret_key(), server._secret_key()
         assert len(first) == len(second) == 64 and first != second   # works, not kept
@@ -2055,13 +2055,13 @@ class TestVersion:
 
     @staticmethod
     def _start(wiki: Path) -> subprocess.CompletedProcess:
-        """Import Leaf in a fresh Python with WIKI_DATA=wiki."""
+        """Import Leaf in a fresh Python with LEAF_DATA=wiki."""
         src = Path(__file__).resolve().parent.parent / "src"
         return subprocess.run([sys.executable, "-c", "import server"], cwd=src, capture_output=True,
-                              text=True, env={**os.environ, "WIKI_DATA": str(wiki)}, timeout=60)
+                              text=True, env={**os.environ, "LEAF_DATA": str(wiki)}, timeout=60)
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
-        # Leaf never makes the wiki itself, so a mistyped WIKI_DATA can't
+        # Leaf never makes the wiki itself, so a mistyped LEAF_DATA can't
         # start an empty wiki somewhere else.
         r = self._start(tmp_path / "nowhere")
         assert r.returncode != 0

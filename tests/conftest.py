@@ -1,4 +1,4 @@
-"""Shared setup: Leaf imported against a throwaway WIKI_DATA, and a fresh
+"""Shared setup: Leaf imported against a throwaway LEAF_DATA, and a fresh
 temporary wiki for each test (wiki_dir, git_wiki_dir, client). The browser
 tests (tests/e2e) build on git_wiki_dir too."""
 
@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-# Before the import: server.py creates WIKI_DATA and runs git_setup there.
-os.environ.setdefault("WIKI_DATA", tempfile.mkdtemp(prefix="leaf_test_"))
-os.environ["ALLOW_REMOTE"] = "1"   # no Host check against the test client's
+# Before the import: server.py creates LEAF_DATA and runs git_setup there.
+os.environ.setdefault("LEAF_DATA", tempfile.mkdtemp(prefix="leaf_test_"))
+os.environ["LEAF_ALLOW_REMOTE"] = "1"   # no Host check against the test client's
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import config  # noqa: E402
@@ -50,7 +50,7 @@ def wiki_dir(tmp_path, monkeypatch):
 @pytest.fixture()
 def git_wiki_dir(wiki_dir, monkeypatch):
     """wiki_dir as a git repository, so every git code path runs."""
-    monkeypatch.setattr(config, "GIT_REMOTE", "")
+    monkeypatch.setattr(config, "LEAF_GIT_REMOTE", "")
     monkeypatch.setattr(deckstore, "GIT_ENABLED", True)
     gitstore.git_setup()
     return wiki_dir

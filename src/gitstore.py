@@ -58,12 +58,12 @@ def git_setup() -> None:
         if not r.stdout.strip():
             run_git("git", "config", "user.email", "leaf@localhost")
             run_git("git", "config", "user.name", "Leaf")
-    if config.GIT_REMOTE:
+    if config.LEAF_GIT_REMOTE:
         existing = run_git("git", "remote", "get-url", "origin")
         if existing.returncode == 0:
-            run_git("git", "remote", "set-url", "origin", config.GIT_REMOTE)
+            run_git("git", "remote", "set-url", "origin", config.LEAF_GIT_REMOTE)
         else:
-            run_git("git", "remote", "add", "origin", config.GIT_REMOTE)
+            run_git("git", "remote", "add", "origin", config.LEAF_GIT_REMOTE)
 
 
 def git_commit(paths: Path | list[Path], message: str) -> None:

@@ -246,7 +246,7 @@ def _shell_context(title: str, editor: bool, action_buttons: bool, wide: bool) -
     return {"title": title, "editor": editor, "wide": wide, "show_actions": show_actions,
             "module": "" if editor else current_module(), "deck_new": deck_new,
             "sharing": sharing_on(), "app_name": config.APP_NAME, "version": config.VERSION,
-            "build": config.LEAF_BUILD, "allow_remote": config.ALLOW_REMOTE,
+            "build": config.LEAF_BUILD, "allow_remote": config.LEAF_ALLOW_REMOTE,
             # Only signed in: the login page has no one to sign out.
             "sign_out": bool(config.LEAF_PASSWORD) and bool(session.get("authenticated")),
             "module_links": module_links() if show_actions else []}

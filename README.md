@@ -141,14 +141,14 @@ You need either **Docker** with Compose, or **Podman** with `podman-compose`.
 ```bash
 git clone <this repository> leaf && cd leaf
 mkdir -p ~/leaf                       # your wiki folder (Leaf won't create it)
-echo 'WIKI_DATA=~/leaf' > .env
+echo 'LEAF_DATA=~/leaf' > .env
 ./run.sh up                           # build and start
 ```
 
 Open <http://localhost:5000>. `./run.sh down` stops Leaf, `./run.sh logs`
 follows its log. To update: `git pull && ./run.sh up`.
 
-To point Leaf at an existing folder of Markdown notes, set `WIKI_DATA` to
+To point Leaf at an existing folder of Markdown notes, set `LEAF_DATA` to
 it; Leaf makes it a git repository (if it isn't one) and adds a home page.
 
 Without a container, you need Python 3.10 or newer and git:
@@ -156,20 +156,20 @@ Without a container, you need Python 3.10 or newer and git:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r src/requirements.txt
-WIKI_DATA=~/leaf python src/server.py
+LEAF_DATA=~/leaf python src/server.py
 ```
 
 ## Configuration
 
-Settings go in `.env`, all optional except `WIKI_DATA`:
+Settings go in `.env`, all optional except `LEAF_DATA`:
 
 | Setting | Does |
 |---------|------|
-| `WIKI_DATA` | The wiki folder (default `~/leaf`) |
-| `ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
+| `LEAF_DATA` | The wiki folder (default `~/leaf`) |
+| `LEAF_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
-| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `_leaf/` (never in git); `SECRET_KEY` sets one instead |
-| `GIT_REMOTE` | A remote for the wiki's git repository |
+| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `_leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
+| `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
 | `LEAF_EMBED_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
@@ -181,13 +181,13 @@ Settings go in `.env`, all optional except `WIKI_DATA`:
 
 `run.sh` fills in what `compose.yaml` can't work out itself: the commit the
 image is built from, your timezone, your user ID, and the network address
-from `ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
+from `LEAF_ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
 `.env`:
 
 | Setting | Does |
 |---------|------|
-| `WIKI_DATA` | As an absolute path (no `~`) |
-| `LEAF_BIND=0.0.0.0` | Together with `ALLOW_REMOTE=1`, for network access |
+| `LEAF_DATA` | As an absolute path (no `~`) |
+| `LEAF_BIND=0.0.0.0` | Together with `LEAF_ALLOW_REMOTE=1`, for network access |
 | `LEAF_UID`, `LEAF_GID` | Your user and group ID (`id -u`, `id -g`), if they aren't 1000 |
 | `TZ` | Your timezone; otherwise UTC |
 
@@ -241,9 +241,9 @@ LEAF_PASSWORD=…                        # long and unique
 LEAF_BASE_URL=https://wiki.example.org
 ```
 
-Leave `ALLOW_REMOTE` off here: the proxy reaches Leaf on localhost, and port
+Leave `LEAF_ALLOW_REMOTE` off here: the proxy reaches Leaf on localhost, and port
 5000 stays closed to the network, so nobody can go around HTTPS. A proxy on
-another machine needs `ALLOW_REMOTE=1` too; `LEAF_HOSTS` keeps the `Host`
+another machine needs `LEAF_ALLOW_REMOTE=1` too; `LEAF_HOSTS` keeps the `Host`
 check on. Over HTTPS the login cookie is marked secure, so the browser never
 sends it unencrypted. Wrong passwords slow a guesser down, with or without
 HTTPS: after 5, each try waits, from 1 minute doubling up to an hour, per
@@ -256,7 +256,7 @@ public address.
 Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
-  delete everything. With `ALLOW_REMOTE=1` that is your whole network: set
+  delete everything. With `LEAF_ALLOW_REMOTE=1` that is your whole network: set
   `LEAF_PASSWORD`. There are no user accounts, so share the password with no
   one you wouldn't hand the files to.
 - **Plain `http://` is readable on the network.** The password when you sign
@@ -274,7 +274,7 @@ Also know this:
   Leaf marks the tools that change or delete as destructive).
 - **Git is the undo.** Every change made through Leaf, by you or an assistant,
   is a commit (an assistant's are marked `(MCP)`); history, restore and
-  Deleted Pages bring things back. Set `GIT_REMOTE` and push now and then, so a
+  Deleted Pages bring things back. Set `LEAF_GIT_REMOTE` and push now and then, so a
   copy lives elsewhere too.
 - **Pages may contain HTML**, which is rendered as is. Don't paste markup you
   don't trust, and keep in mind that anyone who can write to the wiki (including
@@ -282,7 +282,7 @@ Also know this:
 
 ## Your data
 
-Everything is files in `WIKI_DATA`, which is a git repository:
+Everything is files in `LEAF_DATA`, which is a git repository:
 
 - Pages are `.md` files, in folders if you like.
 - Uploads are in `_assets/`, tasks in `_deck/` as JSON.

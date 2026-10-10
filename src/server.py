@@ -68,12 +68,12 @@ class _SessionInterface(SecureCookieSessionInterface):
 
 
 def _secret_key() -> bytes:
-    """The key that signs session cookies: SECRET_KEY, else one Leaf made
+    """The key that signs session cookies: LEAF_SECRET_KEY, else one Leaf made
     once and keeps in _leaf/secret_key in the wiki folder (owner-only, kept
     out of git), so a restart doesn't sign everyone out. A wiki folder Leaf
     can't write to gets a new key per start."""
-    if os.environ.get("SECRET_KEY"):
-        return os.environ["SECRET_KEY"].encode()
+    if os.environ.get("LEAF_SECRET_KEY"):
+        return os.environ["LEAF_SECRET_KEY"].encode()
     path = config.WIKI_DIR / "_leaf" / "secret_key"
     try:
         key = path.read_bytes().strip()
@@ -105,10 +105,10 @@ PUBLIC_DIR = Path(__file__).parent / "public"
 # DNS rebinding: a page on evil.example whose name later resolves to
 # 127.0.0.1 reaches Leaf with "Host: evil.example". Only localhost, and the
 # names in LEAF_HOSTS (a reverse proxy's public name, any port), get in.
-# ALLOW_REMOTE without LEAF_HOSTS turns the check off (LAN access by IP).
+# LEAF_ALLOW_REMOTE without LEAF_HOSTS turns the check off (LAN access by IP).
 @app.before_request
 def check_host():
-    if config.ALLOW_REMOTE and not config.LEAF_HOSTS:
+    if config.LEAF_ALLOW_REMOTE and not config.LEAF_HOSTS:
         return
     if request.host not in ALLOWED_HOSTS and config.host_name(request.host) not in config.LEAF_HOSTS:
         abort(400)

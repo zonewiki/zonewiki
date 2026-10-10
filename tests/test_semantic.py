@@ -77,7 +77,7 @@ def make_index(wiki, embedder=None, **kw):
 
 @pytest.fixture()
 def semantic(wiki_dir, monkeypatch):
-    write_page(wiki_dir, "git-remote", "# Git remote\n\nSet GIT_REMOTE, then push to copy every commit.\n")
+    write_page(wiki_dir, "git-remote", "# Git remote\n\nSet LEAF_GIT_REMOTE, then push to copy every commit.\n")
     write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
     write_page(wiki_dir, "evening", "# Evening routine\n\nNo screens late, bed by eleven.\n")
     write_page(wiki_dir, "money", "# Budget\n\nRent and savings.\n")

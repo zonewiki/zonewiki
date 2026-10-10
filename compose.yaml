@@ -2,13 +2,13 @@
 #
 # ./run.sh up drives this file: it fills in what compose can't work out
 # itself (the build string from git, the port's bind address from
-# ALLOW_REMOTE, the host's timezone, the wiki path with ~ expanded) and
+# LEAF_ALLOW_REMOTE, the host's timezone, the wiki path with ~ expanded) and
 # refuses a wiki folder that doesn't exist. Used directly, it works too:
 #
 #   docker compose up -d --build        (or: podman compose up -d --build)
 #
 # Settings come from .env (see README); used directly, also set
-# LEAF_BIND=0.0.0.0 there for LAN access, and WIKI_DATA as an absolute path.
+# LEAF_BIND=0.0.0.0 there for LAN access, and LEAF_DATA as an absolute path.
 name: leaf
 
 services:
@@ -36,17 +36,17 @@ services:
     # its API; podman-compose as podman -e arguments (briefly visible in ps).
     env_file: .env
     environment:
-      WIKI_DATA: /wiki-data
+      LEAF_DATA: /wiki-data
       # The wiki's folder on the host, for the MCP tools' file: lines.
-      LEAF_HOST_DATA: ${WIKI_DATA:-~/leaf}
+      LEAF_HOST_DATA: ${LEAF_DATA:-~/leaf}
       # The user's timezone, so "today" is their day; run.sh sets the host's.
       TZ: ${TZ:-UTC}
     ports:
-      # Localhost only unless ALLOW_REMOTE (run.sh sets LEAF_BIND=0.0.0.0).
+      # Localhost only unless LEAF_ALLOW_REMOTE (run.sh sets LEAF_BIND=0.0.0.0).
       - "${LEAF_BIND:-127.0.0.1}:5000:5000"
     volumes:
       - type: bind
-        source: ${WIKI_DATA:-~/leaf}
+        source: ${LEAF_DATA:-~/leaf}
         target: /wiki-data
         bind:
           # A mistyped path must not start an empty wiki somewhere else.
