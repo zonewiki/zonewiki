@@ -429,9 +429,11 @@ def _result(id_, result: dict) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
-def handle(message, call_tool: Callable[[str, dict], str], version: str) -> dict | None:
+def handle(message, call_tool: Callable[[str, dict], str], version: str,
+           instructions: Callable[[], str] = lambda: INSTRUCTIONS) -> dict | None:
     """Answer one JSON-RPC message. Notifications and responses (no id, or
-    no method) get None: the transport answers those with 202 and no body."""
+    no method) get None: the transport answers those with 202 and no body.
+    `instructions` gives initialize's instructions (asked for only then)."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return _error(None, -32600, "Invalid Request")
     method = message.get("method")
@@ -450,7 +452,7 @@ def handle(message, call_tool: Callable[[str, dict], str], version: str) -> dict
             "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": "leaf", "title": "Leaf wiki", "version": version},
-            "instructions": INSTRUCTIONS,
+            "instructions": instructions(),
         })
     if method == "ping":
         return _result(id_, {})

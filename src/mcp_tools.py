@@ -607,8 +607,10 @@ def _bool_arg(args: dict, name: str) -> bool:
 
 def _is_orphan(slug: str, counts: dict[str, int], home: str | None) -> bool:
     """No other page links to it. The home page, the deck's home and scratch
-    notes are reached otherwise (the module switcher), so they never are."""
-    return not counts.get(slug) and not is_protected(slug) and slug != home and not is_scratch(slug)
+    notes are reached otherwise (the module switcher), and the guide is
+    read by the assistant, so they never are."""
+    return (not counts.get(slug) and not is_protected(slug) and slug not in (home, GUIDE_SLUG)
+            and not is_scratch(slug))
 
 
 def _list_pages(args: dict, base: str) -> str:
@@ -862,6 +864,36 @@ _WRITE_TOOLS = {
     "create_task": _create_task, "update_task": _update_task,
     "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,
 }
+
+
+# The user's guide for keeping this wiki: their conventions (where things go,
+# tags, page layouts, what stays private), a page like any other. Its text is
+# part of the instructions a client gets when it connects, so the model knows
+# it before it writes, in every client.
+GUIDE_SLUG = "wiki-guide"
+# More than this is cut, with a pointer to read_page: the instructions are
+# in the model's context for the whole session.
+_GUIDE_CHARS = 8000
+
+
+def mcp_instructions() -> str:
+    """The server's instructions for initialize, plus the wiki's guide, or,
+    without one, a nudge to start it."""
+    path = safe_path(GUIDE_SLUG)
+    try:
+        guide = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        guide = ""
+    if not guide:
+        return (mcp_server.INSTRUCTIONS + "\n\nThis wiki has no guide yet. When the user tells you "
+                "how they want it kept (where things go, which tags, page layouts, what stays "
+                f"private), offer to write that down on the page {GUIDE_SLUG!r}: it is shown to "
+                "you at the start of every session.")
+    if len(guide) > _GUIDE_CHARS:
+        guide = guide[:_GUIDE_CHARS] + f"\n\n[… cut here: read_page {GUIDE_SLUG!r} for the rest]"
+    return (mcp_server.INSTRUCTIONS + f"\n\nThe user's guide for this wiki (the page {GUIDE_SLUG!r}). "
+            "Follow it; where it differs from the advice above, it wins. When the user settles a "
+            "new convention, offer to add it there.\n\n" + guide)
 
 
 def mcp_call_tool(name: str, args: dict) -> str:

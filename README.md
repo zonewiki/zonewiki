@@ -214,6 +214,23 @@ In your client, add an MCP server with the HTTP transport at
 `http://localhost:5000/mcp` and the header
 `Authorization: Bearer <LEAF_MCP_TOKEN>` (the token from `.env`).
 
+To teach the assistant how *your* wiki is kept, write a page called
+`wiki-guide`. Leaf adds it to what the assistant is told when it connects, so
+it's followed in every session and with any MCP client. For example:
+
+```markdown
+# Wiki guide
+
+- Tickets go in `tickets/<id>`, one page each, with a `## Log` section.
+- People get a page in `people/`; those pages are private: never quote them
+  elsewhere.
+- Tag pages with existing tags (list_tags) rather than new ones.
+- Prefer extending a page over creating a new one.
+```
+
+Without the page, the assistant offers to start one when you tell it how you
+like things.
+
 Set `LEAF_BASE_URL` to Leaf's address as your browser knows it, so the links
 in the assistant's answers open (it matters when the client runs in a
 container or on another machine). Before you connect, read the MCP points

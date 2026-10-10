@@ -558,6 +558,41 @@ class TestListPages:
         assert call(client, "list_pages", orphans="yes")[1]
 
 
+class TestGuide:
+    """The wiki-guide page: part of the instructions a client gets when it
+    connects."""
+
+    def instructions(self, client):
+        return rpc(client, "initialize", {"protocolVersion": "2025-06-18"}).get_json()["result"]["instructions"]
+
+    def test_without_a_guide_a_nudge_to_start_one(self, client, wiki_dir):
+        text = self.instructions(client)
+        assert text.startswith(mcp_server.INSTRUCTIONS)
+        assert text.endswith("it is shown to you at the start of every session.")
+        assert "This wiki has no guide yet" in text
+
+    def test_the_guide_follows_the_instructions(self, client, wiki_dir):
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- Tickets go in tickets/<id>.\n")
+        text = self.instructions(client)
+        assert text.startswith(mcp_server.INSTRUCTIONS)
+        assert "The user's guide for this wiki (the page 'wiki-guide')" in text
+        assert text.endswith("\n\n# Wiki guide\n\n- Tickets go in tickets/<id>.")
+        # Read when a client connects: an edit shows in the next session.
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- People notes stay private.\n")
+        assert self.instructions(client).endswith("- People notes stay private.")
+
+    def test_a_long_guide_is_cut(self, client, wiki_dir, monkeypatch):
+        import mcp_tools
+        monkeypatch.setattr(mcp_tools, "_GUIDE_CHARS", 20)
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n" + "x" * 100)
+        text = self.instructions(client)
+        assert text.endswith("\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page 'wiki-guide' for the rest]")
+
+    def test_not_an_orphan(self, client, wiki_dir):
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n")
+        assert call(client, "list_pages", orphans=True)[0] == "Every page is linked from another page."
+
+
 class TestReadSection:
     @pytest.fixture()
     def long(self, pages):

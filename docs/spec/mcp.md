@@ -8,6 +8,8 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 
 Register `http://localhost:5000/mcp` with your MCP client (HTTP transport) and the header `Authorization: Bearer <LEAF_MCP_TOKEN>`.
 
+**The wiki's guide**: the page `wiki-guide` (`GUIDE_SLUG`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private. Its text is appended to the `instructions` (`mcp_tools.mcp_instructions`, passed to `handle`, which asks for them only on `initialize`), after a line saying it wins over the general advice and that the model should offer to add conventions the user settles. So the model knows it before its first write, in every MCP client (a client-specific skill or rules file would reach only that client), and it is versioned and editable like any page. Read anew at each `initialize`: an edit shows from the next session. Over `_GUIDE_CHARS` (8000) it is cut, with a pointer to read_page, since the instructions stay in the model's context all session. Without the page, the instructions instead nudge the model to offer starting one when the user describes conventions. It never counts as an orphan (list_pages).
+
 A tool failure the model can fix (bad slug, empty query, text not found) is a result with `isError`, not a protocol error.
 
 ### Reading
