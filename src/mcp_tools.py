@@ -4,6 +4,9 @@ append_to_page, rename_page (also a folder), delete_page) and deck tasks (create
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
+import hashlib
+import json
+import os
 import re
 from datetime import date
 from difflib import SequenceMatcher, get_close_matches
@@ -327,6 +330,209 @@ def _close_in_content(slug: str, content: str, named: set[str]) -> str:
             "delete_page this one; else consider linking them.")
 
 
+# Folder guides: the user's instructions for the pages in a folder and its
+# subfolders, in the files coding assistants read for that (CLAUDE.md,
+# AGENTS.md, any case), and for the whole wiki also the page wiki-guide. A
+# page write is refused until the model passes the ids of the guides that
+# apply; the refusal gives their text and ids. So the model has read them
+# before it writes, without the server keeping sessions, and a guide costs
+# its tokens once per conversation. An id holds a hash of the guide's text:
+# when the user changes a guide, the old id no longer counts and the next
+# write shows the new text.
+_GUIDE_FILES = ("agents.md", "claude.md")
+# A line '@other.md' in a guide stands for that file's text (Claude Code's
+# import), relative to the guide's folder, nested this deep at most.
+_IMPORT_RE = re.compile(r"^@(\S+\.md)$")
+_IMPORT_DEPTH = 3
+# A guide longer than this is cut in the refusal, with a pointer to read_page.
+_FOLDER_GUIDE_CHARS = 8000
+
+
+def _guide_text(path: Path, seen: set[Path], depth: int = 0) -> str:
+    """A guide file's text with its imports in place. Files in seen (already
+    part of another guide) are left out; an import that isn't a page of the
+    wiki stays as written."""
+    seen.add(path)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    root = config.LEAF_DATA.resolve()
+    out = []
+    for line in text.splitlines():
+        m = _IMPORT_RE.match(line.strip())
+        if m and depth < _IMPORT_DEPTH:
+            target = (path.parent / m.group(1)).resolve()
+            try:
+                rel = target.relative_to(root).with_suffix("")
+            except ValueError:
+                rel = None
+            if rel is not None and safe_path(rel.as_posix()) == target and target.is_file():
+                if target not in seen:
+                    out.append(_guide_text(target, seen, depth + 1))
+                continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _folder_guides(slug: str) -> list[tuple[str, str, str]]:
+    """The guides for a page at slug, as (id, guide's slug, text): the
+    wiki's first, then each folder's on the way down to the page's."""
+    root = config.LEAF_DATA.resolve()
+    parts = slug.split("/")[:-1]
+    seen: set[Path] = set()
+    found = []
+    for depth in range(len(parts) + 1):
+        folder = root.joinpath(*parts[:depth])
+        try:
+            files = sorted(p for p in folder.iterdir() if p.name.lower() in _GUIDE_FILES and p.is_file())
+        except OSError:
+            break                            # a folder the write creates: no guides below
+        if depth == 0:
+            files.insert(0, root / f"{GUIDE_SLUG}.md")
+        for path in files:
+            path = path.resolve()
+            try:
+                guide = path.relative_to(root).with_suffix("").as_posix()
+            except ValueError:
+                continue                     # a link to a file outside the wiki
+            if path in seen:
+                continue
+            text = _guide_text(path, seen)
+            if text:
+                digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+                found.append((f"{guide}:{digest}", guide, text))
+    return found
+
+
+def _check_guides(args: dict, slugs: list[str]) -> None:
+    """Refuse a write to these pages while a guide for them isn't among the
+    ids in args['guides']: the error gives the missing guides' text."""
+    given = args.get("guides") or []
+    if isinstance(given, str):
+        given = given.replace(",", " ").split()
+    if not isinstance(given, list) or not all(isinstance(g, str) for g in given):
+        raise mcp_server.ToolError("guides must be a list of guide ids")
+    given = {g.strip() for g in given}
+    needed: dict[str, tuple[str, str]] = {}
+    for slug in slugs:
+        for gid, guide, text in _folder_guides(slug):
+            needed.setdefault(gid, (guide, text))
+    missing = [gid for gid in needed if gid not in given]
+    if not missing:
+        return
+    out = [f"Nothing was written. The user keeps guides for these pages, with instructions for writing "
+           f"them, and this call didn't confirm reading {'them' if len(missing) > 1 else 'it'}. Read "
+           "below, make the change follow it, then call again with guides set to "
+           f"{json.dumps(sorted(needed))}. Pass every guide id you get in this conversation with your later writes "
+           "too; a guide that changes gets a new id."]
+    for gid in missing:
+        guide, text = needed[gid]
+        if len(text) > _FOLDER_GUIDE_CHARS:
+            text = text[:_FOLDER_GUIDE_CHARS] + f"\n\n[… cut here: read_page {guide!r} for the rest]"
+        out.append(f"=== guide {guide} (id {gid}) ===\n{text}")
+    raise mcp_server.ToolError("\n\n".join(out))
+
+
+def _guide_folder(guide: str) -> str:
+    return guide.rsplit("/", 1)[0] if "/" in guide else ""
+
+
+def _guided_folders() -> list[tuple[str, str]]:
+    """The folders with a guide of their own, as (folder, the guide's title),
+    the root ('') first."""
+    root = config.LEAF_DATA.resolve()
+    folders = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(("_", ".")))
+        rel = Path(dirpath).relative_to(root).as_posix()
+        if any(f.lower() in _GUIDE_FILES for f in filenames) or (rel == "." and f"{GUIDE_SLUG}.md" in filenames):
+            folders.append("" if rel == "." else rel)
+    out = []
+    for folder in folders:
+        own = [(guide, text) for _gid, guide, text in _folder_guides(f"{folder}/page" if folder else "page")
+               if _guide_folder(guide) == folder]
+        if own:
+            title = page_title(own[0][1], "")
+            out.append((folder, title[:60] if title else own[0][0]))
+    return out
+
+
+# The folder list in read_guides' description stops after this many, so the
+# description stays short (clients cut long ones).
+_GUIDED_SHOWN = 25
+
+
+def mcp_tool_list() -> list[dict]:
+    """The tools for tools/list: read_guides' description names the folders
+    that have guides, so the model knows to read one before drafting for it."""
+    folders = _guided_folders()
+    if not folders:
+        return mcp_server.TOOLS
+    lines = [f"- {folder + '/' if folder else 'the whole wiki'}: {title}"
+             for folder, title in folders[:_GUIDED_SHOWN]]
+    if len(folders) > _GUIDED_SHOWN:
+        lines.append(f"- … and {len(folders) - _GUIDED_SHOWN} more folders")
+    tools = []
+    for tool in mcp_server.TOOLS:
+        if tool["name"] == "read_guides":
+            tool = {**tool, "description": tool["description"] + " Guides in this wiki:\n" + "\n".join(lines)}
+        tools.append(tool)
+    return tools
+
+
+def _read_guides(args: dict, base: str) -> str:
+    raw = _str_arg(args, "slug", required=False).strip()
+    if "/page/" in raw:
+        raw = raw.split("/page/", 1)[1]
+    raw = raw.split("#", 1)[0].removesuffix(".md")
+    folder = raw.strip("/")
+    if raw.endswith("/") or (folder and (config.LEAF_DATA / folder).is_dir()):
+        slug = folder + "/page"
+    else:
+        slug = (_mcp_page_slug(folder) or _new_slug(folder)) if folder else "page"
+    known = args.get("guides") or []
+    if isinstance(known, str):
+        known = known.replace(",", " ").split()
+    if not isinstance(known, list) or not all(isinstance(g, str) for g in known):
+        raise mcp_server.ToolError("guides must be a list of guide ids")
+    known = {g.strip() for g in known}
+    found = _folder_guides(slug)
+    where = f"{folder}/" if folder and slug == folder + "/page" else (slug if folder else "the wiki")
+    if not found:
+        return f"No guides apply to {where}: write as the conversation and the wiki suggest."
+    out = [f"Guides for {where}, the whole wiki's first. Follow them; where they disagree, the more "
+           f"specific one wins. Pass guides={json.dumps([g for g, _s, _t in found])} with your writes."]
+    for gid, guide, text in found:
+        if gid in known:
+            out.append(f"=== guide {guide} (id {gid}): you have it ===")
+            continue
+        if len(text) > _FOLDER_GUIDE_CHARS:
+            text = text[:_FOLDER_GUIDE_CHARS] + f"\n\n[… cut here: read_page {guide!r} for the rest]"
+        out.append(f"=== guide {guide} (id {gid}) ===\n{text}")
+    return "\n\n".join(out)
+
+
+def _guide_id_line(slug: str, content: str) -> str:
+    """For read_page of a whole guide: its id, as reading it counts as
+    reading the guide. Not when it imports other pages, which the model
+    hasn't seen then."""
+    for gid, guide, text in _folder_guides(slug):
+        if guide == slug:
+            if text != content.strip():
+                return "guide: yes; it imports other pages, read_guides shows it whole\n"
+            return f"guide id: {gid} (pass it as guides with writes under {_guide_folder(slug) or 'the wiki'})\n"
+    return ""
+
+
+def _guide_note(slug: str) -> str:
+    """After a write to a guide: its new id, which the next writes pass."""
+    for gid, guide, _text in _folder_guides(slug):
+        if guide == slug:
+            return f"\nNote: {slug} is a guide; its id is now {gid}: pass that one from now on."
+    return ""
+
+
 def _write_page(args: dict, base: str) -> str:
     content = _str_arg(args, "content")
     overwrite = args.get("overwrite", False) is True
@@ -336,6 +542,7 @@ def _write_page(args: dict, base: str) -> str:
             f"Page {existing!r} already exists. Change it with edit_page or append_to_page, "
             "or set overwrite=true to replace all of it.")
     slug = existing or _new_slug(args["slug"])
+    _check_guides(args, [slug])
     path = safe_path(slug)
     pending = _save_pending(path, slug) if existing else ""
     old = path.read_text(encoding="utf-8") if existing else ""
@@ -351,7 +558,7 @@ def _write_page(args: dict, base: str) -> str:
                     "merge it there (edit_page) and delete_page this one:\n"
                     + "\n".join(f"- {s} | {t}" for s, t in similar))
         out += _close_in_content(slug, content, {s for s, _t in similar})
-    return out + pending + _link_warning(old, content)
+    return out + pending + _link_warning(old, content) + _guide_note(slug)
 
 
 def _apply_edit(content: str, slug: str, edit: dict, which: str = "") -> tuple[str, int]:
@@ -375,6 +582,7 @@ def _apply_edit(content: str, slug: str, edit: dict, which: str = "") -> tuple[s
 
 def _edit_page(args: dict, base: str) -> str:
     slug, path = _existing_page(args)
+    _check_guides(args, [slug])
     edits = args.get("edits")
     if edits is not None:
         if not isinstance(edits, list) or not edits or not all(isinstance(e, dict) for e in edits):
@@ -394,7 +602,8 @@ def _edit_page(args: dict, base: str) -> str:
     total = sum(counts)
     what = f"{total} occurrences" if total > 1 else "1 occurrence"
     done = f"applied {len(counts)} edits, {what}" if edits else f"replaced {what}"
-    return f"Edited page {slug}: {done}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+    return (f"Edited page {slug}: {done}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+            + _guide_note(slug))
 
 
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
@@ -446,6 +655,7 @@ def _append_to_page(args: dict, base: str) -> str:
     slug, path = _existing_page(args)
     addition = _str_arg(args, "content").strip("\n")
     heading = _str_arg(args, "under_heading", required=False).strip()
+    _check_guides(args, [slug])
     pending = _save_pending(path, slug)
     content = path.read_text(encoding="utf-8")
     if heading:
@@ -459,7 +669,8 @@ def _append_to_page(args: dict, base: str) -> str:
     path.write_text(new, encoding="utf-8")
     git_commit(path, _commit_msg(f"Append to {slug}", args))
     where = f" under {heading!r}" if heading else ""
-    return f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+    return (f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+            + _guide_note(slug))
 
 
 def _folder_arg(raw: str) -> str | None:
@@ -490,6 +701,7 @@ def _rename_folder(folder: str, args: dict, base: str) -> str:
     taken = [new for _p, slug in moving if safe_path(new := new_folder + slug[len(folder):]).exists()]
     if taken:
         raise mcp_server.ToolError("These pages already exist, so nothing was moved: " + ", ".join(taken))
+    _check_guides(args, [folder + "/page", new_folder + "/page"])
     pending = _save_pending_pages([p for p, _s in moving], f"{folder}/")
     moves, changed = move_folder(folder, new_folder, _commit_msg(f"Move {folder}/ to {new_folder}/", args))
     out = [f"Moved folder {folder}/ to {new_folder}/: {len(moves)} pages."
@@ -513,6 +725,7 @@ def _rename_page(args: dict, base: str) -> str:
     new_path = safe_path(new_slug)
     if new_path.exists():
         raise mcp_server.ToolError(f"A page {new_slug!r} already exists")
+    _check_guides(args, [slug, new_slug])
     pending = _save_pending(path, slug)
     changed = move_page(path, new_path, slug, new_slug, _commit_msg(f"Rename {slug} to {new_slug}", args))
     refs = f" Links to it were updated in {len(changed)} files." if changed else ""
@@ -523,6 +736,7 @@ def _delete_page(args: dict, base: str) -> str:
     slug, path = _existing_page(args)
     if is_protected(slug):
         raise mcp_server.ToolError(f"{slug} is the home page; it can't be deleted")
+    _check_guides(args, [slug])
     linking = find_backlinks(slug)
     pending = _save_pending(path, slug)
     path.unlink()
@@ -919,6 +1133,7 @@ def _replace_in_pages(args: dict, base: str) -> str:
         raise mcp_server.ToolError(
             f"{find!r} would change {len(hits)} pages, more than max_pages ({max_pages}); nothing was "
             "written. Check with dry_run, then raise max_pages, or narrow find or under.")
+    _check_guides(args, [h[1] for h in hits])
     pending = _save_pending_pages([h[0] for h in hits], f"{len(hits)} pages")
     for path, _slug, _old, new, _changed in hits:
         path.write_text(new, encoding="utf-8")
@@ -954,6 +1169,8 @@ def _read_page(args: dict, base: str) -> str:
         # Line numbers as grep_wiki gives them, so the two fit together.
         head += f"section: lines {start + 1}–{end} of {len(lines)}\n"
         content = "".join(lines[start:end]).rstrip("\n") + "\n"
+    else:
+        head += _guide_id_line(slug, content)
     return f"{head}\n{content}" + _mcp_task_refs(content, base) + _page_links(slug, content)
 
 
@@ -1052,12 +1269,13 @@ def _restore_page(args: dict, base: str) -> str:
     old = path.read_text(encoding="utf-8") if existed else ""
     if existed and old == content:
         raise mcp_server.ToolError(f"{slug} already reads as version {sha[:7]}.")
+    _check_guides(args, [slug])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     git_commit(path, _commit_msg(f"Restore {slug} to {sha[:7]}", args))
     what = "Restored" if existed else "Brought back the deleted page"
     return (f"{what} {slug} as of version {sha[:7]} ({entries[i]['time']}).\n{_page_info(slug, base)}"
-            + pending + _link_warning(old, content))
+            + pending + _link_warning(old, content) + _guide_note(slug))
 
 
 def _list_tags(args: dict, base: str) -> str:
@@ -1123,7 +1341,7 @@ def _leaf_help(args: dict, base: str) -> str:
 
 _READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _list_pages,
                "check_links": _check_links, "history": _history, "list_tags": _list_tags,
-               "leaf_help": _leaf_help}
+               "leaf_help": _leaf_help, "read_guides": _read_guides}
 
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "replace_in_pages": _replace_in_pages,

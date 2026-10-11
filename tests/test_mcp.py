@@ -75,11 +75,11 @@ class TestHandle:
         tools = r["result"]["tools"]
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-            "list_tags", "history", "leaf_help",
+            "list_tags", "history", "leaf_help", "read_guides",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page", "delete_page",
             "restore_page", "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-                   "list_tags", "history", "leaf_help"}
+                   "list_tags", "history", "leaf_help", "read_guides"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
         adding = {"append_to_page", "create_task", "comment_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
@@ -591,6 +591,183 @@ class TestGuide:
     def test_not_an_orphan(self, client, wiki_dir):
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n")
         assert call(client, "list_pages", orphans=True)[0] == "Every page is linked from another page."
+
+
+def guide_ids(text):
+    """The ids a guide refusal tells the model to pass."""
+    return re.findall(r"\(id ([^)]+)\)", text)
+
+
+class TestFolderGuides:
+    """Guides (wiki-guide, a folder's CLAUDE.md or AGENTS.md): a page write
+    under one is refused until the model passes its id."""
+
+    @pytest.fixture()
+    def guided(self, wiki_dir):
+        write_page(wiki_dir, "tickets/CLAUDE", "# Tickets\n\nOne folder per ticket, summary.md in it.\n")
+        write_page(wiki_dir, "tickets/bug-1", "# BUG-1\n\nOld.\n")
+        return wiki_dir
+
+    def test_a_write_without_guides_is_refused_with_the_guide(self, client, guided):
+        text, err = call(client, "write_page", slug="tickets/bug-2", content="# BUG-2\n")
+        assert err
+        assert text.startswith("Nothing was written.")
+        assert "=== guide tickets/CLAUDE (id tickets/CLAUDE:" in text
+        assert "One folder per ticket, summary.md in it." in text
+        assert not (guided / "tickets" / "bug-2.md").exists()
+
+    def test_with_the_id_it_goes_through(self, client, guided):
+        ids = guide_ids(call(client, "write_page", slug="tickets/bug-2", content="# BUG-2\n")[0])
+        text, err = call(client, "write_page", slug="tickets/bug-2", content="# BUG-2\n", guides=ids)
+        assert not err and text.startswith("Created page tickets/bug-2.")
+        # Every page write is gated, and the same id keeps working.
+        for name, args in [("edit_page", {"slug": "tickets/bug-1", "old_string": "Old.", "new_string": "New."}),
+                           ("append_to_page", {"slug": "tickets/bug-1", "content": "More."}),
+                           ("rename_page", {"slug": "tickets/bug-2", "new_slug": "tickets/bug-3"}),
+                           ("delete_page", {"slug": "tickets/bug-3"})]:
+            assert call(client, name, **args)[0].startswith("Nothing was written."), name
+            text, err = call(client, name, **args, guides=ids)
+            assert not err, (name, text)
+
+    def test_ids_as_a_comma_separated_string(self, client, guided):
+        ids = guide_ids(call(client, "append_to_page", slug="tickets/bug-1", content="x")[0])
+        assert not call(client, "append_to_page", slug="tickets/bug-1", content="x", guides=", ".join(ids))[1]
+        assert call(client, "append_to_page", slug="tickets/bug-1", content="x", guides=5)[1]
+
+    def test_pages_elsewhere_are_not_gated(self, client, guided):
+        assert not call(client, "write_page", slug="notes", content="# Notes\n")[1]
+        assert not call(client, "write_page", slug="other/page", content="# Page\n")[1]
+
+    def test_the_wiki_guide_and_parent_folders_apply(self, client, guided):
+        write_page(guided, "wiki-guide", "# Wiki guide\n\nTags in lowercase.\n")
+        write_page(guided, "tickets/bug-1/AGENTS", "# BUG-1\n\nOnly summary.md here.\n")
+        text = call(client, "write_page", slug="tickets/bug-1/summary", content="# BUG-1\n")[0]
+        ids = guide_ids(text)
+        assert [i.split(":")[0] for i in ids] == ["wiki-guide", "tickets/CLAUDE", "tickets/bug-1/AGENTS"]
+        # The ids known so far are passed: only the missing guide is shown.
+        text, err = call(client, "write_page", slug="tickets/bug-1/summary", content="# BUG-1\n", guides=ids[:2])
+        assert err and guide_ids(text) == ids[2:] and "Tags in lowercase" not in text
+        assert not call(client, "write_page", slug="tickets/bug-1/summary", content="# BUG-1\n", guides=ids)[1]
+        # The wiki's guide applies everywhere.
+        assert guide_ids(call(client, "write_page", slug="notes", content="# Notes\n")[0]) == ids[:1]
+
+    def test_a_changed_guide_needs_its_new_id(self, client, guided):
+        ids = guide_ids(call(client, "append_to_page", slug="tickets/bug-1", content="x")[0])
+        write_page(guided, "tickets/CLAUDE", "# Tickets\n\nNew rule: a TL;DR first.\n")
+        text, err = call(client, "append_to_page", slug="tickets/bug-1", content="x", guides=ids)
+        assert err and "New rule: a TL;DR first." in text and guide_ids(text) != ids
+
+    def test_writing_a_guide_gives_its_new_id(self, client, guided):
+        ids = guide_ids(call(client, "append_to_page", slug="tickets/CLAUDE", content="x")[0])
+        text, err = call(client, "append_to_page", slug="tickets/CLAUDE", content="- A rule.", guides=ids)
+        new = re.search(r"its id is now (\S+):", text).group(1)
+        assert not err and new != ids[0]
+        assert not call(client, "append_to_page", slug="tickets/bug-1", content="x", guides=[new])[1]
+
+    def test_imports_are_resolved_once(self, client, guided):
+        write_page(guided, "wiki-guide", "# Wiki guide\n\nTags in lowercase.\n")
+        write_page(guided, "CLAUDE", "@wiki-guide.md\n")       # only the import: no second guide
+        write_page(guided, "messages/shared", "# Shared\n\nSign as G.\n")
+        write_page(guided, "messages/CLAUDE", "# Messages\n\n@shared.md\n@../outside.md\n@missing.md\n")
+        text = call(client, "write_page", slug="messages/m1", content="# M1\n")[0]
+        assert [i.split(":")[0] for i in guide_ids(text)] == ["wiki-guide", "messages/CLAUDE"]
+        assert "# Messages\n\n# Shared\n\nSign as G.\n@../outside.md\n@missing.md" in text
+
+    def test_replace_in_pages_is_gated_on_writing_only(self, client, guided):
+        assert not call(client, "replace_in_pages", find="Old", replace="New")[1]     # a dry run
+        text, err = call(client, "replace_in_pages", find="Old", replace="New", dry_run=False)
+        assert err and guide_ids(text)
+        assert not call(client, "replace_in_pages", find="Old", replace="New", dry_run=False,
+                        guides=guide_ids(text))[1]
+        assert "New." in (guided / "tickets" / "bug-1.md").read_text()
+
+    def test_moving_into_a_guided_folder(self, client, guided):
+        write_page(guided, "loose", "# Loose\n")
+        assert guide_ids(call(client, "rename_page", slug="loose", new_slug="tickets/loose")[0])
+        write_page(guided, "old/a", "# A\n")
+        assert guide_ids(call(client, "rename_page", slug="old/", new_slug="tickets/old")[0])
+
+    def test_a_long_guide_is_cut(self, client, guided, monkeypatch):
+        import mcp_tools
+        monkeypatch.setattr(mcp_tools, "_FOLDER_GUIDE_CHARS", 10)
+        text = call(client, "append_to_page", slug="tickets/bug-1", content="x")[0]
+        assert "# Tickets\n\n\n[… cut here: read_page 'tickets/CLAUDE' for the rest]" in text
+
+    def test_the_schemas_take_guides(self):
+        writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
+                  "delete_page", "restore_page", "read_guides"}
+        for tool in mcp_server.TOOLS:
+            assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
+
+
+class TestReadGuides:
+    """read_guides: a page's or folder's guides before drafting, their ids
+    good for the writes; the folders that have guides in its description."""
+
+    @pytest.fixture()
+    def guided(self, wiki_dir):
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\nTags in lowercase.\n")
+        write_page(wiki_dir, "messages/CLAUDE", "# Messages — Project Instructions\n\nSign as G.\n")
+        write_page(wiki_dir, "messages/old", "# Old\n")
+        return wiki_dir
+
+    def tool_list(self, client):
+        tools = rpc(client, "tools/list").get_json()["result"]["tools"]
+        return {t["name"]: t for t in tools}
+
+    def test_for_a_new_page(self, client, guided):
+        text, err = call(client, "read_guides", slug="messages/2026-10-11_reply")
+        assert not err
+        assert text.startswith("Guides for messages/2026-10-11_reply, the whole wiki's first.")
+        assert text.index("Tags in lowercase.") < text.index("Sign as G.")
+        ids = guide_ids(text)
+        assert [i.split(":")[0] for i in ids] == ["wiki-guide", "messages/CLAUDE"]
+        # Reading them is enough: the write goes through at once.
+        assert not call(client, "write_page", slug="messages/2026-10-11_reply", content="# R\n", guides=ids)[1]
+
+    def test_for_a_folder_an_existing_page_and_the_wiki(self, client, guided):
+        for slug in ("messages/", "messages", "/page/messages/old", "messages/old.md"):
+            assert len(guide_ids(call(client, "read_guides", slug=slug)[0])) == 2, slug
+        assert call(client, "read_guides", slug="messages")[0].startswith("Guides for messages/,")
+        assert [i.split(":")[0] for i in guide_ids(call(client, "read_guides")[0])] == ["wiki-guide"]
+
+    def test_known_guides_are_named_not_repeated(self, client, guided):
+        ids = guide_ids(call(client, "read_guides")[0])
+        text = call(client, "read_guides", slug="messages/", guides=ids)[0]
+        assert f"=== guide wiki-guide (id {ids[0]}): you have it ===" in text
+        assert "Tags in lowercase." not in text and "Sign as G." in text
+
+    def test_no_guides(self, client, wiki_dir):
+        assert call(client, "read_guides", slug="notes/x")[0] == \
+            "No guides apply to notes/x: write as the conversation and the wiki suggest."
+
+    def test_the_description_lists_the_guided_folders(self, client, guided):
+        write_page(guided, "tickets/bug-1/AGENTS", "Only summary.md here.\n")
+        write_page(guided, "_deck/CLAUDE", "# Not a page\n")
+        desc = self.tool_list(client)["read_guides"]["description"]
+        assert desc.endswith(" Guides in this wiki:\n- the whole wiki: Wiki guide\n"
+                             "- messages/: Messages — Project Instructions\n- tickets/bug-1/: tickets/bug-1/AGENTS")
+        # Other tools as they are.
+        assert self.tool_list(client)["read_page"] == next(t for t in mcp_server.TOOLS if t["name"] == "read_page")
+
+    def test_the_description_without_guides_and_with_many(self, client, wiki_dir, monkeypatch):
+        import mcp_tools
+        desc = self.tool_list(client)["read_guides"]["description"]
+        assert "Guides in this wiki" not in desc
+        monkeypatch.setattr(mcp_tools, "_GUIDED_SHOWN", 1)
+        write_page(wiki_dir, "a/CLAUDE", "# A\n")
+        write_page(wiki_dir, "b/CLAUDE", "# B\n")
+        assert self.tool_list(client)["read_guides"]["description"].endswith(
+            "- a/: A\n- … and 1 more folders")
+
+    def test_read_page_of_a_guide_gives_its_id(self, client, guided):
+        text = call(client, "read_page", slug="messages/CLAUDE")[0]
+        gid = re.search(r"guide id: (\S+) \(pass it as guides with writes under messages\)", text).group(1)
+        root = re.search(r"guide id: (\S+)", call(client, "read_page", slug="wiki-guide")[0]).group(1)
+        assert not call(client, "write_page", slug="messages/x", content="# X\n", guides=[root, gid])[1]
+        assert "\nguide" not in call(client, "read_page", slug="messages/old")[0].split("\n\n")[0]
+        write_page(guided, "messages/CLAUDE", "# Messages\n\n@old.md\n")
+        assert "guide: yes; it imports other pages" in call(client, "read_page", slug="messages/CLAUDE")[0]
 
 
 class TestReadSection:

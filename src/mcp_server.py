@@ -53,6 +53,10 @@ _CHANGES = {**_ADDS, "destructiveHint": True}
 _SUMMARY = {"type": "string", "description": (
     "What this change does, in a few words (e.g. 'add findings from BUG-1234'); "
     "it becomes the git commit message.")}
+_GUIDES = {"type": "array", "items": {"type": "string"}, "description": (
+    "The ids of the user's guides for these pages that you have read in this conversation. A write "
+    "to a page under a guide (the wiki's, a folder's CLAUDE.md or AGENTS.md) is refused until you "
+    "pass its id; the refusal shows the guide and its id. Pass every id you have.")}
 _PAGE_SLUG = {"type": "string",
               "description": "The page's slug as search_wiki or list_pages give it, e.g. 'git-remote' or 'journal/2026-09'."}
 _TASK_ID = {"type": "string",
@@ -257,6 +261,28 @@ TOOLS = [
         "annotations": _READ_ONLY,
     },
     {
+        "name": "read_guides",
+        "title": "Read the user's guides",
+        "description": (
+            "Read the user's guides for a page or folder: their instructions for what goes "
+            "there and how it is written (layout, tone, where it goes, what stays private). Call "
+            "it before drafting anything meant for the wiki, before you write the first word, "
+            "so the draft follows them. Returns each guide's text and its id; pass the ids as "
+            "guides with the write, which is refused without them."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": (
+                    "The page the content is meant for, also a new one ('messages/2026-10-11_reply'), "
+                    "or a folder ('messages/'). Leave it out for the whole wiki's guide.")},
+                "guides": {"type": "array", "items": {"type": "string"}, "description": (
+                    "Ids of guides you already have in this conversation: they are named, not repeated.")},
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
         "name": "write_page",
         "title": "Create a page",
         "description": (
@@ -275,6 +301,7 @@ TOOLS = [
                 "overwrite": {"type": "boolean", "default": False,
                               "description": "Replace an existing page's whole text."},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["slug", "content"],
         },
@@ -306,6 +333,7 @@ TOOLS = [
                         "replace_all": {"type": "boolean", "default": False}},
                         "required": ["old_string", "new_string"]}},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["slug"],
         },
@@ -340,6 +368,7 @@ TOOLS = [
                 "limit": {"type": "integer", "default": 50,
                           "description": "How many changed lines a dry run shows."},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["find", "replace"],
         },
@@ -362,6 +391,7 @@ TOOLS = [
                     "The heading whose section gets the text, e.g. 'Findings' (any level, "
                     "case ignored). Leave it out to add at the end of the page.")},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["slug", "content"],
         },
@@ -381,6 +411,7 @@ TOOLS = [
                 "new_slug": {"type": "string", "description": (
                     "The new slug, e.g. 'projects/leaf/mcp'; for a folder, the folder's new path.")},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["slug", "new_slug"],
         },
@@ -393,7 +424,7 @@ TOOLS = [
                         "Pages). Says which pages still link to it."),
         "inputSchema": {
             "type": "object",
-            "properties": {"slug": _PAGE_SLUG, "summary": _SUMMARY},
+            "properties": {"slug": _PAGE_SLUG, "summary": _SUMMARY, "guides": _GUIDES},
             "required": ["slug"],
         },
         "annotations": _CHANGES,
@@ -409,6 +440,7 @@ TOOLS = [
                 "slug": {"type": "string", "description": "The page, also a deleted one."},
                 "version": {"type": "string", "description": "The version to go back to, e.g. '1a2b3c4'."},
                 "summary": _SUMMARY,
+                "guides": _GUIDES,
             },
             "required": ["slug", "version"],
         },
@@ -519,10 +551,12 @@ def _result(id_, result: dict) -> dict:
 
 
 def handle(message, call_tool: Callable[[str, dict], str], version: str,
-           instructions: Callable[[], str] = lambda: INSTRUCTIONS) -> dict | None:
+           instructions: Callable[[], str] = lambda: INSTRUCTIONS,
+           tools: Callable[[], list] = lambda: TOOLS) -> dict | None:
     """Answer one JSON-RPC message. Notifications and responses (no id, or
     no method) get None: the transport answers those with 202 and no body.
-    `instructions` gives initialize's instructions (asked for only then)."""
+    `instructions` gives initialize's instructions (asked for only then),
+    `tools` the tool list for tools/list (TOOLS, descriptions may differ)."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return _error(None, -32600, "Invalid Request")
     method = message.get("method")
@@ -546,7 +580,7 @@ def handle(message, call_tool: Callable[[str, dict], str], version: str,
     if method == "ping":
         return _result(id_, {})
     if method == "tools/list":
-        return _result(id_, {"tools": TOOLS})
+        return _result(id_, {"tools": tools()})
     if method == "tools/call":
         name = params.get("name")
         args = params.get("arguments") or {}

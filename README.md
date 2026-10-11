@@ -240,6 +240,19 @@ in every session and with any MCP client. For example:
 Without the page, the assistant offers to start one when you tell it how you
 like things.
 
+A folder can have its own guide: a `CLAUDE.md` or `AGENTS.md` in it, the files
+coding assistants already read, which then also work when an assistant edits the
+files directly. They apply to the pages in that folder and its subfolders. A line
+`@other.md` in a guide pulls in that page's text. Leaf makes sure the assistant
+has read a guide before it writes: its first change under a guide is refused,
+with the guide's text and an id. It then fixes its change and resends it with
+the id. The assistant is also told which folders have guides, and to read
+them with `read_guides` before drafting anything for the wiki; reading a guide
+that way counts, so its write goes through at once. Either way, the guide's
+text is sent once per conversation. When you change a guide, the old id stops working, so
+the assistant sees the new version. `wiki-guide` counts as the guide for the
+whole wiki.
+
 Set `LEAF_BASE_URL` to Leaf's address as your browser knows it, so the links
 in the assistant's answers open (it matters when the client runs in a
 container or on another machine). Before you connect, read the MCP points

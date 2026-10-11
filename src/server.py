@@ -46,7 +46,7 @@ from retrieval import (
 import views
 from views import build_breadcrumb, build_delete_dialog, FORMAT_BAR, hidden_page_view
 from embed import exclude_from_git
-from mcp_tools import mcp_call_tool, mcp_instructions
+from mcp_tools import mcp_call_tool, mcp_instructions, mcp_tool_list
 from templating import macro
 
 
@@ -744,9 +744,9 @@ def mcp_endpoint():
         return jsonify({"jsonrpc": "2.0", "id": None,
                         "error": {"code": -32700, "message": "Parse error"}}), 400
     if isinstance(message, list):  # a batch (protocol 2025-03-26)
-        replies = [r for m in message if (r := mcp_server.handle(m, mcp_call_tool, config.VERSION, mcp_instructions))]
+        replies = [r for m in message if (r := mcp_server.handle(m, mcp_call_tool, config.VERSION, mcp_instructions, mcp_tool_list))]
         return (jsonify(replies), 200) if replies else ("", 202)
-    reply = mcp_server.handle(message, mcp_call_tool, config.VERSION, mcp_instructions)
+    reply = mcp_server.handle(message, mcp_call_tool, config.VERSION, mcp_instructions, mcp_tool_list)
     return (jsonify(reply), 200) if reply else ("", 202)
 
 
