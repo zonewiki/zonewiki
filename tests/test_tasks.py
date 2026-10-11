@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import threading
 from datetime import date, timedelta
 
@@ -10,6 +11,7 @@ import pytest
 
 import server
 import deckstore
+import gitstore
 from tests.conftest import create_task
 import pages
 
@@ -1050,6 +1052,82 @@ class TestBatchTag:
         assert resp.status_code == 200
         completed = client.get("/api/deck/completed").get_json()
         assert "archived" in completed[0]["tags"]
+
+
+# ── Batch update ───────────────────────────────────────────────────────────────
+
+
+class TestBatchUpdate:
+    def test_each_task_gets_its_own_fields(self, client):
+        a = create_task(client, title="A", tags="x").get_json()
+        b = create_task(client, title="B").get_json()
+        resp = client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": a["id"], "start_date": "2099-01-02"},
+            {"id": b["id"], "tags": ["y", "z"]},
+        ]})
+        assert resp.status_code == 200
+        assert {t["id"] for t in resp.get_json()} == {a["id"], b["id"]}
+        tasks = {t["id"]: t for t in client.get("/api/deck").get_json()}
+        assert tasks[a["id"]]["start_date"] == "2099-01-02"
+        assert tasks[a["id"]]["tags"] == ["x"]            # untouched
+        assert tasks[b["id"]]["tags"] == ["y", "z"]
+        assert tasks[b["id"]]["start_date"] is None
+
+    def test_logs_and_restores_history(self, client):
+        # A start date change is logged; an undo sends the old history back.
+        a = create_task(client, title="A").get_json()
+        client.post("/api/deck/batch-update", json={"tasks": [{"id": a["id"], "start_date": "2099-01-02"}]})
+        t = client.get("/api/deck").get_json()[0]
+        assert [e["event"] for e in t["history"]] == ["created", "start"]
+        client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": a["id"], "start_date": None, "history": a["history"]}]})
+        t = client.get("/api/deck").get_json()[0]
+        assert t["start_date"] is None
+        assert [e["event"] for e in t["history"]] == ["created"]
+
+    def test_reaches_completed_tasks(self, client):
+        a = create_task(client, title="A").get_json()
+        client.put(f"/api/deck/{a['id']}", json={"completed": True})
+        client.post("/api/deck/batch-update", json={"tasks": [{"id": a["id"], "tags": ["old"]}]})
+        assert client.get("/api/deck/completed").get_json()[0]["tags"] == ["old"]
+
+    def test_unknown_ids_are_skipped(self, client):
+        a = create_task(client, title="A").get_json()
+        resp = client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": "gone", "tags": ["x"]}, {"id": a["id"], "tags": ["y"]}]})
+        assert [t["id"] for t in resp.get_json()] == [a["id"]]
+
+    @pytest.mark.parametrize("body", [
+        {}, {"tasks": []}, {"tasks": "x"}, {"tasks": [{"tags": ["x"]}]}, {"tasks": [{"id": 3}]},
+    ])
+    def test_bad_body_400(self, client, body):
+        assert client.post("/api/deck/batch-update", json=body).status_code == 400
+
+    @pytest.mark.parametrize("key", ["completed", "wont_do", "skip"])
+    def test_status_changes_are_refused(self, client, key):
+        a = create_task(client, title="A").get_json()
+        resp = client.post("/api/deck/batch-update", json={"tasks": [{"id": a["id"], key: True}]})
+        assert resp.status_code == 400
+        assert client.get("/api/deck").get_json()[0]["completed_at"] is None
+
+    def test_a_bad_field_changes_nothing(self, client):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B").get_json()
+        resp = client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": a["id"], "tags": ["kept-out"]}, {"id": b["id"], "start_date": "not a date"}]})
+        assert resp.status_code == 400
+        assert all(not t["tags"] for t in client.get("/api/deck").get_json())
+
+    def test_one_commit(self, client, git_wiki_dir):
+        a = create_task(client, title="A").get_json()
+        b = create_task(client, title="B").get_json()
+        log = lambda: subprocess.run(["git", "log", "--format=%s"], cwd=git_wiki_dir, capture_output=True,
+                                     text=True, env=gitstore._GIT_ENV).stdout.splitlines()
+        before = len(log())
+        client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": a["id"], "start_date": "2099-01-02"}, {"id": b["id"], "start_date": "2099-01-02"}]})
+        assert log()[0] == "Update deck tasks"
+        assert len(log()) == before + 1
 
 
 # ---------- Concurrent-write safety (regression for commit 079930f) ----------

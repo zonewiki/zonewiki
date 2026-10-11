@@ -651,3 +651,39 @@ def api_batch_tag_deck():
         updated.append(task)
     write_both(active, completed_list, "Tag deck tasks")
     return jsonify(updated)
+
+
+# What batch-update may not do: it changes fields, while completing, won't
+# do and skip move tasks between files (batch-complete, PUT).
+_STATUS_KEYS = ("completed", "wont_do", "skip")
+
+
+@bp.post("/api/deck/batch-update")
+@serialized
+def api_batch_update_deck():
+    """Change fields of several tasks in one commit: `tasks` is a list of
+    {id, ...fields as PUT takes them}, each task its own fields (start today
+    for a selection, or an undo putting back each task's old tags or dates
+    with its old history). Ids no longer in the deck are skipped."""
+    data = _json_object()
+    changes = data.get("tasks")
+    if (not isinstance(changes, list) or not changes
+            or not all(isinstance(c, dict) and isinstance(c.get("id"), str) for c in changes)):
+        abort(400, description="tasks must be a list of objects with an id")
+    if any(k in c for c in changes for k in _STATUS_KEYS):
+        abort(400, description="batch-update changes fields, not status")
+    active = read_deck_strict()
+    completed_list = read_completed_all_strict()
+    by_id = {t["id"]: t for t in active + completed_list}
+    updated = []
+    for change in changes:
+        task = by_id.get(change["id"])
+        if not task:
+            continue
+        _apply_task_fields(task, change)
+        if "history" in change:
+            task["history"] = clean_history(change["history"])
+        updated.append(task)
+    if updated:
+        write_both(active, completed_list, "Update deck tasks")
+    return jsonify(updated)
