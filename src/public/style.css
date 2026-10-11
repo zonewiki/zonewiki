@@ -2460,6 +2460,39 @@ div.chip-input > input {
 .deck-selbar .btn.danger { color: #dc2626; }
 .deck-selbar-close { padding-inline: .6rem; }
 body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
+/* Selection mode (.deck-selecting): each card's checkbox becomes a round
+   mark, filled on the selected cards; a tap anywhere on a card toggles it. */
+.deck-selecting .task-item { cursor: pointer; }
+.deck-selecting .task-menu-btn { visibility: hidden; }   /* a tap there would only toggle the card */
+.deck-selecting .task-checkbox { position: relative; }
+.deck-selecting .task-checkbox input { visibility: hidden; }
+.deck-selecting .task-checkbox::before {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 1.15rem; height: 1.15rem; box-sizing: border-box;
+  border: 2px solid var(--muted); border-radius: 50%;
+}
+.deck-selecting .task-item.task-selected .task-checkbox::before {
+  border-color: var(--btn-primary);
+  background: var(--btn-primary) no-repeat center / 70%
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+@media (pointer: coarse) { .deck-selecting .task-checkbox::before { width: 1.4rem; height: 1.4rem; } }
+/* Phones: the bar takes the bottom edge in place of the tab bar, the count,
+   All and ✕ on top, the actions in a row of equal buttons under them. */
+@media (max-width: 640px) {
+  .deck-selbar {
+    left: 0; right: 0; bottom: 0; transform: none; max-width: none;
+    flex-wrap: wrap; gap: .4rem; border-radius: 12px 12px 0 0; border-bottom: none;
+    padding: .5rem .75rem calc(.6rem + env(safe-area-inset-bottom));
+  }
+  .deck-selbar-count { flex: 1; }
+  .deck-selbar-actions { order: 1; flex-basis: 100%; }
+  .deck-selbar-actions .btn { flex: 1 1 0; }
+  .deck-selbar .btn { min-height: 2.75rem; font-size: .9rem; }
+  body:has(.deck-selbar:not([hidden])) .action-buttons { display: none; }
+  body:has(.deck-selbar:not([hidden])) main { padding-bottom: calc(8.5rem + env(safe-area-inset-bottom)); }
+  body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: calc(8rem + env(safe-area-inset-bottom)); }
+}
 
 /* Bulk tag dialog (deck.js openBulkTagModal): the selection's tags, each a
    three-state box: on every task ✓, on some –, on none empty. */

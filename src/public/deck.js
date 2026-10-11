@@ -89,6 +89,9 @@ let draggedId = null;
 let selectedId  = null;
 let selectedIds = new Set();
 let anchorId    = null;
+// Selection mode (⋯ → Select; meant for touch, which has no Shift or Ctrl):
+// a tap or click on a card adds or drops it, nothing else on the card reacts.
+let selectMode  = false;
 let completedLimit = 50;
 let undoTimer  = null;
 let undoToastEl = null;
@@ -194,6 +197,16 @@ listEl.addEventListener('click', e => {
   const yearBtn = e.target.closest('[data-completed-year]');
   if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
 });
+// Selection mode: a tap or click anywhere on a card (its checkbox, a link,
+// a date chip too) adds or drops the card, and does nothing else.
+listEl.addEventListener('click', e => {
+  if (!selectMode) return;
+  const card = e.target.closest('.task-item');
+  if (!card) return;
+  e.preventDefault();
+  e.stopPropagation();
+  toggleSelection(card.dataset.id);
+}, true);
 listEl.addEventListener('click', e => {
   if (lastPointerType !== 'touch') return;
   const card = e.target.closest('.task-item');
@@ -332,7 +345,7 @@ function endTouchDrag(drop) {
 }
 listEl.addEventListener('touchstart', e => {
   endTouchDrag(false);
-  if (e.touches.length !== 1) return;
+  if (e.touches.length !== 1 || selectMode) return;   // selecting: no drags, no swipes
   const item = e.target.closest('.task-item');
   // A date chip may start a swipe or drag (it sits on the first line, where
   // a thumb starts one); a mere tap on it still opens its date picker.
@@ -941,6 +954,7 @@ function openTaskMenu(id, anchor, at) {
   const items = task.completed_at ? [
     ['edit', 'Edit…'],
     ['reopen', 'Reopen'],
+    ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ] : [
     ['edit', 'Edit…'],
@@ -950,6 +964,7 @@ function openTaskMenu(id, anchor, at) {
     task.start_date && ['unplan', 'Unplan'],
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['wontdo', "Won't do"],
+    ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
   showMenu(task.title, items, action => runTaskAction(task, action, anchor), anchor, at);
@@ -1015,6 +1030,7 @@ function runTaskAction(task, action, anchor) {
       showUndo('Task reopened', () => completeTasks([id], true));
       break;
     case 'delete':   deleteWithUndo([id]); break;
+    case 'select':   enterSelectMode(id); break;
   }
 }
 
@@ -1446,16 +1462,40 @@ function clearSelection() {
   updateSelectionClasses();
 }
 
+// Selection mode starts with the card whose menu it came from. It ends with
+// ✕, Esc, another tab, Done or Delete, or the browser's back (a phone's
+// back gesture): entering adds a history entry, so back leaves the mode,
+// not the page.
+function enterSelectMode(id) {
+  selectMode = true;
+  appEl.classList.add('deck-selecting');
+  selectedId = anchorId = id;
+  selectedIds = new Set([id]);
+  updateSelectionClasses();
+  try { history.pushState({ ...history.state, deckSelect: instanceId }, ''); } catch (_) {}
+}
+function exitSelectMode() {
+  if (!selectMode) { clearSelection(); return; }
+  selectMode = false;
+  appEl.classList.remove('deck-selecting');
+  clearSelection();
+  if (history.state?.deckSelect === instanceId) history.back();
+}
+window.addEventListener('popstate', () => { if (selectMode) exitSelectMode(); });
+
 // The selection bar: while several tasks are selected (on a page with
 // several decks, only the active one's), how many, and what to do to all.
 // Today goes when every selected task is completed, and Done says Reopen.
 function syncSelBar() {
   if (!selBar) return;
-  const show = selectedIds.size > 1 && (deckInstances.length < 2 || activeDeckInstance === instanceId);
+  const show = (selectMode || selectedIds.size > 1) &&
+    (deckInstances.length < 2 || activeDeckInstance === instanceId);
   selBar.hidden = !show;
   if (!show) return;
   const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
-  selBar.querySelector('.deck-selbar-count').textContent = `${selectedIds.size} selected`;
+  selBar.querySelector('.deck-selbar-count').textContent =
+    selectedIds.size ? `${selectedIds.size} selected` : 'Tap tasks to select';
+  selBar.querySelectorAll('.deck-selbar-actions .btn').forEach(b => { b.disabled = !selectedIds.size; });
   selBar.querySelector('[data-sel="today"]').hidden = allDone;
   const done = selBar.querySelector('[data-sel="done"]');
   done.textContent = allDone ? 'Reopen' : 'Done';
@@ -1473,11 +1513,11 @@ function runSelectionAction(action) {
   const ids = [...selectedIds];
   switch (action) {
     case 'all':    selectAllVisible(); break;
-    case 'clear':  clearSelection(); break;
+    case 'clear':  exitSelectMode(); break;
     case 'tag':    if (ids.length) openBulkTagModal(ids); break;
     case 'today':  startToday(ids); break;
-    case 'done':   clearSelection(); completeMany(ids); break;
-    case 'delete': if (ids.length) deleteWithUndo(ids, clearSelection); break;
+    case 'done':   if (ids.length) { exitSelectMode(); completeMany(ids); } break;
+    case 'delete': if (ids.length) deleteWithUndo(ids, exitSelectMode); break;
   }
 }
 
@@ -2049,7 +2089,7 @@ function render() {
   listEl.querySelectorAll('.task-title').forEach(el => {
     el.addEventListener('dblclick', e => {
       // Touch: two taps select and open (the tap handler), never more.
-      if (e.target.closest('a') || lastPointerType === 'touch') return;
+      if (e.target.closest('a') || lastPointerType === 'touch' || selectMode) return;
       startInlineEdit(e.currentTarget);
     });
   });
@@ -2058,7 +2098,7 @@ function render() {
   // in place) and its controls opens the modal.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('dblclick', e => {
-      if (lastPointerType === 'touch') return;
+      if (lastPointerType === 'touch' || selectMode) return;
       if (e.target.closest('.task-title, input, button, a, label, .task-clickable-date, .task-inline-input, .task-desc')) return;
       openEditModal(el.dataset.id);
     });
@@ -2090,7 +2130,7 @@ function render() {
   // A right-click on a selected card keeps the selection for its menu.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('mousedown', e => {
-      if (e.target.closest('input, button, a')) return;
+      if (selectMode || e.target.closest('input, button, a')) return;   // selecting: the click toggles
       const id = el.dataset.id;
       if (e.button !== 0 && selectedIds.has(id)) return;
       if (e.shiftKey && selectedId) { e.preventDefault(); extendSelection(id); }
@@ -2224,6 +2264,7 @@ function markActiveTab(filter) {
 
 function switchTab(filter) {
   if (!VIEWS.includes(filter)) return;
+  if (selectMode) exitSelectMode();
   if (filter !== 'completed') lastTab = filter;
   activeFilter = filter;
   applyCompact(filter);
@@ -2993,8 +3034,8 @@ function setupBoardDragAndDrop() {
 
   listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
     item.addEventListener('dragstart', e => {
-      // Touch has its own long-press drag (see touchDrop).
-      if (lastPointerType === 'touch') { e.preventDefault(); return; }
+      // Touch has its own long-press drag (see touchDrop); selecting, nothing drags.
+      if (lastPointerType === 'touch' || selectMode) { e.preventDefault(); return; }
       draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -3045,7 +3086,7 @@ function setupDragAndDrop() {
     .forEach(el => el.classList.remove(...DROP_CLASSES));
   items.forEach(item => {
     item.addEventListener('dragstart', e => {
-      if (lastPointerType === 'touch') { e.preventDefault(); return; }
+      if (lastPointerType === 'touch' || selectMode) { e.preventDefault(); return; }
       draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -3259,10 +3300,10 @@ document.addEventListener('keydown', async e => {
     const ids = [...selectedIds];
     const removing = e.key === 'T';
     openBulkTagModal(ids, removing);
-  } else if (e.key === 'Escape' && expandedId) {
+  } else if (e.key === 'Escape' && expandedId && !selectMode) {
     setExpanded(null);   // collapse first; the next Esc clears the selection
   } else if (e.key === 'Escape') {
-    clearSelection();
+    exitSelectMode();
   }
 });
 

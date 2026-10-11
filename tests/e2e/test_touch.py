@@ -90,7 +90,7 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
     expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
-                                "Skip this occurrence", "Won't do", "Delete…"])
+                                "Skip this occurrence", "Won't do", "Select several", "Delete…"])
     box = menu.bounding_box()
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390
@@ -140,10 +140,109 @@ def test_completed_task_menu(phone):
     phone.reload()
     open_tab(phone, "completed")
     menu = open_menu(phone, "Water plants")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Delete…"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Select several", "Delete…"])
     menu.get_by_role("menuitem", name="Reopen").tap()
     wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
 
+
+
+# ── Selection mode (⋯ → Select several) ──────────────────────────────────────
+
+
+@pytest.fixture()
+def selecting(new_page, wiki):
+    """A phone deck on Open (newest first: Saw, Glue, Nuts, Bolts) in
+    selection mode, started from Saw's ⋯ menu."""
+    pg = new_page(**TOUCH_PHONE)
+    for title in ("Bolts", "Nuts", "Glue", "Saw"):
+        pg.request.post("/api/deck", data={"title": title})
+    pg.goto("/deck?view=open")
+    open_menu(pg, "Saw").get_by_role("menuitem", name="Select several").tap()
+    expect(pg.locator(".tasks-app")).to_contain_class("deck-selecting")
+    return pg
+
+
+def selected(page):
+    return page.locator(".task-item.task-selected .task-title").all_inner_texts()
+
+
+def test_select_mode_taps_toggle_cards(selecting):
+    pg = selecting
+    bar = pg.locator("#task-selbar")
+    expect(bar.locator(".deck-selbar-count")).to_have_text("1 selected")
+    expect(pg.locator(".action-buttons")).to_be_hidden()        # the bar takes the tab bar's place
+    box = bar.bounding_box()
+    assert box["x"] == 0 and box["width"] == 390 and abs(box["y"] + box["height"] - 844) < 1, box
+    card(pg, "Nuts").locator(".task-title").tap()
+    card(pg, "Bolts").locator(".task-checkbox").tap()            # the checkbox selects, not completes
+    assert selected(pg) == ["Saw", "Nuts", "Bolts"]
+    expect(bar.locator(".deck-selbar-count")).to_have_text("3 selected")
+    card(pg, "Saw").locator(".task-title").tap()                 # a second tap drops it, no editor
+    assert selected(pg) == ["Nuts", "Bolts"]
+    expect(pg.locator("#task-edit-modal")).to_be_hidden()
+    assert all(t["completed_at"] is None for t in tasks_by_title(pg).values())
+    card(pg, "Nuts").locator(".task-title").tap()
+    card(pg, "Bolts").locator(".task-title").tap()
+    expect(bar.locator(".deck-selbar-count")).to_have_text("Tap tasks to select")
+    expect(bar.locator("[data-sel='tag']")).to_be_disabled()
+    bar.locator("[data-sel='all']").tap()
+    expect(bar.locator(".deck-selbar-count")).to_have_text("4 selected")
+
+
+def test_select_mode_has_no_swipes_or_drags(selecting):
+    pg = selecting
+    touch_drag(pg, card(pg, "Bolts"), card(pg, "Saw"))
+    pg.wait_for_timeout(200)
+    expect(pg.locator(".task-touch-ghost")).to_have_count(0)
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Saw", "Glue", "Nuts", "Bolts"])
+    assert all(t["sort_order"] is None for t in tasks_by_title(pg).values())
+
+
+def test_select_mode_tag_keeps_the_mode(selecting):
+    pg = selecting
+    card(pg, "Glue").locator(".task-title").tap()
+    pg.locator("#task-selbar [data-sel='tag']").tap()
+    inp = pg.locator("#bulk-tag-input")
+    expect(inp).to_be_focused()                  # no rows to tick: the field takes the keyboard
+    inp.fill("shop")
+    pg.locator(".bulk-tag-modal").get_by_role("button", name="Apply").tap()
+    wait_until(pg, lambda: tasks_by_title(pg)["Glue"]["tags"] == ["shop"])
+    assert tasks_by_title(pg)["Saw"]["tags"] == ["shop"]
+    expect(pg.locator(".tasks-app")).to_contain_class("deck-selecting")
+    assert selected(pg) == ["Saw", "Glue"]
+
+
+def test_select_mode_done_ends_it(selecting):
+    pg = selecting
+    card(pg, "Glue").locator(".task-title").tap()
+    pg.locator("#task-selbar [data-sel='done']").tap()
+    expect(pg.locator(".task-undo-toast")).to_contain_text("2 tasks completed")
+    expect(pg.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(pg.locator("#task-selbar")).to_be_hidden()
+    expect(pg.locator(".action-buttons")).to_be_visible()
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Nuts", "Bolts"])
+    # Taps are taps again: the first selects, the second opens the editor.
+    card(pg, "Nuts").locator(".task-title").tap()
+    card(pg, "Nuts").locator(".task-title").tap()
+    expect(pg.locator("#task-edit-modal")).to_be_visible()
+
+
+@pytest.mark.parametrize("how", ["close", "back", "tab"])
+def test_select_mode_ends(selecting, how):
+    pg = selecting
+    card(pg, "Glue").locator(".task-title").tap()
+    if how == "close":
+        pg.locator("#task-selbar [data-sel='clear']").tap()
+    elif how == "back":
+        pg.go_back()                             # a phone's back gesture: leaves the mode, not the page
+    else:
+        open_tab(pg, "focus")
+    expect(pg.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(pg.locator("#task-selbar")).to_be_hidden()
+    assert pg.url.endswith("/deck?view=open")
+    assert selected(pg) == []
+    # The mode's history entry goes with it: back is back to the page before.
+    wait_until(pg, lambda: pg.evaluate("history.state?.deckSelect === undefined"))
 
 
 def test_desktop_click_selects_does_not_edit(page, wiki):
