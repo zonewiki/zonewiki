@@ -134,6 +134,42 @@ function tagCounts(tasks) {
   return counts;
 }
 
+// The tags a selection of tasks carries (the bulk tag dialog): each with
+// how many of the tasks have it, case ignored (the first spelling seen),
+// most common first, then A–Z.
+function selectionTags(tasks) {
+  const byLower = new Map();
+  for (const t of tasks) {
+    const seen = new Set();
+    for (const tag of t.tags || []) {
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const row = byLower.get(key) || byLower.set(key, { tag, count: 0 }).get(key);
+      row.count++;
+    }
+  }
+  return [...byLower.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+// What the bulk tag dialog sends to batch-tag. `states` maps each of the
+// selection's tags to 'all' (every task gets it), 'none' (it goes) or
+// 'some' (left as it is); `added` are tags typed in. A tag both typed and
+// set to none goes.
+function bulkTagChange(states, added) {
+  const remove = Object.keys(states).filter(t => states[t] === 'none');
+  const gone = new Set(remove.map(t => t.toLowerCase()));
+  const add = [];
+  const seen = new Set();
+  for (const tag of [...Object.keys(states).filter(t => states[t] === 'all'), ...added]) {
+    const key = tag.toLowerCase();
+    if (gone.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    add.push(tag);
+  }
+  return { add, remove };
+}
+
 // Tag suggestions, best first — every tag field completes to the first one
 // on Tab/Enter. Exact match, then prefix, substring and in-order letters
 // (tagMatchScore); within a level the most-used tag wins, then A–Z. An empty
@@ -257,7 +293,8 @@ function parseQuickAdd(input, today) {
 }
 
 const DeckCore = {
-  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, tagMatchScore, tagCounts, rankTags, sanitizeTagInput,
+  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
+  rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, tagParamToQuery, DESC_CHECK_RE, toggleDescCheck,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
 };

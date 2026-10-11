@@ -1960,6 +1960,8 @@ div.chip-input > input {
   flex: 1 1 4rem; min-width: 3rem; border: none; outline: none; background: transparent;
   padding: .1rem .2rem;
 }
+/* In a dialog the modal's text-field rule would draw a second box. */
+.scratch-modal div.chip-input > input[type="text"] { width: auto; padding: .1rem .2rem; border: none; }
 .tag-chip {
   display: inline-flex; align-items: center; font-size: .75rem; line-height: 1.4;
   padding: 0 0 0 .4rem; border-radius: 3px; background: var(--code-bg); color: var(--fg);
@@ -2439,6 +2441,32 @@ div.chip-input > input {
 .focus-over-capacity { color: #d97706; }
 
 .tasks-empty .btn { margin-left: .5rem; }
+
+/* Bulk tag dialog (deck.js openBulkTagModal): the selection's tags, each a
+   three-state box: on every task ✓, on some –, on none empty. */
+.bulk-tag-list {
+  list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: .1rem;
+}
+.bulk-tag-row {
+  display: flex; align-items: center; gap: .6rem; width: 100%;
+  padding: .35rem .4rem; border: none; border-radius: 4px; margin: 0;
+  background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.bulk-tag-row:hover, .bulk-tag-row:focus-visible { background: var(--code-bg); outline: none; }
+.bulk-tag-row .task-tag { font-size: .85rem; }
+.bulk-tag-box {
+  flex: none; width: 1rem; height: 1rem; border: 1.5px solid var(--muted); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700; line-height: 1; color: var(--bg);
+}
+.bulk-tag-row[aria-checked="true"] .bulk-tag-box { background: var(--btn-primary); border-color: var(--btn-primary); }
+.bulk-tag-row[aria-checked="true"] .bulk-tag-box::after { content: "✓"; }
+.bulk-tag-row[aria-checked="mixed"] .bulk-tag-box { border-color: var(--btn-primary); color: var(--btn-primary); }
+.bulk-tag-row[aria-checked="mixed"] .bulk-tag-box::after { content: "–"; }
+.bulk-tag-row[aria-checked="false"] .task-tag { text-decoration: line-through; opacity: .6; }
+.bulk-tag-count { margin-left: auto; font-size: .75rem; color: var(--muted); }
+@media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 
 /* ⋯ per-card menu button + the menu itself */
 .task-menu-btn {

@@ -649,6 +649,86 @@ def test_undo_a_bulk_retag(page, wiki):
     wait_for_field(page, "Glue", "tags", ["misc", "hardware"])
 
 
+def select_by_keys(page, first: str, count: int):
+    """Select `count` cards from `first` down (a click, then Shift+↓)."""
+    card(page, first).locator(".task-title").click()
+    for _ in range(count - 1):
+        page.keyboard.press("Shift+ArrowDown")
+
+
+def test_bulk_tag_dialog_three_states(page, wiki):
+    # The selection's tags as rows: on both (✓), on one (–, "1 of 2").
+    # A click cycles all → none → some; typed tags are added; one request,
+    # one undo that puts every task's tags back.
+    page.request.post("/api/deck", data={"title": "Bolts", "tags": "x,y"})
+    page.request.post("/api/deck", data={"title": "Nuts", "tags": "x"})
+    page.goto("/deck?view=open")
+    select_by_keys(page, "Nuts", 2)                   # newest first: Nuts, Bolts
+    page.keyboard.press("t")
+    dlg = page.locator(".bulk-tag-modal")
+    expect(dlg.locator(".scratch-label")).to_have_text("Tags of 2 tasks")
+    rows = dlg.locator(".bulk-tag-row")
+    expect(rows).to_have_count(2)
+    x, y = rows.filter(has_text="#x"), rows.filter(has_text="#y")
+    expect(x).to_have_attribute("aria-checked", "true")
+    expect(y).to_have_attribute("aria-checked", "mixed")
+    expect(y.locator(".bulk-tag-count")).to_have_text("1 of 2")
+    expect(page.locator("#bulk-tag-input")).to_be_focused()
+    y.click()
+    expect(y).to_have_attribute("aria-checked", "true")
+    x.click()
+    expect(x).to_have_attribute("aria-checked", "false")
+    y.click()
+    y.click()                                         # none, then back to some
+    expect(y).to_have_attribute("aria-checked", "mixed")
+    y.click()                                         # all again
+    inp = page.locator("#bulk-tag-input")
+    inp.click()
+    inp.press_sequentially("new,more")
+    expect(dlg.locator(".tag-chip-label")).to_have_text(["#new"])
+    dlg.get_by_role("button", name="Apply").click()   # takes the half-typed "more"
+    expect(dlg).to_have_count(0)
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("Tags changed on 2 tasks")
+    wait_for_field(page, "Bolts", "tags", ["y", "new", "more"])
+    wait_for_field(page, "Nuts", "tags", ["y", "new", "more"])
+    expect(card(page, "Nuts").locator(".task-tag")).to_have_text(["#y", "#new", "#more"])
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Bolts", "tags", ["x", "y"])
+    wait_for_field(page, "Nuts", "tags", ["x"])
+    expect(card(page, "Nuts").locator(".task-tag")).to_have_text(["#x"])
+
+
+def test_bulk_tag_one_tag_says_so_and_skips_unchanged(page, wiki):
+    page.request.post("/api/deck", data={"title": "Bolts", "tags": "work"})
+    page.request.post("/api/deck", data={"title": "Nuts"})
+    page.goto("/deck?view=open")
+    select_by_keys(page, "Nuts", 2)
+    page.keyboard.press("t")
+    page.locator("#bulk-tag-input").fill("work")
+    page.keyboard.press("Enter")
+    toast = page.locator(".task-undo-toast")
+    # Bolts had it already: one task changed.
+    expect(toast).to_contain_text("#work added to 1 task")
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Nuts", "tags", [])
+    assert task_by_title(page, "Bolts")["tags"] == ["work"]
+
+
+def test_bulk_tag_nothing_changed_sends_nothing(page, wiki):
+    page.request.post("/api/deck", data={"title": "Bolts", "tags": "work"})
+    page.goto("/deck?view=open")
+    card(page, "Bolts").locator(".task-title").click()
+    page.keyboard.press("t")
+    requests = []
+    page.on("request", lambda r: requests.append(r.url) if "batch-tag" in r.url else None)
+    page.locator(".bulk-tag-modal").get_by_role("button", name="Apply").click()
+    expect(page.locator(".bulk-tag-modal")).to_have_count(0)
+    page.wait_for_timeout(200)
+    assert requests == []
+    expect(page.locator(".task-undo-toast")).to_have_count(0)
+
+
 def test_main_deck_counts_list_tasks_as_completed(page, wiki):
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
     done = page.request.post("/api/deck", data={"title": "Bread", "tags": "groceries"}).json()

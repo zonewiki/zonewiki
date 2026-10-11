@@ -322,6 +322,26 @@ class TestTagRanking:
         assert run_core(f"DeckCore.tagCounts({json.dumps(tasks)})") == {"a": 2, "b": 1}
 
 
+class TestBulkTags:
+    def test_selection_tags_count_tasks_case_ignored(self):
+        tasks = [{"tags": ["Work", "b"]}, {"tags": ["work", "a", "WORK"]}, {"tags": ["b"]}, {}]
+        assert run_core(f"DeckCore.selectionTags({json.dumps(tasks)})") == [
+            {"tag": "b", "count": 2}, {"tag": "Work", "count": 2}, {"tag": "a", "count": 1}]
+
+    def change(self, states, added=()):
+        return run_core(f"DeckCore.bulkTagChange({json.dumps(states)}, {json.dumps(list(added))})")
+
+    def test_all_adds_none_removes_some_stays(self):
+        assert self.change({"a": "all", "b": "none", "c": "some"}, ["new"]) == {
+            "add": ["a", "new"], "remove": ["b"]}
+
+    def test_typed_tag_set_to_none_goes(self):
+        assert self.change({"a": "none"}, ["A", "x", "X"]) == {"add": ["x"], "remove": ["a"]}
+
+    def test_nothing_changed(self):
+        assert self.change({"a": "some"}) == {"add": [], "remove": []}
+
+
 class TestSanitizeTagInput:
     def clean(self, value, caret=None, lst=True):
         return run_core(f"DeckCore.sanitizeTagInput({json.dumps(value)}, {json.dumps(caret)}, {json.dumps(lst)})")

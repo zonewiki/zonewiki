@@ -9,7 +9,7 @@ import { linkAutocomplete } from './js/completion.js';
 import { continueList, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = DeckCore;
+const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = DeckCore;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
@@ -1202,96 +1202,187 @@ function sortTasks(tasksArr) {
   return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
 }
 
-// ── Bulk tag modal ──────────────────────────────────────────────────────────
+// ── Bulk tag dialog ─────────────────────────────────────────────────────────
+// The tags of several selected tasks at once (t, T, the selection bar's
+// Tag…). Each tag the selection carries is a row with a three-state box:
+// on every task (✓), on some of them (–, left as it is), on none (it goes).
+// A click or tap cycles it, back to "some" only where it started so. The
+// field below adds tags: chips, completed from every tag in use. T opens
+// it for removing: the field then completes to the selection's own tags
+// and turns the completed one off. Enter applies, taking a half-typed tag
+// too. One request (batch-tag), and one undo puts back every task's tags.
 
-function openBulkTagModal(ids, removing) {
-  const count = ids.length;
-  const label = removing
-    ? `Remove tag from ${count} item${count > 1 ? 's' : ''}`
-    : `Add tag to ${count} item${count > 1 ? 's' : ''}`;
+function openBulkTagModal(ids, removing = false) {
+  const idSet = new Set(ids);
+  const chosen = tasks.filter(t => idSet.has(t.id));
+  if (!chosen.length) return;
+  const count = chosen.length;
+  const rows = selectionTags(chosen);
+  const initial = Object.fromEntries(rows.map(r => [r.tag, r.count === count ? 'all' : 'some']));
+  const states = { ...initial };
 
-  // Create a minimal inline dialog
   const dlg = document.createElement('dialog');
-  dlg.className = 'scratch-modal';
+  dlg.className = 'scratch-modal bulk-tag-modal';
   dlg.innerHTML = `
-    <p class="scratch-label">${label}</p>
-    <div class="task-field" style="position:relative">
-      <input type="text" id="bulk-tag-input" autocomplete="off" spellcheck="false" placeholder="tag name…">
+    <p class="scratch-label">Tags of ${count} task${count > 1 ? 's' : ''}</p>
+    <ul class="bulk-tag-list"${rows.length ? '' : ' hidden'}></ul>
+    <div class="task-field">
+      <input type="text" id="bulk-tag-input" autocomplete="off" spellcheck="false"
+             aria-label="${removing ? 'Tag to remove' : 'Tags to add'}"
+             placeholder="${removing ? 'Tag to remove…' : 'Add tags…'}">
     </div>
     <div class="scratch-actions">
-      <button type="button" class="btn btn-primary" id="bulk-tag-ok">${removing ? 'Remove' : 'Add'}</button>
+      <button type="button" class="btn btn-primary" id="bulk-tag-ok">Apply</button>
       <button type="button" class="btn" id="bulk-tag-cancel">Cancel</button>
     </div>`;
   document.body.appendChild(dlg);
 
+  const list = dlg.querySelector('.bulk-tag-list');
+  const ARIA = { all: 'true', some: 'mixed', none: 'false' };
+  function drawRows() {
+    list.innerHTML = rows.map(r => {
+      const isList = listSet.has(r.tag.toLowerCase());
+      const tip = isList ? ` title="${esc(listTooltip(r.tag))}"` : '';
+      const part = initial[r.tag] === 'some' ? `<span class="bulk-tag-count">${r.count} of ${count}</span>` : '';
+      return `<li><button type="button" role="checkbox" class="bulk-tag-row" data-tag="${esc(r.tag)}" aria-checked="${ARIA[states[r.tag]]}">` +
+        `<span class="bulk-tag-box" aria-hidden="true"></span>` +
+        `<span class="task-tag${isList ? ' task-tag-list' : ''}"${tip}>#${esc(r.tag)}</span>${part}</button></li>`;
+    }).join('');
+  }
+  drawRows();
+  // all → none → some (if it started so) → all …
+  const nextState = tag => states[tag] === 'all' ? 'none'
+    : states[tag] === 'none' && initial[tag] === 'some' ? 'some' : 'all';
+  list.addEventListener('click', e => {
+    const row = e.target.closest('.bulk-tag-row');
+    if (!row) return;
+    const tag = row.dataset.tag;
+    states[tag] = nextState(tag);
+    row.setAttribute('aria-checked', ARIA[states[tag]]);
+  });
+
   const input = dlg.querySelector('#bulk-tag-input');
-  const okBtn = dlg.querySelector('#bulk-tag-ok');
-  const cancelBtn = dlg.querySelector('#bulk-tag-cancel');
-  // Adding: any tag in use. Removing: only tags the selected tasks carry.
-  // Enter completes a half-typed tag to the best match and applies it.
-  const idSet = new Set(ids);
+  const chips = removing ? null
+    : chipField(input, { label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
+  if (chips) {
+    // A comma (typed or pasted) makes chips, as in the edit modal's Tags.
+    input.addEventListener('input', () => {
+      const parts = input.value.split(',');
+      if (parts.length < 2) return;
+      const last = parts.pop();
+      chips.set([...chips.words(), ...parts.map(cleanTag).filter(Boolean)], true);
+      input.value = last.trimStart();
+    });
+  }
   noSpacesInTags(input, false);
+  const rowOf = tag => rows.find(r => r.tag.toLowerCase() === tag.toLowerCase());
+  // Removing: turn the tag's row off.
+  function removeTag(tag) {
+    const row = rowOf(tag);
+    if (!row) return;
+    states[row.tag] = 'none';
+    list.querySelector(`[data-tag="${CSS.escape(row.tag)}"]`)?.setAttribute('aria-checked', 'false');
+  }
   attachTagAc(input, {
     word: () => (input.value.trim() ? { partial: input.value.trim() } : null),
-    suggest: w => rankTags(w.partial, tagCounts(removing ? tasks.filter(t => idSet.has(t.id)) : tasks)),
-    accept: tag => { input.value = tag; },
+    suggest: w => {
+      if (removing) {
+        return rankTags(w.partial, Object.fromEntries(
+          rows.filter(r => states[r.tag] !== 'none').map(r => [r.tag, r.count])));
+      }
+      // Adding: any tag in use, but not one every selected task has already.
+      const have = new Set([...chips.words(), ...rows.filter(r => states[r.tag] === 'all').map(r => r.tag)]
+        .map(t => t.toLowerCase()));
+      const counts = tagCounts(tasks);
+      for (const tag of Object.keys(counts)) if (have.has(tag.toLowerCase())) delete counts[tag];
+      return rankTags(w.partial, counts);
+    },
+    accept: tag => {
+      if (removing) removeTag(tag); else chips.add(tag);
+      input.value = '';
+    },
     onEnter: () => submit(),
   });
-
   input.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); submit(); }
-    if (ev.key === 'Escape') { ev.stopPropagation(); close(); }
   });
 
-  async function submit() {
-    const tag = input.value.trim();
-    if (!tag) return;
+  function submit() {
+    const typed = cleanTag(input.value);
+    if (typed && removing) removeTag(typed);
+    const added = removing ? [] : [...chips.words(), typed].filter(Boolean);
+    // Only the rows changed: a tag every task has already needn't be sent.
+    const changedRows = Object.fromEntries(Object.entries(states).filter(([t, st]) => st !== initial[t]));
+    const { add, remove } = bulkTagChange(changedRows, added);
     close();
-    try {
-      const body = removing ? { ids, remove: [tag] } : { ids, add: [tag] };
-      const res = await fetch('/api/deck/batch-tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        // Only the tags changed, so an undo puts back only the tags.
-        const gone = [];
-        for (const u of updated) {
-          const idx = tasks.findIndex(t => t.id === u.id);
-          if (idx === -1) continue;
-          const before = tasks[idx];
-          const msg = leftViewMessage(before, u);
-          if (inScope(u)) tasks[idx] = u;
-          else tasks.splice(idx, 1);
-          if (msg) gone.push({ id: u.id, tags: before.tags || [], msg, list: !inScope(u) && taskList(u) });
-        }
-        if (gone.length) {
-          const lists = new Set(gone.map(g => g.list));
-          const one = lists.size === 1 && [...lists][0];   // all went into one list
-          const msg = gone.length === 1 ? gone[0].msg
-            : one ? `${gone.length} tasks saved to list “${one}”.` : `${gone.length} tasks no longer show here.`;
-          offerUndoLeave(msg,
-                         gone.map(g => [g.id, { tags: g.tags }]));
-        }
-        render();
-        refreshOtherInstances(instanceId);
-      }
-    } catch (_) {}
+    if (add.length || remove.length) bulkTag(ids, add, remove);
   }
 
   function close() {
-    dlg.close();   // the tag dropdown lives inside dlg and goes with it
-    dlg.remove();
+    if (dlg.open) dlg.close();   // the tag dropdown lives inside dlg and goes with it
   }
+  dlg.addEventListener('close', () => dlg.remove());
 
-  okBtn.addEventListener('click', submit);
-  cancelBtn.addEventListener('click', close);
+  dlg.querySelector('#bulk-tag-ok').addEventListener('click', submit);
+  dlg.querySelector('#bulk-tag-cancel').addEventListener('click', close);
   dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
 
   dlg.showModal();
-  input.focus();
+  // On a phone with tags to tick, the keyboard waits until the field is tapped.
+  if (!(lastPointerType === 'touch' && rows.length)) input.focus();
+  else dlg.querySelector('.bulk-tag-row')?.focus({ preventScroll: true });
+}
+
+// Add and remove tags on the tasks `ids` (batch-tag), with one undo that
+// puts back each changed task's tags (batch-update). Tasks the change takes
+// out of this view (another list, the filter) say where they went.
+async function bulkTag(ids, add, remove) {
+  const idSet = new Set(ids);
+  const before = new Map(tasks.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
+  let res;
+  try {
+    res = await fetch('/api/deck/batch-tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, add, remove }),
+    });
+  } catch (_) { showNotice('Could not change the tags'); return; }
+  if (!res.ok) { await noticeFromResponse(res, 'Could not change the tags'); return; }
+  const updated = await res.json();
+  const sameTags = (a, b) => (a || []).join('\n') === (b || []).join('\n');
+  const changed = updated.filter(u => !sameTags(before.get(u.id)?.tags, u.tags));
+  const gone = [];
+  for (const u of updated) {
+    const idx = tasks.findIndex(t => t.id === u.id);
+    if (idx === -1) continue;
+    const msg = leftViewMessage(tasks[idx], u);
+    if (inScope(u)) tasks[idx] = u;
+    else tasks.splice(idx, 1);
+    if (msg) gone.push({ msg, list: !inScope(u) && taskList(u) });
+  }
+  render();
+  refreshOtherInstances(instanceId);
+  if (!changed.length) return;
+  const n = changed.length;
+  const what = `${n} task${n > 1 ? 's' : ''}`;
+  let msg = add.length === 1 && !remove.length ? `#${add[0]} added to ${what}`
+    : remove.length === 1 && !add.length ? `#${remove[0]} removed from ${what}`
+    : `Tags changed on ${what}`;
+  if (gone.length) {
+    const lists = new Set(gone.map(g => g.list));
+    const one = lists.size === 1 && [...lists][0];   // all went into one list
+    msg = gone.length === 1 ? gone[0].msg
+      : one ? `${gone.length} tasks saved to list “${one}”.` : `${gone.length} tasks no longer show here.`;
+  }
+  showUndo(msg, async () => {
+    const res = await fetch('/api/deck/batch-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tasks: changed.map(u => ({ id: u.id, tags: before.get(u.id).tags || [] })) }),
+    });
+    if (!res.ok) { await noticeFromResponse(res, 'Undo failed'); return; }
+    await afterBatchWrite();
+  });
 }
 
 // ── Keyboard selection ─────────────────────────────────────────────────────
