@@ -76,8 +76,8 @@ class TestHandle:
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "leaf_help",
-            "write_page", "edit_page", "append_to_page", "rename_page", "delete_page", "restore_page",
-            "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
+            "write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page", "delete_page",
+            "restore_page", "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "leaf_help"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
@@ -941,6 +941,66 @@ class TestRenamePage:
         assert call(client, "rename_page", slug="golf", new_slug="golf")[1]
 
 
+class TestReplaceInPages:
+    @pytest.fixture()
+    def notes(self, wiki_dir):
+        write_page(wiki_dir, "a", "# A\n\nBUG-12 and bug-13 here.\n\n```\nBUG-12 in a block\n```\n\nand `BUG-12` inline\n")
+        write_page(wiki_dir, "tickets/b", "# B\n\nFixed BUG-99.\n")
+        write_page(wiki_dir, "c", "# C\n\nnothing\n")
+        return wiki_dir
+
+    def test_dry_run_shows_and_writes_nothing(self, client, notes):
+        before = (notes / "a.md").read_text()
+        text, err = call(client, "replace_in_pages", find="BUG-", replace="ONE-")
+        assert not err and text.startswith("Dry run, nothing written: would replace 2 occurrences on 2 pages outside code.")
+        assert "\na\n  3: - BUG-12 and bug-13 here.\n  3: + ONE-12 and bug-13 here." in text
+        assert "tickets/b\n  3: - Fixed BUG-99." in text
+        assert (notes / "a.md").read_text() == before
+
+    def test_writes_outside_code(self, client, notes):
+        text, err = call(client, "replace_in_pages", find="BUG-", replace="ONE-", ignore_case=True, dry_run=False)
+        assert not err and text.startswith("Replaced 3 occurrences on 2 pages outside code, in one commit: a, tickets/b")
+        assert (notes / "a.md").read_text() == (
+            "# A\n\nONE-12 and ONE-13 here.\n\n```\nBUG-12 in a block\n```\n\nand `BUG-12` inline\n")
+        assert (notes / "tickets/b.md").read_text() == "# B\n\nFixed ONE-99.\n"
+
+    def test_include_code(self, client, notes):
+        call(client, "replace_in_pages", find="BUG-12", replace="X", include_code=True, dry_run=False)
+        assert (notes / "a.md").read_text().count("X") == 3
+
+    def test_regex_groups_and_under(self, client, notes):
+        text, err = call(client, "replace_in_pages", find=r"BUG-(\d+)", replace=r"[[tickets/bug-\1]]",
+                         regex=True, under="tickets", dry_run=False)
+        assert not err and (notes / "tickets/b.md").read_text() == "# B\n\nFixed [[tickets/bug-99]].\n"
+        assert "BUG-12 and" in (notes / "a.md").read_text()
+        assert "don't exist (yet): [[tickets/bug-99]]" in text
+
+    def test_max_pages_guards_the_write(self, client, notes):
+        text, err = call(client, "replace_in_pages", find="BUG-", replace="X", max_pages=1)
+        assert not err and "more pages than max_pages (1)" in text
+        text, err = call(client, "replace_in_pages", find="BUG-", replace="X", max_pages=1, dry_run=False)
+        assert err and "2 pages, more than max_pages (1)" in text
+        assert "BUG-99" in (notes / "tickets/b.md").read_text()
+
+    def test_dry_run_limit(self, client, notes):
+        text, _ = call(client, "replace_in_pages", find="#", replace="##", limit=1)
+        assert "the first 1 of 4 changed lines shown" in text and "tickets/b" not in text
+
+    def test_no_match_and_errors(self, client, notes):
+        assert call(client, "replace_in_pages", find="zzz", replace="y")[0] == "Nothing matches 'zzz' outside code."
+        assert call(client, "replace_in_pages", find="a\nb", replace="y")[1]
+        assert call(client, "replace_in_pages", find="(", replace="y", regex=True)[1]
+        text, err = call(client, "replace_in_pages", find="BUG-(\\d+)", replace=r"\2", regex=True)
+        assert err and "replace:" in text
+        assert call(client, "replace_in_pages", find="OA", replace="y", under="nope")[1]
+        assert call(client, "replace_in_pages", find="OA", replace="y", dry_run="no")[1]
+
+    def test_literal_is_not_a_regex(self, client, notes):
+        write_page(notes, "d", "# D\n\ncost $5 (approx.)\n")
+        call(client, "replace_in_pages", find="$5 (approx.)", replace=r"\1 €5", dry_run=False)
+        assert (notes / "d.md").read_text() == "# D\n\ncost \\1 €5\n"
+
+
 class TestDeletePage:
     def test_deletes_and_names_pages_still_linking(self, client, pages):
         write_page(pages, "hub", "# Hub\n\n[[Golf]]\n")
@@ -972,9 +1032,11 @@ class TestWritesCommit:
         tid = call(client, "create_task", title="Ship it", summary="from chat")[0]
         short = re.search(r"\nid: (\w+)", tid).group(1)
         call(client, "update_task", id=short, status="done")
+        call(client, "replace_in_pages", find="1st", replace="first", dry_run=False, summary="spell out")
         call(client, "delete_page", slug="notes/mcp")
-        assert subjects()[:7] == [
+        assert subjects()[:8] == [
             "Delete notes/mcp (MCP)",
+            "Replace '1st' on notes/mcp: spell out (MCP)",
             "Complete deck task (MCP)",
             "Create deck task: from chat (MCP)",
             "Rename mcp-notes to notes/mcp (MCP)",

@@ -126,9 +126,9 @@ Done tasks go to a yearly archive. Beyond that:
 - **AI assistants** through an [MCP](https://modelcontextprotocol.io) server at
   `/mcp`: any MCP client can search and read
   your notes and tasks, find every line matching a regex, check links
-  (backlinks, orphan pages, broken wikilinks), and write: create and edit pages, rename and delete
-  them, add and update tasks. Every write is a commit marked `(MCP)`, with
-  links back into Leaf. It's off until you set a token (see
+  (backlinks, orphan pages, broken wikilinks), and write: create and edit pages, find and
+  replace across pages, rename and delete them, add and update tasks. Every write is a
+  commit marked `(MCP)`, with links back into Leaf. It's off until you set a token (see
   [Connect an AI assistant](#connect-an-ai-assistant)).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

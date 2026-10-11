@@ -1,6 +1,6 @@
 """The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
-list_pages, check_links, leaf_help) and writing pages (write_page, edit_page, append_to_page,
-rename_page, delete_page) and deck tasks (create_task, update_task,
+list_pages, check_links, leaf_help) and writing pages (write_page, edit_page, replace_in_pages,
+append_to_page, rename_page, delete_page) and deck tasks (create_task, update_task,
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
@@ -22,10 +22,10 @@ import mcp_server
 import retrieval
 import search
 from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_uncommitted_files,
-                      grep_pages, GrepError, is_uncommitted, move_page, SHA_RE, version_index,
-                      version_path)
-from mdtext import (is_scratch, iter_fenced_lines, mask_code, page_tags, page_title, plain_heading,
-                    split_wikilink, to_slug, WIKILINK_RE)
+                      grep_pages, GrepError, is_uncommitted, move_page, SHA_RE,
+                      version_index, version_path)
+from mdtext import (_INLINE_CODE_RE, is_scratch, iter_fenced_lines, mask_code, page_tags, page_title,
+                    plain_heading, split_wikilink, to_slug, WIKILINK_RE)
 from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
                    iter_pages, page_link_targets, page_meta, safe_path, url)
 from render import task_link, TOC_RE
@@ -221,6 +221,18 @@ def _save_pending(path: Path, slug: str) -> str:
     git_commit(path, f"Save {slug}")
     return (f"\nNote: {slug} had changes that weren't committed yet (the user may be editing it "
             f"in the browser); they were committed first, as \"Save {slug}\", and kept.")
+
+
+def _save_pending_pages(paths: list[Path], what: str) -> str:
+    """_save_pending for a write to many pages: those with uncommitted
+    changes are committed first, together, as the user's "Save <what>"."""
+    pending = {config.LEAF_DATA / f["filepath"] for f in git_uncommitted_files()}
+    paths = [p for p in paths if p in pending]
+    if not paths:
+        return ""
+    git_commit(paths, f"Save {what}")
+    return (f"\nNote: {len(paths)} of the pages had changes that weren't committed yet (the user may be "
+            f"editing them in the browser); they were committed first, as \"Save {what}\", and kept.")
 
 
 def _existing_page(args: dict, name: str = "slug") -> tuple[str, Path]:
@@ -771,6 +783,117 @@ def _grep_wiki(args: dict, base: str) -> str:
     return head + ":\n" + "\n".join(out)
 
 
+def _replace_lines(content: str, pattern: re.Pattern, repl, include_code: bool) -> tuple[str, list]:
+    """content with pattern replaced line by line, code (fenced blocks,
+    inline spans) left alone unless include_code, and the lines that
+    changed as (line number, old, new, matches)."""
+    out, changed = [], []
+    for i, line, in_fence in iter_fenced_lines(content.splitlines(keepends=True)):
+        body = line.rstrip("\r\n")
+        if in_fence and not include_code:
+            out.append(line)
+            continue
+        code = [] if include_code else [m.span() for m in _INLINE_CODE_RE.finditer(body)]
+        parts, last, n = [], 0, 0
+        for m in pattern.finditer(body):
+            # A match touching inline code (an empty one: starting in it) stays.
+            if any(s < max(m.end(), m.start() + 1) and m.start() < e for s, e in code):
+                continue
+            parts += [body[last:m.start()], repl(m)]
+            last = m.end()
+            n += 1
+        new = "".join(parts) + body[last:]
+        if n and new != body:
+            changed.append((i + 1, body, new, n))
+        out.append(new + line[len(body):])
+    return "".join(out), changed
+
+
+def _cut(line: str) -> str:
+    line = line.strip()
+    return line[:_GREP_LINE_CHARS] + " …" if len(line) > _GREP_LINE_CHARS else line
+
+
+def _replace_in_pages(args: dict, base: str) -> str:
+    find = _str_arg(args, "find")
+    replace = _str_arg(args, "replace", required=False)
+    if "\n" in find:
+        raise mcp_server.ToolError("find is matched within a line, so it can't contain a line break. "
+                                   "For a passage spanning lines, use edit_page on each page.")
+    regex, include_code = _bool_arg(args, "regex"), _bool_arg(args, "include_code")
+    dry_run = args.get("dry_run", True)
+    if not isinstance(dry_run, bool):
+        raise mcp_server.ToolError("dry_run must be true or false")
+    try:
+        pattern = re.compile(find if regex else re.escape(find),
+                             re.IGNORECASE if _bool_arg(args, "ignore_case") else 0)
+    except re.error as e:
+        raise mcp_server.ToolError(f"find is not a valid regex: {e}")
+
+    def repl(m: re.Match) -> str:
+        if not regex:
+            return replace
+        try:
+            return m.expand(replace)
+        except (re.error, IndexError) as e:
+            raise mcp_server.ToolError(f"replace: {e} (groups are \\1 or \\g<name>; a literal backslash is \\\\)")
+
+    under = _clean_folder(args.get("under", ""))
+    if under and not any(in_folder(slug, under) for _p, slug in iter_pages()):
+        raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs.")
+    max_pages = _mcp_int(args, "max_pages", 50, 1000)
+    limit = _mcp_int(args, "limit", 50, 500)
+    hits = []
+    for path, slug in sorted(iter_pages(), key=lambda p: p[1]):
+        if not in_folder(slug, under):
+            continue
+        content = path.read_text(encoding="utf-8")
+        new, changed = _replace_lines(content, pattern, repl, include_code)
+        if changed:
+            hits.append((path, slug, content, new, changed))
+    where = f" under {under}/" if under else ""
+    code = "" if include_code else " outside code"
+    if not hits:
+        return f"Nothing{where} matches {find!r}{code}."
+    total = sum(n for *_x, changed in hits for *_l, n in changed)
+    counted = f"{total} occurrence{'s' if total > 1 else ''} on {len(hits)} page{'s' if len(hits) > 1 else ''}"
+    if dry_run:
+        out, shown = [], 0
+        for _path, slug, _old, _new, changed in hits:
+            if shown >= limit:
+                break
+            out += ["", slug]
+            for number, old_line, new_line, _n in changed[:limit - shown]:
+                out += [f"  {number}: - {_cut(old_line)}", f"  {number}: + {_cut(new_line)}"]
+                shown += 1
+        lines = sum(len(c) for *_x, c in hits)
+        head = f"Dry run, nothing written: would replace {counted}{where}{code}"
+        if shown < lines:
+            head += f"; the first {shown} of {lines} changed lines shown (raise limit to see more)"
+        head += ". Call again with dry_run=false to write them, in one commit."
+        if len(hits) > max_pages:
+            head += f" That is more pages than max_pages ({max_pages}): raise it, or narrow find or under."
+        return head + "\n" + "\n".join(out)
+    if len(hits) > max_pages:
+        raise mcp_server.ToolError(
+            f"{find!r} would change {len(hits)} pages, more than max_pages ({max_pages}); nothing was "
+            "written. Check with dry_run, then raise max_pages, or narrow find or under.")
+    pending = _save_pending_pages([h[0] for h in hits], f"{len(hits)} pages")
+    for path, _slug, _old, new, _changed in hits:
+        path.write_text(new, encoding="utf-8")
+    label = find if len(find) <= 60 else find[:60] + "…"
+    on = f"{len(hits)} pages" if len(hits) > 1 else hits[0][1]
+    git_commit([h[0] for h in hits], _commit_msg(f"Replace {label!r} on {on}", args))
+    slugs = set(all_slugs())
+    broken = sorted(set().union(*(_missing_links(new, slugs) - _missing_links(old, slugs)
+                                  for _p, _s, old, new, _c in hits)))
+    out = f"Replaced {counted}{where}{code}, in one commit: " + ", ".join(h[1] for h in hits)
+    if broken:
+        out += ("\nNote: these new wikilinks point to pages that don't exist (yet): "
+                + ", ".join(f"[[{n}]]" for n in broken))
+    return out + pending
+
+
 def _read_page(args: dict, base: str) -> str:
     raw = args.get("slug")
     if not isinstance(raw, str) or not raw.strip():
@@ -962,7 +1085,8 @@ _READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _
                "leaf_help": _leaf_help}
 
 _WRITE_TOOLS = {
-    "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,
+    "write_page": _write_page, "edit_page": _edit_page, "replace_in_pages": _replace_in_pages,
+    "append_to_page": _append_to_page,
     "rename_page": _rename_page, "delete_page": _delete_page,
     "create_task": _create_task, "update_task": _update_task, "tag_tasks": _tag_tasks,
     "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,

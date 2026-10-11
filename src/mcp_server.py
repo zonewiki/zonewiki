@@ -312,6 +312,40 @@ TOOLS = [
         "annotations": _CHANGES,
     },
     {
+        "name": "replace_in_pages",
+        "title": "Find and replace across pages",
+        "description": (
+            "Replace text on every page where it occurs, in one commit: a term, a name, "
+            "a ticket prefix, a link. Matched within a line; code (fenced blocks, inline "
+            "code) is left alone unless include_code. Pages only, not tasks. By default a "
+            "dry run that shows each line before and after and writes nothing: check it, "
+            "then call again with dry_run=false. For changes to one page, use edit_page."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "find": {"type": "string", "description": "The text to find, within a line."},
+                "replace": {"type": "string", "description": (
+                    "What to put there; empty deletes. With regex, \\1 or \\g<name> are the groups.")},
+                "regex": {"type": "boolean", "default": False,
+                          "description": "find is a regular expression (Python syntax)."},
+                "ignore_case": {"type": "boolean", "default": False},
+                "include_code": {"type": "boolean", "default": False,
+                                 "description": "Replace in code blocks and inline code too."},
+                "under": {"type": "string", "description": "Only pages in this folder, e.g. 'tickets'."},
+                "dry_run": {"type": "boolean", "default": True,
+                            "description": "Only show what would change. false writes it."},
+                "max_pages": {"type": "integer", "default": 50, "description": (
+                    "Refuse to write when more pages would change: a guard against a too broad find.")},
+                "limit": {"type": "integer", "default": 50,
+                          "description": "How many changed lines a dry run shows."},
+                "summary": _SUMMARY,
+            },
+            "required": ["find", "replace"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
         "name": "append_to_page",
         "title": "Append to a page",
         "description": (
