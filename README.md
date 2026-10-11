@@ -357,6 +357,12 @@ where you can check them:
 - Every feature and fix comes with tests (unit, API and browser tests),
   and the whole suite runs before and after each change.
 
+## Contributing
+
+Found a bug or have an idea? Open an issue; there are templates for both.
+[CONTRIBUTING.md](CONTRIBUTING.md) says what a bug report needs and how a
+change gets in.
+
 ## License
 
 [AGPL-3.0-or-later](LICENSE). The vendored [highlight.js](https://highlightjs.org) in

@@ -61,6 +61,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 /
 ├── AGENTS.md               # This file (how to work on Leaf; the index of the spec)
 ├── README.md               # For people who find the repo: what Leaf is, features, quick start
+├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
@@ -73,6 +74,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env                    # Host data path configuration
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
+├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 └── src/
     ├── requirements.txt
     ├── server.py           # Flask app: request checks, wiki routes (pages, editor, scratch, search, uploads, /deck, /mcp)
