@@ -27,6 +27,11 @@ RUN python3 embed_setup.py && \
 
 COPY src/ .
 
+# Leaf's documentation, for the MCP tool leaf_help (manual.py looks for it
+# next to the code).
+COPY README.md ./
+COPY docs/spec/ docs/spec/
+
 # The build ("<hash> <commit date>") shown next to Leaf's version, passed in by
 # run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
 ARG LEAF_BUILD=unknown

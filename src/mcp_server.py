@@ -30,6 +30,9 @@ INSTRUCTIONS = (
     "lead nowhere; list_tags shows the tags in use. history shows recent changes "
     "and a page's versions (restore_page goes back to one). Cite pages and tasks "
     "by their URL.\n\n"
+    "For questions about Leaf itself (how to do something in it, its markdown "
+    "syntax, the deck's options, settings, setup, the MCP), call leaf_help: it "
+    "searches Leaf's documentation. Answer from it, not from guesses.\n\n"
     "You can also write: the wiki is meant to be kept up to date by you. Before "
     "creating a page, search for one that already covers the topic and extend "
     "it instead. Change pages with edit_page (exact text replacement, like a "
@@ -222,6 +225,33 @@ TOOLS = [
                 "since": {"type": "string", "description": "Recent changes from this day on, YYYY-MM-DD."},
                 "under": {"type": "string", "description": "Recent changes in this folder only, e.g. 'tickets'."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 20},
+            },
+        },
+        "annotations": _READ_ONLY,
+    },
+    {
+        "name": "leaf_help",
+        "title": "Leaf's documentation",
+        "description": (
+            "Search Leaf's own documentation (its README and its spec) for how Leaf works: "
+            "features, markdown syntax ([[deck …]] options, callouts, wikilinks, templates), "
+            "the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the "
+            "user's notes: search_wiki finds those. With query, the best passages; with "
+            "topic (and heading), that doc or one section; with neither, the list of topics "
+            "and their headings. The spec is written for Leaf's developers: answer the user "
+            "in terms of what they type or click, leaving out function and file names."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string",
+                          "description": "What to look for, in words the docs would use, e.g. 'deck tab labels' or 'rename page'."},
+                "topic": {"type": "string",
+                          "description": "A doc to read, as the results name it: 'readme', 'deck', 'editor', 'navigation', …"},
+                "heading": {"type": "string",
+                            "description": "With topic: a heading's text, to read only its section."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5,
+                          "description": "How many passages a query returns."},
             },
         },
         "annotations": _READ_ONLY,

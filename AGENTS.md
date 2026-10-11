@@ -6,7 +6,7 @@ A self-hosted, browser-based wiki. Markdown files are served and rendered at run
 
 ## Meta
 
-- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change.
+- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change. The README and the spec are also Leaf's help: the MCP tool `leaf_help` serves them to assistants answering users' questions about Leaf, so a feature's spec should say how to use it, not only how it is built.
 
 ## Spec
 
@@ -19,7 +19,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights |
-| `docs/spec/mcp.md` | The MCP server and its tools |
+| `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, CI, network and phone access, the version string, the home-screen app, the data directory |
@@ -64,7 +64,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
-├── Containerfile           # Ubuntu 26.04 LTS-based container image
+├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, gitleaks, git
@@ -94,6 +94,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
     ├── embed.py            # Optional semantic search: section embeddings, Related pages
     ├── embed_setup.py      # Model choice + install/download at image build (kept small: own image layer)
     ├── mcp_server.py       # MCP protocol (JSON-RPC) for /mcp: wiki tools for LLM clients
+    ├── manual.py           # Leaf's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
     └── public/
         ├── style.css       # All styling
         ├── leaf.js         # The entry ES module every page loads; imports the modules below

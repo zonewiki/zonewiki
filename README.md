@@ -219,6 +219,9 @@ In your client, add an MCP server with the HTTP transport at
 `http://localhost:5000/mcp` and the header
 `Authorization: Bearer <LEAF_MCP_TOKEN>` (the token from `.env`).
 
+The assistant can also answer questions about Leaf itself ("how do I give
+the deck's tabs other names?"): it searches this README and Leaf's spec.
+
 To give the assistant your wiki's conventions (where things go, what's
 private, how pages are tagged), write them on a page called `wiki-guide`.
 Leaf adds it to what the assistant is told when it connects, so it's followed

@@ -1,5 +1,5 @@
 """The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
-list_pages, check_links) and writing pages (write_page, edit_page, append_to_page,
+list_pages, check_links, leaf_help) and writing pages (write_page, edit_page, append_to_page,
 rename_page, delete_page) and deck tasks (create_task, update_task,
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
@@ -16,6 +16,7 @@ import config
 import deck
 import decksyntax
 import deckstore
+import manual
 import pages
 import mcp_server
 import retrieval
@@ -917,8 +918,48 @@ def _list_tags(args: dict, base: str) -> str:
             "tag | pages | open tasks | done tasks:\n" + "\n".join(lines))
 
 
+def _leaf_help(args: dict, base: str) -> str:
+    """Leaf's documentation (manual.py): passages for a query, a doc or one
+    of its sections, or the list of docs with their headings."""
+    query = _str_arg(args, "query", required=False).strip()
+    topic = _str_arg(args, "topic", required=False).strip().lower().removesuffix(".md")
+    heading = _str_arg(args, "heading", required=False).strip()
+    docs = manual.topics()
+    if not docs:
+        raise mcp_server.ToolError("Leaf's documentation isn't installed with this server.")
+    if topic:
+        if topic not in docs:
+            raise mcp_server.ToolError(f"No topic {topic!r}. Topics: {', '.join(docs)}.")
+        text = manual.read(topic)
+        if not heading:
+            return f"topic: {topic}\n\n{text}"
+        lines = text.splitlines(keepends=True)
+        found = _section_lines(lines, heading)
+        if found is None:
+            raise mcp_server.ToolError(_no_heading(topic, text, heading) + " Leave out heading for the whole doc.")
+        return f"topic: {topic}\n\n" + "".join(lines[found[0]:found[1]]).rstrip("\n") + "\n"
+    if heading:
+        raise mcp_server.ToolError("heading needs a topic.")
+    if query:
+        hits = manual.find(query, _mcp_int(args, "limit", 5, 20))
+        if not hits:
+            return "Nothing in Leaf's documentation matches. Try other words, or leave out query for the list of topics."
+        return "\n\n---\n\n".join(
+            f"[{i}] {d['title']} › {d['heading']}\ntopic: {d['topic']}\nheading: {d['heading']}\n\n{d['text']}"
+            if d["heading"] else f"[{i}] {d['title']}\ntopic: {d['topic']}\n\n{d['text']}"
+            for i, d in enumerate(hits, 1)) + "\n\nThe whole section: leaf_help with its topic and heading."
+    out = ["Leaf's documentation: the README (what Leaf is, its features, setup) and the spec, "
+           "one doc per area. Read one with topic, a section with topic and heading."]
+    for name in docs:
+        found = manual.headings(manual.read(name))
+        out.append(f"\n{name}: " + (found[0][1] if found else name))
+        out.extend(f"  {'  ' * (level - 2)}{text}" for level, text in found[1:] if level <= 3)
+    return "\n".join(out)
+
+
 _READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _list_pages,
-               "check_links": _check_links, "history": _history, "list_tags": _list_tags}
+               "check_links": _check_links, "history": _history, "list_tags": _list_tags,
+               "leaf_help": _leaf_help}
 
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,

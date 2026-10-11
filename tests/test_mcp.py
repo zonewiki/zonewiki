@@ -75,11 +75,11 @@ class TestHandle:
         tools = r["result"]["tools"]
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-            "list_tags", "history",
+            "list_tags", "history", "leaf_help",
             "write_page", "edit_page", "append_to_page", "rename_page", "delete_page", "restore_page",
             "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-                   "list_tags", "history"}
+                   "list_tags", "history", "leaf_help"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
         adding = {"append_to_page", "create_task", "comment_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
@@ -1246,3 +1246,84 @@ class TestCommentAndDeleteTask:
         assert not err and text == f"Deleted task {tid}: Oops"
         assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
         assert call(client, "delete_task", id=tid)[1]
+
+
+# ── Leaf's documentation ─────────────────────────────────────────────────────
+
+class TestLeafHelp:
+    @pytest.fixture
+    def docs(self, tmp_path, monkeypatch):
+        """A docs root like the checkout's: README.md and docs/spec/."""
+        import manual
+        spec = tmp_path / "docs" / "spec"
+        spec.mkdir(parents=True)
+        (tmp_path / "README.md").write_text("# Leaf\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
+        (spec / "deck.md").write_text(
+            "# Deck\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
+            "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
+            "```\n# not a heading\n```\n\n## Dates\n\nDue and start dates.\n")
+        (spec / "testing.md").write_text("# Testing\n\nFixtures and labels.\n")
+        monkeypatch.setattr(manual, "docs_root", lambda: tmp_path)
+        return tmp_path
+
+    def test_instructions_point_to_it(self, client):
+        res = rpc(client, "initialize", {"protocolVersion": "2025-06-18"}).get_json()["result"]
+        assert "leaf_help" in res["instructions"]
+
+    def test_query_finds_passages(self, client, docs):
+        text, err = call(client, "leaf_help", query="tab labels")
+        assert not err
+        assert text.startswith("[1] Deck › Labels\ntopic: deck\nheading: Labels\n\n`labels=Catalogue")
+        assert "Testing" not in text  # how Leaf is tested is left out
+        assert "leaf_help with its topic and heading" in text
+
+    def test_query_limit(self, client, docs):
+        text, _ = call(client, "leaf_help", query="dates views labels wiki", limit=1)
+        assert "[1]" in text and "[2]" not in text
+
+    def test_nothing_matches(self, client, docs):
+        text, err = call(client, "leaf_help", query="xylophone")
+        assert not err and text.startswith("Nothing in Leaf's documentation matches")
+
+    def test_topic_and_section(self, client, docs):
+        text, err = call(client, "leaf_help", topic="deck")
+        assert not err and text.startswith("topic: deck\n\n# Deck\n") and "## Dates" in text
+        text, err = call(client, "leaf_help", topic="Deck.md", heading="views")
+        assert not err
+        assert text == ("topic: deck\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
+                        "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
+                        "```\n# not a heading\n```\n")
+
+    def test_bad_topic_or_heading(self, client, docs):
+        text, err = call(client, "leaf_help", topic="testing")
+        assert err and text == "No topic 'testing'. Topics: readme, deck."
+        text, err = call(client, "leaf_help", topic="deck", heading="Nope")
+        assert err and "'Views', 'Labels', 'Dates'" in text and "not a heading" not in text
+        text, err = call(client, "leaf_help", heading="Views")
+        assert err and text == "heading needs a topic."
+
+    def test_list_of_topics(self, client, docs):
+        text, err = call(client, "leaf_help")
+        assert not err
+        assert "\nreadme: Leaf\n  Quick start\n" in text
+        assert "\ndeck: Deck\n  Views\n    Labels\n  Dates" in text
+
+    def test_without_docs(self, client, monkeypatch):
+        import manual
+        monkeypatch.setattr(manual, "docs_root", lambda: None)
+        text, err = call(client, "leaf_help", query="deck")
+        assert err and "isn't installed" in text
+
+    def test_the_real_docs(self, client):
+        """The checkout's README and spec, every spec file but testing.md."""
+        import manual
+        from pathlib import Path
+        spec = Path(__file__).parent.parent / "docs" / "spec"
+        assert list(manual.topics()) == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
+        text, err = call(client, "leaf_help", query="deck tab names labels")
+        assert not err and "topic: deck" in text
+
+    def test_the_image_ships_them(self):
+        from pathlib import Path
+        text = (Path(__file__).parent.parent / "Containerfile").read_text()
+        assert "COPY README.md ./" in text and "COPY docs/spec/ docs/spec/" in text
