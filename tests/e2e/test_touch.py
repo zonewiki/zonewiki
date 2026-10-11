@@ -530,14 +530,43 @@ def test_quick_swipe_scrolls_instead_of_dragging(phone):
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
 
 
-def test_long_press_in_place_neither_moves_nor_opens_editor(phone):
+def test_long_press_in_place_starts_selection_mode(phone):
     open_tab(phone, "due")
     c = card(phone, "Water plants")
     touch_drag(phone, c, c)
-    phone.wait_for_timeout(300)
+    expect(phone.locator(".tasks-app")).to_contain_class("deck-selecting")
+    expect(phone.locator("#task-selbar .deck-selbar-count")).to_have_text("1 selected")
     expect(phone.locator(".task-touch-ghost")).to_have_count(0)
-    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()     # not a tap either
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
+    assert selected(phone) == ["Water plants"]
+    # The release was no tap: the card stays selected, and the next tap drops it.
+    card(phone, "Water plants").locator(".task-title").tap()
+    assert selected(phone) == []
+
+
+def complete_one(page, title="Old chore"):
+    t = page.request.post("/api/deck", data={"title": title}).json()
+    page.request.put(f"/api/deck/{t['id']}", data={"completed": True})
+    page.reload()
+
+
+def test_long_press_where_nothing_drags_starts_selection_mode(phone):
+    complete_one(phone)
+    open_tab(phone, "completed")
+    c = card(phone, "Old chore")
+    touch_drag(phone, c, c)
+    expect(phone.locator(".tasks-app")).to_contain_class("deck-selecting")
+    assert selected(phone) == ["Old chore"]
+
+
+def test_long_press_then_move_where_nothing_drags_does_nothing(phone):
+    complete_one(phone)
+    open_tab(phone, "completed")
+    touch_drag(phone, card(phone, "Old chore"), phone.locator(".deck-header"))
+    phone.wait_for_timeout(200)
+    expect(phone.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(phone.locator("#task-selbar")).to_be_hidden()
 
 
 def test_touch_press_turns_off_native_drag(new_page, wiki):

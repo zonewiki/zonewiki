@@ -229,9 +229,12 @@ listEl.addEventListener('click', e => {
 // it today (Open and Plan), left clears its start date (Focus and Plan).
 // A direction with nothing to do doesn't move the card. Both come with an
 // undo toast (setStart). Drags work only where touchDrop is set.
+// A long press let go without moving (10px) starts selection mode with
+// that card, as ⋯ → Select several does; where nothing drags, the press
+// only holds the card for that (holdCard), and moving drops the hold.
 const LONG_PRESS_MS = 350;
 let touchDrop = null;
-let touchDrag = null;  // { item, x, y, timer, active, swiping, swipe, ghost, grabY, target, raf }
+let touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swiping, swipe, ghost, grabY, target, raf }
 // What a swipe does on this task in the current view: { right, left },
 // each 'start' (start today), 'unplan' (clear the start date) or null.
 function swipeActions(task) {
@@ -287,6 +290,16 @@ function setTouchTarget(target) {
   target.classList.add(side ? `task-drop-${side}`
     : target.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over');
 }
+// A long press where nothing drags: select the card, so the press
+// visibly took; letting go starts selection mode (endTouchDrag).
+function holdCard() {
+  const t = touchDrag;
+  t.held = true;
+  selectedId = anchorId = t.item.dataset.id;
+  selectedIds = new Set([selectedId]);
+  updateSelectionClasses();
+  navigator.vibrate?.(15);
+}
 function startTouchDrag() {
   const t = touchDrag, rect = t.item.getBoundingClientRect();
   t.active = true;
@@ -334,14 +347,18 @@ function endTouchDrag(drop) {
     if (drop && armed && action === 'unplan') setStart(t.item.dataset.id, null);
     return;
   }
-  if (!t.active) return;
-  cancelAnimationFrame(t.raf);
-  t.ghost.remove();
-  t.item.classList.remove('task-dragging');
-  const target = t.target;
-  target?.classList.remove(...DROP_CLASSES);
-  if (drop && target && touchDrop) touchDrop.drop(target, t.side);
-  draggedId = null;
+  // Held and let go in place: no drop, selection mode.
+  const select = drop && (t.held || (t.active && !t.moved));
+  if (t.active) {
+    cancelAnimationFrame(t.raf);
+    t.ghost.remove();
+    t.item.classList.remove('task-dragging');
+    const target = t.target;
+    target?.classList.remove(...DROP_CLASSES);
+    if (drop && !select && target && touchDrop) touchDrop.drop(target, t.side);
+    draggedId = null;
+  }
+  if (select) enterSelectMode(t.item.dataset.id);
 }
 listEl.addEventListener('touchstart', e => {
   endTouchDrag(false);
@@ -353,10 +370,10 @@ listEl.addEventListener('touchstart', e => {
   const canDrag = !!touchDrop && item.matches('[data-drag]');
   const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
   const canSwipe = !!(swipe.right || swipe.left);
-  if (!canDrag && !canSwipe) return;
   const p = e.touches[0];
-  touchDrag = { item, x: p.clientX, y: p.clientY, active: false, swiping: false, canSwipe, swipe,
-                target: null, timer: canDrag ? setTimeout(startTouchDrag, LONG_PRESS_MS) : null };
+  touchDrag = { item, x: p.clientX, y: p.clientY, x0: p.clientX, y0: p.clientY,
+                active: false, held: false, moved: false, swiping: false, canSwipe, swipe, target: null,
+                timer: setTimeout(canDrag ? startTouchDrag : holdCard, LONG_PRESS_MS) };
 }, { passive: true });
 listEl.addEventListener('touchmove', e => {
   if (!touchDrag) return;
@@ -365,6 +382,10 @@ listEl.addEventListener('touchmove', e => {
   if (touchDrag.swiping) {
     e.preventDefault();
     setSwipe(dx);
+    return;
+  }
+  if (touchDrag.held) {
+    if (Math.hypot(dx, dy) > 10) endTouchDrag(false);  // moved after all: no selection mode
     return;
   }
   if (!touchDrag.active) {
@@ -380,6 +401,7 @@ listEl.addEventListener('touchmove', e => {
     return;
   }
   e.preventDefault();  // the finger is carrying a card, not scrolling the page
+  if (Math.hypot(p.clientX - touchDrag.x0, p.clientY - touchDrag.y0) > 10) touchDrag.moved = true;
   touchDrag.x = p.clientX;
   touchDrag.y = p.clientY;
   touchDrag.ghost.style.top = (p.clientY - touchDrag.grabY) + 'px';
@@ -387,7 +409,7 @@ listEl.addEventListener('touchmove', e => {
 }, { passive: false });
 listEl.addEventListener('touchend', e => {
   // A finished drag or swipe must not also count as a tap (which opens the editor).
-  if (touchDrag?.active || touchDrag?.swiping) e.preventDefault();
+  if (touchDrag?.active || touchDrag?.held || touchDrag?.swiping) e.preventDefault();
   endTouchDrag(true);
 });
 listEl.addEventListener('touchcancel', () => endTouchDrag(false));

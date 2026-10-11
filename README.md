@@ -107,8 +107,8 @@ Done tasks go to a yearly archive. Beyond that:
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
 - The Deck link shows how many tasks are due today or overdue.
-- Compact or full cards, fully keyboard-driven; on phones, swipe to plan and
-  long-press to drag.
+- Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
+  long-press to drag, or long-press and let go to select several tasks.
 
 ![The deck's Plan board: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
 
