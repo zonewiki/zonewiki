@@ -146,6 +146,34 @@ def move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message:
     return changed
 
 
+def move_folder(folder: str, new_folder: str, message: str) -> tuple[list[tuple[str, str]], list[Path]]:
+    """Move every page in a folder (and its subfolders) to new_folder, as
+    move_page does for one, all in one commit: returns the (slug, new slug)
+    moves and the files whose links changed. The caller checks that no
+    target exists. Other files in the folder (images…) stay; folders left
+    empty go."""
+    moves = sorted((path, slug) for path, slug in iter_pages() if slug.startswith(folder + "/"))
+    done, touched, changed = [], [], {}
+    for old_path, slug in moves:
+        new_slug = new_folder + slug[len(folder):]
+        new_path = config.LEAF_DATA / f"{new_slug}.md"
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.rename(new_path)
+        # The pages moved so far are at their new paths already, so links
+        # in them are rewritten there.
+        changed.update(dict.fromkeys(update_references(slug, new_slug)))
+        done.append((slug, new_slug))
+        touched += [old_path, new_path]
+    old_root = config.LEAF_DATA / folder
+    for dirpath, _dirs, _files in sorted(os.walk(old_root), key=lambda w: -len(w[0])):
+        try:
+            os.rmdir(dirpath)
+        except OSError:
+            pass                         # not empty
+    git_commit([*touched, *(p for p in changed if p not in touched)], message)
+    return done, [p for p in changed if p.exists()]
+
+
 _RENAME_BRACES_RE = re.compile(r"\{([^{}]*) => ([^{}]*)\}")
 
 

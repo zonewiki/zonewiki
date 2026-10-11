@@ -1,6 +1,6 @@
 """The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
 list_pages, check_links, leaf_help) and writing pages (write_page, edit_page, replace_in_pages,
-append_to_page, rename_page, delete_page) and deck tasks (create_task, update_task,
+append_to_page, rename_page (also a folder), delete_page) and deck tasks (create_task, update_task,
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
@@ -22,7 +22,7 @@ import mcp_server
 import retrieval
 import search
 from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_uncommitted_files,
-                      grep_pages, GrepError, is_uncommitted, move_page, SHA_RE,
+                      grep_pages, GrepError, is_uncommitted, move_folder, move_page, SHA_RE,
                       version_index, version_path)
 from mdtext import (_INLINE_CODE_RE, is_scratch, iter_fenced_lines, mask_code, page_tags, page_title,
                     plain_heading, split_wikilink, to_slug, WIKILINK_RE)
@@ -462,7 +462,48 @@ def _append_to_page(args: dict, base: str) -> str:
     return f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
 
 
+def _folder_arg(raw: str) -> str | None:
+    """The folder rename_page's slug names, if it names one: a trailing '/'
+    ('projects/'), or no page by that name but pages below it. None for a
+    page."""
+    folder = _clean_folder(raw)
+    if not folder or (not raw.strip().endswith("/") and _mcp_page_slug(raw) is not None):
+        return None
+    if any(slug.startswith(folder + "/") for _p, slug in iter_pages()):
+        return folder
+    return None
+
+
+# A list of moved pages in rename_page's result stops after this many.
+_MOVES_SHOWN = 20
+
+
+def _rename_folder(folder: str, args: dict, base: str) -> str:
+    new_folder = _new_slug(_str_arg(args, "new_slug"))
+    if new_folder == folder:
+        raise mcp_server.ToolError(f"The folder is already called {folder}")
+    if new_folder.startswith(folder + "/"):
+        raise mcp_server.ToolError(f"{folder}/ can't move into a folder inside itself")
+    if safe_path(new_folder + "/page") is None:
+        raise mcp_server.ToolError(f"{new_folder!r}: pages can't go in folders starting with '_' or '.'")
+    moving = sorted((path, slug) for path, slug in iter_pages() if slug.startswith(folder + "/"))
+    taken = [new for _p, slug in moving if safe_path(new := new_folder + slug[len(folder):]).exists()]
+    if taken:
+        raise mcp_server.ToolError("These pages already exist, so nothing was moved: " + ", ".join(taken))
+    pending = _save_pending_pages([p for p, _s in moving], f"{folder}/")
+    moves, changed = move_folder(folder, new_folder, _commit_msg(f"Move {folder}/ to {new_folder}/", args))
+    out = [f"Moved folder {folder}/ to {new_folder}/: {len(moves)} pages."
+           + (f" Links to them were updated in {len(changed)} files." if changed else "")]
+    out += [f"- {old} → {new}" for old, new in moves[:_MOVES_SHOWN]]
+    if len(moves) > _MOVES_SHOWN:
+        out.append(f"… and {len(moves) - _MOVES_SHOWN} more")
+    return "\n".join(out) + pending
+
+
 def _rename_page(args: dict, base: str) -> str:
+    folder = _folder_arg(_str_arg(args, "slug"))
+    if folder is not None:
+        return _rename_folder(folder, args, base)
     slug, path = _existing_page(args)
     if is_protected(slug):
         raise mcp_server.ToolError(f"{slug} is the home page; it can't be renamed")

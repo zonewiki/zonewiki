@@ -371,12 +371,15 @@ TOOLS = [
         "name": "rename_page",
         "title": "Rename or move a page",
         "description": ("Rename a page or move it to another folder. Every link to it, on "
-                        "pages and in tasks, is changed to the new name."),
+                        "pages and in tasks, is changed to the new name. A folder ('projects/', "
+                        "with the slash) moves with all its pages and subfolders, in one commit."),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "slug": _PAGE_SLUG,
-                "new_slug": {"type": "string", "description": "The new slug, e.g. 'projects/leaf/mcp'."},
+                "slug": {"type": "string", "description": (
+                    _PAGE_SLUG["description"] + " Or a folder, with a trailing slash: 'journal/'.")},
+                "new_slug": {"type": "string", "description": (
+                    "The new slug, e.g. 'projects/leaf/mcp'; for a folder, the folder's new path.")},
                 "summary": _SUMMARY,
             },
             "required": ["slug", "new_slug"],

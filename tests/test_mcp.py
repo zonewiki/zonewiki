@@ -941,6 +941,53 @@ class TestRenamePage:
         assert call(client, "rename_page", slug="golf", new_slug="golf")[1]
 
 
+class TestRenameFolder:
+    @pytest.fixture()
+    def tree(self, wiki_dir):
+        write_page(wiki_dir, "tickets/bug-1", "# Bug 1\n\nSee [[tickets/sub/bug-2]].\n")
+        write_page(wiki_dir, "tickets/sub/bug-2", "# Bug 2\n")
+        write_page(wiki_dir, "tickets-old", "# Not in the folder\n")
+        write_page(wiki_dir, "hub", "# Hub\n\n[[tickets/bug-1]] and [two](/page/tickets/sub/bug-2)\n")
+        (wiki_dir / "tickets" / "shot.png").write_bytes(b"png")
+        return wiki_dir
+
+    def test_moves_every_page_and_their_links(self, client, tree):
+        tid = client.post("/api/deck", json={"title": "Fix [[tickets/bug-1]]"}, headers=HOST).get_json()["id"]
+        text, err = call(client, "rename_page", slug="tickets/", new_slug="work/tickets")
+        assert not err and text.startswith("Moved folder tickets/ to work/tickets/: 2 pages.")
+        assert "- tickets/sub/bug-2 → work/tickets/sub/bug-2" in text
+        assert (tree / "work/tickets/bug-1.md").read_text() == "# Bug 1\n\nSee [[work/tickets/sub/bug-2]].\n"
+        assert (tree / "work/tickets/sub/bug-2.md").exists()
+        assert (tree / "hub.md").read_text() == (
+            "# Hub\n\n[[work/tickets/bug-1]] and [two](/page/work/tickets/sub/bug-2)\n")
+        assert (tree / "tickets-old.md").exists()
+        assert call(client, "search_tasks", query="Fix")[0].count("[[work/tickets/bug-1]]") == 1 and tid
+        # Other files stay, so the folder does; emptied subfolders go.
+        assert (tree / "tickets" / "shot.png").exists() and not (tree / "tickets" / "sub").exists()
+
+    def test_a_folder_without_the_slash_when_no_page_has_its_name(self, client, tree):
+        text, err = call(client, "rename_page", slug="tickets", new_slug="Archive/Tickets")
+        assert not err and "to archive/tickets/" in text
+        assert (tree / "archive/tickets/bug-1.md").exists()
+
+    def test_a_page_of_the_folders_name_wins_without_the_slash(self, client, tree):
+        write_page(tree, "tickets", "# Tickets\n")
+        text, err = call(client, "rename_page", slug="tickets", new_slug="ticket-list")
+        assert not err and text.startswith("Renamed page tickets to ticket-list.")
+        assert (tree / "tickets/bug-1.md").exists()
+
+    def test_refusals(self, client, tree):
+        write_page(tree, "done/bug-1", "# Taken\n")
+        text, err = call(client, "rename_page", slug="tickets/", new_slug="done")
+        assert err and "done/bug-1" in text and (tree / "tickets/sub/bug-2.md").exists()
+        assert not (tree / "done/sub").exists()
+        text, err = call(client, "rename_page", slug="tickets/", new_slug="tickets/inner")
+        assert err and "inside itself" in text
+        assert call(client, "rename_page", slug="tickets/", new_slug="tickets")[1]
+        assert call(client, "rename_page", slug="tickets/", new_slug="_hidden")[1]
+        assert call(client, "rename_page", slug="nothing/", new_slug="x")[1]
+
+
 class TestReplaceInPages:
     @pytest.fixture()
     def notes(self, wiki_dir):
@@ -1033,9 +1080,11 @@ class TestWritesCommit:
         short = re.search(r"\nid: (\w+)", tid).group(1)
         call(client, "update_task", id=short, status="done")
         call(client, "replace_in_pages", find="1st", replace="first", dry_run=False, summary="spell out")
-        call(client, "delete_page", slug="notes/mcp")
-        assert subjects()[:8] == [
-            "Delete notes/mcp (MCP)",
+        call(client, "rename_page", slug="notes/", new_slug="old-notes")
+        call(client, "delete_page", slug="old-notes/mcp")
+        assert subjects()[:9] == [
+            "Delete old-notes/mcp (MCP)",
+            "Move notes/ to old-notes/ (MCP)",
             "Replace '1st' on notes/mcp: spell out (MCP)",
             "Complete deck task (MCP)",
             "Create deck task: from chat (MCP)",
