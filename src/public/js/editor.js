@@ -502,10 +502,11 @@ if (textarea && previewPane) {
   });
 
   textarea.focus();
-  if (textarea.dataset.new === '1') {
-    // Brand-new page: land right after the pre-filled "# Title\n\n" so typing
-    // continues the body. Existing pages keep the cursor at the start instead
-    // of jumping (and scrolling) to the end of a possibly long file.
+  if (textarea.dataset.cursor === 'end') {
+    // A page with only its title (brand-new, or a new scratch note): land
+    // right after the "# Title\n\n" so typing continues the body. Other pages
+    // keep the cursor at the start instead of jumping (and scrolling) to the
+    // end of a possibly long file.
     textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
   }
 

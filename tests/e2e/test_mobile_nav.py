@@ -112,6 +112,12 @@ def test_note_creates_a_scratch_note(new_page, wiki):
     phone.locator("#scratch-title").fill("Shopping idea")
     phone.locator("#scratch-title").press("Enter")
     expect(phone).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
+    # The cursor waits under the title, so typing starts the body.
+    ta = phone.locator("#editor-textarea")
+    expect(ta).to_be_focused()
+    assert ta.evaluate("t => [t.selectionStart, t.value.length]") == [len("# Shopping idea\n\n")] * 2
+    phone.keyboard.type("milk")
+    expect(ta).to_have_value("# Shopping idea\n\nmilk")
 
 
 def test_task_adds_a_task_to_your_deck_from_the_wiki(new_page, wiki):

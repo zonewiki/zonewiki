@@ -435,9 +435,12 @@ def edit_page(slug):
             section = None  # invalid index, fall back to full edit
 
     editable = not is_new and section is None   # a whole existing page
+    # Nothing but the title yet (a new page, a new scratch note): the cursor
+    # starts after it, ready for the body.
+    only_title = section is None and re.fullmatch(r"# [^\n]*\n*", content) is not None
     return views.page(
         "edit.html", f"Edit — {title}", editor=True, slug=slug, page_title=title, content=content,
-        is_new=is_new, section=section, start_char=start_char, end_char=end_char,
+        is_new=is_new, only_title=only_title, section=section, start_char=start_char, end_char=end_char,
         # The file's hash for conflict detection, whole page or section edit.
         file_hash="" if is_new else file_hash_val if section is not None else content_hash(content),
         can_rename=editable and not is_protected(slug), can_delete=editable and not is_protected(slug),

@@ -464,16 +464,20 @@ class TestEditPageGet:
         assert "tags: work, urgent" in text
         assert "tldr: Short summary." in text
 
-    def test_edit_new_page_shows_editor_flagged_new(self, client):
+    def test_edit_new_page_puts_cursor_after_title(self, client):
         resp = client.get("/edit/brand-new-page", headers=HOST)
         assert resp.status_code == 200
         text = resp.data.decode()
-        assert 'name="content"' in text and 'data-new="1"' in text
+        assert 'name="content"' in text and 'data-cursor="end"' in text
 
-    def test_existing_page_textarea_not_flagged_data_new(self, client, wiki_dir):
+    def test_new_scratch_note_puts_cursor_after_title(self, client):
+        slug = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        assert 'data-cursor="end"' in client.get(f"/edit/{slug}", headers=HOST).data.decode()
+
+    def test_existing_page_keeps_cursor_at_start(self, client, wiki_dir):
         write_page(wiki_dir, "test-edit", "# Test\n\nContent here.\n")
         resp = client.get("/edit/test-edit", headers=HOST)
-        assert 'data-new="1"' not in resp.data.decode()
+        assert 'data-cursor="end"' not in resp.data.decode()
 
     def test_edit_section_loads_section_content(self, client, wiki_dir):
         content = "# Title\n\npreamble\n\n## Alpha\n\nalpha body\n\n## Beta\n\nbeta body\n"

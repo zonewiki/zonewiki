@@ -44,7 +44,7 @@ For sharing the screen: the page on screen stays as it is, everything that shows
 ## Scratch
 
 - **Keybinding:** **c** then **s** creates a scratch note (see Keyboard Shortcuts); so does the phone's action bar's Note (see Modules).
-- User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`.
+- User types a title and submits → `POST /api/scratch` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time) with `# Title\n\n` and returns `{ slug }` → browser navigates to `/edit/<slug>`. The editor opens with the cursor under the title, ready for the body, as for a brand-new page: a page that holds only its `# Title` line (`only_title` in `edit_page`, `data-cursor="end"` on the textarea) starts with the cursor at its end; any other page at its start.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
 - **Scratch note filenames** match `SCRATCH_RE = r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$"` e.g. `2026-03-24_18-50-08_my-note.md`. `is_scratch(slug)` identifies them.
 - **`/page/_scratch`** — special auto-generated page (no `.md` file on disk) listing all scratch notes newest-first with title and timestamp. Not editable.

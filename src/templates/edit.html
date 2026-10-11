@@ -46,7 +46,7 @@
       <input type="hidden" name="end_char" id="section-end-char" value="{{ end_char }}">
       <input type="hidden" name="section_idx" id="section-idx" value="{{ section }}">
       {% endif %}
-      <textarea id="editor-textarea" name="content" data-new="{{ '1' if is_new else '' }}"
+      <textarea id="editor-textarea" name="content" data-cursor="{{ 'end' if only_title else '' }}"
                 spellcheck="false" autocorrect="off" autocapitalize="off">{{ content }}</textarea>
     </form>
   </div>
