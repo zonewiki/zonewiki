@@ -954,9 +954,6 @@ class TestCompletedStorage:
         assert task_results[0]["status"] == "done"
 
 
-# ── Migration: legacy single-file → split files ────────────────────────────────
-
-
 # ── Focus date (Today planning) ────────────────────────────────────────────────
 
 
@@ -1496,8 +1493,8 @@ class TestLimitParam:
     def test_limit_lands_in_embed(self, client, wiki_dir):
         assert 'data-init-limit="7"' in self._embed(client, wiki_dir, "[[deck limit=7]]")
 
-    def test_capacity_is_the_old_name(self, client, wiki_dir):
-        assert 'data-init-limit="4"' in self._embed(client, wiki_dir, "[[deck capacity=4]]")
+    def test_capacity_is_not_a_limit(self, client, wiki_dir):
+        assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck capacity=4]]")
 
     def test_invalid_limit_is_empty(self, client, wiki_dir):
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck limit=lots]]")
@@ -1764,25 +1761,6 @@ class TestNoTaskLinking:
         assert resp.status_code == 200          # a self-"cycle" is no longer an error
         for task in client.get("/api/deck").get_json():
             assert "blocked_by" not in task
-
-    def test_legacy_blocked_by_does_not_hide_from_due_count(self, client, wiki_dir):
-        past = (date.today() - timedelta(days=1)).isoformat()
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "a", "title": "Blocker", "created_at": "2026-01-01T00:00:00"},
-            {"id": "b", "title": "Was blocked", "due_date": past, "blocked_by": ["a"],
-             "created_at": "2026-01-01T00:00:00"},
-        ]), encoding="utf-8")
-        assert client.get("/api/deck/due-count").get_json()["count"] == 1
-
-    def test_legacy_blocked_by_survives_untouched_on_delete(self, client, wiki_dir):
-        # Deleting a task no longer rewrites other tasks' dependency lists.
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps([
-            {"id": "a", "title": "A", "created_at": "2026-01-01T00:00:00"},
-            {"id": "b", "title": "B", "blocked_by": ["a"], "created_at": "2026-01-01T00:00:00"},
-        ]), encoding="utf-8")
-        client.delete("/api/deck/a")
-        assert client.get("/api/deck").get_json() == [
-            {"id": "b", "title": "B", "blocked_by": ["a"], "created_at": "2026-01-01T00:00:00"}]
 
     def test_restore_drops_link_fields(self, client):
         resp = client.post("/api/deck/restore", json={"tasks": [
@@ -2053,15 +2031,15 @@ class TestEmbedLabels:
     def _tabs(self, client, wiki_dir, directive):
         (wiki_dir / "shop.md").write_text(f"# Shop\n\n{directive}\n", encoding="utf-8")
         body = client.get("/page/shop").get_data(as_text=True)
-        return re.findall(r'role="tab" data-filter="(\w+)" aria-selected="false">([^<]*)</button>', body)
+        return re.findall(r'role="tab" data-view="(\w+)" aria-selected="false">([^<]*)</button>', body)
 
     def test_default_labels(self, client, wiki_dir):
         assert self._tabs(client, wiki_dir, "[[deck]]") == [
-            ("open", "Open"), ("due", "Plan"), ("focus", "Focus")]
+            ("open", "Open"), ("plan", "Plan"), ("focus", "Focus")]
 
     def test_custom_labels_keep_the_views(self, client, wiki_dir):
         assert self._tabs(client, wiki_dir, "[[deck labels=Catalogue,,Shopping_list]]") == [
-            ("open", "Catalogue"), ("due", "Plan"), ("focus", "Shopping list")]
+            ("open", "Catalogue"), ("plan", "Plan"), ("focus", "Shopping list")]
 
     def test_labels_are_escaped(self, client, wiki_dir):
         tabs = self._tabs(client, wiki_dir, "[[deck labels=<b>x</b>]]")

@@ -553,7 +553,7 @@ def test_empty_sections_are_single_rows(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.request.post("/api/deck", data={"title": "Today's", "start_date": date.today().isoformat()})
     page.goto("/page/deck?view=open")
-    open_tab(page, "due")
+    open_tab(page, "plan")
     empties = page.locator(".board-day-divider.board-day--empty")
     expect(empties).to_have_count(8)   # Tomorrow + five more days + Later + Unplanned
     for row in empties.all():
@@ -570,7 +570,7 @@ def test_empty_sections_are_finger_sized_on_touch(new_page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/deck?view=open")
-    open_tab(phone, "due")
+    open_tab(phone, "plan")
     assert all(r.bounding_box()["height"] >= 40
                for r in phone.locator(".board-day--empty").all())
 
@@ -583,7 +583,7 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     phone.request.post("/api/deck", data={"title": "Water plants",
                                           "start_date": date.today().isoformat()})
     phone.goto("/page/deck?view=open")
-    open_tab(phone, "due")
+    open_tab(phone, "plan")
     rows = phone.locator(".board-day-divider")
     before = [r.bounding_box() for r in rows.all()]
     card = phone.locator(".task-item").filter(has=phone.get_by_text("Water plants", exact=True))

@@ -102,7 +102,7 @@ _DECK_PLACEHOLDER_BASE = "LEAFDECKPLACEHOLDER"
 
 def _scope_arg() -> str | None:
     """The list a completed-count/-years request is for (?list=<name>), or
-    None for every task. A leftover ?all=1 changes nothing."""
+    None for every task."""
     return clean_list(request.args.get("list")) or None
 
 
@@ -115,9 +115,9 @@ def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False)
     keyboard shortcuts.
     """
     # `limit=N` turns on the WIP limit (Focus warning, Plan day flags); without
-    # it there is none. `capacity=` is its old name, still accepted.
+    # it there is none.
     try:
-        limit = max(1, min(99, int(params.get("limit") or params.get("capacity", ""))))
+        limit = max(1, min(99, int(params.get("limit", ""))))
     except ValueError:
         limit = ""  # no limit
     # `labels=Catalogue,Plan,Shopping`: this embed's own names for the tabs, in

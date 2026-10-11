@@ -6,9 +6,9 @@
 <div class="tasks-app" id="tasks-app{{ sfx }}"{% if headless %} data-headless="1" style="display:none"{% endif %} data-init-tag="{{ tag }}" data-init-list="{{ list }}" data-lists="{{ lists_json }}" data-list-homes="{{ homes_json }}" data-init-view="{{ view }}" data-init-limit="{{ limit }}" data-init-keep="{{ keep }}" data-init-compact="{{ compact }}" data-init-new="" data-instance="{{ instance_id }}"{% if home %} data-home="1"{% endif %}>
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{{ sfx }}" role="tablist" aria-label="View">
-      <button type="button" role="tab" data-filter="open" aria-selected="false">{{ labels[0] }}</button>
-      <button type="button" role="tab" data-filter="due" aria-selected="false">{{ labels[1] }}</button>
-      <button type="button" role="tab" data-filter="focus" aria-selected="false">{{ labels[2] }}</button>
+      <button type="button" role="tab" data-view="open" aria-selected="false">{{ labels[0] }}</button>
+      <button type="button" role="tab" data-view="plan" aria-selected="false">{{ labels[1] }}</button>
+      <button type="button" role="tab" data-view="focus" aria-selected="false">{{ labels[2] }}</button>
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{{ sfx }}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">

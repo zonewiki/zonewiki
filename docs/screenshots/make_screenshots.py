@@ -203,7 +203,7 @@ def main():
         # 2. The deck's Plan board.
         pg = page(1280, 820)
         pg.goto("/deck")
-        pg.locator("#tasks-tabs [data-filter='due']").click()
+        pg.locator("#tasks-tabs [data-view='plan']").click()
         settle(pg)
         pg.screenshot(path=OUT / "deck.png")
 

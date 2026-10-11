@@ -482,7 +482,7 @@ def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True, at=0
 
 
 def test_touch_drag_on_board_sets_start_date(phone):
-    open_tab(phone, "due")
+    open_tab(phone, "plan")
     target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
     touch_drag(phone, card(phone, "Water plants"), target)
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(1))
@@ -496,7 +496,7 @@ def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
     tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     tall.goto("/page/deck?view=open")
-    open_tab(tall, "due")
+    open_tab(tall, "plan")
     target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
     touch_drag(tall, card(tall, "Water plants"), target)
     wait_until(tall, lambda: tasks_by_title(tall)["Water plants"]["start_date"] is None)
@@ -522,7 +522,7 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
 
 def test_quick_swipe_scrolls_instead_of_dragging(phone):
     # Moving before the long press completes is a scroll, not a pick-up.
-    open_tab(phone, "due")
+    open_tab(phone, "plan")
     target = phone.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow")
     touch_drag(phone, card(phone, "Water plants"), target, hold_ms=0)
     phone.wait_for_timeout(600)
@@ -531,7 +531,7 @@ def test_quick_swipe_scrolls_instead_of_dragging(phone):
 
 
 def test_long_press_in_place_starts_selection_mode(phone):
-    open_tab(phone, "due")
+    open_tab(phone, "plan")
     c = card(phone, "Water plants")
     touch_drag(phone, c, c)
     expect(phone.locator(".tasks-app")).to_contain_class("deck-selecting")

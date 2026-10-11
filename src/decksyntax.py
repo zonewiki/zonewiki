@@ -42,23 +42,15 @@ def parse_deck_params(raw: str) -> dict:
     return params
 
 
-# Maps friendly tab-label names (and the internal names) to the data-filter
-# value the client uses to activate a tab. Lets `[[deck view=all]]` work
-# using the labels the user actually sees, not just internal names. "backlog"
-# is the tab's former label, kept so existing embeds keep working.
-_FILTER_ALIASES = {
-    "focus": "focus", "today": "focus",   # "today": the tab's label for a while
-    "all": "open", "backlog": "open", "open": "open",   # "all": the label before "Open"
-    "plan": "due", "upcoming": "due", "due": "due",
-    "completed": "completed", "done": "completed",
-}
+# The deck's views, by the names `[[deck view=…]]` and `?view=` use.
+VIEWS = ("focus", "open", "plan", "completed")
 
 
 def embed_view(params: dict) -> str:
-    """The tab an embed opens on (its data-filter value, "" for the
-    default): `view=`, or `filter=`, its old name, through _FILTER_ALIASES."""
-    raw = (params.get("view") or params.get("filter", "")).strip().lower()
-    return _FILTER_ALIASES.get(raw, raw)
+    """The view an embed opens on (`view=`), "" for the default or a name
+    that isn't one of VIEWS."""
+    raw = params.get("view", "").strip().lower()
+    return raw if raw in VIEWS else ""
 
 
 def is_true(value) -> bool:

@@ -29,7 +29,7 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 500
 def open_board(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=open")
-    open_tab(page, "due")
+    open_tab(page, "plan")
     expect(page.locator(".board-day-divider").first).to_be_visible()
 
 
@@ -108,12 +108,18 @@ def test_embed_filter_marks_its_tab_active(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
 
 
-def test_legacy_filter_url_param_still_works(page, wiki):
+def test_view_url_param_picks_the_tab(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?filter=plan")
+    page.goto("/page/deck?view=plan")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
-    page.goto("/deck?view=today")   # the Focus tab's label for a while
+    # Not a view's name (here the Plan tab's old one, and ?filter=, the old
+    # name of ?view=): the default, Focus, ...
+    page.goto("/page/deck?view=due")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    # ... or the tab last clicked in this browser tab.
+    open_tab(page, "open")
+    page.goto("/page/deck?filter=plan")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
 
 def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
@@ -397,7 +403,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
             page.request.put(f"/api/deck/{tid}", data={"completed": True})
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
-    open_tab(page, "due")
+    open_tab(page, "plan")
     link = page.locator("#task-completed-link")
     expect(link).to_have_text("✓ Completed (2) →")
 
@@ -540,7 +546,7 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     page.goto("/page/deck?view=open")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_be_visible()
-    open_tab(page, "due")
+    open_tab(page, "plan")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_be_visible()
 
@@ -1046,7 +1052,7 @@ def test_board_uses_open_order_and_in_section_drop_changes_nothing(page, wiki):
     open_tab(page, "open")
     card(page, "Charlie").drag_to(card(page, "Alpha"))
     wait_for_field(page, "Charlie", "sort_order", 0)
-    open_tab(page, "due")
+    open_tab(page, "plan")
     assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
 
 
@@ -1122,19 +1128,19 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     # No limit by default: no Focus warning, no flagged day on Plan.
     page.goto("/deck?view=focus")
     expect(_focus_titles(page)).to_have_count(5)
-    expect(page.locator(".focus-over-capacity")).to_have_count(0)
-    open_tab(page, "due")
+    expect(page.locator(".focus-over-limit")).to_have_count(0)
+    open_tab(page, "plan")
     expect(page.locator(".board-day-divider", has_text="Today")).to_be_visible()
     expect(page.locator(".board-day--over")).to_have_count(0)
     # ?limit= (the /deck page) turns it on; the count includes Unsorted.
     page.goto("/deck?view=focus&limit=5")
-    expect(page.locator(".focus-over-capacity")).to_contain_text("5 tasks in Focus (limit: 5)")
-    open_tab(page, "due")
+    expect(page.locator(".focus-over-limit")).to_contain_text("5 tasks in Focus (limit: 5)")
+    open_tab(page, "plan")
     expect(page.locator(".board-day--over")).to_have_count(1)
     # [[deck limit=N]] in an embed.
     wiki.write("board", "# Board\n\n[[deck view=focus limit=3]]\n")
     page.goto("/page/board")
-    expect(page.locator(".focus-over-capacity")).to_contain_text("(limit: 3)")
+    expect(page.locator(".focus-over-limit")).to_contain_text("(limit: 3)")
 
 
 def test_task_added_on_focus_lands_in_unsorted(page, wiki):
@@ -1498,7 +1504,7 @@ def test_planned_tasks_are_marked_on_every_tab(page, wiki):
 
     open_tab(page, "focus")
     expect(card(page, "Since yesterday")).to_have_class(re.compile(r"\btask-planned-now\b"))
-    open_tab(page, "due")
+    open_tab(page, "plan")
     expect(card(page, "Thursday-ish")).to_have_class(re.compile(r"\btask-planned-later\b"))
 
 
@@ -1513,7 +1519,7 @@ def test_due_colour_is_the_same_on_every_tab(page, wiki):
         "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopColor]; }")
     expect(card(page, "Due now")).to_have_class(re.compile(r"\btask-inbox\b"))   # in Unsorted
     on_open = looks()
-    for tab in ("focus", "due"):
+    for tab in ("focus", "plan"):
         open_tab(page, tab)
         expect(card(page, "Due now")).to_be_visible()
         assert looks() == on_open, tab
@@ -1883,7 +1889,7 @@ def test_compact_defaults_per_tab(page, wiki):
     app = page.locator(".tasks-app")
     page.goto("/deck?view=open")
     expect(app).to_have_class(COMPACT)
-    for view in ("focus", "due"):
+    for view in ("focus", "plan"):
         open_tab(page, view)
         expect(app).not_to_have_class(COMPACT)
     open_tab(page, "completed")

@@ -1048,8 +1048,8 @@ class TestFullFileConflict:
         assert "/page/ffc5" in resp.headers["Location"]
         assert page.read_text(encoding="utf-8") == "updated\n"
 
-    def test_full_file_save_without_hash_still_works(self, client, wiki_dir):
-        """Backwards compat: no file_hash → plain write, no conflict check."""
+    def test_full_file_save_without_hash(self, client, wiki_dir):
+        """No file_hash (a page new in the editor) → plain write, no conflict check."""
         page = write_page(wiki_dir, "ffc6", "old\n")
         resp = client.post("/api/save/ffc6", data={"content": "new\n"}, headers=HOST)
         assert resp.status_code == 204

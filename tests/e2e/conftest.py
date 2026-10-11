@@ -74,12 +74,12 @@ class Wiki:
 
 
 def open_tab(page, view: str):
-    """Switch the deck to a view by its data-filter name (open/due/focus/completed).
+    """Switch the deck to a view by its name (open/plan/focus/completed).
     Completed has no tab; its link under the list opens it."""
     if view == "completed":
         page.locator("#task-completed-link").click()
     else:
-        page.locator(f"#tasks-tabs [data-filter='{view}']").click()
+        page.locator(f"#tasks-tabs [data-view='{view}']").click()
 
 
 # ── Browser ───────────────────────────────────────────────────────────────────

@@ -84,7 +84,7 @@ if (!listEl) return;
 
 let tasks = [];
 let completedLoaded = false;
-let activeFilter = 'focus';
+let activeView = 'focus';
 let draggedId = null;
 let selectedId  = null;
 let selectedIds = new Set();
@@ -111,14 +111,14 @@ function clearBoardDropOver() {
   listEl.querySelectorAll('.board-drop-over').forEach(el => el.classList.remove('board-drop-over'));
 }
 listEl.addEventListener('dragover', e => {
-  if (activeFilter !== 'due' || !draggedId) return;
+  if (activeView !== 'plan' || !draggedId) return;
   const div = boardDivider(e.target);
   if (!div || !div.dataset.dropBucket) return;  // non-droppable section
   e.preventDefault();
   if (!div.classList.contains('board-drop-over')) { clearBoardDropOver(); div.classList.add('board-drop-over'); }
 });
 listEl.addEventListener('drop', e => {
-  if (activeFilter !== 'due' || !draggedId) return;
+  if (activeView !== 'plan' || !draggedId) return;
   const div = boardDivider(e.target);
   if (!div || !div.dataset.dropBucket) return;
   e.preventDefault();
@@ -244,9 +244,9 @@ function swipeActions(task) {
   // would leave it in Focus (the deadline keeps it there).
   const start = isFocus(task, today) ? null : 'start';
   const unplan = task.start_date && !isDueNow(task, today) ? 'unplan' : null;
-  if (activeFilter === 'open') return { right: start, left: null };
-  if (activeFilter === 'focus') return { right: null, left: unplan };
-  if (activeFilter === 'due') return { right: start, left: unplan };
+  if (activeView === 'open') return { right: start, left: null };
+  if (activeView === 'focus') return { right: null, left: unplan };
+  if (activeView === 'plan') return { right: start, left: unplan };
   return { right: null, left: null };
 }
 const SWIPE_LABELS = { start: '📅 Start today', unplan: '↩ Unplan' };
@@ -460,7 +460,7 @@ function listTooltip(name) {
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
 // into the tab buttons by deck.py, so they are read back from there).
-const tabLabel = view => tabsEl.querySelector(`[data-filter="${view}"]`)?.textContent.trim() || view;
+const tabLabel = view => tabsEl.querySelector(`[data-view="${view}"]`)?.textContent.trim() || view;
 // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
 // Compact: one line per task (title, then tags, markers and dates; notes
@@ -470,7 +470,7 @@ const initKeep = appEl?.dataset.initKeep === '1';
 // switched; Focus and Plan, where a task's details matter, are full cards.
 // compact=1 makes every tab start compact. A switch is remembered per
 // deck and tab.
-const COMPACT_DEFAULT = { open: true, completed: true, due: false, focus: false };
+const COMPACT_DEFAULT = { open: true, completed: true, plan: false, focus: false };
 const densityKey = view => 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId, view].join('|');
 function compactFor(view) {
@@ -521,7 +521,7 @@ function setExpanded(id) {
 function toggleCompact() {
   expandedId = null;
   compact = !compact;
-  try { localStorage.setItem(densityKey(activeFilter), compact ? '1' : '0'); } catch (_) {}
+  try { localStorage.setItem(densityKey(activeView), compact ? '1' : '0'); } catch (_) {}
   applyCompact();
 }
 densityBtn?.addEventListener('click', toggleCompact);
@@ -540,9 +540,9 @@ function inScope(t) {
 function scopeQuery() {
   return initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
-// ?view= / [[deck view=…]] pick the tab; ?filter= is the old name, still accepted.
-const urlFilter = urlParams.get('view') || urlParams.get('filter') || '';   // explicit per-navigation override
-const embedFilter = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
+// ?view= / [[deck view=…]] pick the tab.
+const urlView = urlParams.get('view') || '';   // explicit per-navigation override
+const embedView = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
 // ?new=1 opens the new-task modal in one embed: the deck's home if the
 // page has it (as the New buttons do), else the first.
 const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
@@ -636,7 +636,7 @@ async function fetchDeck() {
   deckGen++;
   completedLoaded = false;
   render();
-  if (activeFilter === 'completed') fetchCompleted();
+  if (activeView === 'completed') fetchCompleted();
   refreshCompletedCount();
 }
 
@@ -655,7 +655,7 @@ async function refreshCompletedCount() {
 // pull in changes made by another embed on the same page.
 async function refresh() {
   await fetchDeck();
-  if (activeFilter === 'completed') await fetchCompleted();
+  if (activeView === 'completed') await fetchCompleted();
 }
 
 let completedLoading = null;
@@ -688,7 +688,7 @@ async function loadCompleted() {
 async function loadCompletedYears() {
   try {
     const res = await fetch('/api/deck/completed-years' + scopeQuery());
-    if (res.ok) { completedYears = (await res.json()).years; if (activeFilter === 'completed') render(); }
+    if (res.ok) { completedYears = (await res.json()).years; if (activeView === 'completed') render(); }
   } catch (_) {}
 }
 
@@ -702,7 +702,7 @@ function setCompletedYear(year) {
   tasks = tasks.filter(t => !t.completed_at);
   deckGen++;
   completedLoaded = false;
-  if (activeFilter === 'completed') fetchCompleted();
+  if (activeView === 'completed') fetchCompleted();
   render();
 }
 
@@ -1128,14 +1128,14 @@ function filterTasks(query = filterQuery()) {
   if (f.text || f.tagGroups.length || f.excludeTags.length) filtered = filtered.filter(t => matchesFilter(t, f));
 
   // Tab filter
-  if (activeFilter === 'focus') {
+  if (activeView === 'focus') {
     filtered = filtered.filter(t => !t.completed_at && isFocus(t, today));
-  } else if (activeFilter === 'due') {
+  } else if (activeView === 'plan') {
     // Plan is a day board: show all open tasks grouped by start date; tasks
     // without one go to the Unplanned section so they can be dragged into
     // the week (DeckCore.boardBuckets).
     filtered = filtered.filter(t => !t.completed_at);
-  } else if (activeFilter === 'completed') {
+  } else if (activeView === 'completed') {
     filtered = filtered.filter(t => !!t.completed_at);
   } else {
     // Open: every open task. Tasks still waiting for a day are the Plan
@@ -1176,7 +1176,7 @@ function manualOrderIds(s) {
     .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
 }
 function sectionList() {
-  const s = SECTIONS[activeFilter];
+  const s = SECTIONS[activeView];
   const byId = new Map(tasks.map(t => [t.id, t]));
   const ids = visibleItems().map(el => el.dataset.id);
   const manual = ids.filter(id => byId.get(id)[s.field] != null);
@@ -1189,7 +1189,7 @@ function sectionList() {
 // the shop's order). A moved task goes right after the visible task now
 // above it, or right before the one below it when it is first.
 function applySectionList(list, moved) {
-  const s = SECTIONS[activeFilter];
+  const s = SECTIONS[activeView];
   const cut = list.indexOf(sectionKey(s.bottom));
   const visManual = list.slice(cut + 1);
   const movedSet = new Set(moved);
@@ -1228,7 +1228,7 @@ function sectionDrop(key, side) {
 // slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
 // can't move within it; moving down takes them straight across the heading.
 function sectionKeyMove(direction) {
-  const s = SECTIONS[activeFilter];
+  const s = SECTIONS[activeView];
   const list = sectionList();
   const byId = new Map(tasks.map(t => [t.id, t]));
   const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
@@ -1259,7 +1259,7 @@ function sectionHTML(zone, label, count) {
 }
 
 function sortTasks(tasksArr) {
-  const fixed = TAB_SORT[activeFilter];
+  const fixed = TAB_SORT[activeView];
   return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
 }
 
@@ -1871,7 +1871,7 @@ function render() {
   // task has no section of its own: it keeps its place in the order, and
   // its urgency colour marks it.
   let orderedTasks, newTasks = [];
-  if (SECTIONS[activeFilter]) {
+  if (SECTIONS[activeView]) {
     // DeckCore.byOpenOrder, which the Plan board uses too. Reversed first,
     // so tasks created in the same second (created_at has no finer
     // resolution) keep newest-first.
@@ -1882,20 +1882,20 @@ function render() {
     orderedTasks = sortTasks(filtered);
   }
 
-  if (activeFilter !== 'due' &&
+  if (activeView !== 'plan' &&
       orderedTasks.length === 0 && newTasks.length === 0) {
     if (selectedIds.size) clearSelection();
-    if (activeFilter === 'focus') {
+    if (activeView === 'focus') {
       listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
-        '<button type="button" class="btn btn-sm" data-goto-tab="due">Plan your day</button></li>';
-      listEl.querySelector('[data-goto-tab]').addEventListener('click', () => switchTab('due'));
+        '<button type="button" class="btn btn-sm" data-goto-tab="plan">Plan your day</button></li>';
+      listEl.querySelector('[data-goto-tab]').addEventListener('click', () => switchTab('plan'));
     } else {
       listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
     }
     return;
   }
 
-  const taskHTML = (task, draggable = !!SECTIONS[activeFilter], extraClass = '') => {
+  const taskHTML = (task, draggable = !!SECTIONS[activeView], extraClass = '') => {
     const checked = task.completed_at ? 'checked' : '';
     const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
     const dueClass = dueDateClass(task);
@@ -1986,7 +1986,7 @@ function render() {
   let truncated = false;
 
   // Upcoming day board: one section per day, dividers double as drop targets.
-  if (activeFilter === 'due') {
+  if (activeView === 'plan') {
     html = boardBuckets(filtered).map(s => {
       const over = LIMIT && s.date && s.tasks.length >= LIMIT;
       const overCls = over ? ' board-day--over' : '';
@@ -2009,15 +2009,15 @@ function render() {
     return;
   }
 
-  if (activeFilter === 'focus') {
+  if (activeView === 'focus') {
     const inFocus = orderedTasks.length + newTasks.length;
     if (LIMIT && inFocus >= LIMIT) {
-      html += `<li class="focus-stale-bar focus-over-capacity">` +
+      html += `<li class="focus-stale-bar focus-over-limit">` +
         `<span>⚠ ${inFocus} tasks in ${esc(tabLabel('focus'))} (limit: ${LIMIT})</span></li>`;
     }
   }
   // No tab is highlighted in Completed, so the list says where you are.
-  if (activeFilter === 'completed') {
+  if (activeView === 'completed') {
     // Earlier years (the yearly archives) are one click away.
     const shown = completedYear || thisYear;
     const years = completedYears.includes(shown) ? completedYears : [...completedYears, shown].sort().reverse();
@@ -2029,13 +2029,13 @@ function render() {
   }
   // Limit completed tab display
   let displayTasks = orderedTasks;
-  if (activeFilter === 'completed' && orderedTasks.length > completedLimit) {
+  if (activeView === 'completed' && orderedTasks.length > completedLimit) {
     displayTasks = orderedTasks.slice(0, completedLimit);
     truncated = true;
   }
   // Open and Focus: both sections always have a heading, even when empty,
   // because the heading is where a task is dropped to enter an empty section.
-  if (SECTIONS[activeFilter]) {
+  if (SECTIONS[activeView]) {
     html += sectionHTML('unsorted', 'Unsorted', newTasks.length);
     html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
     html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
@@ -2128,9 +2128,9 @@ function render() {
 
   // Drag and drop
   touchDrop = null;
-  if (activeFilter === 'due') {
+  if (activeView === 'plan') {
     setupBoardDragAndDrop();
-  } else if (SECTIONS[activeFilter]) {
+  } else if (SECTIONS[activeView]) {
     setupDragAndDrop();
   }
 
@@ -2243,10 +2243,10 @@ descTextarea?.addEventListener('keydown', e => {
 });
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-// Segmented control: one button per view, data-filter = the view's name.
+// Segmented control: one button per view, data-view = the view's name.
 
-const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-filter]'));
-const VIEWS = ['open', 'due', 'focus', 'completed'];
+const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-view]'));
+const VIEWS = ['open', 'plan', 'focus', 'completed'];
 // The tab to return to from Completed (the link's "back" state).
 let lastTab = 'focus';
 
@@ -2260,7 +2260,7 @@ function syncCompletedLink() {
   if (!completedLink) return;
   let matches = null;
   const f = parseFilter(filterQuery());
-  const filtering = activeFilter !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
+  const filtering = activeView !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
   if (filtering) {
     if (!completedLoaded) { fetchCompleted(); }
     else {
@@ -2268,7 +2268,7 @@ function syncCompletedLink() {
     }
   }
   completedLink.classList.toggle('has-matches', matches > 0);
-  completedLink.textContent = activeFilter === 'completed' ? `← Back to ${tabLabel(lastTab)}`
+  completedLink.textContent = activeView === 'completed' ? `← Back to ${tabLabel(lastTab)}`
     : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
     : matches === 0 ? '✓ No matches in Completed →'
     : filtering ? '✓ Completed →'
@@ -2276,41 +2276,41 @@ function syncCompletedLink() {
 }
 
 // Mark the view's button active (no side effects — used during init too).
-function markActiveTab(filter) {
+function markActiveTab(view) {
   tabButtons().forEach(b => {
-    const on = b.dataset.filter === filter;
+    const on = b.dataset.view === view;
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
 }
 
-function switchTab(filter) {
-  if (!VIEWS.includes(filter)) return;
+function switchTab(view) {
+  if (!VIEWS.includes(view)) return;
   if (selectMode) exitSelectMode();
-  if (filter !== 'completed') lastTab = filter;
-  activeFilter = filter;
-  applyCompact(filter);
+  if (view !== 'completed') lastTab = view;
+  activeView = view;
+  applyCompact(view);
   // Back from an earlier year: the other views count this year's matches.
-  if (filter !== 'completed' && completedYear) setCompletedYear('');
-  markActiveTab(filter);   // Completed has no tab: none is marked
+  if (view !== 'completed' && completedYear) setCompletedYear('');
+  markActiveTab(view);   // Completed has no tab: none is marked
   syncCompletedLink();
   // Keyboard focus follows the active view (Tab-cycling from a focused tab
   // would otherwise leave the focus ring on the previous one).
   if (tabsEl.contains(document.activeElement)) {
-    tabsEl.querySelector(`[data-filter="${filter}"]`)?.focus();
+    tabsEl.querySelector(`[data-view="${view}"]`)?.focus();
   }
-  saveActiveTab(activeFilter);
-  if (activeFilter === 'completed') fetchCompleted();
+  saveActiveTab(activeView);
+  if (activeView === 'completed') fetchCompleted();
   render();
 }
 
 tabsEl.addEventListener('click', e => {
-  const btn = e.target.closest('[data-filter]');
-  if (btn) switchTab(btn.dataset.filter);
+  const btn = e.target.closest('[data-view]');
+  if (btn) switchTab(btn.dataset.view);
 });
 completedLink?.addEventListener('click', () => {
-  switchTab(activeFilter === 'completed' ? lastTab : 'completed');
-  if (activeFilter === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
+  switchTab(activeView === 'completed' ? lastTab : 'completed');
+  if (activeView === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
 });
 
 // The filter: its chips (completed tag words) plus the text typed after them.
@@ -2813,7 +2813,7 @@ function openEditModal(taskId, opts) {
   document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : opts?.description || '';
   document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
   document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
-    : opts && 'start_date' in opts ? opts.start_date || '' : (activeFilter === 'focus' ? dateOffset(0) : '');
+    : opts && 'start_date' in opts ? opts.start_date || '' : (activeView === 'focus' ? dateOffset(0) : '');
   const startTags = task ? task.tags || []
     : givenTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
   editChips.set(startTags, true);
@@ -3156,7 +3156,7 @@ function setupDragAndDrop() {
 // ── Keyboard navigation ────────────────────────────────────────────────────
 
 function reorderSelected(direction) {
-  if (SECTIONS[activeFilter] && selectedIds.size) sectionKeyMove(direction);
+  if (SECTIONS[activeView] && selectedIds.size) sectionKeyMove(direction);
 }
 
 document.addEventListener('keydown', async e => {
@@ -3249,10 +3249,10 @@ document.addEventListener('keydown', async e => {
     e.preventDefault();
     // Only the tabs: Completed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
-    const filters = tabButtons().map(b => b.dataset.filter);
-    const i = filters.indexOf(activeFilter);
-    const n = filters.length;
-    switchTab(filters[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
+    const views = tabButtons().map(b => b.dataset.view);
+    const i = views.indexOf(activeView);
+    const n = views.length;
+    switchTab(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
     return;
   }
 
@@ -3357,23 +3357,12 @@ if (filterSearch) {
 // Precedence: URL ?view= > embed view (always wins when specified) >
 // tab remembered this session > Focus default. So a [[deck view=…]] embed
 // always opens on its configured tab; a plain [[deck]] remembers the tab the
-// user last clicked across refreshes within the same browser tab.
-// The canonical tab names are the <option> values (focus/due/open/completed);
-// this map mirrors deck.py's _FILTER_ALIASES for friendly names in ?view=
-// URLs. The embed filter arrives already normalized by the server.
-const FILTER_ALIASES = {
-  focus: 'focus', today: 'focus',   // "today": the tab's label for a while
-  all: 'open', backlog: 'open', open: 'open',
-  plan: 'due', upcoming: 'due', due: 'due',
-  completed: 'completed', done: 'completed',
-};
-const restoreFilter = FILTER_ALIASES[urlFilter] || embedFilter || loadActiveTab() || 'focus';
-if (VIEWS.includes(restoreFilter)) {
-  activeFilter = restoreFilter;
-  if (restoreFilter !== 'completed') lastTab = restoreFilter;
-}
-applyCompact(activeFilter);
-markActiveTab(activeFilter);
+// user last clicked across refreshes within the same browser tab. A name that
+// isn't one of VIEWS is passed over.
+activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
+if (activeView !== 'completed') lastTab = activeView;
+applyCompact(activeView);
+markActiveTab(activeView);
 syncCompletedLink();
 
 // ?task=<id> (search results, a page's "Linked tasks"): show exactly that
@@ -3400,7 +3389,7 @@ function flashTask(el) {
 }
 
 fetchDeck().then(async () => {
-  if (activeFilter === 'completed') await fetchCompleted();
+  if (activeView === 'completed') await fetchCompleted();
   if (initTaskId) revealTask(initTaskId);
 });
 

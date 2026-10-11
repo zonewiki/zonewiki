@@ -2438,7 +2438,7 @@ div.chip-input > input {
   font-size: .75rem; color: var(--muted);
   background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
 }
-.focus-over-capacity { color: #d97706; }
+.focus-over-limit { color: #d97706; }
 
 .tasks-empty .btn { margin-left: .5rem; }
 
