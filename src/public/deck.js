@@ -76,6 +76,7 @@ const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
 const deleteTitleEl = document.getElementById('task-delete-title' + sfx);
 const deadlineModal = document.getElementById('task-deadline-modal' + sfx);
 const deadlineTextEl = document.getElementById('task-deadline-text' + sfx);
+const selBar = document.getElementById('task-selbar' + sfx);
 // Hidden on the editor page, which only uses its edit modal (Make task).
 const headless = appEl.dataset.headless === '1';
 
@@ -385,13 +386,19 @@ listEl.addEventListener('contextmenu', e => {
   const card = e.target.closest('.task-item');
   if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea, .task-inline-input')) return;
   e.preventDefault();
-  setSelected(card.dataset.id);
+  if (!inSelection(card.dataset.id)) setSelected(card.dataset.id);
   openTaskMenu(card.dataset.id, card, { x: e.clientX, y: e.clientY });
 });
 
 // Claim keyboard focus when user interacts with this instance
-appEl.addEventListener('pointerdown', () => { activeDeckInstance = instanceId; });
-appEl.addEventListener('focusin', () => { activeDeckInstance = instanceId; });
+// (A page with several decks shows the selection bar of the active one.)
+function claimInstance() {
+  if (activeDeckInstance === instanceId) return;
+  activeDeckInstance = instanceId;
+  deckInstances.forEach(inst => inst.syncSelBar());
+}
+appEl.addEventListener('pointerdown', claimInstance);
+appEl.addEventListener('focusin', claimInstance);
 
 const urlParams = new URLSearchParams(window.location.search);
 const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
@@ -914,9 +921,21 @@ function closeTaskMenu() {
 }
 
 // `at` ({x, y}, a right-click): the menu opens there instead of at the
-// anchor (the ⋯ button).
+// anchor (the ⋯ button). On a card of a multi-selection the menu acts on
+// every selected task (runSelectionAction), as the selection bar does.
 function openTaskMenu(id, anchor, at) {
   closeTaskMenu();
+  if (inSelection(id)) {
+    const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
+    const items = [
+      ['tag', 'Tag…'],
+      !allDone && ['today', 'Start today'],
+      ['done', allDone ? 'Reopen' : 'Done'],
+      ['delete', 'Delete…', 'danger'],
+    ].filter(Boolean);
+    showMenu(`${selectedIds.size} tasks`, items, action => runSelectionAction(action), anchor, at);
+    return;
+  }
   const task = tasks.find(t => t.id === id);
   if (!task) return;
   const items = task.completed_at ? [
@@ -933,13 +952,17 @@ function openTaskMenu(id, anchor, at) {
     ['wontdo', "Won't do"],
     ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
+  showMenu(task.title, items, action => runTaskAction(task, action, anchor), anchor, at);
+}
 
+// The menu itself: `items` are [action, label, class?]; `run(action)`.
+function showMenu(title, items, run, anchor, at) {
   const backdrop = document.createElement('div');
   backdrop.className = 'task-menu-backdrop';
   const el = document.createElement('div');
   el.className = 'task-menu';
   el.setAttribute('role', 'menu');
-  el.innerHTML = `<div class="task-menu-title">${esc(task.title)}</div>` + items.map(([key, label, cls]) =>
+  el.innerHTML = `<div class="task-menu-title">${esc(title)}</div>` + items.map(([key, label, cls]) =>
     `<button type="button" role="menuitem" data-action="${key}"${cls ? ` class="${cls}"` : ''}>${label}</button>`
   ).join('');
   document.body.append(backdrop, el);
@@ -971,7 +994,7 @@ function openTaskMenu(id, anchor, at) {
     const action = e.target.closest('[data-action]')?.dataset.action;
     if (!action) return;
     closeTaskMenu();
-    runTaskAction(task, action, anchor);
+    run(action);
   });
 }
 
@@ -1374,18 +1397,15 @@ async function bulkTag(ids, add, remove) {
     msg = gone.length === 1 ? gone[0].msg
       : one ? `${gone.length} tasks saved to list “${one}”.` : `${gone.length} tasks no longer show here.`;
   }
-  showUndo(msg, async () => {
-    const res = await fetch('/api/deck/batch-update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: changed.map(u => ({ id: u.id, tags: before.get(u.id).tags || [] })) }),
-    });
-    if (!res.ok) { await noticeFromResponse(res, 'Undo failed'); return; }
-    await afterBatchWrite();
-  });
+  showUndo(msg, () => batchUpdate(changed.map(u => ({ id: u.id, tags: before.get(u.id).tags || [] }))));
 }
 
-// ── Keyboard selection ─────────────────────────────────────────────────────
+// ── Selection ──────────────────────────────────────────────────────────────
+// One selected task (selectedId) or several (selectedIds): a click selects
+// one, Shift+click or Shift+↑/↓ a range from the anchor, Ctrl/Cmd+click
+// adds or drops one, Ctrl+A takes every task shown. While several are
+// selected the selection bar (syncSelBar) and the ⋯ menu of a selected card
+// act on all of them (runSelectionAction).
 
 function updateSelectionClasses() {
   listEl.querySelectorAll('.task-item').forEach(el => {
@@ -1393,6 +1413,120 @@ function updateSelectionClasses() {
   });
   // Several selected, none, or another one: the expanded task closes.
   if (expandedId && (selectedIds.size !== 1 || expandedId !== selectedId)) setExpanded(null);
+  syncSelBar();
+}
+
+// Whether `id` is one of several selected tasks.
+const inSelection = id => selectedIds.size > 1 && selectedIds.has(id);
+
+function toggleSelection(id) {
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    if (selectedId === id) selectedId = selectedIds.size ? [...selectedIds].at(-1) : null;
+  } else {
+    selectedIds.add(id);
+    selectedId = id;
+  }
+  anchorId = id;   // a Shift+click next extends from here
+  updateSelectionClasses();
+}
+
+function selectAllVisible() {
+  const ids = visibleItems().map(el => el.dataset.id);
+  if (!ids.length) return;
+  selectedIds = new Set(ids);
+  if (!selectedIds.has(selectedId)) selectedId = ids[0];
+  anchorId = selectedId;
+  updateSelectionClasses();
+}
+
+function clearSelection() {
+  selectedId = anchorId = null;
+  selectedIds = new Set();
+  updateSelectionClasses();
+}
+
+// The selection bar: while several tasks are selected (on a page with
+// several decks, only the active one's), how many, and what to do to all.
+// Today goes when every selected task is completed, and Done says Reopen.
+function syncSelBar() {
+  if (!selBar) return;
+  const show = selectedIds.size > 1 && (deckInstances.length < 2 || activeDeckInstance === instanceId);
+  selBar.hidden = !show;
+  if (!show) return;
+  const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
+  selBar.querySelector('.deck-selbar-count').textContent = `${selectedIds.size} selected`;
+  selBar.querySelector('[data-sel="today"]').hidden = allDone;
+  const done = selBar.querySelector('[data-sel="done"]');
+  done.textContent = allDone ? 'Reopen' : 'Done';
+  done.title = allDone ? 'Reopen the selected tasks (Space)' : 'Complete the selected tasks (Space)';
+  selBar.querySelector('[data-sel="all"]').disabled =
+    visibleItems().every(el => selectedIds.has(el.dataset.id));
+}
+selBar?.addEventListener('click', e => {
+  const action = e.target.closest('[data-sel]')?.dataset.sel;
+  if (action) runSelectionAction(action);
+});
+
+// What the selection bar and a selected card's ⋯ menu do to every selected task.
+function runSelectionAction(action) {
+  const ids = [...selectedIds];
+  switch (action) {
+    case 'all':    selectAllVisible(); break;
+    case 'clear':  clearSelection(); break;
+    case 'tag':    if (ids.length) openBulkTagModal(ids); break;
+    case 'today':  startToday(ids); break;
+    case 'done':   clearSelection(); completeMany(ids); break;
+    case 'delete': if (ids.length) deleteWithUndo(ids, clearSelection); break;
+  }
+}
+
+// Fields of several tasks in one request (each task its own; batch-update),
+// then the deck reloads. False if the server refused.
+async function batchUpdate(changes) {
+  const res = await fetch('/api/deck/batch-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tasks: changes }),
+  });
+  if (!res.ok) { await noticeFromResponse(res, 'Update rejected'); return false; }
+  await afterBatchWrite();
+  return true;
+}
+
+// Start the open tasks among `ids` today (those not starting today
+// already), with one undo that puts back each one's start date and history.
+// Today is never after a deadline that hasn't passed, and an overdue task
+// started today is the way to catch up, so no deadline question comes up.
+async function startToday(ids) {
+  const today = todayStr();
+  const idSet = new Set(ids);
+  const before = tasks.filter(t => idSet.has(t.id) && !t.completed_at && t.start_date !== today);
+  if (!before.length) return;
+  if (!await batchUpdate(before.map(t => ({ id: t.id, start_date: today })))) return;
+  const n = before.length;
+  showUndo(n === 1 ? `Starts ${formatDate(today)}` : `${n} tasks start today`, () =>
+    batchUpdate(before.map(t => ({ id: t.id, start_date: t.start_date ?? null, history: t.history || [] }))));
+}
+
+// Complete the tasks `ids`, or reopen them if every one is completed, with
+// an undo. Keep tasks stay open when completed; undo restores their fields
+// instead of reopening them from Completed.
+async function completeMany(ids) {
+  const completing = ids.some(id => { const t = tasks.find(tk => tk.id === id); return t && !t.completed_at; });
+  const kept = completing
+    ? ids.map(id => tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
+         .map(t => [t.id, keepSnapshot(t)])
+    : [];
+  await completeTasks(ids, completing);
+  const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
+  showUndo(label, async () => {
+    const keptIds = new Set(kept.map(([id]) => id));
+    const others = ids.filter(id => !keptIds.has(id));
+    if (kept.length) await Promise.all(kept.map(([id, before]) => putTask(id, before)));
+    if (others.length) await completeTasks(others, !completing);
+    else await afterBatchWrite();
+  });
 }
 
 function setSelected(id) {
@@ -1688,6 +1822,7 @@ function render() {
 
   if (activeFilter !== 'due' &&
       orderedTasks.length === 0 && newTasks.length === 0) {
+    if (selectedIds.size) clearSelection();
     if (activeFilter === 'focus') {
       listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
         '<button type="button" class="btn btn-sm" data-goto-tab="due">Plan your day</button></li>';
@@ -1950,10 +2085,17 @@ function render() {
     }
   }
 
-  // Click to select (clicks on checkbox/button/link are handled separately)
+  // Click to select (clicks on checkbox/button/link are handled separately):
+  // Shift+click a range from the anchor, Ctrl/Cmd+click one more or less.
+  // A right-click on a selected card keeps the selection for its menu.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('mousedown', e => {
-      if (!e.target.closest('input, button, a')) setSelected(el.dataset.id);
+      if (e.target.closest('input, button, a')) return;
+      const id = el.dataset.id;
+      if (e.button !== 0 && selectedIds.has(id)) return;
+      if (e.shiftKey && selectedId) { e.preventDefault(); extendSelection(id); }
+      else if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleSelection(id); }
+      else setSelected(id);
     });
   });
   }  // end wireListHandlers
@@ -2997,6 +3139,14 @@ document.addEventListener('keydown', async e => {
   const items = visibleItems();
   const currentIdx = selectedId ? items.findIndex(el => el.dataset.id === selectedId) : -1;
 
+  // Ctrl/Cmd+A with a task selected: every task shown (with the filter, the
+  // ones it leaves). Without a selection it stays the page's select all.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a' && selectedId) {
+    e.preventDefault();
+    selectAllVisible();
+    return;
+  }
+
   // The menu key or Shift+F10: the selected task's ⋯ menu (with a mouse
   // there is no ⋯ button; right-click opens it too)
   if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && selectedId) {
@@ -3068,27 +3218,12 @@ document.addEventListener('keydown', async e => {
   } else if (e.key === ' ' && selectedId) {
     e.preventDefault();
     if (selectedIds.size > 1) {
-      // Bulk complete/uncomplete
+      // Bulk complete/uncomplete; the selection moves on to the next task.
       const ids = [...selectedIds];
-      const completing = ids.some(id => { const t = tasks.find(tk => tk.id === id); return t && !t.completed_at; });
       const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
                 || items.find(el => !selectedIds.has(el.dataset.id));
       setSelected(next?.dataset.id || null);
-      // Keep tasks stay open when completed; undo restores their fields
-      // instead of reopening them from Completed.
-      const kept = completing
-        ? ids.map(id => tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
-             .map(t => [t.id, keepSnapshot(t)])
-        : [];
-      await completeTasks(ids, completing);
-      const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
-      showUndo(label, async () => {
-        const keptIds = new Set(kept.map(([id]) => id));
-        const others = ids.filter(id => !keptIds.has(id));
-        if (kept.length) await Promise.all(kept.map(([id, before]) => putTask(id, before)));
-        if (others.length) await completeTasks(others, !completing);
-        else await afterBatchWrite();
-      });
+      await completeMany(ids);
     } else {
       const task = tasks.find(t => t.id === selectedId);
       if (!task) return;
@@ -3127,10 +3262,7 @@ document.addEventListener('keydown', async e => {
   } else if (e.key === 'Escape' && expandedId) {
     setExpanded(null);   // collapse first; the next Esc clears the selection
   } else if (e.key === 'Escape') {
-    selectedId = null;
-    selectedIds.clear();
-    anchorId = null;
-    listEl.querySelectorAll('.task-selected').forEach(el => el.classList.remove('task-selected'));
+    clearSelection();
   }
 });
 
@@ -3145,7 +3277,7 @@ function refreshIfIdle() {
     listEl.querySelector('.task-inline-input');
   if (!busy) refresh();
 }
-deckInstances.push({ id: instanceId, refresh, refreshIfIdle, openEdit: openEditModal });
+deckInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });
 
 openEdit = openEditModal;
 

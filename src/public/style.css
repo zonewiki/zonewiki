@@ -2442,6 +2442,25 @@ div.chip-input > input {
 
 .tasks-empty .btn { margin-left: .5rem; }
 
+/* Selection bar (deck.js syncSelBar): while several tasks are selected, at
+   the bottom of the window; toasts move up above it. */
+.deck-selbar {
+  position: fixed; z-index: 900; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+  display: flex; align-items: center; gap: .4rem; max-width: calc(100vw - 2rem);
+  padding: .4rem .45rem .4rem .9rem;
+  background: var(--nav-bg); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: .9rem;
+}
+.deck-selbar[hidden] { display: none; }
+.deck-selbar-count { font-weight: 600; white-space: nowrap; margin-right: .2rem; }
+.deck-selbar-actions { display: flex; gap: .4rem; }
+.deck-selbar .btn { white-space: nowrap; }
+.deck-selbar .btn[hidden] { display: none; }
+.deck-selbar .btn:disabled { opacity: .45; cursor: default; }
+.deck-selbar .btn.danger { color: #dc2626; }
+.deck-selbar-close { padding-inline: .6rem; }
+body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
+
 /* Bulk tag dialog (deck.js openBulkTagModal): the selection's tags, each a
    three-state box: on every task ✓, on some –, on none empty. */
 .bulk-tag-list {

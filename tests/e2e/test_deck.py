@@ -729,6 +729,121 @@ def test_bulk_tag_nothing_changed_sends_nothing(page, wiki):
     expect(page.locator(".task-undo-toast")).to_have_count(0)
 
 
+def seed_four(page):
+    # Open shows them newest first: Saw, Glue, Nuts, Bolts.
+    for title in ("Bolts", "Nuts", "Glue", "Saw"):
+        page.request.post("/api/deck", data={"title": title})
+    page.goto("/deck?view=open")
+
+
+def selected_titles(page):
+    return page.locator(".task-item.task-selected .task-title").all_inner_texts()
+
+
+def test_shift_and_ctrl_click_select(page, wiki):
+    seed_four(page)
+    bar = page.locator("#task-selbar")
+    card(page, "Saw").locator(".task-title").click()
+    expect(bar).to_be_hidden()                          # one task: no bar
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
+    assert selected_titles(page) == ["Saw", "Glue", "Nuts"]
+    expect(bar.locator(".deck-selbar-count")).to_have_text("3 selected")
+    card(page, "Glue").locator(".task-title").click(modifiers=["Control"])
+    assert selected_titles(page) == ["Saw", "Nuts"]
+    card(page, "Bolts").locator(".task-title").click(modifiers=["Control"])
+    expect(bar.locator(".deck-selbar-count")).to_have_text("3 selected")
+    # Shift+click extends from the last Ctrl+clicked card.
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    assert selected_titles(page) == ["Glue", "Nuts", "Bolts"]
+    # A plain click selects just that one again.
+    card(page, "Saw").locator(".task-title").click()
+    assert selected_titles(page) == ["Saw"]
+    expect(bar).to_be_hidden()
+
+
+def test_ctrl_a_selects_what_the_filter_shows(page, wiki):
+    for title, tags in (("Bolts", "hw"), ("Nuts", "hw"), ("Glue", "")):
+        page.request.post("/api/deck", data={"title": title, "tags": tags})
+    page.goto("/deck?view=open&tag=hw")
+    card(page, "Nuts").locator(".task-title").click()
+    page.keyboard.press("Control+a")
+    assert sorted(selected_titles(page)) == ["Bolts", "Nuts"]
+    bar = page.locator("#task-selbar")
+    expect(bar.locator(".deck-selbar-count")).to_have_text("2 selected")
+    expect(bar.locator("[data-sel='all']")).to_be_disabled()
+    page.keyboard.press("Escape")
+    expect(bar).to_be_hidden()
+    assert selected_titles(page) == []
+
+
+def test_selection_bar_tag_opens_the_dialog(page, wiki):
+    seed_four(page)
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    page.locator("#task-selbar [data-sel='tag']").click()
+    expect(page.locator(".bulk-tag-modal .scratch-label")).to_have_text("Tags of 2 tasks")
+    page.locator("#bulk-tag-input").fill("shop")
+    page.keyboard.press("Enter")
+    wait_for_field(page, "Saw", "tags", ["shop"])
+    wait_for_field(page, "Glue", "tags", ["shop"])
+    assert task_by_title(page, "Nuts")["tags"] == []
+    # The selection stays for the next action.
+    assert selected_titles(page) == ["Saw", "Glue"]
+
+
+def test_selection_bar_today_with_undo(page, wiki):
+    seed_four(page)
+    later = (date.today() + timedelta(days=5)).isoformat()
+    page.request.put(f"/api/deck/{task_by_title(page, 'Glue')['id']}", data={"start_date": later})
+    page.reload()
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    page.locator("#task-selbar [data-sel='today']").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks start today")
+    today = date.today().isoformat()
+    wait_for_field(page, "Saw", "start_date", today)
+    wait_for_field(page, "Glue", "start_date", today)
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Saw", "start_date", None)
+    wait_for_field(page, "Glue", "start_date", later)
+    assert [e["event"] for e in task_by_title(page, "Glue")["history"]] == ["created", "start"]
+
+
+def test_selection_bar_done_and_toast_above_it(page, wiki):
+    seed_four(page)
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Control"])
+    page.locator("#task-selbar [data-sel='done']").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks completed")
+    expect(card(page, "Saw")).to_have_count(0)
+    expect(page.locator("#task-selbar")).to_be_hidden()
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Saw")).to_be_visible()
+    expect(card(page, "Nuts")).to_be_visible()
+
+
+def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
+    seed_four(page)
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    card(page, "Glue").locator(".task-title").click(button="right")
+    menu = page.locator(".task-menu")
+    expect(menu.locator(".task-menu-title")).to_have_text("2 tasks")
+    assert selected_titles(page) == ["Saw", "Glue"]       # the right-click kept it
+    menu.get_by_role("menuitem", name="Delete…").click()
+    expect(page.locator("#task-delete-modal .scratch-label")).to_have_text("Delete 2 tasks?")
+    page.locator("#task-delete-confirm").click()
+    expect(card(page, "Saw")).to_have_count(0)
+    expect(card(page, "Glue")).to_have_count(0)
+    expect(page.locator("#task-selbar")).to_be_hidden()
+    # The ⋯ button of a card not in a multi-selection is that card's own menu.
+    card(page, "Nuts").locator(".task-title").click()
+    card(page, "Bolts").locator(".task-menu-btn").click()
+    expect(page.locator(".task-menu .task-menu-title")).to_have_text("Bolts")
+
+
 def test_main_deck_counts_list_tasks_as_completed(page, wiki):
     page.request.post("/api/deck", data={"title": "Oat milk", "tags": "groceries"})
     done = page.request.post("/api/deck", data={"title": "Bread", "tags": "groceries"}).json()
