@@ -132,7 +132,7 @@ Without the container:
 python -m venv .venv && source .venv/bin/activate
 pip install -r src/requirements.txt
 LEAF_DATA=~/leaf python src/server.py          # waitress on http://localhost:5000
-flask --app src/server.py run --debug          # auto-reload during development
+LEAF_DATA=~/leaf flask --app src/server.py run --debug   # auto-reload during development
 ```
 
 ---

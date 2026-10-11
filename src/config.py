@@ -84,9 +84,12 @@ def _parse_noshare(spec: str) -> tuple[frozenset[str], tuple[str, ...]]:
 # Empty counts as unset (run.sh passes unset settings as empty strings).
 NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or "#noshare")
 
-# The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/). It
-# must exist: Leaf doesn't make a wiki where a mistyped LEAF_DATA points.
-LEAF_DATA = Path(os.environ.get("LEAF_DATA", Path(__file__).parent / "data"))
+# The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/).
+# Required, no default (not a folder in the checkout), and it must exist:
+# Leaf doesn't make a wiki where a mistyped LEAF_DATA points.
+if not os.environ.get("LEAF_DATA"):
+    sys.exit("Leaf: LEAF_DATA isn't set. Set it to your wiki's folder, e.g. LEAF_DATA=~/leaf python src/server.py")
+LEAF_DATA = Path(os.environ["LEAF_DATA"])
 if not LEAF_DATA.is_dir():
     sys.exit(f"Leaf: no wiki at {LEAF_DATA}. Create the folder, or set LEAF_DATA to your wiki.")
 UPLOADS_DIR = LEAF_DATA / "_assets"

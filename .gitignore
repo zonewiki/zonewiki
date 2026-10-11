@@ -1,13 +1,4 @@
 .env
-/wiki-data
-/vimwiki
-.cache
-.copilot
-src/__pycache__
-/wiki
-src/data
-.venv
-tests/__pycache__
-tests/e2e/_screenshots/
-.coverage
+.venv/
 __pycache__/
+tests/e2e/_screenshots/

@@ -49,7 +49,7 @@ Leaf's version is a semver constant, `VERSION` in `config.py`, bumped by hand. N
 
 ## Data directory
 
-Set `LEAF_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Leaf creates it (`config.py` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Leaf uses `$LEAF_DATA`, else `src/data`, which must exist too. In an existing wiki folder Leaf creates what it needs (`_assets/`, `_deck/`, `index.md`):
+Set `LEAF_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Leaf creates it (`config.py` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Leaf needs `LEAF_DATA` set (there is no default; unset or empty, it exits with "LEAF_DATA isn't set"), and the folder must exist too. In an existing wiki folder Leaf creates what it needs (`_assets/`, `_deck/`, `index.md`):
 
 ```
 LEAF_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.

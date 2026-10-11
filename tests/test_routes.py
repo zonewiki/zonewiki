@@ -2079,11 +2079,22 @@ class TestVersion:
         assert "· &lt;b&gt;</p>" in body
 
     @staticmethod
-    def _start(wiki: Path) -> subprocess.CompletedProcess:
-        """Import Leaf in a fresh Python with LEAF_DATA=wiki."""
+    def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
+        """Import Leaf in a fresh Python with LEAF_DATA=wiki (None: unset)."""
         src = Path(__file__).resolve().parent.parent / "src"
+        env = {k: v for k, v in os.environ.items() if k != "LEAF_DATA"}
+        if wiki is not None:
+            env["LEAF_DATA"] = str(wiki)
         return subprocess.run([sys.executable, "-c", "import server"], cwd=src, capture_output=True,
-                              text=True, env={**os.environ, "LEAF_DATA": str(wiki)}, timeout=60)
+                              text=True, env=env, timeout=60)
+
+    @pytest.mark.parametrize("wiki", [None, ""])
+    def test_refuses_to_start_without_leaf_data(self, wiki):
+        # No default wiki (there was src/data, a folder in the checkout).
+        r = self._start(wiki)
+        assert r.returncode != 0
+        assert "LEAF_DATA isn't set" in r.stderr
+        assert not (Path(__file__).resolve().parent.parent / "src" / "data").exists()
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
         # Leaf never makes the wiki itself, so a mistyped LEAF_DATA can't
