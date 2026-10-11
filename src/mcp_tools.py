@@ -488,7 +488,12 @@ _TASK_LINK_RE = re.compile(r"task[:=]([0-9a-f-]{4,36})")
 def _task_arg(args: dict) -> dict:
     """The task `id` names: its id or a prefix of it (the 8-character short
     id the tools show), a [[task:…]] reference or a /deck?task=… link."""
-    raw = _str_arg(args, "id").strip().lower()
+    return _find_task(_str_arg(args, "id"))
+
+
+def _find_task(raw: str) -> dict:
+    """The task a reference names (see _task_arg)."""
+    raw = raw.strip().lower()
     m = _TASK_LINK_RE.search(raw)
     ref = m.group(1) if m else raw
     if not re.fullmatch(r"[0-9a-f][0-9a-f-]{3,35}", ref):
@@ -522,17 +527,10 @@ def _task_fields(args: dict, task: dict | None = None) -> dict:
     if "tags" in args:
         data["tags"] = args["tags"] if args["tags"] is not None else []
     if task is not None and ("add_tags" in args or "remove_tags" in args):
-        def tag_list(name):
-            val = args.get(name) or []
-            if isinstance(val, str):
-                val = val.split(",")
-            if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
-                raise mcp_server.ToolError(f"{name} must be a list of tags")
-            return [v.strip().lstrip("#") for v in val if v.strip().lstrip("#")]
         tags = list(data.get("tags", task.get("tags") or []))
         lower = {t.lower() for t in tags}
-        tags += [t for t in tag_list("add_tags") if t.lower() not in lower]
-        drop = {t.lower() for t in tag_list("remove_tags")}
+        tags += [t for t in _tag_list(args, "add_tags") if t.lower() not in lower]
+        drop = {t.lower() for t in _tag_list(args, "remove_tags")}
         data["tags"] = [t for t in tags if t.lower() not in drop]
     if any(k in args for k in ("repeat", "repeat_every", "repeat_from")):
         rec = (task or {}).get("recurrence") or {}
@@ -585,6 +583,41 @@ def _update_task(args: dict, base: str) -> str:
     if args.get("status") in ("done", "skip") and spawned:
         out += "\n\nNext occurrence:\n\n" + _mcp_task_text(spawned[0], base)
     return out
+
+
+def _tag_list(args: dict, name: str) -> list[str]:
+    """A list-of-tags argument (a comma-separated string works too), each
+    without its leading #."""
+    val = args.get(name) or []
+    if isinstance(val, str):
+        val = val.split(",")
+    if not isinstance(val, list) or not all(isinstance(v, str) for v in val):
+        raise mcp_server.ToolError(f"{name} must be a list of tags")
+    return [v.strip().lstrip("#") for v in val if v.strip().lstrip("#")]
+
+
+# More ids than this in one call is likely a mistake (a whole deck retagged).
+_TAG_TASKS_MAX = 200
+
+
+def _tag_tasks(args: dict, base: str) -> str:
+    ids = args.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise mcp_server.ToolError("ids must be a non-empty list of task ids")
+    if len(ids) > _TAG_TASKS_MAX:
+        raise mcp_server.ToolError(f"At most {_TAG_TASKS_MAX} tasks per call")
+    add, remove = _tag_list(args, "add_tags"), _tag_list(args, "remove_tags")
+    if not add and not remove:
+        raise mcp_server.ToolError("Give add_tags or remove_tags")
+    found = {t["id"]: t for t in map(_find_task, ids)}   # an unknown id fails the whole call
+    before = {i: list(t.get("tags") or []) for i, t in found.items()}
+    tasks = _deck_write(deck.tag_tasks, list(found), add, remove, _commit_msg("Tag deck tasks", args))
+    changed = [t for t in tasks if (t.get("tags") or []) != before.get(t["id"])]
+    lines = [f"- {t.get('title', '')} ({decksyntax.short_id(t['id'])}): "
+             + (" ".join(f"#{g}" for g in t.get("tags") or []) or "no tags") for t in tasks]
+    head = f"Tags changed on {len(changed)} of {len(tasks)} task{'s' if len(tasks) != 1 else ''}"
+    return head + (" (the others had them so already)" if len(changed) < len(tasks) else "") + \
+        ".\n\n" + "\n".join(lines)
 
 
 def _comment_task(args: dict, base: str) -> str:
@@ -890,7 +923,7 @@ _READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "append_to_page": _append_to_page,
     "rename_page": _rename_page, "delete_page": _delete_page,
-    "create_task": _create_task, "update_task": _update_task,
+    "create_task": _create_task, "update_task": _update_task, "tag_tasks": _tag_tasks,
     "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,
 }
 

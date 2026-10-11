@@ -36,8 +36,8 @@ INSTRUCTIONS = (
     "code editor) or append_to_page (adds text without reading the page "
     "first; under_heading adds to that section); write_page creates a page "
     "or, with overwrite, replaces all of it. rename_page keeps links working. "
-    "Tasks: create_task, update_task (fields, done, won't do), comment_task "
-    "for a status line. Every write is a git commit the user can undo; give "
+    "Tasks: create_task, update_task (fields, done, won't do), tag_tasks "
+    "(add or remove tags on several tasks at once), comment_task for a status line. Every write is a git commit the user can undo; give "
     "each a short summary, which becomes its commit message."
 )
 
@@ -382,6 +382,28 @@ TOOLS = [
                 "summary": _SUMMARY,
             },
             "required": ["id"],
+        },
+        "annotations": _CHANGES,
+    },
+    {
+        "name": "tag_tasks",
+        "title": "Tag several tasks",
+        "description": (
+            "Add tags to several deck tasks and/or remove tags from them, in one change "
+            "(one commit the user can undo). Case is ignored; a tag a task has keeps its "
+            "spelling. For one task, update_task's add_tags/remove_tags do the same. "
+            "list_tags shows the tags in use: reuse those."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ids": {"type": "array", "items": {"type": "string"},
+                        "description": "The tasks: ids (or their 8-character prefixes) as search_tasks shows them."},
+                "add_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to add."},
+                "remove_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to remove."},
+                "summary": _SUMMARY,
+            },
+            "required": ["ids"],
         },
         "annotations": _CHANGES,
     },

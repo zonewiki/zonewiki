@@ -621,17 +621,28 @@ def api_reorder_deck():
 
 
 @bp.post("/api/deck/batch-tag")
-@serialized
 def api_batch_tag_deck():
     """Add or remove tags from multiple deck items."""
     data = _json_object()
-    id_set = set(_id_list(data))
+    ids = _id_list(data)
     if not isinstance(data.get("add", []), list) or not isinstance(data.get("remove", []), list):
         abort(400, description="add/remove must be lists of strings")
-    add_tags = clean_tags(_as_str_list(data.get("add", []), "add"))
-    remove_tags = [t.lower() for t in clean_tags(_as_str_list(data.get("remove", []), "remove"))]
+    return jsonify(tag_tasks(ids, _as_str_list(data.get("add", []), "add"),
+                             _as_str_list(data.get("remove", []), "remove")))
+
+
+@serialized
+def tag_tasks(ids: list[str], add: list[str], remove: list[str],
+              message: str = "Tag deck tasks") -> list[dict]:
+    """Add the tags `add` to the tasks `ids` and take `remove` off them (case
+    ignored; a tag a task has keeps its spelling), open and completed alike,
+    in one commit; returns the tasks found. The batch-tag route and the MCP
+    tag_tasks tool share it."""
+    id_set = set(ids)
+    add_tags = clean_tags(add)
+    remove_tags = {t.lower() for t in clean_tags(remove)}
     if not id_set or not (add_tags or remove_tags):
-        abort(400)
+        abort(400, description="Give task ids and tags to add or remove")
     active = read_deck_strict()
     completed_list = read_completed_all_strict()
     updated = []
@@ -639,18 +650,15 @@ def api_batch_tag_deck():
         if task["id"] not in id_set:
             continue
         current = task.get("tags") or []
-        if add_tags:
-            existing_lower = {t.lower() for t in current}
-            for tag in add_tags:
-                if tag.lower() not in existing_lower:
-                    current.append(tag)
-                    existing_lower.add(tag.lower())
-        if remove_tags:
-            current = [t for t in current if t.lower() not in remove_tags]
-        task["tags"] = current
+        existing_lower = {t.lower() for t in current}
+        for tag in add_tags:
+            if tag.lower() not in existing_lower:
+                current.append(tag)
+                existing_lower.add(tag.lower())
+        task["tags"] = [t for t in current if t.lower() not in remove_tags]
         updated.append(task)
-    write_both(active, completed_list, "Tag deck tasks")
-    return jsonify(updated)
+    write_both(active, completed_list, message)
+    return updated
 
 
 # What batch-update may not do: it changes fields, while completing, won't

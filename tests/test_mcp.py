@@ -77,7 +77,7 @@ class TestHandle:
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history",
             "write_page", "edit_page", "append_to_page", "rename_page", "delete_page", "restore_page",
-            "create_task", "update_task", "comment_task", "delete_task"]
+            "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
@@ -1190,6 +1190,46 @@ class TestUpdateTask:
         text, err = call(client, "update_task", id="abcd", title="x")
         assert err and "Several tasks" in text
         assert not call(client, "update_task", id="abcd1", title="x")[1]
+
+
+class TestTagTasks:
+    def _tasks(self, client):
+        return {t["title"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
+
+    def test_adds_and_removes_on_several_in_one_commit(self, client, git_wiki_dir):
+        a = _task_id(call(client, "create_task", title="Nails", tags=["old", "Work"])[0])
+        b = _task_id(call(client, "create_task", title="Glue")[0])
+        c = _task_id(call(client, "create_task", title="Saw")[0])
+        call(client, "update_task", id=c, status="done")          # completed tasks too
+        before = len(self_log(git_wiki_dir))
+        text, err = call(client, "tag_tasks", ids=[a, f"[[task:{b}]]", c],
+                         add_tags=["#work", "diy"], remove_tags=["OLD"], summary="sort the shed")
+        assert not err
+        assert text.startswith("Tags changed on 3 of 3 tasks.\n\n")
+        assert f"- Nails ({a}): #Work #diy" in text and f"- Glue ({b}): #work #diy" in text
+        assert self._tasks(client)["Nails"]["tags"] == ["Work", "diy"]
+        assert self._tasks(client)["Glue"]["tags"] == ["work", "diy"]
+        done = client.get("/api/deck/completed", headers=HOST).get_json()
+        assert done[0]["tags"] == ["work", "diy"]
+        log = self_log(git_wiki_dir)
+        assert len(log) == before + 1 and log[0] == "Tag deck tasks: sort the shed (MCP)"
+
+    def test_says_which_had_it_already(self, client, wiki_dir):
+        a = _task_id(call(client, "create_task", title="A", tags=["x"])[0])
+        b = _task_id(call(client, "create_task", title="B")[0])
+        text, _ = call(client, "tag_tasks", ids=[a, b], add_tags="x")
+        assert text.startswith("Tags changed on 1 of 2 tasks (the others had them so already).")
+
+    def test_errors_change_nothing(self, client, wiki_dir):
+        a = _task_id(call(client, "create_task", title="A")[0])
+        text, err = call(client, "tag_tasks", ids=[a, "deadbeef"], add_tags=["x"])
+        assert err and "No task with id" in text
+        assert self._tasks(client)["A"]["tags"] == []
+        assert "Give add_tags or remove_tags" in call(client, "tag_tasks", ids=[a])[0]
+        assert "ids must be" in call(client, "tag_tasks", ids=[], add_tags=["x"])[0]
+        assert "ids must be" in call(client, "tag_tasks", ids=a, add_tags=["x"])[0]
+        assert "add_tags must be" in call(client, "tag_tasks", ids=[a], add_tags=[3])[0]
+        assert "At most" in call(client, "tag_tasks", ids=[a] * 201, add_tags=["x"])[0]
 
 
 class TestCommentAndDeleteTask:
