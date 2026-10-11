@@ -18,6 +18,8 @@ How the suite is set up and what each module covers. The rules (run it, add test
 
 `tests/test_eval_retrieval.py` covers `tools/eval_retrieval.py`: a page target matching any section and a section target only its own, ranks by keywords on a temp wiki, targets naming nothing (page, section, task), the report's numbers per mode, the questions file's format (questions without targets skipped and counted), `--new`'s stubs from the query logs (known and repeated queries left out, newest first), and that the semantic index it builds never writes the wiki's cache.
 
+`tests/test_env_example.py` checks `.env.example` against the settings the source, `run.sh` and `compose.yaml` read (none missing, none unknown).
+
 `tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`), in a scratch git repo holding copies of both, so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2), copy mode creates the container with `--rm`, a build's output stays hidden unless it fails (then nothing runs) and a first build says so, `eval` refuses a missing questions file and builds with `LEAF_EMBEDDINGS` and mounts the wiki read-only, and the hook scans the temporary index of `commit -a` and `commit <path>`, refuses a leak (exit 3) and only warns when the scan fails. The hook tests skip when a local gitleaks is on PATH.
 
 To run the suite without a local venv: `./run.sh test` (runs inside the app image with the repo mounted).

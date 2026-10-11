@@ -148,7 +148,7 @@ Windows in WSL2, which Docker Desktop and Podman use there anyway.
 ```bash
 git clone <this repository> leaf && cd leaf
 mkdir -p ~/leaf                       # your wiki folder (Leaf won't create it)
-echo 'LEAF_DATA=~/leaf' > .env
+cp .env.example .env                  # then edit it: LEAF_DATA is your wiki folder
 ./run.sh up                           # build and start
 ```
 
@@ -171,7 +171,7 @@ In Windows PowerShell: `.venv\Scripts\Activate.ps1` activates the venv, and
 
 ## Configuration
 
-Settings go in `.env`, all optional except `LEAF_DATA`:
+Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF_DATA`:
 
 | Setting | Does |
 |---------|------|

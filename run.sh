@@ -138,7 +138,7 @@ case "${1:-up}" in
       exit 1
     fi
     if [[ ! -f .env ]]; then
-      echo "No .env: create one (e.g. echo 'LEAF_DATA=~/leaf' > .env, see README)." >&2
+      echo "No .env: create one (cp .env.example .env, see README)." >&2
       exit 1
     fi
     # A container named leaf that compose didn't create (an older run.sh
