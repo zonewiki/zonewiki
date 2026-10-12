@@ -347,6 +347,7 @@ files that any editor opens, with their history in git.
 ./run.sh e2e      # browser tests (Playwright) and the deck logic tests (Node)
 ./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
+./run.sh eval     # measure how well search finds answers in your wiki
 ```
 
 All of them run in containers (Podman or Docker, no compose needed); CI runs the same commands. To have

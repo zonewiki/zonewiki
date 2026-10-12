@@ -123,14 +123,20 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
 SEMANTIC: embed.SemanticIndex | None = None
 
 
+def semantic_from_env() -> embed.SemanticIndex | None:
+    """The semantic index LEAF_EMBEDDINGS asks for, its worker not started
+    (None: keywords only)."""
+    return embed.from_env(
+        config.LEAF_DATA, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
+        # A task is embedded as its search text: title, notes and #tags.
+        tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deckstore.task_search_docs()])
+
+
 def start_semantic() -> None:
     """Set up the semantic index LEAF_EMBEDDINGS asks for and start its
     worker (server.py, once the deck is set up: the worker reads tasks)."""
     global SEMANTIC
-    SEMANTIC = embed.from_env(
-        config.LEAF_DATA, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
-        # A task is embedded as its search text: title, notes and #tags.
-        tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deckstore.task_search_docs()])
+    SEMANTIC = semantic_from_env()
     if SEMANTIC:
         SEMANTIC.start()
 

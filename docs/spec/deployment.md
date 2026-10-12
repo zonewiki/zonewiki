@@ -21,6 +21,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 ./run.sh e2e        # run browser tests + deck-core.js (Node) tests in the tools image (extra args go to pytest)
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image
+./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image with LEAF_EMBEDDINGS' model
 ```
 
 Leaf is available at **http://localhost:5000** after `./run.sh up`.

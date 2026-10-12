@@ -206,8 +206,25 @@ case "${1:-up}" in
     image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
+  eval)
+    # Retrieval quality on your wiki (tools/eval_retrieval.py): the questions
+    # are a file in the wiki (default _eval/retrieval.json), the wiki is
+    # mounted read-only. The image is the app's with LEAF_EMBEDDINGS' model
+    # baked in, as up builds it, so it compares keyword and hybrid ranking.
+    file="${2:-_eval/retrieval.json}"
+    if [[ ! -f "$LEAF_DATA/$file" ]]; then
+      echo "No questions at $LEAF_DATA/$file (format: tools/eval_retrieval.py)." >&2
+      exit 1
+    fi
+    embeddings=$(env_val LEAF_EMBEDDINGS)
+    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
+      --build-arg "LEAF_EMBEDDINGS=$embeddings")
+    in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
+      -e "LEAF_EMBEDDINGS=$embeddings" -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" -- \
+      python3 tools/eval_retrieval.py "/wiki-data/$file" "${@:3}"
+    ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
@@ -216,6 +233,7 @@ case "${1:-up}" in
     echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
+    echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
     exit 1
     ;;
 esac

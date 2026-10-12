@@ -18,7 +18,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history, TOC |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
-| `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights |
+| `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
@@ -65,6 +65,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
+├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
@@ -124,6 +125,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
+./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
 ```
 
 Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.

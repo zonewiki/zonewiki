@@ -185,3 +185,21 @@ def test_hook_refuses_a_leak_and_only_warns_when_the_scan_fails(sandbox):
     r = _git(repo, "commit", "-q", "-m", "engine broken", env=env)
     assert r.returncode == 0, r.stderr
     assert "didn't run (exit 125)" in r.stderr
+
+
+def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_path):
+    repo, env, log = sandbox
+    wiki = tmp_path / "wiki"
+    (wiki / "_eval").mkdir(parents=True)
+    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_EMBEDDINGS=fastembed\n")
+    r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 1 and "No questions at" in r.stderr
+    (wiki / "_eval" / "retrieval.json").write_text("[]")
+    r = subprocess.run(["./run.sh", "eval", "_eval/retrieval.json", "-k", "5"],
+                       cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (build,) = _engine_calls(log, "build")
+    assert "--build-arg LEAF_EMBEDDINGS=fastembed" in build
+    (run,) = _engine_calls(log, "run")
+    assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
+    assert run.endswith("tools/eval_retrieval.py /wiki-data/_eval/retrieval.json -k 5")
