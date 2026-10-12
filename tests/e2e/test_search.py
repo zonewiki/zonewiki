@@ -439,3 +439,32 @@ def test_preview_of_a_title_match(new_page, wiki):
     expect(preview.locator(".search-preview-title")).to_have_text("Garden")
     expect(preview.locator("mark")).to_have_count(0)
     assert preview.evaluate("el => el.scrollTop") == 0
+
+
+def test_the_dialog_says_whether_search_goes_by_meaning(page, wiki):
+    seed(wiki)
+    page.goto("/page/index")
+    page.keyboard.press("Control+p")
+    mode = page.locator("#search-mode")
+    expect(mode).to_have_text("Keywords only")   # no semantic index in the tests
+    expect(mode).to_have_attribute("title", re.compile("LEAF_EMBEDDINGS"))
+
+    def as_if_indexed(route):
+        resp = route.fetch()
+        route.fulfill(response=resp, headers={**resp.headers, "x-leaf-semantic": "on"})
+    page.route("**/api/search*", as_if_indexed)
+    page.locator("#modal-filter").fill("tomatoes")
+    expect(mode).to_have_text("Keywords + meaning")
+    expect(mode).to_have_attribute("data-state", "on")
+
+
+def test_the_meaning_indicator_fits_the_dialog_on_a_phone(new_page, wiki):
+    seed(wiki)
+    page = new_page(**TOUCH_PHONE)
+    page.goto("/page/index")
+    page.evaluate("document.getElementById('search-modal').showModal()")
+    dialog = page.locator("#search-modal").bounding_box()
+    mode = page.locator("#search-mode").bounding_box()
+    assert mode["width"] > 0
+    assert dialog["x"] <= mode["x"] and mode["x"] + mode["width"] <= dialog["x"] + dialog["width"]
+    page.screenshot(path="tests/e2e/_screenshots/search-mode-phone.png")

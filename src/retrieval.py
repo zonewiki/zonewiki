@@ -2,6 +2,12 @@
 optional semantic index (embed.py), for the browser (do_search) and for
 LLMs (retrieve, sections rather than pages)."""
 
+import json
+import os
+import sys
+import threading
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlencode
 
 import config
@@ -130,6 +136,18 @@ def semantic_from_env() -> embed.SemanticIndex | None:
         config.LEAF_DATA, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
         # A task is embedded as its search text: title, notes and #tags.
         tasks_fn=lambda: [(d["task_id"], d["excerpt_text"]) for d in deckstore.task_search_docs()])
+
+
+def semantic_status() -> str:
+    """How content search works now, for the search dialog: "on" (by
+    keywords and meaning), "indexing" (the wiki isn't embedded yet),
+    "failed" (the model fails) or "off" (LEAF_EMBEDDINGS unset, or
+    fastembed missing). The last three search by keywords only."""
+    if not SEMANTIC:
+        return "off"
+    if SEMANTIC.failing:
+        return "failed"
+    return "on" if SEMANTIC.ready else "indexing"
 
 
 def start_semantic() -> None:
@@ -437,3 +455,40 @@ def _result_href(r: dict) -> str:
         tab = "completed" if r.get("status") == "done" else "open"
         return task_href(r["task_id"], tab, r.get("list"), r.get("year"))
     return url("page", r['slug'])
+
+
+# search_wiki's queries, one JSON line each (LEAF_QUERY_LOG), for turning
+# into questions for tools/eval_retrieval.py. In .leaf/, so never in git.
+# Past QUERY_LOG_MAX bytes the log moves to queries.1.jsonl (the one
+# before is dropped), so it can't grow without end.
+QUERY_LOG_MAX = 1_000_000
+_query_log_lock = threading.Lock()
+
+
+def query_log_path() -> Path:
+    return config.LEAF_DATA / ".leaf" / "queries.jsonl"
+
+
+def result_target(d: dict) -> str:
+    """A result as the eval's questions name it: slug#anchor, or task:<id>."""
+    return f"task:{d['task_id']}" if d.get("type") == "task" else f"{d['slug']}{d.get('anchor', '')}"
+
+
+def log_query(raw: str, under: str | None, hits: list[dict]) -> None:
+    """Append a search_wiki query and what it found to the query log."""
+    if not config.LEAF_QUERY_LOG:
+        return
+    entry = {"at": datetime.now().isoformat(timespec="seconds"), "q": raw}
+    if under:
+        entry["under"] = under
+    entry["results"] = [result_target(d) for d in hits]
+    path = query_log_path()
+    try:
+        with _query_log_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists() and path.stat().st_size > QUERY_LOG_MAX:
+                os.replace(path, path.with_name("queries.1.jsonl"))
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"[queries] could not write {path}: {e}", file=sys.stderr, flush=True)

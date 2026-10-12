@@ -182,6 +182,7 @@ Settings go in `.env`, all optional except `LEAF_DATA`:
 | `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
 | `LEAF_EMBED_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
+| `LEAF_QUERY_LOG=1` | Keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
 | `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
 | `LEAF_NOSHARE` | Pages hidden in sharing mode, e.g. `#noshare,people/` |

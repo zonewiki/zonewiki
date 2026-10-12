@@ -59,13 +59,29 @@ def test_report_compares_modes_and_lists_questions_not_first():
     assert "       -       2  three" in out
 
 
-def test_load_questions_takes_a_single_target_and_refuses_a_question_without_one(tmp_path):
+def test_load_questions_takes_a_single_target_and_skips_questions_without_one(tmp_path):
     f = tmp_path / "q.json"
-    f.write_text(json.dumps([{"q": " Bremsen ", "expect": "golf", "note": "x"}]))
-    assert ev.load_questions(f) == [{"q": "Bremsen", "expect": ["golf"]}]
-    f.write_text(json.dumps([{"q": "Bremsen"}]))
+    f.write_text(json.dumps([{"q": " Bremsen ", "expect": "golf", "note": "x"},
+                             {"q": "Reifen", "expect": [], "results": ["golf#reifen"]}, {"q": "Öl"}]))
+    assert ev.load_questions(f) == ([{"q": "Bremsen", "expect": ["golf"]}], 2)
+    f.write_text(json.dumps([{"expect": ["golf"]}]))
     with pytest.raises(SystemExit, match="question 1"):
         ev.load_questions(f)
+
+
+def test_new_queries_lists_logged_queries_not_in_the_file_newest_first_once(tmp_path):
+    f = tmp_path / "q.json"
+    f.write_text(json.dumps([{"q": "Golf  Bremsen", "expect": ["golf"]}]))
+    old, log = tmp_path / "queries.1.jsonl", tmp_path / "queries.jsonl"
+    old.write_text(json.dumps({"at": "2026-10-01T09:00:00", "q": "winter tyres", "results": ["golf#reifen"]}) + "\n")
+    log.write_text("\n".join(json.dumps(e) for e in [
+        {"at": "2026-10-02T09:00:00", "q": "golf bremsen", "results": []},
+        {"at": "2026-10-03T09:00:00", "q": "Winter tyres", "results": []},
+        {"at": "2026-10-04T09:00:00", "q": "git push", "results": [f"r{i}" for i in range(9)]},
+    ]) + "\nnot json\n")
+    stubs = ev.new_queries(f, [old, log, tmp_path / "missing.jsonl"])
+    assert [s["q"] for s in stubs] == ["git push", "Winter tyres"]
+    assert stubs[0] == {"q": "git push", "expect": [], "results": ["r0", "r1", "r2", "r3", "r4"]}
 
 
 def test_semantic_index_never_writes_the_wikis_cache(wiki, monkeypatch):

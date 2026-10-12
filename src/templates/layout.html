@@ -41,6 +41,9 @@
       <label class="unlinked-label">
         <input type="checkbox" id="modal-unlinked"> Unlinked only
       </label>
+      {#- Whether content matches are found by meaning too; js/search.js
+          words it and keeps it current from /api/search's X-Leaf-Semantic. #}
+      <span id="search-mode" class="search-mode" data-state="{{ semantic }}"></span>
     </div>
     <div class="modal-results">
       <ul id="modal-page-list" class="page-list"></ul>

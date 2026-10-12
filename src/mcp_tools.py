@@ -32,7 +32,7 @@ from mdtext import (_INLINE_CODE_RE, is_scratch, iter_fenced_lines, mask_code, p
 from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
                    iter_pages, page_link_targets, page_meta, safe_path, url)
 from render import task_link, TOC_RE
-from retrieval import in_folder, passes, retrieve, task_status
+from retrieval import in_folder, log_query, passes, retrieve, task_status
 
 
 def _clean_folder(raw) -> str | None:
@@ -1393,6 +1393,7 @@ def mcp_call_tool(name: str, args: dict) -> str:
             raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs, "
                                        "whose folders are the part before the last '/'.")
         hits = retrieve(query, _mcp_int(args, "limit", 8, 20), under)
+        log_query(query, under, hits)
         if not hits:
             return "No matching sections or tasks. Try other words, or list_pages to browse."
         out = []

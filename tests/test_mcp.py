@@ -4,6 +4,7 @@ read_page, list_pages, grep_wiki, check_links) backed by section-level
 retrieval in server.py, and the writing tools.
 """
 
+import json
 import os
 import re
 
@@ -209,6 +210,28 @@ class TestSearchWiki:
         assert first.startswith("[1] Rollout › Problems › Windows")
         assert "url: http://localhost:5000/page/rollout#windows" in first
         assert first.endswith("Crashes at startup.")
+
+    def test_queries_are_logged_only_when_asked(self, client, pages, monkeypatch):
+        log = retrieval.query_log_path()
+        call(client, "search_wiki", query="git push")
+        assert not log.exists()
+        monkeypatch.setattr(config, "LEAF_QUERY_LOG", True)
+        call(client, "search_wiki", query="git push")
+        call(client, "search_wiki", query="Mechaniker", under="golf")
+        first, second = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
+        assert first["q"] == "git push" and "under" not in first
+        assert first["results"][0] == "git-remote#pushing"
+        assert second["under"] == "golf" and second["results"] == ["golf#werkstatt"]
+        assert first["at"][:2] == "20"
+
+    def test_the_query_log_moves_aside_when_full(self, client, pages, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_QUERY_LOG", True)
+        monkeypatch.setattr(retrieval, "QUERY_LOG_MAX", 10)
+        for q in ("git push", "Mechaniker", "Bremsen"):
+            call(client, "search_wiki", query=q)
+        log = retrieval.query_log_path()
+        assert [json.loads(l)["q"] for l in log.read_text(encoding="utf-8").splitlines()] == ["Bremsen"]
+        assert json.loads(log.with_name("queries.1.jsonl").read_text(encoding="utf-8"))["q"] == "Mechaniker"
 
     def test_last_edit_date(self, client, pages):
         os.utime(pages / "git-remote.md", (1_000_000_000, 1_000_000_000))

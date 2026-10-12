@@ -829,6 +829,18 @@ main {
 }
 .unlinked-label input { cursor: pointer; }
 
+/* Semantic search on or not (js/search.js): a dot and a word, muted. */
+.search-mode {
+  display: inline-flex; align-items: center; gap: .35rem;
+  margin-left: auto; font-size: .8125rem; color: var(--muted); white-space: nowrap; cursor: help;
+}
+.search-mode::before {
+  content: ""; width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--muted); opacity: .6;
+}
+.search-mode[data-state="on"]::before { background: var(--btn-primary); opacity: 1; }
+.search-mode[data-state="indexing"]::before { background: var(--btn-primary); opacity: .45; }
+
 .page-list { list-style: none; }
 
 .page-list-item {

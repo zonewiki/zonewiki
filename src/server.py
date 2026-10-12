@@ -758,8 +758,11 @@ def api_search():
     scratch = request.args.get("scratch") == "1"
     limit = request.args.get("limit", SEARCH_LIMIT, type=int)
     limit = max(1, min(limit, SCRATCH_FILTER_LIMIT if scratch else SEARCH_MAX_LIMIT))
-    return jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1", limit=limit,
+    resp = jsonify(do_search(q, unlinked=request.args.get("unlinked") == "1", limit=limit,
                              scratch=scratch))
+    # The search dialog's indicator (js/search.js) follows it: indexing → on.
+    resp.headers["X-Leaf-Semantic"] = retrieval.semantic_status()
+    return resp
 
 
 # /deck is a built-in page showing one full main deck (or, with ?list=, that

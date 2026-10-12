@@ -17,6 +17,25 @@ let modalCMSeq = 0;
 
 closeOnBackdropClick(searchModal);
 
+// Whether content matches are found by meaning too (retrieval.semantic_status):
+// the page says how it was when rendered, each /api/search how it is now.
+const searchMode = document.getElementById('search-mode');
+const SEARCH_MODES = {
+  on: ['Keywords + meaning', 'Content matches are found by their words and by meaning (semantic search).'],
+  indexing: ['Meaning: indexing…', 'Semantic search is still indexing the wiki; until then content matches are found by their words only.'],
+  failed: ['Keywords only', "The semantic search model fails (see Leaf's log); content matches are found by their words only."],
+  off: ['Keywords only', 'Semantic search is off (LEAF_EMBEDDINGS in .env turns it on); content matches are found by their words.'],
+};
+
+function showSearchMode(state) {
+  const mode = SEARCH_MODES[state];
+  if (!searchMode || !mode) return;
+  searchMode.dataset.state = state;
+  searchMode.textContent = mode[0];
+  searchMode.title = mode[1];
+}
+if (searchMode) showSearchMode(searchMode.dataset.state);
+
 export function openSearchModal() {
   if (!searchModal) return;
   searchModal.showModal();
@@ -323,6 +342,7 @@ async function fetchModalContentMatches(q) {
     // One more than shown: if it comes back, there are more for /search.
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${unlinked}&limit=${MODAL_RESULTS + 1}`);
     if (seq !== modalCMSeq) return;  // stale response — discard
+    showSearchMode(res.headers.get('X-Leaf-Semantic'));
     const results = await res.json();
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     const more = results.length > MODAL_RESULTS

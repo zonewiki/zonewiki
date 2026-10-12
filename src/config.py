@@ -45,6 +45,9 @@ LEAF_BASE_URL = os.environ.get("LEAF_BASE_URL", "").strip().rstrip("/")
 # the MCP tools give; inside the container LEAF_DATA is only /wiki-data.
 # Unset, the MCP tools use LEAF_DATA itself (mcp_tools._host_file).
 LEAF_HOST_DATA = os.environ.get("LEAF_HOST_DATA", "").strip().rstrip("/")
+# Keep search_wiki's queries in .leaf/queries.jsonl (retrieval.log_query),
+# to turn into questions for tools/eval_retrieval.py. Off by default.
+LEAF_QUERY_LOG = os.environ.get("LEAF_QUERY_LOG", "").lower() in ("1", "true", "yes")
 # A remote for the wiki's git repository (gitstore.git_setup).
 LEAF_GIT_REMOTE = os.environ.get("LEAF_GIT_REMOTE", "")
 # Listen on the LAN: no Host check (server.check_host), unless LEAF_HOSTS

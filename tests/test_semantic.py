@@ -501,6 +501,36 @@ def _search(client, q):
     return client.get("/api/search", query_string={"q": q}, headers=HOST).get_json()
 
 
+class TestSemanticStatus:
+    """The search dialog's indicator: the page renders the state, every
+    /api/search says it in X-Leaf-Semantic."""
+
+    def _states(self, client):
+        page = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        rendered = re.search(r'id="search-mode" class="search-mode" data-state="(\w+)"', page).group(1)
+        return rendered, client.get("/api/search", query_string={"q": "golf"}, headers=HOST).headers["X-Leaf-Semantic"]
+
+    def test_off_without_a_semantic_index(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(retrieval, "SEMANTIC", None)
+        assert self._states(client) == ("off", "off")
+
+    def test_indexing_until_ready_then_on(self, client, wiki_dir, monkeypatch):
+        write_page(wiki_dir, "golf", "# Golf\n\nMechaniker.\n")
+        idx = make_index(wiki_dir)
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        assert self._states(client) == ("indexing", "indexing")
+        idx.sync()
+        assert self._states(client) == ("on", "on")
+
+    def test_failed_when_the_model_fails(self, client, wiki_dir, monkeypatch):
+        write_page(wiki_dir, "golf", "# Golf\n\nMechaniker.\n")
+        idx = make_index(wiki_dir)
+        idx.embedder.fail = True
+        idx.sync()
+        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        assert self._states(client) == ("failed", "failed")
+
+
 class TestHybridSearch:
     def test_semantic_only_hit_with_section_excerpt(self, client, semantic):
         results = _search(client, "car repair")

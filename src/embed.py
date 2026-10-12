@@ -297,6 +297,11 @@ class SemanticIndex:
         self.ready = False
         self._load_cache()
 
+    @property
+    def failing(self) -> bool:
+        """Whether the last try to embed failed (the model is missing or broken)."""
+        return self._failed
+
     # Persistence
 
     def _load_cache(self) -> None:
