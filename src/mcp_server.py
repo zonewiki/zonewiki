@@ -16,32 +16,28 @@ from typing import Callable
 # else with the newest. The tools-only subset used here is the same in all.
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
+# Short: Claude Code cuts a server's instructions at about 2 KB, so what
+# every session needs comes first and the tools' own descriptions carry the
+# details. The wiki's guide follows them (mcp_tools.mcp_instructions).
 INSTRUCTIONS = (
-    "Leaf is the user's personal wiki: their notes, in markdown, plus the Deck, "
-    "their task list. Use search_wiki when a question may be answered by something "
-    "the user wrote down (it finds tasks too), then read_page for a page's full "
-    "text (with heading, just one section of a long page). Search finds by meaning as well as by keyword, so phrase queries the "
-    "way the notes might. For questions about their tasks (what's open for a "
-    "project, what's due, what they finished) use search_tasks, which filters by "
-    "tag and status. To find every occurrence of exact text (a ticket id, a name, "
-    "a TODO), not the most relevant sections, use grep_wiki, which takes a regex. "
-    "read_page shows which pages link to a page; list_pages counts the links and, "
-    "with orphans, lists pages nothing links to; check_links reports wikilinks that "
-    "lead nowhere; list_tags shows the tags in use. history shows recent changes "
-    "and a page's versions (restore_page goes back to one). Cite pages and tasks "
-    "by their URL.\n\n"
-    "For questions about Leaf itself (how to do something in it, its markdown "
-    "syntax, the deck's options, settings, setup, the MCP), call leaf_help: it "
-    "searches Leaf's documentation. Answer from it, not from guesses.\n\n"
-    "You can also write: the wiki is meant to be kept up to date by you. Before "
-    "creating a page, search for one that already covers the topic and extend "
-    "it instead. Change pages with edit_page (exact text replacement, like a "
-    "code editor) or append_to_page (adds text without reading the page "
-    "first; under_heading adds to that section); write_page creates a page "
-    "or, with overwrite, replaces all of it. rename_page keeps links working. "
-    "Tasks: create_task, update_task (fields, done, won't do), tag_tasks "
-    "(add or remove tags on several tasks at once), comment_task for a status line. Every write is a git commit the user can undo; give "
-    "each a short summary, which becomes its commit message."
+    "Leaf is the user's personal wiki: their notes in markdown, plus the Deck, "
+    "their task list. Use search_wiki when an answer may be in what the user "
+    "wrote down (it finds tasks too, and matches meaning as well as words, so "
+    "phrase queries the way the notes might), then read_page for a page's full "
+    "text. search_tasks filters tasks by tag and status; grep_wiki finds every "
+    "occurrence of exact text. Cite pages and tasks by their URL. For questions "
+    "about Leaf itself, call leaf_help.\n\n"
+    "When you research something elsewhere (an issue tracker, chat, mail, code, "
+    "the web) and find a fact that a wiki page on the topic lacks or "
+    "contradicts, offer to add it: name the page and each fact in one line, once "
+    "per answer. Write only when the user agrees.\n\n"
+    "Writing: before creating a page, search for one that covers the topic and "
+    "extend it instead. edit_page and append_to_page change pages, write_page "
+    "creates them, rename_page keeps links working; create_task and update_task "
+    "keep the Deck. Every write is a git commit the user can undo; give each a "
+    "short summary, its commit message. The user's guides (for the wiki, and a "
+    "folder's CLAUDE.md or AGENTS.md) say where things go and how to write them: "
+    "call read_guides before drafting, and pass their ids as guides when writing."
 )
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}

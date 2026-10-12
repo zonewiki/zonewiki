@@ -1377,9 +1377,11 @@ def mcp_instructions() -> str:
                 "you at the start of every session.")
     if len(guide) > _GUIDE_CHARS:
         guide = guide[:_GUIDE_CHARS] + f"\n\n[… cut here: read_page {GUIDE_SLUG!r} for the rest]"
-    return (mcp_server.INSTRUCTIONS + f"\n\nThe user's guide for this wiki (the page {GUIDE_SLUG!r}). "
-            "Follow it; where it differs from the advice above, it wins. When the user settles a "
-            "new convention, offer to add it there.\n\n" + guide)
+    # Some clients cut the instructions (Claude Code at about 2 KB), and so
+    # the guide; INSTRUCTIONS points to read_guides, which gives it in full.
+    return (mcp_server.INSTRUCTIONS + f"\n\nThe user's guide for this wiki (the page {GUIDE_SLUG!r}; "
+            "read_guides gives it too if this is cut). Follow it; where it differs from the advice "
+            "above, it wins. When the user settles a new convention, offer to add it there.\n\n" + guide)
 
 
 def mcp_call_tool(name: str, args: dict) -> str:

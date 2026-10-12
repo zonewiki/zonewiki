@@ -595,6 +595,16 @@ class TestGuide:
     def instructions(self, client):
         return rpc(client, "initialize", {"protocolVersion": "2025-06-18"}).get_json()["result"]["instructions"]
 
+    def test_what_every_session_needs_fits_before_a_clients_cut(self, client, wiki_dir):
+        # Claude Code cuts a server's instructions at about 2 KB.
+        text = self.instructions(client)
+        assert len(text.encode()) < 1900
+        for needed in ("search_wiki", "leaf_help", "read_guides", "offer to add it",
+                       "Write only when the user agrees"):
+            assert needed in text
+        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n" + "x" * 5000)
+        assert len(self.instructions(client).split("# Wiki guide")[0].encode()) < 1900
+
     def test_without_a_guide_a_nudge_to_start_one(self, client, wiki_dir):
         text = self.instructions(client)
         assert text.startswith(mcp_server.INSTRUCTIONS)
@@ -605,7 +615,7 @@ class TestGuide:
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- Tickets go in tickets/<id>.\n")
         text = self.instructions(client)
         assert text.startswith(mcp_server.INSTRUCTIONS)
-        assert "The user's guide for this wiki (the page 'wiki-guide')" in text
+        assert "The user's guide for this wiki (the page 'wiki-guide'; read_guides gives it too" in text
         assert text.endswith("\n\n# Wiki guide\n\n- Tickets go in tickets/<id>.")
         # Read when a client connects: an edit shows in the next session.
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- People notes stay private.\n")
