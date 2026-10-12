@@ -83,6 +83,12 @@ def prose_chars(text: str) -> int:
 MAX_CHUNK_CHARS = 800
 
 CACHE_VERSION = 1
+# How pages are cut into chunks; raise it when chunk_page or prepare change
+# what a chunk's text is. A cache of another chunking keeps its vectors
+# (keyed by the text, so still right for a text that didn't change) but
+# re-chunks every page: else a page not edited since kept chunk keys that
+# retrieval's sections no longer have, and its meaning hits were dropped.
+CHUNKING = 2
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _LINK_TARGET_RE = re.compile(r"(!?\[[^\]]*\])\([^)]*\)")
@@ -121,11 +127,15 @@ def _split_long(text: str, max_chars: int) -> list[str]:
 
 def chunk_page(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     """Split a page body into sections at its headings (outside code fences),
-    long sections further at paragraphs. Each chunk starts with its heading,
-    so a hit's excerpt shows where in the page it is. Link targets are
+    long sections further at paragraphs. Each chunk starts with its heading
+    path (chunk_text), so it says where in the page it is. Link targets are
     dropped (the link text stays), as in the BM25 index."""
-    return [f"{heading}\n{body}" if heading else body
-            for heading, body, _level in chunk_sections(text, max_chars)]
+    return [chunk_text(path, body) for _heading, body, _level, path in chunk_sections(text, max_chars)]
+
+
+def chunk_text(path: str, body: str) -> str:
+    """A section as it is embedded and indexed: its heading path, then its text."""
+    return f"{path}\n{body}" if path else body
 
 
 def chunk_key(title: str, chunk: str) -> str:
@@ -134,26 +144,31 @@ def chunk_key(title: str, chunk: str) -> str:
     return _hash(f"{title}\n{chunk}") if chunk else _hash(title)
 
 
-def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str, int]]:
-    """chunk_page's pieces as (heading, body, heading level); before the first
-    heading that is ("", body, 0)."""
+def chunk_sections(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str, int, str]]:
+    """chunk_page's pieces as (heading, body, heading level, heading path);
+    before the first heading that is ("", body, 0, ""). The path is the
+    heading after those it sits under ("Problems › Windows"): a section
+    headed "Windows" or "Next steps" says little on its own."""
     sections: list[list[str]] = [[]]
     for _i, line, in_fence in iter_fenced_lines(text.split("\n")):
         if not in_fence and _HEADING_RE.match(line):
             sections.append([])
         sections[-1].append(line)
     chunks = []
+    parents: list[tuple[int, str]] = []   # the open headings above, (level, text)
     for lines in sections:
         heading, level = "", 0
         m = _HEADING_RE.match(lines[0]) if lines else None
         if m:
             heading, level = m.group(2), len(m.group(1))
             lines = lines[1:]
+            parents = [p for p in parents if p[0] < level] + [(level, heading)]
+        path = " › ".join(h for _l, h in parents) if heading else ""
         body = _LINK_TARGET_RE.sub(r"\1", "\n".join(lines)).strip()
         if not body:
             continue
         for piece in _split_long(body, max_chars):
-            chunks.append((heading, piece, level))
+            chunks.append((heading, piece, level, path))
     return chunks
 
 
@@ -293,7 +308,7 @@ class SemanticIndex:
             return
         try:
             self._vecs = {h: _decode(v) for h, v in data["vectors"].items()}
-            self._pages = data["pages"]
+            self._pages = data["pages"] if data.get("chunking", 1) == CHUNKING else {}
             self._tasks = dict(data.get("tasks") or {})
         except (KeyError, TypeError, ValueError):
             self._vecs, self._pages, self._tasks = {}, {}, {}
@@ -305,6 +320,7 @@ class SemanticIndex:
     def _save_cache(self) -> None:
         data = {
             "version": CACHE_VERSION,
+            "chunking": CHUNKING,
             "model": self.embedder.name,
             "pages": self._pages,
             "tasks": self._tasks,

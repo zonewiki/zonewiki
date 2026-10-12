@@ -1401,7 +1401,7 @@ def mcp_call_tool(name: str, args: dict) -> str:
                 out.append(f"[{i}] " + _mcp_task_text(d["task"], base))
                 continue
             anchor = d["anchor"]
-            where = f"{d['title']} › {d['heading']}" if d["heading"] else d["title"]
+            where = f"{d['title']} › {d['path']}" if d["path"] else d["title"]
             out.append(f"[{i}] {where}\nslug: {d['slug']}\nedited: {fmt_date(d['mtime'])}\n"
                        f"url: {base}{url('page', d['slug'])}{anchor}\n"
                        f"file: {_host_file(d['slug'])}\n\n{d['text']}")

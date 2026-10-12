@@ -92,7 +92,15 @@ def semantic(wiki_dir, monkeypatch):
 class TestChunkPage:
     def test_splits_at_headings_and_keeps_them(self):
         chunks = embed.chunk_page("Intro text.\n\n## Setup\n\nDo this.\n\n### Detail\n\nAnd that.\n")
-        assert chunks == ["Intro text.", "Setup\nDo this.", "Detail\nAnd that."]
+        assert chunks == ["Intro text.", "Setup\nDo this.", "Setup › Detail\nAnd that."]
+
+    def test_a_section_carries_the_headings_it_sits_under(self):
+        text = ("## Problems\n\n### Windows\n\nCrashes.\n\n#### Proxy\n\nSet.\n\n"
+                "### Linux\n\nFine.\n\n## Next steps\n\nShip.\n")
+        assert [(h, p) for h, _b, _l, p in embed.chunk_sections(text)] == [
+            ("Windows", "Problems › Windows"), ("Proxy", "Problems › Windows › Proxy"),
+            ("Linux", "Problems › Linux"), ("Next steps", "Next steps")]
+        assert embed.chunk_page(text)[0] == "Problems › Windows\nCrashes."
 
     def test_heading_inside_code_fence_is_not_a_section(self):
         chunks = embed.chunk_page("## Shell\n\n```sh\n# a comment\necho hi\n```\n")
@@ -104,7 +112,7 @@ class TestChunkPage:
         # inside a ```` block closed it, and a "# comment" after it became a
         # section of its own. The rendered page (mdtext) never split there.
         text = "## Example\n\n````md\n```python\n# not a heading\n```\n````\n\n## Next\n\nText.\n"
-        assert [h for h, _b, _l in embed.chunk_sections(text)] == ["Example", "Next"]
+        assert [h for h, _b, _l, _p in embed.chunk_sections(text)] == ["Example", "Next"]
 
     def test_empty_sections_are_skipped(self):
         assert embed.chunk_page("## Empty\n\n## Full\n\nText.\n") == ["Full\nText."]
@@ -211,6 +219,20 @@ class TestSemanticIndex:
         assert fresh.search("car repair")[0][0] == "golf"
         assert fresh.sync() is False
         assert fresh.embedder.calls == []
+
+    def test_cache_of_an_older_chunking_rechunks_every_page_and_keeps_its_vectors(self, semantic, wiki_dir):
+        cache = wiki_dir / ".leaf" / "index" / "embeddings.json"
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        data["chunking"] = embed.CHUNKING - 1
+        data["pages"]["golf"]["chunks"] = [["stale-key", "Werkstatt\nTermin beim Mechaniker"]]
+        cache.write_text(json.dumps(data), encoding="utf-8")
+        fresh = make_index(wiki_dir)
+        assert not fresh.ready
+        fresh.sync()
+        assert fresh.embedder.calls == []   # the texts are unchanged: their vectors reused
+        keys = {d["key"] for d in retrieval._page_chunk_docs()}
+        hits = fresh.search_chunks("car repair")
+        assert hits and all(k in keys for k, _s in hits)
 
     def test_cache_of_another_model_ignored(self, semantic, wiki_dir):
         other = FakeEmbedder()

@@ -203,6 +203,13 @@ class TestSearchWiki:
         assert "url: http://localhost:5000/page/git-remote#pushing" in first
         assert first.endswith("Run git push to back up.")
 
+    def test_a_nested_section_shows_and_is_found_by_its_parent_headings(self, client, pages):
+        write_page(pages, "rollout", "# Rollout\n\n## Problems\n\n### Windows\n\nCrashes at startup.\n")
+        first = call(client, "search_wiki", query="rollout problems windows")[0].split("\n\n---\n\n")[0]
+        assert first.startswith("[1] Rollout › Problems › Windows")
+        assert "url: http://localhost:5000/page/rollout#windows" in first
+        assert first.endswith("Crashes at startup.")
+
     def test_last_edit_date(self, client, pages):
         os.utime(pages / "git-remote.md", (1_000_000_000, 1_000_000_000))
         first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]

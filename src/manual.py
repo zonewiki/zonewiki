@@ -73,7 +73,7 @@ def _index() -> search.SearchIndex:
         for name, path in paths.items():
             text = path.read_text(encoding="utf-8")
             doc_title = title(name, text)
-            for heading, body, _level in embed.chunk_sections(text, CHUNK_CHARS):
+            for heading, body, _level, _path in embed.chunk_sections(text, CHUNK_CHARS):
                 docs.append({
                     "topic": name, "title": doc_title, "heading": heading, "text": body,
                     "tokens": search.tokenize(f"{heading}\n{body}")

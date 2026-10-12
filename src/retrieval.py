@@ -360,13 +360,13 @@ def _page_chunks(slug: str, content: str, mtime: float) -> list[dict]:
     title, body = _semantic_text(content, slug)
     tags = page_tags(content)
     chunks = []
-    for heading, text, level in embed.chunk_sections(body) or [("", "", 0)]:
-        chunk = f"{heading}\n{text}" if heading else text
+    for heading, text, level, path in embed.chunk_sections(body) or [("", "", 0, "")]:
+        chunk = embed.chunk_text(path, text)
         chunks.append({
-            "slug": slug, "title": title, "heading": heading, "text": text,
+            "slug": slug, "title": title, "heading": heading, "path": path, "text": text,
             "anchor": _section_anchor(heading, level), "tags": tags,
             "mtime": mtime, "key": embed.chunk_key(title, chunk),
-            "tokens": search.tokenize(chunk) + search.tokenize(title) * search.TITLE_WEIGHT
+            "tokens": search.tokenize(f"{heading}\n{text}") + search.tokenize(title) * search.TITLE_WEIGHT
             + search.tokenize(slug),
         })
     return chunks
