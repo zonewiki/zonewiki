@@ -2198,15 +2198,20 @@ div.chip-input > input {
 :is(.task-desc, .task-notes-preview).page-content .markdown-alert { margin: .25rem 0; }
 :is(.task-desc, .task-notes-preview).page-content :is(ul, ol) { margin: .25rem 0 .25rem 1.25rem; }
 /* A card is a list item itself: its notes' lists would get a nested list's ◦. */
-:is(.task-desc, .task-notes-preview).page-content ul { list-style-type: disc; }
-:is(.task-desc, .task-notes-preview).page-content ul ul { list-style-type: circle; }
 :is(.task-desc, .task-notes-preview).page-content li { margin-bottom: 0; }
-/* A checklist's box sits in the bullet column, centred where a bullet
-   is, and its text where a bullet item's text is: boxes and bullets line
-   up, in one list or two, nested too. */
+/* Bullets and checkboxes share one column, a box's width (--mark) left of
+   the text, both centred in it and on the first line: the bullets are drawn
+   here, since a list marker's place depends on the font. */
+:is(.task-desc, .task-notes-preview).page-content { --mark: 13px; }
+:is(.task-desc, .task-notes-preview).page-content ul > li { list-style: none; position: relative; }
+:is(.task-desc, .task-notes-preview).page-content ul > li:not(.task-list-item)::before {
+  content: "•"; position: absolute; left: -1.25rem; width: var(--mark); text-align: center;
+}
+:is(.task-desc, .task-notes-preview).page-content ul ul > li:not(.task-list-item)::before { content: "◦"; }
 :is(.task-desc, .task-notes-preview).page-content .task-list-item { margin-left: 0; position: relative; }
 :is(.task-desc, .task-notes-preview).page-content .task-list-item-checkbox {
-  position: absolute; left: -1.25rem; top: .2em; margin: 0;
+  position: absolute; left: -1.25rem; top: calc((1lh - var(--mark)) / 2 + .2em);   /* on the lowercase letters, as the bullet */
+  width: var(--mark); height: var(--mark); margin: 0;
 }
 :is(.task-desc, .task-notes-preview).page-content :is(h1, h2, h3, h4, h5, h6) {
   font-size: 1em; font-weight: 600; margin: .4rem 0 .1rem; padding: 0; border: none; width: auto;
@@ -2707,7 +2712,7 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-notes-empty { color: var(--muted); font-style: italic; }
 .task-notes-preview:focus { outline: none; }
 /* The preview's checkboxes are the card's, not the modal's field boxes. */
-.task-field .task-notes-preview input.task-list-item-checkbox { width: auto; height: auto; accent-color: var(--link); }
+.task-field .task-notes-preview input.task-list-item-checkbox { width: var(--mark); height: var(--mark); accent-color: var(--link); }
 .task-edit-modal .format-bar { padding: 0; margin: 0 -.2rem; }
 /* Clearly not the text field: tinted, outlined in the accent colour, and
    labelled "Preview" at the top, which stays put while it scrolls. */

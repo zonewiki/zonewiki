@@ -1491,6 +1491,12 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
         return r.getBoundingClientRect().x; })""")
     assert abs(starts[0] - starts[3]) <= 1        # a box item and a bullet item
     assert abs(starts[1] - starts[2]) <= 1        # nested, both kinds
+    # The bullets are drawn in the boxes' column, as wide as a box.
+    box = checks.nth(0).bounding_box()
+    bullet = desc.evaluate("""d => { const li = d.querySelectorAll('li')[3], st = getComputedStyle(li, '::before');
+        return { content: st.content, x: li.getBoundingClientRect().x + parseFloat(st.left), w: parseFloat(st.width) }; }""")
+    assert bullet["content"] == '"•"'
+    assert abs(bullet["x"] - box["x"]) <= 0.5 and abs(bullet["w"] - box["width"]) <= 0.5
     card(page, "Pack").dblclick()
     page.locator("#task-edit-preview-btn").click()
     preview = page.locator("#task-edit-preview")
