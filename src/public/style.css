@@ -2201,9 +2201,13 @@ div.chip-input > input {
 :is(.task-desc, .task-notes-preview).page-content ul { list-style-type: disc; }
 :is(.task-desc, .task-notes-preview).page-content ul ul { list-style-type: circle; }
 :is(.task-desc, .task-notes-preview).page-content li { margin-bottom: 0; }
-/* A checklist's boxes sit where a list's bullets would (a page hangs them
-   in its wide margin, which a card hasn't got). */
-:is(.task-desc, .task-notes-preview).page-content .task-list-item { margin-left: 0; }
+/* A checklist's box sits in the bullet column, centred where a bullet
+   is, and its text where a bullet item's text is: boxes and bullets line
+   up, in one list or two, nested too. */
+:is(.task-desc, .task-notes-preview).page-content .task-list-item { margin-left: 0; position: relative; }
+:is(.task-desc, .task-notes-preview).page-content .task-list-item-checkbox {
+  position: absolute; left: -1.25rem; top: .2em; margin: 0;
+}
 :is(.task-desc, .task-notes-preview).page-content :is(h1, h2, h3, h4, h5, h6) {
   font-size: 1em; font-weight: 600; margin: .4rem 0 .1rem; padding: 0; border: none; width: auto;
 }

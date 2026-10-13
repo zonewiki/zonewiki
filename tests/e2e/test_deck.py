@@ -1471,6 +1471,34 @@ def test_title_links(page, wiki):
     expect(page.locator(".task-menu")).not_to_contain_text("](")
 
 
+def test_note_checklist_starts_flush_with_the_text(page, wiki):
+    # A checklist's boxes sit in the bullet column: the first starts where
+    # the notes' text does, an item's text starts where a bullet item's
+    # does, and a nested one is indented. The same in the modal's preview.
+    page.request.post("/api/deck", data={"title": "Pack", "description":
+        "Before:\n\n- [ ] tent\n  - [ ] pegs\n  - poles\n- stove"})
+    page.goto("/deck?view=open")
+    desc = card(page, "Pack").locator(".task-desc")
+    text_x = desc.locator("p").bounding_box()["x"]
+    checks = desc.locator(".task-list-item-checkbox")
+    assert abs(checks.nth(0).bounding_box()["x"] - text_x) <= 1
+    assert checks.nth(1).bounding_box()["x"] > text_x + 10
+    # Where each item's first letter starts: tent, pegs, poles, stove.
+    starts = desc.evaluate("""d => [...d.querySelectorAll('li')].map(li => {
+        const t = [...li.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+        const r = document.createRange(), i = t.textContent.search(/\\S/);
+        r.setStart(t, i); r.setEnd(t, i + 1);
+        return r.getBoundingClientRect().x; })""")
+    assert abs(starts[0] - starts[3]) <= 1        # a box item and a bullet item
+    assert abs(starts[1] - starts[2]) <= 1        # nested, both kinds
+    card(page, "Pack").dblclick()
+    page.locator("#task-edit-preview-btn").click()
+    preview = page.locator("#task-edit-preview")
+    expect(preview.locator(".task-list-item-checkbox")).to_have_count(2)
+    assert abs(preview.locator(".task-list-item-checkbox").first.bounding_box()["x"]
+               - preview.locator("p").bounding_box()["x"]) <= 1
+
+
 def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     page.goto("/deck?view=open")
     page.locator("#task-add-btn").click()
