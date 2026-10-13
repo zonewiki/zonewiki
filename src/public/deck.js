@@ -210,7 +210,7 @@ listEl.addEventListener('click', e => {
 listEl.addEventListener('click', e => {
   if (lastPointerType !== 'touch') return;
   const card = e.target.closest('.task-item');
-  if (!card || e.target.closest('input, button, a, label, .task-clickable-date, .task-inline-input')) return;
+  if (!card || e.target.closest('input, button, a, label, .task-clickable-date')) return;
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);
@@ -366,7 +366,7 @@ listEl.addEventListener('touchstart', e => {
   const item = e.target.closest('.task-item');
   // A date chip may start a swipe or drag (it sits on the first line, where
   // a thumb starts one); a mere tap on it still opens its date picker.
-  if (!item || e.target.closest('input, button, a, .task-inline-input')) return;
+  if (!item || e.target.closest('input, button, a')) return;
   const canDrag = !!touchDrop && item.matches('[data-drag]');
   const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
   const canSwipe = !!(swipe.right || swipe.left);
@@ -419,7 +419,7 @@ listEl.addEventListener('touchcancel', () => endTouchDrag(false));
 listEl.addEventListener('contextmenu', e => {
   if (touchDrag) { e.preventDefault(); return; }
   const card = e.target.closest('.task-item');
-  if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea, .task-inline-input')) return;
+  if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea')) return;
   e.preventDefault();
   if (!inSelection(card.dataset.id)) setSelected(card.dataset.id);
   openTaskMenu(card.dataset.id, card, { x: e.clientX, y: e.clientY });
@@ -515,8 +515,38 @@ function hasMore(id) {
 }
 function setExpanded(id) {
   expandedId = id;
-  listEl?.querySelectorAll('.task-item').forEach(el =>
-    el.classList.toggle('task-expanded', el.dataset.id === id));
+  listEl?.querySelectorAll('.task-item').forEach(el => {
+    const on = el.dataset.id === id;
+    if (!on && el.classList.contains('task-expanded') && pressedCard && el !== pressedCard) collapseLater(el);
+    else el.classList.toggle('task-expanded', on);
+  });
+}
+// A mouse press on another card leaves the expanded one open until a
+// double-click is over (pressedCard: the card a mousedown is selecting) and
+// then closes it with a short animation. Collapsing at once would pull a
+// card below it up under the pointer, so a double-click's second click hit
+// another card; a card above closes the same way, for one behaviour.
+const COLLAPSE_DELAY_MS = 400;
+let pressedCard = null;
+let collapsing = null;   // { el, timer }
+function collapseLater(el) {
+  if (collapsing?.el === el) return;   // already waiting (the press runs setExpanded twice, a double-click two presses)
+  finishCollapse();
+  collapsing = { el, timer: setTimeout(finishCollapse, COLLAPSE_DELAY_MS) };
+}
+function finishCollapse() {
+  if (!collapsing) return;
+  const { el, timer } = collapsing;
+  collapsing = null;
+  clearTimeout(timer);
+  if (!el.isConnected || el.dataset.id === expandedId) return;
+  const from = el.offsetHeight;
+  el.classList.remove('task-expanded');
+  const to = el.offsetHeight;
+  if (from > to && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.animate([{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }],
+               { duration: 150, easing: 'ease-out' });
+  }
 }
 function toggleCompact() {
   expandedId = null;
@@ -1599,7 +1629,9 @@ function setSelected(id) {
   // Compact: the selected task shows its details. On touch the tap handler
   // does it, since the compat mousedown selects without the click.
   if (compact && id && lastPointerType !== 'touch' && hasMore(id)) setExpanded(id);
-  if (id) {
+  // A pressed card is in view; scrolling an expanded one into view would
+  // move it from under the pointer.
+  if (id && !pressedCard) {
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (el) el.scrollIntoView({ block: 'nearest' });
   }
@@ -1624,38 +1656,6 @@ function visibleItems() {
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────
-
-function startInlineEdit(el) {
-  const id = el.dataset.id;
-  const task = tasks.find(t => t.id === id);
-  if (!task) return;
-  // Prevent double-activation
-  if (el.querySelector('input')) return;
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'task-inline-input';
-  input.value = task.title;
-  el.textContent = '';
-  el.appendChild(input);
-  input.focus();
-  input.select();
-
-  const commit = () => {
-    const newTitle = input.value.trim();
-    if (newTitle && newTitle !== task.title) {
-      updateTask(id, { title: newTitle });
-    } else {
-      render();
-    }
-  };
-
-  input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); input.removeEventListener('blur', commit); commit(); }
-    if (e.key === 'Escape') { input.removeEventListener('blur', commit); render(); }
-  });
-}
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -2108,20 +2108,14 @@ function render() {
   });
 
 
-  listEl.querySelectorAll('.task-title').forEach(el => {
-    el.addEventListener('dblclick', e => {
-      // Touch: two taps select and open (the tap handler), never more.
-      if (e.target.closest('a') || lastPointerType === 'touch' || selectMode) return;
-      startInlineEdit(e.currentTarget);
-    });
-  });
-
-  // Double-click anywhere on a card but its title (which edits the title
-  // in place) and its controls opens the modal.
+  // Double-click anywhere on a card, title and notes included, opens the
+  // modal; only its controls keep their own.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('dblclick', e => {
+      // Touch: two taps select and open (the tap handler), never more.
       if (lastPointerType === 'touch' || selectMode) return;
-      if (e.target.closest('.task-title, input, button, a, label, .task-clickable-date, .task-inline-input, .task-desc')) return;
+      if (e.target.closest('input, button, a, label, .task-clickable-date')) return;
+      window.getSelection()?.removeAllRanges();
       openEditModal(el.dataset.id);
     });
   });
@@ -2157,7 +2151,10 @@ function render() {
       if (e.button !== 0 && selectedIds.has(id)) return;
       if (e.shiftKey && selectedId) { e.preventDefault(); extendSelection(id); }
       else if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleSelection(id); }
-      else setSelected(id);
+      else {
+        pressedCard = el;
+        try { setSelected(id); } finally { pressedCard = null; }
+      }
     });
   });
   }  // end wireListHandlers
@@ -3334,10 +3331,9 @@ document.addEventListener('keydown', async e => {
 // Register this instance so writes in sibling embeds can refresh it.
 // Background refresh re-renders the list, so it waits while the user is in
 // the middle of something the re-render would destroy: a drag or swipe, a
-// completion's grace period, an inline title edit, the ⋯ menu or the editor.
+// completion's grace period, the ⋯ menu or the editor.
 function refreshIfIdle() {
-  const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open || deadlineModal.open ||
-    listEl.querySelector('.task-inline-input');
+  const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open || deadlineModal.open;
   if (!busy) refresh();
 }
 deckInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });

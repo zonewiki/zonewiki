@@ -68,8 +68,7 @@ def test_first_tap_selects_second_opens_editor(phone):
     expect(phone.locator("#task-edit-modal")).to_be_hidden()
     water.locator(".task-title").tap()                                  # the selected one: opens
     expect(phone.locator("#task-edit-modal")).to_be_visible()
-    # A double tap is just these two taps: the title is not edited in place.
-    expect(water.locator(".task-inline-input")).to_have_count(0)
+    # A double tap is just these two taps: one modal, nothing else.
     expect(phone.locator("#task-edit-title")).to_have_value("Water plants")
 
 

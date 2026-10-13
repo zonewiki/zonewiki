@@ -2339,12 +2339,6 @@ div.chip-input > input {
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
-.task-inline-input {
-  font: inherit; font-weight: 500; border: none; border-bottom: 2px solid var(--btn-primary);
-  background: transparent; color: var(--fg); outline: none; width: 100%;
-  padding: 0; margin: 0;
-}
-
 .task-skip-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.6rem; height: 1.6rem; padding: 0;

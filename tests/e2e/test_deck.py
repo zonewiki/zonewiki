@@ -1210,6 +1210,20 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
     expect(page.locator("#task-edit-inbox")).to_have_count(0)
 
 
+def test_double_click_on_title_or_notes_opens_modal(page, wiki):
+    """The title and the notes open the modal too; nothing is edited in place."""
+    page.request.post("/api/deck", data={"title": "Paint fence", "description": "Two coats."})
+    page.goto("/deck?view=open")
+    modal = page.locator("#task-edit-modal")
+    for part in (".task-title", ".task-desc"):
+        card(page, "Paint fence").locator(part).dblclick()
+        expect(modal).to_be_visible()
+        expect(page.locator("#task-edit-title")).to_have_value("Paint fence")
+        page.keyboard.press("Escape")
+        expect(modal).to_be_hidden()
+    expect(card(page, "Paint fence").locator("input[type=text]")).to_have_count(0)
+
+
 def _drop(source, target, side):
     """Drag source onto target's upper (side "before") or lower half ("after")."""
     box = target.bounding_box()
@@ -2069,6 +2083,52 @@ def test_compact_selecting_expands_enter_opens(page, wiki):
     page.keyboard.press("j")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
     expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
+
+
+def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
+    # A press on the card below the expanded one doesn't collapse that one
+    # at once (which would pull the card up under the pointer): the
+    # double-click opens the card it started on, the other collapses after.
+    page.request.post("/api/deck", data={"title": "Below", "description": "Some notes."})
+    page.request.post("/api/deck", data={"title": "Long notes", "description": "\n\n".join(f"Line {i}" for i in range(12))})
+    page.goto("/deck?view=open")
+    page.locator(".deck-density-btn").click()
+    long_notes, below = card(page, "Long notes"), card(page, "Below")
+    long_notes.locator(".task-content").click()
+    expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
+    page.wait_for_timeout(500)
+    for _ in range(2):                       # every time, not just the first
+        box = below.locator(".task-content").bounding_box()
+        page.mouse.move(box["x"] + 10, box["y"] + box["height"] / 2)
+        # Each press of the double-click leaves the card where it was.
+        top = box["y"]
+        page.mouse.down()
+        page.mouse.up()
+        assert below.locator(".task-content").bounding_box()["y"] == top
+        assert "task-expanded" in long_notes.get_attribute("class")
+        page.mouse.down(click_count=2)
+        assert below.locator(".task-content").bounding_box()["y"] == top
+        assert "task-expanded" in long_notes.get_attribute("class")
+        page.mouse.up(click_count=2)
+        expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Below")
+        page.keyboard.press("Escape")
+        expect(long_notes).not_to_have_class(re.compile(r"\btask-expanded\b"))
+        assert below.locator(".task-content").bounding_box()["y"] < top
+        long_notes.locator(".task-content").click()
+        expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
+        page.wait_for_timeout(500)
+    # A single click: the card stays put for the double-click window.
+    top = below.bounding_box()["y"]
+    below.locator(".task-content").click()
+    assert below.bounding_box()["y"] == top
+    expect(long_notes).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    # The card below closes the same way when the one above is clicked.
+    expect(below).to_have_class(re.compile(r"\btask-expanded\b"))
+    page.wait_for_timeout(500)
+    long_notes.locator(".task-content").click()
+    assert "task-expanded" in below.get_attribute("class")
+    expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(below).not_to_have_class(re.compile(r"\btask-expanded\b"))
 
 
 def test_compact_task_with_nothing_more_stays_a_line(page, wiki):
