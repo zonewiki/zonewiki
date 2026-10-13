@@ -8,7 +8,7 @@ import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
 import { markdownEditor, toggleCheckboxInTextarea } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
-import { putTask } from './js/util.js';
+import { pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
@@ -974,7 +974,7 @@ function beginComplete(id, li) {
       const before = task?.keep && keepSnapshot(task);
       const done = await updateTask(id, { completed: true });
       // A keep task is not archived, so Completed can't reopen it: offer undo.
-      if (done && before) showUndo(`“${task.title}” done`, () => updateTask(id, before));
+      if (done && before) showUndo(`“${plainTitle(task.title)}” done`, () => updateTask(id, before));
     }, 400);
   }, 4600);
   pendingCompletions.set(id, tid);
@@ -1051,7 +1051,7 @@ function setStart(id, startDate) {
 // every field). beforeDelete runs after confirmation.
 async function deleteWithUndo(ids, beforeDelete) {
   const count = ids.length;
-  const title = count === 1 ? (tasks.find(t => t.id === ids[0])?.title || '') : '';
+  const title = count === 1 ? plainTitle(tasks.find(t => t.id === ids[0])?.title) : '';
   if (!await confirmDelete(title, count)) return;
   const snapshot = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
   beforeDelete?.();
@@ -1116,7 +1116,7 @@ function openTaskMenu(id, anchor, at) {
     ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
-  showMenu(task.title, items, action => runTaskAction(task, action, anchor), anchor, at);
+  showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
 
 // The menu itself: `items` are [action, label, class?]; `run(action)`.
@@ -1209,7 +1209,7 @@ function confirmDelete(title, count = 1) {
 function confirmDeadlineMove(task, day) {
   const when = d => ({ Today: 'today', Tomorrow: 'tomorrow', Yesterday: 'yesterday' })[formatDate(d)] || shortDate(d);
   deadlineTextEl.textContent =
-    `“${task.title}” is due ${when(task.due_date)}. Starting it ${when(day)} moves the deadline to that day too.`;
+    `“${plainTitle(task.title)}” is due ${when(task.due_date)}. Starting it ${when(day)} moves the deadline to that day too.`;
   return confirmModal(deadlineModal,
     document.getElementById('task-deadline-confirm' + sfx),
     document.getElementById('task-deadline-cancel' + sfx));
@@ -2293,24 +2293,47 @@ const extAttrs = href => {
   try {
     const u = new URL(href, location.href);
     return /^https?:$/.test(u.protocol) && u.host !== location.host
+// Links in a title: [[wikilinks]], [label](url) (a pasted URL with the
+// name the dialog asked for) and bare URLs; the rest is text. A link to
+// anything but the web, mail or this wiki (javascript: …) stays text.
+const TITLE_LINK_RE = /\[\[([^\[\]]+)\]\]|\[([^\[\]]*)\]\(([^()\s]+)\)|(https?:\/\/[^\s<>"]+)/g;
+const SAFE_HREF_RE = /^(?:https?:|mailto:|\/|#|(?![a-z][a-z0-9+.-]*:))/i;
       ? ' target="_blank" rel="noopener noreferrer"' : '';
   } catch (_) { return ''; }
 };
-const unesc = h => h.replace(/&amp;/g, '&');
 
 function linkifyTitle(text) {
-  const escaped = esc(text);
-  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (_, url) => `<a href="${url}" class="task-link"${extAttrs(unesc(url))}>${url}</a>`);
+  let out = '', last = 0;
+  for (const m of text.matchAll(TITLE_LINK_RE)) {
+    let href, label, cls = 'task-link';
+    if (m[1] !== undefined) { ({ href, label } = wikilinkHref(m[1])); cls += ' wikilink'; }
+    else if (m[3] !== undefined) { href = m[3]; label = m[2] || m[3]; }
+    else { href = label = m[4]; }
+    if (!SAFE_HREF_RE.test(href)) continue;
+    out += esc(text.slice(last, m.index)) +
+      `<a href="${esc(href)}" class="${cls}"${extAttrs(href)}>${esc(label)}</a>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
 }
-
-// ── Inline markdown rendering for descriptions ─────────────────────────────
+// A title as text (menus, toasts, dialogs): its links reduced to their
+// labels, as mdtext.plain_task_title does for the server.
+function plainTitle(text) {
+  return String(text || '').replace(TITLE_LINK_RE, (all, wiki, label, url, bare) =>
+    wiki !== undefined ? wikilinkHref(wiki).label : url !== undefined ? (label || url) : bare);
+}
 
 
 // Page completion in the title ([[ and [text](, linkAutocomplete in
 // js/completion.js, shared with the editor).
 const titleInput = document.getElementById('task-edit-title' + sfx);
 const descTextarea = document.getElementById('task-edit-desc' + sfx);
-if (titleInput) linkAutocomplete(titleInput);
+if (titleInput) {
+  linkAutocomplete(titleInput);
+  // Pasting a URL asks for its name, as in the notes and the editor
+  // (pasteUrlAsLink): [name](url), shown as a link on the card.
+  titleInput.addEventListener('paste', e => pasteUrlAsLink(titleInput, e));
+}
 
 // The notes are edited as a page is (js/mdedit.js): the formatting bar,
 // completion, snippets, lists, file paste and drop. Tab stays the key to the

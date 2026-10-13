@@ -1798,8 +1798,15 @@ class TestPlainTaskTitle:
     def test_markdown_page_link(self):
         assert mdtext.plain_task_title("see [x](/page/foo) now") == "see x now"
 
-    def test_external_markdown_link_left_as_text(self):
-        assert mdtext.plain_task_title("[x](https://e.x)") == "[x](https://e.x)"
+    def test_external_markdown_link_becomes_its_label(self):
+        # A pasted URL with its name (the title's paste dialog): the label.
+        assert mdtext.plain_task_title("read [x](https://e.x) today") == "read x today"
+        assert mdtext.plain_task_title("[](https://e.x)") == "https://e.x"
+
+    def test_search_shows_a_task_title_plain(self, client):
+        client.post("/api/deck", json={"title": "Read [the RFC](https://e.x/rfc) on [[Garden]]"}, headers=HOST)
+        results = client.get("/api/search?q=rfc", headers=HOST).get_json()
+        assert [r["title"] for r in results] == ["[Task] Read the RFC on Garden"]
 
 
 # ===========================================================================

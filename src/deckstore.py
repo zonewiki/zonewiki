@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import search
-from mdtext import section_anchor, to_slug
+from mdtext import plain_task_title, section_anchor, to_slug
 from decksyntax import clean_tags, in_scope, _MD_LINK_RE, TASK_REF_RE, WIKILINK_RE
 
 
@@ -671,10 +671,10 @@ def task_search_docs() -> list[dict]:
         text = search.strip_link_targets(f"{title} {desc} {comments} {tags}".strip())
         docs.append({
             "slug": "_deck",
-            "title": f"[Task] {title}",
+            "title": f"[Task] {plain_task_title(title)}",
             "excerpt_text": text,
             "tokens": search.tokenize(text)
-            + search.tokenize(title) * search.TITLE_WEIGHT,
+            + search.tokenize(plain_task_title(title)) * search.TITLE_WEIGHT,
             "type": "task",
             "task_id": task["id"],
             "status": "done" if task.get("completed_at") else "open",

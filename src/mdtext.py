@@ -360,13 +360,14 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def plain_task_title(title: str) -> str:
-    """Task title with wikilinks and /page/ links reduced to their labels.
+    """Task title with its links (wikilinks, [label](url)) reduced to their
+    labels, as deck.js plainTitle does.
 
     Used where the whole title is already inside one link (Linked tasks), so
     it must not contain anchors of its own — nested <a> is invalid HTML and
     browsers split it into separate links."""
     title = re.sub(r'\[\[([^\[\]]+)\]\]', lambda m: split_wikilink(m.group(1))[2], title)
-    return re.sub(r'\[([^\]]*)\]\((/page/[^)]+)\)', r'\1', title)
+    return re.sub(r'\[([^\[\]]*)\]\(([^()\s]+)\)', lambda m: m.group(1) or m.group(2), title)
 
 
 def promoted_slug(folder: str, name: str, date: str = "") -> str:

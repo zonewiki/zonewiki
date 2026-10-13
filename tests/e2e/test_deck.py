@@ -1436,6 +1436,41 @@ def test_notes_and_comments_render_as_on_a_page(page, wiki):
     expect(page.locator("#task-edit-comment-list strong")).to_have_text("primed")
 
 
+PASTE = """(url) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', url);
+    document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
+}"""
+
+
+def test_title_links(page, wiki):
+    # Pasting a URL into the title asks for its name, as in the notes; the
+    # card shows [name](url), [[wikilinks]] and bare URLs as links, menus
+    # and toasts the plain words. A javascript: link stays text.
+    page.request.post("/api/deck", data={"title": "See [[Garden]] and https://e.x/a or [bad](javascript:alert(1))"})
+    page.goto("/deck?view=open")
+    page.locator("#task-add-btn").click()
+    title = page.locator("#task-edit-title")
+    title.press_sequentially("Read ")
+    page.evaluate(PASTE, "https://example.com/rfc")
+    page.locator("#url-name-input").fill("the RFC")
+    page.locator("#url-name-input").press("Enter")
+    expect(title).to_have_value("Read [the RFC](https://example.com/rfc)")
+    expect(title).to_be_focused()
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+    link = card(page, "Read the RFC").locator(".task-title a")
+    expect(link).to_have_text("the RFC")
+    expect(link).to_have_attribute("href", "https://example.com/rfc")
+    expect(link).to_have_attribute("target", "_blank")
+    other = page.locator(".task-item", has_text="See Garden").locator(".task-title")
+    expect(other.locator("a")).to_have_count(2)
+    expect(other.locator("a.wikilink")).to_have_attribute("href", "/page/garden")
+    expect(other).to_contain_text("[bad](javascript:alert(1))")
+    card(page, "Read the RFC").click(button="right")
+    expect(page.locator(".task-menu")).to_contain_text("Read the RFC")
+    expect(page.locator(".task-menu")).not_to_contain_text("](")
+
+
 def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     page.goto("/deck?view=open")
     page.locator("#task-add-btn").click()
