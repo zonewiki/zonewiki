@@ -1520,24 +1520,47 @@ def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     expect(notes).to_be_focused()
     page.keyboard.press("Tab")
     expect(notes).not_to_be_focused()
-    # Preview: the notes as the card will show them, live; F2 toggles it.
+    # Preview takes the field's place, at its height: the notes as the card
+    # will show them; Edit (or F2) goes back.
     preview = modal.locator("#task-edit-preview")
     expect(preview).to_be_hidden()
+    comments_y = modal.locator("label", has_text="Tags").bounding_box()["y"]
     modal.locator("#task-edit-preview-btn").click()
     expect(preview.locator("strong")).to_have_text("loud")
+    expect(notes).to_be_hidden()
+    expect(bar).to_be_hidden()
+    assert abs(modal.locator("label", has_text="Tags").bounding_box()["y"] - comments_y) <= 1   # nothing moved
     # Labelled, so it is never taken for the text field.
     assert preview.evaluate("el => getComputedStyle(el, '::before').content") == '"Preview"'
-    notes.click()
+    modal.locator("#task-edit-notes-edit-btn").click()
+    expect(notes).to_be_focused()
     page.keyboard.press("Control+End")
     page.keyboard.type("\n\n- [ ] eggs")
+    page.keyboard.press("F2")
+    expect(notes).to_be_hidden()
+    expect(preview).to_be_focused()                     # so F2 and Esc still reach the modal
+    page.keyboard.press("F2")
+    expect(notes).to_be_focused()
+    page.keyboard.press("F2")
     expect(preview.locator(".task-list-item-checkbox")).to_have_count(1)
-    # Ticking a box in the preview ticks it in the text.
+    # Ticking a box in the preview ticks it in the text with the date, as
+    # on the card, and the preview shows its chip; unticking takes it out.
     preview.locator(".task-list-item-checkbox").check()
-    expect(notes).to_have_value(re.compile(r"- \[x\] eggs$"))
+    expect(preview.locator(".task-date-done")).to_have_text(date.today().isoformat())
+    expect(preview).to_be_focused()
+    preview.locator(".task-list-item-checkbox").uncheck()
+    expect(preview.locator(".task-date-done")).to_have_count(0)
+    preview.locator(".task-list-item-checkbox").check()
+    expect(preview.locator(".task-date-done")).to_have_count(1)
     page.keyboard.press("F2")
+    expect(notes).to_be_visible()
+    expect(notes).to_have_value(re.compile(r"- \[x\] eggs <!--d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-->$"))
+    # The modal always opens in Edit.
+    page.keyboard.press("F2")
+    page.keyboard.press("Escape")
+    page.locator("#task-add-btn").click()
+    expect(notes).to_be_visible()
     expect(preview).to_be_hidden()
-    page.keyboard.press("F2")
-    expect(preview).to_be_visible()
 
 
 def test_page_and_deck_checkboxes_stay_apart(page, wiki):

@@ -6,7 +6,7 @@
 import DeckCore from './deck-core.js';
 import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
-import { markdownEditor, toggleCheckboxInTextarea } from './js/mdedit.js';
+import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
 import { pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
@@ -2333,50 +2333,53 @@ if (titleInput) {
 
 // The notes are edited as a page is (js/mdedit.js): the formatting bar,
 // completion, snippets, lists, file paste and drop. Tab stays the key to the
-// next field (it still expands a snippet). Preview (F2) shows them under
-// the field as the card will, live; ticking a box there ticks it in the text.
+// next field (it still expands a snippet). Edit | Preview (or F2) switches
+// the field for the notes as the card will show them, in the field's place
+// and at its height, so the modal keeps its layout; it opens in Edit.
 const notesPreview = document.getElementById('task-edit-preview' + sfx);
-const notesPreviewBtn = document.getElementById('task-edit-preview-btn' + sfx);
-let notesPreviewTimer = null;
-function scheduleNotesPreview() {
-  clearTimeout(notesPreviewTimer);
-  notesPreviewTimer = setTimeout(fetchNotesPreview, 300);
-}
+const notesBar = document.getElementById('task-edit-format' + sfx);
+const notesModeBtns = [...modal.querySelectorAll('[data-notes-mode]')];
 async function fetchNotesPreview() {
-  if (!notesPreview || notesPreview.hidden) return;
   const text = descTextarea.value.trim();
-  if (!text) { notesPreview.innerHTML = ''; return; }
+  if (!text) { notesPreview.innerHTML = '<p class="task-notes-empty">Nothing to preview</p>'; return; }
   try {
     const res = await fetch('/api/render-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
     if (res.ok && descTextarea.value.trim() === text) notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
-  } catch (_) { /* keep the last one */ }
+  } catch (_) { notesPreview.textContent = 'Could not render the preview'; }
 }
-// Shown or not, remembered across tasks and visits.
-const NOTES_PREVIEW_KEY = 'leaf-deck-notes-preview';
-function setNotesPreview(show) {
+const previewing = () => !!notesPreview && !notesPreview.hidden;
+function setNotesPreview(show, focus = true) {
   if (!notesPreview) return;
+  // The bar's and the field's space together, so nothing below moves.
+  if (show) {
+    const top = (notesBar || descTextarea).getBoundingClientRect().top;
+    notesPreview.style.height = `${descTextarea.getBoundingClientRect().bottom - top}px`;
+  }
   notesPreview.hidden = !show;
-  notesPreviewBtn?.setAttribute('aria-pressed', String(show));
-  try { localStorage.setItem(NOTES_PREVIEW_KEY, show ? '1' : ''); } catch (_) {}
-  if (show) fetchNotesPreview();
+  descTextarea.hidden = show;
+  if (notesBar) notesBar.hidden = show;
+  notesModeBtns.forEach(b => b.setAttribute('aria-pressed', String((b.dataset.notesMode === 'preview') === show)));
+  // Focus follows: the hidden field would drop it out of the modal, whose
+  // keys (F2 back, Esc) then wouldn't reach it. Arrows scroll the preview.
+  if (show) { notesPreview.innerHTML = ''; fetchNotesPreview(); if (focus) notesPreview.focus({ preventScroll: true }); }
+  else if (focus) descTextarea.focus();
 }
-const notesPreviewWanted = () => { try { return !!localStorage.getItem(NOTES_PREVIEW_KEY); } catch (_) { return false; } };
-notesPreviewBtn?.addEventListener('click', () => setNotesPreview(notesPreview.hidden));
-notesPreview?.addEventListener('change', e => {
+notesModeBtns.forEach(b => b.addEventListener('click', () => setNotesPreview(b.dataset.notesMode === 'preview')));
+// Ticking a box in the preview ticks the item in the text, recording when
+// as on the card (the field is hidden, so not through its undo; unticking
+// undoes it); the preview redraws with the date chip, keeping the focus.
+notesPreview?.addEventListener('change', async e => {
   if (!e.target.matches('.task-list-item-checkbox')) return;
   const idx = [...notesPreview.querySelectorAll('.task-list-item-checkbox')].indexOf(e.target);
-  toggleCheckboxInTextarea(descTextarea, idx, false);
+  descTextarea.value = toggleCheckboxText(descTextarea.value, idx, false);
+  await fetchNotesPreview();
+  notesPreview.focus({ preventScroll: true });
 });
 if (descTextarea) {
-  markdownEditor(descTextarea, {
-    bar: document.getElementById('task-edit-format' + sfx),
-    attachInput: document.getElementById('task-edit-attach' + sfx),
-    onChange: scheduleNotesPreview,
-    tabIndents: false,
-  });
-  descTextarea.addEventListener('input', scheduleNotesPreview);
+  markdownEditor(descTextarea, { bar: notesBar, attachInput: document.getElementById('task-edit-attach' + sfx),
+                                 tabIndents: false });
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -2949,7 +2952,7 @@ function openEditModal(taskId, opts) {
   document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
   document.getElementById('task-edit-title' + sfx).value = task ? task.title : opts?.title || '';
   document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : opts?.description || '';
-  if (notesPreview) { notesPreview.innerHTML = ''; setNotesPreview(notesPreviewWanted()); }
+  setNotesPreview(false, false);
   document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
   document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
     : opts && 'start_date' in opts ? opts.start_date || '' : (activeView === 'focus' ? dateOffset(0) : '');
@@ -3092,11 +3095,12 @@ modal.addEventListener('cancel', blurInside);
 modal.addEventListener('close', () => { onCreated = null; blurInside(); });
 
 modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
-// F2: the notes' preview, as in the editor (not the editor's, on its page).
+// F2: Edit | Preview of the notes, as in the editor (not the editor's,
+// on its page).
 modal.addEventListener('keydown', e => {
   if (e.key !== 'F2' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
   e.preventDefault(); e.stopPropagation();
-  setNotesPreview(notesPreview.hidden);
+  setNotesPreview(!previewing());
 }, true);
 
 form.addEventListener('submit', async e => {

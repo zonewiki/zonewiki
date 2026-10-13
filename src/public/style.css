@@ -2695,16 +2695,24 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-edit-modal::backdrop { background: rgba(0,0,0,.4); }
 .task-edit-form { display: flex; flex-direction: column; gap: .75rem; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
-/* Notes: the label with Preview beside it, the editor's formatting bar,
-   the textarea, the preview under it (deck.js setNotesPreview). */
+/* Notes: the label with Edit | Preview beside it, the editor's formatting
+   bar, the textarea, or the preview in its place (deck.js setNotesPreview). */
 .task-notes-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.task-notes-preview-btn { padding: .1rem .55rem; font-size: .8rem; color: var(--muted); }
-.task-notes-preview-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
+.task-notes-mode { display: inline-flex; }
+.task-notes-mode .btn { padding: .1rem .6rem; font-size: .8rem; color: var(--muted); }
+.task-notes-mode .btn:first-child { border-radius: 6px 0 0 6px; }
+.task-notes-mode .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.task-notes-mode .btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); position: relative; }
+.task-edit-modal .format-bar[hidden], .task-edit-modal textarea[hidden] { display: none; }
+.task-notes-empty { color: var(--muted); font-style: italic; }
+.task-notes-preview:focus { outline: none; }
+/* The preview's checkboxes are the card's, not the modal's field boxes. */
+.task-field .task-notes-preview input.task-list-item-checkbox { width: auto; height: auto; accent-color: var(--link); }
 .task-edit-modal .format-bar { padding: 0; margin: 0 -.2rem; }
 /* Clearly not the text field: tinted, outlined in the accent colour, and
    labelled "Preview" at the top, which stays put while it scrolls. */
 .task-notes-preview {
-  font-size: .9rem; padding: 0 .75rem .5rem; max-height: 40vh; overflow: auto;
+  font-size: .9rem; padding: 0 .75rem .5rem; min-height: 6rem; overflow: auto; box-sizing: border-box;
   background: color-mix(in srgb, var(--btn-primary) 5%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--btn-primary) 40%, var(--border)); border-radius: 6px;
 }
@@ -2853,7 +2861,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .task-edit-form { gap: .55rem; min-height: 100%; }
   .task-edit-form .task-edit-actions { margin-top: auto; }
   .task-field { gap: .15rem; }
-  .task-edit-modal textarea[name="description"] { height: 4.8em; min-height: 3.2em; }
+  .task-edit-modal textarea[name="description"] { height: 9.6em; min-height: 3.2em; }
   .task-field-row { display: grid; gap: .55rem .6rem; }
   /* Due date | Start, then the days-before-due helper across the full width */
   .task-row-dates { grid-template-columns: 1fr 1fr; align-items: start; }

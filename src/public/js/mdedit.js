@@ -442,6 +442,34 @@ export function taskCheckboxOffsets(text, frontmatter = true) {
   return offsets;
 }
 
+// The text with its Nth checkbox ticked or unticked, recording when as the
+// server does (mdtext.toggle_nth_checkbox): ticking adds
+// <!--d:YYYY-MM-DDTHH:MM:SS--> (or the d: of an item's <!--t:…-->), shown
+// as a date chip; unticking takes it out. Local time, as the clock shows it.
+const TASK_META_RE = /<!--t:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\s+d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?-->/;
+const TASK_DONE_RE = /<!--d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-->/;
+export function toggleCheckboxText(text, idx, frontmatter = true) {
+  const at = taskCheckboxOffsets(text, frontmatter)[idx];
+  if (at === undefined) return text;
+  const checking = text[at] === ' ';
+  const start = text.lastIndexOf('\n', at) + 1;
+  let end = text.indexOf('\n', at);
+  if (end === -1) end = text.length;
+  let line = text.slice(start, at) + (checking ? 'x' : ' ') + text.slice(at + 1, end);
+  const now = `${localDate()}T${new Date().toTimeString().slice(0, 8)}`;
+  const meta = line.match(TASK_META_RE);
+  if (checking) {
+    if (meta) line = line.replace(TASK_META_RE, `<!--t:${meta[1]} d:${now}-->`);
+    else if (TASK_DONE_RE.test(line)) line = line.replace(TASK_DONE_RE, `<!--d:${now}-->`);
+    else line = `${line.trimEnd()} <!--d:${now}-->`;
+  } else if (meta) {
+    line = line.replace(TASK_META_RE, `<!--t:${meta[1]}-->`);
+  } else {
+    line = line.replace(TASK_DONE_RE, '').trimEnd();
+  }
+  return text.slice(0, start) + line + text.slice(end);
+}
+
 // A click on the Nth checkbox of a preview ticks the Nth item in the
 // textarea. Through execCommand, so it lands on the undo stack and fires
 // `input` (preview, unsaved dot, auto-save) like any other edit.
