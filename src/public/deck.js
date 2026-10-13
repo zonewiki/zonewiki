@@ -556,13 +556,9 @@ const tabLabel = view => tabsEl.querySelector(`[data-view="${view}"]`)?.textCont
 // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
 // Compact: one line per task (title, then tags, markers and dates; notes
-// hidden; Enter or a tap expands a task). Per deck, remembered in this browser; an embed with
-// compact=1 starts so. The density button and v switch it.
-// Per tab: Open (and Completed), long lists to scan, are compact unless
-// switched; Focus and Plan, where a task's details matter, are full cards.
-// compact=1 makes every tab start compact. A switch is remembered per
-// deck and tab.
-const COMPACT_DEFAULT = { open: true, completed: true, plan: false, focus: false };
+// hidden; selecting or a tap expands a task). The default on every tab;
+// the density button and v switch it, remembered per deck and tab in this
+// browser.
 const densityKey = view => 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId, view].join('|');
 function compactFor(view) {
@@ -570,7 +566,7 @@ function compactFor(view) {
     const stored = localStorage.getItem(densityKey(view));
     if (stored !== null) return stored === '1';
   } catch (_) {}
-  return appEl?.dataset.initCompact === '1' || !!COMPACT_DEFAULT[view];
+  return true;
 }
 let compact = false;   // the shown tab's (applyCompact)
 function applyCompact(view) {
@@ -2293,15 +2289,15 @@ const extAttrs = href => {
   try {
     const u = new URL(href, location.href);
     return /^https?:$/.test(u.protocol) && u.host !== location.host
+      ? ' target="_blank" rel="noopener noreferrer"' : '';
+  } catch (_) { return ''; }
+};
+
 // Links in a title: [[wikilinks]], [label](url) (a pasted URL with the
 // name the dialog asked for) and bare URLs; the rest is text. A link to
 // anything but the web, mail or this wiki (javascript: …) stays text.
 const TITLE_LINK_RE = /\[\[([^\[\]]+)\]\]|\[([^\[\]]*)\]\(([^()\s]+)\)|(https?:\/\/[^\s<>"]+)/g;
 const SAFE_HREF_RE = /^(?:https?:|mailto:|\/|#|(?![a-z][a-z0-9+.-]*:))/i;
-      ? ' target="_blank" rel="noopener noreferrer"' : '';
-  } catch (_) { return ''; }
-};
-
 function linkifyTitle(text) {
   let out = '', last = 0;
   for (const m of text.matchAll(TITLE_LINK_RE)) {

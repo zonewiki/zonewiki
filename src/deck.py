@@ -141,8 +141,6 @@ def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False)
         # `keep=1`: new tasks in this embed are keep tasks (a shopping list of
         # staples); the edit modal's checkbox still turns it off per task.
         keep="1" if is_true(params.get("keep")) else "",
-        # `compact=1`: one line per task until the viewer switches (deck.js).
-        compact="1" if is_true(params.get("compact")) else "",
         # `home=1`: this embed is the user's own deck (pages.deck_home); the
         # module bar's New clicks this embed's "+ New".
         home=is_true(params.get("home")),

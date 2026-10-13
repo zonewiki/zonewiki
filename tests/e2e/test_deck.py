@@ -2026,24 +2026,21 @@ COMPACT = re.compile(r"\bdeck-compact\b")
 
 
 def test_compact_defaults_per_tab(page, wiki):
-    # Open and Completed (long lists) start compact, Focus and Plan with full
-    # cards. A switch is remembered per deck and tab, across reloads.
+    # Every tab starts with one line per task. A switch is remembered per
+    # deck and tab, across reloads.
     real_density(page)
     _compact_tasks(page)
     app = page.locator(".tasks-app")
     page.goto("/deck?view=open")
     expect(app).to_have_class(COMPACT)
-    for view in ("focus", "plan"):
+    for view in ("focus", "plan", "completed"):
         open_tab(page, view)
-        expect(app).not_to_have_class(COMPACT)
-    open_tab(page, "completed")
-    expect(app).to_have_class(COMPACT)
-    # Full cards on Open, compact on Focus: each tab keeps its own.
+        expect(app).to_have_class(COMPACT)
+    # Full cards on Open; Focus stays compact: each tab keeps its own.
     open_tab(page, "open")
     page.locator(".deck-density-btn").click()
     expect(app).not_to_have_class(COMPACT)
     open_tab(page, "focus")
-    page.locator(".deck-density-btn").click()
     expect(app).to_have_class(COMPACT)
     page.reload()                                       # the URL says Open
     expect(app).not_to_have_class(COMPACT)              # Open, as left
@@ -2051,16 +2048,16 @@ def test_compact_defaults_per_tab(page, wiki):
     expect(app).to_have_class(COMPACT)                  # Focus, as left
 
 
-def test_compact_embed_param_and_other_decks(page, wiki):
-    # compact=1 starts every tab compact; a choice is per deck.
+def test_compact_choice_is_per_deck(page, wiki):
+    # Every deck starts compact; a choice is per deck.
     real_density(page)
-    wiki.write("shop", "# Shop\n\n[[deck compact=1 view=focus]]\n")
+    wiki.write("shop", "# Shop\n\n[[deck view=focus]]\n")
     _compact_tasks(page)
     page.goto("/page/shop")
     expect(page.locator(".tasks-app")).to_have_class(COMPACT)
     page.locator(".deck-density-btn").click()             # Focus there: full
     page.goto("/deck?view=focus")
-    expect(page.locator(".tasks-app")).not_to_have_class(COMPACT)   # /deck's own default
+    expect(page.locator(".tasks-app")).to_have_class(COMPACT)       # /deck: still the default
     page.goto("/page/shop")
     expect(page.locator(".tasks-app")).not_to_have_class(COMPACT)
 
