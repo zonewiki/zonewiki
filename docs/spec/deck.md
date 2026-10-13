@@ -172,4 +172,4 @@ A separate list is a tag that a page declares with `[[deck list=<tag>]]`: a high
 - **v**: one line per task / full cards (see Compact)
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags
-- **c t**: a new task in the deck's home, with its tags (from any page; see Modules → New task from anywhere)
+- **c t**: a new task in the deck's home, with its tags (from any page; see Modules → New task from anywhere). The deck's keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the deck leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task

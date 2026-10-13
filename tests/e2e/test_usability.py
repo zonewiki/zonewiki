@@ -459,6 +459,17 @@ def test_tag_fields_do_not_take_spaces(page, wiki):
     expect(inp).to_have_value("new-tag")
 
 
+def test_c_t_with_a_task_selected_opens_only_new_task(page, wiki):
+    # The t of the c t shortcut is not the deck's t (tag the selected tasks).
+    seed_tags(page, wiki)
+    card = page.locator(".task-item").filter(has=page.get_by_text("E", exact=True))
+    card.locator(".task-title").click()
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    expect(page.locator("#bulk-tag-input")).not_to_be_visible()
+
+
 def test_backspace_in_tags_field(page, wiki):
     # A chip can't be edited: one Backspace at the start of the field removes
     # it whole. Inside the typed text, Backspace deletes characters as usual.

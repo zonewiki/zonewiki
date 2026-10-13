@@ -7,6 +7,12 @@ export function closeOnBackdropClick(dialog) {
   });
 }
 
+// The first key of a two-key shortcut (g or c, shortcuts.js) while it waits
+// for the second, else null. The deck's keydown runs before the page's (deck.js
+// is imported first), so it leaves that second key alone: the t of c t isn't
+// the deck's t (tag the selected tasks).
+export const keyPrefix = { key: null, timer: null };
+
 export function he(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

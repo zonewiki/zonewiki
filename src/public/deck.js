@@ -8,7 +8,7 @@ import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
 import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
-import { pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
@@ -3312,6 +3312,8 @@ document.addEventListener('keydown', async e => {
   // Only the active instance handles keyboard events (multi-embed safety)
   if (deckInstances.length > 1 && activeDeckInstance !== instanceId) return;
   if (headless) return;
+  // The second key of g … / c … is the page's (the t of c t, g t)
+  if (keyPrefix.key) return;
   // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
   if (taskMenu) return;
 

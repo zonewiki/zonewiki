@@ -1,4 +1,4 @@
-import { closeOnBackdropClick } from './util.js';
+import { closeOnBackdropClick, keyPrefix } from './util.js';
 import { deckHomeHref, openHomeTask, openNewPage, openScratch, toggleSharing } from './actions.js';
 import { openSearchModal } from './search.js';
 import { togglePreview } from './editor.js';
@@ -29,13 +29,12 @@ function jumpSection(step) {
 const shortcutsModal = document.getElementById('shortcuts-modal');
 closeOnBackdropClick(shortcutsModal);
 
-let awaitingG = false;
-let gPrefixTimer = null;
-function resetG() { awaitingG = false; clearTimeout(gPrefixTimer); }
-
-let awaitingC = false;
-let cPrefixTimer = null;
-function resetC() { awaitingC = false; clearTimeout(cPrefixTimer); }
+function resetPrefix() { keyPrefix.key = null; clearTimeout(keyPrefix.timer); }
+function startPrefix(key) {
+  resetPrefix();
+  keyPrefix.key = key;
+  keyPrefix.timer = setTimeout(resetPrefix, 1000);
+}
 
 document.addEventListener('keydown', e => {
   // Ctrl/Cmd+P — open search modal
@@ -84,36 +83,34 @@ document.addEventListener('keydown', e => {
 
   // Bare key shortcuts — skip when focus is in an input/textarea/select
   if (e.target.matches('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) {
-    resetG(); resetC();
+    resetPrefix();
     return;
   }
 
   // g-prefix navigation: gh=home, gs=scratch, gd=deck (every task),
   // gt=the deck's home (your own deck; /deck without one)
-  if (awaitingG) {
-    resetG();
+  if (keyPrefix.key === 'g') {
+    resetPrefix();
     const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: deckHomeHref() };
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }
   if (e.key === 'g') {
     e.preventDefault();
-    awaitingG = true;
-    gPrefixTimer = setTimeout(resetG, 1000);
+    startPrefix('g');
     return;
   }
 
   // c-prefix create: cs=scratch note, ct=task in the deck's home
-  if (awaitingC) {
-    resetC();
+  if (keyPrefix.key === 'c') {
+    resetPrefix();
     if (e.key === 's') { e.preventDefault(); openScratch(); }
     else if (e.key === 't') { e.preventDefault(); openHomeTask(); }
     return;
   }
   if (e.key === 'c') {
     e.preventDefault();
-    awaitingC = true;
-    cPrefixTimer = setTimeout(resetC, 1000);
+    startPrefix('c');
     return;
   }
 
