@@ -7,6 +7,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 - `server.py`'s `view_page` reads `<slug>.md`, `render.render_md()` converts it to HTML using `markdown-it-py`, and `views.page("view.html", …)` renders it into the page (see Templates). A path with a slug in it is built with `pages.url()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
+- **Deck task notes and comments** render with the same markdown (`render.render_notes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[toc]]`, `[[deck]]`, ✎ per section, heading ids). See Notes in `docs/spec/deck.md`.
 - The shared shell renders the product brand as `Leaf` (page titles, the switcher's accessible name), with a small green inline SVG leaf logo (`_LEAF_LOGO`) on the breadcrumb's Wiki link.
 
 ### Autolinks and callouts
@@ -37,7 +38,8 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 | `js/actions.js` | New scratch note / page / task (`openHomeTask`, loading a hidden deck when the page has none), action bar, sharing mode |
 | `js/pagemenu.js` | The page's ⋯ menu and its dialogs (rename, move to wiki, append, delete) |
 | `js/shortcuts.js` | Keyboard shortcuts |
-| `js/editor.js` | The editor: auto-save, preview, formatting bar, Make task, snippets, rename bar |
+| `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the deck's task notes (formatting bar, completion, snippets, lists, uploads), `taskCheckboxOffsets` |
+| `js/editor.js` | The editor: auto-save, preview, Enter on a wikilink, Make task, rename bar |
 | `js/page.js` | Page view: checkboxes, `[[task:…]]` chips, sortable tables, syntax highlighting, lightbox |
 | `js/present.js` | Presentation mode |
 | `deck.js`, `deck-core.js` | The deck app (exports `initDecks`, `openDeckEdit`) and its pure logic (`DeckCore`, also run by the Node tests) |
@@ -58,7 +60,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ### Wikilinks
 
 - Wikilinks use the `[[Page Name]]` syntax. Nested pages can be linked as `[[journal/my-page]]`.
-- **Sections**: `[[Page#Section]]` links to a heading on that page (`/page/page#section`, the id as the heading renders, `section_anchor`), labelled "Page › Section"; `[[Page#Section|Label]]` with a label; `[[#Section]]` a heading on the same page. `split_wikilink` parses all forms (server), `wikilinkHref` in `js/util.js` the same for `deck.js`'s task notes and the editor's Enter-on-a-wikilink. The section is ignored for backlinks and kept on rename.
+- **Sections**: `[[Page#Section]]` links to a heading on that page (`/page/page#section`, the id as the heading renders, `section_anchor`), labelled "Page › Section"; `[[Page#Section|Label]]` with a label; `[[#Section]]` a heading on the same page. `split_wikilink` parses all forms (server), `wikilinkHref` in `js/util.js` the same for the editor's Enter-on-a-wikilink (task notes render on the server, `render_notes`). The section is ignored for backlinks and kept on rename.
 - Before passing markdown to `markdown-it-py`, run a regex pre-processing step that rewrites wikilinks to standard markdown links:
   - `[[Page Name]]` → `[Page Name](/page/page-name)` (slug = lowercase, spaces → hyphens)
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`

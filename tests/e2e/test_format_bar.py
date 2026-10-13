@@ -21,7 +21,7 @@ def _body(textarea) -> str:
 
 
 def _click(page, fmt):
-    page.locator(f'.fmt-btn[data-fmt="{fmt}"]').click()
+    page.locator(f'#format-bar .fmt-btn[data-fmt="{fmt}"]').click()
 
 
 def test_bold_wraps_unwraps_and_undoes(page, wiki):
@@ -192,13 +192,13 @@ def test_phone_bar_is_finger_sized_and_scrolls_sideways(new_page, wiki):
     phone.goto("/edit/fmt")
     bar = phone.locator("#format-bar")
     expect(bar).to_be_visible()
-    assert phone.locator(".fmt-btn").first.bounding_box()["height"] >= 40
+    assert phone.locator("#format-bar .fmt-btn").first.bounding_box()["height"] >= 40
     # One line that scrolls inside itself, never widening the page.
     assert bar.evaluate("b => b.scrollWidth > b.clientWidth")
     assert phone.evaluate("document.documentElement.scrollWidth") <= 390
     textarea = phone.locator("#editor-textarea")
     textarea.evaluate("ta => ta.setSelectionRange(2, 5)")   # "Fmt"
-    phone.locator('.fmt-btn[data-fmt="bold"]').tap()
+    phone.locator('#format-bar .fmt-btn[data-fmt="bold"]').tap()
     expect(textarea).to_have_value("# **Fmt**\n")
 
 
@@ -206,6 +206,6 @@ def test_bar_sits_close_above_the_textarea(page, wiki):
     # Regression: `.editor-pane form`'s padding overrode the smaller gap.
     wiki.write("fmt", "# Fmt\n")
     page.goto("/edit/fmt")
-    bar = page.locator(".fmt-btn").first.bounding_box()
+    bar = page.locator("#format-bar .fmt-btn").first.bounding_box()
     ta = page.locator("#editor-textarea").bounding_box()
     assert 0 <= ta["y"] - (bar["y"] + bar["height"]) <= 6

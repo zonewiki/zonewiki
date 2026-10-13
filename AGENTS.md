@@ -103,7 +103,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
         ├── style.css       # All styling
         ├── leaf.js         # The entry ES module every page loads; imports the modules below
         ├── js/             # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-        │                   #   shortcuts, editor, page, present (see Client code in `docs/spec/rendering.md`)
+        │                   #   shortcuts, mdedit, editor, page, present (see Client code in `docs/spec/rendering.md`)
         ├── deck-core.js    # Pure deck logic (no DOM), an ES module — shared by deck.js, the editor and Node-run tests
         ├── deck.js         # Deck (task management) app, an ES module leaf.js imports; initDecks() starts each .tasks-app
         ├── favicon.svg     # Browser tab icon

@@ -39,21 +39,6 @@ function byOpenOrder(a, b) {
   return a.sort_order - b.sort_order;
 }
 
-// Checkbox items in a task's notes: a line "- [ ] text" (or "* ", "+ ",
-// indented or not; "[x]" when ticked). Shared by the card renderer, which
-// numbers them in order, and toggleDescCheck, so the numbering matches.
-const DESC_CHECK_RE = /^(\s*[-*+] \[)([ xX])(\] )(.*)$/;
-
-// Flip the idx-th checkbox item (0-based) in a task's notes.
-function toggleDescCheck(text, idx) {
-  let n = -1;
-  return (text || '').split('\n').map(line => {
-    const m = line.match(DESC_CHECK_RE);
-    if (!m || ++n !== idx) return line;
-    return m[1] + (m[2] === ' ' ? 'x' : ' ') + m[3] + m[4];
-  }).join('\n');
-}
-
 // The deck's single filter field: words starting with '#' filter by tag, the
 // rest is a text search over title + description. Separate tag words must
 // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
@@ -295,7 +280,7 @@ function parseQuickAdd(input, today) {
 const DeckCore = {
   dateToStr, addDays, isOverdue, isFocus, byOpenOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, tagParamToQuery, DESC_CHECK_RE, toggleDescCheck,
+  parseFilter, matchesFilter, tagParamToQuery,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
 };
 

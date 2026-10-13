@@ -1,4 +1,5 @@
 import { putTask, showToast } from './util.js';
+import { toggleCheckboxInTextarea } from './mdedit.js';
 
 // ── Syntax highlighting ───────────────────────────────────────────────────────
 
@@ -9,61 +10,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────
 
-// Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order. Mirrors mdtext.py's _task_item_lines/_TASK_ITEM_RE: only
-// list items whose text starts with the box produce a checkbox, fenced code
-// and a leading frontmatter block are skipped — so the Nth rendered checkbox
-// is the Nth offset here.
-const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
-
-function taskCheckboxOffsets(text) {
-  const lines = text.split('\n');
-  let start = 0;
-  if (lines.length && lines[0].trim() === '---') {
-    const close = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
-    if (close !== -1) start = close + 1;
-  }
-  const offsets = [];
-  let pos = 0, fence = null;
-  lines.forEach((line, i) => {
-    const t = line.trim();
-    const run = t.length - t.replace(/^(`+|~+)/, '').length;  // leading fence chars
-    if (fence) {
-      // Closing fence: same char, at least as long, nothing else on the line
-      if (t[0] === fence[0] && run >= fence.length && run === t.length) fence = null;
-    } else if (run >= 3) {
-      fence = t.slice(0, run);
-    } else if (i >= start) {
-      const m = TASK_ITEM_RE.exec(line);
-      if (m) offsets.push(pos + m[1].length);
-    }
-    pos += line.length + 1;
-  });
-  return offsets;
-}
-
+// The page's own checkboxes: a deck's task notes have theirs (deck.js).
+const IN_DECK = '.tasks-app, .task-edit-modal';
 document.addEventListener('change', e => {
-  if (!e.target.matches('.task-list-item-checkbox')) return;
-  const checkboxes = Array.from(document.querySelectorAll('.task-list-item-checkbox'));
+  if (!e.target.matches('.task-list-item-checkbox') || e.target.closest(IN_DECK)) return;
+  const checkboxes = Array.from(document.querySelectorAll('.task-list-item-checkbox'))
+    .filter(cb => !cb.closest(IN_DECK));
   const idx = checkboxes.indexOf(e.target);
   if (idx === -1) return;
 
   const textarea = document.getElementById('editor-textarea');
   if (textarea) {
-    // Editor: toggle the Nth checkbox in the textarea. Goes through
-    // execCommand so it lands on the undo stack and fires `input` (live
-    // preview, unsaved dot, auto-save) like any other edit.
-    const offsets = taskCheckboxOffsets(textarea.value);
-    if (idx < offsets.length) {
-      const at = offsets[idx];
-      const newChar = textarea.value[at] === ' ' ? 'x' : ' ';
-      const { selectionStart, selectionEnd, scrollTop } = textarea;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(at, at + 1);
-      document.execCommand('insertText', false, newChar);
-      textarea.setSelectionRange(selectionStart, selectionEnd);
-      textarea.scrollTop = scrollTop;
-    }
+    // Editor: toggle the Nth checkbox in the textarea (js/mdedit.js).
+    toggleCheckboxInTextarea(textarea, idx);
   } else {
     // Page view: persist the toggle, with an undo toast — a mis-tap on a
     // phone otherwise edits the file silently. Undo is a second toggle.

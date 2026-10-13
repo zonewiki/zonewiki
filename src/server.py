@@ -38,7 +38,7 @@ from pages import (
 )
 from gitstore import run_git, git_commit, git_setup, move_page
 from render import (
-    render_md, render_tags_pills_html,
+    render_md, render_notes, render_tags_pills_html,
 )
 from retrieval import (
     do_search, SCRATCH_FILTER_LIMIT, SEARCH_LIMIT, SEARCH_MAX_LIMIT, SEARCH_PAGE_LIMIT,
@@ -823,6 +823,23 @@ def api_preview():
     # own (js/page.js rerenderTaskRef) keeps linking to the page's list.
     lists = [n for n in (decksyntax.clean_list(x) for x in request.args.get("lists", "").split(",")) if n]
     return render_md(text, prefer_lists=lists)
+
+
+@app.post("/api/render-notes")
+def api_render_notes():
+    """Deck task notes and comments as HTML, as pages render (render_notes):
+    {"notes": [text…], "comments": [text…]} → the same with HTML. The deck
+    asks for the texts it hasn't rendered yet and keeps the answers."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        abort(400)
+    out = {}
+    for key, inline in (("notes", False), ("comments", True)):
+        texts = data.get(key) or []
+        if not isinstance(texts, list) or not all(isinstance(t, str) for t in texts):
+            abort(400)
+        out[key] = render_notes(texts, inline=inline)
+    return jsonify(out)
 
 
 @app.get("/api/version")

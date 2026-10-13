@@ -94,7 +94,7 @@ def test_format_bar_button_starts_a_task_reference(page, wiki):
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")
     page.keyboard.press("Control+End")
-    page.locator('.fmt-btn[data-fmt="taskref"]').click()
+    page.locator('#format-bar .fmt-btn[data-fmt="taskref"]').click()
     expect(page.locator(".wikilink-ac-item")).to_contain_text("Water plants")
     page.locator(".wikilink-ac-item", has_text="Water plants").click()
     expect(page.locator("#editor-textarea")).to_have_value(f"# Notes\n\n[[task:{t['id'][:8]}]]")

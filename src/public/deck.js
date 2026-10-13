@@ -6,10 +6,12 @@
 import DeckCore from './deck-core.js';
 import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
-import { continueList, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { markdownEditor, toggleCheckboxInTextarea } from './js/mdedit.js';
+import { openLightbox } from './js/page.js';
+import { putTask } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd, DESC_CHECK_RE, toggleDescCheck } = DeckCore;
+const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
@@ -38,6 +40,68 @@ window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstance
 let openEdit = null;
 export function openDeckEdit(taskId, opts) {
   return openEdit?.(taskId, opts);
+}
+
+// ── Notes and comments, rendered as pages are ─────────────────────────────
+// The server renders them (POST /api/render-notes, render.render_notes: the
+// page renderer, so headings, lists, tables, code, wikilinks and task chips
+// look as on a page). The HTML is kept per text for the page's life and
+// shared by every deck app on it, so each text is fetched once.
+const renderedHtml = { notes: new Map(), comments: new Map() };
+// Until its HTML is here, a text shows as it is (line breaks kept).
+const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+function highlightCode(html) {
+  if (!window.hljs || !html.includes('<pre')) return html;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  tpl.content.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  return tpl.innerHTML;
+}
+// The notes and comments of `taskList`, for renderTexts.
+function textsOf(taskList) {
+  return {
+    notes: taskList.map(t => t?.description).filter(Boolean),
+    comments: taskList.flatMap(t => (t?.comments || []).map(c => c.text)),
+  };
+}
+// Fetch the HTML of the texts not rendered yet; true when there is new.
+// Texts another deck app is fetching already are waited for, not asked
+// again. A failed request caches nothing: the next render asks again.
+const renderInFlight = { notes: new Map(), comments: new Map() };
+async function renderTexts({ notes = [], comments = [] }) {
+  const want = {}, waits = [];
+  for (const [kind, texts] of Object.entries({ notes, comments })) {
+    want[kind] = [];
+    for (const t of new Set(texts)) {
+      if (!t || renderedHtml[kind].has(t)) continue;
+      const pending = renderInFlight[kind].get(t);
+      if (pending) waits.push(pending);
+      else want[kind].push(t);
+    }
+  }
+  let fresh = false;
+  if (want.notes.length || want.comments.length) {
+    const req = (async () => {
+      try {
+        const res = await fetch('/api/render-notes', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(want),
+        });
+        if (!res.ok) return false;
+        const out = await res.json();
+        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, highlightCode(out[kind][i])));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    })();
+    for (const kind in want) want[kind].forEach(t => renderInFlight[kind].set(t, req));
+    try { fresh = await req; } finally {
+      for (const kind in want) want[kind].forEach(t => renderInFlight[kind].delete(t));
+    }
+  }
+  if (waits.length) fresh = (await Promise.all(waits)).some(Boolean) || fresh;
+  return fresh;
 }
 
 // Start every deck app on the page that hasn't started yet (marked
@@ -165,14 +229,42 @@ async function planOnDay(id, day) {
   }
 }
 
-// A checkbox item in a card's notes ("- [ ] milk"): ticking it edits the
-// notes (DeckCore.toggleDescCheck) and saves them.
+// A checkbox in a card's notes ("- [ ] milk"), as on a page: ticking it
+// saves the notes with the date it was ticked (POST …/toggle-check, the
+// Nth box as render_notes numbers them), with an undo toast; undo is a
+// second toggle. Toggles are chained, so an undo never overtakes the one
+// it reverts.
+let noteCheckQueue = Promise.resolve();
+function toggleNoteCheck(id, idx) {
+  noteCheckQueue = noteCheckQueue.then(async () => {
+    const res = await fetch(`/api/deck/${encodeURIComponent(id)}/toggle-check`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idx }),
+    }).catch(() => null);
+    if (!res?.ok) { showNotice('Could not save the checkbox'); render(); return; }
+    const updated = await res.json();
+    await renderTexts(textsOf([updated]));
+    const i = tasks.findIndex(t => t.id === id);
+    if (i !== -1) tasks[i] = updated;
+    render();
+    refreshOtherInstances(instanceId);
+  });
+  return noteCheckQueue;
+}
 listEl.addEventListener('change', e => {
-  const cb = e.target.closest('input[data-desc-check]');
-  if (!cb) return;
-  const id = cb.closest('.task-item')?.dataset.id;
-  const task = tasks.find(t => t.id === id);
-  if (task) updateTask(id, { description: toggleDescCheck(task.description, +cb.dataset.descCheck) });
+  const cb = e.target.closest('.task-desc .task-list-item-checkbox');
+  const item = cb?.closest('.task-item');
+  if (!item) return;
+  const id = item.dataset.id;
+  const idx = [...item.querySelectorAll('.task-desc .task-list-item-checkbox')].indexOf(cb);
+  toggleNoteCheck(id, idx);
+  const text = (cb.closest('li')?.textContent || '').trim().split('\n')[0];
+  const label = text.length > 40 ? text.slice(0, 39) + '…' : text;
+  showUndo(`${cb.checked ? 'Checked' : 'Unchecked'} “${label}”`, () => toggleNoteCheck(id, idx));
+});
+// An image in the notes opens full size, as on a page.
+listEl.addEventListener('click', e => {
+  const img = e.target.closest('.task-desc img');
+  if (img) openLightbox(img.src);
 });
 
 // Touch: the first tap on a card selects it (and expands it in compact
@@ -662,7 +754,9 @@ async function noticeFromResponse(res, fallback) {
 let deckGen = 0;
 async function fetchDeck() {
   const res = await fetch('/api/deck');
-  tasks = (await res.json()).filter(inScope);
+  const fetched = (await res.json()).filter(inScope);
+  await renderTexts(textsOf(fetched));
+  tasks = fetched;
   deckGen++;
   completedLoaded = false;
   render();
@@ -706,6 +800,7 @@ async function loadCompleted() {
     gen = deckGen;
     const res = await fetch('/api/deck/completed' + (completedYear ? `?year=${completedYear}` : ''));
     completed = (await res.json()).filter(inScope);
+    await renderTexts(textsOf(completed));
   } while (gen !== deckGen);
   const existingIds = new Set(tasks.map(t => t.id));
   for (const t of completed) {
@@ -744,6 +839,7 @@ async function createTask(data) {
   });
   if (res.ok) {
     const task = await res.json();
+    await renderTexts(textsOf([task]));
     const msg = leftViewMessage(null, task);
     if (inScope(task)) tasks.push(task);
     if (msg && !headless) showNotice(msg);
@@ -764,6 +860,7 @@ async function updateTask(id, data) {
   });
   if (res.ok) {
     const updated = await res.json();
+    await renderTexts(textsOf([updated]));
     const idx = tasks.findIndex(t => t.id === id);
     if (idx !== -1) {
       const before = tasks[idx];
@@ -1860,6 +1957,27 @@ function swallowNextClick() {
   const timer = setTimeout(stop, 1000);
 }
 
+// The HTML of a note or comment (renderedHtml). One not rendered yet (a
+// task another deck app or the MCP just changed) shows as plain text, is
+// fetched, and the list and the modal's comments redrawn when it is here.
+let missingTexts = null;
+function htmlOf(kind, text) {
+  const html = renderedHtml[kind].get(text);
+  if (html !== undefined) return html;
+  if (!missingTexts) {
+    missingTexts = { notes: [], comments: [] };
+    queueMicrotask(async () => {
+      const want = missingTexts;
+      missingTexts = null;
+      if (!await renderTexts(want)) return;
+      render();
+      if (modal.open && commentsTaskId) renderComments(tasks.find(t => t.id === commentsTaskId));
+    });
+  }
+  missingTexts[kind].push(text);
+  return plainHtml(text);
+}
+
 function render() {
   syncCompletedLink();
 
@@ -1957,13 +2075,13 @@ function render() {
     const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight || notesDisplay;
     const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
     const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
-    const descHtml = task.description ? `<div class="task-desc">${renderDesc(task.description)}</div>` : '';
+    const descHtml = task.description ? `<div class="task-desc page-content">${htmlOf('notes', task.description)}</div>` : '';
     // The latest comments, newest first: shown only when a compact task is
     // expanded (full cards have the 💬 count; the modal has them all).
     const earlier = comments.length - 3;
     const commentsHtml = comments.length
       ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
-          `<p><span class="task-comment-when">${esc(commentWhen(c.at))}</span> ${esc(c.text)}</p>`).join('')}` +
+          `<p><span class="task-comment-when">${esc(commentWhen(c.at))}</span> ${htmlOf('comments', c.text)}</p>`).join('')}` +
         (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
@@ -2187,57 +2305,60 @@ function linkifyTitle(text) {
 
 // ── Inline markdown rendering for descriptions ─────────────────────────────
 
-function renderDesc(text) {
-  if (!text) return '';
-  let h = esc(text);
-  // Wikilinks: [[page]], [[page|label]], [[page#section]] (… with |label)
-  // — resolved with the shared wikilinkHref from js/util.js, exactly like the
-  // server's. The text is escaped already, so labels need no more.
-  h = h.replace(/\[\[([^\]]+)\]\]/g, (_, inner) => {
-    const { href, label } = wikilinkHref(inner);
-    return `<a href="${href}">${label}</a>`;
-  });
-  // Markdown links: [label](url)
-  h = h.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${href}"${extAttrs(unesc(href))}>${label}</a>`);
-  // Bare URLs (skip those already inside href="..." or anchor text)
-  h = h.replace(/(?<![">])(https?:\/\/[^\s<]+)/g, (_, url) => `<a href="${url}" class="task-link"${extAttrs(unesc(url))}>${url}</a>`);
-  // Bold
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Italic
-  h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Inline code
-  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Checkbox items ("- [ ] milk") become real checkboxes, numbered in order
-  // like DeckCore.toggleDescCheck counts them; ticking one edits the notes.
-  let n = 0;
-  h = h.split('\n').map(line => {
-    const m = line.match(DESC_CHECK_RE);
-    if (!m) return line;
-    const checked = m[2] !== ' ' ? ' checked' : '';
-    return `<label class="task-desc-check"><input type="checkbox" data-desc-check="${n++}"${checked}> <span>${m[4]}</span></label>`;
-  }).join('\n');
-  // Line breaks
-  h = h.replace(/\n/g, '<br>');
-  return h;
-}
 
-// Page completion in the title and notes ([[ and [text](, shared with
-// the editor: linkAutocomplete in js/completion.js).
+// Page completion in the title ([[ and [text](, linkAutocomplete in
+// js/completion.js, shared with the editor).
 const titleInput = document.getElementById('task-edit-title' + sfx);
 const descTextarea = document.getElementById('task-edit-desc' + sfx);
 if (titleInput) linkAutocomplete(titleInput);
-if (descTextarea) linkAutocomplete(descTextarea);
 
-// Pasting a URL into the notes makes a markdown link (pasteUrlAsLink,
-// from js/util.js, undoable).
-descTextarea?.addEventListener('paste', e => pasteUrlAsLink(descTextarea, e));
-// Enter in the notes continues a list as in the page editor: "- [ ] eggs"
-// + Enter starts "- [ ] " (continueList, from js/util.js). Registered
-// after the completion, so an Enter that picked a link suggestion is skipped.
-descTextarea?.addEventListener('keydown', e => {
-  if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.isComposing || e.defaultPrevented) return;
-  continueList(descTextarea, e);
+// The notes are edited as a page is (js/mdedit.js): the formatting bar,
+// completion, snippets, lists, file paste and drop. Tab stays the key to the
+// next field (it still expands a snippet). Preview (F2) shows them under
+// the field as the card will, live; ticking a box there ticks it in the text.
+const notesPreview = document.getElementById('task-edit-preview' + sfx);
+const notesPreviewBtn = document.getElementById('task-edit-preview-btn' + sfx);
+let notesPreviewTimer = null;
+function scheduleNotesPreview() {
+  clearTimeout(notesPreviewTimer);
+  notesPreviewTimer = setTimeout(fetchNotesPreview, 300);
+}
+async function fetchNotesPreview() {
+  if (!notesPreview || notesPreview.hidden) return;
+  const text = descTextarea.value.trim();
+  if (!text) { notesPreview.innerHTML = ''; return; }
+  try {
+    const res = await fetch('/api/render-notes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
+    });
+    if (res.ok && descTextarea.value.trim() === text) notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
+  } catch (_) { /* keep the last one */ }
+}
+// Shown or not, remembered across tasks and visits.
+const NOTES_PREVIEW_KEY = 'leaf-deck-notes-preview';
+function setNotesPreview(show) {
+  if (!notesPreview) return;
+  notesPreview.hidden = !show;
+  notesPreviewBtn?.setAttribute('aria-pressed', String(show));
+  try { localStorage.setItem(NOTES_PREVIEW_KEY, show ? '1' : ''); } catch (_) {}
+  if (show) fetchNotesPreview();
+}
+const notesPreviewWanted = () => { try { return !!localStorage.getItem(NOTES_PREVIEW_KEY); } catch (_) { return false; } };
+notesPreviewBtn?.addEventListener('click', () => setNotesPreview(notesPreview.hidden));
+notesPreview?.addEventListener('change', e => {
+  if (!e.target.matches('.task-list-item-checkbox')) return;
+  const idx = [...notesPreview.querySelectorAll('.task-list-item-checkbox')].indexOf(e.target);
+  toggleCheckboxInTextarea(descTextarea, idx, false);
 });
+if (descTextarea) {
+  markdownEditor(descTextarea, {
+    bar: document.getElementById('task-edit-format' + sfx),
+    attachInput: document.getElementById('task-edit-attach' + sfx),
+    onChange: scheduleNotesPreview,
+    tabIndents: false,
+  });
+  descTextarea.addEventListener('input', scheduleNotesPreview);
+}
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 // Segmented control: one button per view, data-view = the view's name.
@@ -2714,7 +2835,7 @@ function renderComments(task) {
   document.getElementById('task-edit-comments-count' + sfx).textContent = comments.length || '';
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentWhen(c.at))}</span>` +
-    `<span class="task-comment-text">${renderDesc(c.text)}</span>` +
+    `<span class="task-comment-text">${htmlOf('comments', c.text)}</span>` +
     `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
     `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button></li>`).join('');
 }
@@ -2726,6 +2847,7 @@ async function commentWrite(url, method, body) {
   });
   if (!res.ok) { await noticeFromResponse(res, 'Comment not saved'); return null; }
   const updated = await res.json();
+  await renderTexts(textsOf([updated]));
   const idx = tasks.findIndex(t => t.id === updated.id);
   if (idx !== -1) tasks[idx] = updated;
   if (commentsTaskId === updated.id && modal.open) renderComments(updated);
@@ -2808,6 +2930,7 @@ function openEditModal(taskId, opts) {
   document.getElementById('task-edit-id' + sfx).value = task ? task.id : '';
   document.getElementById('task-edit-title' + sfx).value = task ? task.title : opts?.title || '';
   document.getElementById('task-edit-desc' + sfx).value = task ? task.description || '' : opts?.description || '';
+  if (notesPreview) { notesPreview.innerHTML = ''; setNotesPreview(notesPreviewWanted()); }
   document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
   document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
     : opts && 'start_date' in opts ? opts.start_date || '' : (activeView === 'focus' ? dateOffset(0) : '');
@@ -2950,6 +3073,12 @@ modal.addEventListener('cancel', blurInside);
 modal.addEventListener('close', () => { onCreated = null; blurInside(); });
 
 modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); form.requestSubmit(); } }, true);
+// F2: the notes' preview, as in the editor (not the editor's, on its page).
+modal.addEventListener('keydown', e => {
+  if (e.key !== 'F2' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  e.preventDefault(); e.stopPropagation();
+  setNotesPreview(notesPreview.hidden);
+}, true);
 
 form.addEventListener('submit', async e => {
   e.preventDefault();

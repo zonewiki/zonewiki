@@ -171,10 +171,10 @@ def iter_fenced_lines(lines: list[str]):
 _TASK_ITEM_RE = re.compile(r'^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\](?=[ \t]+\S)')
 
 
-def _task_item_lines(lines: list[str]) -> list[tuple[int, re.Match]]:
-    """(line index, match) for every task-list checkbox line, skipping a
-    leading frontmatter block and fenced code."""
-    start = _body_start(lines)
+def _task_item_lines(lines: list[str], frontmatter: bool = True) -> list[tuple[int, re.Match]]:
+    """(line index, match) for every task-list checkbox line, skipping fenced
+    code and, in a page (`frontmatter`), a leading frontmatter block."""
+    start = _body_start(lines) if frontmatter else 0
     found = []
     for i, line, in_fence in iter_fenced_lines(lines):
         if i < start or in_fence:
@@ -185,10 +185,12 @@ def _task_item_lines(lines: list[str]) -> list[tuple[int, re.Match]]:
     return found
 
 
-def toggle_nth_checkbox(content: str, idx: int) -> str:
-    """Toggle the Nth task-list checkbox (0-based), in rendered order."""
+def toggle_nth_checkbox(content: str, idx: int, frontmatter: bool = True) -> str:
+    """Toggle the Nth task-list checkbox (0-based), in rendered order. A deck
+    task's notes have no frontmatter (`frontmatter=False`): render_notes
+    renders a leading --- block as text, so its checkboxes count."""
     lines = content.splitlines(keepends=True)
-    items = _task_item_lines(lines)
+    items = _task_item_lines(lines, frontmatter)
     if idx >= len(items):
         return content
     li, m = items[idx]

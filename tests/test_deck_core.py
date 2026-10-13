@@ -366,24 +366,3 @@ class TestSanitizeTagInput:
         # Typing "," between a and b: the caret lands before b, after the new space.
         assert self.clean("a,b", caret=2) == {"value": "a, b", "caret": 3}
         assert self.clean("local llm", caret=5) == {"value": "local-llm", "caret": 5}
-
-
-class TestDescChecks:
-    """Checkbox items in a task's notes, toggled by index from the card."""
-
-    def _toggle(self, text, idx):
-        return run_core(f"DeckCore.toggleDescCheck({json.dumps(text)}, {idx})")
-
-    def test_toggles_the_nth_item_only(self):
-        text = "Shop:\n- [ ] eggs\n* [x] flour\n  + [ ] salt"
-        assert self._toggle(text, 0) == "Shop:\n- [x] eggs\n* [x] flour\n  + [ ] salt"
-        assert self._toggle(text, 1) == "Shop:\n- [ ] eggs\n* [ ] flour\n  + [ ] salt"
-        assert self._toggle(text, 2) == "Shop:\n- [ ] eggs\n* [x] flour\n  + [x] salt"
-
-    def test_plain_lines_and_brackets_in_prose_are_not_items(self):
-        text = "- plain item\nsee [ ] later\n- [ ]\n- [X] Done"
-        # "- [ ]" without text is not an item, so "- [X] Done" is item 0.
-        assert self._toggle(text, 0) == "- plain item\nsee [ ] later\n- [ ]\n- [ ] Done"
-
-    def test_out_of_range_changes_nothing(self):
-        assert self._toggle("- [ ] eggs", 3) == "- [ ] eggs"

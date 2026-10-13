@@ -46,9 +46,15 @@
       <ul class="task-edit-batch-list" id="task-edit-batch-list{{ sfx }}"></ul>
       <span class="field-hint">One task per line; the fields below apply to all of them.</span>
     </div>
-    <div class="task-field">
-      <label for="task-edit-desc{{ sfx }}">Notes</label>
+    <div class="task-field task-notes-field">
+      <div class="task-notes-head">
+        <label for="task-edit-desc{{ sfx }}">Notes</label>
+        <button type="button" class="btn btn-small task-notes-preview-btn" id="task-edit-preview-btn{{ sfx }}" aria-pressed="false" title="Show the notes as the card will (F2)">Preview</button>
+      </div>
+      {#- The editor's bar, without Make task (js/mdedit.js). #}
+      {% with bar_id="task-edit-format" ~ sfx, attach_id="task-edit-attach" ~ sfx, maketask=false %}{% include "partials/format_bar.html" %}{% endwith %}
       <textarea id="task-edit-desc{{ sfx }}" name="description" rows="6"></textarea>
+      <div class="task-notes-preview page-content" id="task-edit-preview{{ sfx }}" aria-label="Preview of the notes" hidden></div>
     </div>
     <div class="task-field task-comments" id="task-edit-comments{{ sfx }}" hidden>
       <label for="task-edit-comment{{ sfx }}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{ sfx }}"></span></label>

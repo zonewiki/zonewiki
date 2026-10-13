@@ -17,6 +17,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
+| POST   | `/api/render-notes`   | Deck task notes and comments as HTML (`render.render_notes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Notes in `docs/spec/deck.md`) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
 | GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version in `docs/spec/deployment.md`) |
@@ -27,6 +28,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/api/deck`           | Create a task; returns JSON task object (201). |
 | PUT    | `/api/deck/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, keep, last_done, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. `completed: true` on a keep task does not archive it (see Keep tasks). |
 | DELETE | `/api/deck/<id>`      | Delete a task; returns 204. |
+| POST   | `/api/deck/<id>/toggle-check` | Tick or untick the Nth checkbox in a task's notes, recording when as on a page; body `{ idx }`; returns the task. |
 | POST   | `/api/deck/<id>/comments` | Add a comment (status line) to a task, open or done; body `{ text }`; returns the task (201). See Comments. |
 | PUT    | `/api/deck/<id>/comments/<cid>` | Change a comment's text (its time stays); returns the task. |
 | DELETE | `/api/deck/<id>/comments/<cid>` | Delete a comment; returns the task. |

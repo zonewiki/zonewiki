@@ -2244,3 +2244,71 @@ class TestComments:
         assert [r.get("task_id") for r in results] == [tid]
         assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
                                            "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}) == "2026-04-01"
+
+
+# ---------- Notes rendered as pages, checkboxes in them ----------
+
+
+class TestNotes:
+    def test_render_notes_as_a_page_renders(self, client, wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n", encoding="utf-8")
+        resp = client.post("/api/render-notes", json={
+            "notes": ["## Plan\nfirst\nsecond\n\n- [ ] dig <!--d:2026-10-01T10:00:00-->\n\n"
+                      "| a | b |\n|---|---|\n| 1 | 2 |\n\n```py\nx = 1\n```\n\nSee [[Garden]] and [[Nowhere]], _soon_."],
+            "comments": ["**done**, see [[Garden]]"],
+        })
+        assert resp.status_code == 200
+        [note], [comment] = resp.get_json()["notes"], resp.get_json()["comments"]
+        assert "<h2>Plan</h2>" in note                       # no id: it would clash with the page's anchors
+        assert "<p>first\nsecond</p>" in note                # one paragraph, as on a page
+        assert 'class="task-list-item-checkbox"' in note
+        assert '<span class="task-date task-date-done" title="Done 2026-10-01T10:00:00">2026-10-01</span>' in note
+        assert "<table>" in note and '<code class="language-py">' in note
+        assert '<a href="/page/garden" class="wikilink">Garden</a>' in note
+        assert "wikilink-missing" in note and "<em>soon</em>" in note
+        # A comment is one line: inline, no paragraph around it.
+        assert comment == '<strong>done</strong>, see <a href="/page/garden" class="wikilink">Garden</a>'
+
+    def test_render_notes_task_chips_and_no_page_directives(self, client):
+        tid = create_task(client, title="Order seeds").get_json()["id"]
+        [note] = client.post("/api/render-notes", json={"notes": [f"[[task:{tid[:8]}]]\n\n[[toc]]"]}).get_json()["notes"]
+        assert 'class="task-ref"' in note and "Order seeds" in note
+        assert '<nav class="toc">' not in note
+
+    def test_render_notes_validates(self, client):
+        assert client.post("/api/render-notes", json={}).get_json() == {"notes": [], "comments": []}
+        assert client.post("/api/render-notes", json={"notes": "x"}).status_code == 400
+        assert client.post("/api/render-notes", json={"notes": [1]}).status_code == 400
+        assert client.post("/api/render-notes", data="x").status_code == 400
+
+    def _toggle(self, client, tid, idx):
+        return client.post(f"/api/deck/{tid}/toggle-check", json={"idx": idx})
+
+    def test_toggle_check_records_when_and_undoes(self, client):
+        tid = create_task(client, title="Bake", description="Need:\n- [ ] eggs\n- [x] flour").get_json()["id"]
+        resp = self._toggle(client, tid, 0)
+        assert resp.status_code == 200
+        desc = resp.get_json()["description"]
+        assert re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-->\n- \[x\] flour", desc)
+        assert client.get("/api/deck").get_json()[0]["description"] == desc
+        # Again (undo): unticked, the date gone.
+        assert self._toggle(client, tid, 0).get_json()["description"] == "Need:\n- [ ] eggs\n- [x] flour"
+        assert self._toggle(client, tid, 1).get_json()["description"] == "Need:\n- [ ] eggs\n- [ ] flour"
+
+    def test_toggle_check_counts_as_render_notes_does(self, client):
+        # Notes have no frontmatter: a leading --- block is text, and its
+        # checkbox is the first one, as rendered. Fenced code has none.
+        desc = "---\n- [ ] one\n---\n```\n- [ ] code\n```\n- [ ] two"
+        tid = create_task(client, title="T", description=desc).get_json()["id"]
+        [html] = client.post("/api/render-notes", json={"notes": [desc]}).get_json()["notes"]
+        assert html.count("task-list-item-checkbox") == 2
+        toggled = self._toggle(client, tid, 1).get_json()["description"]
+        assert re.search(r"\n- \[x\] two <!--d:[^>]+-->$", toggled)
+        assert "- [ ] one" in toggled and "- [ ] code" in toggled
+
+    def test_toggle_check_out_of_range_and_errors(self, client):
+        task = create_task(client, title="T", description="- [ ] a").get_json()
+        assert self._toggle(client, task["id"], 5).get_json()["description"] == "- [ ] a"
+        assert self._toggle(client, task["id"], -1).status_code == 400
+        assert client.post(f"/api/deck/{task['id']}/toggle-check", json={"idx": "x"}).status_code == 400
+        assert self._toggle(client, "nope", 0).status_code == 404

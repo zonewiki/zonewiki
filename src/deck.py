@@ -13,6 +13,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, Response, abort, jsonify, request
 
+from mdtext import toggle_nth_checkbox
 from pages import deck_home, deck_lists
 from templating import render
 from decksyntax import (
@@ -440,6 +441,27 @@ def _find_for_write(task_id: str) -> tuple[list[dict], list[dict], dict]:
     if not task:
         abort(404)
     return active, completed_list, task
+
+
+@bp.post("/api/deck/<task_id>/toggle-check")
+def api_toggle_note_check(task_id):
+    """Tick or untick the Nth checkbox in a task's notes (0-based, in the
+    order render_notes renders them); ticking records when, as on a page
+    (mdtext.toggle_nth_checkbox)."""
+    idx = _as_int(_json_object().get("idx"), "idx")
+    if idx < 0:
+        abort(400, description="idx must not be negative")
+    return jsonify(toggle_note_check(task_id, idx))
+
+
+@serialized
+def toggle_note_check(task_id: str, idx: int) -> dict:
+    _, _, task = _find_for_write(task_id)
+    text = task.get("description") or ""
+    toggled = toggle_nth_checkbox(text, idx, frontmatter=False)
+    if toggled == text:
+        return task
+    return update_task(task_id, {"description": toggled})
 
 
 @bp.post("/api/deck/<task_id>/comments")

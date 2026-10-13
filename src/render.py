@@ -135,8 +135,9 @@ md.add_render_rule("heading_open", _heading_open)
 md.add_render_rule("heading_close", _heading_close)
 
 
-def process_wikilinks(text: str) -> str:
-    slugs = set(all_slugs())
+def process_wikilinks(text: str, slugs: set[str] | None = None) -> str:
+    """`slugs`: the wiki's pages, when the caller renders many texts at once."""
+    slugs = set(all_slugs()) if slugs is None else slugs
 
     def replace(m: re.Match) -> str:
         page_name, section, label = split_wikilink(m.group(1))
@@ -229,6 +230,26 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
     if deck_embeds:
         result = deck.inject_deck_embeds(result, deck_embeds)
     return fm_html + result
+
+
+_HEADING_ID_RE = re.compile(r'(<h[1-6])\s+id="[^"]*"')
+
+
+def render_notes(texts: list[str], *, inline: bool = False) -> list[str]:
+    """Deck task notes (or, `inline`, comments: one line each) rendered as a
+    page is: the same markdown, wikilinks, [[task:…]] chips and the dates a
+    ticked checkbox records. Without what only a page has (frontmatter,
+    [[toc]], [[deck]] embeds, ✎ per section) and without heading ids, which
+    would clash with the page's own anchors."""
+    slugs = set(all_slugs())
+    out = []
+    for text in texts:
+        text, code_stash = mask_code(text)
+        text, task_refs = _mask_task_refs(text)
+        text = unmask_code(process_wikilinks(text, slugs), code_stash)
+        result = md.renderInline(text) if inline else md.render(text)
+        out.append(_HEADING_ID_RE.sub(r'\1', _inject_task_refs(result, task_refs)))
+    return out
 
 
 # [[task:<id>]] references (decksyntax.TASK_REF_RE): masked with private-use tokens

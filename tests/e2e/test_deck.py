@@ -1388,8 +1388,9 @@ def test_keep_checkbox_in_modal(page, wiki):
 
 
 def test_checkboxes_in_task_notes(page, wiki):
-    # "- [ ] item" lines in the notes are real checkboxes; ticking one edits
-    # the notes and leaves the task itself alone.
+    # "- [ ] item" lines in the notes are real checkboxes, as on a page;
+    # ticking one edits the notes (recording when, shown as a date chip),
+    # leaves the task itself alone, and can be undone.
     page.request.post("/api/deck", data={"title": "Bake", "description": "Need:\n- [ ] eggs\n- [x] flour"})
     page.goto("/deck?view=open")
     checks = card(page, "Bake").locator(".task-desc input[type=checkbox]")
@@ -1399,10 +1400,104 @@ def test_checkboxes_in_task_notes(page, wiki):
     expect(card(page, "Bake").locator(".task-desc")).not_to_contain_text("[ ]")
 
     checks.nth(0).check()
-    wait_for_field(page, "Bake", "description", "Need:\n- [x] eggs\n- [x] flour")
+    for _ in range(50):
+        if re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\S+-->\n- \[x\] flour",
+                        task_by_title(page, "Bake")["description"]):
+            break
+        page.wait_for_timeout(100)
+    assert re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\S+-->\n- \[x\] flour",
+                        task_by_title(page, "Bake")["description"])
+    expect(card(page, "Bake").locator(".task-desc .task-date-done")).to_have_text(date.today().isoformat())
     expect(page.locator("#task-edit-modal")).to_be_hidden()
     assert task_by_title(page, "Bake")["completed_at"] is None
     expect(card(page, "Bake").locator(".task-checkbox input")).not_to_be_checked()
+    # Undo unticks it again, and the date goes.
+    page.locator(".task-undo-toast button", has_text="Undo").click()
+    wait_for_field(page, "Bake", "description", "Need:\n- [ ] eggs\n- [x] flour")
+    expect(checks.nth(0)).not_to_be_checked()
+
+
+def test_notes_and_comments_render_as_on_a_page(page, wiki):
+    # The page renderer draws the notes: headings, tables, highlighted code,
+    # _italic_ (the formatting bar's), one paragraph for lines in a row.
+    # Comments too, inline.
+    tid = page.request.post("/api/deck", data={"title": "Fence", "description":
+        "## Steps\nsand\nprime\n\n| coat | days |\n|---|---|\n| 1 | 2 |\n\n```python\nx = 1\n```\n\n_soft_ wood"}).json()["id"]
+    page.request.post(f"/api/deck/{tid}/comments", data={"text": "**primed** today"})
+    page.goto("/deck?view=open")
+    desc = card(page, "Fence").locator(".task-desc")
+    expect(desc.locator("h2")).to_have_text("Steps")
+    expect(desc.locator("p").first).to_have_text("sand prime")
+    expect(desc.locator("table td").first).to_have_text("1")
+    expect(desc.locator("pre code.hljs")).to_have_count(1)
+    expect(desc.locator("em")).to_have_text("soft")
+    expect(card(page, "Fence").locator(".task-card-comments strong")).to_have_text("primed")
+    card(page, "Fence").dblclick()
+    expect(page.locator("#task-edit-comment-list strong")).to_have_text("primed")
+
+
+def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
+    page.goto("/deck?view=open")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    notes = page.locator("#task-edit-desc")
+    bar = modal.locator("#task-edit-format")
+    expect(bar.locator('[data-fmt="maketask"]')).to_have_count(0)     # the editor's own
+    notes.click()
+    page.keyboard.type("make it loud")
+    notes.evaluate("ta => ta.setSelectionRange(8, 12)")
+    bar.locator('[data-fmt="bold"]').click()
+    expect(notes).to_have_value("make it **loud**")
+    expect(notes).to_be_focused()
+    # Snippets expand on Tab; otherwise Tab moves on to the next field.
+    notes.evaluate("ta => ta.setSelectionRange(ta.value.length, ta.value.length)")
+    page.keyboard.type("\n/date")
+    page.keyboard.press("Tab")
+    expect(notes).to_have_value(re.compile(r"make it \*\*loud\*\*\n\d{4}-\d\d-\d\d$"))
+    expect(notes).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(notes).not_to_be_focused()
+    # Preview: the notes as the card will show them, live; F2 toggles it.
+    preview = modal.locator("#task-edit-preview")
+    expect(preview).to_be_hidden()
+    modal.locator("#task-edit-preview-btn").click()
+    expect(preview.locator("strong")).to_have_text("loud")
+    # Labelled, so it is never taken for the text field.
+    assert preview.evaluate("el => getComputedStyle(el, '::before').content") == '"Preview"'
+    notes.click()
+    page.keyboard.press("Control+End")
+    page.keyboard.type("\n\n- [ ] eggs")
+    expect(preview.locator(".task-list-item-checkbox")).to_have_count(1)
+    # Ticking a box in the preview ticks it in the text.
+    preview.locator(".task-list-item-checkbox").check()
+    expect(notes).to_have_value(re.compile(r"- \[x\] eggs$"))
+    page.keyboard.press("F2")
+    expect(preview).to_be_hidden()
+    page.keyboard.press("F2")
+    expect(preview).to_be_visible()
+
+
+def test_page_and_deck_checkboxes_stay_apart(page, wiki):
+    # A page with its own checklist and a deck: ticking one never ticks
+    # the other, though both render the same checkboxes.
+    page.request.post("/api/deck", data={"title": "Pack", "description": "- [ ] tent"})
+    wiki.write("trip", "# Trip\n\n[[deck view=open]]\n\n- [ ] book train\n")
+    page.goto("/page/trip")
+    deck_box = card(page, "Pack").locator(".task-desc .task-list-item-checkbox")
+    deck_box.check()
+    for _ in range(50):
+        if task_by_title(page, "Pack")["description"].startswith("- [x] tent"):
+            break
+        page.wait_for_timeout(100)
+    assert task_by_title(page, "Pack")["description"].startswith("- [x] tent")
+    assert "- [ ] book train" in wiki.read("trip")
+    page.locator("article > ul .task-list-item-checkbox").check()
+    for _ in range(50):
+        if "- [x] book train" in wiki.read("trip"):
+            break
+        page.wait_for_timeout(100)
+    assert "- [x] book train" in wiki.read("trip")
+    assert task_by_title(page, "Pack")["description"].startswith("- [x] tent")
 
 
 def test_notes_continue_checkbox_list_on_enter(page, wiki):
@@ -2057,12 +2152,13 @@ def test_compact_selecting_expands_enter_opens(page, wiki):
     assert passport.bounding_box()["height"] > one_line + 30
     expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
     # The notes' checkboxes work; the save re-renders, the task stays open.
-    passport.locator("input[data-desc-check]").check()
-    wait_for_field(page, "Renew passport", "description", "At the shop.\n- [x] old passport")
+    passport.locator(".task-desc .task-list-item-checkbox").check()
+    expect(card(page, "Renew passport").locator(".task-desc .task-date-done")).to_be_visible()
+    assert task_by_title(page, "Renew passport")["description"].startswith("At the shop.\n- [x] old passport <!--d:")
     expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
     # The deck ignores its keys while an input has focus: the ticked box
     # keeps it until the save re-renders the card.
-    expect(page.locator("input[data-desc-check]:focus")).to_have_count(0)
+    expect(page.locator(".task-list-item-checkbox:focus")).to_have_count(0)
     page.keyboard.press("Enter")                                    # the modal
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Renew passport")
     page.keyboard.press("Escape")

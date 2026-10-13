@@ -1,13 +1,15 @@
-{#- The editor's formatting bar: one button per markdown construct, applied
-    to the selection by js/editor.js (data-fmt, see applyFormat). Line icons, not
-    letters: a letter's height depends on the font. -#}
+{#- The formatting bar of the editor and of the deck's task notes: one
+    button per markdown construct, applied to the selection by js/mdedit.js
+    (data-fmt, see applyFormat). Line icons, not letters: a letter's height
+    depends on the font. The deck's modal (deck_embed.html) passes its own
+    ids (bar_id, attach_id) and maketask=false: Make task is the editor's. -#}
 {%- macro btn(fmt, label, width="1.4") -%}
 <button type="button" class="fmt-btn" data-fmt="{{ fmt }}" title="{{ label }}" aria-label="{{ label }}">
 {%- if caller %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="{{ width }}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ caller() }}</svg>{% endif -%}
 </button>
 {%- endmacro -%}
 {%- set sep = '<span class="fmt-sep" aria-hidden="true"></span>'|safe -%}
-<div class="format-bar" id="format-bar" role="toolbar" aria-label="Formatting">
+<div class="format-bar" id="{{ bar_id or 'format-bar' }}" role="toolbar" aria-label="Formatting">
 {%- call btn("bold", "Bold (Ctrl+B)", "2") %}<path d="M4.5 2.5h4.25a2.75 2.75 0 0 1 0 5.5H4.5z"/><path d="M4.5 8h5a2.75 2.75 0 0 1 0 5.5h-5z"/>{% endcall -%}
 {%- call btn("italic", "Italic (Ctrl+I)") %}<line x1="6.5" y1="2.5" x2="12.5" y2="2.5"/><line x1="3.5" y1="13.5" x2="9.5" y2="13.5"/><line x1="9.75" y1="2.5" x2="6.25" y2="13.5"/>{% endcall -%}
 {%- call btn("strike", "Strikethrough") %}<path d="M10.7 2.7H6.3a2.2 2.2 0 0 0-1.6 3.7"/><path d="M9.3 8a2.7 2.7 0 0 1 0 5.3H4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/>{% endcall -%}
@@ -25,6 +27,8 @@
 {%- call btn("link", "Link (Ctrl+K)") %}<path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8A3 3 0 0 0 7.2 13l.9-.9"/>{% endcall -%}
 <button type="button" class="fmt-btn" data-fmt="wikilink" title="Link to a wiki page" aria-label="Link to a wiki page"><span class="fmt-wiki">[[ ]]</span></button>
 {%- call btn("taskref", "Link to a deck task") %}<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="m4 8 1.5 1.5L8.5 6.5"/><line x1="10" y1="8" x2="12.5" y2="8"/>{% endcall -%}
+{%- if maketask is not defined or maketask %}
 {%- call btn("maketask", "Make a deck task from the line or selection") %}<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="8" y1="5.25" x2="8" y2="10.75"/><line x1="5.25" y1="8" x2="10.75" y2="8"/>{% endcall -%}
+{%- endif %}
 {%- call btn("attach", "Attach a file or image") %}<path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l5.6-5.6a2.3 2.3 0 0 1 3.3 3.3L6.3 11.3a1.2 1.2 0 0 1-1.7-1.7L9.8 4.4"/>{% endcall -%}
-<input type="file" id="fmt-attach-input" multiple hidden></div>
+<input type="file" id="{{ attach_id or 'fmt-attach-input' }}" multiple hidden></div>
