@@ -561,8 +561,10 @@ def test_empty_sections_are_single_rows(page, wiki):
         assert 28 <= h <= 36, h
     # Today is the only section with a task, so it is the only non-empty one.
     expect(page.locator(".board-day-divider:not(.board-day--empty)")).to_have_count(1)
-    # A week of empty days fits in well under 300px.
-    first, last = empties.first.bounding_box(), empties.last.bounding_box()
+    # A week of empty days fits in well under 300px (Unplanned, above Today,
+    # is left out: the days and Later run below Today).
+    below = page.locator(".board-day-divider.board-day--empty:not([data-drop-bucket='unplanned'])")
+    first, last = below.first.bounding_box(), below.last.bounding_box()
     assert last["y"] + last["height"] - first["y"] < 300
 
 
