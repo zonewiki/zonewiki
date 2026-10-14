@@ -123,8 +123,8 @@ class TestBoardBuckets:
             {"id": "2", "title": "carried", "start_date": "2026-07-20"},
         ]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
-        assert [s["key"] for s in sections][:3] == ["overdue", "carried", TODAY]
-        carried = sections[1]
+        assert [s["key"] for s in sections][1:4] == ["overdue", "carried", TODAY]
+        carried = sections[2]
         assert carried["label"] == "Carried over" and carried["droppable"] is False
 
     def test_day_sections_name_their_deadlines_wherever_the_cards_sit(self):
@@ -142,6 +142,16 @@ class TestBoardBuckets:
         by_key = {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
         assert by_key["unplanned"][0] == "unplanned" and by_key[TODAY] == ["planned-today"]
         assert "due-later" not in sum(due.values(), [])
+
+    def test_unplanned_first_then_overdue_carried_days_later(self):
+        tasks = [
+            {"id": "1", "title": "overdue", "due_date": "2026-07-01"},
+            {"id": "2", "title": "carried", "start_date": "2026-07-20"},
+            {"id": "3", "title": "loose"},
+        ]
+        keys = [s["key"] for s in run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")]
+        assert keys[:4] == ["unplanned", "overdue", "carried", TODAY]
+        assert keys[-1] == "later"
 
     def test_no_carried_over_section_when_nothing_slipped(self):
         by_key = self._by_key([{"id": "1", "title": "x", "start_date": TODAY}])
@@ -223,7 +233,8 @@ class TestBoardBuckets:
         assert by_key["later"]["tasks"] == [] and by_key["later"]["droppable"]
         assert by_key["unplanned"]["tasks"] == [] and by_key["unplanned"]["droppable"]
         assert by_key["unplanned"]["label"] == "Unplanned"
-        assert [s["key"] for s in sections][-2:] == ["later", "unplanned"]
+        keys = [s["key"] for s in sections]
+        assert keys[0] == "unplanned" and keys[-1] == "later"
         assert "overdue" not in by_key  # display-only, so still omitted when empty
 
 

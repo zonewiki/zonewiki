@@ -227,7 +227,9 @@ function boardBuckets(list, today) {
   // the rest in Open's order.
   const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
     : a.due_date ? -1 : b.due_date ? 1 : byOpenOrder(a, b);
-  sections.push({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: (groups['unplanned'] || []).sort(byDeadline) });
+  // Unplanned goes first: it is where planning starts (cards are dragged
+  // from it onto the days), so it sits next to them, not past Later.
+  sections.unshift({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: (groups['unplanned'] || []).sort(byDeadline) });
   return sections;
 }
 

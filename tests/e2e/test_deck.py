@@ -63,7 +63,7 @@ def test_drag_to_tomorrow_plans_task(page, wiki):
 
 def test_drag_to_unplanned_clears_start(page, wiki):
     page.request.post("/api/deck", data={"title": "Planned", "start_date": tomorrow()})
-    # Unplanned is the last section; Playwright's HTML5 drag can't auto-scroll
+    # Unplanned is the first section; Playwright's HTML5 drag can't auto-scroll
     # mid-drag, so make both ends fit on screen.
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
