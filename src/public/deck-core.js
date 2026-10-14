@@ -24,7 +24,7 @@ function isOverdue(t, today) {
 }
 
 // Available now: started, or due today (or earlier). The Focus tab shows
-// exactly these — the board's Overdue and Today sections.
+// exactly these — the board's Overdue, Carried over and Today sections.
 function isFocus(t, today) {
   return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
 }
@@ -169,11 +169,14 @@ function rankTags(partial, counts, limit = 8) {
     .map(x => x.tag);
 }
 
-// Which board section a task belongs in: 'overdue' (missed deadline), an
-// exact YYYY-MM-DD for today..+6, 'later', or 'unplanned'. A start date in
-// the past lands on Today (it is available), not on Overdue.
+// Which board section a task belongs in: 'overdue' (missed deadline),
+// 'carried' (started on an earlier day, still open), an exact YYYY-MM-DD for
+// today..+6, 'later', or 'unplanned'. A start date in the past is not
+// overdue (the task is available), but it is not today's plan either: the
+// board shows it apart, so a plan that keeps slipping is visible.
 function bucketKey(t, today) {
   if (isOverdue(t, today)) return 'overdue';
+  if (t.start_date && t.start_date < today) return 'carried';
   if (isFocus(t, today)) return today;
   if (!t.start_date) return 'unplanned';
   return t.start_date > addDays(today, 6) ? 'later' : t.start_date;
@@ -185,7 +188,7 @@ function fullDayLabel(d) {
 
 // Group Plan-tab tasks into ordered day sections for the board. Date sections
 // (today..+6), Later, and Unplanned are droppable (dropping sets or clears the
-// start date); Overdue is display-only. Dropping on Later opens a date picker
+// start date); Overdue and Carried over are display-only. Dropping on Later opens a date picker
 // in the UI layer.
 function boardBuckets(list, today) {
   const groups = {};
@@ -202,6 +205,11 @@ function boardBuckets(list, today) {
   // and on the day itself Focus's.
   const sections = [];
   if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
+  // Carried over: the longest-slipping first, then Open's order. Display-only
+  // like Overdue (its tasks are in Focus already); dropping one on Today
+  // commits to it again.
+  const byStart = (a, b) => a.start_date.localeCompare(b.start_date) || byOpenOrder(a, b);
+  if (groups['carried']) sections.push({ key: 'carried', label: 'Carried over', date: null, droppable: false, tasks: groups['carried'].sort(byStart) });
   for (let i = 0; i < 7; i++) {
     const d = addDays(today, i);
     const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);

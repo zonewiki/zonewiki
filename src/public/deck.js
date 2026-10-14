@@ -336,9 +336,12 @@ function swipeActions(task) {
   // would leave it in Focus (the deadline keeps it there).
   const start = isFocus(task, today) ? null : 'start';
   const unplan = task.start_date && !isDueNow(task, today) ? 'unplan' : null;
+  // On Plan a carried-over task (started earlier, still open) moves to Today:
+  // committing to it again.
+  const carried = DeckCore.bucketKey(task, today) === 'carried' ? 'start' : null;
   if (activeView === 'open') return { right: start, left: null };
   if (activeView === 'focus') return { right: null, left: unplan };
-  if (activeView === 'plan') return { right: start, left: unplan };
+  if (activeView === 'plan') return { right: start || carried, left: unplan };
   return { right: null, left: null };
 }
 const SWIPE_LABELS = { start: '📅 Start today', unplan: '↩ Unplan' };

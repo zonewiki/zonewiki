@@ -99,12 +99,37 @@ class TestBoardBuckets:
         assert by_key["later"] == ["5"]
         assert by_key["unplanned"] == ["4"]
 
-    def test_past_start_date_is_today_not_overdue(self):
+    def test_past_start_date_is_carried_over_not_overdue(self):
         # Regression: a start date in the past put the task under Overdue,
-        # though the card itself says "since …" without any warning.
+        # though the card itself says "since …" without any warning. It is
+        # not today's plan either: it shows apart, as Carried over.
         by_key = self._by_key([{"id": "1", "title": "x", "start_date": "2026-07-01"}])
-        assert by_key[TODAY] == ["1"]
+        assert by_key["carried"] == ["1"]
+        assert by_key[TODAY] == []
         assert "overdue" not in by_key
+
+    def test_carried_over_longest_slipping_first(self):
+        by_key = self._by_key([
+            {"id": "recent", "start_date": "2026-07-24"},
+            {"id": "old", "start_date": "2026-07-01"},
+            {"id": "same-day-sorted", "start_date": "2026-07-24", "sort_order": 0},
+            {"id": "due-today", "start_date": "2026-07-20", "due_date": TODAY},
+        ])
+        assert by_key["carried"] == ["old", "due-today", "recent", "same-day-sorted"]
+
+    def test_carried_over_is_display_only_between_overdue_and_today(self):
+        tasks = [
+            {"id": "1", "title": "overdue", "due_date": "2026-07-01"},
+            {"id": "2", "title": "carried", "start_date": "2026-07-20"},
+        ]
+        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        assert [s["key"] for s in sections][:3] == ["overdue", "carried", TODAY]
+        carried = sections[1]
+        assert carried["label"] == "Carried over" and carried["droppable"] is False
+
+    def test_no_carried_over_section_when_nothing_slipped(self):
+        by_key = self._by_key([{"id": "1", "title": "x", "start_date": TODAY}])
+        assert "carried" not in by_key
 
     def test_due_date_alone_is_unplanned_not_on_its_deadline(self):
         by_key = self._by_key([{"id": "1", "title": "x", "due_date": "2026-07-28"}])

@@ -240,12 +240,25 @@ def test_board_groups_by_start_date(page, wiki):
                                          "due_date": (today - timedelta(days=1)).isoformat()})
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
-    # A past start date means "available since" — Today, not Overdue.
-    assert section_of(page, "Started earlier") == today.isoformat()
+    # A past start date means "available since": not Overdue, but not
+    # today's plan either — Carried over (display-only, so its label).
+    assert section_of(page, "Started earlier").startswith("Carried over")
     # A deadline alone is not a plan: the task waits in Unplanned, not on its due day.
     assert section_of(page, "Deadline only") == "unplanned"
     # Only a missed deadline is overdue.
     assert section_of(page, "Missed").startswith("Overdue")
+
+
+def test_drop_carried_over_on_today_commits_again(page, wiki):
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Slipped",
+                                         "start_date": (date.today() - timedelta(days=3)).isoformat()})
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    open_board(page, wiki)
+    assert section_of(page, "Slipped").startswith("Carried over")
+    card(page, "Slipped").drag_to(page.locator(f".board-day-divider[data-drop-day='{today}']"))
+    wait_for_field(page, "Slipped", "start_date", today)
+    expect(page.locator(".board-day-divider", has_text="Carried over")).to_have_count(0)
 
 
 def open_edit(page, title: str):

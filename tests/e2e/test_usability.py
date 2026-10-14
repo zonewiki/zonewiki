@@ -218,6 +218,16 @@ def test_swipe_right_on_open_task_already_in_focus_does_nothing(new_page, wiki):
     assert task(phone, "Water plants")["start_date"] != TODAY
 
 
+def test_swipe_right_on_plan_commits_carried_over_task_again(new_page, wiki):
+    phone = phone_deck(new_page, wiki, view="plan",
+                       start_date=(date.today() - timedelta(days=3)).isoformat())
+    c = card(phone, "Water plants")
+    send = swipe(phone, c, 200, release=False)
+    expect(c).to_have_class(re.compile(r"\btask-swipe-armed\b"))
+    send("touchEnd", [])
+    wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
+
+
 def test_swipe_left_on_focus_moves_back_to_open(new_page, wiki):
     phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY)
     c = card(phone, "Water plants")
