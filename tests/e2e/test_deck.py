@@ -348,6 +348,39 @@ def test_new_task_unfolds_its_section(page, wiki):
     expect(card(page, "Loose")).to_be_visible()
 
 
+def test_number_keys_start_selected_tasks_on_that_day(page, wiki):
+    page.request.post("/api/deck", data={"title": "First"})
+    page.request.post("/api/deck", data={"title": "Second"})
+    page.request.post("/api/deck", data={"title": "Third"})
+    open_board(page, wiki)
+    card(page, "First").locator(".task-title").click()
+    page.keyboard.press("3")
+    wait_for_field(page, "First", "start_date", (date.today() + timedelta(days=2)).isoformat())
+    # Several at once, with one undo.
+    card(page, "Second").locator(".task-title").click()
+    card(page, "Third").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("2")
+    wait_for_field(page, "Second", "start_date", tomorrow())
+    wait_for_field(page, "Third", "start_date", tomorrow())
+    expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks start tomorrow")
+    page.keyboard.press("0")
+    wait_for_field(page, "Second", "start_date", None)
+    wait_for_field(page, "Third", "start_date", None)
+    page.keyboard.press("Control+z")
+    wait_for_field(page, "Second", "start_date", tomorrow())
+
+
+def test_number_key_past_the_deadline_asks(page, wiki):
+    page.request.post("/api/deck", data={"title": "Due soon", "due_date": tomorrow()})
+    open_board(page, wiki)
+    card(page, "Due soon").locator(".task-title").click()
+    page.keyboard.press("5")
+    expect(page.locator("#task-deadline-modal")).to_be_visible()
+    page.locator("#task-deadline-modal").get_by_role("button", name="Cancel").click()
+    page.wait_for_timeout(200)
+    assert task_by_title(page, "Due soon")["start_date"] is None
+
+
 def open_edit(page, title: str):
     card(page, title).locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()

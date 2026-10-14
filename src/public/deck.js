@@ -209,7 +209,7 @@ function dropOnBucket(id, div) {
 // move the deadline along; cancelling changes nothing. Undo restores both.
 // A start date after the deadline is usually a slip, so setting one asks
 // whether the deadline moves too (confirmDeadlineMove), on the board and
-// everywhere else a start date is set (setStart, the 📅 picker, f/F). The
+// everywhere else a start date is set (setStart, the 📅 picker, f/F, 1–7). The
 // exception, outside the board: an overdue task started today, the normal
 // way to catch up on a missed deadline.
 function startsAfterDeadline(task, day) {
@@ -1733,15 +1733,30 @@ async function batchUpdate(changes) {
 // already), with one undo that puts back each one's start date and history.
 // Today is never after a deadline that hasn't passed, and an overdue task
 // started today is the way to catch up, so no deadline question comes up.
-async function startToday(ids) {
-  const today = todayStr();
+function startToday(ids) {
+  return startOn(ids, todayStr());
+}
+
+// Start the open tasks among `ids` on `day` (null: unplan them), with one
+// undo. A task whose deadline `day` passes asks whether the deadline moves
+// too, one by one after the others (planOnDay), as everywhere a start date
+// is set. One task alone goes through setStart, which does the same.
+async function startOn(ids, day) {
   const idSet = new Set(ids);
-  const before = tasks.filter(t => idSet.has(t.id) && !t.completed_at && t.start_date !== today);
-  if (!before.length) return;
-  if (!await batchUpdate(before.map(t => ({ id: t.id, start_date: today })))) return;
-  const n = before.length;
-  showUndo(n === 1 ? `Starts ${formatDate(today)}` : `${n} tasks start today`, () =>
-    batchUpdate(before.map(t => ({ id: t.id, start_date: t.start_date ?? null, history: t.history || [] }))));
+  const before = tasks.filter(t => idSet.has(t.id) && !t.completed_at && (t.start_date ?? null) !== day);
+  if (before.length === 1) return setStart(before[0].id, day);
+  const asks = before.filter(t => startsAfterDeadline(t, day));
+  const plain = before.filter(t => !asks.includes(t));
+  if (plain.length) {
+    if (!await batchUpdate(plain.map(t => ({ id: t.id, start_date: day })))) return;
+    const n = plain.length;
+    const msg = n === 1 ? (day ? `Starts ${formatDate(day)}` : 'Start date cleared')
+      : day ? `${n} tasks start ${/^(Today|Tomorrow)$/.test(formatDate(day)) ? formatDate(day).toLowerCase() : formatDate(day)}`
+      : `${n} tasks unplanned`;
+    showUndo(msg, () =>
+      batchUpdate(plain.map(t => ({ id: t.id, start_date: t.start_date ?? null, history: t.history || [] }))));
+  }
+  for (const t of asks) await planOnDay(t.id, day);
 }
 
 // Complete the tasks `ids`, or reopen them if every one is completed, with
@@ -3459,6 +3474,15 @@ document.addEventListener('keydown', async e => {
       if (task.start_date !== target && startsAfterDeadline(task, target)) planOnDay(task.id, target);
       else updateTask(task.id, { start_date: task.start_date === target ? null : target });
     }
+    return;
+  }
+
+  // 1–7 start the selected tasks on that day of the Plan board (1 today,
+  // 2 tomorrow … 7 six days ahead), 0 unplans them; on every tab
+  if (/^[0-7]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && selectedIds.size) {
+    e.preventDefault();
+    const n = Number(e.key);
+    startOn([...selectedIds], n ? dateOffset(n - 1) : null);
     return;
   }
 
