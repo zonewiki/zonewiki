@@ -288,6 +288,8 @@ listEl.addEventListener('pointerdown', e => {
 listEl.addEventListener('click', e => {
   const yearBtn = e.target.closest('[data-completed-year]');
   if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
+  const dueBtn = e.target.closest('[data-due-day]');
+  if (dueBtn) dueOnDayMenu(dueBtn);
 });
 // Selection mode: a tap or click anywhere on a card (its checkbox, a link,
 // a date chip too) adds or drops the card, and does nothing else.
@@ -1119,6 +1121,15 @@ function openTaskMenu(id, anchor, at) {
 }
 
 // The menu itself: `items` are [action, label, class?]; `run(action)`.
+// A Plan day's "N due": the tasks due that day, as a menu (a bottom sheet
+// on phones); picking one selects its card, wherever it sits on the board.
+function dueOnDayMenu(btn) {
+  const section = boardBuckets(filterTasks()).find(s => s.date === btn.dataset.dueDay);
+  if (!section?.due.length) return;
+  const items = section.due.map(t => [t.id, esc(plainTitle(t.title))]);
+  showMenu(`Due ${section.label}`, items, id => setSelected(id), btn);
+}
+
 function showMenu(title, items, run, anchor, at) {
   const backdrop = document.createElement('div');
   backdrop.className = 'task-menu-backdrop';
@@ -2112,8 +2123,14 @@ function render() {
         : '';
       const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
       const emptyCls = s.tasks.length ? '' : ' board-day--empty';
+      // The deadlines on this day, wherever their cards sit: a click lists
+      // them (dueOnDayMenu), the tooltip names them.
+      const dueBtn = s.due?.length
+        ? `<button type="button" class="board-day-due" data-due-day="${s.date}"` +
+          ` title="${esc(`Due ${s.label}: ` + s.due.map(t => plainTitle(t.title)).join(', '))}">${s.due.length} due</button>`
+        : '';
       const header = `<li class="board-day-divider${overCls}${emptyCls}"${dropAttr}>` +
-        `<span class="board-day-label">${esc(s.label)}</span>` +
+        `<span class="board-day-label">${esc(s.label)}${dueBtn}</span>` +
         `${overIcon}<span class="board-day-count">${s.tasks.length}</span></li>`;
       // An empty section is just its header row, which is itself the drop
       // target (styled tall enough to hit). Nothing grows when a drag

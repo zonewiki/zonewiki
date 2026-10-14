@@ -127,6 +127,22 @@ class TestBoardBuckets:
         carried = sections[1]
         assert carried["label"] == "Carried over" and carried["droppable"] is False
 
+    def test_day_sections_name_their_deadlines_wherever_the_cards_sit(self):
+        tasks = [
+            {"id": "unplanned", "due_date": "2026-07-28"},
+            {"id": "planned-today", "start_date": TODAY, "due_date": "2026-07-28"},
+            {"id": "planned-that-day", "start_date": "2026-07-28", "due_date": "2026-07-28"},
+            {"id": "due-later", "due_date": "2026-09-01"},
+        ]
+        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        due = {s["key"]: [t["id"] for t in s.get("due", [])] for s in sections}
+        assert sorted(due["2026-07-28"]) == ["planned-that-day", "planned-today", "unplanned"]
+        assert due[TODAY] == []
+        # Cards stay where their start date puts them.
+        by_key = {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
+        assert by_key["unplanned"][0] == "unplanned" and by_key[TODAY] == ["planned-today"]
+        assert "due-later" not in sum(due.values(), [])
+
     def test_no_carried_over_section_when_nothing_slipped(self):
         by_key = self._by_key([{"id": "1", "title": "x", "start_date": TODAY}])
         assert "carried" not in by_key

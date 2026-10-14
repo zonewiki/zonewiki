@@ -261,6 +261,26 @@ def test_drop_carried_over_on_today_commits_again(page, wiki):
     expect(page.locator(".board-day-divider", has_text="Carried over")).to_have_count(0)
 
 
+def test_day_header_counts_deadlines_and_lists_them(page, wiki):
+    day = (date.today() + timedelta(days=3)).isoformat()
+    page.request.post("/api/deck", data={"title": "Report", "due_date": day})
+    page.request.post("/api/deck", data={"title": "Slides", "due_date": day,
+                                         "start_date": date.today().isoformat()})
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    open_board(page, wiki)
+    header = page.locator(f".board-day-divider[data-drop-day='{day}']")
+    due = header.locator(".board-day-due")
+    expect(due).to_have_text("2 due")
+    expect(header.locator(".board-day-count")).to_have_text("0")   # cards stay put
+    expect(page.locator(".board-day-divider[data-drop-day] .board-day-due")).to_have_count(1)
+    due.click()
+    menu = page.locator(".task-menu")
+    expect(menu.locator(".task-menu-title")).to_contain_text("Due")
+    expect(menu.get_by_role("menuitem")).to_have_count(2)
+    menu.get_by_role("menuitem", name="Report").click()
+    expect(card(page, "Report")).to_have_class(re.compile(r"\btask-selected\b"))
+
+
 def open_edit(page, title: str):
     card(page, title).locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()

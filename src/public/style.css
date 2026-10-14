@@ -2051,6 +2051,15 @@ div.chip-input > input {
 .board-day-divider:first-child { margin-top: 0; }
 .board-day-label { flex: 1; }
 .board-day-count { font-weight: 700; color: var(--muted); }
+/* "N due": the deadlines on this day, wherever their cards sit (a button
+   listing them). Muted: it informs the plan, it isn't a warning. */
+.board-day-due {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; font-weight: 600;
+  color: var(--muted); background: none; border: 0; padding: 0 .25rem; margin-left: .35rem; cursor: pointer;
+}
+.board-day-due::before { content: "· "; }
+.board-day-due:hover, .board-day-due:focus-visible { color: var(--fg); text-decoration: underline; }
+@media (pointer: coarse) { .board-day-due { padding: .4rem .5rem; margin: -.4rem 0; } }
 .board-day--over .board-day-count { color: #d97706; }  /* over capacity */
 .board-day-over-icon { color: #d97706; font-size: .8rem; margin-right: .25rem; cursor: default; }
 /* Highlight the whole section while dragging a card over it. */

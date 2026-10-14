@@ -210,10 +210,14 @@ function boardBuckets(list, today) {
   // commits to it again.
   const byStart = (a, b) => a.start_date.localeCompare(b.start_date) || byOpenOrder(a, b);
   if (groups['carried']) sections.push({ key: 'carried', label: 'Carried over', date: null, droppable: false, tasks: groups['carried'].sort(byStart) });
+  // Each day also names the tasks due on it, wherever they sit (`due`): the
+  // board places cards by start date, so a deadline is otherwise invisible
+  // until its day.
   for (let i = 0; i < 7; i++) {
     const d = addDays(today, i);
     const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
-    sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byOpenOrder) });
+    const due = list.filter(t => t.due_date === d).sort(byOpenOrder);
+    sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byOpenOrder), due });
   }
   // Later and Unplanned are always present, even when empty: they are the
   // only drop targets for "start beyond this week" and "unplan", so hiding
