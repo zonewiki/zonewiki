@@ -290,6 +290,8 @@ listEl.addEventListener('click', e => {
   if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
   const dueBtn = e.target.closest('[data-due-day]');
   if (dueBtn) dueOnDayMenu(dueBtn);
+  const foldBtn = e.target.closest('[data-fold]');
+  if (foldBtn) toggleFold(foldBtn.dataset.fold);
 });
 // Selection mode: a tap or click anywhere on a card (its checkbox, a link,
 // a date chip too) adds or drops the card, and does nothing else.
@@ -573,6 +575,40 @@ function compactFor(view) {
   } catch (_) {}
   return true;
 }
+// Folded Plan sections: a section's header can hide its cards (its count
+// and drop target stay). Remembered per deck in this browser, by section
+// (`foldId`: a day by its distance from today, so "Tomorrow" stays folded
+// as the days go by). A filter shows every section, and a task that has to
+// be seen (a ?task= link, a new task, the due list) unfolds its own.
+const foldKey = () => 'leaf-deck-folded:' + [location.pathname, appEl?.dataset.initList || '',
+  appEl?.dataset.initTag || '', instanceId].join('|');
+function loadFolded() {
+  try { return new Set(JSON.parse(localStorage.getItem(foldKey()) || '[]')); } catch (_) { return new Set(); }
+}
+let folded = loadFolded();
+function saveFolded() {
+  try { localStorage.setItem(foldKey(), JSON.stringify([...folded])); } catch (_) {}
+}
+function foldId(key, today = todayStr()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
+  return 'day' + Math.round((new Date(key + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+}
+function toggleFold(id) {
+  if (folded.has(id)) folded.delete(id); else folded.add(id);
+  saveFolded();
+  render();
+}
+// Unfold the Plan section task `id` sits in; true when that changed anything.
+function unfoldFor(id) {
+  const task = tasks.find(t => t.id === id);
+  if (activeView !== 'plan' || !task) return false;
+  const fid = foldId(DeckCore.bucketKey(task, todayStr()));
+  if (!folded.delete(fid)) return false;
+  saveFolded();
+  render();
+  return true;
+}
+
 let compact = false;   // the shown tab's (applyCompact)
 function applyCompact(view) {
   if (view) {
@@ -1127,7 +1163,7 @@ function dueOnDayMenu(btn) {
   const section = boardBuckets(filterTasks()).find(s => s.date === btn.dataset.dueDay);
   if (!section?.due.length) return;
   const items = section.due.map(t => [t.id, esc(plainTitle(t.title))]);
-  showMenu(`Due ${section.label}`, items, id => setSelected(id), btn);
+  showMenu(`Due ${section.label}`, items, id => { unfoldFor(id); setSelected(id); }, btn);
 }
 
 function showMenu(title, items, run, anchor, at) {
@@ -2115,14 +2151,21 @@ function render() {
 
   // Upcoming day board: one section per day, dividers double as drop targets.
   if (activeView === 'plan') {
+    const filtering = !!filterQuery().trim();
+    const today = todayStr();
     html = boardBuckets(filtered).map(s => {
+      // A section with cards folds from its header (not while filtering:
+      // a match must never hide in a folded section).
+      const fid = foldId(s.key, today);
+      const foldable = s.tasks.length && !filtering;
+      const isFolded = foldable && folded.has(fid);
       const over = LIMIT && s.date && s.tasks.length >= LIMIT;
       const overCls = over ? ' board-day--over' : '';
       const overIcon = over
         ? `<span class="board-day-over-icon" title="Over the limit (${s.tasks.length}/${LIMIT})">⚠</span>`
         : '';
       const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
-      const emptyCls = s.tasks.length ? '' : ' board-day--empty';
+      const emptyCls = (s.tasks.length ? '' : ' board-day--empty') + (isFolded ? ' board-day--folded' : '');
       // The deadlines on this day, wherever their cards sit: a click lists
       // them (dueOnDayMenu), the tooltip names them.
       const dueBtn = s.due?.length
@@ -2130,12 +2173,15 @@ function render() {
           ` title="${esc(`Due ${s.label}: ` + s.due.map(t => plainTitle(t.title)).join(', '))}">${s.due.length} due</button>`
         : '';
       const header = `<li class="board-day-divider${overCls}${emptyCls}"${dropAttr}>` +
-        `<span class="board-day-label">${esc(s.label)}${dueBtn}</span>` +
+        `<span class="board-day-label">` + (foldable
+          ? `<button type="button" class="board-day-fold" data-fold="${esc(fid)}" aria-expanded="${!isFolded}"` +
+            ` title="${isFolded ? 'Show' : 'Hide'} these tasks">${esc(s.label)}</button>`
+          : esc(s.label)) + `${dueBtn}</span>` +
         `${overIcon}<span class="board-day-count">${s.tasks.length}</span></li>`;
       // An empty section is just its header row, which is itself the drop
       // target (styled tall enough to hit). Nothing grows when a drag
       // starts, so the section you aim at never moves under the pointer.
-      const body = s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
+      const body = isFolded ? '' : s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
       return header + body;
     }).join('');
     listEl.innerHTML = html;
@@ -3177,6 +3223,7 @@ form.addEventListener('submit', async e => {
     // (on Focus it lands at the end, possibly below the fold). A view that
     // doesn't show it (another list, a filter) leaves the selection alone.
     const task = await createTask(data);
+    if (task) unfoldFor(task.id);
     const el = task && listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
     if (el) {
       setSelected(task.id);
@@ -3546,6 +3593,7 @@ function revealTask(id) {
     if (instanceId === '0') showNotice('That task is no longer in the deck.');
     return;
   }
+  unfoldFor(id);
   setSelected(id);
   const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
   if (!el) return;

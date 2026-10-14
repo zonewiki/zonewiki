@@ -281,6 +281,73 @@ def test_day_header_counts_deadlines_and_lists_them(page, wiki):
     expect(card(page, "Report")).to_have_class(re.compile(r"\btask-selected\b"))
 
 
+def fold(page, bucket: str):
+    page.locator(f".board-day-divider[data-drop-bucket='{bucket}'] .board-day-fold").click()
+
+
+def test_folded_section_hides_its_cards_and_is_remembered(page, wiki):
+    page.request.post("/api/deck", data={"title": "Loose one"})
+    page.request.post("/api/deck", data={"title": "Loose two"})
+    page.request.post("/api/deck", data={"title": "Today one", "start_date": date.today().isoformat()})
+    open_board(page, wiki)
+    header = page.locator(".board-day-divider[data-drop-bucket='unplanned']")
+    fold(page, "unplanned")
+    expect(card(page, "Loose one")).to_have_count(0)
+    expect(header).to_have_class(re.compile(r"\bboard-day--folded\b"))
+    expect(header.locator(".board-day-count")).to_have_text("2")
+    expect(header.locator(".board-day-fold")).to_have_attribute("aria-expanded", "false")
+    # j skips the folded section: the first card it selects is Today's.
+    page.keyboard.press("j")
+    expect(card(page, "Today one")).to_have_class(re.compile(r"\btask-selected\b"))
+    page.goto("/page/deck?view=plan")   # the same deck: folding is remembered per deck
+    expect(card(page, "Today one")).to_be_visible()
+    expect(card(page, "Loose one")).to_have_count(0)
+    fold(page, "unplanned")
+    expect(card(page, "Loose two")).to_be_visible()
+
+
+def test_folded_section_still_takes_drops(page, wiki):
+    page.request.post("/api/deck", data={"title": "Loose"})
+    page.request.post("/api/deck", data={"title": "Planned", "start_date": tomorrow()})
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    open_board(page, wiki)
+    fold(page, "unplanned")
+    card(page, "Planned").drag_to(page.locator(".board-day-divider[data-drop-bucket='unplanned']"))
+    wait_for_field(page, "Planned", "start_date", None)
+    expect(page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-count")).to_have_text("2")
+    expect(card(page, "Planned")).to_have_count(0)
+
+
+def test_filter_shows_folded_sections(page, wiki):
+    page.request.post("/api/deck", data={"title": "Hidden match"})
+    open_board(page, wiki)
+    fold(page, "unplanned")
+    expect(card(page, "Hidden match")).to_have_count(0)
+    page.locator("#task-filter-search").fill("match")
+    expect(card(page, "Hidden match")).to_be_visible()
+    expect(page.locator(".board-day-fold")).to_have_count(0)
+
+
+def test_task_link_unfolds_its_section(page, wiki):
+    tid = page.request.post("/api/deck", data={"title": "Linked"}).json()["id"]
+    open_board(page, wiki)
+    fold(page, "unplanned")
+    expect(card(page, "Linked")).to_have_count(0)
+    page.goto(f"/deck?view=plan&task={tid}")
+    expect(card(page, "Linked")).to_have_class(re.compile(r"\btask-selected\b"))
+
+
+def test_new_task_unfolds_its_section(page, wiki):
+    page.request.post("/api/deck", data={"title": "Loose"})
+    open_board(page, wiki)
+    fold(page, "unplanned")
+    page.locator("#task-add-btn").click()
+    page.locator("#task-edit-title").fill("Fresh")
+    page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
+    expect(card(page, "Fresh")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(card(page, "Loose")).to_be_visible()
+
+
 def open_edit(page, title: str):
     card(page, title).locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()

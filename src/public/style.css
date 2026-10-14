@@ -2050,6 +2050,20 @@ div.chip-input > input {
 }
 .board-day-divider:first-child { margin-top: 0; }
 .board-day-label { flex: 1; }
+/* The label folds its section (Plan): a chevron before it, the count stays. */
+.board-day-fold {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+/* Every label leaves the chevron's room, so labels line up with or without. */
+.board-day-label { position: relative; padding-left: 1.1rem; }
+.board-day-fold::before {
+  content: "▾"; position: absolute; left: 0; top: 50%; width: .9rem; margin-top: -.5em;
+  font-size: .85rem; line-height: 1; text-align: center; transition: transform .15s;
+}
+.board-day--folded .board-day-fold::before { transform: rotate(-90deg); }
+.board-day-fold:hover, .board-day-fold:focus-visible { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .board-day-fold::before { transition: none; } }
 .board-day-count { font-weight: 700; color: var(--muted); }
 /* "N due": the deadlines on this day, wherever their cards sit (a button
    listing them). Muted: it informs the plan, it isn't a warning. */
@@ -2077,8 +2091,10 @@ div.chip-input > input {
 }
 .task-item + .board-day-divider.board-day--empty { margin-top: 1rem; }
 .board-day--empty .board-day-count { opacity: .5; }
+.board-day-divider.board-day--folded { border-radius: 4px; }
 @media (pointer: coarse) {
   .board-day-divider.board-day--empty { min-height: 2.5rem; }
+  .board-day-fold { padding-block: .5rem; margin-block: -.5rem; }
 }
 
 .task-item {
