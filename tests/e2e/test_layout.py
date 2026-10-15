@@ -770,6 +770,10 @@ def test_move_scratch_note_to_wiki(page, wiki):
     expect(page.locator("#promote-name")).to_be_focused()
     expect(page.locator("#promote-slug")).to_have_text("alex-notes")
     link_from = page.locator("#promote-link-from")
+    # No folder: the home page is suggested to link from.
+    expect(link_from).to_have_value("index")
+    # A folder without an index page: none.
+    page.locator("#promote-folder").fill("journal")
     expect(link_from).to_have_value("")
     page.locator("#promote-folder").fill("conversations/")
     # The folder's index page is suggested to link from.

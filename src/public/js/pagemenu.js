@@ -131,7 +131,8 @@ async function copyText(text) {
     const preview = document.getElementById('promote-slug');
     const fields = ['promote-folder', 'promote-name', 'promote-keep-date'].map(id => document.getElementById(id));
     const [folder, name, keepDate] = fields;
-    // Link from: the folder's index page while it has one, until edited.
+    // Link from: the folder's index page while it has one (the home page
+    // for no folder), until edited.
     const linkFrom = document.getElementById('promote-link-from');
     const pages = new Set([...document.querySelectorAll('#wiki-pages option')].map(o => o.value));
     linkFrom.addEventListener('input', () => { linkFrom.dataset.edited = '1'; });
@@ -139,8 +140,9 @@ async function copyText(text) {
       preview.textContent = promotedSlug(folder.value, name.value,
                                          keepDate.checked ? keepDate.value : '') || '…';
       if (!linkFrom.dataset.edited) {
-        const index = `${toSlug(folder.value)}/index`;
-        linkFrom.value = toSlug(folder.value) && pages.has(index) ? index : '';
+        const dir = toSlug(folder.value);
+        const index = dir ? `${dir}/index` : 'index';
+        linkFrom.value = pages.has(index) ? index : '';
       }
     };
     fields.forEach(f => f.addEventListener('input', update));
