@@ -534,6 +534,19 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
         pg.request.get("/api/deck").json(), key=lambda t: t["sort_order"])] == ["Three", "One", "Two"])
 
 
+def test_touch_drag_reorders_a_plan_day(new_page, wiki):
+    pg = new_page(**TOUCH_PHONE)
+    ids = [pg.request.post("/api/deck", data={"title": t, "start_date": day(0)}).json()["id"]
+           for t in ("One", "Two", "Three")]
+    pg.request.post("/api/deck/reorder", data={"order": ids})
+    pg.goto("/deck?view=plan")
+    send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False, at=0.25)
+    expect(card(pg, "One")).to_have_class(re.compile(r"\btask-drop-before\b"))
+    send("touchEnd", [])
+    wait_until(pg, lambda: [t["title"] for t in sorted(
+        pg.request.get("/api/deck").json(), key=lambda t: t["sort_order"])] == ["Three", "One", "Two"])
+
+
 def test_quick_swipe_scrolls_instead_of_dragging(phone):
     # Moving before the long press completes is a scroll, not a pick-up.
     open_tab(phone, "plan")

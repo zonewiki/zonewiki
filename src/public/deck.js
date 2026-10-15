@@ -11,7 +11,7 @@ import { openLightbox } from './js/page.js';
 import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
+const { dateToStr, addDays, isFocus, byOpenOrder, placeInOrder, planOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
@@ -218,15 +218,16 @@ function startsAfterDeadline(task, day) {
   return !(task.due_date < today && day === today);
 }
 
+// Returns whether the task now starts on `day`.
 async function planOnDay(id, day) {
   const task = tasks.find(t => t.id === id);
   if (!task || !startsAfterDeadline(task, day)) return updateTask(id, { start_date: day });
-  if (!await confirmDeadlineMove(task, day)) return;
+  if (!await confirmDeadlineMove(task, day)) return null;
   const old = { start_date: task.start_date ?? null, due_date: task.due_date,
                 history: oldHistory(id) };
-  if (await updateTask(id, { start_date: day, due_date: day })) {
-    showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
-  }
+  if (!await updateTask(id, { start_date: day, due_date: day })) return null;
+  showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
+  return true;
 }
 
 // A checkbox in a card's notes ("- [ ] milk"), as on a page: ticking it
@@ -379,7 +380,8 @@ function touchDropTarget(x, y) {
 }
 function setTouchTarget(target) {
   // In a sorted list the side of the card under the finger matters too.
-  const side = target && touchDrop?.sided && target.classList.contains('task-item')
+  const sided = target && (typeof touchDrop?.sided === 'function' ? touchDrop.sided(target) : touchDrop?.sided);
+  const side = sided && target.classList.contains('task-item')
     ? dropSide(target, touchDrag.y) : null;
   if (target === touchDrag.target && side === touchDrag.side) return;
   touchDrag.target?.classList.remove(...DROP_CLASSES);
@@ -1358,26 +1360,17 @@ function sectionList() {
   const fixed = ids.filter(id => byId.get(id)[s.field] == null);
   return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
 }
-// Save a rearranged sectionList() in which the tasks `moved` changed place.
-// Every other task keeps its place in the manual order, hidden ones too: on
-// Focus most of the order is hidden (a shopping list shows today's items of
-// the shop's order). A moved task goes right after the visible task now
-// above it, or right before the one below it when it is first.
+// Save a rearranged sectionList() in which the tasks `moved` changed place
+// (DeckCore.placeInOrder: every other task keeps its place, hidden ones too).
 function applySectionList(list, moved) {
   const s = SECTIONS[activeView];
   const cut = list.indexOf(sectionKey(s.bottom));
-  const visManual = list.slice(cut + 1);
-  const movedSet = new Set(moved);
+  saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
+}
+// Save the manual order `order`; tasks of the old order missing from it
+// become Unsorted.
+function saveOrder(s, order) {
   const old = manualOrderIds(s);
-  const order = old.filter(id => !movedSet.has(id));
-  visManual.forEach((id, i) => {
-    if (!movedSet.has(id)) return;
-    if (i > 0) order.splice(order.indexOf(visManual[i - 1]) + 1, 0, id);
-    else {
-      const below = visManual.slice(1).find(b => !movedSet.has(b));
-      order.splice(below ? order.indexOf(below) : 0, 0, id);
-    }
-  });
   const kept = new Set(order);
   const removed = old.filter(id => !kept.has(id));
   if (!removed.length && order.join() === old.join()) return;
@@ -1386,6 +1379,23 @@ function applySectionList(list, moved) {
   removed.forEach(id => { byId.get(id)[s.field] = null; });
   postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
   render();
+}
+
+// Plan: a day and Later (`data-ordered`) show Open's order, and reordering
+// one edits it (DeckCore.planOrder), so the section keeps the order shown.
+// Unplanned and Carried over have orders of their own (deadline, start).
+const OPEN_ORDER = { field: 'sort_order' };
+function planSectionIds(div) {
+  const ids = [];
+  for (let el = div.nextElementSibling; el && !el.classList.contains('board-day-divider'); el = el.nextElementSibling) {
+    if (el.classList.contains('task-item')) ids.push(el.dataset.id);
+  }
+  return ids;
+}
+// `shown`: the section's ids in their new order, `moved` the ones that moved.
+function applyPlanOrder(shown, moved) {
+  const unsorted = new Set(tasks.filter(t => t.sort_order == null).map(t => t.id));
+  saveOrder(OPEN_ORDER, planOrder(manualOrderIds(OPEN_ORDER), shown, moved, unsorted));
 }
 // Drop `draggedId` on a task (`key`, `side`: before or after it, by the
 // pointer, dropSide) or on a section heading (no side: it takes the
@@ -2181,7 +2191,8 @@ function render() {
       const overIcon = over
         ? `<span class="board-day-over-icon" title="Over the limit (${s.tasks.length}/${LIMIT})">⚠</span>`
         : '';
-      const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
+      const dropAttr = (s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '') +
+        (s.ordered ? ' data-ordered="1"' : '');
       const emptyCls = (s.tasks.length ? '' : ' board-day--empty') + (isFolded ? ' board-day--folded' : '');
       // The deadlines on this day, wherever their cards sit, and Unplanned's
       // overdue tasks (red; shown even folded): a click lists them
@@ -3272,31 +3283,43 @@ deleteBtn.addEventListener('click', () => {
 
 // Plan board: make cards draggable; the list-level dragover/drop handlers
 // (attached once at init) re-plan the task to the section it's dropped on.
-// A drop within its own section changes nothing: the order is Open's.
+// A drop on a card in a day or Later (`data-ordered`) lands above or below
+// it, as on Open: on another day it also starts the task there. Elsewhere
+// a drop on a card is a drop on its section.
+const orderedCard = item => !!boardDivider(item)?.dataset.ordered;
 function setupBoardDragAndDrop() {
-  function executeBoardItemDrop(targetItem) {
+  async function executeBoardItemDrop(targetItem, side) {
     const targetId = targetItem.dataset.id;
     if (!draggedId || targetId === draggedId) return;
-    const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(draggedId)}"]`);
+    const id = draggedId;
+    const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     const draggedDiv = draggedEl && boardDivider(draggedEl);
     const targetDiv = boardDivider(targetItem);
-    // Same section: nothing to do. The board only decides the day; the
-    // order within it is Open's (DeckCore.byOpenOrder).
-    if (draggedDiv && targetDiv && draggedDiv === targetDiv) return;
-    // Another section: move there (same as a drop on its heading).
     clearBoardDropOver();
-    if (targetDiv && targetDiv.dataset.dropBucket) dropOnBucket(draggedId, targetDiv);
+    if (!targetDiv?.dataset.dropBucket) return;
+    const same = draggedDiv === targetDiv;
+    // Later is a range: a task from elsewhere asks for its date first, as
+    // on the heading, and lands where Open's order puts it.
+    if (!targetDiv.dataset.ordered || (!same && !targetDiv.dataset.dropDay)) {
+      if (!same) dropOnBucket(id, targetDiv);
+      return;
+    }
+    const shown = planSectionIds(targetDiv).filter(x => x !== id);
+    shown.splice(shown.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
+    if (!same && !await planOnDay(id, targetDiv.dataset.dropDay)) return;
+    applyPlanOrder(shown, [id]);
   }
 
   touchDrop = {
+    sided: orderedCard,
     target: el => {
       const item = el.closest('.task-item');
       if (item) return item.dataset.id === draggedId ? null : item;
       const div = boardDivider(el);
       return div && div.dataset.dropBucket ? div : null;
     },
-    drop: target => target.classList.contains('task-item')
-      ? executeBoardItemDrop(target) : dropOnBucket(draggedId, target),
+    drop: (target, side) => target.classList.contains('task-item')
+      ? executeBoardItemDrop(target, side) : dropOnBucket(draggedId, target),
   };
 
   listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
@@ -3311,21 +3334,27 @@ function setupBoardDragAndDrop() {
       item.classList.remove('task-dragging');
       draggedId = null;
       clearBoardDropOver();
-      listEl.querySelectorAll('.task-drag-over').forEach(el => el.classList.remove('task-drag-over'));
+      listEl.querySelectorAll('.task-drag-over, .task-drop-before, .task-drop-after')
+        .forEach(el => el.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after'));
     });
     item.addEventListener('dragover', e => {
       if (!draggedId) return;
       e.preventDefault();
       e.stopPropagation();  // suppress list-level bucket-highlight when over a task item
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id !== draggedId) item.classList.add('task-drag-over');
+      if (item.dataset.id === draggedId) return;
+      if (!orderedCard(item)) { item.classList.add('task-drag-over'); return; }
+      clearBoardDropOver();
+      const side = dropSide(item, e.clientY);
+      item.classList.toggle('task-drop-before', side === 'before');
+      item.classList.toggle('task-drop-after', side === 'after');
     });
-    item.addEventListener('dragleave', () => item.classList.remove('task-drag-over'));
+    item.addEventListener('dragleave', () => item.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after'));
     item.addEventListener('drop', e => {
       e.preventDefault();
       e.stopPropagation();  // prevent list-level handler from also firing
-      item.classList.remove('task-drag-over');
-      executeBoardItemDrop(item);
+      item.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after');
+      executeBoardItemDrop(item, dropSide(item, e.clientY));
     });
   });
 }
@@ -3401,7 +3430,31 @@ function setupDragAndDrop() {
 // ── Keyboard navigation ────────────────────────────────────────────────────
 
 function reorderSelected(direction) {
-  if (SECTIONS[activeView] && selectedIds.size) sectionKeyMove(direction);
+  if (!selectedIds.size) return;
+  if (SECTIONS[activeView]) sectionKeyMove(direction);
+  else if (activeView === 'plan') planKeyMove(direction);
+}
+// Plan: Ctrl+Shift+↑/↓ moves the selection one place within its day or
+// Later, never out of it (moving to another day is 1–7 and dragging).
+function planKeyMove(direction) {
+  const els = [...selectedIds].map(id => listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
+  if (els.some(el => !el)) return;
+  const div = boardDivider(els[0]);
+  if (!div?.dataset.ordered || els.some(el => boardDivider(el) !== div)) return;
+  const list = planSectionIds(div);
+  const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
+  const group = idxs.map(i => list[i]);
+  const rest = list.filter(id => !selectedIds.has(id));
+  if (direction === 'up') {
+    const above = list[idxs[0] - 1];
+    if (above === undefined) return;
+    rest.splice(rest.indexOf(above), 0, ...group);
+  } else {
+    const below = list[idxs[idxs.length - 1] + 1];
+    if (below === undefined) return;
+    rest.splice(rest.indexOf(below) + 1, 0, ...group);
+  }
+  applyPlanOrder(rest, group);
 }
 
 document.addEventListener('keydown', async e => {

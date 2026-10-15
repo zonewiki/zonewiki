@@ -1194,36 +1194,82 @@ def _day_titles(page, day):
     }""", day)
 
 
-def test_board_uses_open_order_and_in_section_drop_changes_nothing(page, wiki):
-    # The board only decides the day. Inside a section tasks are in Open's
-    # order (Unsorted newest first, then Sorted), and a drop within the
-    # section writes nothing.
+def test_board_reorders_a_day_in_open_order(page, wiki):
+    # A day shows Open's order, and a drop on one of its cards edits it:
+    # the task lands where the pointer is, hidden tasks keep their place.
     page.set_viewport_size({"width": 1280, "height": 1400})
     today = date.today().isoformat()
-    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today}).json()["id"]
-           for t in ("Alpha", "Bravo", "Charlie")]
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": s}).json()["id"]
+           for t, s in (("Alpha", today), ("Elsewhere", tomorrow()), ("Bravo", today), ("Charlie", today))]
     page.request.post("/api/deck/reorder", data={"order": ids})
     page.request.post("/api/deck", data={"title": "Newbie", "start_date": today})
     page.goto("/deck?view=plan")
     expect(card(page, "Charlie")).to_be_visible()
     assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
 
-    card(page, "Charlie").drag_to(card(page, "Alpha"))
-    page.wait_for_timeout(300)
-    assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
-    assert _by_order(page, "sort_order") == ["Alpha", "Bravo", "Charlie"]
-
-    # Reordering on Open is what changes the board.
-    open_tab(page, "open")
-    card(page, "Charlie").drag_to(card(page, "Alpha"))
-    wait_for_field(page, "Charlie", "sort_order", 0)
-    open_tab(page, "plan")
+    _drop(card(page, "Charlie"), card(page, "Alpha"), "before")
+    wait_until(lambda: _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere", "Bravo"])
     assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
+    assert task_by_title(page, "Newbie")["sort_order"] is None   # above it: stays Unsorted
+
+    # Above an Unsorted task: that one is sorted too, so the day keeps
+    # the order shown.
+    _drop(card(page, "Bravo"), card(page, "Newbie"), "before")
+    wait_until(lambda: _by_order(page, "sort_order") == ["Bravo", "Newbie", "Charlie", "Alpha", "Elsewhere"])
+    assert _day_titles(page, today) == ["Bravo", "Newbie", "Charlie", "Alpha"]
+
+
+def test_board_drop_on_a_card_of_another_day_starts_and_places_it(page, wiki):
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": s}).json()["id"]
+           for t, s in (("Alpha", today), ("Bravo", today), ("Mover", tomorrow()))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=plan")
+    _drop(card(page, "Mover"), card(page, "Bravo"), "before")
+    wait_for_field(page, "Mover", "start_date", today)
+    wait_until(lambda: _by_order(page, "sort_order") == ["Alpha", "Mover", "Bravo"])
+    assert _day_titles(page, today) == ["Alpha", "Mover", "Bravo"]
+
+
+def test_board_keyboard_reorders_within_a_day_only(page, wiki):
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    today = date.today().isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": s}).json()["id"]
+           for t, s in (("Alpha", today), ("Bravo", today), ("Next", tomorrow()))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=plan")
+    card(page, "Bravo").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    wait_until(lambda: _by_order(page, "sort_order") == ["Bravo", "Alpha", "Next"])
+    # First of its day: it doesn't leave it, upwards or (as last) downwards.
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
+    page.keyboard.press("Control+Shift+ArrowUp")
+    card(page, "Alpha").click()
+    page.keyboard.press("Control+Shift+ArrowDown")
+    page.wait_for_timeout(300)
+    assert writes == []
+    assert task_by_title(page, "Alpha")["start_date"] == today
+
+
+def test_board_unplanned_has_no_manual_order(page, wiki):
+    # Unplanned is by deadline: a drop on one of its own cards writes nothing.
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    for t in ("Loose one", "Loose two"):
+        page.request.post("/api/deck", data={"title": t})
+    page.goto("/deck?view=plan")
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
+    _drop(card(page, "Loose two"), card(page, "Loose one"), "after")
+    page.wait_for_timeout(300)
+    assert writes == []
+    expect(card(page, "Loose one")).not_to_have_class(re.compile(r"task-drop-"))
 
 
 def test_board_drop_on_own_heading_changes_nothing_except_later(page, wiki):
-    # A drop on the task's own section heading sends nothing (the board has
-    # no order of its own); Later's heading still asks for another date.
+    # A drop on the task's own section heading sends nothing (a heading
+    # sets the day); Later's heading still asks for another date.
     page.set_viewport_size({"width": 1280, "height": 1400})
     today = date.today().isoformat()
     page.request.post("/api/deck", data={"title": "Today task", "start_date": today})

@@ -439,3 +439,36 @@ class TestSanitizeTagInput:
         # Typing "," between a and b: the caret lands before b, after the new space.
         assert self.clean("a,b", caret=2) == {"value": "a, b", "caret": 3}
         assert self.clean("local llm", caret=5) == {"value": "local-llm", "caret": 5}
+
+
+class TestManualOrder:
+    def _place(self, old, shown, moved):
+        return run_core(f"DeckCore.placeInOrder({json.dumps(old)}, {json.dumps(shown)}, {json.dumps(moved)})")
+
+    def _plan(self, old, shown, moved, unsorted):
+        return run_core(f"DeckCore.planOrder({json.dumps(old)}, {json.dumps(shown)}, "
+                        f"{json.dumps(moved)}, new Set({json.dumps(unsorted)}))")
+
+    def test_moved_task_goes_after_the_visible_one_above_hidden_ones_stay(self):
+        assert self._place(list("ahbc"), list("acb"), ["c"]) == list("achb")
+
+    def test_moved_task_first_goes_before_the_one_below(self):
+        assert self._place(list("ahbc"), list("cab"), ["c"]) == list("cahb")
+
+    def test_plan_move_below_the_unsorted_ones_leaves_them_unsorted(self):
+        # Shown: u (Unsorted), then c moved above a, b.
+        assert self._plan(list("ahbc"), list("ucab"), ["c"], ["u"]) == list("cahb")
+
+    def test_plan_move_above_unsorted_ones_sorts_them_as_shown(self):
+        # b dropped above v: v (and w below it) join the order; u above stays out.
+        assert self._plan(list("ab"), list("ubvwa"), ["b"], list("uvw")) == list("bvwa")
+
+    def test_plan_moving_an_unsorted_task(self):
+        assert self._plan(list("ab"), list("avb"), ["v"], ["v"]) == list("avb")
+
+    def test_days_and_later_are_ordered_unplanned_and_carried_are_not(self):
+        tasks = [{"id": "c", "title": "C", "start_date": "2026-07-20"}]
+        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        ordered = {s["key"]: bool(s.get("ordered")) for s in sections}
+        assert ordered.pop("unplanned") is False and ordered.pop("carried") is False
+        assert all(ordered.values())

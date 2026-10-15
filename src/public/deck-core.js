@@ -32,12 +32,46 @@ function isFocus(t, today) {
 
 // Open's order, also Focus's (Open filtered) and the order inside every
 // Plan-board section but Carried over and Unplanned: Unsorted (no sort_order) first, newest
-// first, then Sorted in sort_order. Plan only moves tasks between days.
+// first, then Sorted in sort_order. Every view that reorders edits this one
+// order (placeInOrder, planOrder).
 function byOpenOrder(a, b) {
   if (a.sort_order == null && b.sort_order == null) return (b.created_at || '').localeCompare(a.created_at || '');
   if (a.sort_order == null) return -1;
   if (b.sort_order == null) return 1;
   return a.sort_order - b.sort_order;
+}
+
+// The manual order `old` (ids, by sort_order) after the tasks `moved` were
+// placed among the visible sorted tasks `shown`, in the order shown. Every
+// other task keeps its place, hidden ones too: on Focus most of the order is
+// hidden (a shopping list shows today's items of the shop's order). A moved
+// task goes right after the visible task now above it, or right before the
+// one below it when it is first. `moved` may name tasks not yet in `old`.
+function placeInOrder(old, shown, moved) {
+  const movedSet = new Set(moved);
+  const order = old.filter(id => !movedSet.has(id));
+  shown.forEach((id, i) => {
+    if (!movedSet.has(id)) return;
+    if (i > 0) order.splice(order.indexOf(shown[i - 1]) + 1, 0, id);
+    else {
+      const below = shown.slice(1).find(b => !movedSet.has(b));
+      order.splice(below ? order.indexOf(below) : 0, 0, id);
+    }
+  });
+  return order;
+}
+
+// A reorder within a Plan section: `shown` is the section's visible tasks
+// in their new order, `moved` the tasks that moved, `unsorted` the ids
+// without a sort_order. A section lists its Unsorted tasks first, so the
+// Unsorted tasks below a moved one join the order too, as shown; the ones
+// above it stay Unsorted and stay above. Returns the new manual order.
+function planOrder(old, shown, moved, unsorted) {
+  const movedSet = new Set(moved);
+  const first = shown.findIndex(id => movedSet.has(id));
+  const place = new Set([...moved, ...shown.slice(first).filter(id => unsorted.has(id))]);
+  const visible = shown.filter(id => !unsorted.has(id) || place.has(id));
+  return placeInOrder(old, visible, [...place]);
 }
 
 // The deck's single filter field: words starting with '#' filter by tag, the
@@ -201,9 +235,8 @@ function boardBuckets(list, today) {
     const key = bucketKey(t, today);
     (groups[key] = groups[key] || []).push(t);
   });
-  // Days and Later are in Open's order (byOpenOrder). The board decides
-  // which day a task is on, never where in the day: that is Open's order,
-  // and on the day itself Focus's.
+  // Days and Later are in Open's order (byOpenOrder), and reordering them
+  // (`ordered`) edits that order (planOrder).
   const sections = [];
   // Carried over: the longest-slipping first, then Open's order. Display-only
   // (its tasks are in Focus already); dropping one on Today commits to it
@@ -217,12 +250,12 @@ function boardBuckets(list, today) {
     const d = addDays(today, i);
     const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
     const due = list.filter(t => t.due_date === d).sort(byOpenOrder);
-    sections.push({ key: d, label, date: d, droppable: true, tasks: (groups[d] || []).sort(byOpenOrder), due });
+    sections.push({ key: d, label, date: d, droppable: true, ordered: true, tasks: (groups[d] || []).sort(byOpenOrder), due });
   }
   // Later and Unplanned are always present, even when empty: they are the
   // only drop targets for "start beyond this week" and "unplan", so hiding
   // them when empty would strand every task on a dated day.
-  sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(byOpenOrder) });
+  sections.push({ key: 'later', label: 'Later', date: null, droppable: true, ordered: true, tasks: (groups['later'] || []).sort(byOpenOrder) });
   // Unplanned: nearest deadline first (they need a start date soonest), so
   // overdue tasks lead, the most overdue first; then the rest in Open's order.
   const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
@@ -294,7 +327,7 @@ function parseQuickAdd(input, today) {
 }
 
 const DeckCore = {
-  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
+  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, placeInOrder, planOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, tagParamToQuery,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
