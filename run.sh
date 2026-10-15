@@ -158,24 +158,30 @@ case "${1:-up}" in
     compose logs -f
     ;;
   test)
-    # Unit/API tests inside the app image (repo mounted; pytest added on the fly).
+    # Unit/API tests inside the app image (repo mounted; pytest and
+    # pytest-xdist added on the fly), one worker per CPU (-n 0: one process).
     # Extra args go to pytest; without a tests/… path the whole suite runs.
     # Built without compose, which would want a .env the tests don't need.
     # -f: docker, unlike podman, doesn't fall back to Containerfile.
     image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD")
     in_image "$image" -- sh -c \
-      'pip install --break-system-packages -q pytest 2>/dev/null
+      'pip install --break-system-packages -q pytest pytest-xdist 2>/dev/null
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests "$@"
-       python3 -m pytest -q "$@"' -- "${@:2}"
+       python3 -m pytest -q -n auto "$@"' -- "${@:2}"
     ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
     # deck-core.js tests, in the tools image (Containerfile.tools).
-    # Screenshots land in tests/e2e/_screenshots/.
+    # Screenshots land in tests/e2e/_screenshots/. In parallel (pytest-xdist),
+    # one worker per two CPUs: each runs its own Chromium, and a worker per
+    # CPU starves the browsers until timing-sensitive tests fail. -n 0 (or
+    # any -n) in the extra args overrides it.
     image=$(build_image leaf-tools -f Containerfile.tools)
-    in_image "$image" --ipc=host -- \
-      python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider "${@:2}"
+    in_image "$image" --ipc=host -- sh -c \
+      'n=$(( $(nproc) / 2 )); [ "$n" -ge 1 ] || n=1
+       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider \
+         -n "$n" "$@"' -- "${@:2}"
     ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args

@@ -1,6 +1,7 @@
 # Tools image: what checking Leaf needs beyond the app itself. Microsoft's
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Leaf's
-# Python deps for the browser tests, Node for the deck-core tests, and
+# Python deps for the browser tests (with pytest-xdist, which runs them in
+# parallel), Node for the deck-core tests, and
 # gitleaks for the secret scan. Test-only — the app image (Containerfile)
 # stays browser-free. The repo is bind-mounted at /repo at run time, so the
 # image only needs rebuilding when dependencies change.
@@ -36,7 +37,7 @@ RUN case "$TARGETARCH" in \
 
 COPY src/requirements.txt /tmp/requirements.txt
 RUN pip install --break-system-packages --no-cache-dir \
-      -r /tmp/requirements.txt pytest playwright==1.63.0
+      -r /tmp/requirements.txt pytest pytest-xdist playwright==1.63.0
 
 WORKDIR /repo
 CMD ["python3", "-m", "pytest", "tests/e2e", "tests/test_deck_core.py", "-v"]

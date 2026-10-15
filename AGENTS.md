@@ -168,6 +168,8 @@ pytest tests/test_mcp.py -q           # one module
 ./run.sh e2e                          # browser tests (Playwright) and deck-core.js under Node
 ```
 
+Both `run.sh` commands run the tests in parallel with pytest-xdist (`-n`): `test` with a worker per CPU (8 s → 3 s), `e2e` with one per two CPUs, since each worker runs its own Chromium and more starve the browsers until timing-sensitive tests fail (~2.5 min → ~30 s). Pass `-n 0` to run in one process, e.g. to debug one test. Locally: `pip install pytest-xdist`, then `pytest tests/ -q -n auto`; without `-n`, `pytest` runs in one process. Each worker is its own process with its own temp wikis, server thread and browser, so tests must not share anything outside `tmp_path`.
+
 Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `write_page`, …). Browser tests skip without Playwright, Node tests without Node. Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `Containerfile.tools` equal to its image tag. CI runs the same `run.sh` commands in the images the two Containerfiles build, so a dependency or a test command changes in one place.
 
 **Secrets never go into the repo.** Turn on the pre-commit hook once per clone (`git config core.hooksPath .githooks`): it refuses a commit whose staged changes contain a secret (gitleaks); CI scans the whole history (`./run.sh leaks`).

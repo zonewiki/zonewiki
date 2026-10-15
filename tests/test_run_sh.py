@@ -142,6 +142,21 @@ def test_every_build_names_its_containerfile(sandbox):
         assert f" -f {file} " in build
 
 
+def test_tests_run_in_parallel(sandbox):
+    # pytest-xdist: a worker per CPU for the unit tests, one per two CPUs
+    # for the browser tests (each worker runs a Chromium).
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "test"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    run = log.read_text()   # the script spans lines
+    assert "pytest-xdist" in run and "-n auto" in run
+    log.unlink()
+    r = subprocess.run(["./run.sh", "e2e"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    run = log.read_text()
+    assert "$(nproc) / 2" in run and '-n "$n"' in run
+
+
 def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):
     repo, env, log = sandbox
     env["FAKE_BUILD_FAILS"] = "1"
