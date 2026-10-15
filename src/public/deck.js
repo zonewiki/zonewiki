@@ -11,7 +11,7 @@ import { openLightbox } from './js/page.js';
 import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, planOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
+const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
@@ -191,12 +191,15 @@ listEl.addEventListener('drop', e => {
 });
 // Move a task to a board section: a day sets its start date, Unplanned
 // clears it, and Later asks for a date. A drop on the task's own section
-// does nothing (the board has no order of its own), except on Later, where
-// it picks another later date.
+// does nothing, except on Later, where it picks another later date, and a
+// carried-over task's on Today, which starts it today: committing to it
+// again.
 function dropOnBucket(id, div) {
   clearBoardDropOver();
   const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-  if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later') return;
+  const task = tasks.find(t => t.id === id);
+  const recommit = div.dataset.dropDay === todayStr() && task && DeckCore.isCarried(task, todayStr());
+  if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later' && !recommit) return;
   if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
   else if (div.dataset.dropBucket === 'later') {
     // "Later" is a range, not a day — ask which date (min: beyond this week).
@@ -342,9 +345,9 @@ function swipeActions(task) {
   // would leave it in Focus (the deadline keeps it there).
   const start = isFocus(task, today) ? null : 'start';
   const unplan = task.start_date && !isDueNow(task, today) ? 'unplan' : null;
-  // On Plan a carried-over task (started earlier, still open) moves to Today:
-  // committing to it again.
-  const carried = DeckCore.bucketKey(task, today) === 'carried' ? 'start' : null;
+  // On Plan a carried-over task (started earlier, still open) starts today:
+  // committing to it again, which takes its "since" badge away.
+  const carried = DeckCore.isCarried(task, today) ? 'start' : null;
   if (activeView === 'open') return { right: start, left: null };
   if (activeView === 'focus') return { right: null, left: unplan };
   if (activeView === 'plan') return { right: start || carried, left: unplan };
@@ -1191,16 +1194,17 @@ function openTaskMenu(id, anchor, at) {
   showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
 
-// A Plan header's "N due" (a day) or "N overdue" (Unplanned): those tasks
-// as a menu (a bottom sheet on phones); picking one selects its card,
-// wherever it sits on the board, unfolding its section.
+// A Plan header's "N due" (a day), "N overdue" (Unplanned) or "N carried"
+// (Today): those tasks as a menu (a bottom sheet on phones); picking one
+// selects its card, wherever it sits on the board, unfolding its section.
 function headerTasksMenu(btn) {
   const section = boardBuckets(filterTasks()).find(s => s.key === btn.dataset.headerTasks);
-  const overdue = section?.key === 'unplanned';
-  const list = (overdue ? section.overdue : section?.due) || [];
+  const which = btn.dataset.headerList || 'due';
+  const list = section?.[which] || [];
   if (!list.length) return;
   const items = list.map(t => [t.id, esc(plainTitle(t.title))]);
-  showMenu(overdue ? 'Overdue' : `Due ${section.label}`, items, id => { unfoldFor(id); setSelected(id); }, btn);
+  const title = { due: `Due ${section.label}`, overdue: 'Overdue', carried: 'Carried over' }[which];
+  showMenu(title, items, id => { unfoldFor(id); setSelected(id); }, btn);
 }
 
 // The menu itself: `items` are [action, label, class?]; `run(action)`.
@@ -1395,8 +1399,7 @@ function sectionList() {
 }
 // Save a rearranged sectionList() in which the tasks `moved` changed place
 // (DeckCore.placeInOrder: every other task keeps its place, hidden ones too).
-function applySectionList(list, moved) {
-  const s = SECTIONS[activeView];
+function applySectionList(list, moved, s = SECTIONS[activeView]) {
   const cut = list.indexOf(sectionKey(s.bottom));
   saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
 }
@@ -1414,10 +1417,11 @@ function saveOrder(s, order) {
   render();
 }
 
-// Plan: a day and Later (`data-ordered`) show Open's order, and reordering
-// one edits it (DeckCore.planOrder), so the section keeps the order shown.
-// Unplanned and Carried over have orders of their own (deadline, start).
-const OPEN_ORDER = { field: 'sort_order' };
+// Plan: every section (`data-ordered`, in the manual order) shows Open's
+// order, its Unsorted tasks first under their label, and moves in it follow
+// Open's rules: planSectionList is the section as Open lists its sections,
+// and applySectionList / sectionKeyMove do the rest.
+const OPEN_ORDER = SECTIONS.open;
 function planSectionIds(div) {
   const ids = [];
   for (let el = div.nextElementSibling; el && !el.classList.contains('board-day-divider'); el = el.nextElementSibling) {
@@ -1425,10 +1429,15 @@ function planSectionIds(div) {
   }
   return ids;
 }
-// `shown`: the section's ids in their new order, `moved` the ones that moved.
-function applyPlanOrder(shown, moved) {
-  const unsorted = new Set(tasks.filter(t => t.sort_order == null).map(t => t.id));
-  saveOrder(OPEN_ORDER, planOrder(manualOrderIds(OPEN_ORDER), shown, moved, unsorted));
+// A Plan section as Open lists its sections, the labels' slots included:
+// [#unsorted, …its Unsorted ids, #sorted, …its Sorted ids]. What follows
+// #sorted is the section's share of the manual order (applySectionList):
+// a task moved there is ranked, one moved above it leaves the order.
+function planSectionList(div) {
+  const byId = new Map(tasks.map(t => [t.id, t]));
+  const ids = planSectionIds(div);
+  return [sectionKey('unsorted'), ...ids.filter(id => byId.get(id)?.sort_order == null),
+          sectionKey('sorted'), ...ids.filter(id => byId.get(id)?.sort_order != null)];
 }
 // Drop `draggedId` on a task (`key`, `side`: before or after it, by the
 // pointer, dropSide) or on a section heading (no side: it takes the
@@ -1445,9 +1454,7 @@ function sectionDrop(key, side) {
 // Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
 // slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
 // can't move within it; moving down takes them straight across the heading.
-function sectionKeyMove(direction) {
-  const s = SECTIONS[activeView];
-  const list = sectionList();
+function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[activeView]) {
   const byId = new Map(tasks.map(t => [t.id, t]));
   const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
   if (!idxs.length) return;
@@ -1465,7 +1472,7 @@ function sectionKeyMove(direction) {
     if (below === undefined) return;
     rest.splice(rest.indexOf(below) + 1, 0, ...group);
   }
-  applySectionList(rest, group);
+  applySectionList(rest, group, s);
 }
 
 // A section heading on Open and Focus. It looks like a Plan-board day
@@ -2229,14 +2236,16 @@ function render() {
       const dropAttr = (s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '') +
         (s.ordered ? ' data-ordered="1"' : '');
       const emptyCls = (s.tasks.length ? '' : ' board-day--empty') + (isFolded ? ' board-day--folded' : '');
-      // The deadlines on this day, wherever their cards sit, and Unplanned's
-      // overdue tasks (red; shown even folded): a click lists them
-      // (headerTasksMenu), the tooltip names them.
-      const listBtn = (list, word, title, cls = '') => list?.length
-        ? `<button type="button" class="board-day-due${cls}" data-header-tasks="${esc(s.key)}"` +
-          ` title="${esc(title + ': ' + list.map(t => plainTitle(t.title)).join(', '))}">${list.length} ${word}</button>`
+      // The deadlines on this day, wherever their cards sit, Unplanned's
+      // overdue tasks (red) and Today's carried-over ones (amber; both shown
+      // even folded): a click lists them (headerTasksMenu), the tooltip
+      // names them.
+      const listBtn = (list, which, title, cls = '') => list?.length
+        ? `<button type="button" class="board-day-due${cls}" data-header-tasks="${esc(s.key)}" data-header-list="${which}"` +
+          ` title="${esc(title + ': ' + list.map(t => plainTitle(t.title)).join(', '))}">${list.length} ${which}</button>`
         : '';
-      const dueBtn = listBtn(s.due, 'due', `Due ${s.label}`) +
+      const dueBtn = listBtn(s.carried, 'carried', 'Carried over, on Focus since an earlier day', ' board-day-carried') +
+        listBtn(s.due, 'due', `Due ${s.label}`) +
         listBtn(s.overdue, 'overdue', 'Overdue', ' board-day-overdue');
       // The whole header folds the section (the label is its button, for
       // the keyboard and screen readers); only the due/overdue count does its own.
@@ -2250,7 +2259,21 @@ function render() {
       // An empty section is just its header row, which is itself the drop
       // target (styled tall enough to hit). Nothing grows when a drag
       // starts, so the section you aim at never moves under the pointer.
-      const body = isFolded ? '' : s.tasks.map(t => taskHTML(t, true, 'board-item')).join('');
+      // A section with Unsorted tasks (listed first, in the manual order)
+      // labels them and the Sorted ones below, as Open's sections do, one
+      // level down: so you see what is still to be ranked, and moves follow
+      // Open's rules (planSectionList). The labels are no sections
+      // (.plan-subdivider, not .board-day-divider); Sorted takes drops, as
+      // Open's heading does. No Unsorted task: no labels.
+      const unsorted = s.ordered ? s.tasks.filter(t => t.sort_order == null).length : 0;
+      const sub = (label, n) => `<li class="plan-subdivider" data-sub="${label.toLowerCase()}">` +
+        `<span>${label}</span><span class="board-day-count">${n}</span></li>`;
+      // A carried-over card's "since" badge is amber here (task-carried):
+      // on Today it is a slipped plan, not just an available task.
+      const body = isFolded ? '' : s.tasks.map((t, i) =>
+        (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
+        (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
+        taskHTML(t, true, 'board-item' + (DeckCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
       return header + body;
     }).join('');
     listEl.innerHTML = html;
@@ -3331,18 +3354,20 @@ deleteBtn.addEventListener('click', () => {
 
 // Plan board: make cards draggable; the list-level dragover/drop handlers
 // (attached once at init) re-plan the task to the section it's dropped on.
-// A drop on a card in a day or Later (`data-ordered`) lands above or below
-// it, as on Open: on another day it also starts the task there. Elsewhere
-// a drop on a card is a drop on its section.
+// A drop on a card in a section (`data-ordered`) lands above or below it,
+// as on Open: on another day it also starts the task there. A drop on a
+// section's Sorted label puts it first among the sorted ones, as Open's
+// Sorted heading does. Elsewhere a drop on a card is a drop on its section.
 const orderedCard = item => !!boardDivider(item)?.dataset.ordered;
 function setupBoardDragAndDrop() {
-  async function executeBoardItemDrop(targetItem, side) {
-    const targetId = targetItem.dataset.id;
+  async function executeBoardItemDrop(target, side) {
+    const label = !target.classList.contains('task-item');   // a Sorted label
+    const targetId = label ? null : target.dataset.id;
     if (!draggedId || targetId === draggedId) return;
     const id = draggedId;
     const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     const draggedDiv = draggedEl && boardDivider(draggedEl);
-    const targetDiv = boardDivider(targetItem);
+    const targetDiv = boardDivider(target);
     clearBoardDropOver();
     if (!targetDiv?.dataset.dropBucket) return;
     const same = draggedDiv === targetDiv;
@@ -3352,23 +3377,44 @@ function setupBoardDragAndDrop() {
       if (!same) dropOnBucket(id, targetDiv);
       return;
     }
-    const shown = planSectionIds(targetDiv).filter(x => x !== id);
-    shown.splice(shown.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
+    const list = planSectionList(targetDiv).filter(x => x !== id);
+    list.splice(label ? list.indexOf(sectionKey('sorted')) + 1
+      : list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
     if (!same && !await planOnDay(id, targetDiv.dataset.dropDay)) return;
-    applyPlanOrder(shown, [id]);
+    applySectionList(list, [id], OPEN_ORDER);
   }
+  const SORTED_LABEL = '.plan-subdivider[data-sub="sorted"]';
 
   touchDrop = {
-    sided: orderedCard,
+    sided: t => t.classList.contains('task-item') && orderedCard(t),
     target: el => {
       const item = el.closest('.task-item');
       if (item) return item.dataset.id === draggedId ? null : item;
+      const label = el.closest(SORTED_LABEL);
+      if (label) return label;
       const div = boardDivider(el);
       return div && div.dataset.dropBucket ? div : null;
     },
-    drop: (target, side) => target.classList.contains('task-item')
+    drop: (target, side) => target.classList.contains('task-item') || target.matches(SORTED_LABEL)
       ? executeBoardItemDrop(target, side) : dropOnBucket(draggedId, target),
   };
+
+  listEl.querySelectorAll(SORTED_LABEL).forEach(label => {
+    label.addEventListener('dragover', e => {
+      if (!draggedId) return;
+      e.preventDefault();
+      e.stopPropagation();  // not the section's highlight: this is a place in it
+      clearBoardDropOver();
+      label.classList.add('task-drag-over');
+    });
+    label.addEventListener('dragleave', () => label.classList.remove('task-drag-over'));
+    label.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      label.classList.remove('task-drag-over');
+      executeBoardItemDrop(label);
+    });
+  });
 
   listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
     item.addEventListener('dragstart', e => {
@@ -3490,20 +3536,7 @@ function planKeyMove(direction) {
   if (els.some(el => !el)) return;
   const div = boardDivider(els[0]);
   if (!div?.dataset.ordered || els.some(el => boardDivider(el) !== div)) return;
-  const list = planSectionIds(div);
-  const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
-  const group = idxs.map(i => list[i]);
-  const rest = list.filter(id => !selectedIds.has(id));
-  if (direction === 'up') {
-    const above = list[idxs[0] - 1];
-    if (above === undefined) return;
-    rest.splice(rest.indexOf(above), 0, ...group);
-  } else {
-    const below = list[idxs[idxs.length - 1] + 1];
-    if (below === undefined) return;
-    rest.splice(rest.indexOf(below) + 1, 0, ...group);
-  }
-  applyPlanOrder(rest, group);
+  sectionKeyMove(direction, planSectionList(div), OPEN_ORDER);
 }
 
 document.addEventListener('keydown', async e => {

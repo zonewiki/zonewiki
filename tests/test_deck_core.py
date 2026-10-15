@@ -97,35 +97,38 @@ class TestBoardBuckets:
         assert by_key[TODAY] == ["2"]
         assert by_key["2026-07-27"] == ["1"]
         assert by_key["later"] == ["5"]
-        assert by_key["unplanned"] == ["3", "4"]
+        assert sorted(by_key["unplanned"]) == ["3", "4"]
 
-    def test_past_start_date_is_carried_over_not_overdue(self):
+    def test_past_start_date_is_on_today_not_overdue(self):
         # Regression: a start date in the past put the task under Overdue,
         # though the card itself says "since …" without any warning. It is
-        # not today's plan either: it shows apart, as Carried over.
+        # in Focus, today's load: on Today, carried over.
         by_key = self._by_key([{"id": "1", "title": "x", "start_date": "2026-07-01"}])
-        assert by_key["carried"] == ["1"]
-        assert by_key[TODAY] == []
-        assert "overdue" not in by_key
+        assert by_key[TODAY] == ["1"]
+        assert "overdue" not in by_key and "carried" not in by_key
 
-    def test_carried_over_longest_slipping_first(self):
+    def test_carried_over_tasks_share_todays_open_order(self):
         by_key = self._by_key([
-            {"id": "recent", "start_date": "2026-07-24"},
-            {"id": "old", "start_date": "2026-07-01"},
-            {"id": "same-day-sorted", "start_date": "2026-07-24", "sort_order": 0},
-            {"id": "due-today", "start_date": "2026-07-20", "due_date": TODAY},
+            {"id": "recent", "start_date": "2026-07-24", "created_at": "2026-07-02T09:00"},
+            {"id": "today", "start_date": TODAY, "sort_order": 2},
+            {"id": "sorted-1", "start_date": "2026-07-24", "sort_order": 1},
+            {"id": "sorted-0", "start_date": "2026-07-01", "sort_order": 0},
         ])
-        assert by_key["carried"] == ["old", "due-today", "recent", "same-day-sorted"]
+        assert by_key[TODAY] == ["recent", "sorted-0", "sorted-1", "today"]
 
-    def test_carried_over_is_display_only_between_overdue_and_today(self):
+    def test_today_lists_its_carried_over_tasks_longest_slipping_first(self):
         tasks = [
-            {"id": "1", "title": "overdue", "due_date": "2026-07-01"},
-            {"id": "2", "title": "carried", "start_date": "2026-07-20"},
+            {"id": "recent", "start_date": "2026-07-24", "sort_order": 0},
+            {"id": "old", "start_date": "2026-07-01", "sort_order": 1},
+            {"id": "today", "start_date": TODAY},
+            {"id": "done", "start_date": "2026-07-01", "completed_at": "2026-07-02T10:00"},
         ]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
-        assert [s["key"] for s in sections][:3] == ["unplanned", "carried", TODAY]
-        carried = sections[1]
-        assert carried["label"] == "Carried over" and carried["droppable"] is False
+        by_key = {s["key"]: s for s in sections}
+        assert [t["id"] for t in by_key[TODAY]["carried"]] == ["old", "recent"]
+        assert all("carried" not in s or s["key"] == TODAY for s in sections)
+        assert run_core(f"[{json.dumps(tasks[1])}, {json.dumps(tasks[2])}, {json.dumps(tasks[3])}]"
+                        f".map(t => DeckCore.isCarried(t, '{TODAY}'))") == [True, False, False]
 
     def test_day_sections_name_their_deadlines_wherever_the_cards_sit(self):
         tasks = [
@@ -140,22 +143,18 @@ class TestBoardBuckets:
         assert due[TODAY] == []
         # Cards stay where their start date puts them.
         by_key = {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
-        assert by_key["unplanned"][0] == "unplanned" and by_key[TODAY] == ["planned-today"]
+        assert sorted(by_key["unplanned"]) == ["due-later", "unplanned"] and by_key[TODAY] == ["planned-today"]
         assert "due-later" not in sum(due.values(), [])
 
-    def test_unplanned_first_then_overdue_carried_days_later(self):
+    def test_unplanned_first_then_today_days_later(self):
         tasks = [
             {"id": "1", "title": "overdue", "due_date": "2026-07-01"},
             {"id": "2", "title": "carried", "start_date": "2026-07-20"},
             {"id": "3", "title": "loose"},
         ]
         keys = [s["key"] for s in run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")]
-        assert keys[:3] == ["unplanned", "carried", TODAY]
+        assert keys[:2] == ["unplanned", TODAY]
         assert keys[-1] == "later"
-
-    def test_no_carried_over_section_when_nothing_slipped(self):
-        by_key = self._by_key([{"id": "1", "title": "x", "start_date": TODAY}])
-        assert "carried" not in by_key
 
     def test_due_date_alone_is_unplanned_not_on_its_deadline(self):
         by_key = self._by_key([{"id": "1", "title": "x", "due_date": "2026-07-28"}])
@@ -173,13 +172,12 @@ class TestBoardBuckets:
             {"id": "accepted", "due_date": "2026-07-20", "start_date": "2026-07-29"},
             {"id": "due-today-later", "due_date": TODAY, "start_date": "2026-07-28"},
         ])
-        assert by_key["carried"] == ["slipped"]
-        assert by_key[TODAY] == ["today"]
+        assert sorted(by_key[TODAY]) == ["slipped", "today"]
         assert by_key["2026-07-29"] == ["accepted"]
         assert by_key["2026-07-28"] == ["due-today-later"]
         assert "overdue" not in by_key
 
-    def test_overdue_unplanned_tasks_head_unplanned_and_are_listed(self):
+    def test_unplanned_lists_its_overdue_tasks_most_overdue_first(self):
         tasks = [
             {"id": "loose", "sort_order": 0},
             {"id": "due-soon", "due_date": "2026-08-01"},
@@ -189,28 +187,17 @@ class TestBoardBuckets:
         ]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         unplanned = sections[0]
-        assert [t["id"] for t in unplanned["tasks"]] == ["very-late", "late", "due-soon", "loose"]
+        assert sorted(t["id"] for t in unplanned["tasks"]) == ["due-soon", "late", "loose", "very-late"]
         assert [t["id"] for t in unplanned["overdue"]] == ["very-late", "late"]
 
-    def test_unplanned_sorted_by_nearest_deadline(self):
-        by_key = self._by_key([
-            {"id": "a", "title": "a", "sort_order": 0},
-            {"id": "b", "title": "b", "due_date": "2026-09-01"},
-            {"id": "c", "title": "c", "due_date": "2026-08-01"},
-        ])
-        assert by_key["unplanned"] == ["c", "b", "a"]
-
-    def test_later_and_unplanned_are_droppable_carried_over_is_not(self):
+    def test_every_section_is_droppable(self):
         tasks = [
             {"id": "3", "title": "carried", "start_date": "2026-07-01"},
             {"id": "4", "title": "nothing"},
             {"id": "5", "title": "later", "start_date": "2026-09-01"},
         ]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
-        droppable = {s["key"]: s["droppable"] for s in sections}
-        assert droppable["carried"] is False
-        assert droppable["later"] is True
-        assert droppable["unplanned"] is True
+        assert all(s["droppable"] for s in sections)
 
     def test_seven_day_sections_always_present(self):
         sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
@@ -238,13 +225,16 @@ class TestBoardBuckets:
         assert by_key["2026-07-28"] == ["m-new", "m-sorted"]
         assert by_key["later"] == ["l-new", "l-sorted"]
 
-    def test_unplanned_deadlines_then_open_order(self):
-        by_key = self._by_key([
-            {"id": "sorted", "sort_order": 0},
+    def test_unplanned_is_in_open_order_its_overdue_by_deadline(self):
+        tasks = [
+            {"id": "sorted", "sort_order": 0, "due_date": "2026-07-20"},
             {"id": "unsorted", "created_at": "2026-07-25T09:00"},
-            {"id": "deadline", "due_date": "2026-08-10", "sort_order": 5},
-        ])
-        assert by_key["unplanned"] == ["deadline", "unsorted", "sorted"]
+            {"id": "deadline", "due_date": "2026-07-10", "sort_order": 5},
+        ]
+        assert self._by_key(tasks)["unplanned"] == ["unsorted", "sorted", "deadline"]
+        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        unplanned = next(s for s in sections if s["key"] == "unplanned")
+        assert [t["id"] for t in unplanned["overdue"]] == ["deadline", "sorted"]
 
     def test_empty_later_and_unplanned_still_offered_as_drop_targets(self):
         # Regression: they used to be omitted when empty, so once every task
@@ -256,7 +246,6 @@ class TestBoardBuckets:
         assert by_key["unplanned"]["label"] == "Unplanned"
         keys = [s["key"] for s in sections]
         assert keys[0] == "unplanned" and keys[-1] == "later"
-        assert "carried" not in by_key  # display-only, so still omitted when empty
 
 
 class TestFilterField:
@@ -445,33 +434,16 @@ class TestManualOrder:
     def _place(self, old, shown, moved):
         return run_core(f"DeckCore.placeInOrder({json.dumps(old)}, {json.dumps(shown)}, {json.dumps(moved)})")
 
-    def _plan(self, old, shown, moved, unsorted):
-        return run_core(f"DeckCore.planOrder({json.dumps(old)}, {json.dumps(shown)}, "
-                        f"{json.dumps(moved)}, new Set({json.dumps(unsorted)}))")
-
     def test_moved_task_goes_after_the_visible_one_above_hidden_ones_stay(self):
         assert self._place(list("ahbc"), list("acb"), ["c"]) == list("achb")
 
     def test_moved_task_first_goes_before_the_one_below(self):
         assert self._place(list("ahbc"), list("cab"), ["c"]) == list("cahb")
 
-    def test_plan_move_below_the_unsorted_ones_leaves_them_unsorted(self):
-        # Shown: u (Unsorted), then c moved above a, b.
-        assert self._plan(list("ahbc"), list("ucab"), ["c"], ["u"]) == list("cahb")
-
-    def test_plan_move_above_unsorted_ones_sorts_them_as_shown(self):
-        # b dropped above v: v (and w below it) join the order; u above stays out.
-        assert self._plan(list("ab"), list("ubvwa"), ["b"], list("uvw")) == list("bvwa")
-
-    def test_plan_moving_an_unsorted_task(self):
-        assert self._plan(list("ab"), list("avb"), ["v"], ["v"]) == list("avb")
-
-    def test_days_and_later_are_ordered_unplanned_and_carried_are_not(self):
+    def test_every_section_is_ordered(self):
         tasks = [{"id": "c", "title": "C", "start_date": "2026-07-20"}]
         sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
-        ordered = {s["key"]: bool(s.get("ordered")) for s in sections}
-        assert ordered.pop("unplanned") is False and ordered.pop("carried") is False
-        assert all(ordered.values())
+        assert all(s.get("ordered") for s in sections)
 
     def test_by_deadline_nearest_first_then_open_order_undated_last(self):
         tasks = [
@@ -501,7 +473,7 @@ class TestManualOrder:
             {"id": "u-new", "created_at": "2026-07-05"},
         ]
         for sort, today_ids, unplanned_ids in (
-                (None, ["d-old", "d-new"], ["u-old", "u-new"]),
+                (None, ["d-old", "d-new"], ["u-new", "u-old"]),
                 ("due", ["d-new", "d-old"], ["u-old", "u-new"]),
                 ("created", ["d-new", "d-old"], ["u-new", "u-old"])):
             sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, {json.dumps(today)}, {json.dumps(sort)})"

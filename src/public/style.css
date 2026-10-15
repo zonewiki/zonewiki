@@ -2651,6 +2651,21 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   .tasks-toolbar input, .tasks-toolbar select { font-size: 16px; }
 }
 
+/* Plan: Today's carried-over tasks, their header count and "since" badge */
+.board-day-due.board-day-carried { color: #d97706; }
+.task-carried .task-focus-info { color: #d97706; }
+
+/* A Plan section's Unsorted / Sorted labels (not drop targets) */
+.plan-subdivider {
+  list-style: none; display: flex; align-items: center; gap: .5rem;
+  margin: .2rem 0 .35rem; padding: 0 .25rem;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+}
+.plan-subdivider::after { content: ''; flex: 1; border-top: 1px solid var(--border); order: 1; }
+.plan-subdivider .board-day-count { order: 2; font-weight: 400; letter-spacing: 0; }
+.plan-subdivider.task-drag-over { color: var(--link); }
+.plan-subdivider.task-drag-over::after { border-top: 2px solid var(--link); }
+
 .task-inbox-divider {
   list-style: none;
   position: relative;

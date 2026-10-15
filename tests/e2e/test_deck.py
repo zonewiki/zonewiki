@@ -241,9 +241,11 @@ def test_board_groups_by_start_date(page, wiki):
                                          "due_date": (today - timedelta(days=1)).isoformat()})
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
-    # A past start date means "available since": not Overdue, but not
-    # today's plan either — Carried over (display-only, so its label).
-    assert section_of(page, "Started earlier").startswith("Carried over")
+    # A past start date means "available since": not Overdue, but today's
+    # load (it is in Focus) — on Today, carried over, its badge amber.
+    assert section_of(page, "Started earlier") == today.isoformat()
+    expect(card(page, "Started earlier")).to_have_class(re.compile(r"\btask-carried\b"))
+    expect(page.locator(".board-day-divider", has_text="Carried over")).to_have_count(0)
     # A deadline alone is not a plan: the task waits in Unplanned, not on its due day.
     assert section_of(page, "Deadline only") == "unplanned"
     # A missed deadline has no section of its own: without a start date the
@@ -252,16 +254,30 @@ def test_board_groups_by_start_date(page, wiki):
     expect(page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-overdue")).to_have_text("1 overdue")
 
 
-def test_drop_carried_over_on_today_commits_again(page, wiki):
+def test_today_counts_its_carried_over_tasks_and_a_drop_commits_again(page, wiki):
     today = date.today().isoformat()
-    page.request.post("/api/deck", data={"title": "Slipped",
-                                         "start_date": (date.today() - timedelta(days=3)).isoformat()})
+    for title, days in (("Slipped", 3), ("Slipped long", 9)):
+        page.request.post("/api/deck", data={"title": title,
+                                             "start_date": (date.today() - timedelta(days=days)).isoformat()})
+    page.request.post("/api/deck", data={"title": "Fresh today", "start_date": today})
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
-    assert section_of(page, "Slipped").startswith("Carried over")
-    card(page, "Slipped").drag_to(page.locator(f".board-day-divider[data-drop-day='{today}']"))
+    header = page.locator(f".board-day-divider[data-drop-day='{today}']")
+    # Today's count is its whole load, carried-over tasks included.
+    expect(header.locator(".board-day-count")).to_have_text("3")
+    carried = header.locator(".board-day-carried")
+    expect(carried).to_have_text("2 carried")
+    carried.click()
+    menu = page.locator(".task-menu")
+    expect(menu.locator(".task-menu-title")).to_contain_text("Carried over")
+    expect(menu.get_by_role("menuitem")).to_have_text(["Slipped long", "Slipped"])
+    page.keyboard.press("Escape")
+    expect(card(page, "Fresh today")).not_to_have_class(re.compile(r"\btask-carried\b"))
+    # Dropped on Today's own heading, a carried-over task starts today again.
+    card(page, "Slipped").drag_to(header)
     wait_for_field(page, "Slipped", "start_date", today)
-    expect(page.locator(".board-day-divider", has_text="Carried over")).to_have_count(0)
+    expect(carried).to_have_text("1 carried")
+    expect(card(page, "Slipped")).not_to_have_class(re.compile(r"\btask-carried\b"))
 
 
 def test_day_header_counts_deadlines_and_lists_them(page, wiki):
@@ -1212,10 +1228,16 @@ def test_board_reorders_a_day_in_open_order(page, wiki):
     assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
     assert task_by_title(page, "Newbie")["sort_order"] is None   # above it: stays Unsorted
 
-    # Above an Unsorted task: that one is sorted too, so the day keeps
-    # the order shown.
+    # As on Open: dropped among the Unsorted tasks, a task leaves the order
+    # (Unsorted is newest first), and no other task is ranked by it.
     _drop(card(page, "Bravo"), card(page, "Newbie"), "before")
-    wait_until(lambda: _by_order(page, "sort_order") == ["Bravo", "Newbie", "Charlie", "Alpha", "Elsewhere"])
+    wait_until(lambda: task_by_title(page, "Bravo")["sort_order"] is None)
+    assert _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere"]
+    assert task_by_title(page, "Newbie")["sort_order"] is None
+    assert _day_titles(page, today) == ["Newbie", "Bravo", "Charlie", "Alpha"]
+    # Dropped on the Sorted label: first among the sorted ones.
+    card(page, "Newbie").drag_to(page.locator(f'.board-day-divider[data-drop-day="{today}"] ~ .plan-subdivider[data-sub="sorted"]').first)
+    wait_until(lambda: _by_order(page, "sort_order") == ["Newbie", "Charlie", "Alpha", "Elsewhere"])
     assert _day_titles(page, today) == ["Bravo", "Newbie", "Charlie", "Alpha"]
 
 
@@ -1242,29 +1264,80 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
     wait_until(lambda: _by_order(page, "sort_order") == ["Bravo", "Alpha", "Next"])
-    # First of its day: it doesn't leave it, upwards or (as last) downwards.
+    # Last of its day: it doesn't leave it downwards.
     writes = []
     page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
-    page.keyboard.press("Control+Shift+ArrowUp")
     card(page, "Alpha").click()
     page.keyboard.press("Control+Shift+ArrowDown")
     page.wait_for_timeout(300)
     assert writes == []
     assert task_by_title(page, "Alpha")["start_date"] == today
+    # First of its day, up: into Unsorted, as on Open, still on its day.
+    card(page, "Bravo").click()
+    page.keyboard.press("Control+Shift+ArrowUp")
+    wait_until(lambda: task_by_title(page, "Bravo")["sort_order"] is None)
+    assert task_by_title(page, "Bravo")["start_date"] == today
+    assert _day_titles(page, today) == ["Bravo", "Alpha"]
 
 
-def test_board_unplanned_has_no_manual_order(page, wiki):
-    # Unplanned is by deadline: a drop on one of its own cards writes nothing.
+def _unplanned_rows(page):
+    """Unplanned's labels ('# Unsorted') and card titles, top to bottom."""
+    return page.evaluate("""() => {
+        const out = [];
+        let li = document.querySelector('.board-day-divider[data-drop-bucket="unplanned"]')?.nextElementSibling;
+        for (; li && !li.classList.contains('board-day-divider'); li = li.nextElementSibling)
+          out.push(li.classList.contains('task-item') ? li.querySelector('.task-title').textContent.trim()
+                   : '# ' + li.firstElementChild.textContent.trim());
+        return out;
+    }""")
+
+
+def test_board_labels_unsorted_in_every_section_that_has_some(page, wiki):
+    today = date.today().isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    ranked = page.request.post("/api/deck", data={"title": "Ranked", "start_date": today}).json()["id"]
+    page.request.post("/api/deck/reorder", data={"order": [ranked]})
+    page.request.post("/api/deck", data={"title": "Added today", "start_date": today})
+    other = page.request.post("/api/deck", data={"title": "Tomorrow ranked", "start_date": tomorrow}).json()["id"]
+    page.request.post("/api/deck/reorder", data={"order": [ranked, other]})
     page.set_viewport_size({"width": 1280, "height": 1400})
-    for t in ("Loose one", "Loose two"):
-        page.request.post("/api/deck", data={"title": t})
     page.goto("/deck?view=plan")
-    writes = []
-    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
-    _drop(card(page, "Loose two"), card(page, "Loose one"), "after")
-    page.wait_for_timeout(300)
-    assert writes == []
-    expect(card(page, "Loose one")).not_to_have_class(re.compile(r"task-drop-"))
+    expect(card(page, "Added today")).to_be_visible()
+    rows = lambda day: page.evaluate("""day => {
+        const out = [];
+        let li = document.querySelector(`.board-day-divider[data-drop-day="${day}"]`)?.nextElementSibling;
+        for (; li && !li.classList.contains('board-day-divider'); li = li.nextElementSibling)
+          out.push(li.classList.contains('task-item') ? li.querySelector('.task-title').textContent.trim()
+                   : '# ' + li.firstElementChild.textContent.trim());
+        return out;
+    }""", day)
+    assert rows(today) == ["# Unsorted", "Added today", "# Sorted", "Ranked"]
+    # Nothing unsorted: no labels.
+    assert rows(tomorrow) == ["Tomorrow ranked"]
+
+
+def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    ids = [page.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.request.post("/api/deck", data={"title": "Fresh"})
+    page.goto("/deck?view=plan")
+    expect(card(page, "Fresh")).to_be_visible()
+    assert _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Alpha", "Bravo"]
+    # A drop within Sorted reorders it.
+    _drop(card(page, "Bravo"), card(page, "Alpha"), "before")
+    wait_until(lambda: _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Bravo", "Alpha"])
+    # An Unsorted task dropped among the sorted ones is sorted there; no
+    # Unsorted left, no labels.
+    _drop(card(page, "Fresh"), card(page, "Bravo"), "after")
+    wait_until(lambda: _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"])
+    page.reload()
+    expect(card(page, "Fresh")).to_be_visible()
+    assert _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"]
+    # Sorted by deadline (or creation), no labels and no reordering.
+    page.locator("select.deck-sort").select_option("due")
+    expect(page.locator(".plan-subdivider")).to_have_count(0)
+    expect(page.locator('.board-day-divider[data-drop-bucket="unplanned"][data-ordered]')).to_have_count(0)
 
 
 def test_board_drop_on_own_heading_changes_nothing_except_later(page, wiki):
