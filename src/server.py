@@ -11,7 +11,6 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -25,16 +24,17 @@ import deckstore
 import mcp_server
 import retrieval
 import history
+import scratch
 from mdtext import (
-    add_frontmatter_tags, content_hash, is_scratch, mask_code, note_as_section, page_title,
-    parse_frontmatter, plain_heading, promoted_slug, SCRATCH_RE, section_anchor,
+    content_hash, is_scratch, mask_code, page_title,
+    parse_frontmatter, plain_heading, section_anchor,
     section_char_range, slug_display_name, splice_section, strip_h1, to_slug,
     toggle_nth_checkbox, unmask_code,
 )
 from pages import (
     all_backlink_counts, all_slugs, deck_lists, find_backlinks, fmt_date, hidden_page, is_protected, iter_pages, list_scratch,
     page_deck_lists, page_from_input, page_link_targets, page_meta, page_task_refs,
-    safe_path, update_references, url,
+    safe_path, url,
 )
 from gitstore import run_git, git_commit, git_setup, move_page
 from render import (
@@ -324,15 +324,10 @@ def api_page_preview(slug):
 
 @app.post("/api/scratch")
 def api_scratch():
-    title = request.form.get("title", "").strip() or "Untitled"
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    slug = f"{ts}_{to_slug(title)}"
-    path = safe_path(slug)
-    if path is None:
+    try:
+        return jsonify({"slug": scratch.create(request.form.get("title", ""))})
+    except scratch.ScratchError:
         abort(400)
-    path.write_text(f"# {title}\n\n", encoding="utf-8")
-    git_commit(path, f"Create {slug}")
-    return jsonify({"slug": slug})
 
 
 @app.get("/page/<path:slug>")
@@ -587,25 +582,17 @@ def promote_page(slug):
     old_path = safe_path(slug)
     if old_path is None or not old_path.exists():
         abort(404)
-    date = request.form.get("keep_date", "")
-    date = SCRATCH_RE.match(slug).group(1)[:10] if date else ""
-    new_slug = promoted_slug(request.form.get("folder", ""), request.form.get("name", ""), date)
     back = f"{url('page', slug)}?promote_error="
-    if not new_slug:
-        return redirect(back + quote("Give the page a name"))
-    if is_scratch(new_slug):
-        return redirect(back + quote("That name would still be a scratch note"))
-    new_path = safe_path(new_slug)
-    if new_path is None:
-        abort(400)
-    if new_path.exists():
-        return redirect(back + quote(f"A page named “{new_slug}” already exists"))
     raw_link = request.form.get("link_from", "").strip()
     link_slug = page_from_input(raw_link) if raw_link else ""
     link_path = safe_path(link_slug) if link_slug else None
     if raw_link and (not link_path or not link_path.exists() or link_slug == slug):
         return redirect(back + quote(f"There is no page “{raw_link}” to link from"))
-    move_page(old_path, new_path, slug, new_slug, f"Promote {slug} to {new_slug}")
+    try:
+        new_slug = scratch.move(slug, request.form.get("folder", ""), request.form.get("name", ""),
+                                bool(request.form.get("keep_date", "")))
+    except scratch.ScratchError as e:
+        return redirect(back + quote(str(e)))
     # The page to link it from opens in the editor, the link to paste where
     # it belongs (js/pagemenu.js copied it on Move). A page linking to the note
     # already links here now: nothing to paste.
@@ -629,26 +616,14 @@ def append_page(slug):
     back = f"{url('page', slug)}?append_error="
     raw = request.form.get("page", "").strip()
     target = page_from_input(raw)
-    # [ ] | would break the wikilinks that now point at the section.
-    heading = re.sub(r"[\[\]|]", "", request.form.get("heading", "")).strip()
+    # The error names the page as typed (scratch.append knows only the slug).
     target_path = safe_path(target) if target else None
-    if not target_path or not target_path.exists():
-        return redirect(back + quote(f"There is no page “{raw}”" if raw else "Choose a page"))
-    if target == slug:
-        return redirect(back + quote("Choose another page than this note"))
-    if not heading:
-        return redirect(back + quote("Give the section a heading"))
-    page = target_path.read_text(encoding="utf-8")
-    anchor = section_anchor(heading)
-    if any(section_anchor(h) == anchor for h in re.findall(
-            r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", mask_code(page)[0], re.M)):
-        return redirect(back + quote(f"“{target}” already has a section “{heading}”"))
-    section, tags = note_as_section(old_path.read_text(encoding="utf-8"), heading)
-    page = add_frontmatter_tags(page, tags)
-    target_path.write_text(page.rstrip("\n") + "\n\n" + section, encoding="utf-8")
-    old_path.unlink()
-    modified_refs = update_references(slug, target, heading)
-    git_commit([old_path, target_path, *modified_refs], f"Append {slug} to {target}")
+    if raw and (not target_path or not target_path.exists()):
+        return redirect(back + quote(f"There is no page “{raw}”"))
+    try:
+        anchor = scratch.append(slug, target, request.form.get("heading", ""))
+    except scratch.ScratchError as e:
+        return redirect(back + quote(str(e)))
     return redirect(f"{url('page', target)}#{anchor}")
 
 

@@ -34,8 +34,8 @@ def rpc(client, method, params=None, id_=1, headers=None):
     return client.post("/mcp", json=msg, headers={**HOST, **AUTH, **(headers or {})})
 
 
-def call(client, name, **args):
-    resp = rpc(client, "tools/call", {"name": name, "arguments": args})
+def call(client, tool, /, **args):
+    resp = rpc(client, "tools/call", {"name": tool, "arguments": args})
     assert resp.status_code == 200
     result = resp.get_json()["result"]
     return result["content"][0]["text"], result["isError"]
@@ -77,8 +77,8 @@ class TestHandle:
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "leaf_help", "read_guides",
-            "write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page", "delete_page",
-            "restore_page", "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
+            "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_scratch_note", "rename_page",
+            "delete_page", "restore_page", "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "leaf_help", "read_guides"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
@@ -735,7 +735,7 @@ class TestFolderGuides:
 
     def test_the_schemas_take_guides(self):
         writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
-                  "delete_page", "restore_page", "read_guides"}
+                  "delete_page", "restore_page", "read_guides", "file_scratch_note"}
         for tool in mcp_server.TOOLS:
             assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
 
@@ -1138,6 +1138,102 @@ class TestAppendToPage:
     def test_missing_heading_lists_the_headings(self, client, pages):
         text, err = call(client, "append_to_page", slug="git-remote", content="x", under_heading="Nope")
         assert err and "'Setup', 'Pushing'" in text
+
+
+SCRATCH_NOTE = "2026-10-15_09-30-00_alex-prep"
+
+
+def subjects(wiki):
+    import subprocess
+    import gitstore
+    return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True,
+                          text=True, check=True, env=gitstore._GIT_ENV).stdout.splitlines()
+
+
+class TestScratchNotes:
+    """Scratch notes over MCP: write_page's scratch, list_pages' and
+    search_wiki's scratch filter, file_scratch_note (scratch.py)."""
+
+    def test_write_page_makes_a_scratch_note(self, client, git_wiki_dir):
+        text, err = call(client, "write_page", slug="Alex prep", content="Ask about the roadmap.",
+                         scratch=True, summary="for Friday")
+        assert not err
+        slug = re.search(r"Created scratch note (\S+) ", text).group(1)
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_alex-prep", slug)
+        assert "file_scratch_note" in text
+        # No title in the content: the name becomes it.
+        assert (git_wiki_dir / f"{slug}.md").read_text() == "# Alex prep\n\nAsk about the roadmap.\n"
+        assert subjects(git_wiki_dir)[0] == f"Create {slug}: for Friday (MCP)"
+
+    def test_the_contents_title_names_it_and_frontmatter_stays_first(self, client, wiki_dir):
+        text, _ = call(client, "write_page", slug="", content="# Idea: a/b test\n\nbody", scratch=True)
+        slug = re.search(r"Created scratch note (\S+) ", text).group(1)
+        assert slug.endswith("_idea-a-b-test") and "/" not in slug
+        text, _ = call(client, "write_page", slug="Tagged", content="---\ntags: [x]\n---\nbody", scratch=True)
+        slug = re.search(r"Created scratch note (\S+) ", text).group(1)
+        assert (wiki_dir / f"{slug}.md").read_text() == "---\ntags: [x]\n---\n# Tagged\n\nbody\n"
+
+    def test_same_name_in_the_same_second_makes_two_notes(self, client, wiki_dir):
+        slugs = {re.search(r"Created scratch note (\S+) ", call(client, "write_page", slug="Twin",
+                                                                  content="x", scratch=True)[0]).group(1)
+                 for _ in range(3)}
+        assert len(slugs) == 3
+
+    def test_scratch_refusals(self, client, wiki_dir):
+        text, err = call(client, "write_page", slug="", content="no title", scratch=True)
+        assert err and "title" in text
+        text, err = call(client, "write_page", slug="x", content="# X", scratch=True, overwrite=True)
+        assert err and "always a new one" in text
+
+    def test_list_and_search_only_scratch_notes(self, client, pages):
+        write_page(pages, SCRATCH_NOTE, "# Alex prep\n\nBremsen beim Golf ansprechen.\n")
+        text, _ = call(client, "list_pages", scratch=True)
+        assert text.startswith("Scratch notes") and SCRATCH_NOTE in text and "golf |" not in text
+        text, _ = call(client, "search_wiki", query="Bremsen", scratch=True)
+        assert f"slug: {SCRATCH_NOTE}" in text and "slug: golf" not in text
+        assert f"slug: golf" in call(client, "search_wiki", query="Bremsen")[0]
+        (pages / f"{SCRATCH_NOTE}.md").unlink()
+        assert call(client, "list_pages", scratch=True)[0] == "No scratch notes."
+
+    def test_move_to_the_wiki(self, client, git_wiki_dir):
+        write_page(git_wiki_dir, SCRATCH_NOTE, "# Alex prep\n\nnotes\n")
+        write_page(git_wiki_dir, "hub", f"# Hub\n\n[[{SCRATCH_NOTE}]]\n")
+        text, err = call(client, "file_scratch_note", slug=SCRATCH_NOTE, name="Alex Sam debrief",
+                         folder="conversations", keep_date=True)
+        assert not err
+        new = "conversations/2026-10-15_alex-sam-debrief"
+        assert text.startswith(f"Moved scratch note {SCRATCH_NOTE} into the wiki as {new};")
+        assert (git_wiki_dir / f"{new}.md").exists() and not (git_wiki_dir / f"{SCRATCH_NOTE}.md").exists()
+        assert (git_wiki_dir / "hub.md").read_text() == f"# Hub\n\n[[{new}]]\n"
+        assert subjects(git_wiki_dir)[0] == f"Promote {SCRATCH_NOTE} to {new} (MCP)"
+
+    def test_append_to_a_page(self, client, git_wiki_dir):
+        write_page(git_wiki_dir, SCRATCH_NOTE, "---\ntags: [people]\n---\n# Alex prep\n\n## Topics\n\nRoadmap\n")
+        write_page(git_wiki_dir, "people/alex", "# Alex\n\nLead.\n")
+        write_page(git_wiki_dir, "hub", f"# Hub\n\n[[{SCRATCH_NOTE}]]\n")
+        text, err = call(client, "file_scratch_note", slug=SCRATCH_NOTE, page="people/alex", summary="1:1")
+        assert not err
+        assert "as the section “Alex prep (2026-10-15)”" in text
+        assert "url: http://localhost:5000/page/people/alex#alex-prep-2026-10-15" in text
+        page = (git_wiki_dir / "people" / "alex.md").read_text()
+        assert page.startswith("---\ntags: people\n---\n# Alex\n")
+        assert page.endswith("## Alex prep (2026-10-15)\n\n### Topics\n\nRoadmap\n")
+        assert not (git_wiki_dir / f"{SCRATCH_NOTE}.md").exists()
+        assert "[[people/alex#Alex prep (2026-10-15)" in (git_wiki_dir / "hub.md").read_text()
+        assert subjects(git_wiki_dir)[0] == f"Append {SCRATCH_NOTE} to people/alex: 1:1 (MCP)"
+
+    def test_file_refusals(self, client, pages):
+        write_page(pages, SCRATCH_NOTE, "# Alex prep\n")
+        for args, words in [({"slug": "golf", "name": "x"}, "not a scratch note"),
+                            ({"slug": SCRATCH_NOTE}, "either name"),
+                            ({"slug": SCRATCH_NOTE, "name": "x", "page": "golf"}, "either name"),
+                            ({"slug": SCRATCH_NOTE, "page": "nowhere"}, "No page 'nowhere'"),
+                            ({"slug": SCRATCH_NOTE, "name": "golf"}, "already exists"),
+                            ({"slug": SCRATCH_NOTE, "name": "2026-01-01_10-00-00_x"}, "still be a scratch note"),
+                            ({"slug": SCRATCH_NOTE, "page": "golf", "heading": "Werkstatt"}, "already has a section")]:
+            text, err = call(client, "file_scratch_note", **args)
+            assert err and words in text, (args, text)
+        assert (pages / f"{SCRATCH_NOTE}.md").exists()
 
 
 class TestRenamePage:

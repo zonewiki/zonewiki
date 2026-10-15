@@ -11,7 +11,8 @@ import config
 import deck
 import decksyntax
 import retrieval
-from mdtext import is_scratch, page_title, page_wikilink, plain_task_title, SCRATCH_RE
+import scratch
+from mdtext import is_scratch, page_title, page_wikilink, plain_task_title
 from pages import (
     deck_home, deck_home_slug, hidden_page, is_protected, iter_pages, page_folders, page_meta,
     safe_path, sharing_on, url,
@@ -184,12 +185,6 @@ def build_delete_dialog(slug: str, title: str) -> str:
     return macro("partials/page.html", "delete_dialog")(slug, title, config.GIT_ENABLED)
 
 
-def _append_heading(slug: str, title: str) -> str:
-    """The section heading a scratch note gets on the page it is appended
-    to: its title and its day."""
-    return f"{title} ({SCRATCH_RE.match(slug).group(1)[:10]})"
-
-
 def page_menu(slug: str, title: str, rename_error: str = "",
               promote_error: str = "", append_error: str = "") -> dict:
     """What the page view's ⋯ menu and its dialogs need
@@ -198,9 +193,9 @@ def page_menu(slug: str, title: str, rename_error: str = "",
          "renamable": not is_protected(slug), "rename_error": rename_error}
     if m["scratch"]:
         m.update(
-            date=SCRATCH_RE.match(slug).group(1)[:10], folders=page_folders(),
+            date=scratch.note_date(slug), folders=page_folders(),
             promote_error=promote_error, append_error=append_error,
-            append_heading=_append_heading(slug, title),
+            append_heading=scratch.append_heading(slug, title),
             # Every page but scratch notes: the page to link from, to append to.
             wiki_pages=sorted((s, page_meta(p, s)[0]) for p, s in iter_pages()
                               if not is_scratch(s) and not hidden_page(s)))

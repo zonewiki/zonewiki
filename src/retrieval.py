@@ -412,27 +412,30 @@ def in_folder(slug: str, folder: str | None) -> bool:
     return slug == folder or slug.startswith(folder + "/")
 
 
-def retrieve(raw: str, limit: int = 8, under: str | None = None) -> list[dict]:
+def retrieve(raw: str, limit: int = 8, under: str | None = None, scratch: bool = False) -> list[dict]:
     """The sections and tasks most relevant to the query, best first: section
     dicts (slug, title, heading, text) and task docs (type "task", with the
     task). The query syntax applies (search.Query). With `under`, only
-    sections of pages in that folder, and no tasks."""
+    sections of pages in that folder, with `scratch` only of scratch notes;
+    either way no tasks."""
     query = search.Query(raw)
     q = query.ranking_text
     if not q.strip():
         return []
     index = _chunk_index()
-    keep = (lambda d: d.get("type") != "task" and in_folder(d["slug"], under)) if under else None
+    pages_only = bool(under) or scratch
+    page_ok = lambda slug: in_folder(slug, under) and (not scratch or is_scratch(slug))  # noqa: E731
+    keep = (lambda d: d.get("type") != "task" and page_ok(d["slug"])) if pages_only else None
     ranked = _bm25(index, query, FUSE_DEPTH, keep)
     if SEMANTIC:
         SEMANTIC.poke()
-        sections = [d for d in index.docs if d.get("type") != "task" and in_folder(d["slug"], under)
+        sections = [d for d in index.docs if d.get("type") != "task" and page_ok(d["slug"])
                     and passes(query, d)]
         by_key = {d["key"]: d for d in sections}
         hits = [(by_key[k], sc) for k, sc in SEMANTIC.search_chunks(
             q, known={d["slug"] for d in sections}, limit=FUSE_DEPTH) if k in by_key]
         task_hits = []
-        if not under:
+        if not pages_only:
             tasks = {d["task_id"]: d for d in index.docs if d.get("type") == "task" and passes(query, d)}
             task_hits = [(tasks[i], sc) for i, sc in SEMANTIC.search_tasks(q, known=tasks, limit=FUSE_DEPTH)]
         if hits or task_hits:

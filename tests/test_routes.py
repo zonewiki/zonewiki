@@ -1464,6 +1464,17 @@ class TestSpecialPages:
         slug = resp.get_json()["slug"]
         assert (wiki_dir / f"{slug}.md").exists()
 
+    def test_api_scratch_slash_in_title_makes_no_folder(self, client, wiki_dir):
+        # A / used to make a folder, whose note was then no scratch note.
+        slug = client.post("/api/scratch", data={"title": "A/B test"}, headers=HOST).get_json()["slug"]
+        assert slug.endswith("_a-b-test") and "/" not in slug
+        assert (wiki_dir / f"{slug}.md").read_text() == "# A/B test\n\n"
+
+    def test_api_scratch_same_title_same_second_makes_two_notes(self, client, wiki_dir):
+        slugs = {client.post("/api/scratch", data={"title": "Twin"}, headers=HOST).get_json()["slug"]
+                 for _ in range(3)}
+        assert len(slugs) == 3
+
     def test_search_can_keep_only_scratch_notes(self, client, wiki_dir):
         # The Scratch page's filter: the same search, scratch notes only.
         write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n\nRoof repair quote.\n")

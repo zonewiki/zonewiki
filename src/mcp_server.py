@@ -95,6 +95,8 @@ TOOLS = [
                           "description": "How many sections to return."},
                 "under": {"type": "string",
                           "description": "Only pages in this folder and its subfolders, without tasks, e.g. 'tickets' or 'projects' (the slug part before a '/')."},
+                "scratch": {"type": "boolean", "default": False,
+                            "description": "Only scratch notes (the user's quick notes, not yet filed into the wiki), without tasks."},
             },
             "required": ["query"],
         },
@@ -171,7 +173,8 @@ TOOLS = [
         "title": "List pages",
         "description": ("List the wiki's pages (slug, title, last edited, how many pages link "
                         "to it), most recently edited first; with `under`, one folder's; with "
-                        "`orphans`, only pages no other page links to. Slugs show the folder structure."),
+                        "`orphans`, only pages no other page links to; with `scratch`, only scratch "
+                        "notes. Slugs show the folder structure."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -181,6 +184,9 @@ TOOLS = [
                 "orphans": {"type": "boolean", "default": False, "description": (
                     "Only pages no other page links to (the home page, the deck's home "
                     "and scratch notes aside): candidates to link from somewhere.")},
+                "scratch": {"type": "boolean", "default": False, "description": (
+                    "Only scratch notes: the user's quick notes, named '<date>_<time>_<name>', "
+                    "not yet filed into the wiki.")},
             },
         },
         "annotations": _READ_ONLY,
@@ -285,7 +291,9 @@ TOOLS = [
             "Create a wiki page with the given markdown (start it with '# Title'). "
             "Fails if the page exists, unless overwrite is true, which replaces all "
             "of it; to change part of a page use edit_page or append_to_page. Tells "
-            "you about pages with similar names and wikilinks that lead nowhere."
+            "you about pages with similar names and wikilinks that lead nowhere. With "
+            "scratch, a scratch note instead: a quick note in the Scratch module, for "
+            "when the user wants something jotted down rather than filed in the wiki."
         ),
         "inputSchema": {
             "type": "object",
@@ -296,6 +304,9 @@ TOOLS = [
                 "content": {"type": "string", "description": "The page's full markdown."},
                 "overwrite": {"type": "boolean", "default": False,
                               "description": "Replace an existing page's whole text."},
+                "scratch": {"type": "boolean", "default": False, "description": (
+                    "Make a new scratch note: slug is then just its name, in any words "
+                    "('Alex prep'), and Leaf puts the date and time in front.")},
                 "summary": _SUMMARY,
                 "guides": _GUIDES,
             },
@@ -392,6 +403,34 @@ TOOLS = [
             "required": ["slug", "content"],
         },
         "annotations": _ADDS,
+    },
+    {
+        "name": "file_scratch_note",
+        "title": "File a scratch note",
+        "description": (
+            "File a scratch note into the wiki, as the user does from the note's menu: with "
+            "name, move it there as its own page (folder/name); with page, append it to that "
+            "page as a section and delete the note (its title goes, its headings move down, "
+            "its tags join the page's). Either way links to the note follow."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string", "description": "The scratch note's slug, e.g. '2026-10-15_09-30-00_alex-prep'."},
+                "name": {"type": "string", "description": "Move to the wiki: the new page's name, e.g. 'Alex Sam debrief'."},
+                "folder": {"type": "string", "description": "Move to the wiki: the folder it goes in, e.g. 'conversations'; none: the top level."},
+                "keep_date": {"type": "boolean", "default": False, "description": (
+                    "Move to the wiki: keep the note's date in front of the name "
+                    "('conversations/2026-10-15_alex-sam-debrief').")},
+                "page": {"type": "string", "description": "Append: the page to add the note to, e.g. 'people/alex'."},
+                "heading": {"type": "string", "description": (
+                    "Append: the section's heading; default the note's title and date, "
+                    "'Alex prep (2026-10-15)'.")},
+                "summary": _SUMMARY,
+                "guides": _GUIDES,
+            },
+            "required": ["slug"],
+        },
+        "annotations": _CHANGES,
     },
     {
         "name": "rename_page",

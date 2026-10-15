@@ -1,6 +1,7 @@
 """The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
-list_pages, check_links, leaf_help) and writing pages (write_page, edit_page, replace_in_pages,
-append_to_page, rename_page (also a folder), delete_page) and deck tasks (create_task, update_task,
+list_pages, check_links, leaf_help) and writing pages (write_page (also a scratch note), edit_page,
+replace_in_pages, append_to_page, rename_page (also a folder), delete_page, file_scratch_note)
+and deck tasks (create_task, update_task,
 comment_task, delete_task). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
@@ -23,12 +24,13 @@ import manual
 import pages
 import mcp_server
 import retrieval
+import scratch
 import search
 from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_uncommitted_files,
                       grep_pages, GrepError, is_uncommitted, move_folder, move_page, SHA_RE,
                       version_index, version_path)
 from mdtext import (_INLINE_CODE_RE, is_scratch, iter_fenced_lines, mask_code, page_tags, page_title,
-                    plain_heading, split_wikilink, to_slug, WIKILINK_RE)
+                    parse_frontmatter, plain_heading, promoted_slug, split_wikilink, to_slug, WIKILINK_RE)
 from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
                    iter_pages, page_link_targets, page_meta, safe_path, url)
 from render import task_link, TOC_RE
@@ -535,6 +537,8 @@ def _guide_note(slug: str) -> str:
 
 def _write_page(args: dict, base: str) -> str:
     content = _str_arg(args, "content")
+    if _bool_arg(args, "scratch"):
+        return _write_scratch(args, content, base)
     overwrite = args.get("overwrite", False) is True
     existing = _mcp_page_slug(_str_arg(args, "slug"))
     if existing and not overwrite:
@@ -559,6 +563,70 @@ def _write_page(args: dict, base: str) -> str:
                     + "\n".join(f"- {s} | {t}" for s, t in similar))
         out += _close_in_content(slug, content, {s for s, _t in similar})
     return out + pending + _link_warning(old, content) + _guide_note(slug)
+
+
+def _write_scratch(args: dict, content: str, base: str) -> str:
+    """write_page with scratch: a new scratch note, named by slug (any
+    words; Leaf puts the time in front) or else by the content's title."""
+    if args.get("overwrite") is True:
+        raise mcp_server.ToolError("A scratch note is always a new one: overwrite doesn't apply. "
+                                   "Change an existing note with edit_page.")
+    name = _str_arg(args, "slug", required=False).strip()
+    title = page_title(content, "")
+    if not title.strip() and not name:
+        raise mcp_server.ToolError("Give the note a title: start content with '# Title', or set slug.")
+    if not title.strip():   # the title goes under the frontmatter, if any
+        body = parse_frontmatter(content)[1]
+        content = content[:len(content) - len(body)] + f"# {name}\n\n{body.lstrip()}"
+    # Scratch notes sit at the wiki's root: the wiki's guide applies.
+    _check_guides(args, ["scratch-note"])
+    try:
+        slug = scratch.create(name or title, content, _msg_suffix(args))
+    except scratch.ScratchError as e:
+        raise mcp_server.ToolError(str(e))
+    return (f"Created scratch note {slug} (in Scratch, not yet in the wiki; file_scratch_note "
+            f"moves it there or appends it to a page).\n{_page_info(slug, base)}"
+            + _link_warning("", content))
+
+
+def _file_scratch_note(args: dict, base: str) -> str:
+    """The scratch note's Move to wiki (name, folder, keep_date) or Append
+    to page (page, heading), as in the browser (scratch.py)."""
+    slug, path = _existing_page(args)
+    if not is_scratch(slug):
+        raise mcp_server.ToolError(f"{slug} is not a scratch note. rename_page moves a page, "
+                                   "append_to_page adds text to one.")
+    page = _str_arg(args, "page", required=False).strip()
+    name = _str_arg(args, "name", required=False).strip()
+    if bool(page) == bool(name):
+        raise mcp_server.ToolError("Give either name (to move the note into the wiki as its own page) "
+                                   "or page (to append it to that page as a section), not both.")
+    suffix = _msg_suffix(args)
+    try:
+        if page:
+            target = _mcp_page_slug(page)
+            if target is None:
+                raise mcp_server.ToolError(f"No page {page!r}. Use search_wiki or list_pages to find its slug.")
+            heading = (_str_arg(args, "heading", required=False).strip()
+                       or scratch.append_heading(slug, page_title(path.read_text(encoding="utf-8"), slug)))
+            _check_guides(args, [target])
+            pending = _save_pending(path, slug) + _save_pending(safe_path(target), target)
+            anchor = scratch.append(slug, target, heading, suffix)
+            return (f"Appended scratch note {slug} to {target} as the section “{heading}”, and deleted "
+                    f"the note; links to it now point at that section.\n"
+                    f"url: {base}{url('page', target)}#{anchor}\nfile: {_host_file(target)}" + pending)
+        keep_date = _bool_arg(args, "keep_date")
+        folder = _str_arg(args, "folder", required=False)
+        new_slug = promoted_slug(folder, name, scratch.note_date(slug) if keep_date else "")
+        if new_slug:
+            _check_guides(args, [new_slug])
+        pending = _save_pending(path, slug)
+        new_slug = scratch.move(slug, folder, name, keep_date, suffix)
+    except scratch.ScratchError as e:
+        raise mcp_server.ToolError(str(e))
+    return (f"Moved scratch note {slug} into the wiki as {new_slug}; links to it were updated. "
+            "No page links to it yet: add a link where it belongs (edit_page).\n"
+            + _page_info(new_slug, base) + pending)
 
 
 def _apply_edit(content: str, slug: str, edit: dict, which: str = "") -> tuple[str, int]:
@@ -947,11 +1015,13 @@ def _list_pages(args: dict, base: str) -> str:
     limit = _mcp_int(args, "limit", 100, 1000)
     under = _clean_folder(args.get("under", ""))
     orphans = _bool_arg(args, "orphans")
+    only_scratch = _bool_arg(args, "scratch")
     counts = all_backlink_counts()
     home = deck_home_slug()
     pages = []
     for md_file, slug in iter_pages():
-        if not in_folder(slug, under) or (orphans and not _is_orphan(slug, counts, home)):
+        if (not in_folder(slug, under) or (orphans and not _is_orphan(slug, counts, home))
+                or (only_scratch and not is_scratch(slug))):
             continue
         try:
             mtime = md_file.stat().st_mtime
@@ -961,13 +1031,16 @@ def _list_pages(args: dict, base: str) -> str:
     pages.sort(reverse=True)
     where = f" under {under}/" if under else ""
     if not pages:
+        if only_scratch:
+            return f"No scratch notes{where}."
         if orphans:
             return f"Every page{where} is linked from another page."
         return f"No pages under {under!r}." if under else "The wiki has no pages."
     lines = [f"{slug} | {title} | edited {fmt_date(mtime)} | {counts.get(slug, 0)}"
              for mtime, slug, title in pages[:limit]]
     shown = f"{len(lines)} of {len(pages)}" if len(lines) < len(pages) else f"all {len(pages)}"
-    what = ("Pages no other page links to (the home page, the deck's home and scratch notes aside)"
+    what = ("Scratch notes" if only_scratch
+            else "Pages no other page links to (the home page, the deck's home and scratch notes aside)"
             if orphans else "Pages")
     return (f"{what}{where}, most recently edited first ({shown}); "
             "slug | title | last edit | pages linking to it:\n" + "\n".join(lines))
@@ -1345,7 +1418,7 @@ _READ_TOOLS = {"grep_wiki": _grep_wiki, "read_page": _read_page, "list_pages": _
 
 _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "replace_in_pages": _replace_in_pages,
-    "append_to_page": _append_to_page,
+    "append_to_page": _append_to_page, "file_scratch_note": _file_scratch_note,
     "rename_page": _rename_page, "delete_page": _delete_page,
     "create_task": _create_task, "update_task": _update_task, "tag_tasks": _tag_tasks,
     "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,
@@ -1394,7 +1467,7 @@ def mcp_call_tool(name: str, args: dict) -> str:
         if under and not any(in_folder(slug, under) for _p, slug in iter_pages()):
             raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs, "
                                        "whose folders are the part before the last '/'.")
-        hits = retrieve(query, _mcp_int(args, "limit", 8, 20), under)
+        hits = retrieve(query, _mcp_int(args, "limit", 8, 20), under, _bool_arg(args, "scratch"))
         log_query(query, under, hits)
         if not hits:
             return "No matching sections or tasks. Try other words, or list_pages to browse."
