@@ -7,9 +7,11 @@
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{{ sfx }}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{ labels[0] }}</button>
-      <button type="button" role="tab" data-view="plan" aria-selected="false">{{ labels[1] }}</button>
-      <button type="button" role="tab" data-view="focus" aria-selected="false">{{ labels[2] }}</button>
+      <button type="button" role="tab" data-view="focus" aria-selected="false">{{ labels[1] }}</button>
     </div>
+    {#- Beside the tabs, not in the toolbar: it modifies the Open tab, and on
+        phones it shares the tabs' row, leaving the search its room. #}
+    <button type="button" class="deck-plan-switch" id="task-plan{{ sfx }}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="deck-plan-track" aria-hidden="true"></span>Plan</button>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{{ sfx }}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
       <select class="deck-sort" id="task-sort{{ sfx }}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>

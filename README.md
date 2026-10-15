@@ -84,11 +84,11 @@ later.
 ### Deck: your tasks
 
 A task list built around two different dates: the day you start on a task,
-and its deadline. It has three views:
+and its deadline. It has two views:
 
-- **Open**: every task, in an order you set by dragging.
-- **Plan**: a board of the coming days (today, tomorrow, the week, later);
-  drag a task onto the day you'll do it.
+- **Open**: every task. With **Plan** on, a board of the coming days
+  (today, tomorrow, the week, later) where you drag a task onto the day
+  you'll do it; with Plan off, one list, in an order you set by dragging.
 - **Focus**: what's on today, started or due.
 
 Done tasks go to a yearly archive. Beyond that:
@@ -112,7 +112,7 @@ Done tasks go to a yearly archive. Beyond that:
 - Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
   long-press to drag, or long-press and let go to select several tasks.
 
-![The deck's Plan board: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
+![The deck's Open tab by days: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
 
 ### Across Leaf
 

@@ -79,40 +79,58 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["Open", "Plan", "Focus"])
+    expect(tabs).to_have_text(["Open", "Focus"])
     # Focus is the default view and the only one marked active.
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    plan = page.get_by_role("switch", name="Plan")
+    expect(plan).to_be_hidden()
+
+    # Open has Plan on at first: the board.
     tabs.nth(0).click()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
+    expect(plan).to_have_attribute("aria-checked", "true")
+    expect(page.locator(".board-day-divider[data-drop-day]").first).to_be_visible()
+    # Plan off: one list, Unsorted · Sorted; d toggles back and forth.
+    plan.click()
+    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(page.locator(".list-section[data-section='unsorted']")).to_be_visible()
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
+    page.keyboard.press("d")
+    expect(plan).to_have_attribute("aria-checked", "true")
+    page.keyboard.press("d")
+    expect(plan).to_have_attribute("aria-checked", "false")
 
-    tabs.nth(1).click()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
-    expect(page.locator(".board-day-divider").first).to_be_visible()
-
-    # Tab / Shift+Tab cycle through the views in on-screen order, wrapping;
-    # keyboard focus follows the active view.
+    # Tab / Shift+Tab cycle through the tabs in on-screen order, wrapping;
+    # keyboard focus follows the active view (from a tab), and Open comes
+    # back as it was left.
+    tabs.nth(0).click()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
+    expect(plan).to_have_attribute("aria-checked", "false")
     page.keyboard.press("Shift+Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
-    # The active view survives a reload within the browser tab.
+    # The active view survives a reload within the browser tab; the
+    # grouping is remembered for the deck.
     page.reload()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    tabs.nth(0).click()
+    expect(plan).to_have_attribute("aria-checked", "false")
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck view=plan]]\n")
     page.goto("/page/deck")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
 
 def test_view_url_param_picks_the_tab(page, wiki):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     page.goto("/page/deck?view=plan")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     # Not a view's name (here the Plan tab's old one, and ?filter=, the old
     # name of ?view=): the default, Focus, ...
     page.goto("/page/deck?view=due")
@@ -200,7 +218,7 @@ def test_empty_focus_offers_planning(page, wiki):
     open_tab(page, "focus")
     expect(page.locator(".tasks-empty")).to_contain_text("Nothing planned for today")
     page.get_by_role("button", name="Plan your day").click()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
 
 def test_past_start_date_reads_since(page, wiki):
@@ -593,11 +611,11 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     expect(page.locator(".task-inbox-divider--only")).to_have_text("Completed")
     expect(card(page, "Done one")).to_be_visible()
     expect(card(page, "Open one")).to_have_count(0)
-    expect(link).to_have_text("← Back to Plan")   # names the tab it returns to
+    expect(link).to_have_text("← Back to Open")   # names the tab it returns to
 
     # Back returns to the tab it came from.
     link.click()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Plan"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
     # Completed survives a reload, like any view; Tab from there goes to the
     # first tab.
@@ -1898,7 +1916,7 @@ def test_embed_labels_rename_the_tabs(page, wiki):
     page.request.post("/api/deck", data={"title": "Milk", "tags": "groceries", "keep": True})
     wiki.write("shop", "# Shop\n\n[[deck list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
     page.goto("/page/shop?view=open")
-    expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Plan", "Shopping list"])
+    expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Shopping list"])
     expect(page.locator("#tasks-tabs .active")).to_have_text("Catalogue")
     expect(card(page, "Milk").locator(".task-keep")).to_have_attribute(
         "title", "Keep: back to Catalogue when ticked off")

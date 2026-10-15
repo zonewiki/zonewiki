@@ -75,9 +75,15 @@ class Wiki:
 
 def open_tab(page, view: str):
     """Switch the deck to a view by its name (open/plan/focus/completed).
-    Completed has no tab; its link under the list opens it."""
+    Completed has no tab; its link under the list opens it. Open and Plan
+    are the Open tab with its Plan switch off and on."""
     if view == "completed":
         page.locator("#task-completed-link").click()
+    elif view in ("open", "plan"):
+        page.locator("#tasks-tabs [data-view='open']").click()
+        switch = page.locator(".deck-plan-switch").first
+        if (switch.get_attribute("aria-checked") == "true") != (view == "plan"):
+            switch.click()
     else:
         page.locator(f"#tasks-tabs [data-view='{view}']").click()
 

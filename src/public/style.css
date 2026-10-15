@@ -2398,6 +2398,27 @@ div.chip-input > input {
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .tasks-toolbar select.deck-sort { flex: none; }
 .deck-sort[hidden] { display: none; }
+/* The Open tab's Plan switch: on, the board by start date; off, one list */
+.deck-plan-switch {
+  flex: none; display: inline-flex; align-items: center; gap: .4rem;
+  padding: .2rem .35rem; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: .8rem; color: var(--muted);
+}
+.deck-plan-switch[hidden] { display: none; }
+.deck-plan-track {
+  position: relative; width: 1.9rem; height: 1.05rem; border-radius: 999px;
+  background: var(--border); transition: background .15s;
+}
+.deck-plan-track::after {
+  content: ''; position: absolute; top: .15rem; left: .15rem;
+  width: .75rem; height: .75rem; border-radius: 50%; background: var(--bg);
+  transition: transform .15s;
+}
+.deck-plan-switch[aria-checked="true"] { color: var(--fg); }
+.deck-plan-switch[aria-checked="true"] .deck-plan-track { background: var(--btn-primary); }
+.deck-plan-switch[aria-checked="true"] .deck-plan-track::after { transform: translateX(.85rem); }
+.deck-plan-switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+@media (pointer: coarse) { .deck-plan-switch { min-height: 2.25rem; } }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
 .task-skip-btn {
@@ -2658,13 +2679,17 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* A Plan section's Unsorted / Sorted labels (not drop targets) */
 .plan-subdivider {
   list-style: none; display: flex; align-items: center; gap: .5rem;
-  margin: .2rem 0 .35rem; padding: 0 .25rem;
+  margin: .7rem 0 .55rem; padding: 0 .25rem;
   font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
 }
 .plan-subdivider::after { content: ''; flex: 1; border-top: 1px solid var(--border); order: 1; }
 .plan-subdivider .board-day-count { order: 2; font-weight: 400; letter-spacing: 0; }
-.plan-subdivider.task-drag-over { color: var(--link); }
-.plan-subdivider.task-drag-over::after { border-top: 2px solid var(--link); }
+.plan-subdivider:first-child { margin-top: .2rem; }
+.plan-subdivider.task-drag-over, .plan-subdivider.board-drop-over { color: var(--link); }
+.plan-subdivider:is(.task-drag-over, .board-drop-over)::after { border-top: 2px solid var(--link); }
+/* Focus: a label is also an empty section's drop target, so tall enough to hit */
+.plan-subdivider.list-section { min-height: 1.6rem; }
+@media (pointer: coarse) { .plan-subdivider.list-section { min-height: 2.5rem; } }
 
 .task-inbox-divider {
   list-style: none;
@@ -2885,7 +2910,8 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
 
 
 @media (max-width: 640px) {
-  .view-tabs { display: flex; width: 100%; }
+  /* The tabs fill their row, which the Plan switch shares when shown. */
+  .view-tabs { display: flex; flex: 1 1 0; min-width: 0; }
   /* Task editor: full screen on phones (it is a whole form, not a popup). */
   .task-edit-modal {
     width: 100%; max-width: none; height: 100dvh; max-height: none;
@@ -2900,7 +2926,8 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
     padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
   }
   .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
-  /* Phones: tabs on one line, then search · sort · toggle · "+" on the next.
+  /* Phones: tabs (and the Plan switch) on one line, then search · sort ·
+     toggle · "+" on the next.
      The New button drops its label to leave the search field the room. */
   .tasks-toolbar { flex-basis: 100%; }
   .tasks-toolbar #task-filter-search { min-width: 0; }

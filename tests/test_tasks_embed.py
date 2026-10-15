@@ -83,7 +83,7 @@ class TestTasksLinkRender:
         html = render.render_md("[[deck]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-view="(\w+)"[^>]*>([^<]+)</button>', html)
-        assert tabs == [("open", "Open"), ("plan", "Plan"), ("focus", "Focus")]
+        assert tabs == [("open", "Open"), ("focus", "Focus")]
         # Completed is a link under the list, not a tab.
         assert 'id="task-completed-link"' in html
 

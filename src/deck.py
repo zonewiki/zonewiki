@@ -121,12 +121,16 @@ def build_deck_embed(params: dict, instance_id: int = 0, headless: bool = False)
         limit = max(1, min(99, int(params.get("limit", ""))))
     except ValueError:
         limit = ""  # no limit
-    # `labels=Catalogue,Plan,Shopping`: this embed's own names for the tabs, in
-    # on-screen order (Open, Plan, Focus). Only the words change; views and
-    # links (`view=open` …) stay the same. An empty entry keeps the default;
-    # `_` stands for a space, since params are split on whitespace.
-    tab_labels = ["Open", "Plan", "Focus"]
-    for i, name in enumerate(params.get("labels", "").split(",")[:3]):
+    # `labels=Catalogue,Shopping`: this embed's own names for the tabs, in
+    # on-screen order (Open, Focus). Only the words change; views and links
+    # (`view=open` …) stay the same. An empty entry keeps the default; `_`
+    # stands for a space, since params are split on whitespace. Three names
+    # are from when Plan was a tab of its own: the first and the last count.
+    tab_labels = ["Open", "Focus"]
+    names = params.get("labels", "").split(",")
+    if len(names) == 3:
+        names = [names[0], names[2]]
+    for i, name in enumerate(names[:2]):
         name = name.replace("_", " ").strip()[:30]
         if name:
             tab_labels[i] = name

@@ -127,6 +127,7 @@ const tabsEl = document.getElementById('tasks-tabs' + sfx);
 const addBtn = document.getElementById('task-add-btn' + sfx);
 const densityBtn = document.getElementById('task-density-btn' + sfx);
 const sortSel = document.getElementById('task-sort' + sfx);
+const planSwitch = document.getElementById('task-plan' + sfx);
 const filterSearch = document.getElementById('task-filter-search' + sfx);
 const completedLink = document.getElementById('task-completed-link' + sfx);
 const modal = document.getElementById('task-edit-modal' + sfx);
@@ -565,7 +566,7 @@ function listTooltip(name) {
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
 // into the tab buttons by deck.py, so they are read back from there).
-const tabLabel = view => tabsEl.querySelector(`[data-view="${view}"]`)?.textContent.trim() || view;
+const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
 // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
 // Compact: one line per task (title, then tags, markers and dates; notes
@@ -646,6 +647,34 @@ function cycleSort() {
   setSort(SORT_MODES[(SORT_MODES.indexOf(mode) + 1) % SORT_MODES.length]);
 }
 sortSel?.addEventListener('change', () => setSort(sortSel.value));
+
+// The Open tab shows every open task, grouped by start date (Plan on: the
+// board, view 'plan') or as one list (Plan off: view 'open', Unsorted ·
+// Sorted, where the manual order is ranked across everything). Plan was a
+// tab of its own until 2026-10; the views keep their names, so `view=plan`
+// and `view=open` links still open the one they always did. The Plan
+// switch (d) toggles; the choice is remembered per deck in this browser,
+// and the Open tab opens it.
+const isOpenTab = view => view === 'open' || view === 'plan';
+const groupKey = () => 'leaf-deck-group:' + [location.pathname, appEl?.dataset.initList || '',
+  appEl?.dataset.initTag || '', instanceId].join('|');
+function openGroup() {
+  try { return localStorage.getItem(groupKey()) === 'list' ? 'open' : 'plan'; } catch (_) { return 'plan'; }
+}
+function applyGroup() {
+  if (!planSwitch) return;
+  planSwitch.hidden = !isOpenTab(activeView);
+  planSwitch.setAttribute('aria-checked', String(activeView === 'plan'));
+}
+function setGroup(group) {
+  if (!isOpenTab(activeView)) return;
+  try { localStorage.setItem(groupKey(), group); } catch (_) {}
+  switchTab(group === 'list' ? 'open' : 'plan');
+}
+planSwitch?.addEventListener('click', () => setGroup(activeView === 'plan' ? 'list' : 'days'));
+// The view a tab opens: Open its remembered grouping (unless already on
+// one of them: a click on the active tab changes nothing).
+const tabView = tab => tab === 'open' && !isOpenTab(activeView) ? openGroup() : tab;
 
 let compact = false;   // the shown tab's (applyCompact)
 function applyCompact(view) {
@@ -1477,8 +1506,15 @@ function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[activeView
 
 // A section heading on Open and Focus. It looks like a Plan-board day
 // heading and, like one, takes drops: an empty section is only this row.
+// On Focus it is the light label of the Open tab's board sections
+// (.plan-subdivider), as Focus is a day's list, not a board; it still takes
+// drops.
 function sectionHTML(zone, label, count) {
   const empty = count ? '' : ' board-day--empty';
+  if (activeView === 'focus') {
+    return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
+      `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
+  }
   return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
     `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
 }
@@ -2587,8 +2623,9 @@ function syncCompletedLink() {
 
 // Mark the view's button active (no side effects — used during init too).
 function markActiveTab(view) {
+  const tab = view === 'plan' ? 'open' : view;   // Open grouped by day
   tabButtons().forEach(b => {
-    const on = b.dataset.view === view;
+    const on = b.dataset.view === tab;
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
@@ -2601,6 +2638,7 @@ function switchTab(view) {
   activeView = view;
   applyCompact(view);
   applySort();
+  applyGroup();
   // Back from an earlier year: the other views count this year's matches.
   if (view !== 'completed' && completedYear) setCompletedYear('');
   markActiveTab(view);   // Completed has no tab: none is marked
@@ -2608,7 +2646,7 @@ function switchTab(view) {
   // Keyboard focus follows the active view (Tab-cycling from a focused tab
   // would otherwise leave the focus ring on the previous one).
   if (tabsEl.contains(document.activeElement)) {
-    tabsEl.querySelector(`[data-view="${view}"]`)?.focus();
+    tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.focus();
   }
   saveActiveTab(activeView);
   if (activeView === 'completed') fetchCompleted();
@@ -2617,7 +2655,7 @@ function switchTab(view) {
 
 tabsEl.addEventListener('click', e => {
   const btn = e.target.closest('[data-view]');
-  if (btn) switchTab(btn.dataset.view);
+  if (btn) switchTab(tabView(btn.dataset.view));
 });
 completedLink?.addEventListener('click', () => {
   switchTab(activeView === 'completed' ? lastTab : 'completed');
@@ -3607,7 +3645,14 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // 'o' cycles Open's or Plan's order: manual, by deadline, newest first
+  // 'd' toggles the Open tab's Plan switch (by start date / one list)
+  if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && isOpenTab(activeView)) {
+    e.preventDefault();
+    setGroup(activeView === 'open' ? 'days' : 'list');
+    return;
+  }
+
+  // 'o' cycles the Open tab's order: manual, by deadline, newest first
   if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (activeView === 'open' || activeView === 'plan')) {
     e.preventDefault();
     cycleSort();
@@ -3648,9 +3693,9 @@ document.addEventListener('keydown', async e => {
     // Only the tabs: Completed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
     const views = tabButtons().map(b => b.dataset.view);
-    const i = views.indexOf(activeView);
+    const i = views.indexOf(activeView === 'plan' ? 'open' : activeView);
     const n = views.length;
-    switchTab(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]);
+    switchTab(tabView(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]));
     return;
   }
 
@@ -3760,6 +3805,7 @@ activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) 
 if (activeView !== 'completed') lastTab = activeView;
 applyCompact(activeView);
 applySort();
+applyGroup();
 markActiveTab(activeView);
 syncCompletedLink();
 

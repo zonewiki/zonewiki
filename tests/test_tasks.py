@@ -2034,12 +2034,17 @@ class TestEmbedLabels:
         return re.findall(r'role="tab" data-view="(\w+)" aria-selected="false">([^<]*)</button>', body)
 
     def test_default_labels(self, client, wiki_dir):
-        assert self._tabs(client, wiki_dir, "[[deck]]") == [
-            ("open", "Open"), ("plan", "Plan"), ("focus", "Focus")]
+        assert self._tabs(client, wiki_dir, "[[deck]]") == [("open", "Open"), ("focus", "Focus")]
 
     def test_custom_labels_keep_the_views(self, client, wiki_dir):
-        assert self._tabs(client, wiki_dir, "[[deck labels=Catalogue,,Shopping_list]]") == [
-            ("open", "Catalogue"), ("plan", "Plan"), ("focus", "Shopping list")]
+        assert self._tabs(client, wiki_dir, "[[deck labels=Catalogue,Shopping_list]]") == [
+            ("open", "Catalogue"), ("focus", "Shopping list")]
+        assert self._tabs(client, wiki_dir, "[[deck labels=,Shopping]]") == [
+            ("open", "Open"), ("focus", "Shopping")]
+
+    def test_three_labels_from_the_plan_tab_days_keep_first_and_last(self, client, wiki_dir):
+        assert self._tabs(client, wiki_dir, "[[deck labels=Catalogue,Plan,Shopping_list]]") == [
+            ("open", "Catalogue"), ("focus", "Shopping list")]
 
     def test_labels_are_escaped(self, client, wiki_dir):
         tabs = self._tabs(client, wiki_dir, "[[deck labels=<b>x</b>]]")
