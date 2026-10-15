@@ -1901,6 +1901,34 @@ body.editor-page main {
 /* ── Task App ────────────────────────────────────────────────────────────── */
 
 .tasks-app { margin: 1.25rem auto; }
+/* The deck's own tones: its lines and frames a step darker than the wiki's
+   (cards, section headers, labels, fields: all use --border), cards on a
+   faint tint with a soft resting shadow, and section headers a shade deeper
+   than the cards (--section-bg; unsorted cards keep --code-bg), so a card stands out from the page and from its section.
+   Inside .tasks-app only; a card elsewhere falls back to the page's. */
+.tasks-app {
+  --border: #d5d9df;
+  --section-bg: #eff1f4;
+  --card-bg: #f9fafb;
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+  /* Date colours as text, readable on a card (the bright edge colours are
+     only ~2:1 on one): amber for a start today or carried over, blue for a
+     later start, green for a deadline today. */
+  --amber-text: #b45309;
+  --blue-text: #2563eb;
+  --green-text: #2b7a4b;
+}
+@media (prefers-color-scheme: dark) {
+  .tasks-app {
+    --border: #3d444d;
+    --section-bg: #1b222b;
+    --card-bg: #121820;
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --amber-text: #fbbf24;
+    --blue-text: #79b8ff;
+    --green-text: #56d364;
+  }
+}
 
 /* Single compact header band: tabs on the left, filters + sort + New on the
    right. Wraps to a second line only when the viewport can't fit both. */
@@ -2048,7 +2076,7 @@ div.chip-input > input {
      no descenders, so they sit above the line's middle (a taller line put
      even more room below them), and the text looked high. */
   font-size: .65rem; line-height: 1; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
-  color: var(--muted); background: var(--code-bg);
+  color: var(--muted); background: var(--section-bg, var(--code-bg));
   border: 1px solid var(--border); border-radius: 4px 4px 0 0;
 }
 .board-day-divider:first-child { margin-top: 0; }
@@ -2109,7 +2137,8 @@ div.chip-input > input {
   grid-template-areas: "check title actions" ". meta meta" ". desc desc";
   column-gap: .5rem;
   padding: .4rem .65rem; border: 1px solid var(--border); border-radius: 6px;
-  margin-bottom: .3rem; background: var(--bg); transition: box-shadow .15s, opacity .15s;
+  margin-bottom: .3rem; background: var(--card-bg, var(--bg)); box-shadow: var(--card-shadow, none);
+  transition: box-shadow .15s, opacity .15s;
 }
 .task-item:hover { box-shadow: var(--shadow); }
 .task-item.task-completed { opacity: .6; }
@@ -2262,7 +2291,7 @@ div.chip-input > input {
 }
 .task-comments-btn:hover { color: var(--fg); }
 .task-due.task-overdue { color: #dc2626; font-weight: 600; }
-.task-due.task-due-today { color: var(--btn-primary); font-weight: 600; }
+.task-due.task-due-today { color: var(--green-text, var(--btn-primary)); font-weight: 600; }
 
 .task-recurring { font-size: .85rem; color: var(--muted); }
 
@@ -2515,8 +2544,8 @@ div.chip-input > input {
    urgency colour wins. */
 .task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
 .task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #60a5fa; }
-.task-focus-info.focus-now   { color: #f59e0b !important; }
-.task-focus-info.focus-later { color: #60a5fa !important; }
+.task-focus-info.focus-now   { color: var(--amber-text, #b45309) !important; font-weight: 600; }
+.task-focus-info.focus-later { color: var(--blue-text, #2563eb) !important; }
 
 
 .focus-stale-bar {
@@ -2673,8 +2702,8 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 }
 
 /* Plan: Today's carried-over tasks, their header count and "since" badge */
-.board-day-due.board-day-carried { color: #d97706; }
-.task-carried .task-focus-info { color: #d97706; }
+.board-day-due.board-day-carried { color: var(--amber-text, #b45309); }
+.task-carried .task-focus-info { color: var(--amber-text, #b45309); }
 
 /* A Plan section's Unsorted / Sorted labels (not drop targets) */
 .plan-subdivider {
@@ -2706,7 +2735,7 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-inbox-divider--only {
   height: auto; padding: .1rem .5rem .35rem;
   font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
-  color: var(--muted); background: var(--code-bg);
+  color: var(--muted); background: var(--section-bg, var(--code-bg));
   border: 1px solid var(--border); border-radius: 4px 4px 0 0;
   border-bottom: 1px solid var(--border);
 }

@@ -200,10 +200,9 @@ def main():
         settle(pg)
         pg.screenshot(path=OUT / "page.png")
 
-        # 2. The deck's Plan board.
+        # 2. The deck's Open tab with Plan on: the board.
         pg = page(1280, 820)
-        pg.goto("/deck")
-        pg.locator("#tasks-tabs [data-view='plan']").click()
+        pg.goto("/deck?view=plan")
         settle(pg)
         pg.screenshot(path=OUT / "deck.png")
 

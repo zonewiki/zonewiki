@@ -93,6 +93,10 @@ A segmented control (`.view-tabs`, one `<button data-view>` each) in the order *
 
 **No hiding**: every open task is always reachable from its own deck (Open or Plan) and from search. Dates decide where a task appears, never whether.
 
+### Look
+
+The deck has its own tones, set on `.tasks-app` (so a task card elsewhere keeps the page's): `--border` a step darker than the wiki's, which every line in it uses (cards, section headers, labels, fields), so cards and sections stand out; cards on a faint neutral grey (`--card-bg`; not a hue: the urgency tints use red, orange, yellow and green, and a green or warm tint swallowed them; blue was tried and dropped) with a soft resting shadow (`--card-shadow`; hover still lifts it, `--shadow`); section headers a shade deeper than the cards (`--section-bg`, the day headers and Completed's heading). Unsorted cards keep their grey (`--code-bg`) and dashed frame, urgency colours their tint. Dates as text take readable shades (`--amber-text` for a start today and the carried-over badge and count, `--blue-text` for a later start, `--green-text` for a deadline today): the bright colours of the cards' left edges are only about 2:1 on a card; these are at least 4.5:1, a darker shade in light mode and a brighter one in dark. Each with a dark-mode value.
+
 ### Interaction
 
 - **Filter field** (`#task-filter-search`, `DeckCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), the rest searches title and notes. `/` focuses it, `#` focuses it and starts a tag. Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this). Embed `tag=`/`?tag=` become a query via `DeckCore.tagParamToQuery`. New tasks get the filter's single tags.
