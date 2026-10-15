@@ -892,10 +892,46 @@ def _deck_write(fn, *args):
         raise mcp_server.ToolError("The deck's storage can't be read right now; try again")
 
 
+_SIMILAR_TASKS = 10   # the tasks closest to a new one whose tags are suggested
+_TAGS_SUGGESTED = 5
+
+
+def _tag_hints(task: dict) -> str:
+    """For a task just created: the tags on the tasks most like it (by its
+    title and notes; open and done ones), most common first, which it
+    lacks, so the model can offer them; and its tags no other task or page
+    uses, which may be near-duplicates of existing ones."""
+    others = [d for d in deckstore.task_search_docs() if d["task_id"] != task["id"]]
+    have = {t.lower() for t in task.get("tags") or []}
+    text = f"{task.get('title', '')} {task.get('description', '')}"
+    counts: dict[str, int] = {}
+    if search.Query(text).text.strip():
+        for _s, d in search.SearchIndex(others).search(search.Query(text).text, limit=_SIMILAR_TASKS):
+            for tag in {t.lower() for t in d["task"].get("tags") or []} - have:
+                counts[tag] = counts.get(tag, 0) + 1
+    out = ""
+    if counts:
+        # Most common first; ties: the order the closest tasks named them.
+        tags = sorted(counts, key=lambda t: -counts[t])[:_TAGS_SUGGESTED]
+        out += ("\n\nTags on similar tasks (offer the fitting ones; tag_tasks adds them): "
+                + ", ".join(f"#{t} ({counts[t]})" for t in tags))
+    used = {t.lower() for d in others for t in d["task"].get("tags") or []}
+    for md_file, _slug in iter_pages():
+        try:
+            used |= {t.lower() for t in page_tags(md_file.read_text(encoding="utf-8", errors="replace"))}
+        except OSError:
+            continue
+    new = sorted(have - used)
+    if new and used:
+        out += ("\n\nNew tags, used nowhere else yet: " + ", ".join(f"#{t}" for t in new)
+                + ". If one means an existing tag (list_tags), use that instead.")
+    return out
+
+
 def _create_task(args: dict, base: str) -> str:
     _str_arg(args, "title")
     task = _deck_write(deck.create_task, _task_fields(args), _commit_msg("Create deck task", args))
-    return "Created.\n\n" + _mcp_task_text(task, base)
+    return "Created.\n\n" + _mcp_task_text(task, base) + _tag_hints(task)
 
 
 _STATUS = {"done": {"completed": True}, "open": {"completed": False},

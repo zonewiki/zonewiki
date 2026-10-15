@@ -61,8 +61,13 @@ _TASK_FIELDS = {
     "notes": {"type": "string", "description": "The task's notes (markdown). Replaces the notes there are."},
     "tags": {"type": "array", "items": {"type": "string"},
              "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."},
-    "due": {"type": "string", "description": "Deadline, YYYY-MM-DD; empty to clear."},
-    "start": {"type": "string", "description": "When to start (it shows in Focus from then), YYYY-MM-DD; empty to clear."},
+    "due": {"type": "string", "description": (
+        "Deadline, YYYY-MM-DD; empty to clear. A date the user gives the task ('tomorrow', "
+        "'by Friday', 'on the 3rd') goes here, not in start.")},
+    "start": {"type": "string", "description": (
+        "When to start working on it (it shows in Focus from then), YYYY-MM-DD; empty to clear. "
+        "Only when the user says so ('start Monday', 'work on it tomorrow', 'plan it for Tuesday'); "
+        "a plain date is the deadline (due).")},
     "repeat": {"type": "string", "enum": ["daily", "weekly", "monthly", "yearly", "none"],
                "description": "Repeat the task; done, the next occurrence is created."},
     "repeat_every": {"type": "integer", "minimum": 1, "description": "Repeat every N days/weeks/months/years (default 1)."},
@@ -484,7 +489,8 @@ TOOLS = [
     {
         "name": "create_task",
         "title": "Create a task",
-        "description": "Add a task to the user's deck. Returns it with its id.",
+        "description": ("Add a task to the user's deck. Returns it with its id, and the tags of "
+                        "similar tasks: offer the fitting ones to the user (tag_tasks adds them)."),
         "inputSchema": {
             "type": "object",
             "properties": {

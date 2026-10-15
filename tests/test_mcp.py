@@ -1542,6 +1542,30 @@ def _task_id(text: str) -> str:
 
 
 class TestCreateTask:
+    def test_a_plain_date_is_the_deadline(self):
+        fields = next(t for t in mcp_server.TOOLS if t["name"] == "create_task")["inputSchema"]["properties"]
+        assert "'tomorrow'" in fields["due"]["description"] and "not in start" in fields["due"]["description"]
+        assert "a plain date is the deadline (due)" in fields["start"]["description"]
+
+    def test_suggests_the_tags_of_similar_tasks(self, client, wiki_dir):
+        task(client, title="Call the plumber about the boiler", tags=["home", "calls"])
+        done = task(client, title="Boiler service appointment", tags=["home"])
+        close(client, done["id"], completed=True)
+        task(client, title="Quarterly report", tags=["work"])
+        text, err = call(client, "create_task", title="Boiler pressure check", tags=["calls"])
+        assert not err
+        hint = text.split("Tags on similar tasks")[1]
+        assert "#home (2)" in hint and "#work" not in hint and "#calls" not in hint
+        assert "New tags" not in text
+        # Nothing alike: no suggestion.
+        assert "similar tasks" not in call(client, "create_task", title="Zebra crossing")[0]
+
+    def test_names_tags_used_nowhere_else(self, client, wiki_dir):
+        write_page(wiki_dir, "notes", "---\ntags: [meetings]\n---\n# Notes\n")
+        task(client, title="Standup", tags=["work"])
+        text, _ = call(client, "create_task", title="Sync", tags=["meeting", "work"])
+        assert "New tags, used nowhere else yet: #meeting." in text
+
     def test_creates_with_fields(self, client, wiki_dir):
         text, err = call(client, "create_task", title="Renew passport", notes="at the Bürgeramt",
                          tags=["admin", "#home"], due="2026-11-01", start="2026-10-20")
