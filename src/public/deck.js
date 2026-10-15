@@ -204,14 +204,14 @@ function dropOnBucket(id, div) {
   else if (div.dataset.dropDay) planOnDay(id, div.dataset.dropDay);
 }
 
-// Start a task on `day` from the board. A day after its deadline would
-// leave an overdue (or due-today) card where it is, so that drop asks to
-// move the deadline along; cancelling changes nothing. Undo restores both.
+// Start a task on `day` from the board (and the quick ways below). A day
+// after its deadline asks to move the deadline along; cancelling changes
+// nothing. Undo restores both.
 // A start date after the deadline is usually a slip, so setting one asks
 // whether the deadline moves too (confirmDeadlineMove), on the board and
 // everywhere else a start date is set (setStart, the 📅 picker, f/F, 1–7). The
-// exception, outside the board: an overdue task started today, the normal
-// way to catch up on a missed deadline.
+// exception: an overdue task started today, the normal way to catch up on a
+// missed deadline.
 function startsAfterDeadline(task, day) {
   if (!day || !task?.due_date || day <= task.due_date) return false;
   const today = todayStr();
@@ -220,7 +220,7 @@ function startsAfterDeadline(task, day) {
 
 async function planOnDay(id, day) {
   const task = tasks.find(t => t.id === id);
-  if (!task || !task.due_date || day <= task.due_date) return updateTask(id, { start_date: day });
+  if (!task || !startsAfterDeadline(task, day)) return updateTask(id, { start_date: day });
   if (!await confirmDeadlineMove(task, day)) return;
   const old = { start_date: task.start_date ?? null, due_date: task.due_date,
                 history: oldHistory(id) };
@@ -288,8 +288,8 @@ listEl.addEventListener('pointerdown', e => {
 listEl.addEventListener('click', e => {
   const yearBtn = e.target.closest('[data-completed-year]');
   if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
-  const dueBtn = e.target.closest('[data-due-day]');
-  if (dueBtn) { dueOnDayMenu(dueBtn); return; }
+  const listBtn = e.target.closest('[data-header-tasks]');
+  if (listBtn) { headerTasksMenu(listBtn); return; }
   const fold = e.target.closest('[data-fold]');
   if (fold) toggleFold(fold.dataset.fold);
 });
@@ -1156,16 +1156,19 @@ function openTaskMenu(id, anchor, at) {
   showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
 
-// The menu itself: `items` are [action, label, class?]; `run(action)`.
-// A Plan day's "N due": the tasks due that day, as a menu (a bottom sheet
-// on phones); picking one selects its card, wherever it sits on the board.
-function dueOnDayMenu(btn) {
-  const section = boardBuckets(filterTasks()).find(s => s.date === btn.dataset.dueDay);
-  if (!section?.due.length) return;
-  const items = section.due.map(t => [t.id, esc(plainTitle(t.title))]);
-  showMenu(`Due ${section.label}`, items, id => { unfoldFor(id); setSelected(id); }, btn);
+// A Plan header's "N due" (a day) or "N overdue" (Unplanned): those tasks
+// as a menu (a bottom sheet on phones); picking one selects its card,
+// wherever it sits on the board, unfolding its section.
+function headerTasksMenu(btn) {
+  const section = boardBuckets(filterTasks()).find(s => s.key === btn.dataset.headerTasks);
+  const overdue = section?.key === 'unplanned';
+  const list = (overdue ? section.overdue : section?.due) || [];
+  if (!list.length) return;
+  const items = list.map(t => [t.id, esc(plainTitle(t.title))]);
+  showMenu(overdue ? 'Overdue' : `Due ${section.label}`, items, id => { unfoldFor(id); setSelected(id); }, btn);
 }
 
+// The menu itself: `items` are [action, label, class?]; `run(action)`.
 function showMenu(title, items, run, anchor, at) {
   const backdrop = document.createElement('div');
   backdrop.className = 'task-menu-backdrop';
@@ -1249,9 +1252,8 @@ function confirmDelete(title, count = 1) {
   return confirmModal(deleteModal, deleteConfirmBtn, deleteCancelBtn);
 }
 
-// Plan board: a start date after the task's deadline would leave the card
-// where the deadline puts it (Overdue, or Today when due today), so the
-// drop would seem to do nothing, and the task would start after it is due.
+// A start date after the task's deadline: the task would start after it is
+// due, usually a slip, so it asks whether the deadline moves along.
 function confirmDeadlineMove(task, day) {
   const when = d => ({ Today: 'today', Tomorrow: 'tomorrow', Yesterday: 'yesterday' })[formatDate(d)] || shortDate(d);
   deadlineTextEl.textContent =
@@ -2181,14 +2183,17 @@ function render() {
         : '';
       const dropAttr = s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '';
       const emptyCls = (s.tasks.length ? '' : ' board-day--empty') + (isFolded ? ' board-day--folded' : '');
-      // The deadlines on this day, wherever their cards sit: a click lists
-      // them (dueOnDayMenu), the tooltip names them.
-      const dueBtn = s.due?.length
-        ? `<button type="button" class="board-day-due" data-due-day="${s.date}"` +
-          ` title="${esc(`Due ${s.label}: ` + s.due.map(t => plainTitle(t.title)).join(', '))}">${s.due.length} due</button>`
+      // The deadlines on this day, wherever their cards sit, and Unplanned's
+      // overdue tasks (red; shown even folded): a click lists them
+      // (headerTasksMenu), the tooltip names them.
+      const listBtn = (list, word, title, cls = '') => list?.length
+        ? `<button type="button" class="board-day-due${cls}" data-header-tasks="${esc(s.key)}"` +
+          ` title="${esc(title + ': ' + list.map(t => plainTitle(t.title)).join(', '))}">${list.length} ${word}</button>`
         : '';
+      const dueBtn = listBtn(s.due, 'due', `Due ${s.label}`) +
+        listBtn(s.overdue, 'overdue', 'Overdue', ' board-day-overdue');
       // The whole header folds the section (the label is its button, for
-      // the keyboard and screen readers); only the due count does its own.
+      // the keyboard and screen readers); only the due/overdue count does its own.
       const foldAttr = foldable ? ` data-fold="${esc(fid)}"` : '';
       const header = `<li class="board-day-divider${overCls}${emptyCls}${foldable ? ' board-day--foldable' : ''}"${dropAttr}${foldAttr}>` +
         `<span class="board-day-label">` + (foldable

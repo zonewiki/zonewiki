@@ -24,13 +24,14 @@ function isOverdue(t, today) {
 }
 
 // Available now: started, or due today (or earlier). The Focus tab shows
-// exactly these — the board's Overdue, Carried over and Today sections.
+// exactly these — on the board: Carried over, Today, and overdue tasks
+// wherever their start date puts them.
 function isFocus(t, today) {
   return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
 }
 
 // Open's order, also Focus's (Open filtered) and the order inside every
-// Plan-board section but Overdue: Unsorted (no sort_order) first, newest
+// Plan-board section but Carried over and Unplanned: Unsorted (no sort_order) first, newest
 // first, then Sorted in sort_order. Plan only moves tasks between days.
 function byOpenOrder(a, b) {
   if (a.sort_order == null && b.sort_order == null) return (b.created_at || '').localeCompare(a.created_at || '');
@@ -169,16 +170,17 @@ function rankTags(partial, counts, limit = 8) {
     .map(x => x.tag);
 }
 
-// Which board section a task belongs in: 'overdue' (missed deadline),
-// 'carried' (started on an earlier day, still open), an exact YYYY-MM-DD for
-// today..+6, 'later', or 'unplanned'. A start date in the past is not
-// overdue (the task is available), but it is not today's plan either: the
-// board shows it apart, so a plan that keeps slipping is visible.
+// Which board section a task belongs in: 'carried' (started on an earlier
+// day, still open), an exact YYYY-MM-DD for today..+6, 'later', or
+// 'unplanned'. The start date decides, overdue or not (a missed deadline
+// shows on the card, and overdue tasks without a start head Unplanned);
+// only a deadline today puts an unplanned task on Today. A start date in
+// the past is not overdue (the task is available), but it is not today's
+// plan either: the board shows it apart, so a plan that keeps slipping is
+// visible.
 function bucketKey(t, today) {
-  if (isOverdue(t, today)) return 'overdue';
   if (t.start_date && t.start_date < today) return 'carried';
-  if (isFocus(t, today)) return today;
-  if (!t.start_date) return 'unplanned';
+  if (!t.start_date) return t.due_date === today ? today : 'unplanned';
   return t.start_date > addDays(today, 6) ? 'later' : t.start_date;
 }
 
@@ -188,8 +190,9 @@ function fullDayLabel(d) {
 
 // Group Plan-tab tasks into ordered day sections for the board. Date sections
 // (today..+6), Later, and Unplanned are droppable (dropping sets or clears the
-// start date); Overdue and Carried over are display-only. Dropping on Later opens a date picker
-// in the UI layer.
+// start date); Carried over is display-only. Dropping on Later opens a date
+// picker in the UI layer. Unplanned also lists its overdue tasks
+// (`overdue`), which it shows first, for its header.
 function boardBuckets(list, today) {
   const groups = {};
   // Reversed first, so tasks created in the same second (created_at has no
@@ -198,16 +201,13 @@ function boardBuckets(list, today) {
     const key = bucketKey(t, today);
     (groups[key] = groups[key] || []).push(t);
   });
-  // Overdue: the most overdue first, then by title.
-  const byDate = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || (a.title || '').localeCompare(b.title || '');
   // Days and Later are in Open's order (byOpenOrder). The board decides
   // which day a task is on, never where in the day: that is Open's order,
   // and on the day itself Focus's.
   const sections = [];
-  if (groups['overdue']) sections.push({ key: 'overdue', label: 'Overdue', date: null, droppable: false, tasks: groups['overdue'].sort(byDate) });
   // Carried over: the longest-slipping first, then Open's order. Display-only
-  // like Overdue (its tasks are in Focus already); dropping one on Today
-  // commits to it again.
+  // (its tasks are in Focus already); dropping one on Today commits to it
+  // again.
   const byStart = (a, b) => a.start_date.localeCompare(b.start_date) || byOpenOrder(a, b);
   if (groups['carried']) sections.push({ key: 'carried', label: 'Carried over', date: null, droppable: false, tasks: groups['carried'].sort(byStart) });
   // Each day also names the tasks due on it, wherever they sit (`due`): the
@@ -223,13 +223,15 @@ function boardBuckets(list, today) {
   // only drop targets for "start beyond this week" and "unplan", so hiding
   // them when empty would strand every task on a dated day.
   sections.push({ key: 'later', label: 'Later', date: null, droppable: true, tasks: (groups['later'] || []).sort(byOpenOrder) });
-  // Unplanned: nearest deadline first (they need a start date soonest), then
-  // the rest in Open's order.
+  // Unplanned: nearest deadline first (they need a start date soonest), so
+  // overdue tasks lead, the most overdue first; then the rest in Open's order.
   const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
     : a.due_date ? -1 : b.due_date ? 1 : byOpenOrder(a, b);
   // Unplanned goes first: it is where planning starts (cards are dragged
   // from it onto the days), so it sits next to them, not past Later.
-  sections.unshift({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: (groups['unplanned'] || []).sort(byDeadline) });
+  const unplanned = (groups['unplanned'] || []).sort(byDeadline);
+  sections.unshift({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: unplanned,
+    overdue: unplanned.filter(t => isOverdue(t, today)) });
   return sections;
 }
 

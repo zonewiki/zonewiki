@@ -246,8 +246,10 @@ def test_board_groups_by_start_date(page, wiki):
     assert section_of(page, "Started earlier").startswith("Carried over")
     # A deadline alone is not a plan: the task waits in Unplanned, not on its due day.
     assert section_of(page, "Deadline only") == "unplanned"
-    # Only a missed deadline is overdue.
-    assert section_of(page, "Missed").startswith("Overdue")
+    # A missed deadline has no section of its own: without a start date the
+    # task heads Unplanned, counted red in its header.
+    assert section_of(page, "Missed") == "unplanned"
+    expect(page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-overdue")).to_have_text("1 overdue")
 
 
 def test_drop_carried_over_on_today_commits_again(page, wiki):
@@ -1924,9 +1926,9 @@ def test_history_of_a_repeating_task_continues(page, wiki):
 
 def test_board_drop_past_deadline_moves_deadline_too(page, wiki):
     """Regression: dropping an overdue task on a day set its start date but
-    left the card in Overdue (the deadline decides there), so the drop seemed
-    to do nothing and the task started after it was due. Now it asks to move
-    the deadline along; Cancel changes nothing."""
+    left the card in Overdue (a section the deadline decided, since gone),
+    and the task started after it was due. Now it asks to move the deadline
+    along; Cancel changes nothing."""
     page.set_viewport_size({"width": 1280, "height": 1400})
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     today = date.today().isoformat()
@@ -1954,7 +1956,7 @@ def test_board_drop_past_deadline_moves_deadline_too(page, wiki):
     page.wait_for_timeout(300)
     assert writes == []
 
-    # Move deadline: both dates move, the card leaves Overdue for Tomorrow.
+    # Move deadline: both dates move, the card goes to Tomorrow.
     card(page, "Late task").drag_to(tomorrow_div)
     expect(dialog).to_contain_text("is due yesterday")
     page.locator("#task-deadline-confirm").click()
@@ -1970,6 +1972,33 @@ def test_board_drop_past_deadline_moves_deadline_too(page, wiki):
     page.locator(".task-undo-btn").click()
     wait_for_field(page, "Late task", "due_date", yesterday)
     assert task_by_title(page, "Late task")["start_date"] is None
+
+
+def test_overdue_dropped_on_today_starts_without_asking(page, wiki):
+    # Catching up on a missed deadline: no question, as everywhere else.
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    today = date.today().isoformat()
+    page.request.post("/api/deck", data={"title": "Late task",
+                                         "due_date": (date.today() - timedelta(days=2)).isoformat()})
+    page.goto("/deck?view=plan")
+    card(page, "Late task").drag_to(page.locator(f".board-day-divider[data-drop-day='{today}']"))
+    wait_for_field(page, "Late task", "start_date", today)
+    expect(page.locator("#task-deadline-modal")).to_be_hidden()
+    expect(page.locator(".board-day-overdue")).to_have_count(0)
+
+
+def test_unplanned_overdue_count_lists_them_even_folded(page, wiki):
+    page.request.post("/api/deck", data={"title": "Late", "due_date": "2020-01-01"})
+    page.request.post("/api/deck", data={"title": "Loose"})
+    open_board(page, wiki)
+    fold(page, "unplanned")
+    count = page.locator(".board-day-divider[data-drop-bucket='unplanned'] .board-day-overdue")
+    expect(count).to_have_text("1 overdue")
+    count.click()
+    menu = page.locator(".task-menu")
+    expect(menu.locator(".task-menu-title")).to_have_text("Overdue")
+    menu.get_by_role("menuitem", name="Late").click()
+    expect(card(page, "Late")).to_have_class(re.compile(r"\btask-selected\b"))   # unfolded
 
 
 def test_completed_shows_earlier_years(page, wiki):
