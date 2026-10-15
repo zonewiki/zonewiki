@@ -1912,9 +1912,10 @@ body.editor-page main {
   --card-bg: #f9fafb;
   --card-shadow: 0 1px 2px rgba(15, 23, 42, .06);
   /* Date colours as text, readable on a card (the bright edge colours are
-     only ~2:1 on one): amber for a start today or carried over, blue for a
-     later start, green for a deadline today. */
-  --amber-text: #b45309;
+     only ~2:1 on one): amber for a start today or carried over (the amber
+     of the Focus limit warning, bold), blue for a later start, green for a
+     deadline today. */
+  --amber-text: #d97706;
   --blue-text: #2563eb;
   --green-text: #2b7a4b;
 }
@@ -1924,7 +1925,7 @@ body.editor-page main {
     --section-bg: #1b222b;
     --card-bg: #121820;
     --card-shadow: 0 1px 2px rgba(0, 0, 0, .4);
-    --amber-text: #fbbf24;
+    --amber-text: #d97706;
     --blue-text: #79b8ff;
     --green-text: #56d364;
   }
@@ -2544,7 +2545,7 @@ div.chip-input > input {
    urgency colour wins. */
 .task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
 .task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #60a5fa; }
-.task-focus-info.focus-now   { color: var(--amber-text, #b45309) !important; font-weight: 600; }
+.task-focus-info.focus-now   { color: var(--amber-text, #d97706) !important; font-weight: 600; }
 .task-focus-info.focus-later { color: var(--blue-text, #2563eb) !important; }
 
 
@@ -2702,8 +2703,8 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 }
 
 /* Plan: Today's carried-over tasks, their header count and "since" badge */
-.board-day-due.board-day-carried { color: var(--amber-text, #b45309); }
-.task-carried .task-focus-info { color: var(--amber-text, #b45309); }
+.board-day-due.board-day-carried { color: var(--amber-text, #d97706); }
+.task-carried .task-focus-info { color: var(--amber-text, #d97706); }
 
 /* A Plan section's Unsorted / Sorted labels (not drop targets) */
 .plan-subdivider {
