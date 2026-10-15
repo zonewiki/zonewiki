@@ -2043,8 +2043,11 @@ div.chip-input > input {
 /* Upcoming day board — one section per day; dividers are drag-to-plan targets. */
 .board-day-divider {
   display: flex; align-items: center; gap: .5rem;
-  list-style: none; margin: 1.6rem 0 0; padding: .1rem .5rem .35rem;
-  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  list-style: none; margin: 1.6rem 0 0; padding: .475rem .5rem .325rem;
+  /* Line height 1, and .075rem more padding above than below: capitals have
+     no descenders, so they sit above the line's middle (a taller line put
+     even more room below them), and the text looked high. */
+  font-size: .65rem; line-height: 1; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
   color: var(--muted); background: var(--code-bg);
   border: 1px solid var(--border); border-radius: 4px 4px 0 0;
 }
@@ -2089,7 +2092,7 @@ div.chip-input > input {
    push the tasks off screen. The row is the drop target, so it is tall
    enough to hit; consecutive empty days stack tightly. */
 .board-day-divider.board-day--empty {
-  margin-top: .35rem; border-radius: 4px; min-height: 1.9rem; padding-block: .1rem;
+  margin-top: .35rem; border-radius: 4px; min-height: 1.9rem; padding-block: .15rem 0;
   border-style: dashed;
 }
 .task-item + .board-day-divider.board-day--empty { margin-top: 1rem; }

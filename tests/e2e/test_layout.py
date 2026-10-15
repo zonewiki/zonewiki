@@ -7,6 +7,7 @@ it asserts only that they were produced.
 """
 
 import re
+from datetime import date
 
 import pytest
 from playwright.sync_api import expect
@@ -185,6 +186,36 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     wiki.write("deck", "# Deck\n\n[[deck]]\n")
     pg.goto("/page/deck?view=open")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
+        assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
+
+
+_BOARD_HEADER_GAPS = """() => [...document.querySelectorAll('.board-day-divider')].map(d => {
+  const r = d.getBoundingClientRect(), bw = parseFloat(getComputedStyle(d).borderTopWidth);
+  const label = d.querySelector('.board-day-fold') || d.querySelector('.board-day-label');
+  const cs = getComputedStyle(label);
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const m = ctx.measureText('H');
+  const text = [...label.childNodes].find(n => n.nodeType === 3);
+  const range = document.createRange(); range.selectNodeContents(text);
+  const baseline = range.getBoundingClientRect().top + m.fontBoundingBoxAscent;
+  return [text.textContent, baseline - m.actualBoundingBoxAscent - r.top - bw, r.bottom - bw - baseline];
+})"""
+
+
+@pytest.mark.parametrize("viewport", [DESKTOP, PHONE], ids=["desktop", "phone"])
+def test_board_header_labels_vertically_centred(new_page, wiki, viewport):
+    # Regression: uneven padding and line height 1.6 left the capitals of
+    # a header with cards 3px above centre (4.6px above, 11.2px below).
+    pg = new_page(viewport=viewport)
+    pg.request.post("/api/deck", data={"title": "Loose"})
+    pg.request.post("/api/deck", data={"title": "Started", "start_date": date.today().isoformat()})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    pg.goto("/page/deck?view=plan")
+    pg.locator(".board-day-divider").first.wait_for()
+    rows = pg.evaluate(_BOARD_HEADER_GAPS)
+    assert len(rows) >= 9          # with cards (Unplanned, Today) and empty ones
+    for label, above, below in rows:
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
 
 
