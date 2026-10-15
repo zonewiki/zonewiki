@@ -5,6 +5,7 @@ retrieval in server.py, and the writing tools.
 """
 
 import json
+from datetime import date, timedelta
 import os
 import re
 
@@ -1569,7 +1570,7 @@ class TestCreateTask:
     def test_creates_with_fields(self, client, wiki_dir):
         text, err = call(client, "create_task", title="Renew passport", notes="at the Bürgeramt",
                          tags=["admin", "#home"], due="2026-11-01", start="2026-10-20")
-        assert not err and text.startswith("Created.\n\nTask: Renew passport\n")
+        assert not err and text.startswith(f"Created (today is {date.today()}).\n\nTask: Renew passport\n")
         assert "status: open · tags: #admin #home · start: 2026-10-20 · due: 2026-11-01" in text
         assert re.search(r"\nid: [0-9a-f]{8}\n", text)
         assert "at the Bürgeramt" in text
@@ -1581,8 +1582,34 @@ class TestCreateTask:
         text, _ = call(client, "create_task", title="Milk", keep=True, repeat="daily")
         assert "keep task" in text and "repeats" not in text
 
+    def test_date_words_use_leafs_today(self, client, wiki_dir):
+        # "tomorrow" is resolved by Leaf, so a client without the date (or
+        # with a wrong one) still gets it right.
+        today = date.today()
+        text, err = call(client, "create_task", title="Call Bob", due="tomorrow", start="today")
+        assert not err
+        assert f"start: {today} · due: {today + timedelta(days=1)}" in text
+        tid = _task_id(text)
+        text, _ = call(client, "update_task", id=tid, due="+2w")
+        assert f"due: {today + timedelta(weeks=2)}" in text
+        friday = today + timedelta(days=(4 - today.weekday() + 6) % 7 + 1)
+        assert f"due: {friday}" in call(client, "update_task", id=tid, due="Fri")[0]
+
+    def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
+        # The home deck shows list=task: a task without the tag wasn't in it.
+        write_page(wiki_dir, "my-deck", "# My deck\n\n[[deck list=task tag=work view=focus home=1]]\n")
+        write_page(wiki_dir, "shop", "[[deck list=groceries]]\n")
+        assert "tags: #task #work" in call(client, "create_task", title="Report")[0]
+        assert "tags: #task #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
+        assert "tags: #task #work #x" in call(client, "create_task", title="Y", tags="x")[0]
+        # Filed in another list: just its tags.
+        text = call(client, "create_task", title="Milk", tags=["Groceries"])[0]
+        assert "tags: #Groceries" in text and "#task" not in text
+
     def test_bad_input_is_a_tool_error(self, client, wiki_dir):
-        assert "YYYY-MM-DD" in call(client, "create_task", title="x", due="tomorrow")[0]
+        text, err = call(client, "create_task", title="x", due="next week")
+        assert err and "YYYY-MM-DD, today, tomorrow" in text
+        assert call(client, "create_task", title="x", due="2026-02-30")[1]
         text, err = call(client, "create_task", title="  ")
         assert err and "title" in text
         text, err = call(client, "create_task", title="x", repeat="hourly")

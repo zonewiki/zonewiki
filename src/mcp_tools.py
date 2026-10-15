@@ -848,10 +848,12 @@ _REPEATS = ("daily", "weekly", "monthly", "yearly")
 def _task_fields(args: dict, task: dict | None = None) -> dict:
     """The deck API's fields from the tools' arguments (only those given)."""
     data = {}
-    for arg, field in (("title", "title"), ("notes", "description"), ("due", "due_date"),
-                       ("start", "start_date")):
+    for arg, field in (("title", "title"), ("notes", "description")):
         if arg in args:
             data[field] = _str_arg(args, arg, required=False).strip() or None
+    for arg, field in (("due", "due_date"), ("start", "start_date")):
+        if arg in args:
+            data[field] = _date_arg(args, arg)
     if "title" in data and not data["title"]:
         raise mcp_server.ToolError("title must be a non-empty string")
     if "description" in data:
@@ -930,8 +932,27 @@ def _tag_hints(task: dict) -> str:
 
 def _create_task(args: dict, base: str) -> str:
     _str_arg(args, "title")
-    task = _deck_write(deck.create_task, _task_fields(args), _commit_msg("Create deck task", args))
-    return "Created.\n\n" + _mcp_task_text(task, base) + _tag_hints(task)
+    data = _task_fields(args)
+    data["tags"] = _home_tags(data.get("tags"))
+    task = _deck_write(deck.create_task, data, _commit_msg("Create deck task", args))
+    return (f"Created (today is {date.today()}).\n\n" + _mcp_task_text(task, base)
+            + _tag_hints(task))
+
+
+def _home_tags(tags) -> list[str]:
+    """A new task's tags: the deck home's new-task tags (its list, its
+    single tags; decksyntax.new_task_tags, as its "+ New" and c t give them)
+    before the ones given, so the task shows in the user's deck. Not when
+    the given tags already name a declared list: the task is filed there."""
+    tags = tags or []
+    if isinstance(tags, str):
+        tags = tags.split(",")
+    if not isinstance(tags, list):
+        return tags          # deck.create_task refuses it
+    home = pages.deck_home()
+    if not home or {str(t).lstrip("#").lower() for t in tags} & pages.list_names():
+        return tags
+    return decksyntax.clean_tags(decksyntax.new_task_tags(home["params"]) + tags)
 
 
 _STATUS = {"done": {"completed": True}, "open": {"completed": False},
@@ -1284,10 +1305,16 @@ def _read_page(args: dict, base: str) -> str:
 
 
 def _date_arg(args: dict, name: str) -> str | None:
+    """A date argument: YYYY-MM-DD or a word quick-add knows ("tomorrow",
+    "fri", "+3d"; decksyntax.parse_date_word), resolved with Leaf's today."""
     value = _str_arg(args, name, required=False).strip()
-    if value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        raise mcp_server.ToolError(f"{name} must be a date, YYYY-MM-DD")
-    return value or None
+    if not value:
+        return None
+    day = decksyntax.parse_date_word(value, date.today())
+    if not day:
+        raise mcp_server.ToolError(
+            f"{name} must be a date: YYYY-MM-DD, today, tomorrow, a weekday or +3d/+2w")
+    return day
 
 
 def _file_label(filepath: str) -> str:

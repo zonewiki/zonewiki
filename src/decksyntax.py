@@ -2,6 +2,7 @@
 [[task:<id>]] references, and how tags are written. Pure functions."""
 
 import re
+from datetime import date, timedelta
 
 
 def clean_tags(tags) -> list[str]:
@@ -87,6 +88,35 @@ def new_task_tags(params: dict) -> list[str]:
     if raw and "|" not in raw:
         tags += [t for t in (t.strip() for t in raw.split(",")) if not t.startswith("-")]
     return clean_tags(tags)
+
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def parse_date_word(word: str, today: date) -> str | None:
+    """A date as quick-add reads one (DeckCore.parseDateWord, the same
+    words), YYYY-MM-DD; None when it isn't one: today · tomorrow/tmrw ·
+    mon…sun (the next one, never today) · +3 / +3d / +2w · 2026-10-03.
+    The MCP tools take these, so "tomorrow" is Leaf's tomorrow, whatever
+    the assistant's clock says."""
+    w = (word or "").strip().lower()
+    if w == "today":
+        return today.isoformat()
+    if w in ("tomorrow", "tmrw"):
+        return (today + timedelta(days=1)).isoformat()
+    m = re.fullmatch(r"\+(\d{1,3})([dw]?)", w)
+    if m:
+        return (today + timedelta(days=int(m[1]) * (7 if m[2] == "w" else 1))).isoformat()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", w):
+        try:
+            return date.fromisoformat(w).isoformat()
+        except ValueError:
+            return None
+    if len(w) >= 3:
+        wd = next((i for i, name in enumerate(_WEEKDAYS) if name.startswith(w)), None)
+        if wd is not None:
+            return (today + timedelta(days=(wd - today.weekday() + 6) % 7 + 1)).isoformat()
+    return None
 
 
 def in_scope(task: dict, scope: str | None) -> bool:

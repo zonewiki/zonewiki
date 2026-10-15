@@ -62,10 +62,11 @@ _TASK_FIELDS = {
     "tags": {"type": "array", "items": {"type": "string"},
              "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."},
     "due": {"type": "string", "description": (
-        "Deadline, YYYY-MM-DD; empty to clear. A date the user gives the task ('tomorrow', "
-        "'by Friday', 'on the 3rd') goes here, not in start.")},
+        "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, "
+        "which Leaf resolves with its own date; empty to clear. A date the user gives the task "
+        "('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start.")},
     "start": {"type": "string", "description": (
-        "When to start working on it (it shows in Focus from then), YYYY-MM-DD; empty to clear. "
+        "When to start working on it (it shows in Focus from then), as due takes dates; empty to clear. "
         "Only when the user says so ('start Monday', 'work on it tomorrow', 'plan it for Tuesday'); "
         "a plain date is the deadline (due).")},
     "repeat": {"type": "string", "enum": ["daily", "weekly", "monthly", "yearly", "none"],
