@@ -2470,7 +2470,9 @@ div.chip-input > input {
   cursor: pointer; border-radius: 3px; transition: background .1s, color .1s;
 }
 .task-clickable-date:hover { background: var(--code-bg); color: var(--fg); }
-.task-date-empty { opacity: .3; }
+/* An unset date's button (shown on hover): faded, but clearly there; full on its own hover */
+.task-date-empty { opacity: .6; }
+.task-date-empty:hover { opacity: 1; }
 
 /* Custom calendar popup (deck plan/due date picker) */
 .deck-datepicker {
