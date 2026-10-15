@@ -70,7 +70,7 @@ _TASK_FIELDS = {
         "a plain date is the deadline (due).")},
     "repeat": {"type": "string", "enum": ["daily", "weekly", "monthly", "yearly", "none"],
                "description": "Repeat the task; done, the next occurrence is created."},
-    "repeat_every": {"type": "integer", "minimum": 1, "description": "Repeat every N days/weeks/months/years (default 1)."},
+    "repeat_every": {"type": "integer", "minimum": 1, "maximum": 999, "description": "Repeat every N days/weeks/months/years (default 1)."},
     "repeat_from": {"type": "string", "enum": ["due", "completion"],
                     "description": "Next occurrence counted from the due date (default) or from when it was done."},
     "keep": {"type": "boolean",

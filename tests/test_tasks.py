@@ -310,6 +310,50 @@ class TestRecurring:
         nxt = self._complete_and_get_spawn(client, task["id"])
         assert nxt["due_date"] == "2099-02-15"
 
+    def test_monthly_anchor_resets_when_only_the_date_is_moved(self, client):
+        # The date picker, a drag onto a day and MCP send the date alone, no
+        # rec_type: moving it re-anchors the series as the edit modal does.
+        task = create_task(client, title="Rent", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        spawned = self._complete_and_get_spawn(client, task["id"])
+        assert spawned["recurrence"]["day"] == 31
+        client.put(f"/api/deck/{spawned['id']}", json={"due_date": "2099-03-10"})
+        assert self._complete_and_get_spawn(client, spawned["id"])["due_date"] == "2099-04-10"
+
+    def test_undo_of_a_date_move_keeps_the_day_of_month(self, client):
+        # Undo sends the old recurrence with the old date: the series on the
+        # 31st stays there, though its Feb 28 date alone would re-anchor it.
+        task = create_task(client, title="Rent", due_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        spawned = self._complete_and_get_spawn(client, task["id"])
+        old = {"due_date": spawned["due_date"], "recurrence": spawned["recurrence"],
+               "history": spawned["history"]}
+        client.put(f"/api/deck/{spawned['id']}", json={"due_date": "2099-03-10"})
+        undone = client.put(f"/api/deck/{spawned['id']}", json=old).get_json()
+        assert undone["recurrence"] == spawned["recurrence"]
+        assert undone["history"] == spawned["history"]
+        assert self._complete_and_get_spawn(client, spawned["id"])["due_date"] == "2099-03-31"
+
+    def test_undo_recurrence_via_batch_update_and_validation(self, client):
+        task = create_task(client, title="Rent", start_date="2099-01-31",
+                           rec_type="monthly", rec_interval=1).get_json()
+        spawned = self._complete_and_get_spawn(client, task["id"])
+        client.post("/api/deck/batch-update", json={"tasks": [{"id": spawned["id"], "start_date": "2099-03-10"}]})
+        client.post("/api/deck/batch-update", json={"tasks": [
+            {"id": spawned["id"], "start_date": "2099-02-28", "recurrence": spawned["recurrence"]}]})
+        assert self._complete_and_get_spawn(client, spawned["id"])["start_date"] == "2099-03-31"
+        resp = client.put(f"/api/deck/{task['id']}", json={"recurrence": {"type": "hourly"}})
+        assert resp.status_code == 400
+
+    def test_rec_interval_is_capped(self, client):
+        # A huge interval stepped a date past year 9999: completing failed.
+        resp = create_task(client, title="Rare", due_date="2099-01-01",
+                           rec_type="yearly", rec_interval=100000)
+        assert resp.status_code == 400
+        task = create_task(client, title="Rare", due_date="2099-01-01",
+                           rec_type="daily", rec_interval=999).get_json()
+        assert self._complete_and_get_spawn(client, task["id"])["due_date"] == "2101-09-27"
+
     def test_yearly_leap_day_returns_in_leap_years(self, client):
         task = create_task(client, title="Leap", due_date="2092-02-29",
                            rec_type="yearly", rec_interval=1).get_json()
@@ -513,6 +557,35 @@ class TestUndoRecurring:
         assert len(tasks) == 1
         assert tasks[0]["id"] == task["id"]
         assert tasks[0]["completed_at"] is None
+
+    def test_reopen_keeps_an_edited_next_occurrence(self, client):
+        # Reopening a done recurring task (from Completed, days later)
+        # deleted the next occurrence with the notes and comments added to it.
+        task = create_task(client, title="Weekly", due_date=date.today().isoformat(),
+                           rec_type="weekly").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        nxt = next(t for t in client.get("/api/deck").get_json()
+                   if t["spawned_from"] == task["id"])
+        client.post(f"/api/deck/{nxt['id']}/comments", json={"text": "called Bob"})
+        client.put(f"/api/deck/{task['id']}", json={"completed": False})
+        ids = {t["id"] for t in client.get("/api/deck").get_json()}
+        assert ids == {task["id"], nxt["id"]}
+        # Completing it again spawns no second occurrence.
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        client.post("/api/deck/batch-complete", json={"ids": [task["id"]], "completed": False})
+        client.post("/api/deck/batch-complete", json={"ids": [task["id"]], "completed": True})
+        assert [t["id"] for t in client.get("/api/deck").get_json()] == [nxt["id"]]
+
+    @pytest.mark.parametrize("change", [{"description": "notes"}, {"tags": ["x"]},
+                                        {"title": "Renamed"}, {"due_date": "2099-01-01"}])
+    def test_reopen_keeps_next_occurrence_changed_in_any_way(self, client, change):
+        task = create_task(client, title="Daily", due_date=date.today().isoformat(),
+                           rec_type="daily").get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        nxt = client.get("/api/deck").get_json()[0]
+        client.put(f"/api/deck/{nxt['id']}", json=change)
+        client.put(f"/api/deck/{task['id']}", json={"completed": False})
+        assert len(client.get("/api/deck").get_json()) == 2
 
     def test_uncomplete_non_recurring_no_side_effects(self, client):
         t1 = create_task(client, title="Task A").get_json()

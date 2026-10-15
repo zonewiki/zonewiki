@@ -229,7 +229,7 @@ async function planOnDay(id, day) {
   if (!task || !startsAfterDeadline(task, day)) return updateTask(id, { start_date: day });
   if (!await confirmDeadlineMove(task, day)) return null;
   const old = { start_date: task.start_date ?? null, due_date: task.due_date,
-                history: oldHistory(id) };
+                recurrence: task.recurrence ?? null, history: oldHistory(id) };
   if (!await updateTask(id, { start_date: day, due_date: day })) return null;
   showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
   return true;
@@ -1016,7 +1016,7 @@ function editSnapshot(t) {
     due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
     last_done: t.last_done || null, sort_order: t.sort_order ?? null,
-    history: t.history || [],
+    recurrence: rec ?? null, history: t.history || [],
   };
 }
 
@@ -1127,6 +1127,8 @@ async function afterBatchWrite() {
 
 // Undo sends the task's old history back with the old fields (the server
 // replaces what the undone change logged), so the log shows no trace of it.
+// An undo that moves a date back also sends the old recurrence, so the
+// series keeps its day of month (moving a date re-anchors it).
 const oldHistory = id => tasks.find(t => t.id === id)?.history || [];
 
 function markWontDo(id) {
@@ -1145,10 +1147,11 @@ function setStart(id, startDate) {
   const task = tasks.find(t => t.id === id);
   if (startsAfterDeadline(task, startDate)) return planOnDay(id, startDate);
   const prev = task?.start_date ?? null;
+  const recurrence = task?.recurrence ?? null;
   const history = oldHistory(id);
   updateTask(id, { start_date: startDate });
   const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
-  showUndo(msg, () => updateTask(id, { start_date: prev, history }));
+  showUndo(msg, () => updateTask(id, { start_date: prev, recurrence, history }));
 }
 
 // Confirm, delete, and offer undo that restores the full snapshots (ids and
@@ -1842,7 +1845,8 @@ async function startOn(ids, day) {
       : day ? `${n} tasks start ${/^(Today|Tomorrow)$/.test(formatDate(day)) ? formatDate(day).toLowerCase() : formatDate(day)}`
       : `${n} tasks unplanned`;
     showUndo(msg, () =>
-      batchUpdate(plain.map(t => ({ id: t.id, start_date: t.start_date ?? null, history: t.history || [] }))));
+      batchUpdate(plain.map(t => ({ id: t.id, start_date: t.start_date ?? null,
+                                    recurrence: t.recurrence ?? null, history: t.history || [] }))));
   }
   for (const t of asks) await planOnDay(t.id, day);
 }

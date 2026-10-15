@@ -330,6 +330,11 @@ def _add_months(base: date, months: int, day: int | None = None) -> date:
     return date(year, month, day)
 
 
+# The largest "every N": far beyond any real series, and small enough
+# that stepping a date never leaves the calendar (year 9999).
+REC_INTERVAL_MAX = 999
+
+
 def _rec_step(base: date, rtype: str, interval: int, day: int | None = None) -> date:
     if rtype == "weekly":
         return base + timedelta(weeks=interval)
@@ -363,8 +368,11 @@ def _next_occurrence(rec: dict, base: date, anchored: bool, today: date) -> tupl
     return nxt, rec
 
 
-def spawn_recurring(task: dict) -> dict | None:
+def spawn_recurring(task: dict, active: list[dict] = ()) -> dict | None:
     """If task has recurrence, create the next instance and return it.
+    None too when `active` (the open tasks) still has the one it spawned
+    before: reopening kept it (uncomplete_task), so completing again must
+    not add a second.
 
     The series is driven by the task's primary date — the due date if it has
     one, else the start date. ``recurrence.from`` picks the base for stepping
@@ -379,7 +387,8 @@ def spawn_recurring(task: dict) -> dict | None:
     shrink the gap for good, so the series then remembers it in
     ``recurrence.lead`` (like ``day``) and the next spawn uses that."""
     rec = task.get("recurrence")
-    if not rec:
+    if not rec or any(t.get("spawned_from") == task["id"] and not t.get("completed_at")
+                      for t in active):
         return None
     today = date.today()
     due, start = _parse_date(task.get("due_date")), _parse_date(task.get("start_date"))
@@ -500,22 +509,41 @@ def keep_done(task: dict) -> None:
     task["due_date"] = None
 
 
-def complete_task(task: dict, now: str | None = None) -> dict | None:
-    """Stamp task as completed; return the spawned recurring instance, if any."""
+def complete_task(task: dict, now: str | None = None, active: list[dict] = ()) -> dict | None:
+    """Stamp task as completed; return the spawned recurring instance, if any
+    (see spawn_recurring for `active`)."""
     task["completed_at"] = now or timestamp()
     task["wont_do"] = False
     log_event(task, "done")
-    return spawn_recurring(task)
+    return spawn_recurring(task, active)
+
+
+def _untouched_spawn(spawn: dict, task: dict) -> bool:
+    """Whether the occurrence task spawned is still as the spawn made it:
+    its history ends with the spawn's "repeat" (a date change would follow
+    it), and its title, notes, tags and comments are task's. Only such a
+    spawn may go when task is reopened; one with your edits stays."""
+    history = spawn.get("history") or []
+    comments = task.get("comments") or []
+    return (bool(history) and history[-1].get("event") == "repeat"
+            and not spawn.get("keep")
+            and spawn.get("title") == task.get("title")
+            and (spawn.get("description") or "") == (task.get("description") or "")
+            and (spawn.get("tags") or []) == (task.get("tags") or [])
+            and all(c in comments for c in spawn.get("comments") or []))
 
 
 def uncomplete_task(task: dict, active: list[dict],
                      protect_ids: frozenset = frozenset()) -> list[dict]:
     """Clear task's completion state and return active without the open
     recurring instance spawned when it was completed (the one whose
-    spawned_from is its id). protect_ids are never removed."""
+    spawned_from is its id), unless it was changed since (_untouched_spawn):
+    then it stays, and completing task again spawns no second one
+    (spawn_recurring). protect_ids are never removed."""
     if task.get("recurrence"):
         drop = {t["id"] for t in active
-                if t.get("spawned_from") == task["id"] and not t.get("completed_at")} - set(protect_ids)
+                if t.get("spawned_from") == task["id"] and not t.get("completed_at")
+                and _untouched_spawn(t, task)} - set(protect_ids)
         active = [t for t in active if t["id"] not in drop]
     task["completed_at"] = None
     task["wont_do"] = False
@@ -688,6 +716,25 @@ def task_search_docs() -> list[dict]:
     return docs
 
 
+def clean_recurrence(rec) -> dict | None:
+    """A recurrence from a snapshot or an undo, its known fields validated
+    (day and lead included); None when it names no repeat type."""
+    if not (isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly")):
+        return None
+    out = {
+        "type": rec["type"],
+        "interval": rec["interval"] if isinstance(rec.get("interval"), int)
+                    and not isinstance(rec["interval"], bool)
+                    and 1 <= rec["interval"] <= REC_INTERVAL_MAX else 1,
+        "from": "completion" if rec.get("from") == "completion" else "due",
+    }
+    if isinstance(rec.get("day"), int) and not isinstance(rec["day"], bool) and 1 <= rec["day"] <= 31:
+        out["day"] = rec["day"]
+    if isinstance(rec.get("lead"), int) and not isinstance(rec["lead"], bool) and rec["lead"] >= 0:
+        out["lead"] = rec["lead"]
+    return out
+
+
 def sanitize_snapshot(snap: dict) -> dict | None:
     """Rebuild a task from an untrusted snapshot, keeping only known fields.
 
@@ -715,18 +762,7 @@ def sanitize_snapshot(snap: dict) -> dict | None:
     task["keep"] = bool(snap.get("keep"))
     task["history"] = clean_history(snap.get("history"))
     task["comments"] = clean_comments(snap.get("comments"))
-    rec = snap.get("recurrence")
-    if isinstance(rec, dict) and rec.get("type") in ("daily", "weekly", "monthly", "yearly"):
-        task["recurrence"] = {
-            "type": rec["type"],
-            "interval": rec["interval"] if isinstance(rec.get("interval"), int)
-                        and not isinstance(rec["interval"], bool) and rec["interval"] >= 1 else 1,
-            "from": "completion" if rec.get("from") == "completion" else "due",
-        }
-        if isinstance(rec.get("day"), int) and 1 <= rec["day"] <= 31:
-            task["recurrence"]["day"] = rec["day"]
-        if isinstance(rec.get("lead"), int) and not isinstance(rec["lead"], bool) and rec["lead"] >= 0:
-            task["recurrence"]["lead"] = rec["lead"]
+    task["recurrence"] = clean_recurrence(snap.get("recurrence"))
     if task["keep"]:
         task["recurrence"] = None
     return task

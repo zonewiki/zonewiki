@@ -21,8 +21,9 @@ from decksyntax import (
     tag_param_matches,
 )
 from deckstore import (
-    clean_comments, clean_history, COMMENT_MAX, complete_task, completed_in_year,
-    completed_years, DeckCorrupt, keep_done, serialized, log_event, new_comment_id, new_task, timestamp,
+    clean_comments, clean_history, clean_recurrence, COMMENT_MAX, complete_task, completed_in_year,
+    completed_years, DeckCorrupt, keep_done, serialized, log_event, new_comment_id, new_task,
+    REC_INTERVAL_MAX, timestamp,
     read_completed_all_strict, read_deck, read_deck_strict, sanitize_snapshot,
     spawn_recurring, uncomplete_task, write_both, write_deck,
 )
@@ -326,9 +327,12 @@ def _apply_task_fields(task: dict, data: dict) -> None:
     if "rec_type" in data:
         rec_type = data["rec_type"]
         if rec_type in ("daily", "weekly", "monthly", "yearly"):
+            interval = max(1, _as_int(data.get("rec_interval", 1), "rec_interval"))
+            if interval > REC_INTERVAL_MAX:
+                abort(400, description=f"rec_interval must be at most {REC_INTERVAL_MAX}")
             task["recurrence"] = {
                 "type": rec_type,
-                "interval": max(1, _as_int(data.get("rec_interval", 1), "rec_interval")),
+                "interval": interval,
                 "from": "completion" if data.get("rec_from") == "completion" else "due",
             }
             # Re-saving the edit modal re-sends the recurrence; keep the
@@ -347,11 +351,23 @@ def _apply_task_fields(task: dict, data: dict) -> None:
         else:
             task["recurrence"] = None
     # A date changed by hand defines the gap from now on: forget a remembered
-    # one (see spawn_recurring).
+    # one (see spawn_recurring). Moving the primary date (due, else start)
+    # re-anchors the series' day of month, however it was moved (edit modal,
+    # date picker, a drag onto a day, MCP), so the next spawn takes its day.
     rec = task.get("recurrence")
     if rec and "lead" in rec and (task.get("due_date") != old_due_date
                                   or task.get("start_date") != old_start_date):
         del rec["lead"]
+    if rec and "day" in rec and (task.get("due_date") or task.get("start_date")) \
+            != (old_due_date or old_start_date):
+        del rec["day"]
+    # An undo sends the whole old recurrence, day and lead included: moving
+    # the date back must not re-anchor the series (which would leave one on
+    # the 31st on the 28th after undoing a move of its Feb 28 occurrence).
+    if "recurrence" in data:
+        task["recurrence"] = clean_recurrence(data["recurrence"])
+        if data["recurrence"] is not None and task["recurrence"] is None:
+            abort(400, description="recurrence must be null or have a type")
     # Keep and Repeat are two answers to "what happens after done?": a keep
     # task never repeats.
     if task.get("keep"):
@@ -377,7 +393,7 @@ def update_task(task_id: str, data: dict, suffix: str = "") -> dict:
         # instance — the series continues, unlike a plain won't-do which ends
         # it. On a non-recurring task this degrades to a plain won't-do.
         log_event(task, "skipped")      # before the spawn, which carries the history on
-        spawned = spawn_recurring(task)
+        spawned = spawn_recurring(task, active)
         task["completed_at"] = timestamp()
         task["wont_do"] = True
         active = [t for t in active if t["id"] != task_id]
@@ -406,7 +422,7 @@ def update_task(task_id: str, data: dict, suffix: str = "") -> dict:
             keep_done(task)   # stays open, back in the pool
         elif data["completed"] and not task.get("completed_at"):
             # Complete: move active → completed
-            spawned = complete_task(task)
+            spawned = complete_task(task, active=active)
             active = [t for t in active if t["id"] != task_id]
             completed_list.append(task)
             if spawned:
@@ -592,7 +608,7 @@ def api_batch_complete_deck():
         moving_ids = {t["id"] for t in moving}
         spawned_tasks = []
         for task in moving:
-            spawned = complete_task(task, now)
+            spawned = complete_task(task, now, active)
             if spawned:
                 spawned_tasks.append(spawned)
             updated.append(task)
