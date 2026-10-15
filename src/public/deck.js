@@ -289,9 +289,9 @@ listEl.addEventListener('click', e => {
   const yearBtn = e.target.closest('[data-completed-year]');
   if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
   const dueBtn = e.target.closest('[data-due-day]');
-  if (dueBtn) dueOnDayMenu(dueBtn);
-  const foldBtn = e.target.closest('[data-fold]');
-  if (foldBtn) toggleFold(foldBtn.dataset.fold);
+  if (dueBtn) { dueOnDayMenu(dueBtn); return; }
+  const fold = e.target.closest('[data-fold]');
+  if (fold) toggleFold(fold.dataset.fold);
 });
 // Selection mode: a tap or click anywhere on a card (its checkbox, a link,
 // a date chip too) adds or drops the card, and does nothing else.
@@ -2166,7 +2166,7 @@ function render() {
 
   // Upcoming day board: one section per day, dividers double as drop targets.
   if (activeView === 'plan') {
-    const filtering = !!filterQuery().trim();
+    const filtering = userFiltering();
     const today = todayStr();
     html = boardBuckets(filtered).map(s => {
       // A section with cards folds from its header (not while filtering:
@@ -2187,7 +2187,10 @@ function render() {
         ? `<button type="button" class="board-day-due" data-due-day="${s.date}"` +
           ` title="${esc(`Due ${s.label}: ` + s.due.map(t => plainTitle(t.title)).join(', '))}">${s.due.length} due</button>`
         : '';
-      const header = `<li class="board-day-divider${overCls}${emptyCls}"${dropAttr}>` +
+      // The whole header folds the section (the label is its button, for
+      // the keyboard and screen readers); only the due count does its own.
+      const foldAttr = foldable ? ` data-fold="${esc(fid)}"` : '';
+      const header = `<li class="board-day-divider${overCls}${emptyCls}${foldable ? ' board-day--foldable' : ''}"${dropAttr}${foldAttr}>` +
         `<span class="board-day-label">` + (foldable
           ? `<button type="button" class="board-day-fold" data-fold="${esc(fid)}" aria-expanded="${!isFolded}"` +
             ` title="${isFolded ? 'Show' : 'Hide'} these tasks">${esc(s.label)}</button>`
@@ -2547,6 +2550,12 @@ const filterChips = filterSearch && chipField(filterSearch, {
   listWord: w => w.startsWith('#') && listSet.has(w.slice(1).toLowerCase()) });
 function filterQuery() {
   return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
+}
+// Whether the viewer filters: words beyond the embed's locked ones (a
+// list= deck always has its list's tag in the field, and isn't filtered).
+function userFiltering() {
+  const locked = new Set(embedFilterWords.map(w => w.toLowerCase()));
+  return (filterChips?.words() || []).some(w => !locked.has(w.toLowerCase())) || !!filterSearch?.value.trim();
 }
 
 if (filterSearch) {

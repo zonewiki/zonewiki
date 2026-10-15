@@ -3,6 +3,7 @@
 import re
 from datetime import date, timedelta
 
+import pytest
 from playwright.sync_api import expect
 
 from conftest import open_tab, real_density
@@ -304,6 +305,35 @@ def test_folded_section_hides_its_cards_and_is_remembered(page, wiki):
     expect(card(page, "Loose one")).to_have_count(0)
     fold(page, "unplanned")
     expect(card(page, "Loose two")).to_be_visible()
+
+
+def test_whole_header_folds_but_due_count_opens_its_list(page, wiki):
+    day = (date.today() + timedelta(days=2)).isoformat()
+    page.request.post("/api/deck", data={"title": "On the day", "start_date": day, "due_date": day})
+    open_board(page, wiki)
+    header = page.locator(f".board-day-divider[data-drop-day='{day}']")
+    header.locator(".board-day-due").click()
+    expect(page.locator(".task-menu")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(card(page, "On the day")).to_be_visible()       # the due count didn't fold
+    header.locator(".board-day-count").click()              # far from the label
+    expect(card(page, "On the day")).to_have_count(0)
+    header.click()
+    expect(card(page, "On the day")).to_be_visible()
+
+
+@pytest.mark.parametrize("embed", ["list=task", "tag=task"])
+def test_list_and_tag_decks_fold_too(page, wiki, embed):
+    # Regression: the embed's locked filter chip (#task) counted as the
+    # viewer filtering, which shows every section, so nothing could fold.
+    page.request.post("/api/deck", data={"title": "Loose", "tags": ["task"]})
+    wiki.write("deck", f"# Deck\n\n[[deck {embed}]]\n")
+    page.goto("/page/deck?view=plan")
+    expect(card(page, "Loose")).to_be_visible()
+    fold(page, "unplanned")
+    expect(card(page, "Loose")).to_have_count(0)
+    page.locator("#task-filter-search").fill("loo")         # the viewer's own filter
+    expect(card(page, "Loose")).to_be_visible()
 
 
 def test_folded_section_still_takes_drops(page, wiki):

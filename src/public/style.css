@@ -2059,10 +2059,12 @@ div.chip-input > input {
 .board-day-label { position: relative; padding-left: 1.1rem; }
 .board-day-fold::before {
   content: "▾"; position: absolute; left: 0; top: 50%; width: .9rem; margin-top: -.5em;
-  font-size: .85rem; line-height: 1; text-align: center; transition: transform .15s;
+  font-size: 1rem; line-height: 1; text-align: center; transition: transform .15s;
 }
 .board-day--folded .board-day-fold::before { transform: rotate(-90deg); }
-.board-day-fold:hover, .board-day-fold:focus-visible { color: var(--fg); }
+.board-day--foldable { cursor: pointer; user-select: none; }
+.board-day--foldable .board-day-fold::before { color: var(--fg); }
+.board-day--foldable:hover, .board-day-fold:focus-visible { color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .board-day-fold::before { transition: none; } }
 .board-day-count { font-weight: 700; color: var(--muted); }
 /* "N due": the deadlines on this day, wherever their cards sit (a button

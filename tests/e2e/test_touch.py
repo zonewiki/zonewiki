@@ -490,6 +490,21 @@ def test_touch_drag_on_board_sets_start_date(phone):
     expect(phone.locator("#task-edit-modal")).to_be_hidden()
 
 
+def test_touch_drop_on_a_header_does_not_fold_it(new_page, wiki):
+    # The whole header folds its section on a tap; a drop on it is no tap.
+    tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
+    tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
+    tall.request.post("/api/deck", data={"title": "Loose"})
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    tall.goto("/page/deck?view=open")
+    open_tab(tall, "plan")
+    target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
+    touch_drag(tall, card(tall, "Water plants"), target)
+    wait_until(tall, lambda: tasks_by_title(tall)["Water plants"]["start_date"] is None)
+    expect(target).not_to_have_class(re.compile(r"\bboard-day--folded\b"))
+    expect(card(tall, "Loose")).to_be_visible()
+
+
 def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
     tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
     tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
