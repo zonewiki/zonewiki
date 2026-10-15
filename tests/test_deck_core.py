@@ -472,3 +472,41 @@ class TestManualOrder:
         ordered = {s["key"]: bool(s.get("ordered")) for s in sections}
         assert ordered.pop("unplanned") is False and ordered.pop("carried") is False
         assert all(ordered.values())
+
+    def test_by_deadline_nearest_first_then_open_order_undated_last(self):
+        tasks = [
+            {"id": "none-new", "created_at": "2026-07-02"},
+            {"id": "fri", "due_date": "2026-07-31", "sort_order": 0},
+            {"id": "tue-b", "due_date": "2026-07-28", "sort_order": 2},
+            {"id": "tue-a", "due_date": "2026-07-28", "sort_order": 1},
+            {"id": "none-sorted", "sort_order": 0},
+        ]
+        assert run_core(f"{json.dumps(tasks)}.sort(DeckCore.byDeadline).map(t => t.id)") == [
+            "tue-a", "tue-b", "fri", "none-new", "none-sorted"]
+
+    def test_by_created_newest_first(self):
+        tasks = [
+            {"id": "a", "created_at": "2026-07-01T09:00:00"},
+            {"id": "c", "created_at": "2026-07-03T09:00:00"},
+            {"id": "b", "created_at": "2026-07-02T09:00:00"},
+        ]
+        assert run_core(f"{json.dumps(tasks)}.sort(DeckCore.byCreated).map(t => t.id)") == ["c", "b", "a"]
+
+    def test_board_sort_sorts_every_section_and_none_is_ordered(self):
+        today = "2026-07-27"
+        tasks = [
+            {"id": "d-old", "start_date": today, "created_at": "2026-07-01", "sort_order": 0},
+            {"id": "d-new", "start_date": today, "created_at": "2026-07-05", "sort_order": 1, "due_date": "2026-07-29"},
+            {"id": "u-old", "created_at": "2026-07-01", "due_date": "2026-07-28"},
+            {"id": "u-new", "created_at": "2026-07-05"},
+        ]
+        for sort, today_ids, unplanned_ids in (
+                (None, ["d-old", "d-new"], ["u-old", "u-new"]),
+                ("due", ["d-new", "d-old"], ["u-old", "u-new"]),
+                ("created", ["d-new", "d-old"], ["u-new", "u-old"])):
+            sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, {json.dumps(today)}, {json.dumps(sort)})"
+                                ".map(s => ({key: s.key, ordered: !!s.ordered, ids: s.tasks.map(t => t.id)}))")
+            by_key = {s["key"]: s for s in sections}
+            assert by_key[today]["ids"] == today_ids
+            assert by_key["unplanned"]["ids"] == unplanned_ids
+            assert by_key[today]["ordered"] is (sort is None)

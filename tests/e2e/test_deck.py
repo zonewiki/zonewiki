@@ -1414,8 +1414,7 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
     # Unsorted: newest first. No Due section on Open: a due task sits in its section.
     assert _open_titles(page, "unsorted") == ["Overdue", "Fresh", "Old new"]
     assert _open_titles(page, "sorted") == ["Alpha", "Bravo"]
-    # No sort menu, no "Move to New" checkbox.
-    expect(page.locator("#task-sort")).to_have_count(0)
+    # No "Move to New" checkbox.
     card(page, "Alpha").dblclick()
     expect(page.locator("#task-edit-modal")).to_be_visible()
     expect(page.locator("#task-edit-inbox")).to_have_count(0)
@@ -2787,3 +2786,84 @@ def test_empty_dates_show_on_hover_in_lines_too(page, wiki):
     expect(empty).to_have_count(2)
     expect(empty.first).to_be_visible()
     expect(empty.last).to_be_visible()
+
+
+def _list_rows(page):
+    """Headings and task titles on the list, top to bottom."""
+    return page.evaluate("""() => [...document.querySelectorAll('.tasks-list > li')].map(li =>
+        li.classList.contains('task-item') ? li.querySelector('.task-title').textContent.trim()
+        : '# ' + li.querySelector('.board-day-label')?.textContent.trim())""")
+
+
+def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    later = (date.today() + timedelta(days=9)).isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "due_date": d}).json()["id"]
+           for t, d in (("Plain", None), ("Later due", later), ("Soon due", soon))]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.request.post("/api/deck", data={"title": "Fresh"})
+    page.goto("/deck?view=open")
+    sel = page.locator("select.deck-sort")
+    expect(sel).to_have_value("manual")
+    sel.select_option("due")
+    assert _list_rows(page) == ["# By deadline", "Soon due", "Later due",
+                                "# No deadline", "Fresh", "Plain"]
+    # Nothing drags in this order.
+    expect(page.locator(".task-item[data-drag]")).to_have_count(0)
+    sel.select_option("created")
+    assert _list_rows(page) == ["# Newest first", "Fresh", "Soon due", "Later due", "Plain"]
+    # Remembered on reload; Focus has no sort.
+    page.reload()
+    expect(card(page, "Fresh")).to_be_visible()
+    assert _list_rows(page)[0] == "# Newest first"
+    open_tab(page, "focus")
+    expect(sel).to_be_hidden()
+    open_tab(page, "open")
+    # o goes on to the manual order.
+    page.keyboard.press("o")
+    expect(sel).to_have_value("manual")
+    assert _list_rows(page)[0] == "# Unsorted"
+
+
+def test_open_by_deadline_does_not_reorder(page, wiki):
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "due_date": soon}).json()["id"]
+           for t in ("Alpha", "Bravo")]
+    page.request.post("/api/deck/reorder", data={"order": ids})
+    page.goto("/deck?view=open")
+    page.locator("select.deck-sort").select_option("due")
+    card(page, "Bravo").click()
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
+    page.keyboard.press("Control+Shift+ArrowUp")
+    expect(page.get_by_text("press o until Manual")).to_be_visible()
+    page.wait_for_timeout(200)
+    assert writes == []
+
+
+def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
+    today = date.today().isoformat()
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    later = (date.today() + timedelta(days=9)).isoformat()
+    ids = [page.request.post("/api/deck", data={"title": t, "start_date": today, "due_date": d}).json()["id"]
+           for t, d in (("Old", later), ("Mid", None), ("New", soon))]
+    page.request.post("/api/deck/reorder", data={"order": [ids[1], ids[0], ids[2]]})
+    page.goto("/deck?view=plan")
+    expect(card(page, "New")).to_be_visible()
+    sel = page.locator("select.deck-sort")
+    expect(sel).to_have_value("manual")
+    assert _day_titles(page, today) == ["Mid", "Old", "New"]
+    page.keyboard.press("o")
+    expect(sel).to_have_value("due")
+    assert _day_titles(page, today) == ["New", "Old", "Mid"]
+    # Sorted, a day is not reorderable: no drop line, and keys only explain.
+    expect(page.locator('.board-day-divider[data-ordered]')).to_have_count(0)
+    page.keyboard.press("o")
+    expect(sel).to_have_value("created")
+    assert _day_titles(page, today) == ["New", "Mid", "Old"]
+    # Open keeps its own sort, Plan's is remembered.
+    open_tab(page, "open")
+    expect(sel).to_have_value("manual")
+    page.reload()
+    open_tab(page, "plan")
+    expect(sel).to_have_value("created")

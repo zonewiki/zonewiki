@@ -12,6 +12,7 @@
     </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{{ sfx }}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
+      <select class="deck-sort" id="task-sort{{ sfx }}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
       <button type="button" class="btn deck-density-btn" id="task-density-btn{{ sfx }}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
       <button class="btn btn-primary" id="task-add-btn{{ sfx }}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>

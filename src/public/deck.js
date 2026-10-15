@@ -11,7 +11,7 @@ import { openLightbox } from './js/page.js';
 import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, placeInOrder, planOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
+const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, planOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
@@ -126,6 +126,7 @@ const listEl = document.getElementById('tasks-list' + sfx);
 const tabsEl = document.getElementById('tasks-tabs' + sfx);
 const addBtn = document.getElementById('task-add-btn' + sfx);
 const densityBtn = document.getElementById('task-density-btn' + sfx);
+const sortSel = document.getElementById('task-sort' + sfx);
 const filterSearch = document.getElementById('task-filter-search' + sfx);
 const completedLink = document.getElementById('task-completed-link' + sfx);
 const modal = document.getElementById('task-edit-modal' + sfx);
@@ -610,6 +611,38 @@ function unfoldFor(id) {
   render();
   return true;
 }
+
+// Open and Plan sorted by deadline or by creation (the Order dropdown; o
+// cycles it) instead of the manual order (DeckCore.SORTS). Nothing reorders
+// in them: ordering is done back in the manual order. Each tab's sort is
+// remembered per deck in this browser.
+const SORT_MODES = ['manual', 'due', 'created'];
+const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
+const sortKey = () => 'leaf-deck-sort:' + [location.pathname, appEl?.dataset.initList || '',
+  appEl?.dataset.initTag || '', instanceId].join('|');
+let sortModes = {};   // view → 'due' | 'created'; missing: manual
+try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
+// The shown tab's sort, when not the manual order.
+const activeSort = () => (activeView === 'open' || activeView === 'plan') && SORTS[sortModes[activeView]]
+  ? sortModes[activeView] : null;
+function applySort() {
+  if (!sortSel) return;
+  sortSel.hidden = activeView !== 'open' && activeView !== 'plan';
+  sortSel.value = activeSort() || 'manual';
+}
+function setSort(mode) {
+  if (activeView !== 'open' && activeView !== 'plan') return;
+  if (SORTS[mode]) sortModes[activeView] = mode; else delete sortModes[activeView];
+  try { localStorage.setItem(sortKey(), JSON.stringify(sortModes)); } catch (_) {}
+  applySort();
+  render();
+}
+// o: Manual → Due date → Created → Manual.
+function cycleSort() {
+  const mode = activeSort() || 'manual';
+  setSort(SORT_MODES[(SORT_MODES.indexOf(mode) + 1) % SORT_MODES.length]);
+}
+sortSel?.addEventListener('change', () => setSort(sortSel.value));
 
 let compact = false;   // the shown tab's (applyCompact)
 function applyCompact(view) {
@@ -1869,7 +1902,7 @@ function urgencyClass(task) {
 
 // Day-board grouping lives in DeckCore; bind it to the current date here.
 function boardBuckets(list) {
-  return DeckCore.boardBuckets(list, todayStr());
+  return DeckCore.boardBuckets(list, todayStr(), activeSort());
 }
 
 // Custom in-page calendar popup, anchored at `anchor`. Calls cb with the
@@ -2062,7 +2095,9 @@ function render() {
   // task has no section of its own: it keeps its place in the order, and
   // its urgency colour marks it.
   let orderedTasks, newTasks = [];
-  if (SECTIONS[activeView]) {
+  if (activeView === 'open' && activeSort()) {
+    orderedTasks = [...filtered].reverse().sort(SORTS[activeSort()]);
+  } else if (SECTIONS[activeView]) {
     // DeckCore.byOpenOrder, which the Plan board uses too. Reversed first,
     // so tasks created in the same second (created_at has no finer
     // resolution) keep newest-first.
@@ -2247,9 +2282,21 @@ function render() {
     displayTasks = orderedTasks.slice(0, completedLimit);
     truncated = true;
   }
+  // Open sorted: by deadline the tasks with one, then those without, each
+  // under a heading; newest first under one. Not drop targets: nothing
+  // drags here.
+  if (activeView === 'open' && activeSort()) {
+    const heading = (label, n) => n ? `<li class="board-day-divider sort-heading">` +
+      `<span class="board-day-label">${label}</span><span class="board-day-count">${n}</span></li>` : '';
+    const group = (label, tasks) => heading(label, tasks.length) + tasks.map(t => taskHTML(t, false)).join('');
+    html += activeSort() === 'due'
+      ? group('By deadline', displayTasks.filter(t => t.due_date)) + group('No deadline', displayTasks.filter(t => !t.due_date))
+      : group('Newest first', displayTasks);
+    displayTasks = [];
+  }
   // Open and Focus: both sections always have a heading, even when empty,
   // because the heading is where a task is dropped to enter an empty section.
-  if (SECTIONS[activeView]) {
+  else if (SECTIONS[activeView]) {
     html += sectionHTML('unsorted', 'Unsorted', newTasks.length);
     html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
     html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
@@ -2338,7 +2385,7 @@ function render() {
   touchDrop = null;
   if (activeView === 'plan') {
     setupBoardDragAndDrop();
-  } else if (SECTIONS[activeView]) {
+  } else if (SECTIONS[activeView] && !activeSort()) {
     setupDragAndDrop();
   }
 
@@ -2530,6 +2577,7 @@ function switchTab(view) {
   if (view !== 'completed') lastTab = view;
   activeView = view;
   applyCompact(view);
+  applySort();
   // Back from an earlier year: the other views count this year's matches.
   if (view !== 'completed' && completedYear) setCompletedYear('');
   markActiveTab(view);   // Completed has no tab: none is marked
@@ -3431,7 +3479,8 @@ function setupDragAndDrop() {
 
 function reorderSelected(direction) {
   if (!selectedIds.size) return;
-  if (SECTIONS[activeView]) sectionKeyMove(direction);
+  if (activeSort()) showNotice(`Sorted ${SORT_TITLES[activeSort()]}: press o until Manual to reorder`);
+  else if (SECTIONS[activeView]) sectionKeyMove(direction);
   else if (activeView === 'plan') planKeyMove(direction);
 }
 // Plan: Ctrl+Shift+↑/↓ moves the selection one place within its day or
@@ -3522,6 +3571,13 @@ document.addEventListener('keydown', async e => {
   if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     toggleCompact();
+    return;
+  }
+
+  // 'o' cycles Open's or Plan's order: manual, by deadline, newest first
+  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (activeView === 'open' || activeView === 'plan')) {
+    e.preventDefault();
+    cycleSort();
     return;
   }
 
@@ -3670,6 +3726,7 @@ if (filterSearch) {
 activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
 if (activeView !== 'completed') lastTab = activeView;
 applyCompact(activeView);
+applySort();
 markActiveTab(activeView);
 syncCompletedLink();
 

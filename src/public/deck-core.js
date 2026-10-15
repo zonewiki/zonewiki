@@ -41,6 +41,23 @@ function byOpenOrder(a, b) {
   return a.sort_order - b.sort_order;
 }
 
+// Nearest deadline first, then Open's order; tasks without one last, in
+// Open's order. Plan's Unplanned and the Due sort of Open and Plan.
+function byDeadline(a, b) {
+  if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date) || byOpenOrder(a, b);
+  return a.due_date ? -1 : b.due_date ? 1 : byOpenOrder(a, b);
+}
+
+// Newest first: the Created sort of Open and Plan. Tasks created in the
+// same second (created_at has no finer resolution) keep the order they
+// come in, so callers reverse the list first, as for Unsorted.
+function byCreated(a, b) {
+  return (b.created_at || '').localeCompare(a.created_at || '');
+}
+
+// The sorts Open and Plan can switch to instead of the manual order.
+const SORTS = { due: byDeadline, created: byCreated };
+
 // The manual order `old` (ids, by sort_order) after the tasks `moved` were
 // placed among the visible sorted tasks `shown`, in the order shown. Every
 // other task keeps its place, hidden ones too: on Focus most of the order is
@@ -226,8 +243,11 @@ function fullDayLabel(d) {
 // (today..+6), Later, and Unplanned are droppable (dropping sets or clears the
 // start date); Carried over is display-only. Dropping on Later opens a date
 // picker in the UI layer. Unplanned also lists its overdue tasks
-// (`overdue`), which it shows first, for its header.
-function boardBuckets(list, today) {
+// (`overdue`), which it shows first, for its header. `sort` ('due' or
+// 'created', see SORTS) sorts every section by it instead, and then none is
+// `ordered`: the manual order is only edited where it is shown.
+function boardBuckets(list, today, sort) {
+  const by = SORTS[sort];
   const groups = {};
   // Reversed first, so tasks created in the same second (created_at has no
   // finer resolution) keep newest-first too, as on Open.
@@ -242,7 +262,7 @@ function boardBuckets(list, today) {
   // (its tasks are in Focus already); dropping one on Today commits to it
   // again.
   const byStart = (a, b) => a.start_date.localeCompare(b.start_date) || byOpenOrder(a, b);
-  if (groups['carried']) sections.push({ key: 'carried', label: 'Carried over', date: null, droppable: false, tasks: groups['carried'].sort(byStart) });
+  if (groups['carried']) sections.push({ key: 'carried', label: 'Carried over', date: null, droppable: false, tasks: groups['carried'].sort(by || byStart) });
   // Each day also names the tasks due on it, wherever they sit (`due`): the
   // board places cards by start date, so a deadline is otherwise invisible
   // until its day.
@@ -250,21 +270,19 @@ function boardBuckets(list, today) {
     const d = addDays(today, i);
     const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
     const due = list.filter(t => t.due_date === d).sort(byOpenOrder);
-    sections.push({ key: d, label, date: d, droppable: true, ordered: true, tasks: (groups[d] || []).sort(byOpenOrder), due });
+    sections.push({ key: d, label, date: d, droppable: true, ordered: !by, tasks: (groups[d] || []).sort(by || byOpenOrder), due });
   }
   // Later and Unplanned are always present, even when empty: they are the
   // only drop targets for "start beyond this week" and "unplan", so hiding
   // them when empty would strand every task on a dated day.
-  sections.push({ key: 'later', label: 'Later', date: null, droppable: true, ordered: true, tasks: (groups['later'] || []).sort(byOpenOrder) });
+  sections.push({ key: 'later', label: 'Later', date: null, droppable: true, ordered: !by, tasks: (groups['later'] || []).sort(by || byOpenOrder) });
   // Unplanned: nearest deadline first (they need a start date soonest), so
   // overdue tasks lead, the most overdue first; then the rest in Open's order.
-  const byDeadline = (a, b) => (a.due_date && b.due_date) ? a.due_date.localeCompare(b.due_date)
-    : a.due_date ? -1 : b.due_date ? 1 : byOpenOrder(a, b);
   // Unplanned goes first: it is where planning starts (cards are dragged
   // from it onto the days), so it sits next to them, not past Later.
-  const unplanned = (groups['unplanned'] || []).sort(byDeadline);
+  const unplanned = (groups['unplanned'] || []).sort(by || byDeadline);
   sections.unshift({ key: 'unplanned', label: 'Unplanned', date: null, droppable: true, tasks: unplanned,
-    overdue: unplanned.filter(t => isOverdue(t, today)) });
+    overdue: unplanned.filter(t => isOverdue(t, today)).sort(byDeadline) });
   return sections;
 }
 
@@ -327,7 +345,7 @@ function parseQuickAdd(input, today) {
 }
 
 const DeckCore = {
-  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, placeInOrder, planOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
+  dateToStr, addDays, isOverdue, isFocus, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, planOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, tagParamToQuery,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,

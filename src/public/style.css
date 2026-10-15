@@ -2396,6 +2396,8 @@ div.chip-input > input {
 
 .deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
+.tasks-toolbar select.deck-sort { flex: none; }
+.deck-sort[hidden] { display: none; }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
 .task-skip-btn {
