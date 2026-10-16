@@ -931,7 +931,7 @@ class TestCheckLinks:
         write_page(pages, "knowledge/nginx/a", (
             "# A\n\n[ok](b.md) [up](../../notes/index.md) [gone](../../notes/nope.md) [bare](b) "
             "[gone2](/page/nowhere) [file](_assets/x.pdf) [folder](../../notes/) "
-            "[web](https://example.com/z.md) [anchor](#top)\n"))
+            "[web](https://example.com/z.md) [anchor](#top) [raw](../../_raw/x.md) [daily](/page/_daily)\n"))
         text, err = call(client, "check_links")
         assert not err
         assert text.splitlines() == [

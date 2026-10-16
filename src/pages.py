@@ -330,8 +330,8 @@ def md_link_misses(content: str, file_slug: str, slugs: set[str]) -> dict[str, s
     """The markdown links in content (code aside) that lead to no page: each
     link as written -> the slug it resolves to. Relative (`x.md`, `../dir/x`,
     `x`) and absolute (`/page/x`) links are checked; external links, anchors,
-    folders (a trailing /) and files (an extension other than .md, such as an
-    attachment in _assets/) are not."""
+    folders (a trailing /), files (an extension other than .md, such as an
+    attachment in _assets/) and Leaf's own _folders and views are not."""
     text, _ = mask_code(content)
     misses: dict[str, str] = {}
     for m in _MD_LINK_REWRITE_RE.finditer(text):
@@ -346,6 +346,8 @@ def md_link_misses(content: str, file_slug: str, slugs: set[str]) -> dict[str, s
             continue
         else:
             target = _resolve_bare_link(href, file_slug)
+        if target and target.split("/")[0].startswith("_"):
+            continue  # Leaf's own folders and views: _assets, _raw, _scratch, _deleted, _daily
         if target and target not in slugs:
             misses[m.group(0)] = target
     return misses
