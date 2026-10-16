@@ -391,6 +391,66 @@ def update_references(old_slug: str, new_slug: str, section: str = "") -> list[P
     return modified
 
 
+def rebase_links(text: str, source: str, new_source: str, moves: dict[str, str]) -> str:
+    """Re-point the links in text, written by page `source`, for a page now
+    at `new_source` and for pages that moved (`moves`: old slug -> new slug).
+
+    Every relative link still reaches the same page or file from where the
+    page is now, so a page moved into another folder keeps its links. Wikilinks
+    name pages, so only their targets change. Code is left alone."""
+    text, stash = mask_code(text)
+
+    def wikilink(m: re.Match) -> str:
+        target, sep, label = m.group(1).partition("|")
+        page_name, hash_, sect = target.partition("#")
+        key = page_name.strip()
+        old = key if key in moves else to_slug(key)
+        if not key or old not in moves:
+            return m.group(0)
+        return f"[[{moves[old]}{hash_}{sect}{sep}{label}]]"
+
+    source_dir = posixpath.dirname(new_source)
+
+    def md_link(m: re.Match) -> str:
+        prefix, href, rest = m.groups()
+        if href.startswith("/page/"):
+            old = href[len("/page/"):]
+            return f"{prefix}/page/{moves[old]}{rest}" if old in moves else m.group(0)
+        is_md = href.endswith(".md")
+        target = _resolve_md_link(href, source) if is_md else _resolve_bare_link(href, source)
+        if target is None:
+            return m.group(0)
+        new_target = moves.get(target, target)
+        if new_source == source and new_target == target:
+            return m.group(0)
+        new_href = posixpath.relpath(new_target, source_dir or ".") + (".md" if is_md else "")
+        return f"{prefix}{new_href}{rest}"
+
+    text = WIKILINK_RE.sub(wikilink, text)
+    text = _MD_LINK_REWRITE_RE.sub(md_link, text)
+    return unmask_code(text, stash)
+
+
+def rewrite_moved_links(moves: dict[str, str]) -> list[Path]:
+    """After the pages in `moves` (old slug -> new slug) are at their new
+    paths: point the links to them at the new slugs, in every page and deck
+    task, and re-base the links of the moved pages themselves, which were
+    written relative to their old folder. Returns the files that changed."""
+    inverse = {new: old for old, new in moves.items()}
+    modified: list[Path] = []
+    for md_file, file_slug in iter_pages():
+        source = inverse.get(file_slug, file_slug)
+        content = md_file.read_text(encoding="utf-8")
+        new_content = rebase_links(content, source, file_slug, moves)
+        if new_content != content:
+            md_file.write_text(new_content, encoding="utf-8")
+            modified.append(md_file)
+    for old, new in moves.items():
+        modified += deckstore.rename_page_refs(
+            old, new, lambda text, o=old, n=new: rewrite_page_links(text, o, n))
+    return list(dict.fromkeys(modified))
+
+
 def page_folders() -> list[str]:
     """The folders that hold pages, A–Z (each parent of a page's slug), for
     filing a scratch note. Hidden pages don't name theirs in sharing mode."""

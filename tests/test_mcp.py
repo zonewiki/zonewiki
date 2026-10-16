@@ -1248,6 +1248,15 @@ class TestRenamePage:
         assert call(client, "search_tasks", query="Fix")[0].count("[[cars/golf]]") == 1
         assert tid
 
+    def test_a_moved_page_keeps_its_own_relative_links(self, client, pages):
+        write_page(pages, "golf", "# Golf\n\nSee [hub](hub.md), [bug](tickets/bug-1) and [[hub]].\n")
+        write_page(pages, "hub", "# Hub\n")
+        write_page(pages, "tickets/bug-1", "# Bug 1\n")
+        text, err = call(client, "rename_page", slug="golf", new_slug="cars/golf")
+        assert not err
+        assert (pages / "cars" / "golf.md").read_text() == (
+            "# Golf\n\nSee [hub](../hub.md), [bug](../tickets/bug-1) and [[hub]].\n")
+
     def test_refusals(self, client, pages):
         assert call(client, "rename_page", slug="index", new_slug="home")[1]
         text, err = call(client, "rename_page", slug="golf", new_slug="git-remote")
@@ -1278,6 +1287,13 @@ class TestRenameFolder:
         assert call(client, "search_tasks", query="Fix")[0].count("[[work/tickets/bug-1]]") == 1 and tid
         # Other files stay, so the folder does; emptied subfolders go.
         assert (tree / "tickets" / "shot.png").exists() and not (tree / "tickets" / "sub").exists()
+
+    def test_moved_pages_relative_links_still_reach_their_targets(self, client, tree):
+        write_page(tree, "tickets/bug-3", "# Bug 3\n\n[up](../hub.md) and [sib](sub/bug-2.md)\n")
+        text, err = call(client, "rename_page", slug="tickets/", new_slug="work/tickets")
+        assert not err
+        assert (tree / "work/tickets/bug-3.md").read_text() == (
+            "# Bug 3\n\n[up](../../hub.md) and [sib](sub/bug-2.md)\n")
 
     def test_a_folder_without_the_slash_when_no_page_has_its_name(self, client, tree):
         text, err = call(client, "rename_page", slug="tickets", new_slug="Archive/Tickets")

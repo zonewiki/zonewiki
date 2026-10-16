@@ -51,6 +51,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
 - Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`). Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory. Images are never touched.
 - Links inside fenced code and inline code are left alone (`mask_code`).
+- **Moved pages keep their own links.** A page that moves into another folder (a rename into a folder, a folder move, a scratch note promoted into a folder) has its relative links re-based, through `rewrite_moved_links()` (`rebase_links()` per page): each still reaches the same page or file from where the page is now, including links to other pages that moved too. Wikilinks name pages, so they only change when their target moves.
 
 ### File paste and drag & drop
 

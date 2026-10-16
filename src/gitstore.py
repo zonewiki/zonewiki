@@ -9,7 +9,7 @@ from pathlib import Path
 
 import config
 from mdtext import page_title, slug_display_name
-from pages import iter_pages, update_references
+from pages import iter_pages, rewrite_moved_links
 
 
 SHA_RE = re.compile(r'^[0-9a-f]{7,40}$')
@@ -141,7 +141,7 @@ def move_page(old_path: Path, new_path: Path, slug: str, new_slug: str, message:
     returns those files."""
     new_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.rename(new_path)
-    changed = update_references(slug, new_slug)
+    changed = rewrite_moved_links({slug: new_slug})
     git_commit([old_path, new_path, *changed], message)
     return changed
 
@@ -153,17 +153,17 @@ def move_folder(folder: str, new_folder: str, message: str) -> tuple[list[tuple[
     target exists. Other files in the folder (images…) stay; folders left
     empty go."""
     moves = sorted((path, slug) for path, slug in iter_pages() if slug.startswith(folder + "/"))
-    done, touched, changed = [], [], {}
+    done, touched = [], []
     for old_path, slug in moves:
         new_slug = new_folder + slug[len(folder):]
         new_path = config.LEAF_DATA / f"{new_slug}.md"
         new_path.parent.mkdir(parents=True, exist_ok=True)
         old_path.rename(new_path)
-        # The pages moved so far are at their new paths already, so links
-        # in them are rewritten there.
-        changed.update(dict.fromkeys(update_references(slug, new_slug)))
         done.append((slug, new_slug))
         touched += [old_path, new_path]
+    # All the files are in place before any link is rewritten, so each page's
+    # links are re-based from where it moved to.
+    changed = rewrite_moved_links(dict(done))
     old_root = config.LEAF_DATA / folder
     for dirpath, _dirs, _files in sorted(os.walk(old_root), key=lambda w: -len(w[0])):
         try:
