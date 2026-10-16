@@ -270,29 +270,32 @@ def _page_info(slug: str, base: str) -> str:
     return f"url: {base}{url('page', slug)}\nfile: {_host_file(slug)}"
 
 
-def _missing_links(content: str, slugs: set[str]) -> set[str]:
-    """The [[wikilinks]] in content whose page doesn't exist (as rendering
-    decides it: the name as a slug, else slugified)."""
+def _missing_links(content: str, slugs: set[str], slug: str = "") -> dict[str, str]:
+    """The links in content, a page at `slug`, that lead to no page: the
+    [[wikilinks]] (as rendering decides it: the name as a slug, else
+    slugified) and the markdown links (pages.md_link_misses). Each link as
+    written -> the name or slug it was meant for, to suggest a near match."""
     masked, _ = mask_code(content)
     for pattern in (TOC_RE, decksyntax.DECK_RE, decksyntax.TASK_REF_RE):
         masked = pattern.sub("", masked)
-    missing = set()
+    missing = {}
     for m in WIKILINK_RE.finditer(masked):
         name = split_wikilink(m.group(1))[0]
         if name and name not in slugs and to_slug(name) not in slugs:
-            missing.add(name)
+            missing[f"[[{name}]]"] = name
+    missing.update(pages.md_link_misses(content, slug, slugs))
     return missing
 
 
-def _link_warning(old: str, new: str) -> str:
-    """A note on the wikilinks the write added that lead nowhere, so the
-    model can fix a typo or create the page."""
+def _link_warning(slug: str, old: str, new: str) -> str:
+    """A note on the links the write added that lead nowhere, so the model
+    can fix a typo or create the page."""
     slugs = set(all_slugs())
-    added = _missing_links(new, slugs) - _missing_links(old, slugs)
+    added = _missing_links(new, slugs, slug).keys() - _missing_links(old, slugs, slug).keys()
     if not added:
         return ""
-    return ("\nNote: these new wikilinks point to pages that don't exist (yet): "
-            + ", ".join(f"[[{n}]]" for n in sorted(added)))
+    return ("\nNote: these new links point to pages that don't exist (yet): "
+            + ", ".join(sorted(added)))
 
 
 def _norm_title(text: str) -> str:
@@ -562,7 +565,7 @@ def _write_page(args: dict, base: str) -> str:
                     "merge it there (edit_page) and delete_page this one:\n"
                     + "\n".join(f"- {s} | {t}" for s, t in similar))
         out += _close_in_content(slug, content, {s for s, _t in similar})
-    return out + pending + _link_warning(old, content) + _guide_note(slug)
+    return out + pending + _link_warning(slug, old, content) + _guide_note(slug)
 
 
 def _write_scratch(args: dict, content: str, base: str) -> str:
@@ -586,7 +589,7 @@ def _write_scratch(args: dict, content: str, base: str) -> str:
         raise mcp_server.ToolError(str(e))
     return (f"Created scratch note {slug} (in Scratch, not yet in the wiki; file_scratch_note "
             f"moves it there or appends it to a page).\n{_page_info(slug, base)}"
-            + _link_warning("", content))
+            + _link_warning(slug, "", content))
 
 
 def _file_scratch_note(args: dict, base: str) -> str:
@@ -670,7 +673,7 @@ def _edit_page(args: dict, base: str) -> str:
     total = sum(counts)
     what = f"{total} occurrences" if total > 1 else "1 occurrence"
     done = f"applied {len(counts)} edits, {what}" if edits else f"replaced {what}"
-    return (f"Edited page {slug}: {done}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+    return (f"Edited page {slug}: {done}.\n{_page_info(slug, base)}" + pending + _link_warning(slug, content, new)
             + _guide_note(slug))
 
 
@@ -737,7 +740,7 @@ def _append_to_page(args: dict, base: str) -> str:
     path.write_text(new, encoding="utf-8")
     git_commit(path, _commit_msg(f"Append to {slug}", args))
     where = f" under {heading!r}" if heading else ""
-    return (f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(content, new)
+    return (f"Appended to page {slug}{where}.\n{_page_info(slug, base)}" + pending + _link_warning(slug, content, new)
             + _guide_note(slug))
 
 
@@ -1039,9 +1042,9 @@ def _page_links(slug: str, content: str) -> str:
         shown += f", … and {len(linking) - _BACKLINKS_SHOWN} more"
     out = f"\n\n---\nLinked from ({len(linking)}): {shown}"
     slugs = set(all_slugs())
-    missing = _missing_links(content, slugs)
+    missing = _missing_links(content, slugs, slug)
     if missing:
-        out += "\nBroken wikilinks (no such page): " + ", ".join(f"[[{n}]]" for n in sorted(missing))
+        out += "\nBroken links (no such page): " + ", ".join(sorted(missing))
     if retrieval.SEMANTIC:
         # As the page view's Related: pages close in meaning that aren't
         # linked either way, the connections not written down yet.
@@ -1114,20 +1117,20 @@ def _check_links(args: dict, base: str) -> str:
             content = md_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if missing := _missing_links(content, slugs):
-            found.append((slug, sorted(missing)))
+        if missing := _missing_links(content, slugs, slug):
+            found.append((slug, sorted(missing.items())))
     where = f" under {under}/" if under else ""
     if not found:
-        return f"No broken wikilinks{where}."
+        return f"No broken links{where}."
     out = []
-    for slug, names in found:
+    for slug, misses in found:
         links = []
-        for name in names:
-            near = get_close_matches(to_slug(name), slugs, n=1, cutoff=0.8)
-            links.append(f"[[{name}]]" + (f" (maybe [[{near[0]}]]?)" if near else ""))
+        for link, name in misses:
+            near = get_close_matches(to_slug(name) if link.startswith("[[") else name, slugs, n=1, cutoff=0.8)
+            links.append(link + (f" (maybe [[{near[0]}]]?)" if near else ""))
         out.append(f"{slug}: " + ", ".join(links))
-    total = sum(len(names) for _s, names in found)
-    return (f"{total} wikilinks{where} point to pages that don't exist, on {len(found)} pages "
+    total = sum(len(misses) for _s, misses in found)
+    return (f"{total} links{where} point to pages that don't exist, on {len(found)} pages "
             "(fix the link, or create the page):\n" + "\n".join(out))
 
 
@@ -1271,12 +1274,12 @@ def _replace_in_pages(args: dict, base: str) -> str:
     on = f"{len(hits)} pages" if len(hits) > 1 else hits[0][1]
     git_commit([h[0] for h in hits], _commit_msg(f"Replace {label!r} on {on}", args))
     slugs = set(all_slugs())
-    broken = sorted(set().union(*(_missing_links(new, slugs) - _missing_links(old, slugs)
-                                  for _p, _s, old, new, _c in hits)))
+    broken = sorted(set().union(*(_missing_links(new, slugs, s).keys() - _missing_links(old, slugs, s).keys()
+                                  for _p, s, old, new, _c in hits)))
     out = f"Replaced {counted}{where}{code}, in one commit: " + ", ".join(h[1] for h in hits)
     if broken:
-        out += ("\nNote: these new wikilinks point to pages that don't exist (yet): "
-                + ", ".join(f"[[{n}]]" for n in broken))
+        out += ("\nNote: these new links point to pages that don't exist (yet): "
+                + ", ".join(broken))
     return out + pending
 
 
@@ -1411,7 +1414,7 @@ def _restore_page(args: dict, base: str) -> str:
     git_commit(path, _commit_msg(f"Restore {slug} to {sha[:7]}", args))
     what = "Restored" if existed else "Brought back the deleted page"
     return (f"{what} {slug} as of version {sha[:7]} ({entries[i]['time']}).\n{_page_info(slug, base)}"
-            + pending + _link_warning(old, content) + _guide_note(slug))
+            + pending + _link_warning(slug, old, content) + _guide_note(slug))
 
 
 def _list_tags(args: dict, base: str) -> str:

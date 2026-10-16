@@ -824,12 +824,12 @@ class TestReadSection:
         head, _, rest = text.partition("\n\n")
         assert head.endswith("\nsection: lines 5–16 of 19")
         assert rest.startswith("## Setup\n\nSteps.\n\n### Detail\n\nMore.\n\n```\n## not a heading\n```\n")
-        assert "## Usage" not in rest and "Broken wikilinks" not in rest
+        assert "## Usage" not in rest and "Broken links" not in rest
 
     def test_heading_with_hashes_and_its_links(self, client, long):
         text = call(client, "read_page", slug="long", heading="## Usage")[0]
         assert "\n\n## Usage\n\nUse [[Nowhere]].\n" in text
-        assert text.endswith("Broken wikilinks (no such page): [[Nowhere]]")
+        assert text.endswith("Broken links (no such page): [[Nowhere]]")
 
     def test_missing_heading_lists_headings(self, client, long):
         text, err = call(client, "read_page", slug="long", heading="Install")
@@ -901,7 +901,7 @@ class TestReadPageLinks:
         assert text.endswith("\n\n---\nLinked from (2): a, b")
         text = call(client, "read_page", slug="a")[0]
         assert text.endswith("\n\n---\nLinked from (0): no other page\n"
-                             "Broken wikilinks (no such page): [[Nowhere]]")
+                             "Broken links (no such page): [[Nowhere]]")
 
     def test_long_list_is_cut(self, client, pages, monkeypatch):
         import mcp_tools
@@ -919,14 +919,36 @@ class TestCheckLinks:
         text, err = call(client, "check_links")
         assert not err
         assert text.splitlines() == [
-            "3 wikilinks point to pages that don't exist, on 2 pages (fix the link, or create the page):",
+            "3 links point to pages that don't exist, on 2 pages (fix the link, or create the page):",
             "a: [[Golff]] (maybe [[golf]]?), [[Nowhere At All]]",
             "tickets/t: [[Missing]]"]
         assert call(client, "check_links", under="tickets")[0].endswith("\ntickets/t: [[Missing]]")
 
+    def test_relative_markdown_links_are_checked_too(self, client, pages):
+        # Relative to the page's folder, absolute /page/ links too; files, folders, anchors and external links are not pages.
+        write_page(pages, "notes/index", "# Notes\n")
+        write_page(pages, "knowledge/nginx/b", "# B\n")
+        write_page(pages, "knowledge/nginx/a", (
+            "# A\n\n[ok](b.md) [up](../../notes/index.md) [gone](../../notes/nope.md) [bare](b) "
+            "[gone2](/page/nowhere) [file](_assets/x.pdf) [folder](../../notes/) "
+            "[web](https://example.com/z.md) [anchor](#top)\n"))
+        text, err = call(client, "check_links")
+        assert not err
+        assert text.splitlines() == [
+            "2 links point to pages that don't exist, on 1 pages (fix the link, or create the page):",
+            "knowledge/nginx/a: [gone2](/page/nowhere), [gone](../../notes/nope.md)"]
+
+    def test_a_write_notes_the_new_broken_links(self, client, pages):
+        write_page(pages, "knowledge/nginx/b", "# B\n")
+        text, err = call(client, "write_page", slug="knowledge/nginx/c",
+                         content="# C\n\n[b](b.md) [gone](../notes/nope.md)\n")
+        assert not err
+        assert text.endswith(
+            "Note: these new links point to pages that don't exist (yet): [gone](../notes/nope.md)")
+
     def test_none(self, client, pages):
-        assert call(client, "check_links")[0] == "No broken wikilinks."
-        assert call(client, "check_links", under="golf")[0] == "No broken wikilinks under golf/."
+        assert call(client, "check_links")[0] == "No broken links."
+        assert call(client, "check_links", under="golf")[0] == "No broken links under golf/."
 
 
 class TestGrepWiki:

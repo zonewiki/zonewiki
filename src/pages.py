@@ -326,6 +326,31 @@ def find_backlinks(slug: str) -> list[dict]:
 _MD_LINK_REWRITE_RE = re.compile(r'(?<!!)(\[[^\]]*\]\()([^)#?\s]+)([^)]*\))')
 
 
+def md_link_misses(content: str, file_slug: str, slugs: set[str]) -> dict[str, str]:
+    """The markdown links in content (code aside) that lead to no page: each
+    link as written -> the slug it resolves to. Relative (`x.md`, `../dir/x`,
+    `x`) and absolute (`/page/x`) links are checked; external links, anchors,
+    folders (a trailing /) and files (an extension other than .md, such as an
+    attachment in _assets/) are not."""
+    text, _ = mask_code(content)
+    misses: dict[str, str] = {}
+    for m in _MD_LINK_REWRITE_RE.finditer(text):
+        href = m.group(2)
+        if href.startswith("/page/"):
+            target = href[len("/page/"):]
+        elif href.startswith(('http://', 'https://', '//', '/', '#')) or ':' in href or href.endswith('/'):
+            continue
+        elif href.endswith('.md'):
+            target = _resolve_md_link(href, file_slug)
+        elif '.' in href.rsplit('/', 1)[-1]:
+            continue
+        else:
+            target = _resolve_bare_link(href, file_slug)
+        if target and target not in slugs:
+            misses[m.group(0)] = target
+    return misses
+
+
 def rewrite_page_links(text: str, old_slug: str, new_slug: str, source_slug: str = "",
                        section: str = "") -> str:
     """Point every link to old_slug in text at new_slug.

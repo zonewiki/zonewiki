@@ -199,8 +199,8 @@ TOOLS = [
     },
     {
         "name": "check_links",
-        "title": "Find broken wikilinks",
-        "description": ("List every [[wikilink]] in the wiki that points to a page that doesn't "
+        "title": "Find broken links",
+        "description": ("List every link in the wiki, [[wikilink]] or markdown, that points to a page that doesn't "
                         "exist, by page, with the existing page it was probably meant for."),
         "inputSchema": {
             "type": "object",
