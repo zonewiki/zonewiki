@@ -2412,10 +2412,15 @@ def test_date_picker_shortcuts_move_the_start_date(page, wiki):
     chip = card(page, "Shift me").locator(".task-focus-info")
     for label, days in (("Tomorrow", 1), ("In 2 days", 2), ("In a week", 7), ("Today", 0),
                         ("Next Monday", (7 - date.today().weekday()) or 7)):
+        before = chip.inner_text()
         chip.click()
         page.locator(".deck-datepicker").get_by_role("button", name=label, exact=True).click()
         expect(page.locator(".deck-datepicker")).to_have_count(0)
         wait_for_field(page, "Shift me", "start_date", (date.today() + timedelta(days=days)).isoformat())
+        # The page's copy of the task (which the picker marks the current
+        # value from) changes after the server's: wait for the card to show
+        # it, or under load the next click opens the picker on the old date.
+        expect(chip).not_to_have_text(before)
     # The current value is marked, and the tooltip names the day.
     chip.click()
     btn = page.locator(".deck-datepicker").get_by_role("button", name="Next Monday")
