@@ -4,6 +4,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 
 ## Rendering
 
+- Raw HTML in a page is rendered as written (markdown-it's `html` option), but no script in it runs: the Content-Security-Policy allows only Leaf's own script files (Scripts in pages don't run, `docs/spec/security.md`).
 - `server.py`'s `view_page` reads `<slug>.md`, `render.render_md()` converts it to HTML using `markdown-it-py`, and `views.page("view.html", …)` renders it into the page (see Templates). A path with a slug in it is built with `pages.url()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.

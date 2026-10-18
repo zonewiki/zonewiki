@@ -131,6 +131,13 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     page.js_errors = errors
     page.external_requests = external
+    # Leaf's own pages must run under its Content-Security-Policy (script-src
+    # 'self': no inline scripts or handlers). Chromium reports a blocked one
+    # on the console; a test that blocks one on purpose clears the list.
+    violations = []
+    page.on("console", lambda msg: violations.append(msg.text)
+            if "Content Security Policy" in msg.text else None)
+    page.csp_violations = violations
     return ctx, page
 
 
@@ -149,6 +156,7 @@ def page(browser, base_url, wiki):
     ctx.close()
     assert pg.js_errors == [], f"uncaught JS errors: {pg.js_errors}"
     assert pg.external_requests == [], f"requests to other hosts: {pg.external_requests}"
+    assert pg.csp_violations == [], f"blocked by the Content-Security-Policy: {pg.csp_violations}"
 
 
 @pytest.fixture()
@@ -167,3 +175,4 @@ def new_page(browser, base_url, wiki):
         ctx.close()
         assert pg.js_errors == [], f"uncaught JS errors: {pg.js_errors}"
         assert pg.external_requests == [], f"requests to other hosts: {pg.external_requests}"
+        assert pg.csp_violations == [], f"blocked by the Content-Security-Policy: {pg.csp_violations}"

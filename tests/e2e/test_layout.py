@@ -261,7 +261,7 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     expect(tip).to_be_visible()
     page.locator(".bl-count").click()           # desktop click still jumps to the section
     expect(page).to_have_url(re.compile(r"#backlinks$"))
-    page.wait_for_function("scrollY > 0")
+    page.wait_for_function("() => scrollY > 0")
 
 
 DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
@@ -528,7 +528,7 @@ def test_back_to_top_in_the_left_column(new_page, wiki):
     page.evaluate("window.scrollTo(0, 2000)")
     expect(top).to_be_visible()
     top.click()
-    page.wait_for_function("window.scrollY === 0")
+    page.wait_for_function("() => window.scrollY === 0")
     assert page.url.endswith("/page/release")      # no #hash left behind
     expect(top).to_be_hidden()
 

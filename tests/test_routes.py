@@ -1298,6 +1298,17 @@ class TestServeUpload:
         assert resp.headers["Content-Disposition"].startswith("attachment")
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
 
+    def test_script_upload_is_not_served_as_a_script(self, client, wiki_dir):
+        # script-src 'self' trusts Leaf's origin, so an uploaded .js served as
+        # text/javascript would run from <script src="/_assets/…">.
+        resp = client.get(self.put(wiki_dir, "x.js", b"window.x=1"), headers=HOST)
+        assert resp.headers["Content-Type"] == "application/octet-stream"
+        assert resp.headers["Content-Disposition"].startswith("attachment")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_inline_upload_keeps_its_type(self, client, wiki_dir):
+        assert client.get(self.put(wiki_dir, "doc.pdf"), headers=HOST).headers["Content-Type"] == "application/pdf"
+
     def test_unknown_type_is_a_download(self, client, wiki_dir):
         resp = client.get(self.put(wiki_dir, "blob.xyzzy"), headers=HOST)
         assert resp.headers["Content-Disposition"].startswith("attachment")
@@ -1565,8 +1576,22 @@ class TestProduction:
     def test_no_framing_by_other_sites(self, client, wiki_dir):
         for path in ("/page/index", "/deck", "/api/version", "/login"):
             resp = client.get(path, headers=HOST)
-            assert resp.headers["Content-Security-Policy"] == "frame-ancestors 'self'", path
+            assert "frame-ancestors 'self'" in resp.headers["Content-Security-Policy"], path
             assert resp.headers["X-Frame-Options"] == "SAMEORIGIN", path
+
+    def test_only_leafs_own_scripts_run(self, client, wiki_dir):
+        # A page's raw HTML (written by an AI client after a prompt injection,
+        # say) must not run a script: script-src 'self' without
+        # 'unsafe-inline' blocks <script>, onerror= and javascript: links.
+        write_page(wiki_dir, "evil", "# Evil\n\n<script>window.x=1</script><img src=x onerror=alert(1)>\n")
+        for path in ("/page/evil", "/edit/evil", "/deck", "/api/deck", "/login", "/public/leaf.js"):
+            resp = client.get(path, headers=HOST)
+            csp = resp.headers["Content-Security-Policy"]
+            assert csp == server.PAGE_CSP, path
+            assert "script-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp
+            for rule in ("object-src 'none'", "base-uri 'self'", "form-action 'self'"):
+                assert rule in csp, (path, rule)
+            assert resp.headers["X-Content-Type-Options"] == "nosniff", path
 
     def test_framing_rule_joins_an_existing_policy(self, client, wiki_dir):
         (wiki_dir / "_assets" / "x.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")

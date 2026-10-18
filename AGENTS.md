@@ -198,7 +198,7 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
   - `/mcp` requires `LEAF_MCP_TOKEN`: without one it is off (403), password or not. Don't make it open again.
   - `check_host` validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
   - `check_origin` refuses cross-site writes (an `Origin` of another site, or `null`).
-  - Every response forbids framing by other sites (`deny_framing`).
+  - Every response carries the page policy (`content_policy`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
 - `LEAF_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `GIT_TIMEOUT` (60s, `run_git`): a hung git counts as failed (returncode 124).

@@ -278,8 +278,11 @@ under [Security](#security).
 Leaf is for one person: run it on your own machine, or self-host it on a
 server. Out of the box it listens on localhost only, refuses requests with a
 foreign `Host` header (DNS rebinding) and cross-site writes (another site
-posting to `localhost:5000`). Anything reachable beyond localhost belongs
-behind HTTPS, with `LEAF_PASSWORD` set.
+posting to `localhost:5000`). HTML in your pages is shown as written, but no
+script in it runs: only Leaf's own code does, so a page that an AI assistant
+wrote after reading a malicious mail or web page can't take over your wiki.
+Anything reachable beyond localhost belongs behind HTTPS, with
+`LEAF_PASSWORD` set.
 
 **Self-hosting behind HTTPS.** Put a reverse proxy in front that terminates
 HTTPS, passes the original `Host` and sets `X-Forwarded-Proto` and

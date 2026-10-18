@@ -154,17 +154,31 @@ def set_cache_headers(response):
     return response
 
 
-# Clickjacking: another site could load Leaf invisibly in a frame and trick a
-# signed-in user into clicking Delete or Commit. Only Leaf's own pages may
-# frame it (a page's raw HTML may show an upload in an <iframe>).
+# What a page may run. Pages render their raw HTML as written, and pages are
+# also written by AI clients (MCP), which may have read a prompt injection: a
+# <script>, an onerror= or a javascript: link in a page would run with the
+# user's session and could read and rewrite the whole wiki. So only Leaf's own
+# script files run (script-src 'self'; Leaf has no inline scripts or
+# handlers), no plugins, no <base> that re-points those files, no form that
+# posts elsewhere. Clickjacking: another site could load Leaf invisibly in a
+# frame and trick a signed-in user into clicking Delete or Commit, so only
+# Leaf's own pages may frame it (a page's raw HTML may show an upload in an
+# <iframe>). A response with its own policy (an SVG upload's) keeps it and
+# gets only frame-ancestors added.
+PAGE_CSP = ("script-src 'self'; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'self'")
+
+
 @app.after_request
-def deny_framing(response):
+def content_policy(response):
     csp = response.headers.get("Content-Security-Policy")
     if not csp:
-        response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+        response.headers["Content-Security-Policy"] = PAGE_CSP
     elif "frame-ancestors" not in csp:
         response.headers["Content-Security-Policy"] = csp + "; frame-ancestors 'self'"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"   # browsers without CSP
+    # A JSON or text response is never run as a script (<script src=…>).
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
@@ -882,7 +896,11 @@ _SVG_CSP = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline
 def serve_upload(filename):
     mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     inline = mime.startswith(_INLINE_ASSET_PREFIXES) or mime in _INLINE_ASSET_TYPES
-    resp = send_from_directory(config.UPLOADS_DIR, filename, as_attachment=not inline)
+    # A download keeps its name but not its type: an uploaded .js served as
+    # text/javascript would run from <script src=…> (a download doesn't stop
+    # that), and script-src 'self' trusts Leaf's own origin.
+    resp = send_from_directory(config.UPLOADS_DIR, filename, as_attachment=not inline,
+                               mimetype=None if inline else "application/octet-stream")
     resp.headers["X-Content-Type-Options"] = "nosniff"
     if mime == "image/svg+xml":
         resp.headers["Content-Security-Policy"] = _SVG_CSP
