@@ -2562,67 +2562,99 @@ def test_every_card_shows_every_tag(page, wiki):
 
 # ── Compact: expand a task in place ──────────────────────────────────────────
 
+LONG = ("Renew the passport before the trip to Lisbon in spring next year, with new photos "
+        "from the shop on Main Street and the filled-in form")
+EXPANDED = re.compile(r"\btask-expanded\b")
+DETAILS = re.compile(r"\btask-details\b")
+
+
 def _expand_setup(page):
-    page.request.post("/api/deck", data={"title": "Renew passport", "tags": "admin", "due_date": "2026-11-15",
+    page.request.post("/api/deck", data={"title": LONG, "tags": "admin", "due_date": "2026-11-15",
                                           "description": "At the shop.\n- [ ] old passport"})
+    page.request.post("/api/deck", data={"title": "Short with notes", "description": "Some notes."})
     page.request.post("/api/deck", data={"title": "Plain"})
     page.goto("/deck?view=open")
     page.locator(".deck-density-btn").click()
 
 
-def test_compact_selecting_expands_enter_opens(page, wiki):
-    # Compact: the selected task is expanded to its full card; Enter opens
-    # the modal, as on full cards.
+def test_compact_selecting_shows_the_title_details_on_request(page, wiki):
+    # Compact: selecting a task shows its whole title (wrapped), not its
+    # notes; → (or 📝) opens them, ← closes them; Enter opens the modal.
     _expand_setup(page)
-    passport = card(page, "Renew passport")
+    passport = card(page, LONG)
     one_line = passport.bounding_box()["height"]
+    passport.locator(".task-content").click()                      # select: the whole title
+    expect(passport).to_have_class(EXPANDED)
+    expect(passport).not_to_have_class(DETAILS)
     expect(passport.locator(".task-desc")).to_be_hidden()
-    passport.locator(".task-content").click()                      # select: expands
-    expect(passport).to_have_class(re.compile(r"\btask-expanded\b"))
-    expect(passport.locator(".task-desc")).to_be_visible()
-    assert passport.bounding_box()["height"] > one_line + 30
+    titled = passport.bounding_box()["height"]
+    assert titled > one_line
     expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
-    # The notes' checkboxes work; the save re-renders, the task stays open.
+    page.keyboard.press("ArrowRight")                               # the details
+    expect(passport).to_have_class(DETAILS)
+    expect(passport.locator(".task-desc")).to_be_visible()
+    assert passport.bounding_box()["height"] > titled + 20
+    # The notes' checkboxes work; the save re-renders, the details stay open.
     passport.locator(".task-desc .task-list-item-checkbox").check()
-    expect(card(page, "Renew passport").locator(".task-desc .task-date-done")).to_be_visible()
-    assert task_by_title(page, "Renew passport")["description"].startswith("At the shop.\n- [x] old passport <!--d:")
-    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(card(page, LONG).locator(".task-desc .task-date-done")).to_be_visible()
+    assert task_by_title(page, LONG)["description"].startswith("At the shop.\n- [x] old passport <!--d:")
+    expect(card(page, LONG)).to_have_class(DETAILS)
     # The deck ignores its keys while an input has focus: the ticked box
     # keeps it until the save re-renders the card.
     expect(page.locator(".task-list-item-checkbox:focus")).to_have_count(0)
+    page.keyboard.press("ArrowLeft")                                # closes them, the title stays whole
+    expect(passport).not_to_have_class(DETAILS)
+    expect(passport).to_have_class(EXPANDED)
+    expect(passport.locator(".task-desc")).to_be_hidden()
+    # 📝 toggles them too.
+    passport.locator(".task-has-notes").click()
+    expect(passport.locator(".task-desc")).to_be_visible()
+    passport.locator(".task-has-notes").click()
+    expect(passport.locator(".task-desc")).to_be_hidden()
     page.keyboard.press("Enter")                                    # the modal
-    expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Renew passport")
+    expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value(LONG)
     page.keyboard.press("Escape")
     # Esc collapses (the selection stays); Enter still opens the modal.
+    page.keyboard.press("ArrowRight")
     page.keyboard.press("Escape")
-    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
-    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(passport).not_to_have_class(EXPANDED)
+    expect(passport).not_to_have_class(DETAILS)
+    expect(passport).to_have_class(re.compile(r"\btask-selected\b"))
     page.keyboard.press("Enter")
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
     page.keyboard.press("Escape")
-    expect(card(page, "Renew passport")).not_to_have_class(re.compile(r"\btask-expanded\b"))
-    # Moving the selection expands the newly selected task (when it has
-    # more to show: "Plain" doesn't), the previous one closes.
-    # (Newest first: "Plain" is above.)
+    # Moving the selection expands the newly selected task when its title
+    # is cut off; a short title with notes stays a line until →.
+    # (Newest first: "Short with notes" is above.)
     page.keyboard.press("k")
-    expect(card(page, "Plain")).to_have_class(re.compile(r"\btask-selected\b"))
+    short = card(page, "Short with notes")
+    expect(short).to_have_class(re.compile(r"\btask-selected\b"))
     expect(page.locator(".task-expanded")).to_have_count(0)
+    expect(short.locator(".task-desc")).to_be_hidden()
+    page.keyboard.press("ArrowRight")
+    expect(short.locator(".task-desc")).to_be_visible()
     page.keyboard.press("j")
-    expect(card(page, "Renew passport")).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(short.locator(".task-desc")).to_be_hidden()
+    expect(passport).to_have_class(EXPANDED)
     expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
 
 
 def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
-    # A press on the card below the expanded one doesn't collapse that one
-    # at once (which would pull the card up under the pointer): the
-    # double-click opens the card it started on, the other collapses after.
+    # A press on the card below the open one doesn't close that one at
+    # once (which would pull the card up under the pointer): the
+    # double-click opens the card it started on, the other closes after.
     page.request.post("/api/deck", data={"title": "Below", "description": "Some notes."})
     page.request.post("/api/deck", data={"title": "Long notes", "description": "\n\n".join(f"Line {i}" for i in range(12))})
     page.goto("/deck?view=open")
     page.locator(".deck-density-btn").click()
     long_notes, below = card(page, "Long notes"), card(page, "Below")
-    long_notes.locator(".task-content").click()
-    expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
+
+    def open_details(item):
+        item.locator(".task-content").click()
+        page.keyboard.press("ArrowRight")
+        expect(item).to_have_class(DETAILS)
+
+    open_details(long_notes)
     page.wait_for_timeout(500)
     for _ in range(2):                       # every time, not just the first
         box = below.locator(".task-content").bounding_box()
@@ -2632,56 +2664,60 @@ def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
         page.mouse.down()
         page.mouse.up()
         assert below.locator(".task-content").bounding_box()["y"] == top
-        assert "task-expanded" in long_notes.get_attribute("class")
+        assert "task-details" in long_notes.get_attribute("class")
         page.mouse.down(click_count=2)
         assert below.locator(".task-content").bounding_box()["y"] == top
-        assert "task-expanded" in long_notes.get_attribute("class")
+        assert "task-details" in long_notes.get_attribute("class")
         page.mouse.up(click_count=2)
         expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Below")
         page.keyboard.press("Escape")
-        expect(long_notes).not_to_have_class(re.compile(r"\btask-expanded\b"))
+        expect(long_notes).not_to_have_class(DETAILS)
         assert below.locator(".task-content").bounding_box()["y"] < top
-        long_notes.locator(".task-content").click()
-        expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
+        open_details(long_notes)
         page.wait_for_timeout(500)
     # A single click: the card stays put for the double-click window.
     top = below.bounding_box()["y"]
     below.locator(".task-content").click()
     assert below.bounding_box()["y"] == top
-    expect(long_notes).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(long_notes).not_to_have_class(DETAILS)
     # The card below closes the same way when the one above is clicked.
-    expect(below).to_have_class(re.compile(r"\btask-expanded\b"))
+    page.keyboard.press("ArrowRight")
+    expect(below).to_have_class(DETAILS)
     page.wait_for_timeout(500)
     long_notes.locator(".task-content").click()
-    assert "task-expanded" in below.get_attribute("class")
-    expect(long_notes).to_have_class(re.compile(r"\btask-expanded\b"))
-    expect(below).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    assert "task-details" in below.get_attribute("class")
+    expect(below).not_to_have_class(DETAILS)
 
 
 def test_compact_task_with_nothing_more_stays_a_line(page, wiki):
-    # No notes, no comments, a title that fits: selecting it changes
-    # nothing (no "expanded" card a few pixels taller); Enter opens it.
+    # A title that fits: selecting it changes nothing (no "expanded" card a
+    # few pixels taller), notes or not; Enter opens it.
     _expand_setup(page)
+    for title in ("Plain", "Short with notes"):
+        item = card(page, title)
+        before = item.bounding_box()
+        item.locator(".task-content").click()
+        expect(item).to_have_class(re.compile(r"\btask-selected\b"))
+        expect(item).not_to_have_class(EXPANDED)
+        assert item.bounding_box()["height"] == before["height"]
     plain = card(page, "Plain")
-    before = plain.bounding_box()
     plain.locator(".task-content").click()
-    expect(plain).to_have_class(re.compile(r"\btask-selected\b"))
-    expect(plain).not_to_have_class(re.compile(r"\btask-expanded\b"))
-    assert plain.bounding_box()["height"] == before["height"]
+    page.keyboard.press("ArrowRight")
+    expect(plain).not_to_have_class(DETAILS)
     page.keyboard.press("Enter")
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Plain")
 
 
 def test_compact_tap_on_nothing_more_selects_then_opens(new_page, wiki):
-    # A task with nothing more to show stays a line: the first tap only
-    # selects it, the second opens the modal.
+    # A task whose title fits stays a line: the first tap only selects it,
+    # the second opens the modal.
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     _expand_setup(phone)
     plain = card(phone, "Plain")
     plain.locator(".task-content").tap()
     expect(plain).to_have_class(re.compile(r"\btask-selected\b"))
-    expect(plain).not_to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(plain).not_to_have_class(EXPANDED)
     expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
     plain.locator(".task-content").tap()
     expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
@@ -2696,13 +2732,24 @@ def test_full_cards_enter_opens_the_modal_at_once(page, wiki):
 
 
 def test_compact_tap_expands_then_opens(new_page, wiki):
+    # On touch: the first tap shows the whole title, a tap on 📝 the notes
+    # (and again hides them), a tap on the selected task opens the modal.
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     _expand_setup(phone)
-    passport = card(phone, "Renew passport")
+    passport = card(phone, LONG)
     passport.locator(".task-content").tap()
-    expect(passport).to_have_class(re.compile(r"\btask-expanded\b"))
+    expect(passport).to_have_class(EXPANDED)
+    expect(passport.locator(".task-desc")).to_be_hidden()
     expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
+    notes = passport.locator(".task-has-notes")
+    b = notes.bounding_box()
+    assert b["width"] >= 24 and b["height"] >= 24                       # a finger's target
+    notes.tap()
+    expect(passport.locator(".task-desc")).to_be_visible()
+    expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
+    notes.tap()
+    expect(passport.locator(".task-desc")).to_be_hidden()
     passport.locator(".task-content").tap()
     expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
 
@@ -2812,8 +2859,10 @@ def test_compact_line_marks_notes(page, wiki):
     expect(marker).to_be_visible()
     expect(marker).to_have_attribute("title", "Has notes")
     expect(card(page, "No notes").locator(".task-has-notes")).to_have_count(0)
-    card(page, "Has notes").locator(".task-content").click()            # expanded
+    expect(card(page, "Has notes").locator(".task-desc")).to_be_hidden()
+    marker.click()                                                       # opens them
     expect(card(page, "Has notes").locator(".task-desc")).to_be_visible()
+    expect(card(page, "Has notes")).to_have_class(re.compile(r"\btask-selected\b"))
     expect(marker).to_be_visible()
 
 
@@ -2837,6 +2886,11 @@ def test_expanded_task_keeps_its_line(page, wiki):
         after = item.locator(sel).first.bounding_box()
         assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 3, sel
     assert not title.evaluate(text_wider)                                # the whole title, wrapped
+    expect(item.locator(".task-desc")).to_be_hidden()                    # not the notes
+    page.keyboard.press("ArrowRight")                                    # they open below
+    for sel, box in before.items():
+        after = item.locator(sel).first.bounding_box()
+        assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 3, sel
     desc = item.locator(".task-desc").bounding_box()
     assert desc["y"] > title.bounding_box()["y"] + title.bounding_box()["height"] - 1
 
@@ -2850,7 +2904,8 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
     expect(passport.locator(".task-card-comments p")).to_have_count(3)   # full cards show them
     page.locator(".deck-density-btn").click()
     expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
-    passport.locator(".task-content").click()                       # select: expands
+    passport.locator(".task-comments-btn").click()                  # 💬 opens them on the line
+    expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
     comments = passport.locator(".task-card-comments p")
     expect(comments).to_have_count(3)                                # the latest 3, newest first
     expect(comments.first).to_contain_text("Paid the fee")

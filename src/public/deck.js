@@ -316,7 +316,7 @@ listEl.addEventListener('click', e => {
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);
-  if (compact && hasMore(id)) setExpanded(id);
+  if (compact && titleCut(id)) setExpanded(id);
 });
 
 // Touch drag. Phones do not fire HTML5 drag events reliably, so a long press picks a
@@ -681,6 +681,7 @@ function applyCompact(view) {
   if (view) {
     compact = compactFor(view);
     expandedId = null;
+    detailsOpen = false;
   }
   appEl?.classList.toggle('deck-compact', compact);
   densityBtn?.setAttribute('aria-pressed', String(compact));
@@ -690,32 +691,47 @@ function applyCompact(view) {
     densityBtn.setAttribute('aria-label', label);
   }
 }
-// In compact view one task at a time is expanded to its full card: the
-// selected one (a click, arrows, j/k; setSelected), or on touch the one
-// tapped first (a tap on it then opens the modal); only when it has more
-// to show than its line (hasMore). Esc collapses it until
-// another task is selected; Enter opens the modal, as on full cards.
+// In compact view one task at a time is expanded: the selected one (a
+// click, arrows, j/k; setSelected), or on touch the one tapped first (a tap
+// on it then opens the modal), shows its whole title, wrapped, when the
+// line cuts it off (titleCut); notes and comments stay hidden. Its details
+// (notes, latest comments: the rest of a full card) open on request only
+// (detailsOpen): 📝 or 💬 on the line, or →; ← closes them, Esc closes
+// both. Enter opens the modal, as on full cards.
 let expandedId = null;
+let detailsOpen = false;
 // ⋯ on cards: three dots drawn, so they sit on the line's centre whatever
 // the font (the ⋯ character sat low in some).
 const MORE_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="currentColor">' +
   '<circle cx="2.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="13.5" cy="8" r="1.1"/></svg>';
-// Whether expanding a task shows more than its line: notes, comments, or a
-// title the line cuts off. One with nothing more stays a line.
-function hasMore(id) {
-  const el = listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-  if (!el) return false;
-  if (el.querySelector('.task-desc, .task-card-comments')) return true;
-  const title = el.querySelector('.task-content');
+const cardEl = id => listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
+// Whether the line cuts the task's title off (selecting it then shows it
+// whole). One whose title fits stays a line.
+function titleCut(id) {
+  const title = cardEl(id)?.querySelector('.task-content');
   return !!title && title.scrollWidth > title.clientWidth + 1;
 }
-function setExpanded(id) {
+// Whether the task has details a compact line hides: notes or comments.
+const hasDetails = id => !!cardEl(id)?.querySelector('.task-desc, .task-card-comments');
+function setExpanded(id, details = false) {
   expandedId = id;
+  detailsOpen = !!id && details;
   listEl?.querySelectorAll('.task-item').forEach(el => {
     const on = el.dataset.id === id;
     if (!on && el.classList.contains('task-expanded') && pressedCard && el !== pressedCard) collapseLater(el);
-    else el.classList.toggle('task-expanded', on);
+    else {
+      el.classList.toggle('task-expanded', on);
+      el.classList.toggle('task-details', on && detailsOpen);
+    }
   });
+}
+// 📝, 💬 or →/←: open or close a compact task's details, selecting it.
+function toggleDetails(id, open = !(expandedId === id && detailsOpen)) {
+  if (!compact || !hasDetails(id)) return false;
+  if (selectedIds.size !== 1 || selectedId !== id) setSelected(id);
+  // Closing keeps the whole title (a short one looks the same as its line).
+  setExpanded(id, open);
+  return true;
 }
 // A mouse press on another card leaves the expanded one open until a
 // double-click is over (pressedCard: the card a mousedown is selecting) and
@@ -737,7 +753,7 @@ function finishCollapse() {
   clearTimeout(timer);
   if (!el.isConnected || el.dataset.id === expandedId) return;
   const from = el.offsetHeight;
-  el.classList.remove('task-expanded');
+  el.classList.remove('task-expanded', 'task-details');
   const to = el.offsetHeight;
   if (from > to && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     el.animate([{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }],
@@ -746,6 +762,7 @@ function finishCollapse() {
 }
 function toggleCompact() {
   expandedId = null;
+  detailsOpen = false;
   compact = !compact;
   try { localStorage.setItem(densityKey(activeView), compact ? '1' : '0'); } catch (_) {}
   applyCompact();
@@ -1868,9 +1885,10 @@ function setSelected(id) {
   anchorId   = id;
   selectedIds = new Set(id ? [id] : []);
   updateSelectionClasses();
-  // Compact: the selected task shows its details. On touch the tap handler
-  // does it, since the compat mousedown selects without the click.
-  if (compact && id && lastPointerType !== 'touch' && hasMore(id)) setExpanded(id);
+  // Compact: the selected task shows its whole title. On touch the tap
+  // handler does it, since the compat mousedown selects without the click.
+  // Selecting the expanded task again keeps its details as they are.
+  if (compact && id && lastPointerType !== 'touch' && id !== expandedId && titleCut(id)) setExpanded(id);
   // A pressed card is in view; scrolling an expanded one into view would
   // move it from under the pointer.
   if (id && !pressedCard) {
@@ -2212,7 +2230,7 @@ function render() {
     // Marks that there are notes, which a compact line hides; on every card
     // alike, so expanding a line changes nothing on it.
     const notesDisplay = task.description?.trim()
-      ? '<span class="task-has-notes" title="Has notes" aria-label="Has notes">📝</span>' : '';
+      ? `<button type="button" class="task-has-notes" data-id="${task.id}" title="Has notes" aria-label="Has notes">📝</button>` : '';
     const skipBtnHtml = (!task.completed_at && task.recurrence)
       ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
       : '';
@@ -2233,7 +2251,7 @@ function render() {
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
     return `
-      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' : ''}" data-id="${task.id}" ${dragAttr}>
+      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' + (detailsOpen ? ' task-details' : '') : ''}" data-id="${task.id}" ${dragAttr}>
         <label class="task-checkbox">
           <input type="checkbox" ${checked} data-id="${task.id}">
         </label>
@@ -2370,10 +2388,21 @@ function render() {
       openTaskMenu(btn.dataset.id, btn);
     });
   });
+  // 💬: a compact line's toggles its details (the latest comments among
+  // them); a full card shows them already, so there it opens the modal at
+  // the comments.
   listEl.querySelectorAll('.task-comments-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      openEditModal(btn.dataset.id, { focusComment: true });
+      if (!toggleDetails(btn.dataset.id)) openEditModal(btn.dataset.id, { focusComment: true });
+    });
+  });
+  // 📝: a compact line's toggles its details; a full card shows the notes,
+  // so there it only selects the card.
+  listEl.querySelectorAll('.task-has-notes').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!toggleDetails(btn.dataset.id)) setSelected(btn.dataset.id);
     });
   });
 
@@ -3756,6 +3785,8 @@ document.addEventListener('keydown', async e => {
         showUndo('Task reopened', () => completeTasks([task.id], true));
       }
     }
+  } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && selectedIds.size === 1 && compact) {
+    if (toggleDetails(selectedId, e.key === 'ArrowRight')) e.preventDefault();
   } else if (e.key === 'Enter' && selectedId) {
     e.preventDefault();
     openEditModal(selectedId);

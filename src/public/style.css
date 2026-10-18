@@ -2374,16 +2374,24 @@ div.chip-input > input {
   color: var(--link); cursor: pointer;
 }
 
-/* Compact: every card but the expanded one is its line. */
-.tasks-app.deck-compact .task-item:not(.task-expanded) {
+/* Compact: every card is its line. The expanded one (selected) shows its
+   whole title, wrapped; only one with its details open (.task-details: 📝,
+   💬 or →) shows notes and comments, as a full card. */
+.tasks-app.deck-compact .task-item:not(.task-details) {
   grid-template-areas: "check title tags . dates actions";
   padding-block: .15rem; margin-bottom: .2rem;
 }
 .deck-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.deck-compact .task-item:not(.task-expanded) :is(.task-desc, .task-card-comments) { display: none; }
-/* 📝: a task has notes (a compact line hides them). Shown on every card, so
-   expanding a line changes nothing on it. */
-.task-has-notes { font-size: .8rem; }
+.deck-compact .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
+/* 📝: a task has notes (a compact line hides them; a click on it shows
+   them). Shown on every card, so opening a line changes nothing on it. */
+.task-has-notes {
+  font: inherit; font-size: .8rem; padding: 0; border: none; background: none;
+  border-radius: 3px; cursor: pointer;
+}
+.task-has-notes:hover { background: var(--code-bg); }
+/* A finger-sized target without a taller line. */
+@media (pointer: coarse) { .tasks-app .task-has-notes { padding: .4rem .3rem; margin: -.4rem -.3rem; } }
 @media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }
 /* A phone's line is too short for title and dates: the title gets the
    first line to itself (beside the checkbox and ⋯), tags, markers and dates
@@ -2401,7 +2409,7 @@ div.chip-input > input {
   .tasks-app .task-item .task-meta,
   .tasks-app .task-item .task-meta--hover-only,
   .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
-  .tasks-app.deck-compact .task-item:not(.task-expanded) {
+  .tasks-app.deck-compact .task-item:not(.task-details) {
     grid-template-areas: "check title actions" ". meta meta";
   }
   /* Every tag shows: they wrap onto more lines rather than drop out; the
