@@ -49,7 +49,7 @@ jobs:
 
   image:
     # One image per architecture, each on a runner of its own (no emulation:
-    # the arm64 build installs fastembed and downloads its model natively),
+    # the arm64 build installs onnxruntime and downloads the model natively),
     # pushed by digest only; `manifest` joins them under the tags.
     needs: [checks]
     if: github.event_name != 'pull_request'

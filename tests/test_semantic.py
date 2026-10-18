@@ -3,7 +3,7 @@ ranking in search (search.fuse) and the Related section on page view.
 
 A fake embedder stands in for the model: it maps words to a few "concepts",
 so texts sharing no words can still be similar, deterministically and
-without fastembed.
+without onnxruntime or a model.
 """
 
 import json
@@ -395,25 +395,31 @@ class TestConfig:
         assert embed.embedder_from_spec("") is None
         assert embed.embedder_from_spec("off") is None
         e = embed.embedder_from_spec("fastembed")
-        assert e.model_name == embed.DEFAULT_FASTEMBED_MODEL
-        assert embed.embedder_from_spec("1").model_name == embed.DEFAULT_FASTEMBED_MODEL
-        assert embed.embedder_from_spec("fastembed:BAAI/bge-small-en-v1.5").model_name == "BAAI/bge-small-en-v1.5"
+        assert e.model_name == embed.DEFAULT_MODEL
+        # The cache's name from when fastembed ran the model: caches stay valid.
+        assert e.name == "fastembed:jinaai/jina-embeddings-v2-base-de"
+        assert embed.embedder_from_spec("1").model_name == embed.DEFAULT_MODEL
+        assert embed.embedder_from_spec("fastembed:jinaai/jina-embeddings-v2-base-de").model_name == embed.DEFAULT_MODEL
+        with pytest.raises(ValueError, match="only jinaai/jina-embeddings-v2-base-de"):
+            embed.embedder_from_spec("fastembed:BAAI/bge-small-en-v1.5")   # another recipe
         with pytest.raises(ValueError):
-            embed.embedder_from_spec("ollama:nomic-embed-text")   # removed: fastembed only
+            embed.embedder_from_spec("ollama:nomic-embed-text")   # removed
         with pytest.raises(ValueError):
             embed.embedder_from_spec("bogus:x")
 
     def test_thresholds_per_model(self, wiki_dir):
         e = FakeEmbedder()
-        e.model_name = embed.DEFAULT_FASTEMBED_MODEL
+        e.model_name = embed.DEFAULT_MODEL
         idx = embed.SemanticIndex(e, wiki_dir / "c.json", lambda: [], retrieval._semantic_text)
         assert (idx.min_score, idx.related_min_score, idx.task_min_score) == \
-            embed.THRESHOLDS[embed.DEFAULT_FASTEMBED_MODEL]
+            embed.THRESHOLDS[embed.DEFAULT_MODEL]
 
     def test_setup_parses_like_the_server(self):
         assert embed_setup.parse_spec("") is None
-        assert embed_setup.parse_spec("fastembed") == embed.DEFAULT_FASTEMBED_MODEL
-        assert embed_setup.parse_spec(" fastembed: BAAI/bge-small-en-v1.5 ") == "BAAI/bge-small-en-v1.5"
+        assert embed_setup.parse_spec("fastembed") == embed.DEFAULT_MODEL
+        assert embed_setup.parse_spec(" fastembed: JinaAI/jina-embeddings-v2-base-de ") == embed.DEFAULT_MODEL
+        with pytest.raises(ValueError):
+            embed_setup.parse_spec("fastembed:BAAI/bge-small-en-v1.5")
 
     @pytest.mark.parametrize("spec", ["", "off"])
     def test_setup_installs_nothing_when_off(self, spec, monkeypatch):
@@ -431,32 +437,122 @@ class TestConfig:
         assert [(s, round(sc, 5)) for s, sc, _t in semantic.search("car repair")] == \
             [(s, round(sc, 5)) for s, sc, _t in with_np]
 
-    def test_setup_downloads_the_model(self, monkeypatch):
+    def test_setup_installs_and_downloads(self, monkeypatch, tmp_path):
         import sys
         import types
         calls = []
-        fake = types.ModuleType("fastembed")
-
-        class TextEmbedding:
-            def __init__(self, name, cache_dir=None):
-                calls.append(("load", name, cache_dir))
-
-            def query_embed(self, texts):
-                calls.append(("embed", texts))
-                return iter([[0.0]])
-
-        fake.TextEmbedding = TextEmbedding
-        monkeypatch.setitem(sys.modules, "fastembed", fake)
-        monkeypatch.setattr(embed_setup.subprocess, "run", lambda cmd, **k: calls.append(("pip", cmd[-1])))
-        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed:BAAI/bge-small-en-v1.5")
-        monkeypatch.setenv("FASTEMBED_CACHE_PATH", "/opt/fastembed")
+        monkeypatch.setattr(embed_setup.subprocess, "run", lambda cmd, **k: calls.append(("pip", cmd)))
+        monkeypatch.setattr(embed_setup, "download_model", lambda folder: calls.append(("download", folder)))
+        ort = types.ModuleType("onnxruntime")
+        ort.InferenceSession = lambda path, providers: calls.append(("session", Path(path).name))
+        tok = types.ModuleType("tokenizers")
+        tok.Tokenizer = types.SimpleNamespace(from_file=lambda path: calls.append(("tokenizer", Path(path).name)))
+        monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+        monkeypatch.setitem(sys.modules, "tokenizers", tok)
+        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed")
+        monkeypatch.setenv("LEAF_MODEL_DIR", str(tmp_path / "m"))
         embed_setup.prepare()
-        # fastembed at the pinned versions, from the file next to the script.
-        assert calls == [("pip", str(Path(embed_setup.__file__).with_name("requirements-embed.txt"))),
-                         ("load", "BAAI/bge-small-en-v1.5", "/opt/fastembed"), ("embed", ["warm up"])]
+        pip = calls[0][1]
+        # The pinned packages from the file next to the script, nothing else.
+        assert pip[-1] == str(Path(embed_setup.__file__).with_name("requirements-embed.txt"))
+        assert "--no-deps" in pip
+        assert calls[1:] == [("download", tmp_path / "m"), ("tokenizer", "tokenizer.json"),
+                             ("session", "model.onnx")]
+
+    def test_model_dir(self, monkeypatch):
+        monkeypatch.setenv("LEAF_MODEL_DIR", "/opt/leaf-model")
+        assert embed_setup.model_dir() == Path("/opt/leaf-model")
+        monkeypatch.delenv("LEAF_MODEL_DIR")
+        d = embed_setup.model_dir()
+        assert d.parent == Path.home() / ".cache" / "leaf" and embed_setup.MODEL_REVISION[:12] in d.name
+
+    def _fake_hub(self, monkeypatch, files):
+        import hashlib
+        import io
+        fetched = []
+
+        def urlopen(url, timeout):
+            fetched.append(url)
+            return io.BytesIO(files[url.rsplit("/", 1)[1]])
+        monkeypatch.setattr(embed_setup.urllib.request, "urlopen", urlopen)
+        monkeypatch.setattr(embed_setup, "MODEL_FILES", {
+            "onnx/model.onnx": hashlib.sha256(b"weights").hexdigest(),
+            "tokenizer.json": hashlib.sha256(b"vocab").hexdigest()})
+        return fetched
+
+    def test_download_checks_hashes_and_skips_what_is_there(self, monkeypatch, tmp_path):
+        fetched = self._fake_hub(monkeypatch, {"model.onnx": b"weights", "tokenizer.json": b"vocab"})
+        embed_setup.download_model(tmp_path)
+        assert (tmp_path / "onnx" / "model.onnx").read_bytes() == b"weights"
+        assert (tmp_path / "tokenizer.json").read_bytes() == b"vocab"
+        assert fetched == [f"https://huggingface.co/jinaai/jina-embeddings-v2-base-de/resolve/"
+                           f"{embed_setup.MODEL_REVISION}/{f}" for f in ("onnx/model.onnx", "tokenizer.json")]
+        embed_setup.download_model(tmp_path)
+        assert len(fetched) == 2                      # nothing fetched again
+
+    def test_download_refuses_a_changed_file(self, monkeypatch, tmp_path):
+        self._fake_hub(monkeypatch, {"model.onnx": b"tampered", "tokenizer.json": b"vocab"})
+        with pytest.raises(RuntimeError, match="SHA-256"):
+            embed_setup.download_model(tmp_path)
+        assert list((tmp_path / "onnx").iterdir()) == []   # no file, no .part
+
+    def test_onnx_embedder_pools_and_normalises(self, monkeypatch, tmp_path):
+        # Mean of the token vectors where the mask is set (padding left out),
+        # then unit length; truncated at 512 tokens and padded with <pad>.
+        import sys
+        import types
+        np = pytest.importorskip("numpy")
+        setup = {}
+
+        class Enc:
+            def __init__(self, n, width):
+                self.ids = list(range(1, n + 1)) + [0] * (width - n)
+                self.attention_mask = [1] * n + [0] * (width - n)
+
+        class Tok:
+            def enable_truncation(self, n):
+                setup["truncation"] = n
+
+            def enable_padding(self, pad_id, pad_token):
+                setup["padding"] = (pad_id, pad_token)
+
+            def token_to_id(self, token):
+                return 7
+
+            def encode_batch(self, texts):
+                width = max(len(t.split()) for t in texts)
+                return [Enc(len(t.split()), width) for t in texts]
+
+        class Session:
+            def run(self, _outputs, feed):
+                ids = feed["input_ids"].astype(np.float32)
+                # Token i's vector is (i, 1); padding's would be (100, 100).
+                vecs = np.stack([ids, np.ones_like(ids)], axis=-1)
+                return [np.where(feed["attention_mask"][..., None] == 1, vecs, 100.0)]
+
+        monkeypatch.setitem(sys.modules, "onnxruntime", types.SimpleNamespace(
+            InferenceSession=lambda path, providers: Session()))
+        monkeypatch.setitem(sys.modules, "tokenizers", types.SimpleNamespace(
+            Tokenizer=types.SimpleNamespace(from_file=lambda path: Tok())))
+        downloads = []
+        monkeypatch.setattr(embed, "download_model", lambda folder: downloads.append(folder))
+        e = embed.OnnxEmbedder(tmp_path)
+        a, b = e.embed_docs(["one two three", "one"])
+        assert setup == {"truncation": 512, "padding": (7, "<pad>")}
+        assert downloads == [tmp_path]                 # files missing: fetched first
+        assert a == pytest.approx([2 / 5 ** .5, 1 / 5 ** .5])   # mean (2, 1)
+        assert b == pytest.approx([2 ** -.5, 2 ** -.5])          # (1, 1), padding ignored
+        assert e.embed_query("one") == pytest.approx(b)
+        assert e.embed_docs([]) == []
+
+    def test_missing_packages_mean_keywords_only(self, monkeypatch, wiki_dir):
+        import sys
+        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed")
+        monkeypatch.setitem(sys.modules, "onnxruntime", None)    # import fails
+        assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
 
     @pytest.mark.parametrize("name,first", [("requirements.txt", "flask=="),
-                                            ("requirements-embed.txt", "fastembed==")])
+                                            ("requirements-embed.txt", "onnxruntime==")])
     def test_requirements_are_pinned(self, name, first):
         # Every package at an exact version, the transitive ones too: an
         # image build installs what was tested, not the newest release.

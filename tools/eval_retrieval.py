@@ -4,7 +4,7 @@ question, measured on a wiki and a list of questions with their answers.
 
     ./run.sh eval [FILE]          in the app image, with the semantic model
     LEAF_DATA=~/leaf python tools/eval_retrieval.py FILE    keywords only,
-                                  unless fastembed is installed
+                                  unless requirements-embed.txt is installed
 
 FILE is JSON, a list of {"q": "question", "expect": [target, …]}. A target
 is a page ("people/alex"), a section ("people/alex#current-projects", the
@@ -141,7 +141,7 @@ def summary(ranks: list[int | None], k: int) -> dict[str, str]:
 
 def semantic_index():
     """The wiki's semantic index, brought up to date in a temporary cache;
-    None without LEAF_EMBEDDINGS or fastembed (from_env says why)."""
+    None without LEAF_EMBEDDINGS or its packages (from_env says why)."""
     import retrieval
     idx = retrieval.semantic_from_env()
     if idx:

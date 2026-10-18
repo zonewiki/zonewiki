@@ -19,7 +19,7 @@ services:
       args:
         # "<hash> <commit date>" shown next to the version; run.sh sets it.
         LEAF_BUILD: ${LEAF_BUILD:-unknown}
-        # Semantic search: fastembed and the model are baked into the image.
+        # Semantic search: the model and what runs it are baked into the image.
         LEAF_EMBEDDINGS: ${LEAF_EMBEDDINGS:-}
     image: leaf
     container_name: leaf

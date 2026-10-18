@@ -17,7 +17,9 @@ retrieval.py fuses these results with BM25 (search.fuse) and shows each page's
 nearest neighbours as "Related" pages.
 
 The model choice and its download live in embed_setup.py (run at image
-build time), so editing this file doesn't re-download the model.
+build time), so editing this file doesn't re-download the model. The model
+runs on onnxruntime with Hugging Face's tokenizer (OnnxEmbedder), as
+fastembed ran it before, without fastembed's packages.
 """
 
 import base64
@@ -33,12 +35,12 @@ from array import array
 from pathlib import Path
 from typing import Callable, Iterable
 
-try:  # comes with fastembed; scoring a query is then one matrix product
+try:  # comes with onnxruntime; scoring a query is then one matrix product
     import numpy as np
-except ImportError:  # e.g. a local venv without fastembed: plain Python, ~25x slower
+except ImportError:  # e.g. a local venv without it: plain Python, ~25x slower
     np = None
 
-from embed_setup import DEFAULT_FASTEMBED_MODEL, parse_spec  # noqa: F401 (re-exported)
+from embed_setup import DEFAULT_MODEL, download_model, model_dir, MODEL_FILES, parse_spec
 from mdtext import iter_fenced_lines
 
 
@@ -53,11 +55,10 @@ from mdtext import iter_fenced_lines
 #   title, 0.17 against page sections), so the floor sits higher.
 # Measured on a test wiki: the floor sits above what nonsense queries and
 # unrelated pages score, below what the right page scores. Models differ a
-# lot (bge-small scores even nonsense at 0.55), so an unlisted model gets a
-# guess; tune LEAF_EMBED_MIN_SCORE for it.
+# lot (bge-small scores even nonsense at 0.55): the floors are the model's.
+# An embedder of another model (the tests' fake) gets a guess.
 THRESHOLDS = {
     "jinaai/jina-embeddings-v2-base-de": (0.25, 0.25, 0.3),
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": (0.4, 0.3, 0.4),  # tasks: not measured
 }
 DEFAULT_THRESHOLDS = (0.4, 0.4, 0.4)
 
@@ -211,37 +212,67 @@ def _hash(text: str) -> str:
 # ── Embedders ────────────────────────────────────────────────────────────────
 # An embedder has a `name` (cache files are per model) and two methods:
 # embed_docs(texts) and embed_query(text), returning plain float sequences.
-# Some models want different prefixes for the two; fastembed adds them.
 
-class FastEmbedder:
-    """A local ONNX model via fastembed. Loaded on first use (seconds)."""
+# The model's recipe, as fastembed ran it: at most 512 tokens (its
+# tokenizer_config), padded with <pad>, the token vectors averaged where the
+# attention mask is set, then normalised; queries and passages alike, no
+# prefixes. Another model may need another recipe (embed_setup.parse_spec
+# accepts only this one).
+MAX_TOKENS = 512
+PAD_TOKEN = "<pad>"
 
-    def __init__(self, model: str = DEFAULT_FASTEMBED_MODEL):
-        self.name = f"fastembed:{model}"
-        self.model_name = model
+
+class OnnxEmbedder:
+    """The local ONNX model (embed_setup.DEFAULT_MODEL) on onnxruntime, with
+    Hugging Face's tokenizer. Loaded on first use (seconds); downloaded first
+    when its files are missing (a local run; the image has them)."""
+
+    def __init__(self, folder: Path | None = None):
+        # The name cache files are kept under: the one they had when fastembed
+        # ran the model, whose vectors are the same, so a cache stays valid.
+        self.name = f"fastembed:{DEFAULT_MODEL}"
+        self.model_name = DEFAULT_MODEL
+        self.folder = folder or model_dir()
         self._model = None
         self._lock = threading.Lock()
 
     def _load(self):
         with self._lock:
             if self._model is None:
-                from fastembed import TextEmbedding
-                self._model = TextEmbedding(self.model_name,
-                                            cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
+                import onnxruntime
+                from tokenizers import Tokenizer
+                if not all((self.folder / f).exists() for f in MODEL_FILES):
+                    log(f"downloading {DEFAULT_MODEL} to {self.folder}")
+                    download_model(self.folder)
+                tok = Tokenizer.from_file(str(self.folder / "tokenizer.json"))
+                tok.enable_truncation(MAX_TOKENS)
+                tok.enable_padding(pad_id=tok.token_to_id(PAD_TOKEN), pad_token=PAD_TOKEN)
+                session = onnxruntime.InferenceSession(str(self.folder / "onnx/model.onnx"),
+                                                       providers=["CPUExecutionProvider"])
+                self._model = (tok, session)
             return self._model
 
+    def _embed(self, texts: list[str]) -> list:
+        tok, session = self._load()
+        enc = tok.encode_batch(texts)
+        ids = np.array([e.ids for e in enc], dtype=np.int64)
+        mask = np.array([e.attention_mask for e in enc], dtype=np.int64)
+        hidden = session.run(None, {"input_ids": ids, "attention_mask": mask})[0]
+        weights = mask[..., None].astype(np.float32)
+        vecs = (hidden * weights).sum(1) / np.clip(weights.sum(1), 1e-9, None)
+        return (vecs / np.linalg.norm(vecs, axis=1, keepdims=True)).tolist()
+
     def embed_docs(self, texts: list[str]) -> list:
-        return [list(v) for v in self._load().passage_embed(texts)]
+        return self._embed(texts) if texts else []
 
     def embed_query(self, text: str) -> list:
-        return list(next(iter(self._load().query_embed([text]))))
+        return self._embed([text])[0]
 
 
 def embedder_from_spec(spec: str):
-    """`fastembed` or `fastembed:<model>` (embed_setup.parse_spec); None when
-    empty or off."""
-    model = parse_spec(spec)
-    return FastEmbedder(model) if model else None
+    """The embedder LEAF_EMBEDDINGS asks for (embed_setup.parse_spec: an
+    error for another model than the default); None when empty or off."""
+    return OnnxEmbedder() if parse_spec(spec) else None
 
 
 # ── The index ────────────────────────────────────────────────────────────────
@@ -637,10 +668,12 @@ def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex 
     if embedder is None:
         return None
     try:
-        import fastembed  # noqa: F401
+        import numpy  # noqa: F401
+        import onnxruntime  # noqa: F401
+        import tokenizers  # noqa: F401
     except ImportError:
-        log("LEAF_EMBEDDINGS is set but fastembed is not installed "
-            "(pip install fastembed); using keyword search only")
+        log("LEAF_EMBEDDINGS is set but onnxruntime, tokenizers or numpy is not installed "
+            "(pip install --no-deps -r src/requirements-embed.txt); using keyword search only")
         return None
     min_score = None
     if os.environ.get("LEAF_EMBED_MIN_SCORE"):

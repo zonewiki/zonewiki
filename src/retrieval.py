@@ -142,7 +142,7 @@ def semantic_status() -> str:
     """How content search works now, for the search dialog: "on" (by
     keywords and meaning), "indexing" (the wiki isn't embedded yet),
     "failed" (the model fails) or "off" (LEAF_EMBEDDINGS unset, or
-    fastembed missing). The last three search by keywords only."""
+    its packages missing). The last three search by keywords only."""
     if not SEMANTIC:
         return "off"
     if SEMANTIC.failing:

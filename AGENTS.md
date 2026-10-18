@@ -81,7 +81,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 └── src/
     ├── requirements.txt    # runtime packages, exact versions (transitive too)
-    ├── requirements-embed.txt  # semantic search: fastembed and its packages, exact versions
+    ├── requirements-embed.txt  # semantic search: onnxruntime, tokenizers and their packages, exact versions
     ├── server.py           # Flask app: request checks, wiki routes (pages, editor, scratch, search, uploads, /deck, /mcp)
     ├── config.py           # Settings from the environment, the wiki's directories (read as config.X, so tests can patch them)
     ├── mdtext.py           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
@@ -187,7 +187,7 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
 
 - **One process.** `python src/server.py` serves with waitress (8 threads, at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckstore._LOCK`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several worker processes (gunicorn `-w 4` and the like) would lose task writes.
 - `highlight.js` 11.9.0 is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's.
-- Optional: `fastembed` (with onnxruntime and NumPy) for semantic search, installed by the `Containerfile` only when `LEAF_EMBEDDINGS` names a model (`embed_setup.py`), at the exact versions `src/requirements-embed.txt` pins (all of fastembed's packages but `packaging`, which Ubuntu's pip brings and pip can't replace); `embed.py` works without NumPy. Locally: `pip install -r src/requirements-embed.txt`.
+- Optional: onnxruntime, Hugging Face's `tokenizers` and NumPy for semantic search (`embed.OnnxEmbedder` runs the one model itself; fastembed and its 26 packages were dropped), installed by the `Containerfile` only when `LEAF_EMBEDDINGS` is set (`embed_setup.py`, which also downloads the model, pinned to a revision and SHA-256 hashes), at the exact versions `src/requirements-embed.txt` pins, with `--no-deps` (five packages; not `packaging`, which Ubuntu's pip brings and pip can't replace); `embed.py` works without NumPy. Locally: `pip install --no-deps -r src/requirements-embed.txt` (and `packaging`).
 
 ---
 

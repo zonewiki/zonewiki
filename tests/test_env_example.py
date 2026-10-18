@@ -6,7 +6,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 # Set by run.sh or the build, not by the user: .env.example needn't list them.
-INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO"}
+INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO", "LEAF_MODEL_DIR"}
 
 
 def _example_keys() -> set[str]:
