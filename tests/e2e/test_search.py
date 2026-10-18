@@ -447,7 +447,7 @@ def test_the_dialog_says_whether_search_goes_by_meaning(page, wiki):
     page.keyboard.press("Control+p")
     mode = page.locator("#search-mode")
     expect(mode).to_have_text("Keywords only")   # no semantic index in the tests
-    expect(mode).to_have_attribute("title", re.compile("LEAF_EMBEDDINGS"))
+    expect(mode).to_have_attribute("title", re.compile("LEAF_SEMANTIC_SEARCH"))
 
     def as_if_indexed(route):
         resp = route.fetch()

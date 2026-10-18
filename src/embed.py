@@ -1,6 +1,6 @@
 """Semantic search: embeddings of page sections, searched by meaning.
 
-Opt-in via LEAF_EMBEDDINGS (see from_env). Each page is split into sections
+Opt-in via LEAF_SEMANTIC_SEARCH (see from_env). Each page is split into sections
 (chunk_page), each section is turned into a vector by an embedding model, and
 a query is compared against every vector (cosine similarity, brute force).
 That is plenty fast at wiki scale, so there is no vector database: the
@@ -40,14 +40,14 @@ try:  # comes with onnxruntime; scoring a query is then one matrix product
 except ImportError:  # e.g. a local venv without it: plain Python, ~25x slower
     np = None
 
-from embed_setup import DEFAULT_MODEL, download_model, model_dir, MODEL_FILES, parse_spec
+from embed_setup import DEFAULT_MODEL, download_model, model_dir, MODEL_FILES, parse_spec, RENAMED
 from mdtext import iter_fenced_lines
 
 
 # Similarity floors per model, (search, related, tasks):
 # - search: a query↔section similarity below this is not a hit. Vector search
 #   always has a "nearest" page, so without a floor every query, even
-#   gibberish, would fill the results. LEAF_EMBED_MIN_SCORE overrides it.
+#   gibberish, would fill the results. LEAF_SEMANTIC_MIN_SCORE overrides it.
 # - related: pages less similar than this (page↔page, each page the mean of
 #   its sections) are not listed as related.
 # - tasks: as search, for deck tasks. Their texts are a few words, and short
@@ -270,8 +270,8 @@ class OnnxEmbedder:
 
 
 def embedder_from_spec(spec: str):
-    """The embedder LEAF_EMBEDDINGS asks for (embed_setup.parse_spec: an
-    error for another model than the default); None when empty or off."""
+    """The embedder LEAF_SEMANTIC_SEARCH turns on (embed_setup.parse_spec:
+    an error for a value other than on or off); None when off."""
     return OnnxEmbedder() if parse_spec(spec) else None
 
 
@@ -658,10 +658,15 @@ def exclude_from_git(wiki_dir: Path, entry: str = "/.leaf/") -> None:
 
 
 def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex | None:
-    """The SemanticIndex LEAF_EMBEDDINGS asks for, or None (keywords only).
-    A missing dependency or a bad setting is logged, not fatal."""
+    """The SemanticIndex LEAF_SEMANTIC_SEARCH asks for, or None (keywords
+    only). A missing dependency, a bad setting or one by its old name is
+    logged, not fatal."""
+    for old, new in RENAMED.items():
+        if os.environ.get(old):
+            log(f"{old} was renamed to {new} (ignored): set {new} in .env instead"
+                + (" (on or off)" if new == "LEAF_SEMANTIC_SEARCH" else ""))
     try:
-        embedder = embedder_from_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
+        embedder = embedder_from_spec(os.environ.get("LEAF_SEMANTIC_SEARCH", ""))
     except ValueError as e:
         log(str(e))
         return None
@@ -672,15 +677,15 @@ def from_env(wiki_dir: Path, pages_fn, prepare, tasks_fn=None) -> SemanticIndex 
         import onnxruntime  # noqa: F401
         import tokenizers  # noqa: F401
     except ImportError:
-        log("LEAF_EMBEDDINGS is set but onnxruntime, tokenizers or numpy is not installed "
+        log("LEAF_SEMANTIC_SEARCH is on but onnxruntime, tokenizers or numpy is not installed "
             "(pip install --no-deps -r src/requirements-embed.txt); using keyword search only")
         return None
     min_score = None
-    if os.environ.get("LEAF_EMBED_MIN_SCORE"):
+    if os.environ.get("LEAF_SEMANTIC_MIN_SCORE"):
         try:
-            min_score = float(os.environ["LEAF_EMBED_MIN_SCORE"])
+            min_score = float(os.environ["LEAF_SEMANTIC_MIN_SCORE"])
         except ValueError:
-            log("LEAF_EMBED_MIN_SCORE is not a number; using the default")
+            log("LEAF_SEMANTIC_MIN_SCORE is not a number; using the default")
     exclude_from_git(wiki_dir)
     log(f"semantic search on, model {embedder.name}")
     return SemanticIndex(embedder, wiki_dir / ".leaf" / "index" / "embeddings.json",

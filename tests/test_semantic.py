@@ -394,18 +394,15 @@ class TestConfig:
     def test_spec_parsing(self):
         assert embed.embedder_from_spec("") is None
         assert embed.embedder_from_spec("off") is None
-        e = embed.embedder_from_spec("fastembed")
+        e = embed.embedder_from_spec("on")
         assert e.model_name == embed.DEFAULT_MODEL
         # The cache's name from when fastembed ran the model: caches stay valid.
         assert e.name == "fastembed:jinaai/jina-embeddings-v2-base-de"
+        assert embed.embedder_from_spec(" ON ").model_name == embed.DEFAULT_MODEL
         assert embed.embedder_from_spec("1").model_name == embed.DEFAULT_MODEL
-        assert embed.embedder_from_spec("fastembed:jinaai/jina-embeddings-v2-base-de").model_name == embed.DEFAULT_MODEL
-        with pytest.raises(ValueError, match="only jinaai/jina-embeddings-v2-base-de"):
-            embed.embedder_from_spec("fastembed:BAAI/bge-small-en-v1.5")   # another recipe
-        with pytest.raises(ValueError):
-            embed.embedder_from_spec("ollama:nomic-embed-text")   # removed
-        with pytest.raises(ValueError):
-            embed.embedder_from_spec("bogus:x")
+        for bad in ("fastembed", "fastembed:jinaai/jina-embeddings-v2-base-de", "bogus:x"):
+            with pytest.raises(ValueError, match="expected on or off"):
+                embed.embedder_from_spec(bad)
 
     def test_thresholds_per_model(self, wiki_dir):
         e = FakeEmbedder()
@@ -416,14 +413,13 @@ class TestConfig:
 
     def test_setup_parses_like_the_server(self):
         assert embed_setup.parse_spec("") is None
-        assert embed_setup.parse_spec("fastembed") == embed.DEFAULT_MODEL
-        assert embed_setup.parse_spec(" fastembed: JinaAI/jina-embeddings-v2-base-de ") == embed.DEFAULT_MODEL
+        assert embed_setup.parse_spec("on") == embed.DEFAULT_MODEL
         with pytest.raises(ValueError):
-            embed_setup.parse_spec("fastembed:BAAI/bge-small-en-v1.5")
+            embed_setup.parse_spec("fastembed")          # the old setting's value
 
     @pytest.mark.parametrize("spec", ["", "off"])
     def test_setup_installs_nothing_when_off(self, spec, monkeypatch):
-        monkeypatch.setenv("LEAF_EMBEDDINGS", spec)
+        monkeypatch.setenv("LEAF_SEMANTIC_SEARCH", spec)
         monkeypatch.setattr(embed_setup.subprocess, "run",
                             lambda *a, **k: pytest.fail("nothing to install"))
         embed_setup.prepare()
@@ -449,7 +445,7 @@ class TestConfig:
         tok.Tokenizer = types.SimpleNamespace(from_file=lambda path: calls.append(("tokenizer", Path(path).name)))
         monkeypatch.setitem(sys.modules, "onnxruntime", ort)
         monkeypatch.setitem(sys.modules, "tokenizers", tok)
-        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed")
+        monkeypatch.setenv("LEAF_SEMANTIC_SEARCH", "on")
         monkeypatch.setenv("LEAF_MODEL_DIR", str(tmp_path / "m"))
         embed_setup.prepare()
         pip = calls[0][1]
@@ -547,7 +543,7 @@ class TestConfig:
 
     def test_missing_packages_mean_keywords_only(self, monkeypatch, wiki_dir):
         import sys
-        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed")
+        monkeypatch.setenv("LEAF_SEMANTIC_SEARCH", "on")
         monkeypatch.setitem(sys.modules, "onnxruntime", None)    # import fails
         assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
 
@@ -571,11 +567,11 @@ class TestConfig:
         assert "COPY src/ ." not in before and "embed.py ." not in before
 
     def test_off_by_default(self, monkeypatch, wiki_dir):
-        monkeypatch.delenv("LEAF_EMBEDDINGS", raising=False)
+        monkeypatch.delenv("LEAF_SEMANTIC_SEARCH", raising=False)
         assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
 
     def test_startup_starts_the_worker(self, monkeypatch, wiki_dir):
-        # The index LEAF_EMBEDDINGS asks for is set up at startup and its
+        # The index LEAF_SEMANTIC_SEARCH asks for is set up at startup and its
         # worker started (retrieval.start_semantic, called by server.py).
         started = []
 
@@ -588,8 +584,30 @@ class TestConfig:
         assert started == [retrieval.SEMANTIC]
 
     def test_bad_setting_is_not_fatal(self, monkeypatch, wiki_dir):
-        monkeypatch.setenv("LEAF_EMBEDDINGS", "bogus:x")
+        monkeypatch.setenv("LEAF_SEMANTIC_SEARCH", "bogus:x")
         assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
+
+    def test_old_names_are_ignored_and_named(self, monkeypatch, wiki_dir, capsys):
+        # Renamed in 2026-10, without a grace period: the old names turn
+        # nothing on, and the log says what to set instead.
+        monkeypatch.delenv("LEAF_SEMANTIC_SEARCH", raising=False)
+        monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed")
+        monkeypatch.setenv("LEAF_EMBED_MIN_SCORE", "0.3")
+        assert embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text) is None
+        err = capsys.readouterr()
+        out = err.out + err.err
+        assert "LEAF_EMBEDDINGS was renamed to LEAF_SEMANTIC_SEARCH (ignored)" in out and "(on or off)" in out
+        assert "LEAF_EMBED_MIN_SCORE was renamed to LEAF_SEMANTIC_MIN_SCORE (ignored)" in out
+
+    def test_min_score_setting(self, monkeypatch, wiki_dir):
+        import sys
+        import types
+        for name in ("numpy", "onnxruntime", "tokenizers"):
+            monkeypatch.setitem(sys.modules, name, sys.modules.get(name) or types.ModuleType(name))
+        monkeypatch.setenv("LEAF_SEMANTIC_SEARCH", "on")
+        monkeypatch.setenv("LEAF_SEMANTIC_MIN_SCORE", "0.42")
+        idx = embed.from_env(wiki_dir, lambda: [], retrieval._semantic_text)
+        assert idx.min_score == 0.42
 
     def test_cache_dir_excluded_from_git(self, wiki_dir):
         (wiki_dir / ".git" / "info").mkdir(parents=True)

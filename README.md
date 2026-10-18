@@ -192,8 +192,8 @@ Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `.leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
 | `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
-| `LEAF_EMBEDDINGS=fastembed` | Semantic search with a local model (adds about 1 GB to the image) |
-| `LEAF_EMBED_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
+| `LEAF_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 1 GB to the image) |
+| `LEAF_SEMANTIC_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
 | `LEAF_QUERY_LOG=1` | Keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
 | `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
@@ -353,7 +353,7 @@ Everything is files in `LEAF_DATA`, which is a git repository:
   repository.
 - `.leaf/` is Leaf's own state, never committed: `secret_key` keeps you signed
   in across restarts, `index/` is the semantic search cache (only with
-  `LEAF_EMBEDDINGS`; it can be deleted at any time).
+  `LEAF_SEMANTIC_SEARCH`; it can be deleted at any time).
 
 Nothing is locked in: if you stop using Leaf, your pages are plain Markdown
 files that any editor opens, with their history in git.

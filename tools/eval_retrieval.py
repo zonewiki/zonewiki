@@ -13,7 +13,7 @@ A question is found at the rank of the first result matching one of its
 targets, a page matching any of its sections. A question with no targets
 yet is skipped (counted in the report): paste --new's stubs, fill them in
 over time. The report gives hit@1,
-hit@3, hit@k and MRR, by keywords alone and, with LEAF_EMBEDDINGS, hybrid,
+hit@3, hit@k and MRR, by keywords alone and, with LEAF_SEMANTIC_SEARCH, hybrid,
 then the questions that weren't found first in every mode.
 
 --new lists the queries search_wiki was asked (the query log, which
@@ -141,7 +141,7 @@ def summary(ranks: list[int | None], k: int) -> dict[str, str]:
 
 def semantic_index():
     """The wiki's semantic index, brought up to date in a temporary cache;
-    None without LEAF_EMBEDDINGS or its packages (from_env says why)."""
+    None without LEAF_SEMANTIC_SEARCH or its packages (from_env says why)."""
     import retrieval
     idx = retrieval.semantic_from_env()
     if idx:

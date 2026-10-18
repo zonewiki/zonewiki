@@ -215,18 +215,18 @@ case "${1:-up}" in
   eval)
     # Retrieval quality on your wiki (tools/eval_retrieval.py): the questions
     # are a file in the wiki (default _eval/retrieval.json), the wiki is
-    # mounted read-only. The image is the app's with LEAF_EMBEDDINGS' model
+    # mounted read-only. The image is the app's with LEAF_SEMANTIC_SEARCH's model
     # baked in, as up builds it, so it compares keyword and hybrid ranking.
     file="${2:-_eval/retrieval.json}"
     if [[ ! -f "$LEAF_DATA/$file" ]]; then
       echo "No questions at $LEAF_DATA/$file (format: tools/eval_retrieval.py)." >&2
       exit 1
     fi
-    embeddings=$(env_val LEAF_EMBEDDINGS)
+    semantic=$(env_val LEAF_SEMANTIC_SEARCH)
     image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
-      --build-arg "LEAF_EMBEDDINGS=$embeddings")
+      --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
     in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
-      -e "LEAF_EMBEDDINGS=$embeddings" -e "LEAF_EMBED_MIN_SCORE=$(env_val LEAF_EMBED_MIN_SCORE)" -- \
+      -e "LEAF_SEMANTIC_SEARCH=$semantic" -e "LEAF_SEMANTIC_MIN_SCORE=$(env_val LEAF_SEMANTIC_MIN_SCORE)" -- \
       python3 tools/eval_retrieval.py "/wiki-data/$file" "${@:3}"
     ;;
   *)

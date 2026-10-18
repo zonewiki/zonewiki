@@ -11,7 +11,7 @@ WORKDIR /app
 COPY src/requirements.txt .
 RUN pip install --break-system-packages -r requirements.txt
 
-# Semantic search (opt-in): with LEAF_EMBEDDINGS set in .env, compose.yaml
+# Semantic search (opt-in): with LEAF_SEMANTIC_SEARCH=on in .env, compose.yaml
 # passes it here and onnxruntime, the tokenizer and the model are baked into the image, so the first
 # search doesn't wait for a download and Leaf works offline. Without it,
 # this step does nothing. Only the small, stable
@@ -19,7 +19,7 @@ RUN pip install --break-system-packages -r requirements.txt
 # copied first, so this layer (0.64 GB) is rebuilt when the model setting or
 # those versions change, not on every change to the search code. The model
 # folder is made world-readable: the container may run as another user.
-ARG LEAF_EMBEDDINGS=
+ARG LEAF_SEMANTIC_SEARCH=
 ENV LEAF_MODEL_DIR=/opt/leaf-model
 COPY src/embed_setup.py src/requirements-embed.txt ./
 RUN python3 embed_setup.py && \

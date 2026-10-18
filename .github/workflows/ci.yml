@@ -87,11 +87,11 @@ jobs:
           context: .
           file: Containerfile
           platforms: linux/${{ matrix.arch }}
-          # Semantic search is in the image; LEAF_EMBEDDINGS=fastembed in
+          # Semantic search is in the image; LEAF_SEMANTIC_SEARCH=on in
           # .env turns it on, as with ./run.sh.
           build-args: |
             LEAF_BUILD=${{ steps.meta.outputs.build }}
-            LEAF_EMBEDDINGS=fastembed
+            LEAF_SEMANTIC_SEARCH=on
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Leaf: a self-hosted wiki of plain Markdown files, with tasks and search

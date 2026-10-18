@@ -2,10 +2,11 @@
 
 Kept apart from embed.py on purpose: the Containerfile copies only this file
 and requirements-embed.txt before installing the packages and downloading the
-model (0.64 GB), so that layer is rebuilt only when they or LEAF_EMBEDDINGS
-change, not on every edit to embed.py. Keep it small and stable.
+model (0.64 GB), so that layer is rebuilt only when they or
+LEAF_SEMANTIC_SEARCH change, not on every edit to embed.py. Keep it small and
+stable.
 
-    LEAF_EMBEDDINGS=fastembed python3 embed_setup.py
+    LEAF_SEMANTIC_SEARCH=on python3 embed_setup.py
 """
 
 import hashlib
@@ -31,19 +32,21 @@ MODEL_FILES = {
 }
 
 
-def parse_spec(spec: str) -> str | None:
-    """The model LEAF_EMBEDDINGS asks for: `fastembed` (the name it had when
-    fastembed ran the model; `on`, `1` … too) or `fastembed:<DEFAULT_MODEL>`;
-    None when it is empty or off. Another model is an error."""
-    spec = (spec or "").strip()
-    if not spec or spec.lower() in ("0", "off", "false", "no"):
+# The settings' names until 2026-10 (LEAF_EMBEDDINGS=fastembed): set, they
+# turn nothing on, and embed.from_env logs what to rename them to.
+RENAMED = {"LEAF_EMBEDDINGS": "LEAF_SEMANTIC_SEARCH", "LEAF_EMBED_MIN_SCORE": "LEAF_SEMANTIC_MIN_SCORE"}
+
+
+def parse_spec(value: str) -> str | None:
+    """The model LEAF_SEMANTIC_SEARCH turns on: DEFAULT_MODEL for on (1,
+    true, yes), None for off (0, false, no, empty); anything else is an
+    error."""
+    v = (value or "").strip().lower()
+    if v in ("", "0", "off", "false", "no"):
         return None
-    kind, _, model = spec.partition(":")
-    if kind.lower() not in ("fastembed", "1", "true", "yes", "on"):
-        raise ValueError(f"LEAF_EMBEDDINGS: expected fastembed, got {spec!r}")
-    if model.strip() and model.strip().lower() != DEFAULT_MODEL.lower():
-        raise ValueError(f"LEAF_EMBEDDINGS: only {DEFAULT_MODEL} is supported, got {model.strip()!r}")
-    return DEFAULT_MODEL
+    if v in ("1", "on", "true", "yes"):
+        return DEFAULT_MODEL
+    raise ValueError(f"LEAF_SEMANTIC_SEARCH: expected on or off, got {value!r}")
 
 
 def model_dir() -> Path:
@@ -81,7 +84,7 @@ def prepare() -> None:
     tokenizer, NumPy, which embed.py also scores with), download the model
     into model_dir() and load it once, so a broken install fails the build
     (build time). Nothing when off. (embed.py isn't in the image yet here.)"""
-    if not parse_spec(os.environ.get("LEAF_EMBEDDINGS", "")):
+    if not parse_spec(os.environ.get("LEAF_SEMANTIC_SEARCH", "")):
         return
     # --no-deps: the file lists every package; tokenizers would otherwise
     # bring the Hugging Face hub client, which only downloads.

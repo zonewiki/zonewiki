@@ -124,13 +124,13 @@ def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
 
 
-# None unless LEAF_EMBEDDINGS is set: then search is hybrid (BM25 fused with
+# None unless LEAF_SEMANTIC_SEARCH is on: then search is hybrid (BM25 fused with
 # vector similarity) and pages list their nearest neighbours as Related.
 SEMANTIC: embed.SemanticIndex | None = None
 
 
 def semantic_from_env() -> embed.SemanticIndex | None:
-    """The semantic index LEAF_EMBEDDINGS asks for, its worker not started
+    """The semantic index LEAF_SEMANTIC_SEARCH asks for, its worker not started
     (None: keywords only)."""
     return embed.from_env(
         config.LEAF_DATA, lambda: [(s, p) for p, s in iter_pages()], _semantic_text,
@@ -141,7 +141,7 @@ def semantic_from_env() -> embed.SemanticIndex | None:
 def semantic_status() -> str:
     """How content search works now, for the search dialog: "on" (by
     keywords and meaning), "indexing" (the wiki isn't embedded yet),
-    "failed" (the model fails) or "off" (LEAF_EMBEDDINGS unset, or
+    "failed" (the model fails) or "off" (LEAF_SEMANTIC_SEARCH off, or
     its packages missing). The last three search by keywords only."""
     if not SEMANTIC:
         return "off"
@@ -151,7 +151,7 @@ def semantic_status() -> str:
 
 
 def start_semantic() -> None:
-    """Set up the semantic index LEAF_EMBEDDINGS asks for and start its
+    """Set up the semantic index LEAF_SEMANTIC_SEARCH asks for and start its
     worker (server.py, once the deck is set up: the worker reads tasks)."""
     global SEMANTIC
     SEMANTIC = semantic_from_env()

@@ -18,7 +18,9 @@ def _used_keys() -> set[str]:
     text = "".join(p.read_text(encoding="utf-8")
                    for p in [*(REPO / "src").glob("*.py"), REPO / "run.sh", REPO / "compose.yaml",
                              REPO / "compose.nas.yaml"])
-    return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL
+    # The old names of renamed settings, read only to say so.
+    renamed = set(re.findall(r'"(LEAF_[A-Z0-9_]+)": "LEAF_', (REPO / "src" / "embed_setup.py").read_text()))
+    return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL - renamed
 
 
 def test_example_has_no_unknown_keys():

@@ -1,4 +1,4 @@
-# Semantic search (LEAF_EMBEDDINGS): what embed.py runs the model with, at
+# Semantic search (LEAF_SEMANTIC_SEARCH): what embed.py runs the model with, at
 # exact versions, installed by embed_setup.py at image build with --no-deps
 # (so this list is all there is: tokenizers' own dependency, the Hugging Face
 # hub client, only downloads, which embed_setup.py does itself). Pinned for

@@ -20,7 +20,7 @@ services:
         # "<hash> <commit date>" shown next to the version; run.sh sets it.
         LEAF_BUILD: ${LEAF_BUILD:-unknown}
         # Semantic search: the model and what runs it are baked into the image.
-        LEAF_EMBEDDINGS: ${LEAF_EMBEDDINGS:-}
+        LEAF_SEMANTIC_SEARCH: ${LEAF_SEMANTIC_SEARCH:-}
     image: leaf
     container_name: leaf
     # Not root: Leaf runs as the host user, so the files it writes in the wiki

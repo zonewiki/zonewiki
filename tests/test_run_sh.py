@@ -206,7 +206,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     (wiki / "_eval").mkdir(parents=True)
-    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_EMBEDDINGS=fastembed\n")
+    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\nLEAF_SEMANTIC_MIN_SCORE=0.3\n")
     r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No questions at" in r.stderr
     (wiki / "_eval" / "retrieval.json").write_text("[]")
@@ -214,7 +214,8 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
                        cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     (build,) = _engine_calls(log, "build")
-    assert "--build-arg LEAF_EMBEDDINGS=fastembed" in build
+    assert "--build-arg LEAF_SEMANTIC_SEARCH=on" in build
     (run,) = _engine_calls(log, "run")
     assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
+    assert "-e LEAF_SEMANTIC_SEARCH=on -e LEAF_SEMANTIC_MIN_SCORE=0.3" in run
     assert run.endswith("tools/eval_retrieval.py /wiki-data/_eval/retrieval.json -k 5")
