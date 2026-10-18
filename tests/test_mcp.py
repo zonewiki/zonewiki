@@ -79,11 +79,11 @@ class TestHandle:
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "leaf_help", "read_guides",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_scratch_note", "rename_page",
-            "delete_page", "restore_page", "create_task", "update_task", "tag_tasks", "comment_task", "delete_task"]
+            "delete_page", "restore_page", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "leaf_help", "read_guides"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
-        adding = {"append_to_page", "create_task", "comment_task"}
+        adding = {"append_to_page", "create_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
@@ -1731,6 +1731,7 @@ class TestUpdateTask:
 
 
 class TestTagTasks:
+    """update_task with ids: tags on several tasks in one commit."""
     def _tasks(self, client):
         return {t["title"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
 
@@ -1740,7 +1741,7 @@ class TestTagTasks:
         c = _task_id(call(client, "create_task", title="Saw")[0])
         call(client, "update_task", id=c, status="done")          # completed tasks too
         before = len(self_log(git_wiki_dir))
-        text, err = call(client, "tag_tasks", ids=[a, f"[[task:{b}]]", c],
+        text, err = call(client, "update_task", ids=[a, f"[[task:{b}]]", c],
                          add_tags=["#work", "diy"], remove_tags=["OLD"], summary="sort the shed")
         assert not err
         assert text.startswith("Tags changed on 3 of 3 tasks.\n\n")
@@ -1755,35 +1756,69 @@ class TestTagTasks:
     def test_says_which_had_it_already(self, client, wiki_dir):
         a = _task_id(call(client, "create_task", title="A", tags=["x"])[0])
         b = _task_id(call(client, "create_task", title="B")[0])
-        text, _ = call(client, "tag_tasks", ids=[a, b], add_tags="x")
+        text, _ = call(client, "update_task", ids=[a, b], add_tags="x")
         assert text.startswith("Tags changed on 1 of 2 tasks (the others had them so already).")
 
     def test_errors_change_nothing(self, client, wiki_dir):
         a = _task_id(call(client, "create_task", title="A")[0])
-        text, err = call(client, "tag_tasks", ids=[a, "deadbeef"], add_tags=["x"])
+        text, err = call(client, "update_task", ids=[a, "deadbeef"], add_tags=["x"])
         assert err and "No task with id" in text
         assert self._tasks(client)["A"]["tags"] == []
-        assert "Give add_tags or remove_tags" in call(client, "tag_tasks", ids=[a])[0]
-        assert "ids must be" in call(client, "tag_tasks", ids=[], add_tags=["x"])[0]
-        assert "ids must be" in call(client, "tag_tasks", ids=a, add_tags=["x"])[0]
-        assert "add_tags must be" in call(client, "tag_tasks", ids=[a], add_tags=[3])[0]
-        assert "At most" in call(client, "tag_tasks", ids=[a] * 201, add_tags=["x"])[0]
+        assert "Give add_tags or remove_tags" in call(client, "update_task", ids=[a])[0]
+        assert "ids must be" in call(client, "update_task", ids=[], add_tags=["x"])[0]
+        assert "ids must be" in call(client, "update_task", ids=a, add_tags=["x"])[0]
+        assert "add_tags must be" in call(client, "update_task", ids=[a], add_tags=[3])[0]
+        assert "At most" in call(client, "update_task", ids=[a] * 201, add_tags=["x"])[0]
+
+    def test_ids_take_only_tags(self, client, wiki_dir):
+        a = _task_id(call(client, "create_task", title="A")[0])
+        text, err = call(client, "update_task", id=a, ids=[a], add_tags=["x"])
+        assert err and "Give id or ids, not both" in text
+        text, err = call(client, "update_task", ids=[a], add_tags=["x"], status="done", due="today")
+        assert err and "only add_tags and remove_tags work, not due, status" in text
+        assert self._tasks(client)["A"]["tags"] == [] and not self._tasks(client)["A"]["due_date"]
 
 
 class TestCommentAndDeleteTask:
-    def test_comment(self, client, wiki_dir):
+    """update_task's comment and status deleted."""
+    def test_comment(self, client, git_wiki_dir):
         tid = _task_id(call(client, "create_task", title="Call Bob")[0])
-        text, err = call(client, "comment_task", id=tid, text="left a voicemail")
+        text, err = call(client, "update_task", id=tid, comment="left a voicemail", summary="bob")
         assert not err and text.startswith("Comment added.")
         assert re.search(r"Comments:\n- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: left a voicemail", text)
-        assert call(client, "comment_task", id=tid, text=" ")[1]
+        assert self_log(git_wiki_dir)[0] == "Comment on deck task: bob (MCP)"
+        assert call(client, "update_task", id=tid, comment=" ")[1]
+
+    def test_comment_with_changes(self, client, git_wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Call Bob")[0])
+        text, err = call(client, "update_task", id=tid, status="done", comment="reached him")
+        assert not err and text.startswith("Updated, comment added.")
+        assert "status: done" in text and "reached him" in text
+        assert self_log(git_wiki_dir)[:2] == ["Comment on deck task (MCP)", "Complete deck task (MCP)"]
+
+    def test_bad_comment_changes_nothing(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Call Bob")[0])
+        text, err = call(client, "update_task", id=tid, status="done", comment=" ")
+        assert err and "comment must be" in text
+        assert call(client, "search_tasks", status="open")[0].count("Call Bob") == 1
 
     def test_delete(self, client, wiki_dir):
         tid = _task_id(call(client, "create_task", title="Oops")[0])
-        text, err = call(client, "delete_task", id=tid)
+        text, err = call(client, "update_task", id=tid, status="deleted")
         assert not err and text == f"Deleted task {tid}: Oops"
         assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
-        assert call(client, "delete_task", id=tid)[1]
+        assert call(client, "update_task", id=tid, status="deleted")[1]
+
+    def test_delete_takes_nothing_else(self, client, wiki_dir):
+        tid = _task_id(call(client, "create_task", title="Oops")[0])
+        text, err = call(client, "update_task", id=tid, status="deleted", comment="why")
+        assert err and "status deleted takes nothing else, not comment" in text
+        assert "Oops" in call(client, "search_tasks")[0]
+
+    def test_old_tools_are_gone(self, client, wiki_dir):
+        for name in ("tag_tasks", "comment_task", "delete_task"):
+            r = rpc(client, "tools/call", {"name": name, "arguments": {}}).get_json()
+            assert "Unknown tool" in json.dumps(r)
 
 
 # ── Leaf's documentation ─────────────────────────────────────────────────────

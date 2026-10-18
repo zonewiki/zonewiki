@@ -41,7 +41,7 @@ INSTRUCTIONS = (
 )
 
 _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
-# Writes that only add (a page, a section, a task, a comment), and those that
+# Writes that only add (a page, a section, a task), and those that
 # change or remove what is there.
 _ADDS = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False}
 _CHANGES = {**_ADDS, "destructiveHint": True}
@@ -491,7 +491,7 @@ TOOLS = [
         "name": "create_task",
         "title": "Create a task",
         "description": ("Add a task to the user's deck. Returns it with its id, and the tags of "
-                        "similar tasks: offer the fitting ones to the user (tag_tasks adds them)."),
+                        "similar tasks: offer the fitting ones to the user (update_task's add_tags adds them)."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -505,73 +505,31 @@ TOOLS = [
     },
     {
         "name": "update_task",
-        "title": "Update a task",
+        "title": "Update, comment on or delete tasks",
         "description": (
             "Change a deck task: only the fields given change. status: done (a "
             "repeating task gets its next occurrence), wont_do (abandon it), skip "
-            "(won't do this occurrence, the series goes on), open (reopen)."
+            "(won't do this occurrence, the series goes on), open (reopen), deleted "
+            "(gone for good, only in the git history: for a task made by mistake; "
+            "to end a task use done or wont_do). comment adds a dated status line. "
+            "With ids instead of id: add_tags/remove_tags on several tasks in one "
+            "change. Case is ignored; list_tags shows the tags in use: reuse those."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "id": _TASK_ID,
+                "ids": {"type": "array", "items": {"type": "string"}, "description": (
+                    "Several tasks instead of id (ids or 8-character prefixes), for add_tags/remove_tags only.")},
                 "title": {"type": "string"},
                 **_TASK_FIELDS,
                 "add_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to add."},
                 "remove_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to remove."},
-                "status": {"type": "string", "enum": ["open", "done", "wont_do", "skip"]},
+                "comment": {"type": "string", "description": (
+                    "A comment to add: a dated status line ('called Bob, waiting'), open or done tasks alike.")},
+                "status": {"type": "string", "enum": ["open", "done", "wont_do", "skip", "deleted"]},
                 "summary": _SUMMARY,
             },
-            "required": ["id"],
-        },
-        "annotations": _CHANGES,
-    },
-    {
-        "name": "tag_tasks",
-        "title": "Tag several tasks",
-        "description": (
-            "Add tags to several deck tasks and/or remove tags from them, in one change "
-            "(one commit the user can undo). Case is ignored; a tag a task has keeps its "
-            "spelling. For one task, update_task's add_tags/remove_tags do the same. "
-            "list_tags shows the tags in use: reuse those."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "ids": {"type": "array", "items": {"type": "string"},
-                        "description": "The tasks: ids (or their 8-character prefixes) as search_tasks shows them."},
-                "add_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to add."},
-                "remove_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to remove."},
-                "summary": _SUMMARY,
-            },
-            "required": ["ids"],
-        },
-        "annotations": _CHANGES,
-    },
-    {
-        "name": "comment_task",
-        "title": "Comment on a task",
-        "description": "Add a comment (a dated status line) to a deck task, open or done.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "id": _TASK_ID,
-                "text": {"type": "string", "description": "The comment."},
-                "summary": _SUMMARY,
-            },
-            "required": ["id", "text"],
-        },
-        "annotations": _ADDS,
-    },
-    {
-        "name": "delete_task",
-        "title": "Delete a task",
-        "description": ("Delete a deck task for good (only in the git history after). To end "
-                        "a task use update_task with status done or wont_do instead."),
-        "inputSchema": {
-            "type": "object",
-            "properties": {"id": _TASK_ID, "summary": _SUMMARY},
-            "required": ["id"],
         },
         "annotations": _CHANGES,
     },

@@ -1,8 +1,8 @@
 """The MCP tools: reading (search_wiki, search_tasks, grep_wiki, read_page,
 list_pages, check_links, leaf_help) and writing pages (write_page (also a scratch note), edit_page,
 replace_in_pages, append_to_page, rename_page (also a folder), delete_page, file_scratch_note)
-and deck tasks (create_task, update_task,
-comment_task, delete_task). The protocol itself is in mcp_server.py, the
+and deck tasks (create_task, update_task: also comments, deletes and
+tags on several tasks). The protocol itself is in mcp_server.py, the
 endpoint in server.py."""
 
 import hashlib
@@ -921,7 +921,7 @@ def _tag_hints(task: dict) -> str:
     if counts:
         # Most common first; ties: the order the closest tasks named them.
         tags = sorted(counts, key=lambda t: -counts[t])[:_TAGS_SUGGESTED]
-        out += ("\n\nTags on similar tasks (offer the fitting ones; tag_tasks adds them): "
+        out += ("\n\nTags on similar tasks (offer the fitting ones; update_task's add_tags adds them): "
                 + ", ".join(f"#{t} ({counts[t]})" for t in tags))
     used = {t.lower() for d in others for t in d["task"].get("tags") or []}
     for md_file, _slug in iter_pages():
@@ -967,16 +967,40 @@ _STATUS = {"done": {"completed": True}, "open": {"completed": False},
 
 @deckstore.serialized
 def _update_task(args: dict, base: str) -> str:
+    """One task's fields, status and comment; status deleted deletes it; ids
+    instead of id tags several tasks (_tag_tasks)."""
+    if "ids" in args:
+        if "id" in args:
+            raise mcp_server.ToolError("Give id or ids, not both")
+        other = sorted(set(args) - {"ids", "add_tags", "remove_tags", "summary"})
+        if other:
+            raise mcp_server.ToolError(
+                f"With ids only add_tags and remove_tags work, not {', '.join(other)}; "
+                "change the rest one task (id) at a time")
+        return _tag_tasks(args)
     task = _task_arg(args)
+    status = args.get("status")
+    if status == "deleted":
+        other = sorted(set(args) - {"id", "status", "summary"})
+        if other:
+            raise mcp_server.ToolError(f"status deleted takes nothing else, not {', '.join(other)}")
+        return _delete_task(task, args)
+    comment = _str_arg(args, "comment") if "comment" in args else None
     data = _task_fields(args, task)
     if "status" in args:
-        if args["status"] not in _STATUS:
-            raise mcp_server.ToolError("status must be open, done, wont_do or skip")
-        data.update(_STATUS[args["status"]])
-    if not data:
-        raise mcp_server.ToolError("Nothing to change: give the fields to set, or a status")
-    task = _deck_write(deck.update_task, task["id"], data, _msg_suffix(args))
-    out = "Updated.\n\n" + _mcp_task_text(task, base)
+        if status not in _STATUS:
+            raise mcp_server.ToolError("status must be open, done, wont_do, skip or deleted")
+        data.update(_STATUS[status])
+    if not data and comment is None:
+        raise mcp_server.ToolError("Nothing to change: give the fields to set, a status or a comment")
+    if data:
+        task = _deck_write(deck.update_task, task["id"], data, _msg_suffix(args))
+    if comment is not None:
+        task = _deck_write(deck.add_comment, task["id"], comment,
+                           _commit_msg("Comment on deck task", args))
+    head = "Updated, comment added." if data and comment is not None else \
+        "Updated." if data else "Comment added."
+    out = head + "\n\n" + _mcp_task_text(task, base)
     spawned = [t for t in deckstore.read_deck() if t.get("spawned_from") == task["id"]
                and not t.get("completed_at")]
     if args.get("status") in ("done", "skip") and spawned:
@@ -999,7 +1023,7 @@ def _tag_list(args: dict, name: str) -> list[str]:
 _TAG_TASKS_MAX = 200
 
 
-def _tag_tasks(args: dict, base: str) -> str:
+def _tag_tasks(args: dict) -> str:
     ids = args.get("ids")
     if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
         raise mcp_server.ToolError("ids must be a non-empty list of task ids")
@@ -1019,15 +1043,7 @@ def _tag_tasks(args: dict, base: str) -> str:
         ".\n\n" + "\n".join(lines)
 
 
-def _comment_task(args: dict, base: str) -> str:
-    task = _task_arg(args)
-    task = _deck_write(deck.add_comment, task["id"], _str_arg(args, "text"),
-                       _commit_msg("Comment on deck task", args))
-    return "Comment added.\n\n" + _mcp_task_text(task, base)
-
-
-def _delete_task(args: dict, base: str) -> str:
-    task = _task_arg(args)
+def _delete_task(task: dict, args: dict) -> str:
     _deck_write(deck.delete_task, task["id"], _commit_msg("Delete deck task", args))
     return f"Deleted task {decksyntax.short_id(task['id'])}: {task.get('title', '')}"
 
@@ -1484,8 +1500,7 @@ _WRITE_TOOLS = {
     "write_page": _write_page, "edit_page": _edit_page, "replace_in_pages": _replace_in_pages,
     "append_to_page": _append_to_page, "file_scratch_note": _file_scratch_note,
     "rename_page": _rename_page, "delete_page": _delete_page,
-    "create_task": _create_task, "update_task": _update_task, "tag_tasks": _tag_tasks,
-    "comment_task": _comment_task, "delete_task": _delete_task, "restore_page": _restore_page,
+    "create_task": _create_task, "update_task": _update_task, "restore_page": _restore_page,
 }
 
 

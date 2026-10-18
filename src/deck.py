@@ -677,7 +677,7 @@ def tag_tasks(ids: list[str], add: list[str], remove: list[str],
     """Add the tags `add` to the tasks `ids` and take `remove` off them (case
     ignored; a tag a task has keeps its spelling), open and completed alike,
     in one commit; returns the tasks found. The batch-tag route and the MCP
-    tag_tasks tool share it."""
+    update_task tool (with ids) share it."""
     id_set = set(ids)
     add_tags = clean_tags(add)
     remove_tags = {t.lower() for t in clean_tags(remove)}
