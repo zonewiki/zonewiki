@@ -163,6 +163,13 @@ follows its log. To update: `git pull && ./run.sh up`.
 To point Leaf at an existing folder of Markdown notes, set `LEAF_DATA` to
 it; Leaf makes it a git repository (if it isn't one) and adds a home page.
 
+**On a NAS or server** (Synology, QNAP, a Raspberry Pi, …), you don't need
+the repository: `compose.nas.yaml` runs the prebuilt image
+`ghcr.io/gklingler/leaf` (amd64 and arm64). Put it next to a `.env` and run
+`docker compose -f compose.nas.yaml up -d`; Leaf is then on port 5080. What
+`.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS
+or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md).
+
 Without a container, you need Python 3.10 or newer and git:
 
 ```bash

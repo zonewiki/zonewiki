@@ -16,7 +16,8 @@ def _example_keys() -> set[str]:
 
 def _used_keys() -> set[str]:
     text = "".join(p.read_text(encoding="utf-8")
-                   for p in [*(REPO / "src").glob("*.py"), REPO / "run.sh", REPO / "compose.yaml"])
+                   for p in [*(REPO / "src").glob("*.py"), REPO / "run.sh", REPO / "compose.yaml",
+                             REPO / "compose.nas.yaml"])
     return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL
 
 

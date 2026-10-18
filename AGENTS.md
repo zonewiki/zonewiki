@@ -22,7 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, CI, network and phone access, the version string, the home-screen app, the data directory |
+| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
 ---
@@ -69,6 +69,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
+├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
 ├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
@@ -76,6 +77,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── .env.example            # Template for .env: every setting, commented
 ├── .env                    # Your settings (gitignored; copy of .env.example)
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
+├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 └── src/
     ├── requirements.txt
