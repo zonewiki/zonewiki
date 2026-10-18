@@ -1,9 +1,9 @@
 """Which embedding model Leaf uses, and installing it ahead of time.
 
 Kept apart from embed.py on purpose: the Containerfile copies only this file
-before installing fastembed and downloading the model (0.64 GB), so that
-layer is rebuilt only when this file or LEAF_EMBEDDINGS changes, not on
-every edit to embed.py. Keep it small and stable.
+and requirements-embed.txt before installing fastembed and downloading the
+model (0.64 GB), so that layer is rebuilt only when they or LEAF_EMBEDDINGS
+change, not on every edit to embed.py. Keep it small and stable.
 
     LEAF_EMBEDDINGS=fastembed python3 embed_setup.py
 """
@@ -11,6 +11,7 @@ every edit to embed.py. Keep it small and stable.
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 # German and English, also mixed (0.64 GB). On a test wiki it separated real
 # hits from noise far better than the small multilingual MiniLM (which covers
@@ -31,14 +32,15 @@ def parse_spec(spec: str) -> str | None:
 
 
 def prepare() -> None:
-    """Install fastembed (it brings NumPy, which embed.py scores with) and
-    download LEAF_EMBEDDINGS' model into FASTEMBED_CACHE_PATH (build time).
-    Nothing when off."""
+    """Install fastembed at the versions requirements-embed.txt pins (it
+    brings NumPy, which embed.py scores with) and download LEAF_EMBEDDINGS'
+    model into FASTEMBED_CACHE_PATH (build time). Nothing when off."""
     name = parse_spec(os.environ.get("LEAF_EMBEDDINGS", ""))
     if not name:
         return
     subprocess.run([sys.executable, "-m", "pip", "install", "--break-system-packages",
-                    "--no-cache-dir", "-q", "fastembed"], check=True)
+                    "--no-cache-dir", "-q", "-r", str(Path(__file__).with_name("requirements-embed.txt"))],
+                   check=True)
     from fastembed import TextEmbedding
     model = TextEmbedding(name, cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
     list(model.query_embed(["warm up"]))

@@ -12,6 +12,7 @@ import re
 import time
 
 import pytest
+from pathlib import Path
 
 from tests.conftest import HOST, write_page
 import deckstore
@@ -450,8 +451,19 @@ class TestConfig:
         monkeypatch.setenv("LEAF_EMBEDDINGS", "fastembed:BAAI/bge-small-en-v1.5")
         monkeypatch.setenv("FASTEMBED_CACHE_PATH", "/opt/fastembed")
         embed_setup.prepare()
-        assert calls == [("pip", "fastembed"), ("load", "BAAI/bge-small-en-v1.5", "/opt/fastembed"),
-                         ("embed", ["warm up"])]
+        # fastembed at the pinned versions, from the file next to the script.
+        assert calls == [("pip", str(Path(embed_setup.__file__).with_name("requirements-embed.txt"))),
+                         ("load", "BAAI/bge-small-en-v1.5", "/opt/fastembed"), ("embed", ["warm up"])]
+
+    @pytest.mark.parametrize("name,first", [("requirements.txt", "flask=="),
+                                            ("requirements-embed.txt", "fastembed==")])
+    def test_requirements_are_pinned(self, name, first):
+        # Every package at an exact version, the transitive ones too: an
+        # image build installs what was tested, not the newest release.
+        text = Path(embed_setup.__file__).with_name(name).read_text()
+        pins = [p for p in (line.split("#")[0].strip() for line in text.splitlines()) if p]
+        assert pins[0].startswith(first)
+        assert all(p.count("==") == 1 and not p.startswith("-") for p in pins), pins
 
     def test_containerfile_copies_only_the_setup_before_the_download(self):
         # The model layer must not depend on embed.py, or every change to the
@@ -459,7 +471,7 @@ class TestConfig:
         from pathlib import Path
         text = (Path(__file__).parent.parent / "Containerfile").read_text()
         before = text[:text.index("RUN python3 embed_setup.py")]
-        assert "COPY src/embed_setup.py ." in before
+        assert "COPY src/embed_setup.py src/requirements-embed.txt ./" in before
         assert "COPY src/ ." not in before and "embed.py ." not in before
 
     def test_off_by_default(self, monkeypatch, wiki_dir):
