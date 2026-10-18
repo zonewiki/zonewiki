@@ -2514,36 +2514,50 @@ def test_phone_card_menu_sits_on_the_title_line(new_page, wiki):
             assert card(phone, "Plain").bounding_box()["height"] < 56
 
 
-def test_full_cards_show_every_tag_compact_lines_stay_one_line(page, wiki):
-    # Short of room, a full card's tags wrap onto more lines (the dates stay
-    # at the first line's end); a compact line stays one line, its tags give
-    # way.
+def test_every_card_shows_every_tag(page, wiki):
+    # Short of room, the tags wrap onto more lines (the dates stay at the
+    # first line's end), in full cards and compact lines alike: a compact
+    # line gets two lines rather than drop a tag. A long title doesn't push
+    # them out, nor do they squeeze the title: both get their share.
     page.set_viewport_size({"width": 800, "height": 800})
-    page.request.post("/api/deck", data={"title": "Call the insurance about the broken window in the kitchen",
+    page.request.post("/api/deck", data={"title": "Call the insurance about the broken window in the kitchen and the hallway",
                                          "tags": "home,insurance,money,calls,waiting,landlord,repairs",
                                          "due_date": tomorrow()})
+    page.request.post("/api/deck", data={"title": "Plain"})
     page.goto("/deck?view=open")
-    app, item = page.locator(".tasks-app"), card(page, "Call the insurance about the broken window in the kitchen")
+    app, item = page.locator(".tasks-app"), card(page, "Call the insurance about the broken window in the kitchen and the hallway")
     if "deck-compact" in app.get_attribute("class"):
         page.locator(".deck-density-btn").click()
     expect(app).not_to_have_class(COMPACT)
-    box, due = item.bounding_box(), item.locator(".task-due").bounding_box()
     tags = item.locator(".task-tag")
     expect(tags).to_have_count(7)
-    for tag in tags.all():
-        b = tag.bounding_box()
-        assert box["x"] <= b["x"] and b["x"] + b["width"] <= due["x"]     # whole, left of the dates
-        assert b["y"] + b["height"] <= box["y"] + box["height"]           # inside the card
-    first = tags.first.bounding_box()
-    assert tags.last.bounding_box()["y"] > first["y"]                    # wrapped
-    assert abs((due["y"] + due["height"] / 2) - (first["y"] + first["height"] / 2)) < 2
+
+    def check():
+        box, due = item.bounding_box(), item.locator(".task-due").bounding_box()
+        title = item.locator(".task-content").bounding_box()
+        for tag in tags.all():
+            b = tag.bounding_box()
+            assert box["x"] <= b["x"] and b["x"] + b["width"] <= due["x"]     # whole, left of the dates
+            assert b["x"] >= title["x"] + title["width"]                      # right of the title
+            assert b["y"] + b["height"] <= box["y"] + box["height"]           # inside the card
+        first = tags.first.bounding_box()
+        assert tags.last.bounding_box()["y"] > first["y"]                    # wrapped
+        assert abs((due["y"] + due["height"] / 2) - (first["y"] + first["height"] / 2)) < 2
+        assert title["width"] > 200                                           # the title keeps its share
+        return box
+
+    page.mouse.move(0, 0)
+    full = check()
     page.locator(".deck-density-btn").click()
     expect(app).to_have_class(COMPACT)
-    line = item.bounding_box()
-    assert line["height"] < box["height"]
-    t = item.locator(".task-tags-right").bounding_box()
-    hidden = [b for b in (tag.bounding_box() for tag in tags.all()) if b["y"] >= t["y"] + t["height"]]
-    assert hidden                                                       # some gave way
+    page.mouse.move(0, 0)
+    line = check()
+    assert line["height"] < full["height"]                               # the title is one line, cut off
+    assert card(page, "Plain").bounding_box()["height"] < 40              # a line, as ever
+    # Hovering shows the empty 📅 in room kept for it: nothing rewraps.
+    item.locator(".task-content").hover()
+    expect(item.locator(".task-date-empty").first).to_be_visible()
+    assert item.bounding_box()["height"] == line["height"]
 
 
 # ── Compact: expand a task in place ──────────────────────────────────────────
