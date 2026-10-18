@@ -439,6 +439,36 @@ def test_number_keys_start_selected_tasks_on_that_day(page, wiki):
     wait_for_field(page, "Second", "start_date", tomorrow())
 
 
+def test_undo_waits_for_the_write_it_belongs_to(page, wiki):
+    # A bulk start writes first and arms its undo after the response: Ctrl+Z
+    # in between does nothing, instead of undoing the step before.
+    page.request.post("/api/deck", data={"title": "Second"})
+    page.request.post("/api/deck", data={"title": "Third"})
+    open_board(page, wiki)
+    card(page, "Second").locator(".task-title").click()
+    card(page, "Third").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("2")
+    expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks start tomorrow")
+    held = []
+    page.route("**/api/deck/batch-update", lambda route: held.append(route))
+    page.keyboard.press("0")
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    assert len(held) == 1
+    page.keyboard.press("Control+z")
+    page.wait_for_timeout(300)
+    assert len(held) == 1  # no undo request went out
+    held[0].continue_()
+    page.unroute("**/api/deck/batch-update")
+    expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks unplanned")
+    wait_for_field(page, "Second", "start_date", None)
+    page.keyboard.press("Control+z")
+    wait_for_field(page, "Second", "start_date", tomorrow())
+    wait_for_field(page, "Third", "start_date", tomorrow())
+
+
 def test_number_key_past_the_deadline_asks(page, wiki):
     page.request.post("/api/deck", data={"title": "Due soon", "due_date": tomorrow()})
     open_board(page, wiki)

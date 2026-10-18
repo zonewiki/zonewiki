@@ -230,6 +230,7 @@ async function planOnDay(id, day) {
   if (!await confirmDeadlineMove(task, day)) return null;
   const old = { start_date: task.start_date ?? null, due_date: task.due_date,
                 recurrence: task.recurrence ?? null, history: oldHistory(id) };
+  dismissUndo();
   if (!await updateTask(id, { start_date: day, due_date: day })) return null;
   showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
   return true;
@@ -841,6 +842,9 @@ function placeToast(el) {
   }, { once: true });
 }
 
+// An action that writes first and arms its undo after the response calls
+// dismissUndo() before the write: until its own undo is armed, Ctrl+Z (or
+// the old toast's button) would otherwise undo the action before it.
 function showUndo(msg, undoFn) {
   dismissUndo();
   pendingUndoFn = undoFn;
@@ -1110,6 +1114,7 @@ function beginComplete(id, li) {
     setTimeout(async () => {
       const task = tasks.find(t => t.id === id);
       const before = task?.keep && keepSnapshot(task);
+      if (before) dismissUndo();
       const done = await updateTask(id, { completed: true });
       // A keep task is not archived, so Completed can't reopen it: offer undo.
       if (done && before) showUndo(`“${plainTitle(task.title)}” done`, () => updateTask(id, before));
@@ -1196,6 +1201,7 @@ async function deleteWithUndo(ids, beforeDelete) {
   if (!await confirmDelete(title, count)) return;
   const snapshot = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
   beforeDelete?.();
+  dismissUndo();
   await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
   showUndo(count === 1 ? 'Task deleted' : `${count} tasks deleted`, async () => {
     await fetch('/api/deck/restore', {
@@ -1690,6 +1696,7 @@ function openBulkTagModal(ids, removing = false) {
 async function bulkTag(ids, add, remove) {
   const idSet = new Set(ids);
   const before = new Map(tasks.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
+  dismissUndo();
   let res;
   try {
     res = await fetch('/api/deck/batch-tag', {
@@ -1865,6 +1872,7 @@ async function startOn(ids, day) {
   const asks = before.filter(t => startsAfterDeadline(t, day));
   const plain = before.filter(t => !asks.includes(t));
   if (plain.length) {
+    dismissUndo();
     if (!await batchUpdate(plain.map(t => ({ id: t.id, start_date: day })))) return;
     const n = plain.length;
     const msg = n === 1 ? (day ? `Starts ${formatDate(day)}` : 'Start date cleared')
@@ -1886,6 +1894,7 @@ async function completeMany(ids) {
     ? ids.map(id => tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
          .map(t => [t.id, keepSnapshot(t)])
     : [];
+  dismissUndo();
   await completeTasks(ids, completing);
   const label = completing ? `${ids.length} tasks completed` : `${ids.length} tasks reopened`;
   showUndo(label, async () => {
@@ -3183,6 +3192,7 @@ commentList.addEventListener('click', e => {
   if (!comment) return;
   if (btn.dataset.commentAction === 'delete') {
     const before = task.comments;
+    dismissUndo();
     commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'DELETE').then(ok => {
       if (ok) showUndo('Comment deleted', () => updateTask(taskId, { comments: before }).then(t => {
         if (t && commentsTaskId === taskId && modal.open) renderComments(t);
