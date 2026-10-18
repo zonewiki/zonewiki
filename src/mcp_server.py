@@ -46,13 +46,11 @@ _READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
 _ADDS = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False}
 _CHANGES = {**_ADDS, "destructiveHint": True}
 
-_SUMMARY = {"type": "string", "description": (
-    "What this change does, in a few words (e.g. 'add findings from BUG-1234'); "
-    "it becomes the git commit message.")}
+# The parameters many tools share keep their descriptions short: every
+# session loads each copy. What the guide gate is, read_guides says once.
+_SUMMARY = {"type": "string", "description": "The git commit message, a few words ('add findings from BUG-1234')."}
 _GUIDES = {"type": "array", "items": {"type": "string"}, "description": (
-    "The ids of the user's guides for these pages that you have read in this conversation. A write "
-    "to a page under a guide (the wiki's, a folder's CLAUDE.md or AGENTS.md) is refused until you "
-    "pass its id; the refusal shows the guide and its id. Pass every id you have.")}
+    "Every guide id you have (read_guides); a write under a guide is refused without its id.")}
 _PAGE_SLUG = {"type": "string",
               "description": "The page's slug as search_wiki or list_pages give it, e.g. 'git-remote' or 'journal/2026-09'."}
 _TASK_ID = {"type": "string",
@@ -76,6 +74,12 @@ _TASK_FIELDS = {
                     "description": "Next occurrence counted from the due date (default) or from when it was done."},
     "keep": {"type": "boolean",
              "description": "A keep task: done, it goes back to the list instead of being archived (shopping list staples)."},
+}
+# update_task's: create_task's description of dates is in the same list.
+_TASK_FIELDS_UPDATE = {
+    **_TASK_FIELDS,
+    "due": {"type": "string", "description": "Deadline, as create_task takes it; empty to clear."},
+    "start": {"type": "string", "description": "Start date, as create_task takes it (only when the user says so); empty to clear."},
 }
 
 TOOLS = [
@@ -275,8 +279,10 @@ TOOLS = [
             "Read the user's guides for a page or folder: their instructions for what goes "
             "there and how it is written (layout, tone, where it goes, what stays private). Call "
             "it before drafting anything meant for the wiki, before you write the first word, "
-            "so the draft follows them. Returns each guide's text and its id; pass the ids as "
-            "guides with the write, which is refused without them."
+            "so the draft follows them. Returns each guide's text and its id. A page write under "
+            "a guide (the wiki's, a folder's CLAUDE.md or AGENTS.md) is refused until its id is "
+            "in the write's guides; the refusal shows the guide and its id. Ids count for the "
+            "conversation, until the user changes the guide."
         ),
         "inputSchema": {
             "type": "object",
@@ -522,7 +528,7 @@ TOOLS = [
                 "ids": {"type": "array", "items": {"type": "string"}, "description": (
                     "Several tasks instead of id (ids or 8-character prefixes), for add_tags/remove_tags only.")},
                 "title": {"type": "string"},
-                **_TASK_FIELDS,
+                **_TASK_FIELDS_UPDATE,
                 "add_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to add."},
                 "remove_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to remove."},
                 "comment": {"type": "string", "description": (

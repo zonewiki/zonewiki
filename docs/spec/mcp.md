@@ -16,6 +16,8 @@ Every page write (write_page, edit_page, append_to_page, file_scratch_note (the 
 
 A tool failure the model can fix (bad slug, empty query, text not found) is a result with `isError`, not a protocol error.
 
+**Size of the tool list**: every session loads all tool definitions (about 24 KB), so text is said once: the parameters many tools share (`summary`, `guides`) have one-line descriptions, `read_guides` explains the guide gate, and `update_task`'s `due`/`start` refer to `create_task`'s, which carry the date rules. A test keeps the total under 25,000 characters.
+
 ### Reading
 
 Annotated `readOnlyHint`.

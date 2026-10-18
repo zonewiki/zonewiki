@@ -88,6 +88,16 @@ class TestHandle:
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
 
+    def test_tool_definitions_stay_small(self):
+        # Every session loads them all. Parameters many tools share keep
+        # short descriptions; read_guides explains the gate once.
+        assert len(json.dumps(mcp_server.TOOLS)) < 25000
+        for shared in (mcp_server._SUMMARY, mcp_server._GUIDES):
+            assert len(shared["description"]) < 100
+        tools = {t["name"]: t for t in mcp_server.TOOLS}
+        assert "refused until its id" in tools["read_guides"]["description"]
+        assert "as create_task takes it" in tools["update_task"]["inputSchema"]["properties"]["due"]["description"]
+
     def test_unknown_method(self):
         r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/list"}, _no_tools, "x")
         assert r["error"]["code"] == -32601
