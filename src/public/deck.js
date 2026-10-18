@@ -1589,17 +1589,9 @@ function openBulkTagModal(ids, removing = false) {
   const input = dlg.querySelector('#bulk-tag-input');
   const chips = removing ? null
     : chipField(input, { label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
-  if (chips) {
-    // A comma (typed or pasted) makes chips, as in the edit modal's Tags.
-    input.addEventListener('input', () => {
-      const parts = input.value.split(',');
-      if (parts.length < 2) return;
-      const last = parts.pop();
-      chips.set([...chips.words(), ...parts.map(cleanTag).filter(Boolean)], true);
-      input.value = last.trimStart();
-    });
-  }
-  noSpacesInTags(input, false);
+  // A comma or space makes chips, as in the edit modal's Tags.
+  if (chips) chipsOnSeparators(input, chips);
+  else noSpacesInTags(input, false);
   const rowOf = tag => rows.find(r => r.tag.toLowerCase() === tag.toLowerCase());
   // Removing: turn the tag's row off.
   function removeTag(tag) {
@@ -2922,23 +2914,37 @@ function filterDefaultTags() {
 }
 
 // Edit modal Tags field: each tag is a chip; the input holds the one being
-// typed. Completing it (Tab/Enter on a suggestion) or typing a comma makes
-// it a chip; Backspace at the start removes the last chip.
+// typed. Completing it (Tab/Enter on a suggestion), typing a comma or a
+// space, or Enter on a tag no suggestion matches makes it a chip (Enter on
+// an empty field saves); Backspace at the start removes the last chip.
 const editTagsInput = document.getElementById('task-edit-tags' + sfx);
 const cleanTag = t => t.trim().replace(/^#+/, '').replace(/\s+/g, '-');
+// A chip field of tags: a comma or a space (typed or pasted: "#a #b, c")
+// commits everything before it as chips. Tags are one word each, so a
+// space ends one rather than becoming part of it.
+function chipsOnSeparators(input, chips) {
+  input.addEventListener('input', () => {
+    const parts = input.value.split(/[\s,]+/);
+    if (parts.length < 2) return;
+    const last = parts.pop();
+    chips.set([...chips.words(), ...parts.map(cleanTag).filter(Boolean)], true);
+    input.value = last;
+  });
+}
 const editChips = editTagsInput && chipField(editTagsInput, {
   label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
 if (editTagsInput) {
-  // A comma (typed or pasted) commits everything before it as chips.
-  // Registered before noSpacesInTags, which would turn ", " into "-".
-  editTagsInput.addEventListener('input', () => {
-    const parts = editTagsInput.value.split(',');
-    if (parts.length < 2) return;
-    const last = parts.pop();
-    editChips.set([...editChips.words(), ...parts.map(cleanTag).filter(Boolean)], true);
-    editTagsInput.value = last.trimStart();
+  chipsOnSeparators(editTagsInput, editChips);
+  // Enter with no suggestion open (the dropdown takes it first when one
+  // is): a typed tag becomes a chip rather than saving the task.
+  editTagsInput.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.isComposing) return;
+    const typed = cleanTag(editTagsInput.value);
+    if (!typed) return;
+    e.preventDefault();
+    editChips.add(typed);
+    editTagsInput.value = '';
   });
-  noSpacesInTags(editTagsInput, false);
 }
 // Every tag in the field: the chips plus a half-typed one (Save takes it too).
 function editTags() {

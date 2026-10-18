@@ -436,37 +436,42 @@ def test_tag_with_space_is_findable_in_filter(page, wiki):
     expect(page.locator(".task-item .task-title")).to_have_text(["Try models"])
 
 
-def test_tag_fields_do_not_take_spaces(page, wiki):
+def test_tags_field_takes_several_tags_at_once(page, wiki):
+    # Regression: only a comma made a chip; a space became a hyphen ("a b"
+    # one tag "a-b") and Enter on a new tag saved the task. Tags are one
+    # word each, so a comma, a space or Enter ends one.
     seed_tags(page, wiki)
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
+    modal.locator("#task-edit-title").fill("Several")
     tags = modal.locator("#task-edit-tags")
     tags.click()
-    tags.press_sequentially("local llm")
-    expect(tags).to_have_value("local-llm")
-    tags.press_sequentially(",")             # a comma makes it a chip
-    expect(tag_chips(page)).to_have_text(["#local-llm"])
-    tags.press_sequentially("x y")
-    expect(tags).to_have_value("x-y")
-    # Paste goes through the same cleaning; the part after the last comma
-    # stays to be typed on, and Save takes it too.
-    tags.fill("")
-    tags.evaluate("el => { el.value = 'a b ,  c'; el.dispatchEvent(new Event('input')); }")
-    expect(tag_chips(page)).to_have_text(["#local-llm", "#a-b"])
+    tags.press_sequentially("alpha beta,gamma ")
+    expect(tag_chips(page)).to_have_text(["#alpha", "#beta", "#gamma"])
+    expect(tags).to_have_value("")
+    tags.press_sequentially("brandnew")
+    expect(page.locator(".tag-ac-dropdown")).to_have_count(0)   # nothing to complete
+    tags.press("Enter")                                         # a chip, not Save
+    expect(tag_chips(page)).to_have_text(["#alpha", "#beta", "#gamma", "#brandnew"])
+    expect(modal).to_be_visible()
+    # Paste: "#a #b, c" — the part after the last separator stays to be
+    # typed on, and Save takes it too.
+    tags.evaluate("el => { el.value = '#a  #b, c'; el.dispatchEvent(new Event('input')); }")
+    expect(tag_chips(page)).to_have_text(["#alpha", "#beta", "#gamma", "#brandnew", "#a", "#b"])
     expect(tags).to_have_value("c")
-    modal.locator("#task-edit-title").fill("Spaced")
     modal.get_by_role("button", name="Save").click()
-    expect(page.locator(".task-item").filter(has_text="Spaced")).to_be_visible()
-    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Spaced")
-    assert t["tags"] == ["local-llm", "a-b", "c"]
+    expect(page.locator(".task-item").filter(has_text="Several")).to_be_visible()
+    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Several")
+    assert t["tags"] == ["alpha", "beta", "gamma", "brandnew", "a", "b", "c"]
 
-    # The bulk tag dialog (a single tag) too.
+    # The bulk tag dialog too: a space makes a chip.
     card = page.locator(".task-item").filter(has=page.get_by_text("E", exact=True))
     card.locator(".task-title").click()
     page.keyboard.press("t")
     inp = page.locator("#bulk-tag-input")
     inp.press_sequentially("new tag")
-    expect(inp).to_have_value("new-tag")
+    expect(page.locator(".bulk-tag-modal .tag-chip-label")).to_have_text(["#new"])
+    expect(inp).to_have_value("tag")
 
 
 def test_c_t_with_a_task_selected_opens_only_new_task(page, wiki):
@@ -491,8 +496,7 @@ def test_backspace_in_tags_field(page, wiki):
     expect(tag_chips(page)).to_have_text(["#zz", "#yy"])
     tags.press("Backspace")
     expect(tag_chips(page)).to_have_text(["#zz"])
-    tags.press_sequentially("a b")
-    expect(tags).to_have_value("a-b")
+    tags.press_sequentially("abc")
     for _ in range(2):
         tags.press("Backspace")
     expect(tags).to_have_value("a")
