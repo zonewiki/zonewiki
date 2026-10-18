@@ -462,6 +462,31 @@ main {
   color: var(--fg);
 }
 
+/* The copy-link icon by the page title and each heading (js/page.js): in
+   the margin left of it where there is room, after it on narrow screens.
+   Sized in em, so it scales with the heading, and centred on the first line. */
+:is(.page-header, .page-content) .heading-link {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: .3em;
+  padding: .2em;
+  border-radius: 6px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity .15s, background .15s, color .15s;
+}
+.heading-link svg { width: max(.875rem, .6em); height: max(.875rem, .6em); }
+:is(h1, h2, h3):hover > .heading-link { opacity: .7; }
+:is(.page-header, .page-content) .heading-link:is(:hover, :focus-visible, .copied) { opacity: 1; background: var(--btn-bg); color: var(--fg); }
+:is(.page-header, .page-content) .heading-link.copied { color: var(--green-text, var(--btn-primary)); }
+@media (min-width: 800px) {
+  :is(h1, h2, h3):has(> .heading-link) { position: relative; }
+  :is(.page-header, .page-content) .heading-link { position: absolute; right: 100%; top: .5lh; translate: 0 -50%; margin: 0 .25em 0 0; }
+  /* The margin left of the heading counts as hovering it. */
+  .heading-link::before { content: ""; position: absolute; inset: 0 -.25em 0 0; }
+}
+.slide-body .heading-link { display: none; }
+
 .page-content p { margin-bottom: .875rem; }
 .page-content ul, .page-content ol { margin: .375rem 0 .875rem 1.5rem; }
 .page-content li { margin-bottom: .2rem; }

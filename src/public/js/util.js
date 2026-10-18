@@ -153,6 +153,28 @@ export function continueList(ta, e) {
   return true;
 }
 
+// Put text in the clipboard; false when the browser won't. The Clipboard
+// API needs a secure context (plain http on the LAN isn't), so without it
+// the old copy command, which works during a user's click.
+export async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) {}
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) {}
+  ta.remove();
+  return ok;
+}
+
 // A short message at the bottom with an optional Undo; one at a time.
 let toastEl = null;
 export function showToast(msg, undo) {

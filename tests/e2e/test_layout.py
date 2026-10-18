@@ -844,3 +844,30 @@ def test_uncommitted_list_layout(new_page, wiki, width):
     assert abs(btn["x"] + btn["width"] - (table["x"] + table["width"])) < 1
     assert horizontal_overflow(page) <= 0
     assert table["x"] + table["width"] <= width
+
+
+def test_heading_links_copy_page_and_section_urls(page, wiki):
+    # A link icon after the title and each heading, hidden until hovered;
+    # a click copies the page's or the section's URL.
+    wiki.write("linked", "# Linked\n\n## First part\n\nText.\n\n### A detail\n\nMore.\n")
+    page.goto("/page/linked")
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    title_link = page.locator(".page-header h1 .heading-link")
+    section_link = page.locator("article h2#first-part .heading-link")
+    expect(page.locator("article .heading-link")).to_have_count(2)
+    expect(section_link).to_have_css("opacity", "0")
+    page.locator("article h2#first-part").hover()
+    expect(section_link).not_to_have_css("opacity", "0")
+    section_link.click()
+    expect(page.locator(".task-undo-toast")).to_contain_text("Link copied")
+    # A ✓ in the icon's place for a moment.
+    expect(section_link).to_have_class(re.compile(r"\bcopied\b"))
+    expect(section_link).not_to_have_class(re.compile(r"\bcopied\b"), timeout=3000)
+    base = page.url.split("#")[0]
+    assert page.evaluate("navigator.clipboard.readText()") == base + "#first-part"
+    assert page.url.endswith("#first-part")
+    page.locator(".page-header h1").hover()
+    title_link.click()
+    assert page.evaluate("navigator.clipboard.readText()") == base
+    # The rail's "On this page" and the title text are unchanged.
+    expect(page.locator(".page-header h1")).to_have_text("Linked")

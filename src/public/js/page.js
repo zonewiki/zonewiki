@@ -1,4 +1,4 @@
-import { putTask, showToast } from './util.js';
+import { copyText, putTask, showToast } from './util.js';
 import { toggleCheckboxInTextarea } from './mdedit.js';
 
 // ── Syntax highlighting ───────────────────────────────────────────────────────
@@ -7,6 +7,42 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!window.hljs) return;
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
 });
+
+// ── Heading links ─────────────────────────────────────────────────────────────
+
+// On a page view, a link icon after the title and after each heading with an
+// anchor (#, ##, ###; not a deck embed's), shown on hover: a click copies the
+// link to the page, or to the section, and puts the section's anchor in the URL.
+const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+const LINK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.8.8"/><path d="M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.8-.8"/></svg>';
+
+(function () {
+  const article = document.querySelector('.page-grid article.page-content');
+  const title = document.querySelector('.page-grid .page-header h1');
+  if (!article || !title) return;
+  const heads = [...article.querySelectorAll('h1[id], h2[id], h3[id]')].filter(h => !h.closest('.tasks-app'));
+  for (const h of [title, ...heads]) {
+    const a = document.createElement('a');
+    a.className = 'heading-link';
+    a.href = h === title ? location.pathname : '#' + h.id;
+    a.title = h === title ? 'Copy link to page' : 'Copy link to section';
+    a.setAttribute('aria-label', a.title);
+    a.innerHTML = LINK_ICON;
+    a.addEventListener('click', async e => {
+      e.preventDefault();
+      if (h !== title) history.replaceState(null, '', a.hash);
+      if (!await copyText(a.href)) { showToast('Could not copy the link'); return; }
+      showToast('Link copied');
+      // A ✓ in the icon's place for a moment.
+      a.innerHTML = CHECK_ICON;
+      a.classList.add('copied');
+      clearTimeout(a.copiedTimer);
+      a.copiedTimer = setTimeout(() => { a.innerHTML = LINK_ICON; a.classList.remove('copied'); }, 1500);
+    });
+    h.append(a);
+  }
+}());
+
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────
 

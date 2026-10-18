@@ -1,4 +1,4 @@
-import { closeOnBackdropClick, toSlug } from './util.js';
+import { closeOnBackdropClick, copyText, toSlug } from './util.js';
 
 // ── Page delete dialog ────────────────────────────────────────────────────────
 
@@ -13,28 +13,6 @@ function promotedSlug(folder, name, date) {
   if (!n) return '';
   if (date) n = `${date}_${n}`;
   return [toSlug(folder), n].filter(Boolean).join('/');
-}
-
-// Put text in the clipboard; false when the browser won't. The Clipboard
-// API needs a secure context (plain http on the LAN isn't), so without it
-// the old copy command, which works during a user's click.
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (_) {}
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.setAttribute('readonly', '');
-  ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
-  document.body.appendChild(ta);
-  ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch (_) {}
-  ta.remove();
-  return ok;
 }
 
 // The editor's hint after Move to wiki (views.paste_hint, templates/partials/page.html): Copy puts
