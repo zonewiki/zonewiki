@@ -9,6 +9,7 @@ tests do: in the tools image, which has both.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,9 @@ os.environ["LEAF_BUILD"] = subprocess.run(
 sys.path.insert(0, str(ROOT / "src"))
 
 TODAY = date.today()
+# The phone pair's width in CSS px (its PNG is twice that); the README's <img
+# shows it at this width, so on a wide page it doesn't fill the column.
+PHONE_WIDTH = 640
 
 
 def day(n: int) -> str:
@@ -212,23 +216,41 @@ def main():
         settle(pg)
         pg.screenshot(path=OUT / "editor.png")
 
-        # 4. On a phone: a page and the deck's Focus, side by side.
+        # 4. On a phone: a page and the deck's Focus, side by side. Each phone
+        # is shown at two thirds of its size (260 of 390 px), so the pair reads
+        # as phones next to the desktop shots rather than as a wall of text;
+        # at 2x the text stays sharp. The README shows it at PHONE_WIDTH.
         shots = []
-        for url, tab in (("/page/projects/garden-shed", None), ("/page/tasks", None)):
+        for url in ("/page/projects/garden-shed", "/page/tasks"):
             pg = page(390, 780, scale=2, is_mobile=True, has_touch=True)
             pg.goto(url)
             settle(pg)
             shots.append(base64.b64encode(pg.screenshot()).decode())
-        frame = page(900, 820, scale=2)
-        frame.set_content(f"""<body style="margin:0;background:#e9ecef;display:flex;gap:40px;
+        frame = page(PHONE_WIDTH, 600, scale=2)
+        frame.set_content(f"""<body style="margin:0;background:#e9ecef;display:flex;gap:32px;
             justify-content:center;align-items:center;height:100vh">
-            {''.join(f'<img src="data:image/png;base64,{s}" style="width:390px;border-radius:28px;'
-                     f'box-shadow:0 8px 30px rgba(0,0,0,.18)">' for s in shots)}</body>""")
+            {''.join(f'<img src="data:image/png;base64,{s}" style="width:260px;border-radius:20px;'
+                     f'box-shadow:0 6px 24px rgba(0,0,0,.18)">' for s in shots)}</body>""")
         frame.screenshot(path=OUT / "phone.png")
 
         browser.close()
     srv.shutdown()
-    print("wrote", ", ".join(sorted(p.name for p in OUT.glob("*.png"))))
+    compress(sorted(OUT.glob("*.png")))
+    print("wrote", ", ".join(p.name for p in sorted(OUT.glob("*.png"))))
+
+
+def compress(paths):
+    """Lossy palette compression (pngquant), about a quarter of the size
+    with no visible change for UI shots. Skipped without pngquant (the tools
+    image has it)."""
+    if not shutil.which("pngquant"):
+        print("pngquant not found: screenshots left uncompressed")
+        return
+    for path in paths:
+        before = path.stat().st_size
+        subprocess.run(["pngquant", "--quality=70-95", "--speed=1", "--strip", "--force",
+                        "--skip-if-larger", "--ext", ".png", str(path)], check=False)
+        print(f"{path.name}: {before // 1024} KB -> {path.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":

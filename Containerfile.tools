@@ -14,8 +14,9 @@
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
 # Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js);
-# curl fetches gitleaks below.
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates \
+# curl fetches gitleaks below; pngquant compresses the README's screenshots
+# (docs/screenshots/make_screenshots.py).
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates pngquant \
  && rm -rf /var/lib/apt/lists/*
 
 # gitleaks, a pinned release checked against its published checksums. To

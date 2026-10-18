@@ -141,7 +141,7 @@ Done tasks go to a yearly archive. Beyond that:
 - **Phones**: a responsive layout with a tab bar, installable on the home
   screen. Light and dark mode follow your system.
 
-![Leaf on a phone: a wiki page, and the deck's Focus view](docs/screenshots/phone.png)
+<p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Leaf on a phone: a wiki page, and the deck's Focus view"></p>
 
 ## Quick start
 
