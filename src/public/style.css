@@ -2405,7 +2405,7 @@ div.chip-input > input {
   }
   /* ⋯ stays finger-sized but takes only the title line's height: its
      target reaches into the card's padding instead of making the line tall. */
-  .tasks-app .task-item .task-menu-btn { margin-block: calc((var(--line) - 2.5rem) / 2); }
+  .tasks-app .task-item :is(.task-menu-btn, .task-expand-btn) { margin-block: calc((var(--line) - 2.5rem) / 2); }
   .tasks-app .task-item .task-meta,
   .tasks-app .task-item .task-meta--hover-only,
   .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
@@ -2589,7 +2589,7 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* Selection mode (.deck-selecting): each card's checkbox becomes a round
    mark, filled on the selected cards; a tap anywhere on a card toggles it. */
 .deck-selecting .task-item { cursor: pointer; }
-.deck-selecting .task-menu-btn { visibility: hidden; }   /* a tap there would only toggle the card */
+.deck-selecting :is(.task-menu-btn, .task-expand-btn) { visibility: hidden; }   /* a tap there would only toggle the card */
 .deck-selecting .task-checkbox { position: relative; }
 .deck-selecting .task-checkbox input { visibility: hidden; }
 .deck-selecting .task-checkbox::before {
@@ -2646,14 +2646,23 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .bulk-tag-count { margin-left: auto; font-size: .75rem; color: var(--muted); }
 @media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 
-/* ⋯ per-card menu button + the menu itself */
-.task-menu-btn {
+/* ⋯ per-card menu button + the menu itself. The expand button (a chevron)
+   left of ⋯ on a compact line with notes or comments opens and closes them,
+   turned up while open; full cards show them, so have none. Every compact
+   line keeps its room, so the dates end at the same place on lines with
+   and without one. */
+.task-menu-btn, .task-expand-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.6rem; height: 1.6rem; padding: 0; margin: 0;
   background: none; border: none; border-radius: 3px;
   color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1;
 }
-.task-menu-btn:hover { background: var(--code-bg); color: var(--fg); }
+.task-menu-btn:hover, .task-expand-btn:hover { background: var(--code-bg); color: var(--fg); }
+.task-expand-btn svg { transition: transform .15s; }
+.task-expand-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tasks-app:not(.deck-compact) .task-expand-btn { display: none; }
+.tasks-app.deck-compact .task-actions { min-width: 3.2rem; justify-content: flex-end; }
+@media (prefers-reduced-motion: reduce) { .task-expand-btn svg { transition: none; } }
 .task-menu-backdrop, .page-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
 .task-menu, .page-menu {
   position: fixed; z-index: 1000; min-width: 12rem; max-width: 18rem;
@@ -2702,7 +2711,8 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   .task-item[data-drag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   /* Sideways moves on a card are swipes (deck.js), not the browser's pan. */
   .task-item { touch-action: pan-y; }
-  .task-menu-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
+  .task-menu-btn, .task-expand-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
+  .tasks-app.deck-compact .task-actions { min-width: 5rem; }
   .task-checkbox input { width: 1.35rem; height: 1.35rem; }
   .task-clickable-date { padding: .25rem .35rem; }
   .tasks-empty .btn {

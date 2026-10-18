@@ -316,7 +316,7 @@ listEl.addEventListener('click', e => {
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);
-  if (compact && titleCut(id)) setExpanded(id);
+  if (compact) expandSelected(id);
 });
 
 // Touch drag. Phones do not fire HTML5 drag events reliably, so a long press picks a
@@ -681,7 +681,7 @@ function applyCompact(view) {
   if (view) {
     compact = compactFor(view);
     expandedId = null;
-    detailsOpen = false;
+    detailsOpen = detailsMode = false;
   }
   appEl?.classList.toggle('deck-compact', compact);
   densityBtn?.setAttribute('aria-pressed', String(compact));
@@ -696,10 +696,18 @@ function applyCompact(view) {
 // on it then opens the modal), shows its whole title, wrapped, when the
 // line cuts it off (titleCut); notes and comments stay hidden. Its details
 // (notes, latest comments: the rest of a full card) open on request only
-// (detailsOpen): 📝 or 💬 on the line, or →; ← closes them, Esc closes
-// both. Enter opens the modal, as on full cards.
+// (detailsOpen): 📝, 💬 or the expand button on the line, or → / l;
+// ← / h closes them, Esc closes both. Opened, they stay open while the
+// selection moves on (detailsMode): the next selected task shows its
+// details too, until they are closed. Enter opens the modal, as on full
+// cards.
 let expandedId = null;
 let detailsOpen = false;
+let detailsMode = false;
+// The expand button of a compact line with details: a chevron, turned up
+// while they are open.
+const EXPAND_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M4 6l4 4 4-4"/></svg>';
 // ⋯ on cards: three dots drawn, so they sit on the line's centre whatever
 // the font (the ⋯ character sat low in some).
 const MORE_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="currentColor">' +
@@ -722,16 +730,24 @@ function setExpanded(id, details = false) {
     else {
       el.classList.toggle('task-expanded', on);
       el.classList.toggle('task-details', on && detailsOpen);
+      el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', String(on && detailsOpen));
     }
   });
 }
 // 📝, 💬 or →/←: open or close a compact task's details, selecting it.
 function toggleDetails(id, open = !(expandedId === id && detailsOpen)) {
   if (!compact || !hasDetails(id)) return false;
+  detailsMode = open;
   if (selectedIds.size !== 1 || selectedId !== id) setSelected(id);
   // Closing keeps the whole title (a short one looks the same as its line).
   setExpanded(id, open);
   return true;
+}
+// A compact task just selected: its details while they are open on the
+// way through (detailsMode), else its whole title if the line cuts it off.
+function expandSelected(id) {
+  if (detailsMode && hasDetails(id)) setExpanded(id, true);
+  else if (titleCut(id)) setExpanded(id);
 }
 // A mouse press on another card leaves the expanded one open until a
 // double-click is over (pressedCard: the card a mousedown is selecting) and
@@ -754,6 +770,7 @@ function finishCollapse() {
   if (!el.isConnected || el.dataset.id === expandedId) return;
   const from = el.offsetHeight;
   el.classList.remove('task-expanded', 'task-details');
+  el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', 'false');
   const to = el.offsetHeight;
   if (from > to && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     el.animate([{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }],
@@ -762,7 +779,7 @@ function finishCollapse() {
 }
 function toggleCompact() {
   expandedId = null;
-  detailsOpen = false;
+  detailsOpen = detailsMode = false;
   compact = !compact;
   try { localStorage.setItem(densityKey(activeView), compact ? '1' : '0'); } catch (_) {}
   applyCompact();
@@ -1888,7 +1905,7 @@ function setSelected(id) {
   // Compact: the selected task shows its whole title. On touch the tap
   // handler does it, since the compat mousedown selects without the click.
   // Selecting the expanded task again keeps its details as they are.
-  if (compact && id && lastPointerType !== 'touch' && id !== expandedId && titleCut(id)) setExpanded(id);
+  if (compact && id && lastPointerType !== 'touch' && id !== expandedId) expandSelected(id);
   // A pressed card is in view; scrolling an expanded one into view would
   // move it from under the pointer.
   if (id && !pressedCard) {
@@ -2250,6 +2267,11 @@ function render() {
         (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
+    // Compact lines with details get the expand button (CSS hides it on
+    // full cards, which show them).
+    const detailsShown = compact && task.id === expandedId && detailsOpen;
+    const expandBtn = descHtml || commentsHtml
+      ? `<button type="button" class="task-expand-btn" data-id="${task.id}" aria-expanded="${detailsShown}" aria-label="Notes and comments" title="Notes and comments (l / h)">${EXPAND_ICON}</button>` : '';
     return `
       <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' + (detailsOpen ? ' task-details' : '') : ''}" data-id="${task.id}" ${dragAttr}>
         <label class="task-checkbox">
@@ -2259,7 +2281,7 @@ function render() {
           <span class="task-title" data-id="${task.id}">${linkifyTitle(task.title)}</span>
         </div>
         <div class="task-actions">
-          <button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">${MORE_ICON}</button>
+          ${expandBtn}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">${MORE_ICON}</button>
         </div>
         ${metaHtml}${descHtml}${commentsHtml}
       </li>`;
@@ -2395,6 +2417,12 @@ function render() {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       if (!toggleDetails(btn.dataset.id)) openEditModal(btn.dataset.id, { focusComment: true });
+    });
+  });
+  listEl.querySelectorAll('.task-expand-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleDetails(btn.dataset.id);
     });
   });
   // 📝: a compact line's toggles its details; a full card shows the notes,
@@ -3785,8 +3813,10 @@ document.addEventListener('keydown', async e => {
         showUndo('Task reopened', () => completeTasks([task.id], true));
       }
     }
-  } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && selectedIds.size === 1 && compact) {
-    if (toggleDetails(selectedId, e.key === 'ArrowRight')) e.preventDefault();
+  } else if (['ArrowRight', 'l', 'ArrowLeft', 'h'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey &&
+             selectedIds.size === 1 && compact) {
+    // → / l open the selected line's details, ← / h close them (vim's hjkl).
+    if (toggleDetails(selectedId, e.key === 'ArrowRight' || e.key === 'l')) e.preventDefault();
   } else if (e.key === 'Enter' && selectedId) {
     e.preventDefault();
     openEditModal(selectedId);
@@ -3806,7 +3836,8 @@ document.addEventListener('keydown', async e => {
     const ids = [...selectedIds];
     const removing = e.key === 'T';
     openBulkTagModal(ids, removing);
-  } else if (e.key === 'Escape' && expandedId && !selectMode) {
+  } else if (e.key === 'Escape' && (expandedId || detailsMode) && !selectMode) {
+    detailsMode = false;
     setExpanded(null);   // collapse first; the next Esc clears the selection
   } else if (e.key === 'Escape') {
     exitSelectMode();

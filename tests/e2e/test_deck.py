@@ -2633,10 +2633,61 @@ def test_compact_selecting_shows_the_title_details_on_request(page, wiki):
     expect(short.locator(".task-desc")).to_be_hidden()
     page.keyboard.press("ArrowRight")
     expect(short.locator(".task-desc")).to_be_visible()
+    # Open details stay open on the way: the next selected task shows its
+    # own (the previous one's close), until they are closed.
     page.keyboard.press("j")
     expect(short.locator(".task-desc")).to_be_hidden()
-    expect(passport).to_have_class(EXPANDED)
+    expect(passport).to_have_class(DETAILS)
+    expect(passport.locator(".task-desc")).to_be_visible()
     expect(page.locator(".task-expanded.task-selected")).to_have_count(1)
+    page.keyboard.press("j")                                            # Plain: nothing to show
+    expect(page.locator(".task-details")).to_have_count(0)
+    page.keyboard.press("k")                                            # still on
+    expect(passport.locator(".task-desc")).to_be_visible()
+    page.keyboard.press("h")                                            # off
+    page.keyboard.press("k")
+    expect(short.locator(".task-desc")).to_be_hidden()
+    expect(page.locator(".task-details")).to_have_count(0)
+    # Esc turns it off too.
+    page.keyboard.press("l")
+    expect(short.locator(".task-desc")).to_be_visible()
+    page.keyboard.press("Escape")
+    page.keyboard.press("j")
+    expect(passport.locator(".task-desc")).to_be_hidden()
+
+
+def test_compact_expand_button_and_hl_keys(page, wiki):
+    # A compact line with notes or comments has an expand button (a
+    # chevron, left of ⋯): it opens and closes them; l and h do the same
+    # from the keyboard, as → and ←. Lines without keep its room, so the
+    # dates end at the same place; full cards have none.
+    _expand_setup(page)
+    short, plain = card(page, "Short with notes"), card(page, "Plain")
+    btn = short.locator(".task-expand-btn")
+    expect(btn).to_be_visible()
+    expect(btn).to_have_attribute("aria-expanded", "false")
+    expect(plain.locator(".task-expand-btn")).to_have_count(0)
+    p_menu, s_menu = plain.locator(".task-menu-btn").bounding_box(), short.locator(".task-menu-btn").bounding_box()
+    assert abs(p_menu["x"] - s_menu["x"]) < 1
+    b = btn.bounding_box()
+    assert b["x"] + b["width"] <= s_menu["x"] + 1                        # left of ⋯
+    btn.click()
+    expect(short.locator(".task-desc")).to_be_visible()
+    expect(short).to_have_class(re.compile(r"\btask-selected\b"))
+    expect(btn).to_have_attribute("aria-expanded", "true")
+    btn.click()
+    expect(short.locator(".task-desc")).to_be_hidden()
+    expect(btn).to_have_attribute("aria-expanded", "false")
+    page.keyboard.press("l")
+    expect(short.locator(".task-desc")).to_be_visible()
+    expect(btn).to_have_attribute("aria-expanded", "true")
+    page.keyboard.press("h")
+    expect(short.locator(".task-desc")).to_be_hidden()
+    expect(short).to_have_class(re.compile(r"\btask-selected\b"))
+    page.keyboard.press("j")                                             # hjkl: j moves on
+    expect(short).not_to_have_class(re.compile(r"\btask-selected\b"))
+    page.locator(".deck-density-btn").click()                            # full cards: none
+    expect(btn).to_be_hidden()
 
 
 def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
@@ -2742,6 +2793,13 @@ def test_compact_tap_expands_then_opens(new_page, wiki):
     expect(passport).to_have_class(EXPANDED)
     expect(passport.locator(".task-desc")).to_be_hidden()
     expect(phone.locator(".task-edit-modal[open]")).to_have_count(0)
+    expand = passport.locator(".task-expand-btn")
+    b = expand.bounding_box()
+    assert b["width"] >= 40 and b["height"] >= 40
+    expand.tap()
+    expect(passport.locator(".task-desc")).to_be_visible()
+    expand.tap()
+    expect(passport.locator(".task-desc")).to_be_hidden()
     notes = passport.locator(".task-has-notes")
     b = notes.bounding_box()
     assert b["width"] >= 24 and b["height"] >= 24                       # a finger's target
