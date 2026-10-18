@@ -10,27 +10,30 @@ self-host it behind HTTPS.
 
 ## Why Leaf
 
-Leaf is a wiki an AI can write in, and you can check its work. An
-[MCP server](#connect-an-ai-assistant) lets an assistant search, read, create
-and edit your pages and tasks. Its edits are precise (exact-text replace,
-append under a heading), warn about broken links, and land as git commits
-marked `(MCP)` that you can review, diff or undo.
-
-That works because of one rule: **files are the source of truth.** Pages are
-Markdown, tasks are JSON, history is git. Everything else (search indexes,
-caches) can be rebuilt, so you can edit in the browser, in any editor, or
-through an assistant, and all of it ends up in the same files.
+**Your notes stay yours, as plain files.** Pages are Markdown in a folder you
+choose, tasks are JSON next to them, history is git. Leaf renders, searches
+and edits them, but nothing is locked inside it: open the folder in any
+editor, grep it, back it up with `git push`, or stop using Leaf and keep
+everything as it is. Search indexes and caches are rebuilt from the files.
 
 - **Notes and tasks in one place.** The wiki and the task deck share links,
   search and history. A page can show a task as a chip, and a task can link to
   a page, with no plugins to combine.
+- **Nothing gets lost.** Every page has its version history: see what each
+  save changed, open any version, restore it in one click, bring back a
+  deleted page. Renaming a page updates every link to it.
 - **Any browser, nothing to install on the client.** Open a URL on your
-  phone or another computer. The server is one Python process with no
-  database, and the frontend has no npm or bundler. It is small enough to
-  read and change.
-- **Your files, your server.** Runs on your machine by default, with no cloud
-  and no account. To reach it from elsewhere, put it behind HTTPS with a
-  password (see [Security](#security)).
+  laptop or your phone; the editor works on both. The server is one Python
+  process with no database, and the frontend has no npm or bundler. It is
+  small enough to read and change.
+- **Your server, no cloud.** Runs on your machine by default, with no account
+  and nothing loaded from other hosts. To reach it from elsewhere, put it
+  behind HTTPS with a password (see [Security](#security)).
+- **Supports AI-first workflows.** Through its
+  [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
+  you can: search, read, create, edit, rename and restore pages, file scratch
+  notes, and manage tasks. Its edits land as git commits marked `(MCP)` that
+  you can review, diff or undo.
 
 Leaf is for one person's notes and tasks on a server you run. It is
 deliberately a single process with no plugins, no graph view and no real-time
