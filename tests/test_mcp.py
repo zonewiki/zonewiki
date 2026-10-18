@@ -1666,10 +1666,14 @@ class TestUpdateTask:
         assert "tags: #urgent" in text and "due:" not in text and "draft" not in text
 
     def test_status_done_spawns_the_next_occurrence(self, client, wiki_dir):
-        tid = _task_id(call(client, "create_task", title="Backup", due="2026-10-10", repeat="weekly")[0])
+        # Due 3 days ago: the next week's date is still to come (a date
+        # already past would be skipped, see deck.md Completing).
+        due = (date.today() - timedelta(days=3)).isoformat()
+        nxt = (date.today() + timedelta(days=4)).isoformat()
+        tid = _task_id(call(client, "create_task", title="Backup", due=due, repeat="weekly")[0])
         text, err = call(client, "update_task", id=tid, status="done")
         assert not err and "status: done" in text
-        assert "Next occurrence:\n\nTask: Backup\nstatus: open · due: 2026-10-17" in text
+        assert f"Next occurrence:\n\nTask: Backup\nstatus: open · due: {nxt}" in text
         text, _ = call(client, "update_task", id=tid, status="open")
         assert "status: open" in text
         assert call(client, "search_tasks")[0].count("Task: Backup") == 1

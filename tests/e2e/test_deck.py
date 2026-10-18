@@ -432,6 +432,9 @@ def test_number_keys_start_selected_tasks_on_that_day(page, wiki):
     page.keyboard.press("0")
     wait_for_field(page, "Second", "start_date", None)
     wait_for_field(page, "Third", "start_date", None)
+    # The undo is armed once the write's response is in, a moment after the
+    # server has it: Ctrl+Z before that would undo the step before.
+    expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks unplanned")
     page.keyboard.press("Control+z")
     wait_for_field(page, "Second", "start_date", tomorrow())
 
