@@ -90,6 +90,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
     ├── retrieval.py        # Search and LLM retrieval (BM25 + optional semantic index)
     ├── views.py            # HTML building blocks: shell, breadcrumb, modules, menus, dialogs, side columns
     ├── mcp_tools.py        # The MCP tools: search (also grep), read, link checks, write pages and deck tasks (the protocol is mcp_server.py)
+    ├── regexjob.py         # replace_in_pages' regex, run in its own process with a timeout (no ReDoS)
     ├── scratch.py          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
     ├── history.py          # Blueprint: history, revisions, diffs, restore, deleted pages, uncommitted changes
     ├── templating.py       # The Jinja2 environment: render(), macro()

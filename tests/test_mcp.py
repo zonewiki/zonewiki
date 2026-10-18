@@ -1394,6 +1394,27 @@ class TestReplaceInPages:
         assert call(client, "replace_in_pages", find="OA", replace="y", under="nope")[1]
         assert call(client, "replace_in_pages", find="OA", replace="y", dry_run="no")[1]
 
+    def test_a_catastrophic_regex_is_stopped(self, client, notes, monkeypatch):
+        # (a+)+$ on a long run of a's that doesn't end the line backtracks
+        # for ages; it runs in a process of its own (regexjob), killed after
+        # REGEX_TIMEOUT, so the server thread comes back and nothing is written.
+        import mcp_tools
+        monkeypatch.setattr(mcp_tools, "REGEX_TIMEOUT", 1)
+        write_page(notes, "slow", "# Slow\n\n" + "a" * 40 + "!\n")
+        before = (notes / "slow.md").read_text()
+        text, err = call(client, "replace_in_pages", find="(a+)+$", replace="x", regex=True, dry_run=False)
+        assert err and "more than 1 seconds" in text and "nothing was written" in text
+        assert (notes / "slow.md").read_text() == before
+
+    def test_plain_text_runs_without_a_process(self, client, notes, monkeypatch):
+        # An escaped pattern can't backtrack, so it needs no process of its own.
+        import mcp_tools
+        def no_process(*a, **k):
+            raise AssertionError("plain text started a process")
+        monkeypatch.setattr(mcp_tools.subprocess, "run", no_process)
+        text, err = call(client, "replace_in_pages", find="BUG-", replace="ONE-")
+        assert not err and "would replace 2 occurrences" in text
+
     def test_literal_is_not_a_regex(self, client, notes):
         write_page(notes, "d", "# D\n\ncost $5 (approx.)\n")
         call(client, "replace_in_pages", find="$5 (approx.)", replace=r"\1 €5", dry_run=False)

@@ -462,3 +462,29 @@ def splice_section(full: str | None, file_hash: str, start_char: int,
 def page_tags(content: str) -> list[str]:
     """A page's frontmatter tags, lowercased, for #tag queries."""
     return [t.lower() for t in parse_frontmatter(content)[0].get("tags", [])]
+
+
+def replace_lines(content: str, pattern: re.Pattern, repl, include_code: bool) -> tuple[str, list]:
+    """content with pattern replaced line by line, code (fenced blocks,
+    inline spans) left alone unless include_code, and the lines that
+    changed as (line number, old, new, matches)."""
+    out, changed = [], []
+    for i, line, in_fence in iter_fenced_lines(content.splitlines(keepends=True)):
+        body = line.rstrip("\r\n")
+        if in_fence and not include_code:
+            out.append(line)
+            continue
+        code = [] if include_code else [m.span() for m in _INLINE_CODE_RE.finditer(body)]
+        parts, last, n = [], 0, 0
+        for m in pattern.finditer(body):
+            # A match touching inline code (an empty one: starting in it) stays.
+            if any(s < max(m.end(), m.start() + 1) and m.start() < e for s, e in code):
+                continue
+            parts += [body[last:m.start()], repl(m)]
+            last = m.end()
+            n += 1
+        new = "".join(parts) + body[last:]
+        if n and new != body:
+            changed.append((i + 1, body, new, n))
+        out.append(new + line[len(body):])
+    return "".join(out), changed

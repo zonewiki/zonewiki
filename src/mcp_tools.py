@@ -9,6 +9,8 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
 from datetime import date
 from difflib import SequenceMatcher, get_close_matches
 from pathlib import Path
@@ -23,13 +25,14 @@ import deckstore
 import manual
 import pages
 import mcp_server
+import regexjob
 import retrieval
 import scratch
 import search
 from gitstore import (git_commit, git_diff, git_log, git_log_all, git_show, git_uncommitted_files,
                       grep_pages, GrepError, is_uncommitted, move_folder, move_page, SHA_RE,
                       version_index, version_path)
-from mdtext import (_INLINE_CODE_RE, is_scratch, iter_fenced_lines, mask_code, page_tags, page_title,
+from mdtext import (is_scratch, iter_fenced_lines, mask_code, page_tags, page_title,
                     parse_frontmatter, plain_heading, promoted_slug, split_wikilink, to_slug, WIKILINK_RE)
 from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
                    iter_pages, page_link_targets, page_meta, safe_path, url)
@@ -1171,30 +1174,35 @@ def _grep_wiki(args: dict, base: str) -> str:
     return head + ":\n" + "\n".join(out)
 
 
-def _replace_lines(content: str, pattern: re.Pattern, repl, include_code: bool) -> tuple[str, list]:
-    """content with pattern replaced line by line, code (fenced blocks,
-    inline spans) left alone unless include_code, and the lines that
-    changed as (line number, old, new, matches)."""
-    out, changed = [], []
-    for i, line, in_fence in iter_fenced_lines(content.splitlines(keepends=True)):
-        body = line.rstrip("\r\n")
-        if in_fence and not include_code:
-            out.append(line)
-            continue
-        code = [] if include_code else [m.span() for m in _INLINE_CODE_RE.finditer(body)]
-        parts, last, n = [], 0, 0
-        for m in pattern.finditer(body):
-            # A match touching inline code (an empty one: starting in it) stays.
-            if any(s < max(m.end(), m.start() + 1) and m.start() < e for s, e in code):
-                continue
-            parts += [body[last:m.start()], repl(m)]
-            last = m.end()
-            n += 1
-        new = "".join(parts) + body[last:]
-        if n and new != body:
-            changed.append((i + 1, body, new, n))
-        out.append(new + line[len(body):])
-    return "".join(out), changed
+# How long replace_in_pages' regex may run over the pages, in its own process
+# (regexjob), before it is killed: a catastrophic pattern would otherwise
+# hold a server thread for hours. As long as grep_wiki's git grep gets.
+REGEX_TIMEOUT = 10
+
+
+def _replace_job(job: dict) -> list:
+    """regexjob.replace_in_texts' hits: plain text in this process (an
+    escaped pattern can't backtrack), a regex in a process of its own that
+    is killed after REGEX_TIMEOUT seconds."""
+    if not job["regex"]:
+        result = regexjob.replace_in_texts(job)
+    else:
+        try:
+            run = subprocess.run([sys.executable, regexjob.__file__], input=json.dumps(job),
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 timeout=REGEX_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise mcp_server.ToolError(
+                f"The regex ran for more than {REGEX_TIMEOUT} seconds over the pages and was stopped; "
+                "nothing was written. It probably backtracks catastrophically (nested repeats like "
+                "(a+)+ or (.*)*): make it more specific, or narrow under.")
+        if run.returncode:
+            raise mcp_server.ToolError(f"The regex couldn't be run: {run.stderr.strip()[-300:]}")
+        result = json.loads(run.stdout)
+    if "error" in result:
+        raise mcp_server.ToolError(f"replace: {result['error']} "
+                                   "(groups are \\1 or \\g<name>; a literal backslash is \\\\)")
+    return result["hits"]
 
 
 def _cut(line: str) -> str:
@@ -1212,33 +1220,23 @@ def _replace_in_pages(args: dict, base: str) -> str:
     dry_run = args.get("dry_run", True)
     if not isinstance(dry_run, bool):
         raise mcp_server.ToolError("dry_run must be true or false")
+    pattern = find if regex else re.escape(find)
     try:
-        pattern = re.compile(find if regex else re.escape(find),
-                             re.IGNORECASE if _bool_arg(args, "ignore_case") else 0)
+        re.compile(pattern)
     except re.error as e:
         raise mcp_server.ToolError(f"find is not a valid regex: {e}")
-
-    def repl(m: re.Match) -> str:
-        if not regex:
-            return replace
-        try:
-            return m.expand(replace)
-        except (re.error, IndexError) as e:
-            raise mcp_server.ToolError(f"replace: {e} (groups are \\1 or \\g<name>; a literal backslash is \\\\)")
 
     under = _clean_folder(args.get("under", ""))
     if under and not any(in_folder(slug, under) for _p, slug in iter_pages()):
         raise mcp_server.ToolError(f"No pages under {under!r}. list_pages shows the slugs.")
     max_pages = _mcp_int(args, "max_pages", 50, 1000)
     limit = _mcp_int(args, "limit", 50, 500)
-    hits = []
-    for path, slug in sorted(iter_pages(), key=lambda p: p[1]):
-        if not in_folder(slug, under):
-            continue
-        content = path.read_text(encoding="utf-8")
-        new, changed = _replace_lines(content, pattern, repl, include_code)
-        if changed:
-            hits.append((path, slug, content, new, changed))
+    pages_in = [(path, slug, path.read_text(encoding="utf-8"))
+                for path, slug in sorted(iter_pages(), key=lambda p: p[1]) if in_folder(slug, under)]
+    job = {"texts": [content for *_x, content in pages_in], "find": pattern, "replace": replace,
+           "regex": regex, "ignore_case": _bool_arg(args, "ignore_case"), "include_code": include_code}
+    hits = [(pages_in[i][0], pages_in[i][1], pages_in[i][2], new, changed)
+            for i, new, changed in _replace_job(job)]
     where = f" under {under}/" if under else ""
     code = "" if include_code else " outside code"
     if not hits:
