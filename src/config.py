@@ -3,6 +3,7 @@ wiki's directories. Other modules read them as config.X at call time,
 so a test can point Leaf at another wiki by patching them here."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -86,6 +87,30 @@ def _parse_noshare(spec: str) -> tuple[frozenset[str], tuple[str, ...]]:
 
 # Empty counts as unset (run.sh passes unset settings as empty strings).
 NOSHARE_TAGS, NOSHARE_FOLDERS = _parse_noshare(os.environ.get("LEAF_NOSHARE") or "#noshare")
+
+# How dates read and the day a week starts on: a BCP 47 tag like de-AT or
+# en-GB, handed to the browser's Intl (<body data-locale>, deck-core.js).
+# Unset: US-English dates, weeks from Monday. The UI's words stay English.
+def _check_locale(tag: str) -> str:
+    """The tag, or exit: a typo shouldn't leave every date in the default."""
+    tag = tag.strip()
+    if tag and not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*", tag):
+        sys.exit(f"Leaf: LEAF_LOCALE={tag} isn't a locale. Use a tag like de-AT or en-GB.")
+    return tag
+
+
+LEAF_LOCALE = _check_locale(os.environ.get("LEAF_LOCALE", ""))
+
+# iso: dates as YYYY-MM-DD (ISO 8601) whatever the locale; its weekday and
+# month names stay (<body data-date-format>, deck-core.js). Unset: the locale's.
+def _check_date_format(value: str) -> str:
+    value = value.strip().lower()
+    if value not in ("", "iso"):
+        sys.exit(f"Leaf: LEAF_DATE_FORMAT={value} isn't known. Use iso, or leave it unset.")
+    return value
+
+
+LEAF_DATE_FORMAT = _check_date_format(os.environ.get("LEAF_DATE_FORMAT", ""))
 
 # The wiki: pages at the top, uploads in _assets/ (deck.py has _deck/).
 # Required, no default (not a folder in the checkout), and it must exist:

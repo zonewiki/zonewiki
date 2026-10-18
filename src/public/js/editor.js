@@ -1,6 +1,6 @@
 import DeckCore from '../deck-core.js';
 import { openDeckEdit } from '../deck.js';
-import { localDate, showToast, wikilinkHref } from './util.js';
+import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
 import { markdownEditor } from './mdedit.js';
 
 // ── Editor ────────────────────────────────────────────────────────────────────
@@ -335,6 +335,7 @@ async function fetchPreview() {
       body: textarea.value,
     });
     previewPane.innerHTML = await res.text();
+    localizeDates(previewPane);
     if (window.hljs) previewPane.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
     highlightPreviewBlock(true);
   } catch (_) { /* ignore */ }

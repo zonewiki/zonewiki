@@ -1,4 +1,4 @@
-import { copyText, putTask, showToast } from './util.js';
+import { copyText, localizeDates, putTask, showToast } from './util.js';
 import { toggleCheckboxInTextarea } from './mdedit.js';
 
 // ── Syntax highlighting ───────────────────────────────────────────────────────
@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!window.hljs) return;
   document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
 });
+
+// ── Dates ─────────────────────────────────────────────────────────────────────
+
+// The task chips' dates in LEAF_LOCALE (the server writes them in US English).
+localizeDates();
 
 // ── Heading links ─────────────────────────────────────────────────────────────
 
@@ -107,7 +112,7 @@ async function rerenderTaskRef(chip, id) {
       method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `[[task:${id}]]`,
     });
     const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').querySelector('.task-ref');
-    if (fresh) { chip.replaceWith(fresh); return fresh; }
+    if (fresh) { localizeDates(fresh); chip.replaceWith(fresh); return fresh; }
   } catch (_) { /* keep the old chip */ }
   return chip;
 }

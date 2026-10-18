@@ -45,6 +45,46 @@ class TestDates:
 
 
 
+class TestLocale:
+    """Dates in LEAF_LOCALE; without one, US English with weeks from Monday."""
+
+    def test_settings_from_the_body(self):
+        assert run_core("DeckCore.dateSettings({})") == {"locale": "", "iso": False}
+        assert run_core("DeckCore.dateSettings({locale: 'de-AT', dateFormat: 'iso'})") == {"locale": "de-AT", "iso": True}
+
+    def test_short_date(self):
+        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18')") == "Oct 5"
+        assert run_core("DeckCore.shortDate('2025-10-05', '2026-10-18')") == "Oct 5, 2025"
+        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18', {locale: 'en-GB'})") == "5 Oct"
+        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18', {locale: 'de-AT'})") == "5. Okt."
+
+    def test_iso(self):
+        iso = "{locale: 'de-AT', iso: true}"
+        assert run_core(f"DeckCore.shortDate('2026-10-05T09:30', '2026-10-18', {iso})") == "2026-10-05"
+        assert run_core(f"DeckCore.shortDate('2025-10-05', '2026-10-18', {iso})") == "2025-10-05"
+        assert run_core("DeckCore.fullDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
+        assert run_core("DeckCore.longDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
+        assert run_core("DeckCore.longDayLabel('2026-10-21', {})") == "Wed, Oct 21"
+        labels = run_core(f"DeckCore.boardBuckets([], '{TODAY}', '', {{iso: true}}).map(s => s.label)")
+        assert "Tue 2026-07-28" in labels
+
+    def test_week_start(self):
+        assert run_core("DeckCore.weekStart('')") == 1
+        assert run_core("DeckCore.weekStart('de-AT')") == 1
+        assert run_core("DeckCore.weekStart('en-US')") == 0
+
+    def test_calendar_heads_and_title(self):
+        assert run_core("DeckCore.weekdayNames('', 1)") == ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        assert run_core("DeckCore.weekdayNames('en-US', 0)") == ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+        assert run_core("DeckCore.weekdayNames('de-AT', 1)") == ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+        assert run_core("DeckCore.monthTitle(2026, 9)") == "October 2026"
+        assert run_core("DeckCore.monthTitle(2026, 9, 'de-AT')") == "Oktober 2026"
+
+    def test_board_day_labels(self):
+        labels = run_core(f"DeckCore.boardBuckets([], '{TODAY}', '', {{locale: 'de-AT'}}).map(s => s.label)")
+        assert "Di., 28." in labels   # 2026-07-28, a Tuesday
+
+
 class TestOrders:
     def _sorted(self, fn, tasks):
         return run_core(f"{json.dumps(tasks)}.sort(DeckCore.{fn}).map(t => t.id)")

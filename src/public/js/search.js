@@ -1,4 +1,4 @@
-import { closeOnBackdropClick, he } from './util.js';
+import { closeOnBackdropClick, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
 
 // ── Search modal ──────────────────────────────────────────────────────────────
@@ -130,6 +130,7 @@ async function showModalPreview(item) {
   const body = document.createElement('div');
   body.className = 'page-content';
   body.innerHTML = data.html;
+  localizeDates(body);
   modalPreview.replaceChildren(title, body);
   const marks = markTerms(body, url.searchParams.getAll('hl').filter(Boolean));
   const anchor = url.hash && body.querySelector(`[data-pid="${CSS.escape(decodeURIComponent(url.hash.slice(1)))}"]`);

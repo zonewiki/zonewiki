@@ -2167,6 +2167,34 @@ def test_tag_param_matches(raw, tags, expected):
     assert decksyntax.tag_param_matches({"tags": tags}, raw) is expected
 
 
+class TestLocale:
+    """LEAF_LOCALE: a BCP 47 tag the browser formats dates with (data-locale)."""
+
+    def test_check(self):
+        assert config._check_locale(" de-AT ") == "de-AT"
+        assert config._check_locale("en") == "en"
+        assert config._check_locale("zh-Hant-TW") == "zh-Hant-TW"
+        assert config._check_locale("") == ""
+        for bad in ("de_AT", "german", "de-AT;x", '"><script>'):
+            with pytest.raises(SystemExit):
+                config._check_locale(bad)
+
+    def test_check_date_format(self):
+        assert config._check_date_format(" ISO ") == "iso"
+        assert config._check_date_format("") == ""
+        with pytest.raises(SystemExit):
+            config._check_date_format("yyyy-mm-dd")
+
+    def test_on_the_body_when_set(self, client, monkeypatch):
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert "data-locale" not in body and "data-date-format" not in body
+        monkeypatch.setattr(config, "LEAF_LOCALE", "de-AT")
+        monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
+        for url in ("/page/index", "/deck", "/edit/index"):
+            body = client.get(url, headers=HOST).get_data(as_text=True)
+            assert 'data-locale="de-AT"' in body and 'data-date-format="iso"' in body, url
+
+
 class TestNoshare:
     """Sharing mode leaves out the pages LEAF_NOSHARE names (#tags, folders/)."""
 

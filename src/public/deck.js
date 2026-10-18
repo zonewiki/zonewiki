@@ -13,6 +13,11 @@ import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 // Pure task logic lives in deck-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
+// How dates read and the week starts: LEAF_LOCALE (empty: US English) and
+// LEAF_DATE_FORMAT=iso (YYYY-MM-DD), see deck-core.js.
+const DATES = DeckCore.dateSettings(document.body.dataset);
+const LOCALE = DATES.locale;
+
 // Track which instance owns keyboard focus (only one at a time)
 let activeDeckInstance = null;
 
@@ -1957,10 +1962,7 @@ function formatDate(dateStr) {
 
 // "Sep 21" (plus the year when it isn't this year), for "since …" labels.
 function shortDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const opts = { month: 'short', day: 'numeric' };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-  return d.toLocaleDateString('en-US', opts);
+  return DeckCore.shortDate(dateStr, todayStr(), DATES);
 }
 
 function dueDateClass(task) {
@@ -1985,7 +1987,7 @@ function urgencyClass(task) {
 
 // Day-board grouping lives in DeckCore; bind it to the current date here.
 function boardBuckets(list) {
-  return DeckCore.boardBuckets(list, todayStr(), activeSort());
+  return DeckCore.boardBuckets(list, todayStr(), activeSort(), DATES);
 }
 
 // Custom in-page calendar popup, anchored at `anchor`. Calls cb with the
@@ -2001,9 +2003,8 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
   // Only one picker at a time.
   document.querySelectorAll('.deck-datepicker').forEach(el => el.remove());
 
-  const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
+  const WEEK_START = DeckCore.weekStart(LOCALE);
+  const WEEKDAYS = DeckCore.weekdayNames(LOCALE, WEEK_START);
   const today = todayStr();
   // View month starts on the current value, else today.
   const anchorDate = new Date((current || today) + 'T00:00:00');
@@ -2066,14 +2067,14 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
     const ds = dateOffset(days);
     const off = min && ds < min;
     return `<button type="button" class="dp-quick-btn${ds === current ? ' dp-selected' : ''}" data-date="${ds}"` +
-      `${off ? ' disabled' : ''} title="${esc(name + ': ' + new Date(ds + 'T00:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' }))}"` +
+      `${off ? ' disabled' : ''} title="${esc(name + ': ' + DeckCore.longDayLabel(ds, DATES))}"` +
       ` aria-label="${esc(name)}">${label}</button>`;
   }).join('');
 
   function draw() {
     const first = new Date(viewY, viewM, 1);
-    // Monday-first offset (JS getDay: 0=Sun).
-    const lead = (first.getDay() + 6) % 7;
+    // Blank cells before the 1st, counted from the locale's first weekday.
+    const lead = (first.getDay() - WEEK_START + 7) % 7;
     const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
 
     let cells = '';
@@ -2092,7 +2093,7 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
       `<div class="dp-quick">${quickHtml}</div>` +
       `<div class="dp-head">` +
         `<button type="button" class="dp-nav" data-nav="-1">‹</button>` +
-        `<span class="dp-title">${MONTHS[viewM]} ${viewY}</span>` +
+        `<span class="dp-title">${esc(DeckCore.monthTitle(viewY, viewM, LOCALE))}</span>` +
         `<button type="button" class="dp-nav" data-nav="1">›</button>` +
       `</div>` +
       `<div class="dp-weekdays">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>` +

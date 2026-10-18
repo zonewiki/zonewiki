@@ -1,3 +1,4 @@
+import DeckCore from '../deck-core.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,18 @@ export function he(s) {
 // yesterday's shortly after midnight in Europe).
 export const localDate = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// The dates the server writes in US English (<time class="local-date">, the
+// task chips' badges) rewritten in LEAF_LOCALE; without one they stay as they
+// are (with LEAF_DATE_FORMAT=iso the server writes them as ISO already).
+export function localizeDates(root = document) {
+  const dates = DeckCore.dateSettings(document.body.dataset);
+  if (!dates.locale || dates.iso) return;
+  const today = localDate();
+  root.querySelectorAll('time.local-date').forEach(el => {
+    el.textContent = DeckCore.shortDate(el.dateTime, today, dates);
+  });
+}
 
 // Prompt for a display name when pasting a bare URL. Resolves with the name,
 // null (no name — insert plain URL), or false (cancelled). Shared with deck.js.

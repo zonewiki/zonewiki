@@ -7,6 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from conftest import open_tab, real_density
+import config
 
 
 def tomorrow() -> str:
@@ -2204,6 +2205,64 @@ def test_completed_shows_earlier_years(page, wiki):
     page.goto(href)
     expect(page.locator(".task-item[data-id='old']")).to_have_class(re.compile(r"\btask-selected\b"))
     expect(page.get_by_text("That task is no longer in the deck.")).to_have_count(0)
+
+
+# ── Locale ───────────────────────────────────────────────────────────────────
+
+GERMAN_MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
+                 "August", "September", "Oktober", "November", "Dezember"]
+
+
+def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
+    # LEAF_LOCALE: dates in German, a calendar with German heads from Monday,
+    # and the task chips the server writes in English rewritten in the page.
+    monkeypatch.setattr(config, "LEAF_LOCALE", "de-DE")
+    long_ago = date(date.today().year - 1, 3, 4)
+    t = page.request.post("/api/deck", data={"title": "Started last year", "start_date": long_ago.isoformat(),
+                                              "due_date": (date.today() + timedelta(days=400)).isoformat()}).json()
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck?view=open")
+    open_tab(page, "focus")
+    expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
+        f"📅 since 4. März {long_ago.year}")
+
+    modal = open_edit(page, "Started last year")
+    modal.locator("[data-date-trigger='task-edit-due']").click()
+    picker = page.locator(".deck-datepicker")
+    expect(picker.locator(".dp-weekdays span")).to_have_text(["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"])
+    expect(picker.locator(".dp-title")).to_have_text(re.compile(rf"^({'|'.join(GERMAN_MONTHS)}) \d{{4}}$"))
+    page.keyboard.press("Escape")
+
+    wiki.write("notes", f"# Notes\n\n[[task:{t['id'][:8]}]]\n")
+    page.goto("/page/notes")
+    expect(page.locator(".task-ref-due time")).to_have_text(re.compile(r"^\d+\. \S+ \d{4}$"))
+
+
+def test_iso_date_format(page, wiki, monkeypatch):
+    # LEAF_DATE_FORMAT=iso: YYYY-MM-DD on cards, the board and in chips; the
+    # locale still names the weekdays and starts the week.
+    monkeypatch.setattr(config, "LEAF_LOCALE", "en-US")
+    monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
+    start = date.today() - timedelta(days=5)
+    t = page.request.post("/api/deck", data={"title": "Started", "start_date": start.isoformat(),
+                                              "due_date": (date.today() + timedelta(days=40)).isoformat()}).json()
+    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    page.goto("/page/deck?view=open")
+    open_tab(page, "focus")
+    expect(card(page, "Started").locator(".task-focus-info")).to_have_text(f"📅 since {start.isoformat()}")
+    in3 = date.today() + timedelta(days=3)
+    open_tab(page, "plan")
+    expect(page.locator(".board-day-label", has_text=in3.isoformat())).to_have_count(1)
+
+    modal = open_edit(page, "Started")
+    modal.locator("[data-date-trigger='task-edit-due']").click()
+    expect(page.locator(".deck-datepicker .dp-weekdays span").first).to_have_text("Su")
+    page.keyboard.press("Escape")
+
+    wiki.write("notes", f"# Notes\n\n[[task:{t['id'][:8]}]]\n")
+    page.goto("/page/notes")
+    expect(page.locator(".task-ref-due time")).to_have_text(
+        (date.today() + timedelta(days=40)).isoformat())
 
 
 # ── Start after the deadline ─────────────────────────────────────────────────

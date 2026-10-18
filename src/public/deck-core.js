@@ -227,8 +227,70 @@ function bucketKey(t, today) {
   return t.start_date > addDays(today, 6) ? 'later' : t.start_date;
 }
 
-function fullDayLabel(d) {
-  return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+// ── Locale ─────────────────────────────────────────────────────────────────
+// Dates read the way LEAF_LOCALE says (<body data-locale>, a BCP 47 tag like
+// de-AT); without one, US English with weeks from Monday, as before the
+// setting. LEAF_DATE_FORMAT=iso (<body data-date-format>) writes the dates
+// themselves as YYYY-MM-DD; weekday and month names still follow the locale.
+// Only dates: the UI's words stay English. `dates` below is dateSettings().
+
+const DEFAULT_LOCALE = 'en-US';
+
+// { locale, iso } from <body>'s dataset (or any object with those keys).
+function dateSettings(data) {
+  return { locale: (data && data.locale) || '', iso: !!data && data.dateFormat === 'iso' };
+}
+
+// A date in `locale` (default US English); `opts` as toLocaleDateString's.
+function localeDate(d, locale, opts) {
+  return new Date(d + 'T00:00:00').toLocaleDateString(locale || DEFAULT_LOCALE, opts);
+}
+
+// "Sep 21" / "21. Sept." (plus the year when it isn't today's year), or
+// "2026-09-21" in ISO, for "since …" labels, history and task chips.
+function shortDate(d, today, dates = {}) {
+  if (dates.iso) return d.slice(0, 10);
+  const opts = { month: 'short', day: 'numeric' };
+  if (d.slice(0, 4) !== today.slice(0, 4)) opts.year = 'numeric';
+  return localeDate(d, dates.locale, opts);
+}
+
+// The Plan board's days: "Wed 21", or "Wed 2026-10-21" in ISO.
+function fullDayLabel(d, dates = {}) {
+  if (dates.iso) return `${localeDate(d, dates.locale, { weekday: 'short' })} ${d}`;
+  return localeDate(d, dates.locale, { weekday: 'short', day: 'numeric' });
+}
+
+// "Mon, Oct 5", or "Mon 2026-10-05" in ISO: the date picker's tooltips.
+function longDayLabel(d, dates = {}) {
+  if (dates.iso) return fullDayLabel(d, dates);
+  return localeDate(d, dates.locale, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// The day a week starts on in `locale`, as getDay() counts (0 = Sunday,
+// 1 = Monday): Intl's week info where the engine has it, else Monday.
+function weekStart(locale) {
+  if (!locale) return 1;
+  try {
+    const loc = new Intl.Locale(locale);
+    const info = loc.getWeekInfo ? loc.getWeekInfo() : loc.weekInfo;
+    if (info && info.firstDay) return info.firstDay % 7;
+  } catch (e) { /* not a locale this engine knows: Monday */ }
+  return 1;
+}
+
+// The calendar's column heads, from the week's first day: two letters each
+// ("Mo", "Di"), a short form's trailing dot dropped.
+function weekdayNames(locale, start) {
+  // 2023-01-01 was a Sunday, so day i of that week has getDay() === i.
+  return Array.from({ length: 7 }, (_, i) =>
+    localeDate(addDays('2023-01-01', (start + i) % 7), locale, { weekday: 'short' })
+      .replace(/\.$/, '').slice(0, 2));
+}
+
+// "October 2026", the calendar's title.
+function monthTitle(year, month, locale) {
+  return new Date(year, month, 1).toLocaleDateString(locale || DEFAULT_LOCALE, { month: 'long', year: 'numeric' });
 }
 
 // Group Plan-tab tasks into ordered day sections for the board. Date sections
@@ -238,8 +300,9 @@ function fullDayLabel(d) {
 // carried-over ones (`carried`), the longest-slipping first, for their
 // headers. `sort` ('due' or
 // 'created', see SORTS) sorts every section by it instead, and then none is
-// `ordered`: the manual order is only edited where it is shown.
-function boardBuckets(list, today, sort) {
+// `ordered`: the manual order is only edited where it is shown. Days past
+// tomorrow are labelled as `dates` says (dateSettings).
+function boardBuckets(list, today, sort, dates) {
   const by = SORTS[sort];
   const groups = {};
   // Reversed first, so tasks created in the same second (created_at has no
@@ -256,7 +319,7 @@ function boardBuckets(list, today, sort) {
   // until its day.
   for (let i = 0; i < 7; i++) {
     const d = addDays(today, i);
-    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d);
+    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fullDayLabel(d, dates);
     const due = list.filter(t => t.due_date === d).sort(byOpenOrder);
     const tasks = (groups[d] || []).sort(by || byOpenOrder);
     const carried = i === 0
@@ -343,6 +406,7 @@ const DeckCore = {
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, tagParamToQuery,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
+  dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };
 
 export default DeckCore;

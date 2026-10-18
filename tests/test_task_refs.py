@@ -92,6 +92,19 @@ class TestRendering:
         assert f'href="/deck?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
         assert '<span class="task-ref-badge task-ref-list">groceries</span>' in body
 
+    def test_dates_are_time_elements_the_browser_localizes(self):
+        # js/util.js localizeDates rewrites them in LEAF_LOCALE.
+        assert render._short_date("2026-10-05", "2026-10-18") == \
+            '<time class="local-date" datetime="2026-10-05">Oct 5</time>'
+        assert render._short_date("2025-10-05T09:30", "2026-10-18") == \
+            '<time class="local-date" datetime="2025-10-05">Oct 5, 2025</time>'
+        assert render._short_date("<b>", "2026-10-18") == "&lt;b&gt;"
+
+    def test_iso_dates(self, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
+        assert render._short_date("2026-10-05T09:30", "2026-10-18") == \
+            '<time class="local-date" datetime="2026-10-05">2026-10-05</time>'
+
     def test_alone_in_a_list_item_is_a_row(self, client, wiki_dir):
         t = task(client, title="Row")
         ref = f"[[task:{t['id'][:8]}]]"

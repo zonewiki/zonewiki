@@ -191,6 +191,8 @@ Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
 | `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
 | `LEAF_NOSHARE` | Pages hidden in sharing mode, e.g. `#noshare,people/` |
+| `LEAF_LOCALE` | How dates read and the day weeks start on, e.g. `de-AT` or `en-GB` (default: US English dates, weeks from Monday). The UI's words stay English |
+| `LEAF_DATE_FORMAT=iso` | Dates as `YYYY-MM-DD` (ISO 8601); weekday and month names still follow `LEAF_LOCALE` |
 | `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
 
 ### Without run.sh

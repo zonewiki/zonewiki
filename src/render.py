@@ -14,6 +14,7 @@ from mdit_py_plugins.footnote import footnote_plugin
 from mdit_py_plugins.gfm_autolink import gfm_autolink_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 
+import config
 import deck
 
 import decksyntax
@@ -282,13 +283,19 @@ def _inject_task_refs(html_str: str, refs: list[str], prefer: list[str] = ()) ->
 
 
 def _short_date(iso: str, today: str) -> str:
-    """"Oct 5" (this year) or "Oct 5, 2025", as the deck's cards show dates."""
+    """"Oct 5" (this year) or "Oct 5, 2025", as the deck's cards show dates,
+    in a <time class="local-date"> that the browser rewrites in LEAF_LOCALE
+    (localizeDates in js/util.js); "2025-10-05" with LEAF_DATE_FORMAT=iso."""
     try:
         d = date.fromisoformat(iso[:10])
     except ValueError:
-        return iso
-    text = f"{d:%b} {d.day}"
-    return text if iso[:4] == today[:4] else f"{text}, {d.year}"
+        return html.escape(iso)
+    if config.LEAF_DATE_FORMAT == "iso":
+        text = d.isoformat()
+    else:
+        text = f"{d:%b} {d.day}"
+        text = text if iso[:4] == today[:4] else f"{text}, {d.year}"
+    return f'<time class="local-date" datetime="{d.isoformat()}">{text}</time>'
 
 
 def link_list(task: dict, prefer=()) -> str | None:
