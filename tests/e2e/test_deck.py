@@ -2815,7 +2815,10 @@ def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
         expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Below")
         page.keyboard.press("Escape")
         expect(long_notes).not_to_have_class(DETAILS)
-        assert below.locator(".task-content").bounding_box()["y"] < top
+        # The card closes with a 150ms height animation (finishCollapse): the
+        # one below moves up as it runs, not with the class. Read at once,
+        # under load, it hadn't moved yet.
+        wait_until(lambda: below.locator(".task-content").bounding_box()["y"] < top)
         open_details(long_notes)
         page.wait_for_timeout(500)
     # A single click: the card stays put for the double-click window.
