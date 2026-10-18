@@ -255,9 +255,8 @@ def page(template: str, title: str, *, editor: bool = False, action_buttons: boo
 
 # Big screens (style.css, "Side columns") show a page view in three columns:
 # the table of contents on the left, the page in the middle and what links
-# to it on the right, both sides sticky. The columns are copies of what
-# smaller screens show inline: the [[toc]] box and the sections at the end.
-_TOC_NAV_RE = re.compile(r'<nav class="toc">(<ul>.*?</ul>)</nav>', re.S)
+# to it on the right, both sides sticky. The right column copies the
+# sections smaller screens show at the page's end.
 
 
 _HEADING_RE = re.compile(r'<h([23]) id="([^"]+)">(.*?)</h\1>', re.S)
@@ -265,13 +264,9 @@ RAIL_TOC_MIN_HEADINGS = 3
 
 
 def rail_toc_items(article_html: str) -> str:
-    """The left column's "On this page" list: the page's [[toc]], or without
-    one its ## and ### headings when there are at least
-    RAIL_TOC_MIN_HEADINGS (a long page shouldn't need the directive for
-    this). "" otherwise; the column stays, so the page keeps its place."""
-    m = _TOC_NAV_RE.search(article_html)
-    if m:
-        return m.group(1)
+    """The left column's "On this page" list: the page's ## and ### headings
+    when there are at least RAIL_TOC_MIN_HEADINGS. "" otherwise; the column
+    stays, so the page keeps its place."""
     heads = _HEADING_RE.findall(article_html)
     if len(heads) < RAIL_TOC_MIN_HEADINGS:
         return ""

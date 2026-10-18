@@ -116,7 +116,7 @@ _INLINE_CODE_RE = re.compile(r'(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)')
 def mask_code(text: str) -> tuple[str, list[str]]:
     """Replace fenced code blocks and inline code spans with opaque tokens.
 
-    [[wikilinks]], [[toc]] and [[deck]] are rewritten on the raw markdown before
+    [[wikilinks]] and [[deck]] are rewritten on the raw markdown before
     markdown-it runs, so without this they would also be rewritten inside code
     (showing up as escaped HTML in the block, or embedding a whole deck app in a
     <pre>). Restore with unmask_code() before rendering."""

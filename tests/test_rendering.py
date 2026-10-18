@@ -1,6 +1,6 @@
 """Tests for Leaf markdown rendering helpers.
 
-Covers: render_md, process_wikilinks, _build_toc, image widths,
+Covers: render_md, process_wikilinks, image widths,
         _render_task_dates, toggle_nth_checkbox (metadata), page_title,
         to_slug, build_breadcrumb, strip_h1, _render_task_title,
         parse_frontmatter, _render_frontmatter_html.
@@ -11,7 +11,7 @@ import re
 import pytest
 
 from mdtext import page_title, parse_frontmatter, strip_h1, to_slug, toggle_nth_checkbox
-from render import _build_toc, _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
+from render import _render_frontmatter_html, render_tags_pills_html, _render_task_dates, process_wikilinks, render_md
 from views import build_breadcrumb
 from tests.conftest import write_page
 import mdtext
@@ -330,49 +330,6 @@ class TestRenderTaskDates:
 
 
 # ===========================================================================
-# _build_toc
-# ===========================================================================
-
-class TestBuildToc:
-
-    def test_builds_toc_from_h2(self):
-        text = "# Title\n\n## Section One\n\nbody\n\n## Section Two\n\nbody2\n"
-        toc = _build_toc(text)
-        assert "Section One" in toc
-        assert "Section Two" in toc
-        assert '<nav class="toc">' in toc
-
-    def test_empty_when_no_headings(self):
-        assert _build_toc("Just text.\n") == ""
-
-    def test_h1_not_included(self):
-        toc = _build_toc("# Title\n\nBody.\n")
-        assert toc == ""
-
-    def test_h3_included_with_class(self):
-        text = "## Parent\n\n### Child\n\nbody\n"
-        toc = _build_toc(text)
-        assert "toc-h3" in toc
-        assert "Child" in toc
-
-    def test_h4_not_included(self):
-        text = "## Section\n\n#### Deep\n\nbody\n"
-        toc = _build_toc(text)
-        assert "Deep" not in toc
-
-    def test_anchor_ids_generated(self):
-        text = "## My Section\n\nbody\n"
-        toc = _build_toc(text)
-        assert 'href="#my-section"' in toc
-
-    def test_wikilinks_in_heading_stripped(self):
-        text = "## See [[Some Page]]\n\nbody\n"
-        toc = _build_toc(text)
-        assert "[[" not in toc
-        assert "Some Page" in toc
-
-
-# ===========================================================================
 # render_md — integration
 # ===========================================================================
 
@@ -387,27 +344,12 @@ class TestRenderMd:
         result = render_md("See [[target]]")
         assert 'href="/page/target"' in result
 
-    def test_toc_placeholder_replaced(self, wiki_dir):
-        text = "[[toc]]\n\n## Section A\n\nbody\n"
-        result = render_md(text)
-        assert "[[toc]]" not in result
-        assert '<nav class="toc">' in result
-
-    def test_toc_followed_by_hr_not_setext_heading(self, wiki_dir):
-        # Regression: [[toc]] followed by a blank line then --- was consuming
-        # the newline, leaving the placeholder adjacent to --- and causing
-        # markdown-it to render it as a setext h2 instead of <p>.
-        text = "[[toc]]\n\n---\n\n## Section A\n\nbody\n"
-        result = render_md(text)
-        assert '<nav class="toc">' in result
-        assert "LEAFTOCPLACEHOLDER" not in result
-        assert "LEAFTOCPLACEHOLDER".lower() not in result
-
-    def test_toc_uppercase_variant(self, wiki_dir):
-        text = "[[TOC]]\n\n---\n\n## Section A\n\nbody\n"
-        result = render_md(text)
-        assert '<nav class="toc">' in result
-        assert "LEAFTOCPLACEHOLDER" not in result
+    def test_toc_is_no_directive(self, wiki_dir):
+        # [[toc]] was removed (the side column lists a page's headings): it is
+        # an ordinary wikilink now, to a page named toc.
+        result = render_md("[[toc]]\n\n## Section A\n\nbody\n")
+        assert '<nav class="toc">' not in result
+        assert 'href="/page/toc" class="wikilink wikilink-missing"' in result
 
     def test_image_width_applied(self, wiki_dir):
         text = "![photo|150](/img.png)"
@@ -584,7 +526,7 @@ class TestDisabledAttributeStripping:
 
 
 class TestDirectivesInsideCode:
-    """[[wikilinks]], [[deck]] and [[toc]] are pre-processed on the raw text.
+    """[[wikilinks]] and [[deck]] are pre-processed on the raw text.
     Inside code they must stay literal — they used to be rewritten into HTML
     that then showed up escaped inside the code block (or embedded a whole deck
     app inside a <pre>)."""
@@ -613,14 +555,8 @@ class TestDirectivesInsideCode:
         assert "tasks-app" not in html
         assert "[[deck tag=work]]" in html
 
-    def test_toc_directive_in_code_not_replaced(self, wiki_dir):
-        html = render_md("## A\n\n```\n[[toc]]\n```\n")
-        assert 'class="toc"' not in html
-        assert "[[toc]]" in html
-
     def test_directives_outside_code_still_work(self, wiki_dir):
-        html = render_md("[[toc]]\n\n## A\n\n`code` then [[link]]\n\n```\nx\n```\n\n[[deck]]\n")
-        assert 'class="toc"' in html
+        html = render_md("## A\n\n`code` then [[link]]\n\n```\nx\n```\n\n[[deck]]\n")
         assert 'href="/page/link"' in html
         assert "tasks-app" in html
 

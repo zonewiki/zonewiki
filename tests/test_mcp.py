@@ -895,7 +895,7 @@ class TestRelatedByMeaning:
 class TestReadPageLinks:
     def test_linked_from_and_broken_links(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]], [[Nowhere]], [[golf#Werkstatt|the garage]]\n"
-                               "\n`[[In Code]]`\n\n[[toc]]\n")
+                               "\n`[[In Code]]`\n\n[[deck]]\n")
         write_page(pages, "b", "# B\n\n[Golf](golf.md)\n")
         text = call(client, "read_page", slug="golf")[0]
         assert text.endswith("\n\n---\nLinked from (2): a, b")
@@ -1051,7 +1051,7 @@ class TestWritePage:
 
     def test_warns_about_wikilinks_to_missing_pages(self, client, pages):
         text, _ = call(client, "write_page", slug="hub",
-                       content="# Hub\n\n[[Golf]] [[Nowhere]] [[task:abcd1234]] [[toc]] `[[Code]]`")
+                       content="# Hub\n\n[[Golf]] [[Nowhere]] [[task:abcd1234]] `[[Code]]`")
         assert "point to pages that don't exist (yet): [[Nowhere]]" in text
         assert "[[Golf]]" not in text.split("Note:")[1] and "Code" not in text
 

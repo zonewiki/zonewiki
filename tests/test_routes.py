@@ -327,18 +327,17 @@ class TestViewPage:
     # ── Side columns (big screens; the CSS decides when they show) ──────────
 
     def test_page_view_has_side_columns(self, client, wiki_dir):
-        write_page(wiki_dir, "garden", "# Garden\n\n[[toc]]\n\n## Beds\n\nSoil.\n\n### Roses\n\nRed.\n")
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n### Roses\n\nRed.\n\n## Paths\n")
         write_page(wiki_dir, "plans", "# Plans\n\nSee [[Garden]].\n")
         client.post("/api/deck", json={"title": "Weed the [[garden]]"})
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<main class="wide">' in body
         grid = body.split('<div class="page-grid">', 1)[1]
         left, rest = grid.split('<div class="page-col">', 1)
-        # Left: the [[toc]] as "On this page", the same links as the box.
+        # Left: the headings as "On this page".
         assert '<aside class="rail rail-left"><nav class="rail-toc" aria-label="On this page">' in left
-        assert re.findall(r'href="(#[^"]+)"', left) == ["#beds", "#roses"]
+        assert re.findall(r'href="(#[^"]+)"', left) == ["#beds", "#roses", "#paths"]
         assert '<li class="toc-h3"><a href="#roses">' in left
-        assert '<nav class="toc">' in rest   # the box stays, for smaller screens
         # Right: a copy of the sections at the end; the anchors stay with them.
         col, right = rest.split('<aside class="rail rail-context" aria-label="Links">', 1)
         foot = col.split('<div class="page-foot">', 1)[1]
@@ -348,10 +347,9 @@ class TestViewPage:
         assert ' id="' not in right.split("</aside>", 1)[0]
         assert "Plans" in right and "Weed the garden" in right
 
-    def test_side_toc_without_directive_from_three_headings(self, client, wiki_dir):
-        # A long page gets "On this page" without [[toc]]: its ## and ###
-        # headings, links in them flattened (no link inside a link). No box
-        # in the text, which stays as written.
+    def test_side_toc_from_three_headings(self, client, wiki_dir):
+        # A long page gets "On this page": its ## and ### headings, links in
+        # them flattened (no link inside a link). The text stays as written.
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n### [[Roses]] and `tulips`\n\n```\n## not a heading\n```\n\n## Paths\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         left = body.split('<aside class="rail rail-left">', 1)[1].split("</aside>", 1)[0]
@@ -374,9 +372,9 @@ class TestViewPage:
         assert body.count("Links to") == 1
 
     def test_side_column_without_toc_is_empty(self, client, wiki_dir):
-        # No [[toc]] and under three headings: no left column content; the
-        # column stays, so the page keeps its place.
-        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\n## Paths\n")
+        # Under three headings: no left column content (a [[toc]] line no
+        # longer asks for one); the column stays, so the page keeps its place.
+        write_page(wiki_dir, "garden", "# Garden\n\n[[toc]]\n\n## Beds\n\n## Paths\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<aside class="rail rail-left"><a class="rail-top" href="#" hidden>↑ Back to top</a></aside>' in body
         right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]

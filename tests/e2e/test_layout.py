@@ -362,7 +362,7 @@ def test_code_block_padding_survives_the_highlight_theme(page, wiki):
 
 BIG = {"width": 1600, "height": 900}
 
-LONG = "# Release\n\n[[toc]]\n\nIntro text.\n\n" + "".join(
+LONG = "# Release\n\nIntro text.\n\n" + "".join(
     f"## Part {i}\n\n" + "A paragraph of text that fills the line nicely. " * 12 + "\n\n" for i in range(1, 7)
 ) + """## Code and tables
 
@@ -395,9 +395,9 @@ def test_side_columns_on_big_screens(new_page, wiki):
     page.goto("/page/release")
     toc, links = page.locator(".rail-toc"), page.locator(".rail-context")
     expect(toc).to_be_visible()
+    expect(toc.locator("a")).to_have_count(7)                 # every ## and ###
     expect(links.locator(".backlinks a", has_text="Plans")).to_be_visible()
-    # The inline copies and the breadcrumb's backlinks chip are gone.
-    expect(page.locator(".page-content .toc")).to_be_hidden()
+    # The sections at the end and the breadcrumb's backlinks chip are gone.
     expect(page.locator(".page-foot")).to_be_hidden()
     expect(page.locator(".bl-count")).to_be_hidden()
     t, c, r = (page.locator(s).bounding_box() for s in (".rail-left", ".page-content", ".rail-context"))
@@ -448,7 +448,6 @@ def test_no_side_columns_below_1320(new_page, wiki):
     page.goto("/page/release")
     expect(page.locator(".rail-left")).to_be_hidden()
     expect(page.locator(".rail-context")).to_be_hidden()
-    expect(page.locator(".page-content .toc")).to_be_visible()
     expect(page.locator(".page-foot .backlinks a", has_text="Plans")).to_be_visible()
     expect(page.locator(".bl-count")).to_be_visible()
     text = page.locator(".page-content > p").first.bounding_box()
@@ -487,16 +486,6 @@ def test_editor_badges_clear_of_the_breadcrumb(page, wiki):
             if box:
                 assert (b["x"] + b["width"] <= box["x"] or box["x"] + box["width"] <= b["x"] or
                         b["y"] + b["height"] <= box["y"] or box["y"] + box["height"] <= b["y"]), sel
-
-
-def test_side_toc_without_the_directive(new_page, wiki):
-    wiki.write("long", LONG.replace("[[toc]]\n\n", ""))
-    page = new_page(viewport=BIG)
-    page.goto("/page/long")
-    expect(page.locator(".rail-toc a")).to_have_count(7)
-    expect(page.locator(".rail-toc a.active")).to_have_text("Part 1")
-    page.evaluate("window.scrollBy(0, document.getElementById('part-3').getBoundingClientRect().top - 40)")
-    expect(page.locator(".rail-toc a.active")).to_have_text("Part 3")
 
 
 def test_long_side_toc_fades_and_follows(new_page, wiki):

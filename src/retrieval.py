@@ -21,7 +21,7 @@ from mdtext import (
     plain_task_title, strip_h1,
 )
 from pages import all_backlink_counts, fmt_date, is_noshare, iter_pages, sharing_on, url
-from render import task_href, TOC_RE
+from render import task_href
 
 
 # Cache of tokenized page documents, keyed by slug -> (mtime, doc, deck key). Avoids
@@ -116,11 +116,11 @@ def _search_index() -> search.SearchIndex:
 def _semantic_text(content: str, slug: str) -> tuple[str, str]:
     """A page as (title, body) for embedding: the tldr and tags lead, the
     frontmatter block and the H1 (the title already) are dropped, and so are
-    [[deck …]] and [[toc]] directives. Those are markup, not content: pages
+    [[deck …]] directives. Those are markup, not content: pages
     holding nothing but a deck embed came out as each other's closest match."""
     meta, body = parse_frontmatter(_task_refs_as_titles(content))
     lead = "\n".join(filter(None, [meta.get("tldr", ""), " ".join(meta.get("tags", []))]))
-    body = TOC_RE.sub("", decksyntax.DECK_RE.sub("", strip_h1(body)))
+    body = decksyntax.DECK_RE.sub("", strip_h1(body))
     return page_title(content, slug), f"{lead}\n\n{body}" if lead else body
 
 

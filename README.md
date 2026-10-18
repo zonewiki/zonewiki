@@ -59,7 +59,7 @@ editor; a change on disk shows up immediately.
 - Backlinks, "Linked tasks" (tasks that mention the page) and, with semantic
   search, "Related pages". On wide screens the table of contents sits on the
   left and the links on the right, both following as you scroll.
-- Callouts (`> [!WARNING]`), sortable tables, image sizing, `[[toc]]`,
+- Callouts (`> [!WARNING]`), sortable tables, image sizing,
   frontmatter tags and a one-line summary.
 - An editor with live preview and auto-save, a formatting bar, completion
   for links and pages, snippets (`/date`), list continuation, and editing a

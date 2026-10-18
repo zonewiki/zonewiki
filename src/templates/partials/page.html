@@ -86,7 +86,7 @@
 {%- endmacro %}
 
 {#- The left column on big screens: "On this page" (`items_html`, the
-    page's [[toc]] list or its headings), and ↑ Back to top, which js/chrome.js
+    page's headings), and ↑ Back to top, which js/chrome.js
     shows once the page has scrolled a screen down. #}
 {% macro rail_toc(items_html) -%}
 <aside class="rail rail-left">{% if items_html %}<nav class="rail-toc" aria-label="On this page"><p class="rail-label">On this page</p>{{ items_html|safe }}</nav>{% endif %}<a class="rail-top" href="#" hidden>↑ Back to top</a></aside>

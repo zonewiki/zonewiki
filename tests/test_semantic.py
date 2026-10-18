@@ -137,11 +137,11 @@ class TestChunkPage:
 
 
 class TestSemanticText:
-    def test_deck_and_toc_directives_dropped(self):
+    def test_deck_directives_dropped(self):
         # Pages holding only a deck embed were each other's closest match.
         title, body = retrieval._semantic_text(
-            "# Leaf\n\n[[toc]]\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
-        assert "deck" not in body.lower() and "toc" not in body
+            "# Leaf\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
+        assert "deck" not in body.lower()
         assert "Notes  here." in body
 
     def test_only_a_deck_embed_leaves_no_body(self):

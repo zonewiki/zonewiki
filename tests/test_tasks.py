@@ -2349,9 +2349,9 @@ class TestNotes:
 
     def test_render_notes_task_chips_and_no_page_directives(self, client):
         tid = create_task(client, title="Order seeds").get_json()["id"]
-        [note] = client.post("/api/render-notes", json={"notes": [f"[[task:{tid[:8]}]]\n\n[[toc]]"]}).get_json()["notes"]
+        [note] = client.post("/api/render-notes", json={"notes": [f"[[task:{tid[:8]}]]\n\n[[deck]]"]}).get_json()["notes"]
         assert 'class="task-ref"' in note and "Order seeds" in note
-        assert '<nav class="toc">' not in note
+        assert "tasks-app" not in note
 
     def test_render_notes_validates(self, client):
         assert client.post("/api/render-notes", json={}).get_json() == {"notes": [], "comments": []}

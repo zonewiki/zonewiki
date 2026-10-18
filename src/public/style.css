@@ -201,9 +201,9 @@ main {
 
 /* ── Side columns ──────────────────────────────────────────────────────────── */
 /* A page view on a big screen (view_page, main.wide): the table of contents
-   on the left, what links to the page on the right, both sticky. They are
-   copies of what smaller screens show inline (the [[toc]] box, the sections
-   at the end), which hide there. The text keeps its reading width; tables,
+   on the left, what links to the page on the right, both sticky. The right
+   one copies the sections smaller screens show at the page's end, which hide
+   there. The text keeps its reading width; tables,
    code blocks and images alone in a paragraph grow into the middle column
    only when they need it. */
 
@@ -290,7 +290,7 @@ main {
   .page-col > :is(.page-header, .page-meta-wrapper, .page-tldr, .page-content) {
     max-width: 46rem; margin-inline: auto;
   }
-  .page-col .page-content > .toc, .page-foot { display: none; }
+  .page-foot { display: none; }
   /* The right column lists the backlinks, so the breadcrumb's chip goes. */
   main.wide .breadcrumb-right { display: none; }
   /* As wide as the text, unless a line or a row needs more: then up to the
@@ -589,25 +589,6 @@ main {
 /* The highlight.js theme pads `pre code.hljs` by 1em, on top of the pre's
    own padding. */
 .page-content pre code.hljs { padding: 0; }
-
-/* ── Table of contents ─────────────────────────────────────────────────────── */
-
-.toc {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: .6rem .85rem;
-  float: right;
-  clear: right;
-  margin: 1.2rem 0 1rem 1.5rem;
-  max-width: 220px;
-  min-width: 140px;
-}
-.toc ul { margin: 0; padding: 0; list-style: none; }
-.toc li { padding: .1rem 0; }
-.toc li.toc-h3 { padding-left: .85rem; }
-.toc a { color: var(--muted); font-size: .8rem; text-decoration: none; }
-.toc a:hover { color: var(--link); }
 
 /* Images never overflow, are always shrunk to fit */
 .page-content img { max-width: 100%; height: auto; cursor: zoom-in; }
@@ -1850,9 +1831,6 @@ body.editor-page main {
 
   /* Tables scroll horizontally instead of overflowing */
   .page-content table { display: block; overflow-x: auto; }
-
-  /* TOC: no float on small screens */
-  .toc { float: none; max-width: 100%; margin: 0 0 1rem 0; }
 
   /* Editor — full-screen; preview stacks under the textarea and is toggled
      with the toolbar's Preview button (.mobile-only) or F2. */

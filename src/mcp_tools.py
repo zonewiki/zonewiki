@@ -36,7 +36,7 @@ from mdtext import (is_scratch, iter_fenced_lines, mask_code, page_tags, page_ti
                     parse_frontmatter, plain_heading, promoted_slug, split_wikilink, to_slug, WIKILINK_RE)
 from pages import (all_backlink_counts, all_slugs, deck_home_slug, find_backlinks, fmt_date, is_protected,
                    iter_pages, page_link_targets, page_meta, safe_path, url)
-from render import task_link, TOC_RE
+from render import task_link
 from retrieval import in_folder, log_query, passes, retrieve, task_status
 
 
@@ -279,7 +279,7 @@ def _missing_links(content: str, slugs: set[str], slug: str = "") -> dict[str, s
     slugified) and the markdown links (pages.md_link_misses). Each link as
     written -> the name or slug it was meant for, to suggest a near match."""
     masked, _ = mask_code(content)
-    for pattern in (TOC_RE, decksyntax.DECK_RE, decksyntax.TASK_REF_RE):
+    for pattern in (decksyntax.DECK_RE, decksyntax.TASK_REF_RE):
         masked = pattern.sub("", masked)
     missing = {}
     for m in WIKILINK_RE.finditer(masked):

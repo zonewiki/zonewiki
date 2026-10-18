@@ -15,7 +15,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | File | Covers |
 |------|--------|
 | `docs/spec/routes.md` | Every route, what each page view includes, side columns on big screens |
-| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history, TOC |
+| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
@@ -87,7 +87,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
     ├── mdtext.py           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
     ├── pages.py            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home, url()
     ├── gitstore.py         # Git: commits, moving a page (move_page), grep over pages (grep_pages), a page's log, versions, diffs, uncommitted files, deleted pages
-    ├── render.py           # Markdown → HTML: wikilinks, [[toc]], [[deck]], [[task:…]], post-processing
+    ├── render.py           # Markdown → HTML: wikilinks, [[deck]], [[task:…]], post-processing
     ├── retrieval.py        # Search and LLM retrieval (BM25 + optional semantic index)
     ├── views.py            # HTML building blocks: shell, breadcrumb, modules, menus, dialogs, side columns
     ├── mcp_tools.py        # The MCP tools: search (also grep), read, link checks, write pages and deck tasks (the protocol is mcp_server.py)

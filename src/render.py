@@ -1,5 +1,5 @@
 """Markdown to HTML: markdown-it with Leaf's directives (wikilinks,
-[[toc]], [[deck]], [[task:…]]) and the post-processing of the result."""
+[[deck]], [[task:…]]) and the post-processing of the result."""
 
 import html
 import re
@@ -23,8 +23,8 @@ import deckstore
 
 import pages
 from mdtext import (
-    heading_id, mask_code, parse_frontmatter, plain_heading, plain_task_title,
-    section_anchor, split_wikilink, strip_links, TASK_DONE_ONLY_RE, TASK_META_SRC_RE,
+    mask_code, parse_frontmatter, plain_task_title,
+    section_anchor, split_wikilink, TASK_DONE_ONLY_RE, TASK_META_SRC_RE,
     to_slug, unmask_code, WIKILINK_RE,
 )
 from pages import all_slugs, hidden_page, page_deck_lists, url
@@ -157,29 +157,6 @@ def process_wikilinks(text: str, slugs: set[str] | None = None) -> str:
     return WIKILINK_RE.sub(replace, text)
 
 
-_TOC_PLACEHOLDER = "LEAFTOCPLACEHOLDER"
-TOC_RE = re.compile(r'^\[\[toc\]\][^\S\n]*$', re.IGNORECASE | re.MULTILINE)
-
-
-def _build_toc(text: str, unmask=lambda s: s) -> str:
-    """TOC from ## / ### headings. `text` may have code masked (so headings
-    inside fenced code are not picked up); `unmask` restores inline code in
-    the heading titles."""
-    headings = re.findall(r'^(#{2,3})\s+(.+)', text, re.MULTILINE)
-    if not headings:
-        return ''
-    items = []
-    for hashes, title in headings:
-        level = len(hashes)
-        title = unmask(title)
-        plain = plain_heading(title.strip())
-        hid = heading_id(plain)
-        cls = ' class="toc-h3"' if level == 3 else ''
-        label = md.renderInline(strip_links(title.strip()))
-        items.append(f'<li{cls}><a href="#{hid}">{label}</a></li>')
-    return '<nav class="toc"><ul>\n' + '\n'.join(items) + '\n</ul></nav>'
-
-
 def _render_task_dates(html_str: str) -> str:
     """Task metadata comments (<!--t:… d:…-->, written when a checkbox is
     ticked, mdtext.toggle_nth_checkbox) as visible date chips."""
@@ -212,11 +189,6 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
 
     text, code_stash = mask_code(text)
 
-    toc_html = ''
-    if TOC_RE.search(text):
-        toc_html = _build_toc(text, unmask=lambda s: unmask_code(s, code_stash))
-        text = TOC_RE.sub(_TOC_PLACEHOLDER, text)
-
     # Replace [[deck …]] directives with placeholders (supports multiple per page)
     text, deck_embeds = deck.process_deck_embeds(text)
     text, task_refs = _mask_task_refs(text)
@@ -226,8 +198,6 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
            "section_chips": _section_task_chips(section_tasks, prefer)}
     result = md.render(text, env)
     result = _inject_task_refs(result, task_refs, prefer)
-    if toc_html:
-        result = result.replace(f'<p>{_TOC_PLACEHOLDER}</p>', toc_html)
     if deck_embeds:
         result = deck.inject_deck_embeds(result, deck_embeds)
     return fm_html + result
@@ -240,7 +210,7 @@ def render_notes(texts: list[str], *, inline: bool = False) -> list[str]:
     """Deck task notes (or, `inline`, comments: one line each) rendered as a
     page is: the same markdown, wikilinks, [[task:…]] chips and the dates a
     ticked checkbox records. Without what only a page has (frontmatter,
-    [[toc]], [[deck]] embeds, ✎ per section) and without heading ids, which
+    [[deck]] embeds, ✎ per section) and without heading ids, which
     would clash with the page's own anchors."""
     slugs = set(all_slugs())
     out = []

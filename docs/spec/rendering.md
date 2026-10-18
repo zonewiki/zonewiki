@@ -8,7 +8,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 - `server.py`'s `view_page` reads `<slug>.md`, `render.render_md()` converts it to HTML using `markdown-it-py`, and `views.page("view.html", …)` renders it into the page (see Templates). A path with a slug in it is built with `pages.url()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
-- **Deck task notes and comments** render with the same markdown (`render.render_notes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[toc]]`, `[[deck]]`, ✎ per section, heading ids). See Notes in `docs/spec/deck.md`.
+- **Deck task notes and comments** render with the same markdown (`render.render_notes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[deck]]`, ✎ per section, heading ids). See Notes in `docs/spec/deck.md`.
 - The shared shell renders the product brand as `Leaf` (page titles, the switcher's accessible name), with a small green inline SVG leaf logo (`_LEAF_LOGO`) on the breadcrumb's Wiki link.
 
 ### Autolinks and callouts
@@ -23,7 +23,7 @@ Clicking a column header of a table in a page's article sorts its rows: ascendin
 
 ### Templates
 
-Every view is a Jinja2 template in `src/templates` that extends `layout.html` (head, the dialogs the client code opens, the status badges, top actions and action bar), rendered by `views.page(template, title, …)`. The environment (`templating.py`: `render`, `macro`) has auto-escaping on and `url` and `config` as globals; it is not Flask's `render_template`, so templates also render outside a request (tests, and Python callers that embed the result, like `deck.build_deck_embed`). A variable holding HTML that Leaf built itself ends in `_html` and is the only kind marked `|safe` (rendered markdown, an excerpt with `<mark>`s). Reusable parts are macros in `templates/partials/` (`page.html`: the ⋯ menu and dialogs, link sections, side columns, meta row; `history.html`; `modules.html`; `icons.html`), which Python can call with `templating.macro(template, name)`. Markdown-level fragments (task chips, the TOC, ☑ chips) stay in `render.py`. Escaped quotes in attributes come out as `&#34;` (markupsafe), not `&quot;`.
+Every view is a Jinja2 template in `src/templates` that extends `layout.html` (head, the dialogs the client code opens, the status badges, top actions and action bar), rendered by `views.page(template, title, …)`. The environment (`templating.py`: `render`, `macro`) has auto-escaping on and `url` and `config` as globals; it is not Flask's `render_template`, so templates also render outside a request (tests, and Python callers that embed the result, like `deck.build_deck_embed`). A variable holding HTML that Leaf built itself ends in `_html` and is the only kind marked `|safe` (rendered markdown, an excerpt with `<mark>`s). Reusable parts are macros in `templates/partials/` (`page.html`: the ⋯ menu and dialogs, link sections, side columns, meta row; `history.html`; `modules.html`; `icons.html`), which Python can call with `templating.macro(template, name)`. Markdown-level fragments (task chips, ☑ chips) stay in `render.py`. Escaped quotes in attributes come out as `&#34;` (markupsafe), not `&quot;`.
 
 ### Client code
 
@@ -69,7 +69,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`
 - If the target page does not exist, render the link with a CSS class `wikilink-missing` so it can be styled differently (e.g. red or dashed underline). Clicking a missing wikilink redirects to `/edit/<slug>` so the page can be created immediately.
 - The same pre-processing must run in the `/api/preview` endpoint so the live editor preview also renders wikilinks correctly.
-- Code is exempt: `render_md()` masks fenced code blocks and inline code spans (`mask_code`, private-use-character tokens) before running the wikilink, `[[toc]]` and `[[deck]]` pre-processors and restores them (`unmask_code`) before `md.render()`, so directives inside code render literally. The TOC also ignores `##` lines inside fences.
+- Code is exempt: `render_md()` masks fenced code blocks and inline code spans (`mask_code`, private-use-character tokens) before running the wikilink and `[[deck]]` pre-processors and restores them (`unmask_code`) before `md.render()`, so directives inside code render literally. The TOC also ignores `##` lines inside fences.
 - Add a route `GET /api/pages` that returns a JSON list of all existing slugs — used by the editor to hint which wikilinks are valid.
 
 ### Task references
@@ -119,7 +119,4 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Table of Contents
 
-- `[[toc]]` on a line by itself (case-insensitive) is replaced with a `<nav class="toc">` block listing all `##` and `###` headings in the page as anchor links.
-- The TOC is built before `process_wikilinks` runs. `[[toc]]` is replaced with a placeholder, rendered, then the placeholder `<p>` is swapped for the nav HTML.
-- Heading anchors are generated by `anchors_plugin` from `mdit-py-plugins`. The `heading_id()` helper replicates the plugin's slugify for the href values in the TOC.
-- If the page has no `##`/`###` headings, `[[toc]]` renders nothing.
+A page's contents are listed by the side column on big screens ("On this page", see Side columns in `docs/spec/routes.md`), built from its headings. The `[[toc]]` directive, a box of the same links inside the text, was removed in 2026-10 as unused next to it; a `[[toc]]` left in a page is an ordinary wikilink now (to a page named toc).
