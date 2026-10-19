@@ -187,6 +187,14 @@ def _future(days):
     return (date.today() + timedelta(days=days)).isoformat()
 
 
+def _past(days):
+    return (date.today() - timedelta(days=days)).isoformat()
+
+
+def _today():
+    return date.today().isoformat()
+
+
 class TestRecurring:
     def test_complete_recurring_spawns_new(self, client):
         task = create_task(client, title="Daily standup",
@@ -1553,6 +1561,45 @@ class TestSkipOccurrence:
         assert client.get("/api/deck").get_json() == []
         completed = client.get("/api/deck/completed").get_json()
         assert completed[0]["wont_do"] is True
+
+    # Skipping an overdue occurrence must not bring the series back today:
+    # the next one is the first after today (catch-up is > today, not >= today).
+    def test_skip_overdue_daily_due_moves_to_tomorrow(self, client):
+        task = create_task(client, title="Daily", due_date=_past(3),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        active = client.get("/api/deck").get_json()
+        assert len(active) == 1
+        assert active[0]["due_date"] == _future(1)
+
+    def test_skip_overdue_daily_start_moves_to_tomorrow(self, client):
+        task = create_task(client, title="Daily on focus", start_date=_past(3),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        active = client.get("/api/deck").get_json()
+        assert len(active) == 1
+        assert active[0]["start_date"] == _future(1)
+        assert active[0]["due_date"] is None
+
+    def test_skip_overdue_weekly_moves_to_next_weekly_date_after_today(self, client):
+        task = create_task(client, title="Weekly", due_date=_past(10),
+                           rec_type="weekly", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        active = client.get("/api/deck").get_json()
+        assert active[0]["due_date"] == _future(4)
+
+    def test_skip_due_today_moves_to_tomorrow(self, client):
+        task = create_task(client, title="Daily today", due_date=_today(),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"skip": True})
+        assert client.get("/api/deck").get_json()[0]["due_date"] == _future(1)
+
+    def test_completing_overdue_daily_still_lands_today(self, client):
+        # Completing is unchanged: you did it today, so the next one is due today.
+        task = create_task(client, title="Daily", due_date=_past(3),
+                           rec_type="daily", rec_interval=1).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"completed": True})
+        assert client.get("/api/deck").get_json()[0]["due_date"] == _today()
 
 
 class TestLimitParam:

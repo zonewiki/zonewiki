@@ -393,7 +393,7 @@ def update_task(task_id: str, data: dict, suffix: str = "") -> dict:
         # instance — the series continues, unlike a plain won't-do which ends
         # it. On a non-recurring task this degrades to a plain won't-do.
         log_event(task, "skipped")      # before the spawn, which carries the history on
-        spawned = spawn_recurring(task, active)
+        spawned = spawn_recurring(task, active, skip=True)
         task["completed_at"] = timestamp()
         task["wont_do"] = True
         active = [t for t in active if t["id"] != task_id]

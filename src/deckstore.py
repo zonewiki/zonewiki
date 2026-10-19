@@ -346,8 +346,10 @@ def _rec_step(base: date, rtype: str, interval: int, day: int | None = None) -> 
     return base + timedelta(days=interval)  # daily (and any unknown type)
 
 
-def _next_occurrence(rec: dict, base: date, anchored: bool, today: date) -> tuple[date, dict]:
-    """Step a recurrence from base and catch up to >= today.
+def _next_occurrence(rec: dict, base: date, anchored: bool, today: date,
+                     after_today: bool = False) -> tuple[date, dict]:
+    """Step a recurrence from base and catch up to >= today (to > today with
+    after_today: a skipped occurrence is not offered again today).
 
     Monthly/yearly series remember their day of month in ``recurrence.day``:
     stepping from the previous (possibly clamped) date alone would drift —
@@ -363,12 +365,12 @@ def _next_occurrence(rec: dict, base: date, anchored: bool, today: date) -> tupl
         day = rec.get("day") or base.day
         rec["day"] = day
     nxt = _rec_step(base, rtype, interval, day)
-    while nxt < today:
+    while nxt < today or (after_today and nxt == today):
         nxt = _rec_step(nxt, rtype, interval, day)
     return nxt, rec
 
 
-def spawn_recurring(task: dict, active: list[dict] = ()) -> dict | None:
+def spawn_recurring(task: dict, active: list[dict] = (), skip: bool = False) -> dict | None:
     """If task has recurrence, create the next instance and return it.
     None too when `active` (the open tasks) still has the one it spawned
     before: reopening kept it (uncomplete_task), so completing again must
@@ -380,6 +382,10 @@ def spawn_recurring(task: dict, active: list[dict] = ()) -> dict | None:
     today. The next date is caught up until >= today. When the task has both
     dates, the start date moves with the due date, keeping the gap between
     them ("start 3 days before due" carries over to every instance).
+
+    ``skip`` (Skip this occurrence) catches up until > today instead: the
+    skipped occurrence is not offered again, so a backlog of missed ones
+    collapses into the next occurrence after today, not a card for today.
 
     The new start is never before today: the next instance can't have been
     available before the previous one was done (a daily task with a 2-day
@@ -394,7 +400,8 @@ def spawn_recurring(task: dict, active: list[dict] = ()) -> dict | None:
     due, start = _parse_date(task.get("due_date")), _parse_date(task.get("start_date"))
     primary = due or start
     anchored = primary is not None and rec.get("from") != "completion"
-    next_date, next_rec = _next_occurrence(rec, primary if anchored else today, anchored, today)
+    next_date, next_rec = _next_occurrence(rec, primary if anchored else today, anchored, today,
+                                           after_today=skip)
     next_rec.pop("lead", None)
     if due:
         new_due = next_date
