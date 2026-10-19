@@ -2345,6 +2345,21 @@ def test_quick_start_after_the_deadline_asks(page, wiki):
     assert task_by_title(page, "Late task")["due_date"] == _day(-1)
 
 
+def test_comment_paste_of_a_url_asks_for_its_name(page, wiki):
+    page.request.post("/api/deck", data={"title": "Link in comment"})
+    page.goto("/deck?view=open")
+    modal = open_edit(page, "Link in comment")
+    field = modal.locator("#task-edit-comment")
+    field.press_sequentially("See ")
+    page.evaluate(PASTE, "https://example.com/rfc")
+    page.locator("#url-name-input").fill("the RFC")
+    page.locator("#url-name-input").press("Enter")
+    expect(field).to_have_value("See [the RFC](https://example.com/rfc)")
+    expect(field).to_be_focused()
+    field.press("Enter")                       # sends
+    expect(modal.locator(".task-comment-list li .task-comment-text a")).to_have_text(["the RFC"])
+
+
 def test_comments_in_edit_modal(page, wiki):
     page.request.post("/api/deck", data={"title": "Plan on-call"})
     page.goto("/deck?view=open")

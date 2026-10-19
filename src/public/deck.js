@@ -3182,6 +3182,8 @@ async function addComment() {
 commentInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addComment(); }
 });
+// Pasting a URL asks for its name, as in the description (pasteUrlAsLink).
+commentInput.addEventListener('paste', e => pasteUrlAsLink(commentInput, e));
 document.getElementById('task-edit-comment-add' + sfx).addEventListener('click', addComment);
 commentList.addEventListener('click', e => {
   const btn = e.target.closest('[data-comment-action]');
@@ -3206,6 +3208,7 @@ commentList.addEventListener('click', e => {
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'task-comment-edit';
+  input.addEventListener('paste', e => pasteUrlAsLink(input, e));
   input.value = comment.text;
   input.setAttribute('aria-label', 'Edit comment');
   textEl.replaceWith(input);

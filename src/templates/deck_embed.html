@@ -51,16 +51,16 @@
     </div>
     <div class="task-field task-notes-field">
       <div class="task-notes-head">
-        <label for="task-edit-desc{{ sfx }}">Notes</label>
-        <span class="task-notes-mode" role="group" aria-label="Notes">
-          <button type="button" class="btn" data-notes-mode="edit" id="task-edit-notes-edit-btn{{ sfx }}" aria-pressed="true" title="Edit the notes (F2)">Edit</button>
-          <button type="button" class="btn" data-notes-mode="preview" id="task-edit-preview-btn{{ sfx }}" aria-pressed="false" title="The notes as the card will show them (F2)">Preview</button>
+        <label for="task-edit-desc{{ sfx }}">Description</label>
+        <span class="task-notes-mode" role="group" aria-label="Description">
+          <button type="button" class="btn" data-notes-mode="edit" id="task-edit-notes-edit-btn{{ sfx }}" aria-pressed="true" title="Edit the description (F2)">Edit</button>
+          <button type="button" class="btn" data-notes-mode="preview" id="task-edit-preview-btn{{ sfx }}" aria-pressed="false" title="The description as the card will show it (F2)">Preview</button>
         </span>
       </div>
       {#- The editor's bar, without Make task (js/mdedit.js). #}
       {% with bar_id="task-edit-format" ~ sfx, attach_id="task-edit-attach" ~ sfx, maketask=false %}{% include "partials/format_bar.html" %}{% endwith %}
       <textarea id="task-edit-desc{{ sfx }}" name="description" rows="12"></textarea>
-      <div class="task-notes-preview page-content" id="task-edit-preview{{ sfx }}" tabindex="-1" aria-label="Preview of the notes" hidden></div>
+      <div class="task-notes-preview page-content" id="task-edit-preview{{ sfx }}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
     <div class="task-field task-comments" id="task-edit-comments{{ sfx }}" hidden>
       <label for="task-edit-comment{{ sfx }}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{ sfx }}"></span></label>
