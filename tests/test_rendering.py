@@ -174,6 +174,24 @@ class TestParseFrontmatter:
         meta, _ = parse_frontmatter("---\nsources: [[index]]\n---\nBody.\n")
         assert meta["sources"] == ["[[index]]"]
 
+    def test_folded_tldr(self):
+        meta, _ = parse_frontmatter("---\ntldr: >-\n  One line\n  goes on.\n\n  Second: part.\ntags: a\n---\nBody.\n")
+        assert meta == {"tldr": "One line goes on.\nSecond: part.", "tags": ["a"]}
+
+    def test_literal_tldr_keeps_lines_and_indent(self):
+        meta, _ = parse_frontmatter("---\ntldr: |\n  - first\n    more\n  - second\n---\nBody.\n")
+        assert meta["tldr"] == "- first\n  more\n- second"
+
+    def test_plain_tldr_going_on_in_indented_lines(self):
+        meta, _ = parse_frontmatter('---\ntldr: "Starts here\n  and: ends here"\ntags: a\n---\nBody.\n')
+        assert meta == {"tldr": "Starts here and: ends here", "tags": ["a"]}
+
+    def test_tldr_on_the_last_line(self):
+        assert parse_frontmatter("---\ntldr: >\n  Last\n---\nBody.\n")[0] == {"tldr": "Last"}
+
+    def test_empty_block_tldr_omitted(self):
+        assert parse_frontmatter("---\ntldr: >\ntags: 'a'\n---\nBody.\n")[0] == {"tags": ["a"]}
+
     def test_dashes_not_at_start_not_treated_as_frontmatter(self):
         content = "# Title\n\n---\ntags: a\n---\n"
         meta, body = parse_frontmatter(content)

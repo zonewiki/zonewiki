@@ -4,6 +4,7 @@ functions on strings, no files."""
 
 import hashlib
 import re
+import textwrap
 from datetime import datetime
 
 
@@ -338,6 +339,24 @@ def _frontmatter_values(value: str) -> list[str]:
     return [v.strip().strip('"\'') for v in _FRONTMATTER_VALUE_RE.findall(value) if v.strip()]
 
 
+# A tldr over several lines: `tldr: >` (folded: the lines joined by spaces,
+# a blank line a line break), `tldr: |` (literal: the lines as written), either
+# with YAML's chomping sign or indent (`>-`, `|2`), or a plain value going on
+# in indented lines below it (folded, as YAML reads it).
+_FRONTMATTER_BLOCK_RE = re.compile(r"^([>|])[+-]?\d?[+-]?$")
+
+
+def _frontmatter_text(value: str, more: list[str]) -> str:
+    """A text value: the line's `value` and the indented (or blank) lines after it."""
+    block = _FRONTMATTER_BLOCK_RE.match(value)
+    if block and block.group(1) == '|':
+        return textwrap.dedent("\n".join(more)).strip("\n")
+    text = "\n".join(more if block else [value] + more)
+    paragraphs = (" ".join(p.split()) for p in re.split(r"\n[ \t]*\n", text))
+    text = "\n".join(p for p in paragraphs if p)
+    return text if block else text.strip('"\'').strip()
+
+
 def parse_frontmatter(content: str) -> tuple[dict, str]:
     """Parse a leading frontmatter block (--- ... ---) for `tags`, `tldr`
     and `sources`.
@@ -353,7 +372,15 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
 
     meta: dict = {}
     key = ''
-    for line in lines[1:end_idx]:
+    tldr: list[str] | None = None   # the tldr's first value and the lines after it
+    for line in lines[1:end_idx + 1]:   # the closing fence ends a tldr still open
+        if tldr is not None:
+            if line[:1] in (' ', '\t') or not line.strip():
+                tldr.append(line)
+                continue
+            if text := _frontmatter_text(tldr[0], tldr[1:]):
+                meta['tldr'] = text
+            tldr = None
         if item := _FRONTMATTER_ITEM_RE.match(line):
             if key in _FRONTMATTER_LISTS and (value := item.group(1).strip('"\'')):
                 meta.setdefault(key, []).append(value)
@@ -367,9 +394,7 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
             if values := _frontmatter_values(value):
                 meta[key] = values
         elif key == 'tldr':
-            value = value.strip('"\'')
-            if value:
-                meta['tldr'] = value
+            tldr = [value]
 
     rest = lines[end_idx + 1:]
     if rest and rest[0].strip() == '':
@@ -412,7 +437,7 @@ def page_wikilink(slug: str, label: str) -> str:
 def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
     """A scratch note's text as a `## heading` section of another page, and
     its frontmatter tags (for that page's). The note's own title goes (the
-    heading replaces it), a tldr becomes an italic first line, and its
+    heading replaces it), a tldr becomes an italic first paragraph, and its
     headings move down so the highest is a ###: they are subsections now.
     Its sources become a list at the section's end."""
     meta, body = parse_frontmatter(content)
@@ -427,7 +452,7 @@ def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
                 lines[i] = "#" * min(6, len(m.group(1)) + shift) + line[len(m.group(1)):]
     parts = [f"## {heading}"]
     if meta.get("tldr"):
-        parts.append(f"_{meta['tldr']}_")
+        parts.append("\n".join(f"_{line.strip()}_" for line in meta["tldr"].split("\n") if line.strip()))
     text = "\n".join(lines).strip("\n")
     if text:
         parts.append(text)

@@ -369,7 +369,8 @@ main {
 }
 .page-frontmatter summary:hover { color: var(--fg); }
 .page-frontmatter[open] summary { margin-bottom: .5rem; }
-.page-tldr { color: var(--muted); font-style: italic; margin: 0 0 .5rem; }
+/* pre-line: a literal (`tldr: |`) or paragraphed tldr keeps its line breaks. */
+.page-tldr { color: var(--muted); font-style: italic; margin: 0 0 .5rem; white-space: pre-line; }
 .page-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
 /* Frontmatter sources, at the article's end. */
 .page-sources {

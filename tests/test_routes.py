@@ -2425,6 +2425,7 @@ class TestAppendToPage:
                            "### Topics\n\n#### Detail\n\n```\n# not a heading\n```\n")
         assert tags == ["alex", "1on1"]
         assert mdtext.note_as_section("# Only a title\n", "H") == ("## H\n", [])
+        assert mdtext.note_as_section("---\ntldr: |\n  a\n  b\n---\n# T\n", "H") == ("## H\n\n_a_\n_b_\n", [])
         assert mdtext.note_as_section("---\nsources: https://a.example, [[b]]\n---\n# T\n\nText\n", "H") == (
             "## H\n\nText\n\nSources:\n\n- https://a.example\n- [[b]]\n", [])
 
