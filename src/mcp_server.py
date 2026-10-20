@@ -313,7 +313,11 @@ TOOLS = [
                 "slug": {"type": "string", "description": (
                     "The new page's slug or name, folders separated by '/', e.g. "
                     "'tickets/bug-1234' ('Tickets/BUG 1234' becomes that).")},
-                "content": {"type": "string", "description": "The page's full markdown."},
+                "content": {"type": "string", "description": (
+                    "The page's full markdown. It may start with frontmatter: '---', then "
+                    "'tags: a, b', 'tldr: one or two sentences' ('tldr: >' for several lines) "
+                    "and 'sources:' with one '- url', '- [label](url)' or '- [[page]]' line "
+                    "each, then '---'. Other keys are ignored.")},
                 "overwrite": {"type": "boolean", "default": False,
                               "description": "Replace an existing page's whole text."},
                 "scratch": {"type": "boolean", "default": False, "description": (
