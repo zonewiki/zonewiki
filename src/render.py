@@ -200,7 +200,7 @@ def render_md(text: str, *, show_tags: bool = True, show_tldr: bool = True,
     result = _inject_task_refs(result, task_refs, prefer)
     if deck_embeds:
         result = deck.inject_deck_embeds(result, deck_embeds)
-    return fm_html + result
+    return fm_html + result + _render_sources_html(fm_meta.get('sources', []), result)
 
 
 _HEADING_ID_RE = re.compile(r'(<h[1-6])\s+id="[^"]*"')
@@ -373,6 +373,22 @@ def _render_frontmatter_html(meta: dict, *, show_tags: bool = True, show_tldr: b
         '<details class="page-frontmatter"><summary>tldr</summary>'
         + ''.join(parts) + '</details>'
     )
+
+
+def _render_sources_html(sources: list[str], article_html: str) -> str:
+    """A page's frontmatter `sources` as a list at the article's end, each
+    one inline markdown: a URL, [label](url) or [[page]] is a link. Under a
+    ## heading, so the side TOC lists it; its id is `sources`, unless the
+    article has a heading of that name already."""
+    if not sources:
+        return ''
+    hid, n = 'sources', 0
+    while f'id="{hid}"' in article_html:
+        n += 1
+        hid = f'sources-{n}'
+    slugs = set(all_slugs())
+    items = ''.join(f'<li>{md.renderInline(process_wikilinks(s, slugs))}</li>' for s in sources)
+    return f'<section class="page-sources"><h2 id="{hid}">Sources</h2><ul>{items}</ul></section>'
 
 
 def task_href(task_id: str, tab: str, list_name: str | None,

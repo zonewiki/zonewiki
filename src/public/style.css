@@ -371,6 +371,15 @@ main {
 .page-frontmatter[open] summary { margin-bottom: .5rem; }
 .page-tldr { color: var(--muted); font-style: italic; margin: 0 0 .5rem; }
 .page-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+/* Frontmatter sources, at the article's end. */
+.page-sources {
+  margin-top: 2rem; padding-top: .75rem; border-top: 1px solid var(--border);
+  font-size: .85rem; color: var(--muted); overflow-wrap: anywhere;
+}
+.page-content .page-sources h2 {
+  font-size: .85rem; font-weight: 600; margin: 0 0 .35rem; padding: 0; border: none;
+}
+.page-sources ul { margin: 0; }
 .page-tag { text-decoration: none; }
 .page-tag:hover { background: var(--btn-primary); color: var(--btn-primary-fg); }
 

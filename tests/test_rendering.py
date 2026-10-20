@@ -157,6 +157,23 @@ class TestParseFrontmatter:
         meta, _ = parse_frontmatter("---\ntags:\ntldr:\n---\nBody.\n")
         assert meta == {}
 
+    def test_parses_sources_inline_without_splitting_links(self):
+        meta, _ = parse_frontmatter(
+            "---\nsources: https://a.example/x, [Doc, v2](https://b.example), [[people/alex|Alex, A.]]\n---\nBody.\n")
+        assert meta["sources"] == ["https://a.example/x", "[Doc, v2](https://b.example)",
+                                   "[[people/alex|Alex, A.]]"]
+
+    def test_parses_block_lists(self):
+        meta, _ = parse_frontmatter(
+            "---\ntags:\n  - work\n  - 'urgent'\nsources:\n- https://a.example/x?q=1:2\n"
+            "- [[index]]\ntldr: Short.\n- stray item\n---\nBody.\n")
+        assert meta == {"tags": ["work", "urgent"], "sources": ["https://a.example/x?q=1:2", "[[index]]"],
+                        "tldr": "Short."}
+
+    def test_single_wikilink_source_not_taken_for_a_bracketed_list(self):
+        meta, _ = parse_frontmatter("---\nsources: [[index]]\n---\nBody.\n")
+        assert meta["sources"] == ["[[index]]"]
+
     def test_dashes_not_at_start_not_treated_as_frontmatter(self):
         content = "# Title\n\n---\ntags: a\n---\n"
         meta, body = parse_frontmatter(content)
@@ -384,6 +401,31 @@ class TestRenderMd:
         assert '<p class="page-tldr">Quick summary.</p>' in result
         assert 'class="task-tag page-tag"' in result
         assert "<p>Body.</p>" in result
+
+    def test_sources_listed_at_the_end_as_links(self, wiki_dir):
+        write_page(wiki_dir, "index", "# Index\n")
+        text = ("---\nsources:\n  - https://a.example/x\n  - '[Doc](https://b.example)'\n"
+                "  - '[[index]]'\n  - <b>raw</b>\n---\n\n# Title\n\nBody.\n")
+        result = render_md(text, show_tags=False, show_tldr=False)
+        assert result.index("<p>Body.</p>") < result.index('<section class="page-sources">')
+        sources = result[result.index('<section class="page-sources">'):]
+        assert '<h2 id="sources">Sources</h2>' in sources
+        assert '>https://a.example/x</a>' in sources
+        assert 'href="https://b.example"' in sources and '>Doc</a>' in sources
+        assert 'href="/page/index" class="wikilink"' in sources
+        assert "<b>raw</b>" in sources  # inline HTML, as in the body
+
+    def test_sources_heading_id_kept_apart_from_the_pages_own(self, wiki_dir):
+        result = render_md("---\nsources: https://a.example\n---\n# T\n\n## Sources\n\nMine.\n")
+        assert '<h2 id="sources-1">Sources</h2>' in result
+
+    def test_sources_in_the_side_toc(self, wiki_dir):
+        from views import rail_toc_items
+        toc = rail_toc_items(render_md("---\nsources: https://a.example\n---\n# T\n\n## A\n\n## B\n"))
+        assert toc.endswith('<li><a href="#sources">Sources</a></li>\n</ul>')
+
+    def test_no_sources_no_list(self, wiki_dir):
+        assert "page-sources" not in render_md("---\ntags: a\n---\n# T\n\nBody.\n")
 
     def test_no_frontmatter_no_meta_block(self, wiki_dir):
         result = render_md("# Title\n\nBody.\n")

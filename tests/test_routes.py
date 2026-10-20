@@ -2425,6 +2425,8 @@ class TestAppendToPage:
                            "### Topics\n\n#### Detail\n\n```\n# not a heading\n```\n")
         assert tags == ["alex", "1on1"]
         assert mdtext.note_as_section("# Only a title\n", "H") == ("## H\n", [])
+        assert mdtext.note_as_section("---\nsources: https://a.example, [[b]]\n---\n# T\n\nText\n", "H") == (
+            "## H\n\nText\n\nSources:\n\n- https://a.example\n- [[b]]\n", [])
 
     def test_add_frontmatter_tags(self):
         add = mdtext.add_frontmatter_tags
@@ -2432,6 +2434,7 @@ class TestAppendToPage:
         assert add("---\ntags: [A, b]\n---\n# P\n", ["a", "c"]) == "---\ntags: A, b, c\n---\n# P\n"
         assert add("---\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: c\ntldr: x\n---\n# P\n"
         assert add("# P\n", []) == "# P\n"
+        assert add("---\ntags:\n  - a\n  - b\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: a, b, c\ntldr: x\n---\n# P\n"
 
     def test_append_moves_note_into_the_page(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "---\ntags: sync\n---\n# Alex 1:1\n\nnotes\n\n## Next\n\nsteps\n")

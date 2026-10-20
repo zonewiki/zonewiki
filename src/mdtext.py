@@ -324,8 +324,23 @@ def _body_start(lines: list[str]) -> int:
     return 0 if end is None else end + 1
 
 
+# The frontmatter keys holding a list: `a, b`, `[a, b]`, or one `- a` line each.
+_FRONTMATTER_LISTS = ('tags', 'sources')
+_FRONTMATTER_ITEM_RE = re.compile(r"^\s*-\s+(.*?)\s*$")
+# One value of `a, b`: a comma inside [...] or (...) doesn't split it, so a
+# source's [label, with comma](url) or [[page|a, b]] stays whole.
+_FRONTMATTER_VALUE_RE = re.compile(r"(?:\[[^\]]*\]|\([^)]*\)|[^,])+")
+
+
+def _frontmatter_values(value: str) -> list[str]:
+    if value.startswith('[') and value.endswith(']') and not value.startswith('[['):
+        value = value[1:-1]
+    return [v.strip().strip('"\'') for v in _FRONTMATTER_VALUE_RE.findall(value) if v.strip()]
+
+
 def parse_frontmatter(content: str) -> tuple[dict, str]:
-    """Parse a leading frontmatter block (--- ... ---) for `tags` and `tldr`.
+    """Parse a leading frontmatter block (--- ... ---) for `tags`, `tldr`
+    and `sources`.
 
     Returns (metadata, content_with_frontmatter_removed). Absent or malformed
     frontmatter (no closing fence) yields an empty metadata dict and the
@@ -337,17 +352,20 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
         return {}, content
 
     meta: dict = {}
+    key = ''
     for line in lines[1:end_idx]:
+        if item := _FRONTMATTER_ITEM_RE.match(line):
+            if key in _FRONTMATTER_LISTS and (value := item.group(1).strip('"\'')):
+                meta.setdefault(key, []).append(value)
+            continue
         if ':' not in line:
             continue
         key, _, value = line.partition(':')
         key = key.strip().lower()
         value = value.strip()
-        if key == 'tags':
-            value = value.strip('[]')
-            tags = [t.strip().strip('"\'') for t in value.split(',') if t.strip()]
-            if tags:
-                meta['tags'] = tags
+        if key in _FRONTMATTER_LISTS:
+            if values := _frontmatter_values(value):
+                meta[key] = values
         elif key == 'tldr':
             value = value.strip('"\'')
             if value:
@@ -395,7 +413,8 @@ def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
     """A scratch note's text as a `## heading` section of another page, and
     its frontmatter tags (for that page's). The note's own title goes (the
     heading replaces it), a tldr becomes an italic first line, and its
-    headings move down so the highest is a ###: they are subsections now."""
+    headings move down so the highest is a ###: they are subsections now.
+    Its sources become a list at the section's end."""
     meta, body = parse_frontmatter(content)
     lines = strip_h1(body).strip("\n").split("\n")
     levels = [len(m.group(1)) for _, line, fenced in iter_fenced_lines(lines)
@@ -412,6 +431,8 @@ def note_as_section(content: str, heading: str) -> tuple[str, list[str]]:
     text = "\n".join(lines).strip("\n")
     if text:
         parts.append(text)
+    if meta.get("sources"):
+        parts.append("Sources:\n\n" + "\n".join(f"- {s}" for s in meta["sources"]))
     return "\n\n".join(parts) + "\n", meta.get("tags", [])
 
 
@@ -429,7 +450,10 @@ def add_frontmatter_tags(content: str, tags: list[str]) -> str:
         return f"---\n{line}\n---\n{content}"
     for i in range(1, end):
         if lines[i].partition(":")[0].strip().lower() == "tags":
-            lines[i] = line
+            j = i + 1   # a block list's `- tag` lines: the new line has them
+            while j < end and _FRONTMATTER_ITEM_RE.match(lines[j]):
+                j += 1
+            lines[i:j] = [line]
             break
     else:
         lines.insert(1, line)
