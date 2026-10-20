@@ -397,9 +397,12 @@ main {
 /* When open, hand the row's bottom margin over to the revealed text so the
    text sits snug under the label instead of a full 1.5rem gap below it. */
 .tldr-toggle:checked ~ .page-meta-wrapper { margin-bottom: .35rem; }
+/* Top and bottom only: from 1320px the side columns centre the text with
+   margin-inline: auto (Side columns), and this rule is the more specific. */
 .tldr-toggle:checked ~ .page-tldr {
   display: block;
-  margin: 0 0 1.5rem;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
   font-size: .95rem;
 }
 

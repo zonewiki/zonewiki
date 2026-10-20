@@ -149,6 +149,17 @@ def test_tldr_toggle_reveals_text_below_tags(page, wiki):
     assert tldr.bounding_box()["y"] > after["y"] + after["height"] - 1, "text goes below the row"
 
 
+def test_tldr_text_lines_up_with_the_row_beside_side_columns(new_page, wiki):
+    # From 1320px the page column is wider than the text, which is centred in it.
+    wiki.write("stress", STRESS)
+    pg = new_page(viewport={"width": 1440, "height": 900})
+    pg.goto("/page/stress")
+    pg.locator("label.tldr-label").click()
+    row = pg.locator(".page-meta-wrapper").bounding_box()
+    tldr = pg.locator(".page-tldr").bounding_box()
+    assert abs(tldr["x"] - row["x"]) < 1 and abs(tldr["width"] - row["width"]) < 1
+
+
 def test_screenshots(new_page, wiki):
     SCREENSHOT_DIR.mkdir(exist_ok=True)
     shots = []
