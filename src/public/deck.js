@@ -8,7 +8,7 @@ import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
 import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
-import { keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in deck-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
@@ -1257,6 +1257,7 @@ function openTaskMenu(id, anchor, at) {
   const items = task.completed_at ? [
     ['edit', 'Edit…'],
     ['reopen', 'Reopen'],
+    ['copylink', 'Copy link'],
     ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ] : [
@@ -1267,6 +1268,7 @@ function openTaskMenu(id, anchor, at) {
     task.start_date && ['unplan', 'Unplan'],
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['wontdo', "Won't do"],
+    ['copylink', 'Copy link'],
     ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
@@ -1347,7 +1349,21 @@ function runTaskAction(task, action, anchor) {
       break;
     case 'delete':   deleteWithUndo([id]); break;
     case 'select':   enterSelectMode(id); break;
+    case 'copylink':
+      copyText(location.origin + taskHref(task)).then(ok => showNotice(ok ? 'Link copied' : 'Could not copy the link'));
+      break;
   }
+}
+
+// The link that opens this task in the deck (render.task_link): an open
+// one on Open, a done one on Completed (its archive's year when earlier),
+// in its list when it has one.
+function taskHref(task) {
+  const params = new URLSearchParams({ task: task.id, view: task.completed_at ? 'completed' : 'open' });
+  const list = taskList(task);
+  if (list) params.set('list', list);
+  if (task.completed_at && completedYear) params.set('year', completedYear);
+  return `/deck?${params}`;
 }
 
 async function postReorder(body) {

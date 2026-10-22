@@ -1700,6 +1700,31 @@ def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
     assert [t["title"] for t in page.request.get("/api/deck").json()] == ["Gamma"]
 
 
+def test_copy_link_to_a_task(page, wiki):
+    # ⋯ → Copy link puts the task's /deck?task= link in the clipboard (a
+    # done one's on Completed); opening it selects the task.
+    tid = page.request.post("/api/deck", data={"title": "Call Bob"}).json()["id"]
+    done = page.request.post("/api/deck", data={"title": "Old one"}).json()["id"]
+    page.request.put(f"/api/deck/{done}", data={"completed": True})
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    page.goto("/deck?view=open")
+    card(page, "Call Bob").locator(".task-menu-btn").click()
+    page.locator(".task-menu").get_by_role("menuitem", name="Copy link").click()
+    expect(page.locator(".task-undo-toast")).to_contain_text("Link copied")
+    base = page.url.split("/deck")[0]
+    link = page.evaluate("navigator.clipboard.readText()")
+    assert link == f"{base}/deck?task={tid}&view=open"
+    page.goto("/")
+    page.goto(link)
+    expect(card(page, "Call Bob")).to_have_class(re.compile(r"\btask-selected\b"))
+
+    open_tab(page, "completed")
+    card(page, "Old one").locator(".task-menu-btn").click()
+    page.locator(".task-menu").get_by_role("menuitem", name="Copy link").click()
+    expect(page.locator(".task-undo-toast")).to_contain_text("Link copied")
+    assert page.evaluate("navigator.clipboard.readText()") == f"{base}/deck?task={done}&view=completed"
+
+
 def test_keep_task_goes_back_to_open_with_undo(page, wiki):
     # Ticking off a keep task (a staple on a shopping list) takes it off
     # Focus and back to Open, shows when it was last done, and can be undone.
