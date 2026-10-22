@@ -47,6 +47,53 @@ function taskAcMatches(query, onLoad) {
     }));
 }
 
+// Emoji for `:name` completion: GitHub's gemoji table (vendored, MIT),
+// fetched when first needed; `onLoad` runs when a fetch it started is back.
+let emojiList = null, emojiLoading = false;
+
+function loadEmoji(onLoad) {
+  if (emojiList || emojiLoading) return;
+  emojiLoading = true;
+  fetch('/public/vendor/gemoji/emoji.json').then(r => r.json()).then(list => {
+    emojiList = list;
+  }).catch(() => {}).finally(() => { emojiLoading = false; onLoad(); });
+}
+
+// The emoji a shortcode names exactly (`+1`, `tada`), once the table is in.
+function emojiNamed(name) {
+  const n = name.toLowerCase();
+  return emojiList?.find(e => e.aliases.includes(n))?.emoji || null;
+}
+
+// Best first: the exact name, one that starts with the query, then one
+// containing it, then a tag (`:happy` finds 😀) or the description.
+function emojiMatches(query, onLoad) {
+  if (!emojiList) { loadEmoji(onLoad); return []; }
+  const q = query.toLowerCase();
+  const rank = e =>
+    e.aliases.includes(q) ? 0
+    : e.aliases.some(a => a.startsWith(q)) ? 1
+    : e.aliases.some(a => a.includes(q)) ? 2
+    : e.tags.some(t => t.startsWith(q)) || e.description.startsWith(q) ? 3
+    : e.description.includes(q) ? 4 : 5;
+  return emojiList
+    .map((e, i) => ({ e, r: rank(e), i }))
+    .filter(x => x.r < 5)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .slice(0, 8)
+    .map(({ e }) => {
+      const name = e.aliases.find(a => a.startsWith(q)) || e.aliases.find(a => a.includes(q)) || e.aliases[0];
+      return { value: e.emoji, label: `${e.emoji}  ${name}`, meta: e.description };
+    });
+}
+
+// Inside code (a fence above the caret, or an open ` on its line): no emoji.
+function inCode(before) {
+  const fences = (before.match(/^ {0,3}(```|~~~)/gm) || []).length;
+  const line = before.slice(before.lastIndexOf('\n') + 1);
+  return fences % 2 === 1 || (line.match(/`/g) || []).length % 2 === 1;
+}
+
 // Measure approximate caret position inside textarea using a mirror div
 function getCaretCoords(el) {
   const computed = window.getComputedStyle(el);
@@ -76,6 +123,9 @@ function getCaretCoords(el) {
 // Attach link completion to a textarea or input. Keys: ↑/↓ move, Enter or
 // Tab insert (the event's default is prevented, so later handlers can skip
 // it), Esc closes. Returns { update }, for text inserted by script.
+// `:name` (two letters or more, after a space or at the start) offers
+// emoji, and a whole `:name:` turns into its emoji: the file holds the
+// character itself, not the shortcode.
 export function linkAutocomplete(ta, { tasks = false } = {}) {
   loadWikiPages();
   let el = null, index = 0, mode = 'wikilink';
@@ -88,18 +138,38 @@ export function linkAutocomplete(ta, { tasks = false } = {}) {
     // [label]( then what looks like a page path (no space, no closing paren)
     const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);
     if (m && (m[1] === '' || /^[/a-z0-9_-]/i.test(m[1]))) return ['mdlink', m[1].replace(/^\/page\//, '')];
+    // Not after a letter or digit, so "Note:", 10:30 and http: don't open it.
+    const e = before.match(/(?:^|[\s([{"'*_~>])(:([a-z0-9_+-]{2,}))$/i);
+    if (e && !inCode(before)) return ['emoji', e[2]];
     return [null];
   }
 
   function update(onlyIfFocused = false) {
     if (onlyIfFocused && document.activeElement !== ta) return;
+    if (completeShortcode()) return;
     const [kind, q] = context();
     // Sharing mode: no list of pages or tasks before two letters are typed.
-    if (!kind || (sharingOn() && q.trim().length < 2)) { hide(); return; }
+    if (!kind || (kind !== 'emoji' && sharingOn() && q.trim().length < 2)) { hide(); return; }
     mode = kind;
     const matches = kind === 'task' ? taskAcMatches(q, () => update(true))
+      : kind === 'emoji' ? emojiMatches(q, () => update(true))
       : wikiPages.filter(p => p.includes(q.toLowerCase())).slice(0, 8);
     if (matches.length) show(matches); else hide();
+  }
+
+  // `:tada:` typed out (the closing colon just now): replace it with 🎉.
+  function completeShortcode() {
+    const pos = ta.selectionStart;
+    if (pos !== ta.selectionEnd || ta.value[pos - 1] !== ':') return false;
+    const before = ta.value.slice(0, pos);
+    const m = before.match(/(?:^|[\s([{"'*_~>])(:([a-z0-9_+-]+):)$/i);
+    if (!m || inCode(before)) return false;
+    const emoji = emojiNamed(m[2]);
+    if (!emoji) return false;
+    ta.setSelectionRange(pos - m[1].length, pos);
+    document.execCommand('insertText', false, emoji);
+    hide();
+    return true;
   }
 
   // An item is a page slug, or { value, label, meta } (tasks).
@@ -165,6 +235,9 @@ export function linkAutocomplete(ta, { tasks = false } = {}) {
     if (mode === 'mdlink') {
       ta.setSelectionRange(ta.value.lastIndexOf('(', pos - 1) + 1, pos);
       document.execCommand('insertText', false, '/page/' + value);
+    } else if (mode === 'emoji') {
+      ta.setSelectionRange(ta.value.lastIndexOf(':', pos - 1), pos);
+      document.execCommand('insertText', false, value);
     } else {
       ta.setSelectionRange(ta.value.lastIndexOf('[[', pos), pos);
       document.execCommand('insertText', false, mode === 'task' ? `[[task:${value}]]` : `[[${value}]]`);

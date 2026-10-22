@@ -62,7 +62,7 @@ editor; a change on disk shows up immediately.
 - Callouts (`> [!WARNING]`), sortable tables, image sizing,
   frontmatter tags, a one-line summary and sources.
 - An editor with live preview and auto-save, a formatting bar, completion
-  for links and pages, snippets (`/date`), list continuation, and editing a
+  for links, pages and emoji (`:tada` → 🎉), snippets (`/date`), list continuation, and editing a
   single section from its heading. Paste or drop files and images to upload
   them.
 - Renaming or moving a page updates every link to it, on other pages and in
@@ -398,4 +398,6 @@ change gets in.
 ## License
 
 [AGPL-3.0-or-later](LICENSE). The vendored [highlight.js](https://highlightjs.org) in
-`src/public/vendor/highlight/` is under its own BSD-3-Clause license.
+`src/public/vendor/highlight/` is under its own BSD-3-Clause license; the
+emoji names in `src/public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji))
+under MIT.

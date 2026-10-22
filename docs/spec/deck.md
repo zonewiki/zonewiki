@@ -129,7 +129,7 @@ The deck has its own tones, set on `.tasks-app` (so a task card elsewhere keeps 
 
 ### Title links
 
-A title can carry links: `[[wikilinks]]`, `[label](url)` and bare URLs show as links on the card (`linkifyTitle`; one to another site opens in a new tab, `class="task-link"`; a link to anything but the web, mail or the wiki, e.g. `javascript:`, stays text). **Pasting a URL into the title** asks for its name, as in the notes and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label. `[[` and `[text](` complete pages there too. Where a title is plain text (the ⋯ menu, toasts, the delete and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.plain_task_title`), links are reduced to their labels.
+A title can carry links: `[[wikilinks]]`, `[label](url)` and bare URLs show as links on the card (`linkifyTitle`; one to another site opens in a new tab, `class="task-link"`; a link to anything but the web, mail or the wiki, e.g. `javascript:`, stays text). **Pasting a URL into the title** asks for its name, as in the notes and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label. `[[` and `[text](` complete pages there too, and `:name` emoji (see Emoji in `docs/spec/editor.md`). Where a title is plain text (the ⋯ menu, toasts, the delete and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.plain_task_title`), links are reduced to their labels.
 
 ### Notes
 

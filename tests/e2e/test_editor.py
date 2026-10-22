@@ -286,3 +286,49 @@ def test_task_notes_complete_page_links(page, wiki):
     page.keyboard.press("Tab")
     expect(notes).to_have_value("see [[target-page]] or [docs](/page/tangent")
     expect(page.locator("#task-edit-modal")).to_be_visible()
+
+
+def test_emoji_completion_in_the_editor(page, wiki):
+    # `:name` offers emoji (the exact name first), picking one puts the
+    # character itself in the file; a typed-out `:name:` turns into its
+    # emoji. Not after a letter or digit (Note:, 10:30), nor in code.
+    wiki.write("notes", "# Notes\n\n")
+    page.goto("/edit/notes")
+    textarea = page.locator("#editor-textarea")
+    textarea.click()
+    page.keyboard.press("Control+End")
+    items = page.locator(".wikilink-ac-item")
+    page.keyboard.type("Done :smile")
+    expect(items.first).to_have_text("😄  smile" + "grinning face with smiling eyes")
+    page.keyboard.press("Enter")
+    expect(textarea).to_have_value("# Notes\n\nDone 😄")
+    expect(items).to_have_count(0)
+    page.keyboard.type(" :happ")              # a tag finds it too
+    expect(items.first).to_contain_text("😀")
+    page.keyboard.press("Escape")
+    page.keyboard.type(" :tada:")             # typed out: replaced at once
+    expect(textarea).to_have_value("# Notes\n\nDone 😄 :happ 🎉")
+    page.keyboard.type(" :nosuchemoji:")      # unknown names stay as typed
+    page.keyboard.type(" Note:ab 10:30 `x :tada:`")
+    expect(items).to_have_count(0)
+    page.keyboard.type("\n```\n:tada:\n```\n:+1:")
+    expect(textarea).to_have_value(
+        "# Notes\n\nDone 😄 :happ 🎉 :nosuchemoji: Note:ab 10:30 `x :tada:`\n```\n:tada:\n```\n👍")
+
+
+def test_emoji_completion_in_task_title(page, wiki):
+    # The task title (and Description) get the same completion.
+    page.goto("/deck?view=open")
+    page.locator("#task-add-btn").click()
+    title = page.locator("#task-edit-title")
+    title.click()
+    page.keyboard.type("Ship it :rocke")
+    expect(page.locator("#task-edit-modal .wikilink-ac-item").first).to_contain_text("🚀")
+    page.keyboard.press("Enter")           # picks the emoji, doesn't save yet
+    expect(title).to_have_value("Ship it 🚀")
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    page.locator("#task-edit-desc").click()
+    page.keyboard.type("yay :tada:")
+    expect(page.locator("#task-edit-desc")).to_have_value("yay 🎉")
+    page.keyboard.press("Control+Enter")
+    expect(page.locator(".task-item .task-title", has_text="Ship it 🚀")).to_be_visible()

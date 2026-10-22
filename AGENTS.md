@@ -114,7 +114,8 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
         ├── favicon.svg     # Browser tab icon
         ├── icon.svg        # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
         ├── manifest.json   # Web app manifest (Add to home screen)
-        └── vendor/highlight/  # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
+        ├── vendor/highlight/  # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
+        └── vendor/gemoji/     # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `LEAF_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
@@ -186,7 +187,7 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
 `src/requirements.txt`: flask, jinja2, markdown-it-py, mdit-py-plugins, waitress. Nothing else at runtime; add a dependency only when it clearly pays for itself. **Every package is pinned to an exact version, the transitive ones too** (a build installs what was tested, not the newest release; `tests/test_semantic.py` checks it): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and pin what pip then resolves.
 
 - **One process.** `python src/server.py` serves with waitress (8 threads, at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckstore._LOCK`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several worker processes (gunicorn `-w 4` and the like) would lose task writes.
-- `highlight.js` 11.9.0 is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's.
+- `highlight.js` 11.9.0 is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `src/public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
 - Optional: onnxruntime, Hugging Face's `tokenizers` and NumPy for semantic search (`embed.OnnxEmbedder` runs the one model itself; fastembed and its 26 packages were dropped), installed by the `Containerfile` only when `LEAF_SEMANTIC_SEARCH` is on (`embed_setup.py`, which also downloads the model, pinned to a revision and SHA-256 hashes), at the exact versions `src/requirements-embed.txt` pins, with `--no-deps` (five packages; not `packaging`, which Ubuntu's pip brings and pip can't replace); `embed.py` works without NumPy. Locally: `pip install --no-deps -r src/requirements-embed.txt` (and `packaging`).
 
 ---
