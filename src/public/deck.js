@@ -1115,6 +1115,8 @@ function beginComplete(id, li) {
   if (pendingCompletions.has(id)) clearTimeout(pendingCompletions.get(id));
   const tid = setTimeout(() => {
     pendingCompletions.delete(id);
+    // A re-render since the tick replaced the card: fade out the current one.
+    li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (li) li.classList.add('task-completing-out');
     setTimeout(async () => {
       const task = tasks.find(t => t.id === id);
@@ -2206,8 +2208,12 @@ function render() {
   }
 
   const taskHTML = (task, draggable = !!SECTIONS[activeView], extraClass = '') => {
-    const checked = task.completed_at ? 'checked' : '';
-    const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '');
+    // A task ticked but not yet done stays ticked when another completion
+    // re-renders the list.
+    const pending = pendingCompletions.has(task.id);
+    const checked = task.completed_at || pending ? 'checked' : '';
+    const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '') +
+      (pending ? ' task-completing' : '');
     const dueClass = dueDateClass(task);
     const urgClass = urgencyClass(task);
     // A separate list's tag first and marked (icon, tint, tooltip), as in

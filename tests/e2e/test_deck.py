@@ -1672,6 +1672,34 @@ def test_completed_matches_survive_the_load_race(page, wiki):
     expect(page.locator("#task-completed-link")).to_have_text("✓ 1 match in Completed →")
 
 
+def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
+    # Regression: ticking several tasks in a row, the first one's completion
+    # re-rendered the list and the others lost their tick (yet still completed).
+    for title in ("Alpha", "Beta", "Gamma"):
+        page.request.post("/api/deck", data={"title": title})
+    page.clock.install()
+    page.goto("/deck?view=open")
+    card(page, "Alpha").locator("input[type=checkbox]").check()
+    page.clock.run_for(2000)
+    card(page, "Beta").locator("input[type=checkbox]").check()
+    card(page, "Gamma").locator("input[type=checkbox]").check()
+    page.clock.run_for(3500)   # Alpha's grace period + fade-out
+    expect(card(page, "Alpha")).to_have_count(0)
+    for title in ("Beta", "Gamma"):
+        expect(card(page, title).locator("input[type=checkbox]")).to_be_checked()
+        expect(card(page, title)).to_have_class(re.compile(r"\btask-completing\b"))
+    # Unticking one still cancels it; the other goes as planned.
+    card(page, "Gamma").locator("input[type=checkbox]").uncheck()
+    page.clock.run_for(3000)
+    expect(card(page, "Beta")).to_have_count(0)
+    expect(card(page, "Gamma")).to_be_visible()
+    for _ in range(50):
+        if [t["title"] for t in page.request.get("/api/deck").json()] == ["Gamma"]:
+            break
+        page.wait_for_timeout(100)
+    assert [t["title"] for t in page.request.get("/api/deck").json()] == ["Gamma"]
+
+
 def test_keep_task_goes_back_to_open_with_undo(page, wiki):
     # Ticking off a keep task (a staple on a shopping list) takes it off
     # Focus and back to Open, shows when it was last done, and can be undone.
