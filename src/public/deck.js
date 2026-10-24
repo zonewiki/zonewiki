@@ -2551,7 +2551,7 @@ function render() {
   // A right-click on a selected card keeps the selection for its menu.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('mousedown', e => {
-      if (selectMode || e.target.closest('input, button, a')) return;   // selecting: the click toggles
+      if (selectMode || e.target.closest('input, button, a, .task-checkbox')) return;   // selecting: the click toggles
       const id = el.dataset.id;
       if (e.button !== 0 && selectedIds.has(id)) return;
       if (e.shiftKey && selectedId) { e.preventDefault(); extendSelection(id); }

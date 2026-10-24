@@ -2730,6 +2730,12 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   .task-menu-btn, .task-expand-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
   .tasks-app.deck-compact .task-actions { min-width: 5rem; }
   .task-checkbox input { width: 1.35rem; height: 1.35rem; }
+  /* A finger-sized target: the label reaches into the card's padding and
+     the gap before the title, so a tap just beside the box ticks it rather
+     than selecting (and, compact, expanding) the card under it. */
+  .tasks-app .task-item .task-checkbox {
+    padding: .3rem .4rem .3rem .65rem; margin: -.3rem -.4rem -.3rem -.65rem; min-height: calc(var(--line) + .6rem);
+  }
   .task-clickable-date { padding: .25rem .35rem; }
   .tasks-empty .btn {
     display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .75rem; font-size: .8rem;

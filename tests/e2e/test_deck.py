@@ -1725,6 +1725,19 @@ def test_copy_link_to_a_task(page, wiki):
     assert page.evaluate("navigator.clipboard.readText()") == f"{base}/deck?task={done}&view=completed"
 
 
+def test_click_on_checkbox_label_ticks_without_selecting(page, wiki):
+    # A press on the checkbox's label (on touch it reaches beside the box)
+    # ticks it like one on the box: it used to select the card as well.
+    page.request.post("/api/deck", data={"title": "Water plants"})
+    page.goto("/deck?view=open")
+    c = card(page, "Water plants")
+    label = c.locator(".task-checkbox")
+    label.dispatch_event("mousedown", {"button": 0})
+    label.dispatch_event("click")
+    expect(c).to_contain_class("task-completing")
+    expect(c).not_to_contain_class("task-selected")
+
+
 def test_keep_task_goes_back_to_open_with_undo(page, wiki):
     # Ticking off a keep task (a staple on a shopping list) takes it off
     # Focus and back to Open, shows when it was last done, and can be undone.

@@ -78,6 +78,31 @@ def test_tapping_checkbox_completes_not_edits(phone):
     expect(card(phone, "Water plants")).to_contain_class("task-completing")
 
 
+def test_checkbox_target_reaches_beside_the_box(phone):
+    # The box is 1.35rem; a finger landing just beside it (the card's
+    # padding, the gap before the title) used to hit the card, which
+    # selected it (compact: expanded it, moving the line), so the tick took
+    # a second tap. (Chromium's emulated tap snaps to the box anyway, so
+    # what is under those points is checked, not a tap.)
+    c = card(phone, "Water plants")
+    box = c.locator("input[type=checkbox]").bounding_box()
+    card_box, title = c.bounding_box(), c.locator(".task-content").bounding_box()
+    mid_x, mid_y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    # Left: past the card's border (3px on a task planned for now).
+    points = [(card_box["x"] + 5, mid_y), (title["x"] - 2, mid_y),
+              (mid_x, box["y"] - 4), (mid_x, box["y"] + box["height"] + 4)]
+    for x, y in points:
+        assert phone.evaluate("([x, y]) => !!document.elementFromPoint(x, y).closest('.task-checkbox')",
+                              [x, y]), (x, y)
+    # The box stays centred on the line: the bigger target moves nothing.
+    line = c.locator(".task-content").bounding_box()
+    assert abs(mid_y - (line["y"] + line["height"] / 2)) < 1.5
+    phone.touchscreen.tap(card_box["x"] + 5, mid_y)
+    expect(c).to_contain_class("task-completing")
+    expect(c).not_to_contain_class("task-selected")
+    expect(phone.locator("#task-edit-modal")).to_be_hidden()
+
+
 def test_hover_icons_hidden_menu_button_is_a_real_target(phone):
     expect(card(phone, "Weekly review").locator(".task-wontdo-btn")).to_have_count(0)
     expect(card(phone, "Weekly review").locator(".task-skip-btn")).to_be_hidden()
