@@ -123,7 +123,7 @@ func TestGolden(t *testing.T) {
 		check("promoted_slug", text, promotedSlug("Folder X", text, "2026-01-02"), c["promoted_slug"])
 		check("page_wikilink", text, pageWikilink("s", text), c["page_wikilink"])
 		check("is_scratch", text, isScratch(text), c["is_scratch"])
-		check("clean_tags", text, cleanTags([]any{text, "#" + text}), c["clean_tags"])
+		check("clean_tags", text, cleanTags([]string{text, "#" + text}), c["clean_tags"])
 		check("clean_list", text, nilIfEmpty(cleanList(text)), c["clean_list"])
 		check("parse_date_word", text, nilIfEmpty(parseDateWord(text, day)), c["parse_date_word"])
 		params := [][]string{}

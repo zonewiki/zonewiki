@@ -318,7 +318,7 @@ class TestFolders:
     def test_list_pages_under(self, client, tree):
         text, _ = call(client, "list_pages", under="tickets")
         assert text.splitlines()[0].startswith("Pages under tickets/, most recently edited first (all 2)")
-        assert call(client, "list_pages", under="nope")[0] == "No pages under 'nope'."
+        assert call(client, "list_pages", under="nope")[0] == 'No pages under "nope".'
 
     def test_bad_type(self, client, tree):
         assert call(client, "search_wiki", query="git", under=3)[1] is True
@@ -770,7 +770,7 @@ class TestReadSection:
 
     def test_missing_heading_lists_headings(self, client, long):
         text, err = call(client, "read_page", slug="long", heading="Install")
-        assert err and "'Setup', 'Detail', 'Usage'" in text
+        assert err and '"Setup", "Detail", "Usage"' in text
 
 
 class TestListTags:
@@ -912,7 +912,7 @@ class TestGrepWiki:
         assert call(client, "grep_wiki", pattern="x+")[0].endswith("x" * 300 + " …")
 
     def test_no_match_and_bad_pattern(self, client, notes):
-        assert call(client, "grep_wiki", pattern="zebra")[0] == "No line matches 'zebra'."
+        assert call(client, "grep_wiki", pattern="zebra")[0] == 'No line matches "zebra".'
         text, err = call(client, "grep_wiki", pattern="(unclosed")
         assert err and text.startswith("grep_wiki: ")
         assert call(client, "grep_wiki", pattern=" ")[1]
@@ -926,7 +926,7 @@ class TestGrepWiki:
         monkeypatch.setattr(settings, "GIT_ENABLED", False)
         text = call(client, "grep_wiki", pattern="bug-12345", ignore_case=True)[0]
         assert text.startswith("2 matching lines on 2 pages; git isn't installed")
-        assert call(client, "grep_wiki", pattern=r"BUG-\d+")[0] == r"No line matches 'BUG-\\d+'."
+        assert call(client, "grep_wiki", pattern=r"BUG-\d+")[0] == r'No line matches "BUG-\\d+".'
 
 
 class TestTaskComments:
@@ -1043,7 +1043,7 @@ class TestEditPage:
 
     def test_unknown_page_and_no_op(self, client, pages):
         text, err = call(client, "edit_page", slug="nope", old_string="a", new_string="b")
-        assert err and "No page 'nope'" in text
+        assert err and 'No page "nope"' in text
         text, err = call(client, "edit_page", slug="golf", old_string="Golf", new_string="Golf")
         assert err and "nothing to change" in text
 
@@ -1080,7 +1080,7 @@ class TestAppendToPage:
 
     def test_missing_heading_lists_the_headings(self, client, pages):
         text, err = call(client, "append_to_page", slug="git-remote", content="x", under_heading="Nope")
-        assert err and "'Setup', 'Pushing'" in text
+        assert err and '"Setup", "Pushing"' in text
 
 
 SCRATCH_NOTE = "2026-10-15_09-30-00_alex-prep"
@@ -1175,7 +1175,7 @@ class TestScratchNotes:
         for args, words in [({"slug": "golf", "name": "x"}, "not a scratch note"),
                             ({"slug": SCRATCH_NOTE}, "either name"),
                             ({"slug": SCRATCH_NOTE, "name": "x", "page": "golf"}, "either name"),
-                            ({"slug": SCRATCH_NOTE, "page": "nowhere"}, "No page 'nowhere'"),
+                            ({"slug": SCRATCH_NOTE, "page": "nowhere"}, 'No page "nowhere"'),
                             ({"slug": SCRATCH_NOTE, "name": "golf"}, "already exists"),
                             ({"slug": SCRATCH_NOTE, "name": "2026-01-01_10-00-00_x"}, "still be a scratch note"),
                             ({"slug": SCRATCH_NOTE, "page": "golf", "heading": "Werkstatt"}, "already has a section")]:
@@ -1311,7 +1311,7 @@ class TestReplaceInPages:
         assert "the first 1 of 4 changed lines shown" in text and "tickets/b" not in text
 
     def test_no_match_and_errors(self, client, notes):
-        assert call(client, "replace_in_pages", find="zzz", replace="y")[0] == "Nothing matches 'zzz' outside code."
+        assert call(client, "replace_in_pages", find="zzz", replace="y")[0] == 'Nothing matches "zzz" outside code.'
         assert call(client, "replace_in_pages", find="a\nb", replace="y")[1]
         assert call(client, "replace_in_pages", find="(", replace="y", regex=True)[1]
         text, err = call(client, "replace_in_pages", find="BUG-(\\d+)", replace=r"\2", regex=True)
@@ -1367,7 +1367,7 @@ class TestWritesCommit:
         assert subjects()[:9] == [
             "Delete old-notes/mcp (MCP)",
             "Move notes/ to old-notes/ (MCP)",
-            "Replace '1st' on notes/mcp: spell out (MCP)",
+            'Replace "1st" on notes/mcp: spell out (MCP)',
             "Complete deck task (MCP)",
             "Create deck task: from chat (MCP)",
             "Rename mcp-notes to notes/mcp (MCP)",
@@ -1766,9 +1766,9 @@ class TestLeafHelp:
 
     def test_bad_topic_or_heading(self, client, docs):
         text, err = call(client, "leaf_help", topic="testing")
-        assert err and text == "No topic 'testing'. Topics: readme, deck."
+        assert err and text == 'No topic "testing". Topics: readme, deck.'
         text, err = call(client, "leaf_help", topic="deck", heading="Nope")
-        assert err and "'Views', 'Labels', 'Dates'" in text and "not a heading" not in text
+        assert err and '"Views", "Labels", "Dates"' in text and "not a heading" not in text
         text, err = call(client, "leaf_help", heading="Views")
         assert err and text == "heading needs a topic."
 

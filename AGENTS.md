@@ -97,7 +97,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── deckstore.go        # Deck tasks on disk: _deck/ files, lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A deck task (Task): its fields, read leniently from a file, written in a fixed key order
-│   ├── pyjson.go           # JSON objects that keep their key order, read as the Python Leaf read requests and MCP messages
+│   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): deck requests, MCP messages and arguments, task files
 │   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages

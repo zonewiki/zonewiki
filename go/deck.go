@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -50,63 +51,64 @@ func deckRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handle
 
 // jsonObject is the request's JSON body, which must be an object (any
 // content type: text/plain bodies too).
-func jsonObject(r *http.Request) (*Obj, error) {
+func jsonObject(r *http.Request) (jsonObj, error) {
 	body, _ := io.ReadAll(r.Body)
-	v, err := loads(body)
-	o, ok := v.(*Obj)
-	if err != nil || !ok {
+	o, ok := parseObj(body)
+	if !ok {
 		return nil, badRequest("Request body must be a JSON object")
 	}
 	return o, nil
 }
 
-func asStr(v any, name string) (string, error) {
-	s, ok := v.(string)
+func asStr(raw json.RawMessage, name string) (string, error) {
+	s, ok := as[string](raw)
 	if !ok {
 		return "", badRequest(name + " must be a string")
 	}
 	return s, nil
 }
 
-// asInt: a whole number, or a string of one ("12", " -3 "); not a bool.
-func asInt(v any, name string) (int, error) {
-	bad := badRequest(name + " must be an integer")
-	switch v := v.(type) {
-	case int64:
-		return int(v), nil
-	case float64:
-		if v != v || v > 1e18 || v < -1e18 {
-			return 0, bad
-		}
-		return int(v), nil
-	case string:
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+func asBool(raw json.RawMessage, name string) (bool, error) {
+	b, ok := as[bool](raw)
+	if !ok {
+		return false, badRequest(name + " must be true or false")
+	}
+	return b, nil
+}
+
+// boolField: data's k as true or false; false when it is missing.
+func boolField(data jsonObj, k string) (bool, error) {
+	if !data.has(k) {
+		return false, nil
+	}
+	return asBool(data[k], k)
+}
+
+// asInt: a whole number, or a string of one ("12", " -3 ").
+func asInt(raw json.RawMessage, name string) (int, error) {
+	if n, ok := wholeNumber(raw); ok {
+		return n, nil
+	}
+	if s, ok := as[string](raw); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
 			return n, nil
 		}
 	}
-	return 0, bad
+	return 0, badRequest(name + " must be an integer")
 }
 
 // asStrList: a list of strings, or one string split on commas; stripped,
 // empties left out.
-func asStrList(v any, name string) ([]string, error) {
-	var items []any
-	switch v := v.(type) {
-	case string:
-		for _, s := range strings.Split(v, ",") {
-			items = append(items, s)
-		}
-	case []any:
-		items = v
-	default:
+func asStrList(raw json.RawMessage, name string) ([]string, error) {
+	items, ok := as[[]string](raw)
+	if s, isStr := as[string](raw); isStr {
+		items, ok = strings.Split(s, ","), true
+	}
+	if !ok {
 		return nil, badRequest(name + " must be a list of strings")
 	}
 	out := []string{}
-	for _, it := range items {
-		s, ok := it.(string)
-		if !ok {
-			return nil, badRequest(name + " must be a list of strings")
-		}
+	for _, s := range items {
 		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
 		}
@@ -114,38 +116,38 @@ func asStrList(v any, name string) ([]string, error) {
 	return out, nil
 }
 
+// listField: data's k as a list, [] when it is missing; ok false when it
+// is something else.
+func listField(data jsonObj, k string) ([]json.RawMessage, bool) {
+	if !data.has(k) {
+		return []json.RawMessage{}, true
+	}
+	return as[[]json.RawMessage](data[k])
+}
+
 // idList: the body's ids, a list of task-id strings.
-func idList(data *Obj) ([]string, error) {
-	v, ok := data.Lookup("ids")
-	if !ok {
+func idList(data jsonObj) ([]string, error) {
+	if !data.has("ids") {
 		return []string{}, nil
 	}
-	l, isList := v.([]any)
-	if !isList {
+	ids, ok := as[[]string](data["ids"])
+	if !ok {
 		return nil, badRequest("ids must be a list of task ids")
 	}
-	out := []string{}
-	for _, x := range l {
-		s, ok := x.(string)
-		if !ok {
-			return nil, badRequest("ids must be a list of task ids")
-		}
-		out = append(out, s)
-	}
-	return out, nil
+	return ids, nil
 }
 
 // strptime's %Y-%m-%d: four digits, then a month and a day of one or two.
 var strptimeDayRE = regexp.MustCompile(`^(\d{4})-(1[0-2]|0[1-9]|[1-9])-(3[01]|[12]\d|0[1-9]|[1-9]| [1-9])$`)
 
-// validateDate: v as a date field: falsy is none (""), else a valid
-// YYYY-MM-DD.
-func validateDate(v any) (string, error) {
-	if !truthyValue(v) {
+// validateDate: raw as a date field: null or "" is none (""), else a
+// valid YYYY-MM-DD.
+func validateDate(raw json.RawMessage) (string, error) {
+	s, ok := as[string](raw)
+	if isNull(raw) || ok && s == "" {
 		return "", nil
 	}
 	bad := badRequest("Invalid date format, expected YYYY-MM-DD")
-	s, ok := v.(string)
 	if !ok {
 		return "", bad
 	}
@@ -162,11 +164,8 @@ func validateDate(v any) (string, error) {
 	return s, nil
 }
 
-func commentText(v any) (string, error) {
-	s, err := asStr(v, "text")
-	if err != nil {
-		return "", err
-	}
+// commentText: a comment's text, stripped and capped; empty is refused.
+func commentText(s string) (string, error) {
 	if s = strings.TrimSpace(s); s == "" {
 		return "", badRequest("Comment cannot be empty")
 	}
@@ -204,13 +203,9 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 	}
 	lists := deckLists()
 	names = sortedKeys(lists)
-	homes := NewObj()
+	homes := map[string]string{}
 	for _, n := range names {
-		h := lists[n].Title
-		if h == "" {
-			h = lists[n].Slug
-		}
-		homes.Set(n, h)
+		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
 	}
 	listsJSON, homesJSON := jsonText(names), jsonText(homes)
 	sfx := ""
@@ -365,7 +360,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		idx, err := asInt(data.Get("idx"), "idx")
+		idx, err := asInt(data["idx"], "idx")
 		if err != nil {
 			return err
 		}
@@ -384,7 +379,11 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := addComment(r.PathValue("id"), data.Get("text"), "Comment on deck task")
+		text, err := asStr(data["text"], "text")
+		if err != nil {
+			return err
+		}
+		t, err := addComment(r.PathValue("id"), text, "Comment on deck task")
 		if err != nil {
 			return err
 		}
@@ -413,22 +412,18 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		add, rem := orDefault(data, "add", []any{}), orDefault(data, "remove", []any{})
-		if _, ok := add.([]any); !ok {
-			return badRequest("add/remove must be lists of strings")
+		var tags [2][]string
+		for i, k := range []string{"add", "remove"} {
+			if _, ok := listField(data, k); !ok {
+				return badRequest("add/remove must be lists of strings")
+			}
+			if data.has(k) {
+				if tags[i], err = asStrList(data[k], k); err != nil {
+					return err
+				}
+			}
 		}
-		if _, ok := rem.([]any); !ok {
-			return badRequest("add/remove must be lists of strings")
-		}
-		addTags, err := asStrList(add, "add")
-		if err != nil {
-			return err
-		}
-		remTags, err := asStrList(rem, "remove")
-		if err != nil {
-			return err
-		}
-		tasks, err := tagTasks(ids, addTags, remTags, "Tag deck tasks")
+		tasks, err := tagTasks(ids, tags[0], tags[1], "Tag deck tasks")
 		if err != nil {
 			return err
 		}
@@ -454,10 +449,13 @@ func yearArg(r *http.Request) (string, error) {
 
 // createTask: a new open task from the fields in data (as the API takes
 // them); the MCP tools share it.
-func createTask(data *Obj, message string) (*Task, error) {
-	title, err := asStr(orDefault(data, "title", ""), "title")
-	if err != nil {
-		return nil, err
+func createTask(data jsonObj, message string) (*Task, error) {
+	title := ""
+	if data.has("title") {
+		var err error
+		if title, err = asStr(data["title"], "title"); err != nil {
+			return nil, err
+		}
 	}
 	if strings.TrimSpace(title) == "" {
 		return nil, badRequest("Title cannot be empty")
@@ -478,10 +476,10 @@ func createTask(data *Obj, message string) (*Task, error) {
 }
 
 // applyTaskFields applies the field changes in data (not completion).
-func applyTaskFields(t *Task, data *Obj) error {
+func applyTaskFields(t *Task, data jsonObj) error {
 	oldDue := t.DueDate
-	if data.Has("title") {
-		s, err := asStr(data.Get("title"), "title")
+	if data.has("title") {
+		s, err := asStr(data["title"], "title")
 		if err != nil {
 			return err
 		}
@@ -490,32 +488,34 @@ func applyTaskFields(t *Task, data *Obj) error {
 		}
 		t.Title = s
 	}
-	if data.Has("description") {
-		s, err := asStr(orNone(data.Get("description")), "description")
-		if err != nil {
-			return err
+	if data.has("description") {
+		t.Description = ""
+		if !data.null("description") {
+			s, err := asStr(data["description"], "description")
+			if err != nil {
+				return err
+			}
+			t.Description = strings.TrimSpace(s)
 		}
-		t.Description = strings.TrimSpace(s)
 	}
-	if data.Has("tags") {
-		v := data.Get("tags")
-		if !truthyValue(v) {
-			v = []any{}
+	if data.has("tags") {
+		t.Tags = []string{}
+		if !data.null("tags") {
+			tags, err := asStrList(data["tags"], "tags")
+			if err != nil {
+				return err
+			}
+			t.Tags = cleanTags(tags)
 		}
-		tags, err := asStrList(v, "tags")
-		if err != nil {
-			return err
-		}
-		t.Tags = cleanTagStrings(tags)
 	}
-	if data.Has("comments") { // the whole list, for undoing a comment's delete or edit
-		if _, ok := data.Get("comments").([]any); !ok {
+	if data.has("comments") { // the whole list, for undoing a comment's delete or edit
+		if _, ok := as[[]json.RawMessage](data["comments"]); !ok {
 			return badRequest("comments must be a list")
 		}
-		t.Comments = cleanComments(data.Get("comments"))
+		t.Comments = cleanComments(data["comments"])
 	}
-	if data.Has("due_date") {
-		d, err := validateDate(data.Get("due_date"))
+	if data.has("due_date") {
+		d, err := validateDate(data["due_date"])
 		if err != nil {
 			return err
 		}
@@ -524,22 +524,26 @@ func applyTaskFields(t *Task, data *Obj) error {
 			logEvent(t, "due", oldDue, d)
 		}
 	}
-	if data.Has("sort_order") {
-		switch v := data.Get("sort_order").(type) {
-		case nil:
+	if data.has("sort_order") {
+		f, ok := as[float64](data["sort_order"])
+		switch {
+		case data.null("sort_order"):
 			t.SortOrder = nil
-		case int64, float64:
-			f, _ := number(v)
+		case ok:
 			t.SortOrder = &f
 		default:
 			return badRequest("sort_order must be a number")
 		}
 	}
-	if data.Has("keep") {
-		t.Keep = data.Truthy("keep")
+	if data.has("keep") {
+		keep, err := asBool(data["keep"], "keep")
+		if err != nil {
+			return err
+		}
+		t.Keep = keep
 	}
-	if data.Has("last_done") {
-		d, err := validateDate(data.Get("last_done"))
+	if data.has("last_done") {
+		d, err := validateDate(data["last_done"])
 		if err != nil {
 			return err
 		}
@@ -550,8 +554,8 @@ func applyTaskFields(t *Task, data *Obj) error {
 	if oldRec == nil {
 		oldRec = &Recurrence{}
 	}
-	if data.Has("start_date") {
-		d, err := validateDate(data.Get("start_date"))
+	if data.has("start_date") {
+		d, err := validateDate(data["start_date"])
 		if err != nil {
 			return err
 		}
@@ -560,20 +564,23 @@ func applyTaskFields(t *Task, data *Obj) error {
 			logEvent(t, "start", oldStart, d)
 		}
 	}
-	if data.Has("rec_type") {
-		rtype, _ := data.Get("rec_type").(string)
+	if data.has("rec_type") {
+		rtype, _ := as[string](data["rec_type"])
 		switch rtype {
 		case "daily", "weekly", "monthly", "yearly":
-			n, err := asInt(orDefault(data, "rec_interval", int64(1)), "rec_interval")
-			if err != nil {
-				return err
+			n := 1
+			if data.has("rec_interval") {
+				var err error
+				if n, err = asInt(data["rec_interval"], "rec_interval"); err != nil {
+					return err
+				}
 			}
 			n = max(1, n)
 			if n > recIntervalMax {
 				return badRequest("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
 			}
 			from := "due"
-			if data.Get("rec_from") == "completion" {
+			if s, _ := as[string](data["rec_from"]); s == "completion" {
 				from = "completion"
 			}
 			rec := &Recurrence{Type: rtype, Interval: n, From: from}
@@ -605,10 +612,10 @@ func applyTaskFields(t *Task, data *Obj) error {
 		}
 	}
 	// An undo sends the whole old recurrence, day and lead included.
-	if data.Has("recurrence") {
-		rec := cleanRecurrence(data.Get("recurrence"))
+	if data.has("recurrence") {
+		rec := cleanRecurrence(data["recurrence"])
 		t.Recurrence = rec
-		if rec == nil && data.Get("recurrence") != nil {
+		if rec == nil && !data.null("recurrence") {
 			return badRequest("recurrence must be null or have a type")
 		}
 	}
@@ -657,13 +664,21 @@ func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 // updateTask changes a task's fields and status (complete, won't do, skip,
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
-func updateTask(id string, data *Obj, suffix string) (*Task, error) {
+func updateTask(id string, data jsonObj, suffix string) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	return updateTaskLocked(id, data, suffix)
 }
 
-func updateTaskLocked(id string, data *Obj, suffix string) (*Task, error) {
+func updateTaskLocked(id string, data jsonObj, suffix string) (*Task, error) {
+	var status [3]bool
+	for i, k := range []string{"skip", "wont_do", "completed"} {
+		var err error
+		if status[i], err = boolField(data, k); err != nil {
+			return nil, err
+		}
+	}
+	skip, wontDo, done := status[0], status[1], status[2]
 	active, completed, t, err := findForWriteLocked(id)
 	if err != nil {
 		return nil, err
@@ -671,7 +686,7 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Task, error) {
 	if err := applyTaskFields(t, data); err != nil {
 		return nil, err
 	}
-	didSkip := data.Truthy("skip") && t.isOpen()
+	didSkip := skip && t.isOpen()
 	switch {
 	case didSkip:
 		// Skip this occurrence: archived as won't-do, the next one spawned
@@ -685,53 +700,53 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Task, error) {
 		if spawned != nil {
 			active = append(active, spawned)
 		}
-	case data.Has("wont_do"):
-		if data.Truthy("wont_do") && t.isOpen() {
+	case data.has("wont_do"):
+		if wontDo && t.isOpen() {
 			// Won't do: to completed, abandoned; no next occurrence.
 			t.CompletedAt = timestamp()
 			t.WontDo = true
 			logEvent(t, "wontdo", "", "")
 			active = without(active, id)
 			completed = append(completed, t)
-		} else if !data.Truthy("wont_do") && !t.isOpen() {
+		} else if !wontDo && !t.isOpen() {
 			// Reopen (also takes away what a skip spawned).
 			active = uncompleteTask(t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
 		}
-	case data.Has("completed"):
+	case data.has("completed"):
 		switch {
-		case data.Truthy("completed") && t.Keep && t.isOpen():
+		case done && t.Keep && t.isOpen():
 			keepDone(t) // stays open, back in the pool
-		case data.Truthy("completed") && t.isOpen():
+		case done && t.isOpen():
 			spawned := completeTask(t, "", active)
 			active = without(active, id)
 			completed = append(completed, t)
 			if spawned != nil {
 				active = append(active, spawned)
 			}
-		case !data.Truthy("completed") && !t.isOpen():
+		case !done && !t.isOpen():
 			active = uncompleteTask(t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
 		}
 	}
 	// An undo sends the old history back with the old fields.
-	if data.Has("history") {
-		t.History = cleanHistory(data.Get("history"))
+	if data.has("history") {
+		t.History = cleanHistory(data["history"])
 	}
 	msg := "Update deck task"
 	switch {
 	case didSkip:
 		msg = "Skip deck task"
-	case data.Has("wont_do"):
+	case data.has("wont_do"):
 		msg = "Abandon deck task"
-		if !data.Truthy("wont_do") {
+		if !wontDo {
 			msg = "Reopen deck task"
 		}
-	case data.Has("completed"):
+	case data.has("completed"):
 		msg = "Complete deck task"
-		if !data.Truthy("completed") {
+		if !done {
 			msg = "Uncomplete deck task"
 		}
 	}
@@ -751,11 +766,13 @@ func toggleNoteCheck(id string, idx int) (*Task, error) {
 	if toggled == text {
 		return t, nil
 	}
-	return updateTaskLocked(id, NewObj("description", toggled), "")
+	data := jsonObj{}
+	data.set("description", toggled)
+	return updateTaskLocked(id, data, "")
 }
 
 // addComment adds a comment (a status line) to a task, open or done.
-func addComment(id string, text any, message string) (*Task, error) {
+func addComment(id string, text string, message string) (*Task, error) {
 	s, err := commentText(text)
 	if err != nil {
 		return nil, err
@@ -788,8 +805,11 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	text, err := commentText(data.Get("text"))
+	text, err := asStr(data["text"], "text")
 	if err != nil {
+		return err
+	}
+	if text, err = commentText(text); err != nil {
 		return err
 	}
 	deckMu.Lock()
@@ -879,7 +899,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	snaps, ok := data.Get("tasks").([]any)
+	snaps, ok := as[[]json.RawMessage](data["tasks"])
 	if !ok || len(snaps) == 0 {
 		return badRequest("Bad Request")
 	}
@@ -895,7 +915,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	restored := []*Task{}
 	for _, s := range snaps {
-		snap, ok := s.(*Obj)
+		snap, ok := as[jsonObj](s)
 		if !ok {
 			continue
 		}
@@ -929,7 +949,12 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	markCompleted := truthyValue(orDefault(data, "completed", true))
+	markCompleted := true
+	if data.has("completed") {
+		if markCompleted, err = asBool(data["completed"], "completed"); err != nil {
+			return err
+		}
+	}
 	if len(ids) == 0 {
 		return badRequest("Bad Request")
 	}
@@ -997,15 +1022,16 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	order, ok1 := orDefault(data, "order", []any{}).([]any)
-	updates, ok2 := orDefault(data, "updates", []any{}).([]any)
-	allObjs := true
-	for _, u := range updates {
-		if _, ok := u.(*Obj); !ok {
-			allObjs = false
+	order, ok1 := listField(data, "order")
+	rawUpdates, ok2 := listField(data, "updates")
+	updates := make([]jsonObj, len(rawUpdates))
+	for i, u := range rawUpdates {
+		var isObj bool
+		if updates[i], isObj = as[jsonObj](u); !isObj {
+			ok2 = false
 		}
 	}
-	if !ok1 || !ok2 || !allObjs {
+	if !ok1 || !ok2 {
 		return badRequest("order must be a list of ids, updates a list of objects")
 	}
 	if len(order) == 0 && len(updates) == 0 {
@@ -1022,22 +1048,20 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 		byID[t.ID] = t
 	}
 	for i, id := range order {
-		if s, ok := id.(string); ok && byID[s] != nil {
+		if s, ok := as[string](id); ok && byID[s] != nil {
 			f := float64(i)
 			byID[s].SortOrder = &f
 		}
 	}
-	for _, x := range updates {
-		u := x.(*Obj)
-		id, _ := u.Get("id").(string)
+	for _, u := range updates {
+		id, _ := as[string](u["id"])
 		t := byID[id]
-		val := u.Get("sort_order")
 		// null clears it: the task leaves the manual order.
-		if val == nil && t != nil {
+		if u.null("sort_order") && t != nil {
 			t.SortOrder = nil
 			continue
 		}
-		if f, ok := number(val); ok && t != nil {
+		if f, ok := as[float64](u["sort_order"]); ok && t != nil {
 			t.SortOrder = &f
 		}
 	}
@@ -1053,7 +1077,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 // in one commit; the batch-tag route and the MCP tools share it.
 func tagTasks(ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
-	addTags, removeTags := cleanTagStrings(add), cleanTagStrings(remove)
+	addTags, removeTags := cleanTags(add), cleanTags(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
 		return nil, badRequest("Give task ids and tags to add or remove")
 	}
@@ -1082,24 +1106,23 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	changes, ok := data.Get("tasks").([]any)
-	valid := ok && len(changes) > 0
-	for _, c := range changes {
-		o, isObj := c.(*Obj)
-		if !isObj {
+	raw, ok := as[[]json.RawMessage](data["tasks"])
+	valid := ok && len(raw) > 0
+	changes := make([]jsonObj, len(raw))
+	for i, c := range raw {
+		o, isObj := as[jsonObj](c)
+		if _, isStr := as[string](o["id"]); !isObj || !isStr {
 			valid = false
 			break
 		}
-		if _, isStr := o.Get("id").(string); !isStr {
-			valid = false
-		}
+		changes[i] = o
 	}
 	if !valid {
 		return badRequest("tasks must be a list of objects with an id")
 	}
 	for _, c := range changes {
 		for _, k := range []string{"completed", "wont_do", "skip"} {
-			if c.(*Obj).Has(k) {
+			if c.has(k) {
 				return badRequest("batch-update changes fields, not status")
 			}
 		}
@@ -1115,17 +1138,17 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		byID[t.ID] = t
 	}
 	updated := []*Task{}
-	for _, c := range changes {
-		change := c.(*Obj)
-		t := byID[change.Str("id")]
+	for _, change := range changes {
+		id, _ := as[string](change["id"])
+		t := byID[id]
 		if t == nil {
 			continue
 		}
 		if err := applyTaskFields(t, change); err != nil {
 			return err
 		}
-		if change.Has("history") {
-			t.History = cleanHistory(change.Get("history"))
+		if change.has("history") {
+			t.History = cleanHistory(change["history"])
 		}
 		updated = append(updated, t)
 	}

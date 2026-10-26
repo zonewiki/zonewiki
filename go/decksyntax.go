@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"regexp"
 	"sort"
@@ -14,36 +13,14 @@ import (
 
 var spaceRunRE = regexp.MustCompile(spaceClass + `+`)
 
-// pyStr is Python's str() of a JSON value.
-func pyStr(v any) string {
-	switch v := v.(type) {
-	case nil:
-		return "None"
-	case string:
-		return v
-	case bool:
-		if v {
-			return "True"
-		}
-		return "False"
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case int:
-		return strconv.Itoa(v)
-	case float64:
-		return pyFloatRepr(v)
-	}
-	return fmt.Sprint(v)
-}
-
 // cleanTags: tags as the filter can match them: one word each (whitespace
 // inside becomes "-"), no leading "#", no empties, no case-insensitive
 // duplicates (the first spelling wins).
-func cleanTags(tags []any) []string {
+func cleanTags(tags []string) []string {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, t := range tags {
-		tag := strings.Trim(spaceRunRE.ReplaceAllString(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(pyStr(t)), "#")), "-"), "-")
+		tag := strings.Trim(spaceRunRE.ReplaceAllString(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(t), "#")), "-"), "-")
 		if tag != "" && !seen[strings.ToLower(tag)] {
 			seen[strings.ToLower(tag)] = true
 			out = append(out, tag)
@@ -51,8 +28,6 @@ func cleanTags(tags []any) []string {
 	}
 	return out
 }
-
-func cleanTagStrings(tags []string) []string { return cleanTags(strs(tags)) }
 
 // cleanList: a list name as stored and matched: trimmed, lowercase, one
 // word, no leading "#"; "" for no list.
@@ -190,7 +165,7 @@ func tagParamMatches(t *Task, raw string) bool {
 // newTaskTags: the tags a new task gets in an embed with these params: the
 // list= tag, then the single tags of tag= (not an a|b group, not -tag).
 func newTaskTags(p DeckParams) []string {
-	tags := []any{cleanList(p.Get("list"))}
+	tags := []string{cleanList(p.Get("list"))}
 	if raw := strings.TrimSpace(p.Get("tag")); raw != "" && !strings.Contains(raw, "|") {
 		for _, t := range strings.Split(raw, ",") {
 			if t = strings.TrimSpace(t); !strings.HasPrefix(t, "-") {

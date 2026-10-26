@@ -298,10 +298,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, _ := jsonObject(r)
-	fp := ""
-	if data != nil {
-		fp, _ = data.Get("filepath").(string)
-	}
+	fp, _ := as[string](data["filepath"])
 	if fp == "" {
 		writeJSON(w, http.StatusBadRequest, M{"error": "No filepath provided"})
 		return

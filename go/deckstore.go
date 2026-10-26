@@ -7,6 +7,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -106,18 +107,17 @@ func readListLenient(path string) []*Task {
 	return tasks
 }
 
-// parseTasks: the tasks of a file's text (taskFromObj); ok false when it
+// parseTasks: the tasks of a file's text (taskFromJSON); ok false when it
 // isn't a JSON list. What isn't an object is no task.
 func parseTasks(raw []byte) ([]*Task, bool) {
-	v, err := loads(raw)
-	l, ok := v.([]any)
-	if err != nil || !ok {
+	var l []json.RawMessage
+	if json.Unmarshal(raw, &l) != nil || l == nil {
 		return nil, false
 	}
 	out := make([]*Task, 0, len(l))
-	for _, v := range l {
-		if o, ok := v.(*Obj); ok {
-			out = append(out, taskFromObj(o))
+	for _, x := range l {
+		if o, ok := as[jsonObj](x); ok {
+			out = append(out, taskFromJSON(o))
 		}
 	}
 	return out, true
@@ -440,21 +440,6 @@ func recStep(base time.Time, rtype string, interval, day int) time.Time {
 	return base.AddDate(0, 0, interval) // daily (and any unknown type)
 }
 
-// intValue is a JSON int (not a bool), ok false otherwise.
-func intValue(v any) (int, bool) {
-	switch v := v.(type) {
-	case int64:
-		return int(v), true
-	case int:
-		return v, true
-	case float64:
-		if isWhole(v) {
-			return int(v), true
-		}
-	}
-	return 0, false
-}
-
 // nextOccurrence steps a recurrence from base and catches up to >= today
 // (> today with afterToday: a skipped occurrence isn't offered again).
 // Monthly and yearly series remember their day of month in rec.Day
@@ -549,14 +534,6 @@ func spawnRecurring(task *Task, active []*Task, skip bool) *Task {
 	return spawned
 }
 
-// orDefault is Python's t.get(k, d).
-func orDefault(t *Obj, k string, d any) any {
-	if v, ok := t.Lookup(k); ok {
-		return v
-	}
-	return d
-}
-
 // parseTaskDate reads a YYYY-MM-DD field.
 func parseTaskDate(s string) (time.Time, bool) {
 	if s == "" {
@@ -596,25 +573,20 @@ func logEvent(t *Task, event, from, to string) {
 }
 
 // cleanHistory validates a history list from a request or snapshot.
-func cleanHistory(v any) []HistoryEntry {
-	l, _ := v.([]any)
+func cleanHistory(raw json.RawMessage) []HistoryEntry {
 	out := []HistoryEntry{}
-	for _, x := range l {
-		e, ok := x.(*Obj)
-		if !ok {
-			continue
-		}
-		at, isStr := e.Get("at").(string)
-		event, isStrEvent := e.Get("event").(string)
+	for _, e := range objList(raw) {
+		at, isStr := as[string](e["at"])
+		event, isStrEvent := as[string](e["event"])
 		if !isStr || !isStrEvent || !historyEvents[event] {
 			continue
 		}
 		entry := HistoryEntry{At: runePrefix(at, 16), Event: event}
 		if datedEvents[event] {
-			if s, ok := e.Get("from").(string); ok && isoDateRE.MatchString(s) {
+			if s, ok := as[string](e["from"]); ok && isoDateRE.MatchString(s) {
 				entry.From = s
 			}
-			if s, ok := e.Get("to").(string); ok && isoDateRE.MatchString(s) {
+			if s, ok := as[string](e["to"]); ok && isoDateRE.MatchString(s) {
 				entry.To = s
 			}
 		}
@@ -635,20 +607,15 @@ const commentMax = 2000
 func newCommentID() string { return strings.ReplaceAll(uuid4(), "-", "")[:8] }
 
 // cleanComments validates a comment list from a request or snapshot.
-func cleanComments(v any) []Comment {
-	l, _ := v.([]any)
+func cleanComments(raw json.RawMessage) []Comment {
 	var cs []Comment
-	for _, x := range l {
-		c, ok := x.(*Obj)
-		if !ok {
-			continue
-		}
-		text, isText := c.Get("text").(string)
-		at, isAt := c.Get("at").(string)
+	for _, c := range objList(raw) {
+		text, isText := as[string](c["text"])
+		at, isAt := as[string](c["at"])
 		if !isText || !isAt {
 			continue
 		}
-		id, _ := c.Get("id").(string)
+		id, _ := as[string](c["id"])
 		cs = append(cs, Comment{ID: id, At: at, Text: text})
 	}
 	return cleanCommentList(cs)
@@ -897,30 +864,29 @@ var ymdPrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 
 // cleanRecurrence: a recurrence from a request (an undo), its fields
 // validated; nil when it names no repeat type.
-func cleanRecurrence(v any) *Recurrence {
-	rec, ok := v.(*Obj)
+func cleanRecurrence(raw json.RawMessage) *Recurrence {
+	rec, ok := as[jsonObj](raw)
 	if !ok {
 		return nil
 	}
-	rtype, _ := rec.Get("type").(string)
+	rtype, _ := as[string](rec["type"])
 	switch rtype {
 	case "daily", "weekly", "monthly", "yearly":
 	default:
 		return nil
 	}
 	out := &Recurrence{Type: rtype, Interval: 1, From: "due"}
-	if n, ok := rec.Get("interval").(int64); ok && n >= 1 && n <= recIntervalMax {
-		out.Interval = int(n)
+	if n, ok := as[int](rec["interval"]); ok && n >= 1 && n <= recIntervalMax {
+		out.Interval = n
 	}
-	if rec.Str("from") == "completion" {
+	if s, _ := as[string](rec["from"]); s == "completion" {
 		out.From = "completion"
 	}
-	if n, ok := rec.Get("day").(int64); ok && n >= 1 && n <= 31 {
-		out.Day = int(n)
+	if n, ok := as[int](rec["day"]); ok && n >= 1 && n <= 31 {
+		out.Day = n
 	}
-	if n, ok := rec.Get("lead").(int64); ok && n >= 0 {
-		lead := int(n)
-		out.Lead = &lead
+	if n, ok := as[int](rec["lead"]); ok && n >= 0 {
+		out.Lead = &n
 	}
 	return out
 }
@@ -928,20 +894,17 @@ func cleanRecurrence(v any) *Recurrence {
 // sanitizeSnapshot rebuilds a task from an untrusted snapshot (undo after
 // delete), known fields only; nil without a usable title. A bad optional
 // value falls back to its default.
-func sanitizeSnapshot(snap *Obj) *Task {
-	title := strings.TrimSpace(pyStr(orNone(snap.Get("title"))))
-	if !snap.Truthy("title") || title == "" {
+func sanitizeSnapshot(snap jsonObj) *Task {
+	title, _ := as[string](snap["title"])
+	if title = strings.TrimSpace(title); title == "" {
 		return nil
 	}
 	t := newTask()
 	t.Title = title
-	if snap.Truthy("description") {
-		t.Description = pyStr(snap.Get("description"))
-	}
-	tags, _ := snap.Get("tags").([]any)
-	t.Tags = cleanTags(tags)
+	t.Description, _ = as[string](snap["description"])
+	t.Tags = cleanTags(textList(snap["tags"]))
 	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
-		if s, ok := snap.Get(f).(string); ok {
+		if s, ok := as[string](snap[f]); ok {
 			if _, ok := parseDay(s); ok {
 				*field = s
 			}
@@ -949,26 +912,18 @@ func sanitizeSnapshot(snap *Obj) *Task {
 	}
 	for f, field := range map[string]*string{"id": &t.ID, "created_at": &t.CreatedAt,
 		"completed_at": &t.CompletedAt, "spawned_from": &t.SpawnedFrom} {
-		if s, ok := snap.Get(f).(string); ok && s != "" {
+		if s, ok := as[string](snap[f]); ok && s != "" {
 			*field = s
 		}
 	}
-	if f, ok := number(snap.Get("sort_order")); ok {
+	if f, ok := as[float64](snap["sort_order"]); ok {
 		t.SortOrder = &f
 	}
-	t.WontDo, t.Keep = snap.Truthy("wont_do"), snap.Truthy("keep")
-	t.History = cleanHistory(snap.Get("history"))
-	t.Comments = cleanComments(snap.Get("comments"))
+	t.WontDo, t.Keep = jsonTrue(snap["wont_do"]), jsonTrue(snap["keep"])
+	t.History = cleanHistory(snap["history"])
+	t.Comments = cleanComments(snap["comments"])
 	if !t.Keep {
-		t.Recurrence = cleanRecurrence(snap.Get("recurrence"))
+		t.Recurrence = cleanRecurrence(snap["recurrence"])
 	}
 	return t
-}
-
-// orNone: a missing value as "" (Python's `or ""`).
-func orNone(v any) any {
-	if !truthyValue(v) {
-		return ""
-	}
-	return v
 }

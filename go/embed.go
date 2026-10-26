@@ -263,7 +263,7 @@ func parseSemanticSpec(value string) (string, error) {
 	case "1", "on", "true", "yes":
 		return defaultModel, nil
 	}
-	return "", fmt.Errorf("LEAF_SEMANTIC_SEARCH: expected on or off, got %s", pyRepr(value))
+	return "", fmt.Errorf("LEAF_SEMANTIC_SEARCH: expected on or off, got %s", strconv.Quote(value))
 }
 
 // modelDir: where the model's files are, LEAF_MODEL_DIR (the image's

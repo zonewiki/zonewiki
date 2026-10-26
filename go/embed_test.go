@@ -395,7 +395,7 @@ func TestSemanticSettings(t *testing.T) {
 			t.Errorf("%q: %q %v", v, m, err)
 		}
 	}
-	if _, err := parseSemanticSpec("bogus:x"); err == nil || err.Error() != "LEAF_SEMANTIC_SEARCH: expected on or off, got 'bogus:x'" {
+	if _, err := parseSemanticSpec("bogus:x"); err == nil || err.Error() != "LEAF_SEMANTIC_SEARCH: expected on or off, got \"bogus:x\"" {
 		t.Errorf("bogus: %v", err)
 	}
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }

@@ -10,6 +10,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,7 +23,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -30,19 +30,18 @@ import (
 
 // cleanFolder: a folder argument as a slug prefix: "/page/tickets/",
 // "tickets/" and "tickets" all become "tickets". "" means the whole wiki.
-func cleanFolder(raw any) (string, error) {
-	s, ok := raw.(string)
-	if !ok {
-		return "", toolErr("under must be a string")
-	}
+func cleanFolder(s string) string {
 	s = strings.TrimSpace(s)
 	if _, after, found := strings.Cut(s, "/page/"); found {
 		s = after
 	}
-	return strings.Trim(s, "/"), nil
+	return strings.Trim(s, "/")
 }
 
-func underArg(args *Obj) (string, error) { return cleanFolder(orDefault(args, "under", "")) }
+func underArg(args jsonObj) (string, error) {
+	s, err := strArg(args, "under", false)
+	return cleanFolder(s), err
+}
 
 // underWhere: " under <folder>/" for an answer's text, "" for the whole wiki.
 func underWhere(under string) string {
@@ -55,29 +54,26 @@ func underWhere(under string) string {
 var digitsRE = regexp.MustCompile(`^\d+$`)
 
 // mcpInt: a whole-number argument (a string of digits too), clamped to 1…top.
-func mcpInt(args *Obj, name string, def, top int) (int, error) {
-	v := orDefault(args, name, int64(def))
-	if s, ok := v.(string); ok && digitsRE.MatchString(strings.TrimSpace(s)) {
-		if n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil {
-			v = n
-		}
+func mcpInt(args jsonObj, name string, def, top int) (int, error) {
+	if !args.has(name) {
+		return def, nil
 	}
-	n, ok := v.(int64)
+	n, ok := wholeNumber(args[name])
+	if s, isStr := as[string](args[name]); isStr && digitsRE.MatchString(strings.TrimSpace(s)) {
+		i, err := strconv.Atoi(strings.TrimSpace(s))
+		n, ok = i, err == nil
+	}
 	if !ok {
 		return 0, toolErr(name + " must be a whole number")
 	}
-	return int(max(1, min(n, int64(top)))), nil
+	return max(1, min(n, top)), nil
 }
 
 // strArg: a string argument with CRLF line ends as LF; a required one
-// non-empty. null is "".
-func strArg(args *Obj, name string, required bool) (string, error) {
-	v := orDefault(args, name, "")
-	if v == nil {
-		v = ""
-	}
-	s, ok := v.(string)
-	if !ok {
+// non-empty. Missing or null is "".
+func strArg(args jsonObj, name string, required bool) (string, error) {
+	s, ok := as[string](args[name])
+	if !ok && !args.null(name) {
 		return "", toolErr(name + " must be a string")
 	}
 	s = newlines(s)
@@ -87,69 +83,45 @@ func strArg(args *Obj, name string, required bool) (string, error) {
 	return s, nil
 }
 
-func boolArg(args *Obj, name string) (bool, error) {
-	b, ok := orDefault(args, name, false).(bool)
-	if !ok {
+// boolArg: true or false; missing or null is false.
+func boolArg(args jsonObj, name string) (bool, error) {
+	b, ok := as[bool](args[name])
+	if !ok && !args.null(name) {
 		return false, toolErr(name + " must be true or false")
 	}
 	return b, nil
 }
 
-// idsArg: a list of ids (guide ids), a comma- or space-separated string too.
-func idsArg(args *Obj, name, msg string) (map[string]bool, error) {
-	v := args.Get(name)
-	if !truthyValue(v) {
-		v = []any{}
+// listArg: a list of strings, or one string split by split; missing or
+// null is none.
+func listArg(args jsonObj, name, msg string, split func(string) []string) ([]string, error) {
+	if args.null(name) {
+		return nil, nil
 	}
-	if s, ok := v.(string); ok {
-		v = strs(strings.Fields(strings.ReplaceAll(s, ",", " ")))
+	if s, ok := as[string](args[name]); ok {
+		return split(s), nil
 	}
-	l, ok := v.([]any)
+	l, ok := as[[]json.RawMessage](args[name])
+	out := make([]string, len(l))
+	for i, x := range l {
+		if out[i], ok = as[string](x); !ok {
+			break
+		}
+	}
 	if !ok {
 		return nil, toolErr(msg)
 	}
-	set := map[string]bool{}
-	for _, x := range l {
-		s, ok := x.(string)
-		if !ok {
-			return nil, toolErr(msg)
-		}
-		set[strings.TrimSpace(s)] = true
-	}
-	return set, nil
+	return out, nil
 }
 
-// pyRepr is Python's repr() of a string: 'text', quotes and unprintable
-// characters escaped.
-func pyRepr(s string) string {
-	quote := "'"
-	if strings.Contains(s, "'") && !strings.Contains(s, `"`) {
-		quote = `"`
+// idsArg: a list of ids (guide ids), a comma- or space-separated string too.
+func idsArg(args jsonObj, name, msg string) (map[string]bool, error) {
+	l, err := listArg(args, name, msg, func(s string) []string { return strings.Fields(strings.ReplaceAll(s, ",", " ")) })
+	set := map[string]bool{}
+	for _, s := range l {
+		set[strings.TrimSpace(s)] = true
 	}
-	var b strings.Builder
-	b.WriteString(quote)
-	for _, r := range s {
-		switch {
-		case r == '\\' || string(r) == quote:
-			b.WriteString(`\` + string(r))
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case unicode.IsPrint(r):
-			b.WriteRune(r)
-		case r < 0x100:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		case r < 0x10000:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			fmt.Fprintf(&b, `\U%08x`, r)
-		}
-	}
-	b.WriteString(quote)
-	return b.String()
+	return set, err
 }
 
 // cutRunes: s to its first n characters, with tail when it was longer.
@@ -219,14 +191,14 @@ func readPageText(path string) (string, error) {
 	return strings.ToValidUTF8(text, "�"), err
 }
 
-func existingPage(args *Obj, name string) (string, string, error) {
+func existingPage(args jsonObj, name string) (string, string, error) {
 	raw, err := strArg(args, name, true)
 	if err != nil {
 		return "", "", err
 	}
 	slug := mcpPageSlug(raw)
 	if slug == "" {
-		return "", "", toolErr("No page " + pyRepr(raw) + ". Use search_wiki or list_pages to find its slug.")
+		return "", "", toolErr("No page " + strconv.Quote(raw) + ". Use search_wiki or list_pages to find its slug.")
 	}
 	return slug, safePath(slug), nil
 }
@@ -238,10 +210,10 @@ func newSlug(raw string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := toSlug(raw)
 	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
-		return "", toolErr(pyRepr(raw) + " is not a usable page name")
+		return "", toolErr(strconv.Quote(raw) + " is not a usable page name")
 	}
 	if safePath(slug) == "" {
-		return "", toolErr(pyRepr(slug) + ": pages can't go in folders starting with '_' or '.'")
+		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	return slug, nil
 }
@@ -352,7 +324,7 @@ func similarPages(slug, title string) []PageRef {
 // history tells the model's changes from the user's. The model's summary,
 // when given, says what changed.
 
-func msgSuffix(args *Obj) (string, error) {
+func msgSuffix(args jsonObj) (string, error) {
 	s, err := strArg(args, "summary", false)
 	if err != nil {
 		return "", err
@@ -363,7 +335,7 @@ func msgSuffix(args *Obj) (string, error) {
 	return " (MCP)", nil
 }
 
-func commitMsg(action string, args *Obj) (string, error) {
+func commitMsg(action string, args jsonObj) (string, error) {
 	s, err := msgSuffix(args)
 	return action + s, err
 }
@@ -512,12 +484,12 @@ func folderGuides(slug string) []guide {
 }
 
 func cutGuide(g guide) string {
-	return cutRunes(g.text, folderGuideChars, "\n\n[… cut here: read_page "+pyRepr(g.slug)+" for the rest]")
+	return cutRunes(g.text, folderGuideChars, "\n\n[… cut here: read_page "+strconv.Quote(g.slug)+" for the rest]")
 }
 
 // checkGuides refuses a write to these pages while a guide for them isn't
 // among the ids in args' guides: the error gives the missing guides' text.
-func checkGuides(args *Obj, slugs []string) error {
+func checkGuides(args jsonObj, slugs []string) error {
 	given, err := idsArg(args, "guides", "guides must be a list of guide ids")
 	if err != nil {
 		return err
@@ -607,7 +579,7 @@ func guidedFolders() [][2]string {
 // toolList: the tools for tools/list. read_guides' description names the
 // folders that have guides, so the model knows to read one before drafting
 // for it.
-func toolList() []any {
+func toolList() []map[string]any {
 	folders := guidedFolders()
 	if len(folders) == 0 {
 		return mcpTools
@@ -623,18 +595,18 @@ func toolList() []any {
 	if len(folders) > guidedShown {
 		lines = append(lines, fmt.Sprintf("- … and %d more folders", len(folders)-guidedShown))
 	}
-	tools := make([]any, len(mcpTools))
+	tools := make([]map[string]any, len(mcpTools))
 	for i, t := range mcpTools {
-		if t.(*Obj).Get("name") == "read_guides" {
-			t = t.(*Obj).Copy()
-			t.(*Obj).Set("description", t.(*Obj).Str("description")+" Guides in this wiki:\n"+strings.Join(lines, "\n"))
+		if t["name"] == "read_guides" {
+			t = maps.Clone(t)
+			t["description"] = t["description"].(string) + " Guides in this wiki:\n" + strings.Join(lines, "\n")
 		}
 		tools[i] = t
 	}
 	return tools
 }
 
-func readGuides(args *Obj, base string) (string, error) {
+func readGuides(args jsonObj, base string) (string, error) {
 	raw, err := strArg(args, "slug", false)
 	if err != nil {
 		return "", err
@@ -726,7 +698,7 @@ func instructionsWithGuide() string {
 			"private), offer to write that down on the page 'wiki-guide': it is shown to " +
 			"you at the start of every session."
 	}
-	guide = cutRunes(guide, guideChars, "\n\n[… cut here: read_page 'wiki-guide' for the rest]")
+	guide = cutRunes(guide, guideChars, "\n\n[… cut here: read_page \"wiki-guide\" for the rest]")
 	// Some clients cut the instructions (Claude Code at about 2 KB), and so
 	// the guide; the instructions point to read_guides, which gives it whole.
 	return mcpInstructions + "\n\nThe user's guide for this wiki (the page 'wiki-guide'; " +
@@ -783,14 +755,14 @@ func noHeading(slug, content, heading string) string {
 	var names []string
 	for _, l := range fencedLines(lines) {
 		if _, text, ok := headingMatch(l.line); ok && !l.inFence {
-			names = append(names, pyRepr(text))
+			names = append(names, strconv.Quote(text))
 		}
 	}
 	list := strings.Join(names, ", ")
 	if list == "" {
 		list = "none"
 	}
-	return slug + " has no heading " + pyRepr(heading) + ". Its headings: " + list + "."
+	return slug + " has no heading " + strconv.Quote(heading) + ". Its headings: " + list + "."
 }
 
 func trimNewlines(s string) string { return strings.TrimRight(s, "\n") }
@@ -901,13 +873,16 @@ func mcpTaskRefs(content, base string) string {
 	return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
 }
 
-func searchTasks(args *Obj, base string) (string, error) {
-	query, ok1 := orDefault(args, "query", "").(string)
-	tag, ok2 := orDefault(args, "tag", "").(string)
-	if !ok1 || !ok2 {
+func searchTasks(args jsonObj, base string) (string, error) {
+	query, err1 := strArg(args, "query", false)
+	tag, err2 := strArg(args, "tag", false)
+	if err1 != nil || err2 != nil {
 		return "", toolErr("query and tag must be strings")
 	}
-	status := orDefault(args, "status", "open")
+	status := "open"
+	if args.has("status") {
+		status, _ = as[string](args["status"])
+	}
 	if status != "open" && status != "done" && status != "all" {
 		return "", toolErr("status must be open, done or all")
 	}
@@ -1002,106 +977,86 @@ func findTask(raw string) (*Task, error) {
 		ref = m[1]
 	}
 	if !taskIDRE.MatchString(ref) {
-		return nil, toolErr(pyRepr(raw) + " is not a task id; search_tasks shows each task's id")
+		return nil, toolErr(strconv.Quote(raw) + " is not a task id; search_tasks shows each task's id")
 	}
 	found := findTasks(ref)
 	if len(found) == 0 {
-		return nil, toolErr("No task with id " + pyRepr(ref) + ". search_tasks shows each task's id.")
+		return nil, toolErr("No task with id " + strconv.Quote(ref) + ". search_tasks shows each task's id.")
 	}
 	if len(found) > 1 {
-		return nil, toolErr("Several tasks have ids starting with " + pyRepr(ref) + "; give more of the id")
+		return nil, toolErr("Several tasks have ids starting with " + strconv.Quote(ref) + "; give more of the id")
 	}
 	return found[0], nil
 }
 
 // dateArg: a date argument, YYYY-MM-DD or a word quick-add knows
-// ("tomorrow", "fri", "+3d"), resolved with Leaf's today; nil for none.
-func dateArg(args *Obj, name string) (any, error) {
+// ("tomorrow", "fri", "+3d"), resolved with Leaf's today; "" for none.
+func dateArg(args jsonObj, name string) (string, error) {
 	s, err := strArg(args, name, false)
 	if err != nil || strings.TrimSpace(s) == "" {
-		return nil, err
+		return "", err
 	}
 	day := parseDateWord(strings.TrimSpace(s), today())
 	if day == "" {
-		return nil, toolErr(name + " must be a date: YYYY-MM-DD, today, tomorrow, a weekday or +3d/+2w")
+		return "", toolErr(name + " must be a date: YYYY-MM-DD, today, tomorrow, a weekday or +3d/+2w")
 	}
 	return day, nil
 }
 
 // tagListArg: a list-of-tags argument (a comma-separated string works too),
 // each without its leading #.
-func tagListArg(args *Obj, name string) ([]string, error) {
-	v := args.Get(name)
-	if !truthyValue(v) {
-		v = []any{}
-	}
-	if s, ok := v.(string); ok {
-		v = strs(strings.Split(s, ","))
-	}
-	l, ok := v.([]any)
-	if !ok {
-		return nil, toolErr(name + " must be a list of tags")
-	}
+func tagListArg(args jsonObj, name string) ([]string, error) {
+	l, err := listArg(args, name, name+" must be a list of tags", splitComma)
 	var out []string
-	for _, x := range l {
-		s, ok := x.(string)
-		if !ok {
-			return nil, toolErr(name + " must be a list of tags")
-		}
+	for _, s := range l {
 		if s = strings.TrimLeft(strings.TrimSpace(s), "#"); s != "" {
 			out = append(out, s)
 		}
 	}
-	return out, nil
+	return out, err
 }
+
+func splitComma(s string) []string { return strings.Split(s, ",") }
 
 // taskFields: the deck API's fields from the tools' arguments (only those
 // given); task, when updating one, for add_tags/remove_tags and repeat.
-func taskFields(args *Obj, task *Task) (*Obj, error) {
-	data := NewObj()
+func taskFields(args jsonObj, task *Task) (jsonObj, error) {
+	data := jsonObj{}
 	for _, f := range [][2]string{{"title", "title"}, {"notes", "description"}} {
-		if args.Has(f[0]) {
+		if args.has(f[0]) {
 			s, err := strArg(args, f[0], false)
 			if err != nil {
 				return nil, err
 			}
-			data.Set(f[1], orNone(strings.TrimSpace(s)))
+			data.set(f[1], strings.TrimSpace(s))
 		}
 	}
 	for _, f := range [][2]string{{"due", "due_date"}, {"start", "start_date"}} {
-		if args.Has(f[0]) {
+		if args.has(f[0]) {
 			day, err := dateArg(args, f[0])
 			if err != nil {
 				return nil, err
 			}
-			data.Set(f[1], day)
+			data.set(f[1], nullable(day))
 		}
 	}
-	if data.Has("title") && !data.Truthy("title") {
+	if title, _ := as[string](data["title"]); data.has("title") && title == "" {
 		return nil, toolErr("title must be a non-empty string")
 	}
-	if data.Has("description") {
-		data.Set("description", firstTruthy(data.Get("description"), ""))
-	}
-	if args.Has("keep") {
-		keep, ok := args.Get("keep").(bool)
+	if args.has("keep") {
+		keep, ok := as[bool](args["keep"])
 		if !ok {
 			return nil, toolErr("keep must be true or false")
 		}
-		data.Set("keep", keep)
+		data.set("keep", keep)
 	}
-	if args.Has("tags") {
-		data.Set("tags", firstNonNil(args.Get("tags"), []any{}))
+	if args.has("tags") {
+		data["tags"] = args["tags"]
 	}
-	if task != nil && (args.Has("add_tags") || args.Has("remove_tags")) {
-		var tags []string
-		if data.Has("tags") {
-			l, _ := data.Get("tags").([]any)
-			for _, t := range l {
-				tags = append(tags, pyStr(t))
-			}
-		} else {
-			tags = append([]string{}, task.Tags...)
+	if task != nil && (args.has("add_tags") || args.has("remove_tags")) {
+		tags := append([]string{}, task.Tags...)
+		if data.has("tags") {
+			tags = textList(data["tags"])
 		}
 		add, err := tagListArg(args, "add_tags")
 		if err != nil {
@@ -1111,48 +1066,38 @@ func taskFields(args *Obj, task *Task) (*Obj, error) {
 		if err != nil {
 			return nil, err
 		}
-		data.Set("tags", strs(retag(tags, add, remove)))
+		data.set("tags", retag(tags, add, remove))
 	}
-	if args.Has("repeat") || args.Has("repeat_every") || args.Has("repeat_from") {
-		var rec any = "none"
-		interval, from := any(int64(1)), any("due")
+	if args.has("repeat") || args.has("repeat_every") || args.has("repeat_from") {
+		repeat, interval, from := "none", json.RawMessage("1"), "due"
 		if task != nil && task.Recurrence != nil {
-			rec, interval, from = task.Recurrence.Type, int64(task.Recurrence.Interval), task.Recurrence.From
+			repeat, from = task.Recurrence.Type, task.Recurrence.From
+			interval = json.RawMessage(strconv.Itoa(task.Recurrence.Interval))
 		}
-		repeat := orDefault(args, "repeat", rec)
+		if args.has("repeat") {
+			repeat, _ = as[string](args["repeat"])
+		}
 		switch repeat {
 		case "daily", "weekly", "monthly", "yearly":
-			data.Set("rec_type", repeat)
+			data.set("rec_type", repeat)
 		case "none":
-			data.Set("rec_type", nil)
+			data.set("rec_type", nil)
 		default:
 			return nil, toolErr("repeat must be daily, weekly, monthly, yearly or none")
 		}
-		data.Set("rec_interval", orDefault(args, "repeat_every", interval))
-		from = orDefault(args, "repeat_from", from)
+		if args.has("repeat_every") {
+			interval = args["repeat_every"]
+		}
+		data["rec_interval"] = interval
+		if args.has("repeat_from") {
+			from, _ = as[string](args["repeat_from"])
+		}
 		if from != "due" && from != "completion" {
 			return nil, toolErr("repeat_from must be due or completion")
 		}
-		data.Set("rec_from", from)
+		data.set("rec_from", from)
 	}
 	return data, nil
-}
-
-// firstTruthy is Python's a or b.
-func firstTruthy(a, b any) any {
-	if truthyValue(a) {
-		return a
-	}
-	return b
-}
-
-func isString(v any) bool { _, ok := v.(string); return ok }
-
-func firstNonNil(v, d any) any {
-	if v == nil {
-		return d
-	}
-	return v
 }
 
 // deckWrite: a deck write's refusals (a bad date, an empty title …) as
@@ -1247,31 +1192,29 @@ func tagHints(task *Task) string {
 // single tags, as its "+ New" and c t give them) before the ones given, so
 // the task shows in the user's deck. Not when the given tags already name a
 // declared list: the task is filed there.
-func homeTags(tags any) any {
-	if !truthyValue(tags) {
-		tags = []any{}
+func homeTags(tags json.RawMessage) json.RawMessage {
+	l, ok := as[[]string](tags)
+	if s, isStr := as[string](tags); isStr {
+		l, ok = splitComma(s), true
 	}
-	if s, ok := tags.(string); ok {
-		tags = strs(strings.Split(s, ","))
-	}
-	l, ok := tags.([]any)
-	if !ok {
+	if !ok && !isNull(tags) {
 		return tags // createTask refuses it
 	}
 	home := lookupDeckHome()
 	if home == nil {
-		return l
+		return tags
 	}
 	lists := deckLists()
 	for _, t := range l {
-		if _, ok := lists[strings.ToLower(strings.TrimLeft(pyStr(t), "#"))]; ok {
-			return l
+		if _, ok := lists[strings.ToLower(strings.TrimLeft(t, "#"))]; ok {
+			return tags
 		}
 	}
-	return strs(cleanTags(append(strs(newTaskTags(home.Params)), l...)))
+	b, _ := json.Marshal(cleanTags(append(newTaskTags(home.Params), l...)))
+	return b
 }
 
-func createTaskTool(args *Obj, base string) (string, error) {
+func createTaskTool(args jsonObj, base string) (string, error) {
 	if _, err := strArg(args, "title", true); err != nil {
 		return "", err
 	}
@@ -1279,7 +1222,7 @@ func createTaskTool(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data.Set("tags", homeTags(data.Get("tags")))
+	data["tags"] = homeTags(data["tags"])
 	msg, err := commitMsg("Create deck task", args)
 	if err != nil {
 		return "", err
@@ -1291,15 +1234,16 @@ func createTaskTool(args *Obj, base string) (string, error) {
 	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base) + tagHints(task), nil
 }
 
-var taskStatusFields = map[string]*Obj{
-	"done": NewObj("completed", true), "open": NewObj("completed", false),
-	"wont_do": NewObj("wont_do", true), "skip": NewObj("skip", true),
-}
+// taskStatusFields: a status as the deck API's field and its value.
+var taskStatusFields = map[string]struct {
+	field string
+	value bool
+}{"done": {"completed", true}, "open": {"completed", false}, "wont_do": {"wont_do", true}, "skip": {"skip", true}}
 
 // otherArgs: the arguments besides those named, A–Z.
-func otherArgs(args *Obj, allowed ...string) []string {
+func otherArgs(args jsonObj, allowed ...string) []string {
 	var other []string
-	for _, k := range args.Keys() {
+	for k := range args {
 		if !slices.Contains(allowed, k) {
 			other = append(other, k)
 		}
@@ -1310,9 +1254,9 @@ func otherArgs(args *Obj, allowed ...string) []string {
 
 // updateTaskTool: one task's fields, status and comment; status deleted
 // deletes it; ids instead of id tags several tasks (tagTasksTool).
-func updateTaskTool(args *Obj, base string) (string, error) {
-	if args.Has("ids") {
-		if args.Has("id") {
+func updateTaskTool(args jsonObj, base string) (string, error) {
+	if args.has("ids") {
+		if args.has("id") {
 			return "", toolErr("Give id or ids, not both")
 		}
 		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "summary"); len(other) > 0 {
@@ -1329,7 +1273,7 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	status := args.Get("status")
+	status, _ := as[string](args["status"])
 	if status == "deleted" {
 		if other := otherArgs(args, "id", "status", "summary"); len(other) > 0 {
 			return "", toolErr("status deleted takes nothing else, not " + strings.Join(other, ", "))
@@ -1344,7 +1288,7 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
 	}
 	var comment *string
-	if args.Has("comment") {
+	if args.has("comment") {
 		c, err := strArg(args, "comment", true)
 		if err != nil {
 			return "", err
@@ -1355,23 +1299,21 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if args.Has("status") {
-		fields, ok := taskStatusFields[pyStr(status)]
-		if !ok || !isString(status) {
+	if args.has("status") {
+		f, ok := taskStatusFields[status]
+		if !ok {
 			return "", toolErr("status must be open, done, wont_do, skip or deleted")
 		}
-		for _, k := range fields.Keys() {
-			data.Set(k, fields.Get(k))
-		}
+		data.set(f.field, f.value)
 	}
-	if data.Len() == 0 && comment == nil {
+	if len(data) == 0 && comment == nil {
 		return "", toolErr("Nothing to change: give the fields to set, a status or a comment")
 	}
 	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	if data.Len() > 0 {
+	if len(data) > 0 {
 		if task, err = deckWrite(updateTask(task.ID, data, suffix)); err != nil {
 			return "", err
 		}
@@ -1382,9 +1324,9 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 		}
 	}
 	head := "Comment added."
-	if data.Len() > 0 && comment != nil {
+	if len(data) > 0 && comment != nil {
 		head = "Updated, comment added."
-	} else if data.Len() > 0 {
+	} else if len(data) > 0 {
 		head = "Updated."
 	}
 	out := head + "\n\n" + mcpTaskText(task, base)
@@ -1402,13 +1344,13 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 // More ids than this in one call is likely a mistake (a whole deck retagged).
 const tagTasksMax = 200
 
-func tagTasksTool(args *Obj) (string, error) {
-	ids, ok := args.Get("ids").([]any)
+func tagTasksTool(args jsonObj) (string, error) {
+	ids, ok := as[[]json.RawMessage](args["ids"])
 	if !ok || len(ids) == 0 {
 		return "", toolErr("ids must be a non-empty list of task ids")
 	}
 	for _, id := range ids {
-		if !isString(id) {
+		if _, ok := as[string](id); !ok {
 			return "", toolErr("ids must be a non-empty list of task ids")
 		}
 	}
@@ -1428,8 +1370,9 @@ func tagTasksTool(args *Obj) (string, error) {
 	}
 	var found []string
 	before := map[string][]string{}
-	for _, raw := range ids {
-		t, err := findTask(raw.(string)) // an unknown id fails the whole call
+	for _, id := range ids {
+		raw, _ := as[string](id)
+		t, err := findTask(raw) // an unknown id fails the whole call
 		if err != nil {
 			return "", err
 		}
@@ -1507,14 +1450,14 @@ func mcpPageLinks(slug, content string) string {
 	return out
 }
 
-func readPage(args *Obj, base string) (string, error) {
-	raw, ok := args.Get("slug").(string)
+func readPage(args jsonObj, base string) (string, error) {
+	raw, ok := as[string](args["slug"])
 	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
 	}
 	slug := mcpPageSlug(raw)
 	if slug == "" {
-		return "", toolErr("No page " + pyRepr(raw) + ". Use search_wiki or list_pages to find its slug.")
+		return "", toolErr("No page " + strconv.Quote(raw) + ". Use search_wiki or list_pages to find its slug.")
 	}
 	content, err := readPageText(safePath(slug))
 	if err != nil {
@@ -1547,7 +1490,7 @@ func isOrphan(slug string, counts map[string]int, home string) bool {
 	return counts[slug] == 0 && !isProtected(slug) && slug != home && slug != guideSlug && !isScratch(slug)
 }
 
-func listPages(args *Obj, base string) (string, error) {
+func listPages(args jsonObj, base string) (string, error) {
 	limit, err := mcpInt(args, "limit", 100, 1000)
 	if err != nil {
 		return "", err
@@ -1603,7 +1546,7 @@ func listPages(args *Obj, base string) (string, error) {
 		case orphans:
 			return "Every page" + where + " is linked from another page.", nil
 		case under != "":
-			return "No pages under " + pyRepr(under) + ".", nil
+			return "No pages under " + strconv.Quote(under) + ".", nil
 		}
 		return "The wiki has no pages.", nil
 	}
@@ -1626,7 +1569,7 @@ func listPages(args *Obj, base string) (string, error) {
 		"slug | title | last edit | pages linking to it:\n" + strings.Join(lines, "\n"), nil
 }
 
-func checkLinks(args *Obj, base string) (string, error) {
+func checkLinks(args jsonObj, base string) (string, error) {
 	under, err := underArg(args)
 	if err != nil {
 		return "", err
@@ -1674,8 +1617,8 @@ const grepLineChars = 300
 
 func cutLine(line string) string { return cutRunes(strings.TrimSpace(line), grepLineChars, " …") }
 
-func grepWiki(args *Obj, base string) (string, error) {
-	pattern, ok := args.Get("pattern").(string)
+func grepWiki(args jsonObj, base string) (string, error) {
+	pattern, ok := as[string](args["pattern"])
 	if !ok || strings.TrimSpace(pattern) == "" {
 		return "", toolErr("pattern must be a non-empty string")
 	}
@@ -1706,7 +1649,7 @@ func grepWiki(args *Obj, base string) (string, error) {
 	}
 	where := underWhere(under)
 	if len(hits) == 0 {
-		return "No line" + where + " matches " + pyRepr(pattern) + ".", nil
+		return "No line" + where + " matches " + strconv.Quote(pattern) + ".", nil
 	}
 	var out []string
 	last := ""
@@ -1741,7 +1684,7 @@ func fileLabel(fp string) string {
 
 func noGit() error { return toolErr("There is no history: git isn't installed where Leaf runs.") }
 
-func history(args *Obj, base string) (string, error) {
+func history(args jsonObj, base string) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -1770,8 +1713,7 @@ func history(args *Obj, base string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		day, _ := since.(string)
-		return recentChanges(day, under, limit), nil
+		return recentChanges(since, under, limit), nil
 	}
 	slug, err := pageOrNewSlug(raw) // a deleted page has a history too
 	if err != nil {
@@ -1780,7 +1722,7 @@ func history(args *Obj, base string) (string, error) {
 	path := safePath(slug)
 	entries := gitLog(path, 0)
 	if len(entries) == 0 {
-		return "", toolErr("No history for " + pyRepr(raw) + ". Use list_pages to find its slug.")
+		return "", toolErr("No history for " + strconv.Quote(raw) + ". Use list_pages to find its slug.")
 	}
 	if version != "" {
 		return pageChange(slug, path, entries, version)
@@ -1815,7 +1757,7 @@ func versionOf(entries []GitEntry, version string) int {
 func pageChange(slug, path string, entries []GitEntry, version string) (string, error) {
 	i := versionOf(entries, version)
 	if i < 0 {
-		return "", toolErr(pyRepr(version) + " is not a version of " + slug + "; history lists them.")
+		return "", toolErr(strconv.Quote(version) + " is not a version of " + slug + "; history lists them.")
 	}
 	e := entries[i]
 	diff, _ := versionDiff(path, entries, e.Sha)
@@ -1866,7 +1808,7 @@ func recentChanges(since, under string, limit int) string {
 	return strings.Join(out, "\n\n")
 }
 
-func listTags(args *Obj, base string) (string, error) {
+func listTags(args jsonObj, base string) (string, error) {
 	counts := map[string]*[3]int{} // tag → pages, open tasks, done tasks
 	count := func(tag string, column int) {
 		if counts[tag] == nil {
@@ -1918,7 +1860,7 @@ func listTags(args *Obj, base string) (string, error) {
 
 // leafHelp: Leaf's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
-func leafHelp(args *Obj, base string) (string, error) {
+func leafHelp(args jsonObj, base string) (string, error) {
 	var query, topic, heading string
 	for _, a := range []struct {
 		name string
@@ -1944,7 +1886,7 @@ func leafHelp(args *Obj, base string) (string, error) {
 	if topic != "" {
 		path, ok := paths[topic]
 		if !ok {
-			return "", toolErr("No topic " + pyRepr(topic) + ". Topics: " + strings.Join(names, ", ") + ".")
+			return "", toolErr("No topic " + strconv.Quote(topic) + ". Topics: " + strings.Join(names, ", ") + ".")
 		}
 		text, err := readText(path)
 		if err != nil {
@@ -2001,8 +1943,8 @@ func leafHelp(args *Obj, base string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-func searchWiki(args *Obj, base string) (string, error) {
-	query, ok := args.Get("query").(string)
+func searchWiki(args jsonObj, base string) (string, error) {
+	query, ok := as[string](args["query"])
 	if !ok || strings.TrimSpace(query) == "" {
 		return "", toolErr("query must be a non-empty string")
 	}
@@ -2011,7 +1953,7 @@ func searchWiki(args *Obj, base string) (string, error) {
 		return "", err
 	}
 	if under != "" && !anyPageIn(under) {
-		return "", toolErr("No pages under " + pyRepr(under) + ". list_pages shows the slugs, " +
+		return "", toolErr("No pages under " + strconv.Quote(under) + ". list_pages shows the slugs, " +
 			"whose folders are the part before the last '/'.")
 	}
 	limit, err := mcpInt(args, "limit", 8, 20)
@@ -2054,7 +1996,7 @@ func anyPageIn(folder string) bool {
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
-var mcpToolFuncs = map[string]func(args *Obj, base string) (string, error){
+var mcpToolFuncs = map[string]func(args jsonObj, base string) (string, error){
 	"search_wiki": searchWiki, "search_tasks": searchTasks, "grep_wiki": grepWiki, "read_page": readPage,
 	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
 	"leaf_help": leafHelp, "read_guides": readGuides,
@@ -2066,7 +2008,7 @@ var mcpToolFuncs = map[string]func(args *Obj, base string) (string, error){
 
 // callMCPTool runs a tool for the request r: links in its answer use
 // LEAF_BASE_URL, else the address the client reached Leaf at.
-func callMCPTool(r *http.Request, name string, args *Obj) (string, error) {
+func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	base := cfg.BaseURL
 	if base == "" {
 		scheme := "http"

@@ -7,11 +7,13 @@ import (
 
 // A task as the Python Leaf wrote it (its key order, 1.0, a key it no
 // longer knows, a field missing) reads into a Task and is written in Leaf's
-// order, the unknown key last and kept; written again, nothing changes.
+// order, the unknown keys last (A–Z) and kept; written again, nothing
+// changes.
 func TestTaskFileRoundTrip(t *testing.T) {
 	old := `[
   {
     "id": "a1",
+    "zz": {"a": [1, 2.50]},
     "title": "Call <Bob> & \"Al\"",
     "description": "ü",
     "tags": ["work", "#Home"],
@@ -69,7 +71,13 @@ func TestTaskFileRoundTrip(t *testing.T) {
     "comments": [],
     "blocked_by": [
       "x"
-    ]
+    ],
+    "zz": {
+      "a": [
+        1,
+        2.50
+      ]
+    }
   }
 ]
 `
@@ -82,12 +90,13 @@ func TestTaskFileRoundTrip(t *testing.T) {
 	}
 }
 
-// Values of the wrong kind are their field's default, never an error.
+// Values of the wrong kind are their field's default, never an error; a
+// number or a bool where text belongs is its JSON text.
 func TestTaskFromOddValues(t *testing.T) {
-	v, _ := loads([]byte(`{"id": 7, "title": null, "tags": "work", "sort_order": "x",
+	v, _ := parseObj([]byte(`{"id": 7, "title": null, "description": true, "tags": "work", "sort_order": "x",
 		"recurrence": {"interval": "2"}, "keep": 1, "comments": [{"id": "c", "at": "2026-01-01T10:00", "text": "hi"}, 3]}`))
-	task := taskFromObj(v.(*Obj))
-	if task.ID != "7" || task.Title != "" || len(task.Tags) != 0 || task.SortOrder != nil || !task.Keep ||
+	task := taskFromJSON(v)
+	if task.ID != "7" || task.Title != "" || task.Description != "true" || len(task.Tags) != 0 || task.SortOrder != nil || task.Keep ||
 		task.Recurrence == nil || task.Recurrence.Type != "daily" || task.Recurrence.Interval != 1 || len(task.Comments) != 1 {
 		t.Errorf("%+v %+v", task, task.Recurrence)
 	}

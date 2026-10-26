@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"math"
 )
 
 type Task struct {
@@ -25,7 +24,7 @@ type Task struct {
 	SpawnedFrom            string // the occurrence this one follows
 	History                []HistoryEntry
 	Comments               []Comment
-	Extra                  *Obj // keys Leaf doesn't know, in the file's order
+	Extra                  map[string]json.RawMessage // keys Leaf doesn't know, as the file had them
 }
 
 // Recurrence: a task's series. Day (monthly, yearly) is the day of month
@@ -54,133 +53,179 @@ var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "
 	"keep": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true}
 
-// strField: a field as text: a string as it is, null as "", anything else
-// as Python's str() of it (a file edited by hand).
-func strField(o *Obj, k string) string {
-	switch v := o.Get(k).(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	default:
-		return pyStr(v)
-	}
+// strField: a field as text: a string as it is, a number or a bool as its
+// JSON text (an id of 7 is "7"), anything else "" (a file edited by hand).
+func strField(o jsonObj, k string) string {
+	s, _ := scalarText(o[k])
+	return s
 }
 
-// taskFromObj reads a task from a file's (or a request's) object,
-// leniently: a value of the wrong kind is its field's default, never an
-// error, so an odd file still reads (and a write doesn't refuse it).
-func taskFromObj(o *Obj) *Task {
+// textList: a list's items as text (scalarText), the others left out.
+func textList(raw json.RawMessage) []string {
+	l, _ := as[[]json.RawMessage](raw)
+	var out []string
+	for _, x := range l {
+		if s, ok := scalarText(x); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// taskFromJSON reads a task from a file's object, leniently: a value of the
+// wrong kind is its field's default, never an error, so an odd file still
+// reads (and a write doesn't refuse it).
+func taskFromJSON(o jsonObj) *Task {
 	t := &Task{ID: strField(o, "id"), Title: strField(o, "title"), Description: strField(o, "description"),
 		StartDate: strField(o, "start_date"), DueDate: strField(o, "due_date"),
 		CreatedAt: strField(o, "created_at"), CompletedAt: strField(o, "completed_at"),
-		WontDo: o.Truthy("wont_do"), Keep: o.Truthy("keep"), LastDone: strField(o, "last_done"),
-		SpawnedFrom: strField(o, "spawned_from"), Tags: []string{}, History: []HistoryEntry{}, Comments: []Comment{}}
-	if tags, ok := o.Get("tags").([]any); ok {
-		t.Tags = cleanTags(tags) // "local llm", "#work" from a file edited by hand
-	}
-	if f, ok := number(o.Get("sort_order")); ok && !math.IsNaN(f) && !math.IsInf(f, 0) {
+		WontDo: jsonTrue(o["wont_do"]), Keep: jsonTrue(o["keep"]), LastDone: strField(o, "last_done"),
+		SpawnedFrom: strField(o, "spawned_from"), History: []HistoryEntry{}, Comments: []Comment{}}
+	t.Tags = cleanTags(textList(o["tags"])) // "local llm", "#work" from a file edited by hand
+	if f, ok := as[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
 	}
-	if rec, ok := o.Get("recurrence").(*Obj); ok && rec.Len() > 0 {
-		t.Recurrence = recurrenceFromObj(rec)
+	if rec, ok := as[jsonObj](o["recurrence"]); ok && len(rec) > 0 {
+		t.Recurrence = recurrenceFromJSON(rec)
 	}
-	for _, x := range o.List("history") {
-		if e, ok := x.(*Obj); ok {
-			t.History = append(t.History, HistoryEntry{At: strField(e, "at"), Event: strField(e, "event"),
-				From: strField(e, "from"), To: strField(e, "to")})
-		}
+	for _, e := range objList(o["history"]) {
+		t.History = append(t.History, HistoryEntry{At: strField(e, "at"), Event: strField(e, "event"),
+			From: strField(e, "from"), To: strField(e, "to")})
 	}
-	for _, x := range o.List("comments") {
-		if c, ok := x.(*Obj); ok {
-			t.Comments = append(t.Comments, Comment{ID: strField(c, "id"), At: strField(c, "at"), Text: strField(c, "text")})
-		}
+	for _, c := range objList(o["comments"]) {
+		t.Comments = append(t.Comments, Comment{ID: strField(c, "id"), At: strField(c, "at"), Text: strField(c, "text")})
 	}
-	for _, k := range o.Keys() {
+	for k, v := range o {
 		if !taskKeys[k] {
 			if t.Extra == nil {
-				t.Extra = NewObj()
+				t.Extra = map[string]json.RawMessage{}
 			}
-			t.Extra.Set(k, o.Get(k))
+			t.Extra[k] = v
 		}
 	}
 	return t
 }
 
-// recurrenceFromObj: a series as stored; a missing or bad type is daily,
+// objList: a list's objects, the other items left out.
+func objList(raw json.RawMessage) []jsonObj {
+	l, _ := as[[]json.RawMessage](raw)
+	var out []jsonObj
+	for _, x := range l {
+		if o, ok := as[jsonObj](x); ok {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// recurrenceFromJSON: a series as stored; a missing or bad type is daily,
 // a missing or bad interval 1.
-func recurrenceFromObj(rec *Obj) *Recurrence {
+func recurrenceFromJSON(rec jsonObj) *Recurrence {
 	r := &Recurrence{Type: "daily", Interval: 1, From: "due"}
-	if s, ok := rec.Get("type").(string); ok && s != "" {
+	if s, ok := as[string](rec["type"]); ok && s != "" {
 		r.Type = s
 	}
-	if n, ok := intValue(rec.Get("interval")); ok && n >= 1 {
+	if n, ok := wholeNumber(rec["interval"]); ok && n >= 1 {
 		r.Interval = min(n, recIntervalMax)
 	}
-	if rec.Str("from") == "completion" {
+	if s, _ := as[string](rec["from"]); s == "completion" {
 		r.From = "completion"
 	}
-	if n, ok := intValue(rec.Get("day")); ok && n >= 1 && n <= 31 {
+	if n, ok := wholeNumber(rec["day"]); ok && n >= 1 && n <= 31 {
 		r.Day = n
 	}
-	if n, ok := intValue(rec.Get("lead")); ok && n >= 0 {
+	if n, ok := wholeNumber(rec["lead"]); ok && n >= 0 {
 		r.Lead = &n
 	}
 	return r
 }
 
-func nullable(s string) any {
+// nullable: "" as null.
+func nullable(s string) *string {
 	if s == "" {
 		return nil
 	}
-	return s
+	return &s
 }
 
-// obj: the task as JSON's object, in the order the files keep, the keys
-// Leaf doesn't know last.
-func (t *Task) obj() *Obj {
-	var sortOrder, rec any
-	if t.SortOrder != nil {
-		sortOrder = *t.SortOrder
-	}
-	if r := t.Recurrence; r != nil {
-		o := NewObj("type", r.Type, "interval", int64(r.Interval), "from", r.From)
-		if r.Day > 0 {
-			o.Set("day", int64(r.Day))
-		}
-		if r.Lead != nil {
-			o.Set("lead", int64(*r.Lead))
-		}
-		rec = o
-	}
-	history := make([]any, len(t.History))
-	for i, e := range t.History {
-		o := NewObj("at", e.At, "event", e.Event)
-		if datedEvents[e.Event] {
-			o.Set("from", nullable(e.From))
-			o.Set("to", nullable(e.To))
-		}
-		history[i] = o
-	}
-	comments := make([]any, len(t.Comments))
-	for i, c := range t.Comments {
-		comments[i] = NewObj("id", c.ID, "at", c.At, "text", c.Text)
-	}
-	o := NewObj("id", t.ID, "title", t.Title, "description", t.Description, "tags", strs(t.Tags),
-		"start_date", nullable(t.StartDate), "due_date", nullable(t.DueDate),
-		"created_at", nullable(t.CreatedAt), "completed_at", nullable(t.CompletedAt),
-		"wont_do", t.WontDo, "keep", t.Keep, "last_done", nullable(t.LastDone),
-		"sort_order", sortOrder, "recurrence", rec, "spawned_from", nullable(t.SpawnedFrom),
-		"history", history, "comments", comments)
-	if t.Extra != nil {
-		for _, k := range t.Extra.Keys() {
-			o.Set(k, t.Extra.Get(k))
-		}
-	}
-	return o
+func (r *Recurrence) MarshalJSON() ([]byte, error) {
+	return marshalText(struct {
+		Type     string `json:"type"`
+		Interval int    `json:"interval"`
+		From     string `json:"from"`
+		Day      int    `json:"day,omitempty"`
+		Lead     *int   `json:"lead,omitempty"`
+	}{r.Type, r.Interval, r.From, r.Day, r.Lead})
 }
 
-func (t *Task) MarshalJSON() ([]byte, error) { return t.obj().MarshalJSON() }
+// MarshalJSON: the dated events say from and to which day (null none),
+// the others neither.
+func (e HistoryEntry) MarshalJSON() ([]byte, error) {
+	if !datedEvents[e.Event] {
+		return marshalText(struct {
+			At    string `json:"at"`
+			Event string `json:"event"`
+		}{e.At, e.Event})
+	}
+	return marshalText(struct {
+		At    string  `json:"at"`
+		Event string  `json:"event"`
+		From  *string `json:"from"`
+		To    *string `json:"to"`
+	}{e.At, e.Event, nullable(e.From), nullable(e.To)})
+}
+
+func (c Comment) MarshalJSON() ([]byte, error) {
+	return marshalText(struct {
+		ID   string `json:"id"`
+		At   string `json:"at"`
+		Text string `json:"text"`
+	}{c.ID, c.At, c.Text})
+}
+
+// MarshalJSON writes the fields in the order the files keep, the keys
+// Leaf doesn't know last, A–Z.
+func (t *Task) MarshalJSON() ([]byte, error) {
+	tags, history, comments := t.Tags, t.History, t.Comments
+	if tags == nil {
+		tags = []string{}
+	}
+	if history == nil {
+		history = []HistoryEntry{}
+	}
+	if comments == nil {
+		comments = []Comment{}
+	}
+	b, err := marshalText(struct {
+		ID          string         `json:"id"`
+		Title       string         `json:"title"`
+		Description string         `json:"description"`
+		Tags        []string       `json:"tags"`
+		StartDate   *string        `json:"start_date"`
+		DueDate     *string        `json:"due_date"`
+		CreatedAt   *string        `json:"created_at"`
+		CompletedAt *string        `json:"completed_at"`
+		WontDo      bool           `json:"wont_do"`
+		Keep        bool           `json:"keep"`
+		LastDone    *string        `json:"last_done"`
+		SortOrder   *float64       `json:"sort_order"`
+		Recurrence  *Recurrence    `json:"recurrence"`
+		SpawnedFrom *string        `json:"spawned_from"`
+		History     []HistoryEntry `json:"history"`
+		Comments    []Comment      `json:"comments"`
+	}{t.ID, t.Title, t.Description, tags, nullable(t.StartDate), nullable(t.DueDate),
+		nullable(t.CreatedAt), nullable(t.CompletedAt), t.WontDo, t.Keep, nullable(t.LastDone),
+		t.SortOrder, t.Recurrence, nullable(t.SpawnedFrom), history, comments})
+	if err != nil || len(t.Extra) == 0 {
+		return b, err
+	}
+	b = b[:len(b)-1] // the closing }
+	for _, k := range sortedKeys(t.Extra) {
+		key, _ := marshalText(k)
+		b = append(append(append(append(b, ','), key...), ':'), t.Extra[k]...)
+	}
+	return append(b, '}'), nil
+}
 
 // encodeTasks: a deck file's text, two spaces of indent, text as it is
 // (no \u escapes but those JSON needs).

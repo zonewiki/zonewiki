@@ -162,9 +162,16 @@ func loadQuestions(path string) ([]question, int, error) {
 
 func normQuery(q string) string { return strings.Join(strings.Fields(strings.ToLower(q)), " ") }
 
+// queryStub: a logged query as a question to fill in (its expect).
+type queryStub struct {
+	Q       string            `json:"q"`
+	Expect  []string          `json:"expect"`
+	Results []json.RawMessage `json:"results"`
+}
+
 // newQueries: logged queries the questions file doesn't have, newest first,
-// each once, as stubs: {"q", "expect": [], "results"}.
-func newQueries(path string, logs []string) ([]*Obj, error) {
+// each once, as stubs.
+func newQueries(path string, logs []string) ([]queryStub, error) {
 	known := map[string]bool{}
 	if b, err := os.ReadFile(path); err == nil {
 		var data []any
@@ -182,8 +189,9 @@ func newQueries(path string, logs []string) ([]*Obj, error) {
 		return nil, fmt.Errorf("Can't read %s: %v", path, err)
 	}
 	type entry struct {
-		at, q   string
-		results []any
+		At      string            `json:"at"`
+		Q       *string           `json:"q"`
+		Results []json.RawMessage `json:"results"`
 	}
 	var entries []entry
 	for _, log := range logs {
@@ -192,31 +200,22 @@ func newQueries(path string, logs []string) ([]*Obj, error) {
 			continue
 		}
 		for _, line := range strings.Split(string(b), "\n") {
-			var m map[string]any
-			if json.Unmarshal([]byte(line), &m) != nil {
-				continue
+			var e entry
+			if json.Unmarshal([]byte(line), &e) == nil && e.Q != nil {
+				entries = append(entries, e)
 			}
-			q, ok := m["q"].(string)
-			if !ok {
-				continue
-			}
-			at, _ := m["at"].(string)
-			results, _ := m["results"].([]any)
-			entries = append(entries, entry{at, q, results})
 		}
 	}
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at > entries[j].at })
-	var stubs []*Obj
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].At > entries[j].At })
+	var stubs []queryStub
 	for _, e := range entries {
-		if known[normQuery(e.q)] {
+		q := *e.Q
+		if known[normQuery(q)] {
 			continue
 		}
-		known[normQuery(e.q)] = true
-		results := e.results[:min(5, len(e.results))]
-		if results == nil {
-			results = []any{}
-		}
-		stubs = append(stubs, NewObj("q", e.q, "expect", []any{}, "results", results))
+		known[normQuery(q)] = true
+		stubs = append(stubs, queryStub{Q: q, Expect: []string{},
+			Results: append([]json.RawMessage{}, e.Results[:min(5, len(e.Results))]...)})
 	}
 	return stubs, nil
 }

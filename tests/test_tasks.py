@@ -117,6 +117,25 @@ class TestValidation:
         resp = client.put(f"/api/deck/{task['id']}", json={"due_date": ""})
         assert resp.get_json()["due_date"] is None
 
+    def test_status_and_keep_are_true_or_false(self, client):
+        """1, "yes" or null is no bool: refused, the task as it was."""
+        task = create_task(client, title="Task").get_json()
+        for field, value in [("completed", 1), ("wont_do", "yes"), ("skip", None), ("keep", 0)]:
+            resp = client.put(f"/api/deck/{task['id']}", json={field: value})
+            assert resp.status_code == 400
+            assert resp.get_json()["error"] == f"{field} must be true or false"
+        resp = client.post("/api/deck/batch-complete", json={"ids": [task["id"]], "completed": "no"})
+        assert resp.get_json()["error"] == "completed must be true or false"
+        [same] = client.get("/api/deck").get_json()
+        assert same["completed_at"] is None and same["keep"] is False
+
+    def test_idx_must_be_whole(self, client):
+        task = create_task(client, title="Task", description="- [ ] a").get_json()
+        resp = client.post(f"/api/deck/{task['id']}/toggle-check", json={"idx": 0.5})
+        assert resp.get_json()["error"] == "idx must be an integer"
+        resp = client.post(f"/api/deck/{task['id']}/toggle-check", json={"idx": "0"})
+        assert resp.get_json()["description"].startswith("- [x] a")
+
 
 # ---------- Batch Delete ----------
 

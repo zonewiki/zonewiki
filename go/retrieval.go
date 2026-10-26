@@ -699,20 +699,24 @@ func resultTarget(d *SearchDoc) string {
 	return d.Slug + d.Anchor
 }
 
+// queryLogEntry: a line of the query log.
+type queryLogEntry struct {
+	At      string   `json:"at"`
+	Q       string   `json:"q"`
+	Under   string   `json:"under,omitempty"`
+	Results []string `json:"results"`
+}
+
 // logQuery appends a search_wiki query and what it found to the query log.
 func logQuery(raw, under string, hits []*SearchDoc) {
 	if !cfg.QueryLog {
 		return
 	}
-	entry := NewObj("at", now().Format("2006-01-02T15:04:05"), "q", raw)
-	if under != "" {
-		entry.Set("under", under)
-	}
-	targets := make([]any, len(hits))
+	targets := make([]string, len(hits))
 	for i, d := range hits {
 		targets[i] = resultTarget(d)
 	}
-	entry.Set("results", targets)
+	entry := queryLogEntry{At: now().Format("2006-01-02T15:04:05"), Q: raw, Under: under, Results: targets}
 	path := queryLogPath()
 	queryLogMu.Lock()
 	defer queryLogMu.Unlock()

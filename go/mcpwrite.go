@@ -6,6 +6,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -20,7 +21,7 @@ import (
 
 func unixNano(n int64) time.Time { return time.Unix(0, n) }
 
-func writePage(args *Obj, base string) (string, error) {
+func writePage(args jsonObj, base string) (string, error) {
 	content, err := strArg(args, "content", true)
 	if err != nil {
 		return "", err
@@ -31,14 +32,14 @@ func writePage(args *Obj, base string) (string, error) {
 	} else if scratch {
 		return writeScratch(args, content, base)
 	}
-	overwrite := args.Get("overwrite") == true
+	overwrite := jsonTrue(args["overwrite"])
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
 		return "", err
 	}
 	existing := mcpPageSlug(raw)
 	if existing != "" && !overwrite {
-		return "", toolErr("Page " + pyRepr(existing) + " already exists. Change it with edit_page or append_to_page, " +
+		return "", toolErr("Page " + strconv.Quote(existing) + " already exists. Change it with edit_page or append_to_page, " +
 			"or set overwrite=true to replace all of it.")
 	}
 	slug := existing
@@ -92,8 +93,8 @@ func writePage(args *Obj, base string) (string, error) {
 
 // writeScratch: write_page with scratch, a new scratch note, named by slug
 // (any words; Leaf puts the time in front) or else by the content's title.
-func writeScratch(args *Obj, content, base string) (string, error) {
-	if args.Get("overwrite") == true {
+func writeScratch(args jsonObj, content, base string) (string, error) {
+	if jsonTrue(args["overwrite"]) {
 		return "", toolErr("A scratch note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
 	}
@@ -140,7 +141,7 @@ func scratchErr(s string, err error) (string, error) {
 
 // fileScratchNote: the scratch note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
-func fileScratchNote(args *Obj, base string) (string, error) {
+func fileScratchNote(args jsonObj, base string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -168,7 +169,7 @@ func fileScratchNote(args *Obj, base string) (string, error) {
 	if page != "" {
 		target := mcpPageSlug(page)
 		if target == "" {
-			return "", toolErr("No page " + pyRepr(page) + ". Use search_wiki or list_pages to find its slug.")
+			return "", toolErr("No page " + strconv.Quote(page) + ". Use search_wiki or list_pages to find its slug.")
 		}
 		heading, err := strArg(args, "heading", false)
 		if err != nil {
@@ -222,7 +223,7 @@ func fileScratchNote(args *Obj, base string) (string, error) {
 // applyEdit: content with one edit applied (old_string → new_string,
 // replace_all), and how many places it changed. which names the edit in
 // errors.
-func applyEdit(content, slug string, edit *Obj, which string) (string, int, error) {
+func applyEdit(content, slug string, edit jsonObj, which string) (string, int, error) {
 	old, err := strArg(edit, "old_string", true)
 	if err != nil {
 		return "", 0, err
@@ -239,14 +240,14 @@ func applyEdit(content, slug string, edit *Obj, which string) (string, int, erro
 		return "", 0, toolErr(which + "old_string was not found in " + slug + ". It must match the page exactly, line breaks " +
 			"and whitespace included; read_page shows the current text.")
 	}
-	if count > 1 && edit.Get("replace_all") != true {
+	if count > 1 && !jsonTrue(edit["replace_all"]) {
 		return "", 0, toolErr(fmt.Sprintf("%sold_string occurs %d times in %s. Include more of the surrounding text "+
 			"to make it unique, or set replace_all=true to change every one.", which, count, slug))
 	}
 	return strings.ReplaceAll(content, old, repl), count, nil
 }
 
-func editPageTool(args *Obj, base string) (string, error) {
+func editPageTool(args jsonObj, base string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -254,22 +255,22 @@ func editPageTool(args *Obj, base string) (string, error) {
 	if err := checkGuides(args, []string{slug}); err != nil {
 		return "", err
 	}
-	edits := []*Obj{args}
-	several := args.Get("edits") != nil
+	edits := []jsonObj{args}
+	several := !args.null("edits")
 	if several {
-		l, ok := args.Get("edits").([]any)
+		l, ok := as[[]json.RawMessage](args["edits"])
 		if !ok || len(l) == 0 {
 			return "", toolErr("edits must be a non-empty list of {old_string, new_string, replace_all}")
 		}
 		edits = nil
 		for _, e := range l {
-			o, ok := e.(*Obj)
+			o, ok := as[jsonObj](e)
 			if !ok {
 				return "", toolErr("edits must be a non-empty list of {old_string, new_string, replace_all}")
 			}
 			edits = append(edits, o)
 		}
-		if args.Has("old_string") {
+		if args.has("old_string") {
 			return "", toolErr("give either old_string/new_string or edits, not both")
 		}
 	}
@@ -327,7 +328,7 @@ func appendAt(content, addition, heading string) (string, bool) {
 	return out, true
 }
 
-func appendToPage(args *Obj, base string) (string, error) {
+func appendToPage(args jsonObj, base string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -358,7 +359,7 @@ func appendToPage(args *Obj, base string) (string, error) {
 			return "", toolErr(noHeading(slug, content, heading) +
 				" To start a new section, put its heading in content and leave out under_heading.")
 		}
-		where = " under " + pyRepr(heading)
+		where = " under " + strconv.Quote(heading)
 	}
 	msg, err := commitMsg("Append to "+slug, args)
 	if err != nil {
@@ -376,7 +377,7 @@ func appendToPage(args *Obj, base string) (string, error) {
 // trailing "/" ("projects/"), or no page by that name but pages below it.
 // "" for a page.
 func folderArg(raw string) string {
-	folder, _ := cleanFolder(raw)
+	folder := cleanFolder(raw)
 	if folder == "" || !strings.HasSuffix(strings.TrimSpace(raw), "/") && mcpPageSlug(raw) != "" {
 		return ""
 	}
@@ -391,7 +392,7 @@ func folderArg(raw string) string {
 // A list of moved pages in rename_page's result stops after this many.
 const movesShown = 20
 
-func renameFolder(folder string, args *Obj, base string) (string, error) {
+func renameFolder(folder string, args jsonObj, base string) (string, error) {
 	raw, err := strArg(args, "new_slug", true)
 	if err != nil {
 		return "", err
@@ -406,7 +407,7 @@ func renameFolder(folder string, args *Obj, base string) (string, error) {
 	case strings.HasPrefix(newFolder, folder+"/"):
 		return "", toolErr(folder + "/ can't move into a folder inside itself")
 	case safePath(newFolder+"/page") == "":
-		return "", toolErr(pyRepr(newFolder) + ": pages can't go in folders starting with '_' or '.'")
+		return "", toolErr(strconv.Quote(newFolder) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	var paths, taken []string
 	for _, p := range sortedPages() {
@@ -447,7 +448,7 @@ func renameFolder(folder string, args *Obj, base string) (string, error) {
 	return strings.Join(out, "\n") + pending, nil
 }
 
-func renamePageTool(args *Obj, base string) (string, error) {
+func renamePageTool(args jsonObj, base string) (string, error) {
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
 		return "", err
@@ -475,7 +476,7 @@ func renamePageTool(args *Obj, base string) (string, error) {
 	}
 	newPath := safePath(newS)
 	if exists(newPath) {
-		return "", toolErr("A page " + pyRepr(newS) + " already exists")
+		return "", toolErr("A page " + strconv.Quote(newS) + " already exists")
 	}
 	if err := checkGuides(args, []string{slug, newS}); err != nil {
 		return "", err
@@ -496,7 +497,7 @@ func renamePageTool(args *Obj, base string) (string, error) {
 	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pending, nil
 }
 
-func deletePageTool(args *Obj, base string) (string, error) {
+func deletePageTool(args jsonObj, base string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -531,7 +532,7 @@ func deletePageTool(args *Obj, base string) (string, error) {
 	return out + pending, nil
 }
 
-func restorePage(args *Obj, base string) (string, error) {
+func restorePage(args jsonObj, base string) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -552,7 +553,7 @@ func restorePage(args *Obj, base string) (string, error) {
 	entries := gitLog(path, 0)
 	i := versionOf(entries, version)
 	if i < 0 {
-		return "", toolErr(pyRepr(version) + " is not a version of " + slug + "; history(slug) lists them.")
+		return "", toolErr(strconv.Quote(version) + " is not a version of " + slug + "; history(slug) lists them.")
 	}
 	sha := entries[i].Sha
 	content, ok := gitShow(sha, versionPath(path, entries, sha))
@@ -698,7 +699,7 @@ func parseTemplate(t string, re *regexp.Regexp) ([]templatePart, error) {
 			} else if n := re.SubexpIndex(name); n >= 0 {
 				parts = append(parts, templatePart{"", n})
 			} else {
-				return nil, fmt.Errorf("unknown group name %s", pyRepr(name))
+				return nil, fmt.Errorf("unknown group name %s", strconv.Quote(name))
 			}
 		case c == '0':
 			n := 0
@@ -772,7 +773,7 @@ type replaceHit struct {
 	changed              []changedLine
 }
 
-func replaceInPages(args *Obj, base string) (string, error) {
+func replaceInPages(args jsonObj, base string) (string, error) {
 	find, err := strArg(args, "find", true)
 	if err != nil {
 		return "", err
@@ -793,9 +794,12 @@ func replaceInPages(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dryRun, ok := orDefault(args, "dry_run", true).(bool)
-	if !ok {
-		return "", toolErr("dry_run must be true or false")
+	dryRun := true
+	if args.has("dry_run") {
+		var ok bool
+		if dryRun, ok = as[bool](args["dry_run"]); !ok {
+			return "", toolErr("dry_run must be true or false")
+		}
 	}
 	pattern := regexp.QuoteMeta(find)
 	if isRegex {
@@ -814,7 +818,7 @@ func replaceInPages(args *Obj, base string) (string, error) {
 		return "", err
 	}
 	if under != "" && !anyPageIn(under) {
-		return "", toolErr("No pages under " + pyRepr(under) + ". list_pages shows the slugs.")
+		return "", toolErr("No pages under " + strconv.Quote(under) + ". list_pages shows the slugs.")
 	}
 	maxPages, err := mcpInt(args, "max_pages", 50, 1000)
 	if err != nil {
@@ -872,7 +876,7 @@ func replaceInPages(args *Obj, base string) (string, error) {
 		code = " outside code"
 	}
 	if len(hits) == 0 {
-		return "Nothing" + where + " matches " + pyRepr(find) + code + ".", nil
+		return "Nothing" + where + " matches " + strconv.Quote(find) + code + ".", nil
 	}
 	counted := fmt.Sprintf("%d %s on %d %s", total, plural(total, "occurrence"), len(hits), plural(len(hits), "page"))
 	if dryRun {
@@ -903,7 +907,7 @@ func replaceInPages(args *Obj, base string) (string, error) {
 	}
 	if len(hits) > maxPages {
 		return "", toolErr(fmt.Sprintf("%s would change %d pages, more than max_pages (%d); nothing was "+
-			"written. Check with dry_run, then raise max_pages, or narrow find or under.", pyRepr(find), len(hits), maxPages))
+			"written. Check with dry_run, then raise max_pages, or narrow find or under.", strconv.Quote(find), len(hits), maxPages))
 	}
 	var slugs, paths []string
 	for _, h := range hits {
@@ -917,7 +921,7 @@ func replaceInPages(args *Obj, base string) (string, error) {
 	if len(hits) > 1 {
 		on = fmt.Sprintf("%d pages", len(hits))
 	}
-	msg, err := commitMsg("Replace "+pyRepr(cutRunes(find, 60, "…"))+" on "+on, args)
+	msg, err := commitMsg("Replace "+strconv.Quote(cutRunes(find, 60, "…"))+" on "+on, args)
 	if err != nil {
 		return "", err
 	}

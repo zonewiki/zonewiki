@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,31 +21,47 @@ func set[T any](t *testing.T, v *T, to T) {
 	t.Cleanup(func() { *v = old })
 }
 
-func handle(t *testing.T, msg string, call func(string, *Obj) (string, error)) *Obj {
+// replyText: the reply to msg as JSON text ("null" for none).
+func replyText(t *testing.T, msg string, call func(string, jsonObj) (string, error)) string {
 	t.Helper()
-	v, err := loads([]byte(msg))
+	reply, err := handleMCP(json.RawMessage(msg), call)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reply, err := handleMCP(v, call)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return reply
+	return jsonText(reply)
 }
 
-func noTools(string, *Obj) (string, error) { panic("not called") }
+// handle: the reply to msg, as JSON reads back (nil for none).
+func handle(t *testing.T, msg string, call func(string, jsonObj) (string, error)) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(replyText(t, msg, call)), &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// field: a member of nested objects, by path.
+func field(v any, path ...string) any {
+	for _, k := range path {
+		m, _ := v.(map[string]any)
+		v = m[k]
+	}
+	return v
+}
+
+func noTools(string, jsonObj) (string, error) { panic("not called") }
 
 func TestMCPProtocol(t *testing.T) {
 	testWiki(t, nil)
 	r := handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}`, noTools)
-	res := r.Get("result").(*Obj)
-	if res.Get("protocolVersion") != "2025-06-18" || res.Get("serverInfo").(*Obj).Get("version") != version ||
-		!strings.Contains(res.Str("instructions"), "search_wiki") {
+	instructions, _ := field(r, "result", "instructions").(string)
+	if field(r, "result", "protocolVersion") != "2025-06-18" || field(r, "result", "serverInfo", "version") != version ||
+		!strings.Contains(instructions, "search_wiki") {
 		t.Errorf("initialize: %s", jsonText(r))
 	}
 	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}`, noTools)
-	if r.Get("result").(*Obj).Get("protocolVersion") != protocolVersions[0] {
+	if field(r, "result", "protocolVersion") != protocolVersions[0] {
 		t.Error("an unknown version doesn't get the newest")
 	}
 	for _, msg := range []string{`{"jsonrpc": "2.0", "method": "notifications/initialized"}`, `{"jsonrpc": "2.0", "id": 5, "result": {}}`} {
@@ -52,11 +69,11 @@ func TestMCPProtocol(t *testing.T) {
 			t.Errorf("answered %s", msg)
 		}
 	}
-	if got := jsonText(handle(t, `{"jsonrpc": "2.0", "id": 2, "method": "ping"}`, noTools)); got != `{"jsonrpc":"2.0","id":2,"result":{}}` {
+	if got := replyText(t, `{"jsonrpc": "2.0", "id": 2, "method": "ping"}`, noTools); got != `{"jsonrpc":"2.0","id":2,"result":{}}` {
 		t.Errorf("ping: %s", got)
 	}
-	code := func(msg string) any { return handle(t, msg, noTools).Get("error").(*Obj).Get("code") }
-	for msg, want := range map[string]int{
+	code := func(msg string) any { return field(handle(t, msg, noTools), "error", "code") }
+	for msg, want := range map[string]float64{
 		`{"jsonrpc": "2.0", "id": 1, "method": "resources/list"}`: -32601,
 		`{"id": 1, "method": "ping"}`:                             -32600,
 		`[1]`:                                                     -32600,
@@ -67,9 +84,9 @@ func TestMCPProtocol(t *testing.T) {
 			t.Errorf("%s: code %v", msg, c)
 		}
 	}
-	fail := func(string, *Obj) (string, error) { return "", toolErr("No page 'x'") }
-	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "read_page", "arguments": {"slug": "x"}}}`, fail)
-	if got := jsonText(r.Get("result")); got != `{"content":[{"type":"text","text":"No page 'x'"}],"isError":true}` {
+	fail := func(string, jsonObj) (string, error) { return "", toolErr("No page 'x'") }
+	got := replyText(t, `{"jsonrpc": "2.0", "id": "a", "method": "tools/call", "params": {"name": "read_page", "arguments": {"slug": "x"}}}`, fail)
+	if got != `{"jsonrpc":"2.0","id":"a","result":{"content":[{"type":"text","text":"No page 'x'"}],"isError":true}}` {
 		t.Errorf("a tool error: %s", got)
 	}
 }
@@ -77,9 +94,10 @@ func TestMCPProtocol(t *testing.T) {
 func TestMCPToolDefinitions(t *testing.T) {
 	var names []string
 	for _, tool := range mcpTools {
-		names = append(names, tool.(*Obj).Str("name"))
-		if _, ok := mcpToolFuncs[tool.(*Obj).Str("name")]; !ok {
-			t.Errorf("%s has no function", tool.(*Obj).Str("name"))
+		name, _ := tool["name"].(string)
+		names = append(names, name)
+		if _, ok := mcpToolFuncs[name]; !ok {
+			t.Errorf("%s has no function", name)
 		}
 	}
 	if len(names) != len(mcpToolFuncs) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
@@ -94,12 +112,12 @@ func TestLongGuidesAreCut(t *testing.T) {
 	testWiki(t, map[string]string{"wiki-guide": "# Wiki guide\n\n" + strings.Repeat("x", 100),
 		"tickets/CLAUDE": "# Tickets\n\nOne folder per ticket.\n", "tickets/bug-1": "# Bug\n"})
 	set(t, &guideChars, 20)
-	if got := instructionsWithGuide(); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page 'wiki-guide' for the rest]") {
+	if got := instructionsWithGuide(); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page \"wiki-guide\" for the rest]") {
 		t.Errorf("instructions: %q", got[len(got)-100:])
 	}
 	set(t, &folderGuideChars, 10)
-	err := checkGuides(NewObj(), []string{"tickets/bug-1"})
-	if err == nil || !strings.Contains(err.Error(), "# Tickets\n\n\n[… cut here: read_page 'tickets/CLAUDE' for the rest]") {
+	err := checkGuides(jsonObj{}, []string{"tickets/bug-1"})
+	if err == nil || !strings.Contains(err.Error(), "# Tickets\n\n\n[… cut here: read_page \"tickets/CLAUDE\" for the rest]") {
 		t.Errorf("refusal: %v", err)
 	}
 }
@@ -108,8 +126,8 @@ func TestToolListNamesGuidedFolders(t *testing.T) {
 	testWiki(t, nil)
 	desc := func() string {
 		for _, tool := range toolList() {
-			if tool.(*Obj).Get("name") == "read_guides" {
-				return tool.(*Obj).Str("description")
+			if tool["name"] == "read_guides" {
+				return tool["description"].(string)
 			}
 		}
 		return ""
@@ -151,8 +169,9 @@ func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 func TestCatastrophicRegexIsFast(t *testing.T) {
 	testWiki(t, map[string]string{"slow": "# Slow\n\n" + strings.Repeat("a", 5000) + "!\n"})
 	start := time.Now()
-	out, err := replaceInPages(NewObj("find", "(a+)+$", "replace", "x", "regex", true, "dry_run", false), "")
-	if err != nil || out != "Nothing matches '(a+)+$' outside code." || time.Since(start) > 2*time.Second {
+	args, _ := parseObj([]byte(`{"find": "(a+)+$", "replace": "x", "regex": true, "dry_run": false}`))
+	out, err := replaceInPages(args, "")
+	if err != nil || out != `Nothing matches "(a+)+$" outside code.` || time.Since(start) > 2*time.Second {
 		t.Errorf("%q %v in %v", out, err, time.Since(start))
 	}
 }
@@ -213,13 +232,5 @@ func TestReplaceLinesLeavesCodeAlone(t *testing.T) {
 	}
 	if got := pyPattern(`a\Z\d`); got != `a\z\d` {
 		t.Errorf("pyPattern: %q", got)
-	}
-}
-
-func TestPyRepr(t *testing.T) {
-	for in, want := range map[string]string{"a": "'a'", "it's": `"it's"`, `a'b"c`: `'a\'b"c'`, "a\nb\\": `'a\nb\\'`, " é": `'\xa0é'`} {
-		if got := pyRepr(in); got != want {
-			t.Errorf("%q: got %s, want %s", in, got, want)
-		}
 	}
 }

@@ -40,17 +40,17 @@ func TestDeckLists(t *testing.T) {
 // A task's last activity: its completion, history, comments, creation.
 func TestLastActivity(t *testing.T) {
 	// As a file has them: a junk history entry is no event.
-	task := func(kv ...any) *Task { return taskFromObj(NewObj(kv...)) }
+	task := func(s string) *Task { o, _ := parseObj([]byte(s)); return taskFromJSON(o) }
 	for _, c := range []struct {
 		t    *Task
 		want string
 	}{
-		{task("created_at", "2026-01-02T10:00:00"), "2026-01-02"},
-		{task("created_at", "2026-01-02T10:00:00", "history", []any{NewObj("at", "2026-03-04T09:00", "event", "start")}), "2026-03-04"},
-		{task("created_at", "2026-01-02T10:00:00", "completed_at", "2026-05-06T08:00:00",
-			"history", []any{NewObj("at", "2026-03-04T09:00"), "junk"}), "2026-05-06"},
-		{task("created_at", "2026-01-02T10:00:00", "comments", []any{NewObj("at", "2026-04-01T09:00", "text", "x")}), "2026-04-01"},
-		{task(), ""},
+		{task(`{"created_at": "2026-01-02T10:00:00"}`), "2026-01-02"},
+		{task(`{"created_at": "2026-01-02T10:00:00", "history": [{"at": "2026-03-04T09:00", "event": "start"}]}`), "2026-03-04"},
+		{task(`{"created_at": "2026-01-02T10:00:00", "completed_at": "2026-05-06T08:00:00",
+			"history": [{"at": "2026-03-04T09:00"}, "junk"]}`), "2026-05-06"},
+		{task(`{"created_at": "2026-01-02T10:00:00", "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}`), "2026-04-01"},
+		{task(`{}`), ""},
 	} {
 		if got := lastActivity(c.t); got != c.want {
 			t.Errorf("lastActivity(%+v) = %q, want %q", c.t, got, c.want)

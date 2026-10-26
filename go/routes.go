@@ -703,20 +703,11 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 		inline bool
 	}{{"notes", false}, {"comments", true}} {
 		var texts []string
-		v := data.Get(k.key)
-		if truthyValue(v) {
-			l, ok := v.([]any)
-			if !ok {
+		if !data.null(k.key) {
+			var ok bool
+			if texts, ok = as[[]string](data[k.key]); !ok {
 				badRequestPage(w)
 				return
-			}
-			for _, t := range l {
-				s, ok := t.(string)
-				if !ok {
-					badRequestPage(w)
-					return
-				}
-				texts = append(texts, s)
 			}
 		}
 		out[k.key] = renderNotes(rq, texts, k.inline)

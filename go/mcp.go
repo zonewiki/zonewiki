@@ -7,9 +7,11 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -43,13 +45,13 @@ const mcpInstructions = "Leaf is the user's personal wiki: their notes in markdo
 //go:embed mcp_tools.json
 var mcpToolsJSON []byte
 
-// mcpTools: the tool definitions, in order, as *Obj (key order kept).
-var mcpTools = func() []any {
-	v, err := loads(mcpToolsJSON)
-	if err != nil {
+// mcpTools: the tool definitions, in order.
+var mcpTools = func() []map[string]any {
+	var tools []map[string]any
+	if err := json.Unmarshal(mcpToolsJSON, &tools); err != nil {
 		panic("mcp_tools.json: " + err.Error())
 	}
-	return v.([]any)
+	return tools
 }()
 
 // toolError is a tool failing in a way the model should see (bad slug, …):
@@ -61,17 +63,56 @@ func (e *toolError) Error() string { return e.msg }
 
 func toolErr(msg string) error { return &toolError{msg} }
 
-func rpcError(id any, code int, message string) *Obj {
-	return NewObj("jsonrpc", "2.0", "id", id, "error", NewObj("code", code, "message", message))
+// rpcResponse: a JSON-RPC answer, its id the request's (null when it had
+// none that could be read).
+type rpcResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  any             `json:"result,omitempty"`
+	Error   *rpcFault       `json:"error,omitempty"`
 }
 
-func rpcResult(id any, result *Obj) *Obj {
-	return NewObj("jsonrpc", "2.0", "id", id, "result", result)
+type rpcFault struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
-func knownTool(name any) bool {
+func rpcError(id json.RawMessage, code int, message string) *rpcResponse {
+	return &rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcFault{code, message}}
+}
+
+func rpcResult(id json.RawMessage, result any) *rpcResponse {
+	return &rpcResponse{JSONRPC: "2.0", ID: id, Result: result}
+}
+
+type initializeResult struct {
+	ProtocolVersion string `json:"protocolVersion"`
+	Capabilities    struct {
+		Tools struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"tools"`
+	} `json:"capabilities"`
+	ServerInfo struct {
+		Name    string `json:"name"`
+		Title   string `json:"title"`
+		Version string `json:"version"`
+	} `json:"serverInfo"`
+	Instructions string `json:"instructions"`
+}
+
+type toolContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type toolResult struct {
+	Content []toolContent `json:"content"`
+	IsError bool          `json:"isError"`
+}
+
+func knownTool(name string) bool {
 	for _, t := range mcpTools {
-		if t.(*Obj).Get("name") == name {
+		if t["name"] == name {
 			return true
 		}
 	}
@@ -82,55 +123,54 @@ func knownTool(name any) bool {
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
 // other error (a failed write) is returned, for a 500.
-func handleMCP(message any, callTool func(name string, args *Obj) (string, error)) (*Obj, error) {
-	msg, ok := message.(*Obj)
-	if !ok || msg.Get("jsonrpc") != "2.0" {
+func handleMCP(message json.RawMessage, callTool func(name string, args jsonObj) (string, error)) (*rpcResponse, error) {
+	msg, ok := parseObj(message)
+	if v, _ := as[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
 	}
-	method, ok := msg.Get("method").(string)
-	id := msg.Get("id")
+	method, ok := as[string](msg["method"])
+	id, hasID := msg["id"]
 	if !ok {
 		return nil, nil // a response to something we never asked
 	}
-	if !msg.Has("id") {
+	if !hasID {
 		return nil, nil // a notification, e.g. notifications/initialized
 	}
-	params := NewObj()
-	if truthyValue(msg.Get("params")) {
-		if params, ok = msg.Get("params").(*Obj); !ok {
+	params := jsonObj{}
+	if !msg.null("params") {
+		if params, ok = parseObj(msg["params"]); !ok {
 			return rpcError(id, -32602, "params must be an object"), nil
 		}
 	}
 	switch method {
 	case "initialize":
-		protocol := protocolVersions[0]
-		for _, v := range protocolVersions {
-			if params.Get("protocolVersion") == v {
-				protocol = v
+		var res initializeResult
+		res.ProtocolVersion = protocolVersions[0]
+		if v, _ := as[string](params["protocolVersion"]); slices.Contains(protocolVersions, v) {
+			res.ProtocolVersion = v
+		}
+		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "leaf", "Leaf wiki", version
+		res.Instructions = instructionsWithGuide()
+		return rpcResult(id, res), nil
+	case "ping":
+		return rpcResult(id, struct{}{}), nil
+	case "tools/list":
+		return rpcResult(id, map[string]any{"tools": toolList()}), nil
+	case "tools/call":
+		name, isStr := as[string](params["name"])
+		if !isStr || !knownTool(name) {
+			if !isStr {
+				name = string(params["name"])
+			}
+			return rpcError(id, -32602, "Unknown tool: "+name), nil
+		}
+		args := jsonObj{}
+		if !params.null("arguments") {
+			if args, ok = parseObj(params["arguments"]); !ok {
+				return rpcError(id, -32602, "arguments must be an object"), nil
 			}
 		}
-		return rpcResult(id, NewObj(
-			"protocolVersion", protocol,
-			"capabilities", NewObj("tools", NewObj("listChanged", false)),
-			"serverInfo", NewObj("name", "leaf", "title", "Leaf wiki", "version", version),
-			"instructions", instructionsWithGuide())), nil
-	case "ping":
-		return rpcResult(id, NewObj()), nil
-	case "tools/list":
-		return rpcResult(id, NewObj("tools", toolList())), nil
-	case "tools/call":
-		name := params.Get("name")
-		args := NewObj()
-		if truthyValue(params.Get("arguments")) {
-			args, ok = params.Get("arguments").(*Obj)
-		}
-		if !knownTool(name) {
-			return rpcError(id, -32602, "Unknown tool: "+pyStr(name)), nil
-		}
-		if !ok {
-			return rpcError(id, -32602, "arguments must be an object"), nil
-		}
-		text, err := callTool(name.(string), args)
+		text, err := callTool(name, args)
 		isError := false
 		if err != nil {
 			var te *toolError
@@ -139,7 +179,7 @@ func handleMCP(message any, callTool func(name string, args *Obj) (string, error
 			}
 			text, isError = te.msg, true
 		}
-		return rpcResult(id, NewObj("content", []any{NewObj("type", "text", "text", text)}, "isError", isError)), nil
+		return rpcResult(id, toolResult{[]toolContent{{"text", text}}, isError}), nil
 	}
 	return rpcError(id, -32601, "Method not found: "+method), nil
 }
@@ -183,14 +223,13 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
-	message, err := loads(body)
-	if err != nil {
+	if !json.Valid(body) {
 		writeJSON(w, http.StatusBadRequest, rpcError(nil, -32700, "Parse error"))
 		return
 	}
-	call := func(name string, args *Obj) (string, error) { return callMCPTool(r, name, args) }
-	if batch, ok := message.([]any); ok { // a batch (protocol 2025-03-26)
-		replies := []any{}
+	call := func(name string, args jsonObj) (string, error) { return callMCPTool(r, name, args) }
+	if batch, ok := as[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
+		replies := []*rpcResponse{}
 		for _, m := range batch {
 			reply, err := handleMCP(m, call)
 			if err != nil {
@@ -208,7 +247,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(message, call)
+	reply, err := handleMCP(body, call)
 	if err != nil {
 		serverError(w, r, err)
 		return
