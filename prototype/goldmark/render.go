@@ -12,7 +12,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
@@ -283,19 +282,6 @@ func (r *leafRenderer) heading(w util.BufWriter, src []byte, node ast.Node, ente
 	}
 	w.WriteString("\n")
 	return ast.WalkContinue, nil
-}
-
-// pageURL is pages.url: each part percent-encoded, "/" kept.
-func pageURL(parts ...string) string {
-	out := ""
-	for _, p := range parts {
-		segs := strings.Split(p, "/")
-		for i, s := range segs {
-			segs[i] = url.PathEscape(s)
-		}
-		out += "/" + strings.Join(segs, "/")
-	}
-	return out
 }
 
 func (r *leafRenderer) blockquote(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {

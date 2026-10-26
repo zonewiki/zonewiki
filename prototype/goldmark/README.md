@@ -1,9 +1,10 @@
 # Goldmark prototype
 
 Can a Go port of Leaf render pages with [goldmark](https://github.com/yuin/goldmark)
-instead of markdown-it-py? This prototype is the markdown step of
-`src/render.py` (`md.render`) in Go, plus a harness that renders a whole wiki
-with both and compares them.
+instead of markdown-it-py? This prototype is `src/render.py`'s `render_md` up
+to and including the markdown step in Go: the text pre-processing
+(`preprocess.go`) and `md.render` (`render.go`), plus a harness that renders
+a whole wiki with both and compares them.
 
 The goal is **not** markdown-it's HTML byte for byte: the port may render
 differently (a breaking change is fine), but nothing may break. So goldmark
@@ -21,9 +22,29 @@ what a Leaf feature needs:
 | Task-date chips | `<!--t:… d:…-->` comments as chips | `taskDates` |
 | `http://localhost:5000`, `http://nas:5000` as links | goldmark's linkify wants a dot in the host; a self-hosted wiki has such URLs | `urlRE` |
 
-Leaf's text pre-processing (frontmatter, code masking, `[[wikilinks]]`,
-`[[deck]]`, `[[task:…]]`) is string work, ported later as it is; here
-`compare.py` runs Leaf's Python for it and feeds both renderers the result.
+## Pre-processing
+
+`Prepare` does what `render_md` does to a page before markdown, and gives
+the same result as Python, byte for byte (it is input text, not markup):
+
+- frontmatter off, its `tags`, `tldr` (plain, `>`, `|`) and `sources` parsed
+  (`mdtext.parse_frontmatter`);
+- fenced code and inline code spans masked, so `[[…]]` in code stays
+  (`mdtext.mask_code`);
+- `[[deck …]]` and `[[task:…]]` swapped for placeholders, their parameters
+  and ids kept for the HTML that replaces them after rendering;
+- `[[wikilinks]]` as links: missing pages, hidden ones in sharing mode,
+  `#Section` anchors (`render.process_wikilinks`, `mdtext.section_anchor`).
+
+Python's regexes don't all run on Go's RE2: the inline-code pattern needs
+lookarounds and a backreference, so it is a scanner (`maskInlineCode`).
+And Python's strings mean more by whitespace and line breaks than Go's
+(`str.strip`, `splitlines`, `\s` and `\d` in patterns match non-ASCII
+characters, a non-breaking space for one): `pyStrip`, `pyIsSpace`,
+`splitLines` and `pySpace` are Python's versions.
+
+Not ported: the HTML after markdown (deck embeds, task chips, the
+frontmatter block, sources), which needs the deck's store.
 
 ## Running it
 
@@ -38,18 +59,27 @@ cp -a ~/leaf /tmp/wiki-copy
 ../../.venv/bin/python compare.py /tmp/wiki-copy /tmp/leafmd /tmp/leafmd-out [EXTRA.md …]
 ```
 
-`compare.py` checks two things per page:
+Go gets each page's file as it is. `compare.py` checks three things per page:
 
-1. **The checkbox contract**: goldmark's checkboxes = `mdtext`'s task lines.
-2. **What a reader and Leaf's code see**: text, link targets, heading ids,
+1. **Pre-processing**: exactly Python's text, frontmatter, deck parameters
+   and task refs (differences in `OUT_DIR/*.prep.json`).
+2. **The checkbox contract**: goldmark's checkboxes = `mdtext`'s task lines.
+3. **What a reader and Leaf's code see**: text, link targets, heading ids,
    checkboxes, images, the classes Leaf's CSS/JS select on. Markup that
    doesn't matter is ignored (`<p>` in tight lists, `<s>`/`<del>`, entities,
-   attribute order, footnote ids). Differences go to `OUT_DIR/*.diff`, which
-   holds your pages' text: keep it out of the repo.
+   attribute order, footnote ids). Differences go to `OUT_DIR/*.diff`.
+
+`OUT_DIR` holds your pages' text: keep it out of the repo.
+
+`compare.py --fuzz N WIKI GO_BINARY OUT_DIR` runs check 1 on N random texts
+built from the syntax pre-processing looks for (wikilinks with sections and
+labels, a hidden page, decks, task refs, code fences and spans, frontmatter)
+and the characters Python and Go disagree on.
 
 ## Results (2026-10-26, goldmark 1.8.6)
 
-- **A real wiki, 338 pages**: checkbox counts agree on every page; 337 render
+- **A real wiki, 338 pages**: pre-processing is the same on every page, and
+  so are the checkbox counts; 337 render
   the same. The one that differs has `[label](file:///…)` links: markdown-it
   refuses `file:` links and shows the markdown as text, goldmark makes them
   links (an improvement).
@@ -57,6 +87,14 @@ cp -a ~/leaf /tmp/wiki-copy
 - **The 652 CommonMark 0.31.2 spec examples**: all the same, checkboxes too.
 - `cases/features.md` (every feature Leaf uses, and edge cases) shows the
   behaviour changes below.
+- **Fuzzing the pre-processing**: the same on all of 247,781 random texts
+  (seeds 20000, 50001, 77777, 100003). On the way it found two differences,
+  fixed: Python's `\s` matches a non-breaking space and Go's doesn't, so
+  `[[deck\u00a0list=x]]` was a deck in Python only; and Python 3.13's
+  `textwrap.dedent` counts a line of any whitespace (`\r`, U+2028) as blank.
+- It also found a bug in Leaf: a page with the masking characters in its own
+  text (U+E000, digits, U+E001) fails to render (`unmask_code` raises
+  IndexError, the page view a 500). Go leaves such text alone.
 
 ## Behaviour changes (none breaks a page)
 
@@ -76,7 +114,10 @@ cp -a ~/leaf /tmp/wiki-copy
 - `render_notes(…, inline=True)` and the frontmatter `sources` use
   `md.renderInline`; goldmark has no inline-only mode (render, then strip
   the one `<p>`).
-- The pre-processing in Go: `mask_code`, wikilinks, `[[deck]]`, `[[task:…]]`
-  (`mdtext.py`, `render.py`, `deck.py`), and the HTML after it.
-- `mdtext.section_anchor` and `slugify` here must stay the same function;
-  in the port both live in Go.
+- The HTML after markdown: deck embeds (`deck.build_deck_embed`), task
+  chips (`render._task_ref_html`, the deck's store), the frontmatter block
+  and sources.
+- Two slug functions, as in Python: `slugify` (render.go, the heading ids
+  markdown-it's anchors plugin gives) and `headingID` (preprocess.go,
+  `mdtext.heading_id`, what `[[Page#Section]]` links to). A link only finds
+  its heading where the two agree; the port could make them one.

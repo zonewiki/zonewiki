@@ -66,7 +66,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
-├── prototype/goldmark/     # Go prototype: Leaf's markdown rendering on goldmark, compare.py checks it against a wiki (README there)
+├── prototype/goldmark/     # Go prototype: render_md's pre-processing and markdown (goldmark), compare.py checks it against a wiki (README there)
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
