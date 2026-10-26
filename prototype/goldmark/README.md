@@ -83,6 +83,8 @@ and the characters Python and Go disagree on.
   the same. The one that differs has `[label](file:///…)` links: markdown-it
   refuses `file:` links and shows the markdown as text, goldmark makes them
   links (an improvement).
+- No task in that wiki links to a section, so the ☑ N chips under a
+  heading are only covered by the Go tests (`TestSections`).
 - **Leaf's own docs** (README, `docs/spec/`, AGENTS.md, CONTRIBUTING.md): all the same.
 - **The 652 CommonMark 0.31.2 spec examples**: all the same, checkboxes too.
 - `cases/features.md` (every feature Leaf uses, and edge cases) shows the

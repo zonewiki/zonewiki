@@ -51,11 +51,16 @@ func TestPreparePlaceholders(t *testing.T) {
 	}
 }
 
-// Mask characters in a page's own text are left alone (Python's
-// unmask_code raises IndexError on them).
-func TestUnmaskForeignTokens(t *testing.T) {
-	if p := Prepare("x \ue0005\ue001 y", testWiki); p.Text != "x \ue0005\ue001 y" {
-		t.Errorf("got %q", p.Text)
+// A page's own text like our tokens comes back as written.
+func TestTextLikeTokens(t *testing.T) {
+	for _, in := range []string{"x \ue0005\ue001 y", "`code` \ue0000\ue001 \ue000١\ue001"} {
+		if p := Prepare(in, testWiki); p.Text != in {
+			t.Errorf("got %q", p.Text)
+		}
+	}
+	p := Prepare("\ue0020\ue003 [[task:ABCD1234]]", testWiki)
+	if p.Text != "\ue0020\ue003 \ue0021\ue003" || !reflect.DeepEqual(p.TaskRefs, []string{"\ue0020\ue003", "abcd1234"}) {
+		t.Errorf("got %q %q", p.Text, p.TaskRefs)
 	}
 }
 

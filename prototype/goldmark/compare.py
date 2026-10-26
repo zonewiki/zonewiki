@@ -103,7 +103,8 @@ FUZZ_TOKENS = [
     "\x1c", "\xa0", "　", "`", "``", "```", "~~~", "````", "[[", "]]", "[", "]", "(", ")", "|", "#", "!",
     "*", "**", "_", "__", "deck", "DECK", " list=work", "task:", "1a2b3c4d", "abcd-ef", "---", "tags:",
     "tldr:", "sources:", " >", " |", "- ", "  ", '"', "'", ",", ":", "<", ">", "&", "ü", "Ärger", "日本",
-    "", "1", "<!--t:2026-06-12T18:35:00-->",
+    "\ue000", "\ue0011\ue001", "\ue0009\ue001", "\ue000\u0661\ue001", "\ue0020\ue003", "\ue0029\ue003",
+    "<!--t:2026-06-12T18:35:00-->",
 ]
 
 
@@ -137,6 +138,9 @@ def main() -> None:
     import deck
     import deckstore
     import render
+
+    # Where the server's init_deck puts the deck (without its archiving, a write).
+    deckstore.LEAF_DATA, deckstore.DECK_FILE = wiki, wiki / deckstore.DECK_DIR_NAME / "tasks.json"
     from decksyntax import DECK_RE
     from mdtext import _task_item_lines, mask_code, parse_frontmatter, unmask_code
     from pages import all_slugs, hidden_page, iter_pages

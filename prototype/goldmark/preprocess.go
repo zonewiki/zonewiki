@@ -36,7 +36,7 @@ type Prepared struct {
 	Meta     Frontmatter `json:"meta"`
 	Text     string      `json:"text"`
 	Decks    []string    `json:"decks"`     // each [[deck …]]'s parameters, placeholder LEAFDECKPLACEHOLDER_<i>
-	TaskRefs []string    `json:"task_refs"` // ids, lowercased, token <i>
+	TaskRefs []string    `json:"task_refs"` // ids, lowercased, token \ue002<i>\ue003; or the page's own text like a token
 }
 
 // Prepare is render_md up to md.render.
@@ -48,17 +48,22 @@ func Prepare(content string, wiki *Wiki) Prepared {
 		p.Decks = append(p.Decks, deckRE.FindStringSubmatch(m)[1])
 		return "LEAFDECKPLACEHOLDER_" + strconv.Itoa(len(p.Decks)-1)
 	})
-	text = taskRefRE.ReplaceAllStringFunc(text, func(m string) string {
-		p.TaskRefs = append(p.TaskRefs, strings.ToLower(taskRefRE.FindStringSubmatch(m)[1]))
-		return "" + strconv.Itoa(len(p.TaskRefs)-1) + ""
+	text = taskRefMaskedRE.ReplaceAllStringFunc(text, func(m string) string {
+		ref := m // the page's own text, as written: it comes back so
+		if g := taskRefMaskedRE.FindStringSubmatch(m); g[2] != "" {
+			ref = strings.ToLower(g[2])
+		}
+		p.TaskRefs = append(p.TaskRefs, ref)
+		return "\ue002" + strconv.Itoa(len(p.TaskRefs)-1) + "\ue003"
 	})
 	p.Text = UnmaskCode(Wikilinks(text, wiki), stash)
 	return p
 }
 
 var (
-	deckRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + pySpace + `+([^\]]*))?\]\]`) // decksyntax.DECK_RE
-	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)  // decksyntax.TASK_REF_RE
+	deckRE = regexp.MustCompile(`(?i)\[\[deck(?:` + pySpace + `+([^\]]*))?\]\]`) // decksyntax.DECK_RE
+	// decksyntax.TASK_REF_RE, after text like our token (render._TASK_REF_MASKED_RE)
+	taskRefMaskedRE = regexp.MustCompile("(\\p{Nd}+)|" + `\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 )
 
 // ---- Python's notion of whitespace and lines ----
@@ -253,13 +258,13 @@ func dedent(s string) string {
 
 // ---- code masking (mdtext.mask_code, iter_fenced_lines) ----
 
-// MaskCode swaps fenced code and inline code spans for <i>, so
+// MaskCode swaps fenced code and inline code spans for \ue000<i>\ue001, so
 // [[…]] in code is never rewritten; UnmaskCode puts them back.
 func MaskCode(text string) (string, []string) {
 	var stash []string
 	token := func(s string) string {
 		stash = append(stash, s)
-		return "" + strconv.Itoa(len(stash)-1) + ""
+		return "\ue000" + strconv.Itoa(len(stash)-1) + "\ue001"
 	}
 	var out strings.Builder
 	for _, l := range fencedLines(splitLines(text)) {
@@ -273,14 +278,11 @@ func MaskCode(text string) (string, []string) {
 	return out.String(), stash
 }
 
-var maskTokenRE = regexp.MustCompile("(\\d+)")
+var maskTokenRE = regexp.MustCompile("\ue000(\\d+)\ue001")
 
 func UnmaskCode(text string, stash []string) string {
 	return maskTokenRE.ReplaceAllStringFunc(text, func(m string) string {
-		i, err := strconv.Atoi(maskTokenRE.FindStringSubmatch(m)[1])
-		if err != nil || i >= len(stash) {
-			return m // the page's own text, not a token of ours
-		}
+		i, _ := strconv.Atoi(maskTokenRE.FindStringSubmatch(m)[1])
 		return stash[i]
 	})
 }
@@ -313,13 +315,19 @@ func fencedLines(lines []string) []fencedLine {
 	return out
 }
 
-// maskInlineCode is _INLINE_CODE_RE's sub on one line,
+// maskInlineCode is _MASKED_RE's sub on one line: text that looks like one
+// of our tokens (so it comes back as written), and inline code,
 // (?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`): a whole run of backticks, then the
 // shortest text (no \n, at least a character) up to a run of exactly as many.
 func maskInlineCode(line string, token func(string) string) string {
 	var out strings.Builder
 	i := 0
 	for i < len(line) {
+		if n := lookalikeLen(line[i:], '\ue000', '\ue001'); n > 0 {
+			out.WriteString(token(line[i : i+n]))
+			i += n
+			continue
+		}
 		if line[i] != '`' {
 			out.WriteByte(line[i])
 			i++
@@ -336,6 +344,28 @@ func maskInlineCode(line string, token func(string) string) string {
 		i = end
 	}
 	return out.String()
+}
+
+// lookalikeLen: the length of open, digits (Python's \d: any), close at the
+// start of s; 0 when s doesn't start so.
+func lookalikeLen(s string, open, close rune) int {
+	r, n := utf8.DecodeRuneInString(s)
+	if r != open {
+		return 0
+	}
+	digits := 0
+	for n < len(s) {
+		r, size := utf8.DecodeRuneInString(s[n:])
+		if r == close && digits > 0 {
+			return n + size
+		}
+		if !unicode.IsDigit(r) {
+			return 0
+		}
+		digits++
+		n += size
+	}
+	return 0
 }
 
 func runLen(s string, i int) int {
