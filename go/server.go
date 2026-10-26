@@ -44,6 +44,7 @@ func main() {
 	gitSetup()
 	excludeFromGit(cfg.Data, "/.leaf/") // the secret key
 	ensureHomePage()
+	initDeck()
 
 	// All interfaces by default, so the container's network bridge can
 	// forward connections; exposure is the port mapping's (compose.yaml:
@@ -111,6 +112,9 @@ func newHandler() http.Handler {
 	mux.HandleFunc("POST /api/upload", apiUpload)
 	mux.HandleFunc("GET /public/{path...}", servePublic)
 	mux.HandleFunc("GET /_assets/{filename}", serveUpload)
+	pageRoutes(mux)
+	historyRoutes(mux)
+	deckRoutes(mux)
 	return checks(mux)
 }
 
@@ -120,6 +124,12 @@ func checks(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &policyWriter{ResponseWriter: w}
 		if !hostAllowed(r.Host) {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+		if dotSegments(r.URL.Path) {
+			// "/page/../x": Flask's routes refused such a slug (400); Go's
+			// router would redirect to the cleaned path instead.
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
@@ -139,6 +149,16 @@ func checks(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// dotSegments: a path with a "." or ".." segment.
+func dotSegments(p string) bool {
+	for _, part := range strings.Split(p, "/") {
+		if part == "." || part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // authExempt: what needs no login. /mcp checks its own bearer token (an
@@ -221,7 +241,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			errorText = "Incorrect password."
 		}
 	}
-	page(w, r, status, "login.html", "Sign in", false, false, map[string]any{
+	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true}, M{
 		"error": errorText, "next_url": r.URL.Query().Get("next"), "badge_in_form": true})
 }
 

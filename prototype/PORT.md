@@ -14,14 +14,25 @@ Progress by step (see Order):
 
 | Step | State |
 |---|---|
-| 1. Skeleton | Done but what needs pages: settings (`config.go`), the request checks, page policy, login, signed session, throttle (`security.go`), `/public/`, `/_assets/`, `/api/upload`, `/api/version`, git setup (`gitstore.go`), the page shell (`views.go`, `templates/layout.html`) and login page. The test switch works (below). |
-| 2. Pages | Next. Brings what the skeleton's shell still leaves out: `deck_new` and the deck home's module, `show_actions` (top actions, action bar, modules partials). |
-| 3–7 | Not started |
+| 1. Skeleton | Done: settings (`config.go`), the request checks, page policy, login, signed session, throttle (`security.go`), `/public/`, `/_assets/`, `/api/upload`, `/api/version`, git setup. |
+| 2. Pages | Done: `mdtext.go`, `pages.go` (link graph, renames re-pointing links), `markdown.go` (goldmark, from the prototype) and `render.go`, `gitstore.go`, `history.go`, `scratch.go`, `routes.go`, `views.go` with every template in `go/templates/`. |
+| 3. Deck | Done with step 2 (the page view needs it): `pyjson.go` (key order, ints/floats, Python's `json.dumps` byte for byte), `decksyntax.go`, `deckstore.go`, `deck.go` (every `/api/deck` route, the embed). |
+| 4. Search | Next: `/api/search`, `/search` (the prototype's `search/`), the documents and caches. |
+| 5–7 | Not started (MCP, semantic search, switch-over). `retrieval.go` stubs semantic status ("off") and Related. |
 
-Against Go (`./run.sh go tests`): 91 API tests pass; the other ~800 that go
-through `client` fail on routes not ported yet. `go test` covers what the
-Python tests check on Python internals (throttle clock, client key, secret
-key, settings, session).
+Against Go: 620 API tests pass, the rest (~280) are search, MCP and
+semantic; 380 of 398 browser tests pass (2 skipped), the 16 others need search. `go test`:
+Go's own tests, and `testdata/golden.json.gz` (Python's answers of 28 pure
+functions on 6,259 texts, every string in the tests: `testdata/golden.py`
+writes it) all the same.
+
+Deliberate differences so far (none breaks a page):
+- Rendering: goldmark's, as `goldmark/README.md` lists; markdown-it's
+  typographer is goldmark's (curly quotes, dashes, …; not `(c)` → ©);
+  `javascript:`, `vbscript:` and non-image `data:` links are text, as before.
+- No empty `_deck/completed.json` (and commit) in a wiki without completed tasks.
+- Paths with `.`/`..` segments are 400 (Go's router would redirect).
+- The session cookie's format (users sign in once more).
 
 Earlier, four spikes, each in its own folder with a README (method, results) and a
 `compare.py` that checks Go against the Python on a real wiki:

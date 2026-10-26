@@ -1,0 +1,60 @@
+{{- /* The editor (server.go editPage): the text (a whole page or one
+    section, with the hash and range a save checks against), the toolbar,
+    the formatting bar, the live preview, and a hidden deck app for Make
+    task. */ -}}
+{{define "body"}}
+<div class="editor-wrap">
+  <div class="editor-pane">
+    {{.breadcrumb_html}}
+    <div class="editor-toolbar">
+      <span class="slug-label" title="{{.slug}}">{{.slug}}</span>
+      <span id="save-dot" class="save-dot">●</span>
+      <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
+      <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
+      {{- /* Phones: Rename and Delete fold into a ⋯ menu so Preview and Done
+          keep the toolbar; on wider screens .editor-more is display:contents. */}}
+      {{- if or .can_rename .can_delete}}
+      <button type="button" class="btn mobile-only" id="editor-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="editor-more" title="More actions">⋯</button>
+      {{- end}}
+      <span class="editor-more" id="editor-more">
+        {{- if .can_rename}}<button type="button" class="btn" id="rename-toggle">Rename…</button>{{end -}}
+        {{- if .can_delete}}<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{{.page_title}}" data-git="{{if .git}}1{{end}}">Delete</button>{{end -}}
+      </span>
+    </div>
+    {{- if .can_delete}}
+    <form id="delete-form" method="post" action="{{url "delete" .slug}}" style="display:none"></form>
+    {{- end}}
+    {{- if .can_rename}}
+    <div class="rename-bar{{if not .rename_error}} hidden{{end}}" id="rename-bar">
+      <form method="post" action="{{url "rename" .slug}}" class="rename-form">
+        <label>New name</label>
+        <input type="text" name="new_name" id="rename-input" value="{{.slug}}" autocomplete="off">
+        <button type="submit" class="btn btn-primary">Rename</button>
+        <button type="button" class="btn" id="rename-cancel">Cancel</button>
+        {{template "error" (dict "message" .rename_error "tag" "span")}}
+      </form>
+    </div>
+    {{- end}}
+    {{- with .paste}}{{template "paste_hint" .}}{{end}}
+    {{template "format_bar" (dict)}}
+    <form id="editor-form" method="post" action="{{url "edit" .slug}}">
+      {{- /* The file's hash, for conflict detection (whole page and section edits). */}}
+      <input type="hidden" name="file_hash" id="section-file-hash" value="{{.file_hash}}">
+      {{- if .has_section}}
+      <input type="hidden" name="start_char" id="section-start-char" value="{{.start_char}}">
+      <input type="hidden" name="end_char" id="section-end-char" value="{{.end_char}}">
+      <input type="hidden" name="section_idx" id="section-idx" value="{{.section}}">
+      {{- end}}
+      <textarea id="editor-textarea" name="content" data-cursor="{{if .only_title}}end{{end}}"
+                spellcheck="false" autocorrect="off" autocapitalize="off">{{.content}}</textarea>
+    </form>
+  </div>
+  <div class="preview-pane">
+    <p class="pane-label">Preview</p>
+    <div id="editor-preview" class="page-content"></div>
+  </div>
+</div>
+{{- /* A hidden deck app: Make task (js/editor.js) opens its edit modal, and
+    uses the deck's quick-add parser (deck-core.js) for several lines at once. */}}
+{{.deck_html}}
+{{end}}

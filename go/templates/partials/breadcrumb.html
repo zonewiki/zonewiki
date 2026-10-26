@@ -1,0 +1,11 @@
+{{- /* A view's breadcrumb: the module switcher, then crumbs ({label, href}),
+    the last without a link unless it has one. key and title name the view
+    for the navigation trail (js/chrome.js: data-slug, data-title);
+    right_html sits at the right end (the backlinks chip). */ -}}
+{{define "breadcrumb" -}}
+<div class="breadcrumb"{{if .has_key}} data-slug="{{.key}}" data-title="{{.title}}"{{end}}>
+{{- template "module_switch" (dict "links" .module_links "app_name" .app_name) -}}
+{{- range .crumbs}}<span class="breadcrumb-sep">›</span>{{if .href}}<a href="{{.href}}">{{.label}}</a>{{else}}<span>{{.label}}</span>{{end}}{{end -}}
+{{- if .right_html}}<span class="breadcrumb-right">{{.right_html}}</span>{{end -}}
+</div>
+{{- end}}

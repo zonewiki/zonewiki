@@ -1,0 +1,25 @@
+{{- /* One saved version of a page, read-only, with where it stands, what its
+    save changed, Restore and ← Older / Newer →. */ -}}
+{{define "body"}}
+{{.breadcrumb_html}}
+<header class="page-header">
+  <h1>{{.page_title}}</h1>
+  <div class="page-header-actions">{{template "hist_back" (dict "slug" .slug "page_exists" .page_exists)}}</div>
+</header>
+<div class="version-bar">
+  <p class="version-where">
+  {{- if not .has_i}}Version <code>{{runePrefix .sha 7}}</code>
+  {{- else if and .current (eq .i 0)}}The current version, saved {{.when}}
+  {{- else if and (not .page_exists) (ne .restore_sha .sha)}}The last version before the page was deleted ({{.when}})
+  {{- else}}The version of {{.when}}{{if and .page_exists .back}} · {{.back}} {{if eq .back 1}}version{{else}}versions{{end}} back{{end}}
+  {{- end}}</p>
+  <div class="version-actions">
+  {{- if .has_i}}<a href="{{url "diff" .slug}}/{{.sha}}" class="version-link">What this save changed</a>{{end -}}
+  {{- if not (and .current (eq .i 0) .has_i)}}<form method="post" action="{{url "restore" .slug}}/{{.restore_sha}}" class="version-restore" data-confirm="Make this version the page again? The page as it is now stays in its history."><button type="submit" class="btn">Restore this version</button></form>{{end -}}
+  </div>
+  {{- if .has_i}}{{template "version_nav" (dict "slug" .slug "entries" .entries "i" .i "current" .current "kind" "revision")}}{{end}}
+</div>
+<article class="page-content">
+  {{.article_html}}
+</article>
+{{end}}

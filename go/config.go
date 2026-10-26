@@ -127,6 +127,9 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 		return nil, fmt.Errorf("no wiki at %s. Create the folder, or set LEAF_DATA to your wiki.", c.Data)
 	}
 	c.Data, _ = filepath.Abs(c.Data)
+	if real, err := filepath.EvalSymlinks(c.Data); err == nil {
+		c.Data = real // pages' paths are resolved too (safePath)
+	}
 	c.Uploads = filepath.Join(c.Data, "_assets")
 	_ = os.Mkdir(c.Uploads, 0o777)
 	_, err := exec.LookPath("git")

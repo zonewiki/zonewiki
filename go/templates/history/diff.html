@@ -1,0 +1,15 @@
+{{- /* What one save changed in a page. No Restore: a diff shows a change,
+    not a version ("View this version" has it). */ -}}
+{{define "body"}}
+{{.breadcrumb_html}}
+<header class="page-header">
+  <h1>Changes — {{.page_title}}</h1>
+  <div class="page-header-actions">{{template "hist_back" (dict "slug" .slug "page_exists" .page_exists)}}</div>
+</header>
+<div class="version-bar">
+  <p class="version-where">What the save of {{.when}} changed{{with .what}} ({{lowerFirst .}}){{end}}: <span class="hist-del">red</span> was taken out, <span class="hist-add">green</span> put in.</p>
+  <div class="version-actions">{{if .has_i}}<a href="{{url "revision" .slug}}/{{.sha}}" class="version-link">View this version</a>{{end}}</div>
+  {{- if .has_i}}{{template "version_nav" (dict "slug" .slug "entries" .entries "i" .i "current" false "kind" "diff")}}{{end}}
+</div>
+<pre class="diff-view">{{template "diff" .diff_lines}}</pre>
+{{end}}

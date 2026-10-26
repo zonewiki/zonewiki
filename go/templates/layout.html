@@ -110,11 +110,13 @@
     <form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>
     {{- end}}
   </div>
+  {{- if .show_actions}}{{template "top_actions"}}{{end}}
   {{- block "body" .}}{{end}}
   </main>
+  {{- if .show_actions}}{{template "action_bar" .}}{{end}}
   {{- /* Version and the commit it was built from, quietly in the corner; the
       full build (commit date, +dirty) on hover and in the ? modal. */}}
-  <div class="leaf-build"{{with .commit}} title="Build {{$.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{.}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
+  <div class="leaf-build"{{with .commit}} title="Build {{text $.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{text .}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
 </body>
 </html>
 {{end}}

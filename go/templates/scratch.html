@@ -1,0 +1,12 @@
+{{- /* The scratch notes, newest first. The filter runs the search over them
+    (js/search.js initScratchFilter, /api/search?scratch=1); ?q= keeps it. */ -}}
+{{define "body"}}
+{{.breadcrumb_html}}
+<header class="page-header"><h1>Scratch</h1></header>
+<article class="page-content">
+{{- if .notes}}<div class="scratch-filter"><input type="search" id="scratch-filter" value="{{.q}}" placeholder="Filter scratch notes…" title="Search syntax works: &quot;phrase&quot;, -word, #tag, edited:2026-09 …" aria-label="Filter scratch notes" autocomplete="off" spellcheck="false"><span class="scratch-filter-count" id="scratch-filter-count" aria-live="polite"></span></div><ul class='notes-list'>
+{{- range .notes}}<li data-slug="{{.Slug}}"><a href="{{url "page" .Slug}}">{{.Title}}</a><span class="note-date">{{.Date}}</span></li>{{end -}}
+</ul>
+{{- else}}<p>No entries yet.</p>{{end -}}
+</article>
+{{end}}

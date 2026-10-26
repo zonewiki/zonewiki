@@ -21,6 +21,7 @@ pytest.importorskip("playwright.sync_api", reason="playwright not installed (use
 from playwright.sync_api import sync_playwright  # noqa: E402
 from werkzeug.serving import make_server  # noqa: E402
 
+import config  # noqa: E402
 import server  # noqa: E402  (tests/conftest.py set up its import)
 import gitstore  # noqa: E402
 from tests.goserver import LiveServer, free_port, go_enabled  # noqa: E402
@@ -36,10 +37,21 @@ TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
 # ── Server ────────────────────────────────────────────────────────────────────
 
 
-# The Go server of the running test (LEAF_TEST_GO): every request the
-# browser makes passes _new_page's route, which restarts it when the test
-# changed a setting.
+# The Go server of the running test (LEAF_TEST_GO). A setting the test
+# changes in config restarts it at once (_WatchedConfig): requests the test
+# makes itself (page.request) don't pass _new_page's route.
 _go: LiveServer | None = None
+
+
+class _WatchedConfig(type(config)):
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if _go:
+            _go.ensure()
+
+
+if go_enabled():
+    config.__class__ = _WatchedConfig
 
 
 @pytest.fixture(scope="session")
@@ -129,8 +141,6 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
 
     def route(r):
         if r.request.url.split("//", 1)[1].startswith(host):
-            if _go:
-                _go.ensure()
             r.continue_()
         else:
             external.append(r.request.url)

@@ -62,6 +62,10 @@ def _settings() -> dict[str, str]:
     }
     if os.environ.get("LEAF_SECRET_KEY"):
         env["LEAF_SECRET_KEY"] = os.environ["LEAF_SECRET_KEY"]
+    if not config.GIT_ENABLED:
+        # No git on its PATH: the server finds none, as config.GIT_ENABLED says.
+        env["PATH"] = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
+                                      if d and not os.path.exists(os.path.join(d, "git")))
     return env
 
 
@@ -71,9 +75,10 @@ class GoServer:
     def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0"):
         self.env = env
         base = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
+        self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(
-            [str(binary()), "-addr", addr, "-public", str(REPO / "src" / "public")],
+            [str(self.binary), "-addr", addr, "-public", str(REPO / "src" / "public")],
             env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log)
         line = self.proc.stdout.readline().decode()
         if " listening on " not in line:

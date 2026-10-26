@@ -1,0 +1,28 @@
+{{- /* Parts of the history views (history/*.html). */ -}}
+
+{{- /* A unified diff as classed lines (views.go diffLines): git's file
+    headers are left out, a hunk header is a quiet "⋯". */}}
+{{define "diff" -}}
+{{range .}}<span class="{{.Class}}">{{text .Text}}</span>{{else}}<span class="diff-ctx">(no changes)</span>{{end}}
+{{- end}}
+
+{{define "hist_counts" -}}
+{{if .Added}}<span class="hist-add">+{{.Added}}</span>{{end}}{{if and .Added .Deleted}} {{end}}{{if .Deleted}}<span class="hist-del">−{{.Deleted}}</span>{{end}}
+{{- end}}
+
+{{- /* ← Older · Newer → between versions (kind: "revision" or "diff"); the
+    newest, when it is the page as it is now, is the page itself. */}}
+{{define "version_nav" -}}
+<nav class="version-nav" aria-label="Versions">
+{{- if lt (add .i 1) (len .entries)}}<a href="{{url .kind .slug}}/{{(index .entries (add .i 1)).Sha}}" class="btn">← Older</a>{{else}}<span class="btn" aria-disabled="true">← Older</span>{{end -}}
+{{- if eq .i 0}}<span class="btn" aria-disabled="true">Newer →</span>
+{{- else if and (eq .i 1) .current (eq .kind "revision")}}<a href="{{url "page" .slug}}" class="btn">Current →</a>
+{{- else}}<a href="{{url .kind .slug}}/{{(index .entries (add .i -1)).Sha}}" class="btn">Newer →</a>{{end -}}
+</nav>
+{{- end}}
+
+{{define "hist_back" -}}
+{{if not .page_exists}}<a href="/page/_deleted" class="btn">← Deleted pages</a>
+{{- else if eq .to "page"}}<a href="{{url "page" .slug}}" class="btn">← Page</a>
+{{- else}}<a href="{{url "history" .slug}}" class="btn">← History</a>{{end}}
+{{- end}}

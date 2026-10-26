@@ -61,6 +61,7 @@ def git_wiki_dir(wiki_dir, monkeypatch):
 def client(wiki_dir, tmp_path_factory):
     if go_enabled():
         with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
+            c.live.ensure()   # its start-up (git, the deck's files) before the test, as Python's import
             yield c
         return
     server.app.config["TESTING"] = True

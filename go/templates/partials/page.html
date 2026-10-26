@@ -1,0 +1,115 @@
+{{- /* Parts of the page view (view.html) and the editor (edit.html). */ -}}
+
+{{- /* Commit form wired up by js/git.js (posts to /api/commit-file). inline:
+    a link-styled word at the end of "Last changed … — uncommitted". */}}
+{{define "commit_form" -}}
+<form class="commit-file-form" style="display:inline" data-filepath="{{.filepath}}" data-title="{{.title}}" data-on-success="{{.on_success}}"><button type="submit" class="{{if .inline}}commit-link{{else}}btn btn-primary{{end}}">Commit</button></form>
+{{- end}}
+
+{{define "menu_button" -}}
+<button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More actions" aria-label="More actions">⋯</button>
+{{- end}}
+
+{{define "error" -}}
+{{if and .message (eq .tag "span")}}<span class="rename-error">{{.message}}</span>{{else if .message}}<p class="rename-error">{{.message}}</p>{{end}}
+{{- end}}
+
+{{define "delete_dialog" -}}
+<dialog id="page-delete-dialog" class="scratch-modal"><p class="scratch-label">Delete page</p><p class="modal-desc">Delete &ldquo;{{.title}}&rdquo;? {{if .git}}It can be restored from history.{{else}}This cannot be undone.{{end}}</p><form method="post" action="{{url "delete" .slug}}"><div class="scratch-actions"><button type="button" class="btn" id="page-delete-cancel">Cancel</button><button type="submit" class="btn btn-danger">Delete</button></div></form></dialog>
+{{- end}}
+
+{{- /* The "Move to wiki" dialog of a scratch note: a folder (suggesting the
+    existing ones), the name (the note's title), whether to keep the date in
+    front of it, a preview of the slug, and the page to link it from
+    (js/pagemenu.js). Posts to /promote/<slug>. */}}
+{{define "promote_dialog" -}}
+<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="{{.title}}"{{if .promote_error}} data-open{{end}}><p class="scratch-label">Move to wiki</p><form method="post" action="{{url "promote" .slug}}">
+<label class="promote-field">Folder<input type="text" name="folder" id="promote-folder" list="promote-folders" placeholder="(top level)" autocomplete="off" spellcheck="false"></label>
+<datalist id="promote-folders">{{range .folders}}<option value="{{.}}/">{{end}}</datalist>
+<label class="promote-field">Name<input type="text" name="name" id="promote-name" value="{{.title}}" autocomplete="off" spellcheck="false" required></label>
+<label class="promote-check"><input type="checkbox" name="keep_date" id="promote-keep-date" value="{{.date}}"> Keep the date ({{.date}})</label>
+<p class="promote-preview" aria-live="polite">/page/<code id="promote-slug"></code></p>
+<label class="promote-field">Link from<input type="text" name="link_from" id="promote-link-from" list="wiki-pages" placeholder="(no link)" autocomplete="off" spellcheck="false"></label>
+<p class="modal-desc">Opens that page in the editor, the link in the clipboard to paste where it belongs.</p>
+<input type="hidden" name="copied" id="promote-copied" value="">{{template "error" (dict "message" .promote_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Move</button><button type="button" class="btn" id="page-promote-cancel">Cancel</button></div></form></dialog>
+{{- end}}
+
+{{- /* The "Append to page" dialog of a scratch note: the page and the
+    heading of the section the note becomes there. Posts to /append/<slug>. */}}
+{{define "append_dialog" -}}
+<dialog id="page-append-dialog" class="scratch-modal promote-modal"{{if .append_error}} data-open{{end}}><p class="scratch-label">Append to page</p><p class="modal-desc">The note becomes a section at the end of the page and leaves Scratch. Links to it follow.</p><form method="post" action="{{url "append" .slug}}">
+<label class="promote-field">Page<input type="text" name="page" id="append-page" list="wiki-pages" autocomplete="off" spellcheck="false" required></label>
+<label class="promote-field">Section heading<input type="text" name="heading" id="append-heading" value="{{.append_heading}}" autocomplete="off" required></label>{{template "error" (dict "message" .append_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Append</button><button type="button" class="btn" id="page-append-cancel">Cancel</button></div></form></dialog>
+{{- end}}
+
+{{- /* The page view's ⋯ menu (Present, History, Move to wiki… and Append to
+    page… for a scratch note, Rename…, Delete…) and the dialogs behind it.
+    One hidden element that js/pagemenu.js opens under whichever ⋯ was
+    pressed; Present shows only on a page with headings. Outside the page
+    grid: the middle column is a size container, which would anchor
+    position: fixed. */}}
+{{define "page_menu" -}}
+<div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>
+<button type="button" role="menuitem" id="present-btn" hidden>Present<kbd class="menu-key">p</kbd></button>
+{{- if .git}}<a role="menuitem" href="{{url "history" .slug}}">History</a>{{end}}
+{{- if .scratch}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
+{{- if .renamable}}<button type="button" role="menuitem" data-action="rename">Rename…</button><button type="button" role="menuitem" data-action="delete" class="danger">Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>{{end -}}
+</div>
+{{- if .scratch}}
+<datalist id="wiki-pages">{{range .wiki_pages}}<option value="{{.Slug}}">{{.Title}}</option>{{end}}</datalist>
+{{- template "promote_dialog" .}}
+{{- template "append_dialog" .}}
+{{- end}}
+{{- if .renamable}}
+<dialog id="page-rename-dialog" class="scratch-modal"{{if .rename_error}} data-open{{end}}><p class="scratch-label">Rename page</p><form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{.slug}}" aria-label="New name for “{{.title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .rename_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
+{{- end}}
+{{- end}}
+
+{{- /* Backlinks and Linked tasks (id on the originals at the page's end; the
+    right column's copy has data-id, the anchors belong to the originals). A
+    task linking to a section names it (§ Section). */}}
+{{define "link_section" -}}
+<section class="backlinks" {{if .copy}}data-id{{else}}id{{end}}="{{.id}}"><h3>{{.heading}}</h3><ul>
+{{- range .links}}<li><a href="{{.href}}">{{.title}}</a>{{if .section}} <a class="task-bl-section" href="#{{.anchor}}">§ {{.section}}</a>{{end}}</li>{{end -}}
+</ul></section>
+{{- end}}
+
+{{define "link_sections" -}}
+{{range .sections}}{{template "link_section" (dict "id" .id "heading" .heading "links" .links "copy" $.copy)}}{{end}}
+{{- end}}
+
+{{- /* The breadcrumb's ← N chip: hovering (or tapping) lists the pages. */}}
+{{define "backlinks_chip" -}}
+{{if .}}<a href="#backlinks" class="bl-count">← {{len .}}</a><div class="bl-tooltip">{{range .}}<a href="{{.href}}">{{.title}}</a>{{end}}</div>{{end}}
+{{- end}}
+
+{{- /* The left column on big screens: "On this page" (the page's headings),
+    and ↑ Back to top, which js/chrome.js shows once the page has scrolled
+    a screen down. */}}
+{{define "rail_toc" -}}
+<aside class="rail rail-left">{{if .}}<nav class="rail-toc" aria-label="On this page"><p class="rail-label">On this page</p>{{.}}</nav>{{end}}<a class="rail-top" href="#" hidden>↑ Back to top</a></aside>
+{{- end}}
+
+{{- /* The editor's hint after Move to wiki (?paste=<slug>): the moved page's
+    link, copied (copied) or to copy. Copy and × in js/pagemenu.js. */}}
+{{define "paste_hint" -}}
+<div class="paste-hint" role="status" data-link="{{.link}}"><svg class="paste-hint-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="9" height="12" rx="1.5"/><path d="M6 2.5h4v2H6z"/><path d="M6 8.5l1.5 1.5L10.5 7"/></svg><div class="paste-hint-text"><p>
+{{- if .copied}}<strong>Link copied.</strong> Paste it where it belongs on this page.{{else}}<strong>Moved to the wiki.</strong> Copy its link and paste it where it belongs.{{end -}}
+</p><code title="{{.link}}">{{.link}}</code></div><button type="button" class="btn paste-hint-copy">{{if .copied}}Copy{{else}}Copy link{{end}}</button><button type="button" class="paste-hint-close" aria-label="Close" title="Close">×</button></div>
+{{- end}}
+
+{{- /* Below the title: tags and the tldr toggle on the left, "Last changed"
+    (and Commit while uncommitted) on the right. The tldr toggle is a
+    checkbox before the row, its label inside, the text after it: as
+    siblings the label stays on the tags line while the text takes a
+    full-width line below. CSS only. */}}
+{{define "meta_row" -}}
+{{if or .tags_html .tldr .changed}}
+{{- if .tldr}}<input type="checkbox" id="tldr-toggle" class="tldr-toggle">{{end -}}
+<div class="page-meta-wrapper"><div class="page-meta-left">{{.tags_html}}{{if .tldr}}<label class="tldr-label" for="tldr-toggle">tldr</label>{{end}}</div><div class="page-meta-right">
+{{- with .changed}}<div class="page-meta">Last changed {{.date}} ({{.rel}}){{if $.commit}} — uncommitted{{end}}</div>{{end -}}
+{{- with .commit}}{{template "commit_form" (dict "filepath" .filepath "title" .title "on_success" "reload" "inline" true)}}{{end -}}
+</div></div>
+{{- if .tldr}}<p class="page-tldr">{{.tldr}}</p>{{end}}
+{{- end}}
+{{- end}}
