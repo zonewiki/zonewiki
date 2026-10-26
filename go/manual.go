@@ -14,8 +14,8 @@ import (
 )
 
 // docsDir holds README.md and docs/spec/ (the -docs flag); "" finds them
-// from the browser code's folder: the checkout (src/public → the repo) or
-// next to it (the image).
+// next to the browser code's folder (public/): in the checkout and in the
+// image alike.
 var docsDir string
 
 // How Leaf is tested: nothing a user asks about.
@@ -31,7 +31,7 @@ var manualHeadingRE = regexp.MustCompile(`^(#{1,6})` + pySpace + `+(.*?)` + pySp
 func docsRoot() string {
 	candidates := []string{docsDir}
 	if docsDir == "" {
-		candidates = []string{filepath.Dir(filepath.Dir(publicDir)), filepath.Dir(publicDir)}
+		candidates = []string{filepath.Dir(publicDir)}
 	}
 	for _, root := range candidates {
 		if isDir(filepath.Join(root, "docs", "spec")) {

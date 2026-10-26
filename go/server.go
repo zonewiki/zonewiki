@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-// publicDir holds the browser code and styles (src/public), served as is.
+// publicDir holds the browser code and styles (public/), served as is.
 var publicDir string
 
 func logf(format string, args ...any) {
@@ -40,7 +40,7 @@ func main() {
 		}
 	}
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
-	public := flag.String("public", "", "the folder of the browser code (default: src/public, found from the binary)")
+	public := flag.String("public", "", "the folder of the browser code (default: public/, found from the binary)")
 	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
@@ -108,15 +108,15 @@ func health(url string) int {
 	return 0
 }
 
-// findPublic finds src/public from the binary: next to it (public/) or in
-// the checkout it was built in (go/leaf → src/public).
+// findPublic finds public/ from the binary: next to it (the image) or in
+// the checkout it was built in (go/leaf → public/).
 func findPublic() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return "public"
 	}
 	dir := filepath.Dir(exe)
-	for _, p := range []string{filepath.Join(dir, "public"), filepath.Join(dir, "..", "src", "public")} {
+	for _, p := range []string{filepath.Join(dir, "public"), filepath.Join(dir, "..", "public")} {
 		if isDir(p) {
 			return p
 		}
@@ -288,7 +288,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
-// servePublic serves the browser code (src/public): files only, nothing
+// servePublic serves the browser code (public/): files only, nothing
 // outside the folder.
 func servePublic(w http.ResponseWriter, r *http.Request) {
 	serveFile(w, r, publicDir, r.PathValue("path"), "")

@@ -400,6 +400,6 @@ change gets in.
 ## License
 
 [AGPL-3.0-or-later](LICENSE). The vendored [highlight.js](https://highlightjs.org) in
-`src/public/vendor/highlight/` is under its own BSD-3-Clause license; the
-emoji names in `src/public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji))
+`public/vendor/highlight/` is under its own BSD-3-Clause license; the
+emoji names in `public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji))
 under MIT.

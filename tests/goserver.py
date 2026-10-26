@@ -93,7 +93,7 @@ class GoServer:
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(
-            [str(self.binary), "-addr", addr, "-public", str(REPO / "src" / "public"), *self.flags],
+            [str(self.binary), "-addr", addr, "-public", str(REPO / "public"), *self.flags],
             env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log)
         line = self.proc.stdout.readline().decode()
         if " listening on " not in line:

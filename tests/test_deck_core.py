@@ -1,4 +1,4 @@
-"""Tests for the pure client-side deck logic in src/public/deck-core.js.
+"""Tests for the pure client-side deck logic in public/deck-core.js.
 
 The module is DOM-free, so these tests import it in Node (``node -e``) and
 compare JSON output. They skip automatically when Node is not installed.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-CORE = Path(__file__).resolve().parent.parent / "src" / "public" / "deck-core.js"
+CORE = Path(__file__).resolve().parent.parent / "public" / "deck-core.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
                                 reason="node not installed")

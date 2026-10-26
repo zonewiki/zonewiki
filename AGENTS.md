@@ -44,7 +44,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Server              | Go (`net/http`), one process, one binary (`go/`) |
 | Markdown render     | `goldmark` (server renders to HTML), with Leaf's rules (`go/markdown.go`) |
 | HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped |
-| Syntax highlight    | `highlight.js` (vendored in `src/public/vendor/`, no CDN) |
+| Syntax highlight    | `highlight.js` (vendored in `public/vendor/`, no CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
@@ -52,7 +52,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
-No build step for the browser code (no bundler: the server serves `src/public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
+No build step for the browser code (no bundler: the server serves `public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
 
 ---
 
@@ -109,7 +109,7 @@ No build step for the browser code (no bundler: the server serves `src/public/` 
 │   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
-└── src/public/             # The browser code, served as it is
+└── public/                 # The browser code, served as it is
     ├── style.css           # All styling
     ├── leaf.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
@@ -147,7 +147,7 @@ Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one with
 
 ```bash
 (cd go && go build -o leaf .)
-LEAF_DATA=~/leaf go/leaf                 # http://localhost:5000 (finds src/public from the binary)
+LEAF_DATA=~/leaf go/leaf                 # http://localhost:5000 (finds public/ from the binary)
 LEAF_DATA=~/leaf go/leaf eval FILE       # measure retrieval
 ```
 
@@ -195,7 +195,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 `go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search). Nothing else; add a dependency only when it clearly pays for itself. **Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and commit the new pins.
 
 - **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
-- `highlight.js` 11.9.0 is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `src/public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
+- `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
 - Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `LEAF_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/leaf-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Leaf searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
 - The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
 

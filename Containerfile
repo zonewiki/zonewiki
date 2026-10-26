@@ -98,7 +98,7 @@ RUN ldconfig
 ENV LEAF_MODEL_DIR=/opt/leaf-model
 
 WORKDIR /app
-COPY src/public/ public/
+COPY public/ public/
 # Leaf's documentation, for the MCP tool leaf_help (found next to public/).
 COPY README.md ./
 COPY docs/spec/ docs/spec/

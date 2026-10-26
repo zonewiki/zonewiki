@@ -65,7 +65,7 @@ fi
 # uncommitted source changes), shown next to Leaf's version; same format as
 # a local go build's (go/config.go sourceBuild).
 LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
-if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go src 2>/dev/null)" ]]; then
+if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)" ]]; then
   LEAF_BUILD="$LEAF_BUILD +dirty"
 fi
 export LEAF_BUILD="${LEAF_BUILD:-unknown}"
