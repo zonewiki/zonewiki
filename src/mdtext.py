@@ -114,6 +114,12 @@ _CODE_MASK_RE = re.compile('\ue000(\\d+)\ue001')
 _INLINE_CODE_RE = re.compile(r'(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)')
 
 
+# What mask_code stashes outside fences: inline code, and the page's own
+# text that looks like a token of ours, so unmask_code puts that back as it
+# was rather than another stash entry (or failing on a number past its end).
+_MASKED_RE = re.compile(_CODE_MASK_RE.pattern + '|' + _INLINE_CODE_RE.pattern.replace(r'\1', r'\2'))
+
+
 def mask_code(text: str) -> tuple[str, list[str]]:
     """Replace fenced code blocks and inline code spans with opaque tokens.
 
@@ -133,7 +139,7 @@ def mask_code(text: str) -> tuple[str, list[str]]:
             body = line.rstrip('\n')
             out.append(token(body) + line[len(body):])
         else:
-            out.append(_INLINE_CODE_RE.sub(lambda m: token(m.group(0)), line))
+            out.append(_MASKED_RE.sub(lambda m: token(m.group(0)), line))
     return ''.join(out), stash
 
 

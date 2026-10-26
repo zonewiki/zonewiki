@@ -621,6 +621,32 @@ class TestDirectivesInsideCode:
         assert "tasks-app" in html
 
 
+class TestTextLikeMaskTokens:
+    """A page's own text that looks like the private-use tokens masking
+    uses (\\ue000N\\ue001 for code, \\ue002N\\ue003 for [[task:…]]) stays as
+    written. It used to be taken for a token: the page failed to render
+    (IndexError) or showed another code span there, and a rename that
+    rewrote such a page wrote that code span into the file."""
+
+    def test_page_renders_with_the_text_as_written(self, wiki_dir):
+        assert "x 5 y" in render_md("x 5 y\n")
+        html = render_md("`code` x 0 y\n")
+        assert "x 0 y" in html and html.count("<code>code</code>") == 1
+
+    def test_mask_round_trips(self):
+        text = "`a` 0 ``b`1`` 9\n```\n0\n```\n"
+        assert mdtext.unmask_code(*mdtext.mask_code(text)) == text
+
+    def test_rename_leaves_the_text_alone(self):
+        text = "`code` 0 [[old]]\n"
+        assert pages.rewrite_page_links(text, "old", "new") == "`code` 0 [[new]]\n"
+
+    def test_task_ref_lookalikes_stay(self, wiki_dir):
+        assert "x 5 y" in render_md("x 5 y [[task:abcd1234]]\n")
+        html = render_md("0 [[task:abcd1234]]\n")
+        assert html.count("task-ref-missing") == 1 and "0" in html
+
+
 class TestPageTitleIgnoresCode:
     """Regression: page_title took the first "# " line anywhere, so a page
     without an H1 whose code block had a shell comment was titled after it."""

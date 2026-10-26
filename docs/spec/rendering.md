@@ -69,7 +69,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
   - `[[Page Name|Label]]` → `[Label](/page/page-name)`
 - If the target page does not exist, render the link with a CSS class `wikilink-missing` so it can be styled differently (e.g. red or dashed underline). Clicking a missing wikilink redirects to `/edit/<slug>` so the page can be created immediately.
 - The same pre-processing must run in the `/api/preview` endpoint so the live editor preview also renders wikilinks correctly.
-- Code is exempt: `render_md()` masks fenced code blocks and inline code spans (`mask_code`, private-use-character tokens) before running the wikilink and `[[deck]]` pre-processors and restores them (`unmask_code`) before `md.render()`, so directives inside code render literally. The TOC also ignores `##` lines inside fences.
+- Code is exempt: `render_md()` masks fenced code blocks and inline code spans (`mask_code`, private-use-character tokens) before running the wikilink and `[[deck]]` pre-processors and restores them (`unmask_code`) before `md.render()`, so directives inside code render literally. A page's own text that looks like such a token (`\ue000N\ue001`, or `\ue002N\ue003` for task references) is masked too and comes back as written, so it can't fail a render or swap in another code span, nor be written into a page by a rename's link rewrite. The TOC also ignores `##` lines inside fences.
 - Add a route `GET /api/pages` that returns a JSON list of all existing slugs — used by the editor to hint which wikilinks are valid.
 
 ### Task references

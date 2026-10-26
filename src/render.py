@@ -232,24 +232,31 @@ _TASK_REF_TOKEN_RE = re.compile('\ue002(\\d+)\ue003')
 _TASK_REF_ITEM_RE = re.compile(r'<li>(?=(?:\s|<p>)*\ue002\d+\ue003(?:\s|</p>)*</li>)')
 
 
+# A reference, or the page's own text that looks like one of our tokens:
+# masked too, and put back as it was (a ref starting with \ue002).
+_TASK_REF_MASKED_RE = re.compile(_TASK_REF_TOKEN_RE.pattern + '|' + decksyntax.TASK_REF_RE.pattern)
+
+
 def _mask_task_refs(text: str) -> tuple[str, list[str]]:
     refs: list[str] = []
 
     def token(m: re.Match) -> str:
-        refs.append(m.group(1).lower())
+        refs.append(m.group(0) if m.group(2) is None else m.group(2).lower())
         return f'\ue002{len(refs) - 1}\ue003'
-    return decksyntax.TASK_REF_RE.sub(token, text), refs
+    return _TASK_REF_MASKED_RE.sub(token, text), refs
 
 
 def _inject_task_refs(html_str: str, refs: list[str], prefer: list[str] = ()) -> str:
     if not refs:
         return html_str
-    tasks = deckstore.resolve_task_refs(refs)
+    tasks = deckstore.resolve_task_refs([r for r in refs if not r.startswith('\ue002')])
     today = date.today().isoformat()
     html_str = _TASK_REF_ITEM_RE.sub('<li class="task-ref-item">', html_str)
-    return _TASK_REF_TOKEN_RE.sub(
-        lambda m: _task_ref_html(refs[int(m.group(1))], tasks[refs[int(m.group(1))]], today, prefer),
-        html_str)
+
+    def chip(m: re.Match) -> str:
+        ref = refs[int(m.group(1))]
+        return ref if ref.startswith('\ue002') else _task_ref_html(ref, tasks[ref], today, prefer)
+    return _TASK_REF_TOKEN_RE.sub(chip, html_str)
 
 
 def _short_date(iso: str, today: str) -> str:
