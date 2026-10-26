@@ -9,6 +9,7 @@ password, LEAF_HOSTS …) go to the server as its environment: when they
 change, the server restarts on the same wiki before the next request."""
 
 import http.client
+import json
 import os
 import shutil
 import socket
@@ -71,9 +72,24 @@ def _settings() -> dict[str, str]:
 
 def _flags() -> list[str]:
     """The flags for what a test patches that isn't a setting: Leaf's docs
-    folder (manual.docs_root, for leaf_help)."""
+    folder (manual.docs_root, for leaf_help), and the semantic index
+    (retrieval.SEMANTIC, with the tests' FakeEmbedder): the server gets the
+    same embedder and floors, and syncs once at start when Python's index
+    has synced. Each sync that changes Python's index (a new generation)
+    restarts the server, so it sees the wiki as Python's index does."""
     import manual
-    return ["-docs", str(manual.docs_root() or "/nonexistent")]
+    import retrieval
+    flags = ["-docs", str(manual.docs_root() or "/nonexistent")]
+    idx = retrieval.SEMANTIC
+    if idx is not None:
+        e = idx.embedder
+        flags += ["-semantic-test", json.dumps({
+            "name": e.name, "model_name": e.model_name, "concepts": e.concepts, "dim": e.dim,
+            "fail": e.fail, "min_score": idx.min_score, "related_min_score": idx.related_min_score,
+            "task_min_score": idx.task_min_score, "related_min_chars": idx.related_min_chars,
+            "synced": idx.ready, "generation": idx._gen,
+        })]
+    return flags
 
 
 class GoServer:

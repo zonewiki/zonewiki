@@ -32,6 +32,7 @@ func main() {
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
 	public := flag.String("public", "", "the folder of the browser code (default: src/public, found from the binary)")
 	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
+	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
 	var err error
 	if cfg, err = loadConfig(os.Getenv); err != nil {
@@ -46,6 +47,15 @@ func main() {
 	excludeFromGit(cfg.Data, "/.leaf/") // the secret key
 	ensureHomePage()
 	initDeck()
+	// The semantic index's worker reads tasks: after the deck is set up.
+	if *semanticTest != "" {
+		if semantic, err = semanticForTest(*semanticTest); err != nil {
+			fmt.Fprintln(os.Stderr, "Leaf: -semantic-test:", err)
+			os.Exit(1)
+		}
+	} else if semantic = semanticFromEnv(os.Getenv); semantic != nil {
+		semantic.start()
+	}
 
 	// All interfaces by default, so the container's network bridge can
 	// forward connections; exposure is the port mapping's (compose.yaml:

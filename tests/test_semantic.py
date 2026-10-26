@@ -35,6 +35,7 @@ DIM = 4
 class FakeEmbedder:
     name = "fake:concepts"
     model_name = "fake"
+    concepts, dim = CONCEPTS, DIM   # for the Go server (tests/goserver.py)
 
     def __init__(self):
         self.calls: list[str] = []   # every text embedded as a document

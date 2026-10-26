@@ -619,12 +619,13 @@ func Excerpt(text, query string) string {
 	return snippet
 }
 
-// Fuse: reciprocal rank fusion of ranked lists of keys (best first); ties
-// keep the order keys were first seen in.
-func Fuse(rankings [][]string) []string {
+// Fuse: reciprocal rank fusion of ranked lists (best first); an item high
+// in several lists beats one high in a single list. Ties keep the order
+// items were first seen in, so the first list (BM25) wins them.
+func Fuse[T comparable](rankings [][]T) []T {
 	const rrfK = 60
-	scores := map[string]float64{}
-	var order []string
+	scores := map[T]float64{}
+	var order []T
 	for _, ranking := range rankings {
 		for rank, k := range ranking {
 			if _, ok := scores[k]; !ok {

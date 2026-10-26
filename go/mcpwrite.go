@@ -8,6 +8,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"strconv"
@@ -72,14 +73,19 @@ func writePage(args *Obj, base string) (string, error) {
 	out := "Created page " + slug + ".\n" + pageInfo(slug, base)
 	if existing != "" {
 		out = "Replaced page " + slug + ".\n" + pageInfo(slug, base)
-	} else if similar := similarPages(slug, pageTitle(content, slug)); len(similar) > 0 {
-		out += "\nNote: pages with similar names exist; if this one repeats one of them, " +
-			"merge it there (edit_page) and delete_page this one:"
-		for _, p := range similar {
-			out += "\n- " + p.Slug + " | " + p.Title
+	} else {
+		similar := similarPages(slug, pageTitle(content, slug))
+		named := map[string]bool{}
+		if len(similar) > 0 {
+			out += "\nNote: pages with similar names exist; if this one repeats one of them, " +
+				"merge it there (edit_page) and delete_page this one:"
+			for _, p := range similar {
+				out += "\n- " + p.Slug + " | " + p.Title
+				named[p.Slug] = true
+			}
 		}
+		out += closeInContent(slug, content, named)
 	}
-	// The pages closest in content (semantic search) come with step 6.
 	return out + pending + linkWarning(slug, old, content) + guideNote(slug), nil
 }
 
@@ -933,4 +939,27 @@ func replaceInPages(args *Obj, base string) (string, error) {
 		out += "\nNote: these new links point to pages that don't exist (yet): " + strings.Join(sortedKeys(brokenSet), ", ")
 	}
 	return out + pending, nil
+}
+
+// closeInContent: for a new page (semantic search only), the existing pages
+// closest to it in meaning, which a similar name doesn't catch (a crash
+// analysis written up anew when the ticket's page already covers it).
+// Pages it links to, or already named for a similar name, are left out.
+func closeInContent(slug, content string, named map[string]bool) string {
+	if semantic == nil {
+		return ""
+	}
+	known := slugSet()
+	delete(known, slug)
+	exclude := maps.Clone(named)
+	for s := range pageLinkTargets(content, slug) {
+		exclude[s] = true
+	}
+	close := semantic.relatedToText(slug, content, known, exclude, 3)
+	if len(close) == 0 {
+		return ""
+	}
+	return "\nNote: the pages closest to it in content: " + joinIDs(close) +
+		". If one already covers this topic, merge this page there (edit_page) and " +
+		"delete_page this one; else consider linking them."
 }

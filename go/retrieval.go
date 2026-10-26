@@ -1,12 +1,11 @@
 // Search and retrieval (src/retrieval.py): BM25 over pages and deck tasks
-// (search.go) for the browser (doSearch) and for LLMs (retrieve: sections
-// rather than pages). Semantic search isn't ported yet (PORT.md step 6):
-// ranking is by keywords only, the search dialog says semantic search is
-// off, and pages have no Related section.
+// (search.go), fused with the optional semantic index (embed.go), for the
+// browser (doSearch) and for LLMs (retrieve: sections rather than pages).
 package main
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -375,14 +374,46 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 		sort.SliceStable(docs, func(i, j int) bool { return docs[i].date() > docs[j].date() })
 		return firstN(docs, limit)
 	}
-	return firstN(phraseFirst(bm25(x, q, limit, keep), q, x, keep), limit)
+	// Each ranking goes as deep as the fused list must be long.
+	depth := limit
+	if semantic != nil {
+		depth = max(fuseDepth, limit)
+	}
+	ranked := bm25(x, q, depth, keep)
+	if semantic == nil {
+		return firstN(phraseFirst(ranked, q, x, keep), limit)
+	}
+	semantic.poke()
+	pages, tasks := map[string]*SearchDoc{}, map[string]*SearchDoc{}
+	for _, d := range x.docs {
+		if !passes(q, d, keep) {
+			continue
+		}
+		if d.isTask() {
+			tasks[d.TaskID] = d
+		} else {
+			pages[d.Slug] = d
+		}
+	}
+	text := q.RankingText()
+	var pageHits []docScore
+	for _, h := range semantic.search(text, docKeys(pages), depth) {
+		pageHits = append(pageHits, docScore{pages[h.Slug], h.Score})
+	}
+	tHits := taskHits(text, tasks, depth)
+	if pageHits == nil && tHits == nil {
+		return firstN(phraseFirst(ranked, q, x, keep), limit)
+	}
+	meaning := firstN(bySimilarity(pageHits, tHits), depth)
+	return firstN(phraseFirst(Fuse([][]*SearchDoc{ranked, meaning}), q, x, keep), limit)
 }
 
 // bestSections: for each page in slugs, the section a result should open:
 // one whose own text has the query as a phrase, else the best BM25-scored
-// section whose own text has a query word. A page matched only by its
-// title gets none (every section would match equally), so its link opens
-// the top of the page.
+// section whose own text has a query word, else, for a page found by
+// meaning, its most similar section. A page matched only by its title gets
+// none (every section would match equally), so its link opens the top of
+// the page.
 func bestSections(q *Query, slugs map[string]bool) map[string]*SearchDoc {
 	text := q.RankingText()
 	x := chunkIndex()
@@ -403,6 +434,25 @@ func bestSections(q *Query, slugs map[string]bool) map[string]*SearchDoc {
 	for _, d := range ranked {
 		if best[d.Slug] == nil && Matches(d.Heading+"\n"+d.Text, text) {
 			best[d.Slug] = d
+		}
+	}
+	if semantic != nil && len(best) < len(slugs) {
+		rest := map[string]bool{}
+		for slug := range slugs {
+			if best[slug] == nil {
+				rest[slug] = true
+			}
+		}
+		byKey := map[string]*SearchDoc{}
+		for _, d := range x.docs {
+			if !d.isTask() && rest[d.Slug] {
+				byKey[d.Key] = d
+			}
+		}
+		for _, h := range semantic.searchChunks(text, rest, max(len(byKey), 1)) {
+			if d := byKey[h.ID]; d != nil && best[d.Slug] == nil {
+				best[d.Slug] = d
+			}
 		}
 	}
 	return best
@@ -603,13 +653,40 @@ func retrieve(raw string, limit int, under string, scratch bool) []*SearchDoc {
 		return nil
 	}
 	x := chunkIndex()
+	pagesOnly := under != "" || scratch
+	pageOK := func(slug string) bool { return inFolder(slug, under) && (!scratch || isScratch(slug)) }
 	var keep func(*SearchDoc) bool
-	if under != "" || scratch {
-		keep = func(d *SearchDoc) bool {
-			return !d.isTask() && inFolder(d.Slug, under) && (!scratch || isScratch(d.Slug))
+	if pagesOnly {
+		keep = func(d *SearchDoc) bool { return !d.isTask() && pageOK(d.Slug) }
+	}
+	ranked := bm25(x, q, fuseDepth, keep)
+	if semantic != nil {
+		semantic.poke()
+		text := q.RankingText()
+		byKey, slugs, tasks := map[string]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
+		for _, d := range x.docs {
+			switch {
+			case !passes(q, d, nil):
+			case !d.isTask() && pageOK(d.Slug):
+				byKey[d.Key], slugs[d.Slug] = d, true
+			case d.isTask() && !pagesOnly:
+				tasks[d.TaskID] = d
+			}
+		}
+		var hits, tHits []docScore
+		for _, h := range semantic.searchChunks(text, slugs, fuseDepth) {
+			if d := byKey[h.ID]; d != nil {
+				hits = append(hits, docScore{d, h.Score})
+			}
+		}
+		if !pagesOnly {
+			tHits = taskHits(text, tasks, fuseDepth)
+		}
+		if hits != nil || tHits != nil {
+			ranked = Fuse([][]*SearchDoc{ranked, firstN(bySimilarity(hits, tHits), fuseDepth)})
 		}
 	}
-	return firstN(phraseFirst(bm25(x, q, fuseDepth, keep), q, x, keep), limit)
+	return firstN(phraseFirst(ranked, q, x, keep), limit)
 }
 
 // search_wiki's queries, one JSON line each (LEAF_QUERY_LOG), for turning
@@ -669,9 +746,71 @@ func logQuery(raw, under string, hits []*SearchDoc) {
 	}
 }
 
-// semanticStatus: how content search works now, for the search dialog:
-// "on", "indexing", "failed" or "off".
-func semanticStatus() string { return "off" }
+// relatedSection: the "Related" section, the pages most similar in
+// meaning (semantic search only). Pages already linked either way are left
+// out; the point is connections you haven't written down.
+func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M {
+	if semantic == nil {
+		return nil
+	}
+	semantic.poke()
+	files := map[string]string{}
+	known := map[string]bool{}
+	for _, p := range iterPages() {
+		files[p.Slug], known[p.Slug] = p.Path, true
+	}
+	_, exclude := pageMeta(path, slug)
+	exclude = maps.Clone(exclude)
+	for _, b := range backlinks {
+		exclude[b.Slug] = true
+	}
+	var related []PageRef
+	for _, r := range semantic.related(slug, known, exclude, 5) {
+		if !hiddenPage(rq, r.ID) {
+			title, _ := pageMeta(files[r.ID], r.ID)
+			related = append(related, PageRef{Slug: r.ID, Title: title})
+		}
+	}
+	if related == nil {
+		return nil
+	}
+	return M{"id": "related", "heading": "Related", "links": pageLinks(related)}
+}
 
-// relatedSection: the pages most similar in meaning (semantic search only).
-func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M { return nil }
+// bySimilarity: one semantic ranking from several (doc, similarity) lists,
+// page sections and tasks: all come from the same model, so their cosine
+// similarities compare directly.
+func bySimilarity(hitLists ...[]docScore) []*SearchDoc {
+	var all []docScore
+	for _, hits := range hitLists {
+		all = append(all, hits...)
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].score > all[j].score })
+	out := make([]*SearchDoc, len(all))
+	for i, h := range all {
+		out[i] = h.doc
+	}
+	return out
+}
+
+type docScore struct {
+	doc   *SearchDoc
+	score float64
+}
+
+// taskHits: the semantic index's tasks among those given, as docs.
+func taskHits(q string, tasks map[string]*SearchDoc, limit int) []docScore {
+	var hits []docScore
+	for _, h := range semantic.searchTasks(q, docKeys(tasks), limit) {
+		hits = append(hits, docScore{tasks[h.ID], h.Score})
+	}
+	return hits
+}
+
+func docKeys(m map[string]*SearchDoc) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
+}

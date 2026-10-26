@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -937,6 +938,18 @@ func searchTasks(args *Obj, base string) (string, error) {
 		for _, h := range NewIndex(tokens).Search(q.Text, max(len(docs), 1)) {
 			ranked = append(ranked, docs[h.Doc])
 		}
+		if semantic != nil {
+			semantic.poke()
+			byID := map[string]*SearchDoc{}
+			for _, d := range docs {
+				byID[d.TaskID] = d
+			}
+			var hits []*SearchDoc
+			for _, h := range semantic.searchTasks(q.Text, docKeys(byID), max(len(byID), 1)) {
+				hits = append(hits, byID[h.ID])
+			}
+			ranked = Fuse([][]*SearchDoc{ranked, hits})
+		}
 		docs = ranked
 	} else {
 		var open, done []*SearchDoc
@@ -1492,8 +1505,22 @@ func mcpPageLinks(slug, content string) string {
 		shown += fmt.Sprintf(", … and %d more", len(linking)-backlinksShown)
 	}
 	out := fmt.Sprintf("\n\n---\nLinked from (%d): %s", len(linking), shown)
-	if missing := missingLinks(content, slugSet(), slug); len(missing) > 0 {
+	slugs := slugSet()
+	if missing := missingLinks(content, slugs, slug); len(missing) > 0 {
 		out += "\nBroken links (no such page): " + strings.Join(sortedKeys(missing), ", ")
+	}
+	if semantic != nil {
+		// As the page view's Related: pages close in meaning that aren't
+		// linked either way, the connections not written down yet.
+		semantic.poke()
+		_, targets := pageMeta(safePath(slug), slug)
+		linked := maps.Clone(targets)
+		for _, s := range linking {
+			linked[s] = true
+		}
+		if related := semantic.related(slug, slugs, linked, 5); len(related) > 0 {
+			out += "\nRelated, not linked (close in meaning): " + joinIDs(related)
+		}
 	}
 	return out
 }
@@ -2089,4 +2116,12 @@ func callMCPTool(r *http.Request, name string, args *Obj) (string, error) {
 		return "", toolErr("Unknown tool: " + name)
 	}
 	return f(args, base)
+}
+
+func joinIDs(hits []idScore) string {
+	ids := make([]string, len(hits))
+	for i, h := range hits {
+		ids[i] = h.ID
+	}
+	return strings.Join(ids, ", ")
 }

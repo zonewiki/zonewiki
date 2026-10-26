@@ -19,12 +19,12 @@ Progress by step (see Order):
 | 3. Deck | Done with step 2 (the page view needs it): `pyjson.go` (key order, ints/floats, Python's `json.dumps` byte for byte), `decksyntax.go`, `deckstore.go`, `deck.go` (every `/api/deck` route, the embed). |
 | 4. Search | Done: `search.go` (the prototype's, with `difflib.go`), `retrieval.go` (page, section and task documents, per-file caches, `doSearch`, `retrieve`, the query log), `embed.go`'s chunking; `/api/search`, `/search`. `search/compare_servers.py` finds no difference from Python on a wiki but the order of equal scores. |
 | 5. MCP | Done: `mcp.go` (protocol, endpoint; `mcp_tools.json` the tool definitions as clients see them), `mcptools.go` (reading, tasks, guides), `mcpwrite.go` (page writes, `replace_in_pages` in RE2), `manual.go` (`leaf_help`; `-docs` flag, which `tests/goserver.py` sets from `manual.docs_root`), gitstore's `grepPages`, `moveFolder`, `gitLogAll`, `isUncommitted`. Tests that patch Python's limits are `python_only`, with Go tests in `mcp_test.go`. |
-| 6. Semantic | Next. |
-| 7 | Not started (switch-over). `retrieval.go` ranks by keywords only, stubs semantic status ("off") and Related. |
+| 6. Semantic | Done: `embed.go` (the index: sync, worker, cache, floors, scoring, Related, `relatedToText`; settings, model download), `embed_onnx.go` (the model on onnxruntime, cgo only; `embed_nocgo.go`: built without cgo, semantic search is off), `tokenizer.go` (from `semantic/`), fusion in `retrieval.go` and the MCP tools. `embedtest.go`: the tests' concept embedder, `-semantic-test` (`tests/goserver.py` passes Python's `retrieval.SEMANTIC`). `search/compare_servers.py --semantic`: Go reads Python's cache and embeds nothing; on a wiki 0 differences in search but tie order and twins (pages of the same text), Related identical on every page. |
+| 7 | Next (switch-over). |
 
-Against Go: every API test passes but those needing semantic search (14:
-8 in `test_semantic.py`, 6 in `test_mcp.py`); every browser test passes
-(396, 2 skipped). `go test`:
+Against Go: every API test passes (899, the rest test Python code); every
+browser test passes (396, 2 skipped). `go test` (also `-race`, and
+`CGO_ENABLED=0`):
 Go's own tests, and `testdata/golden.json.gz` (Python's answers of 28 pure
 functions on 6,259 texts, every string in the tests: `testdata/golden.py`
 writes it) all the same.
@@ -44,6 +44,11 @@ Deliberate differences so far (none breaks a page):
   Python's `\1`/`\g<name>` as before. The spec (`mcp.md`) says so at the
   switch-over.
 - Empty regex matches right after a match are skipped (RE2), Python finds them.
+- Semantic: equal similarities come in the pages' A–Z order (Python: the
+  directory listing's), scores are float64 dot products (numpy: float32),
+  the cache file is the same JSON written compactly and in UTF-8. Go finds
+  onnxruntime as `libonnxruntime.so` on the loader's path (the image must
+  put it there; locally `LD_LIBRARY_PATH`).
 
 Earlier, four spikes, each in its own folder with a README (method, results) and a
 `compare.py` that checks Go against the Python on a real wiki:
@@ -171,8 +176,8 @@ These are read or written by users, other tools, or the browser code:
   `requirements-embed.txt`. `semantic/README.md` has the commands.
 - Go dependencies (`go/go.mod`, exact versions as for Python):
   `github.com/yuin/goldmark` v1.8.6, `golang.org/x/text` v0.43.0 (search's
-  case folding and NFKD); semantic search will add
-  `github.com/yalue/onnxruntime_go` (`semantic/`).
+  case folding and NFKD), `github.com/yalue/onnxruntime_go` v1.38.0
+  (semantic search; needs cgo, so a C compiler at build time).
 
 ## Python and Go differ here
 

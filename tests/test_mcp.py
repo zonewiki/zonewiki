@@ -891,7 +891,9 @@ class TestRelatedByMeaning:
         text, err = call(client, "write_page", slug="car-trouble",
                          content="# Car trouble\n\nThe car needs a repair, bremsen again.")
         assert not err
-        assert "\nNote: the pages closest to it in content: golf, brakes. If one already covers" in text
+        # Both score the same (ties come in the wiki's order: the listing's, or A–Z in Go).
+        note = re.search(r"\nNote: the pages closest to it in content: (.*?)\. If one already covers", text)
+        assert note and sorted(note.group(1).split(", ")) == ["brakes", "golf"]
         assert "car-trouble" not in text.split("closest")[1]          # not itself
         text = call(client, "write_page", slug="sleep", content="# Sleep\n\nTired every evening.")[0]
         assert "closest to it in content" not in text                 # nothing close enough
