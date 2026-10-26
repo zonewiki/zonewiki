@@ -21,6 +21,7 @@ import mdtext  # noqa: E402
 import pages  # noqa: E402
 import retrieval  # noqa: E402
 import server  # noqa: E402
+from tests.goserver import GoClient, go_enabled  # noqa: E402
 
 HOST = {"Host": "localhost:5000"}
 
@@ -57,10 +58,31 @@ def git_wiki_dir(wiki_dir, monkeypatch):
 
 
 @pytest.fixture()
-def client(wiki_dir):
+def client(wiki_dir, tmp_path_factory):
+    if go_enabled():
+        with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
+            yield c
+        return
     server.app.config["TESTING"] = True
     with server.app.test_client() as c:
         yield c
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "python_only: tests Python internals the Go port has its own tests for")
+
+
+def pytest_collection_modifyitems(config, items):
+    """With LEAF_TEST_GO=1 the tests run against the Go port (tests/goserver.py):
+    those that go through `client` or a browser (`base_url`), unless marked
+    python_only."""
+    if not go_enabled():
+        return
+    for item in items:
+        if item.get_closest_marker("python_only"):
+            item.add_marker(pytest.mark.skip(reason="Python internals (the Go port has its own test)"))
+        elif not {"client", "base_url"} & set(getattr(item, "fixturenames", ())):
+            item.add_marker(pytest.mark.skip(reason="no HTTP: tests Python code"))
 
 
 def write_page(wiki_dir: Path, slug: str, content: str) -> Path:

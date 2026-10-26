@@ -133,7 +133,7 @@ def test_every_build_names_its_containerfile(sandbox):
     # docker, unlike podman, looks only for a Dockerfile when -f is missing.
     repo, env, log = sandbox
     for check, file in (("test", "Containerfile"), ("e2e", "Containerfile.tools"),
-                        ("screenshots", "Containerfile.tools")):
+                        ("go", "Containerfile.tools"), ("screenshots", "Containerfile.tools")):
         log.unlink(missing_ok=True)
         r = subprocess.run(["./run.sh", check], cwd=repo, env=env,
                            capture_output=True, text=True)
@@ -155,6 +155,16 @@ def test_tests_run_in_parallel(sandbox):
     assert r.returncode == 0, r.stderr
     run = log.read_text()
     assert "$(nproc) / 2" in run and '-n "$n"' in run
+
+
+def test_go_tests_the_port_and_runs_pytest_against_it(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "go", "tests/test_routes.py", "-k", "Auth"], cwd=repo, env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (run,) = [l for l in log.read_text().split("\nrun ") if "go test" in l]
+    assert "-e LEAF_TEST_GO=1" in run and "go vet ./..." in run
+    assert run.rstrip().endswith("tests/test_routes.py -k Auth")
 
 
 def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):

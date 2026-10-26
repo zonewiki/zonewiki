@@ -1,0 +1,13 @@
+{{- /* The login gate (LEAF_PASSWORD). */ -}}
+{{define "body"}}
+<div class="login-wrap">
+  <form class="login-form" method="post" action="/login{{with .next_url}}?next={{.}}{{end}}">
+    <h2>Sign in to {{.app_name}}{{if .allow_remote}}<span class="remote-badge" title="Remote access enabled">🌐</span>{{end}}</h2>
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
+    {{- with .error}}
+    <p class="login-error">{{.}}</p>
+    {{- end}}
+    <button type="submit" class="btn btn-primary">Sign in</button>
+  </form>
+</div>
+{{end}}

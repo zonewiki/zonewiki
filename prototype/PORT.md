@@ -1,15 +1,29 @@
 # Porting Leaf to Go: handoff
 
-Where the Go port stands and how to go on. Written 2026-10-26, at the end
-of the session that built the prototypes; a new session starts here.
+Where the Go port stands and how to go on; a new session starts here.
+Keep it current as steps get done.
 
 ## Status
 
-**Decision: pending.** The user hasn't decided to port. The spikes answer
-"can it be done", not "should it": read the trade-off below, and ask
-before building more than a prototype.
+**Porting has started** (2026-10-26: the user said "continue with the go
+port"). The port lives in `go/` (one `main` package, a file per Python
+module, templates in `go/templates/`); Python stays the product until Go
+passes the same tests (ground rules below).
 
-Four spikes, each in its own folder with a README (method, results) and a
+Progress by step (see Order):
+
+| Step | State |
+|---|---|
+| 1. Skeleton | Done but what needs pages: settings (`config.go`), the request checks, page policy, login, signed session, throttle (`security.go`), `/public/`, `/_assets/`, `/api/upload`, `/api/version`, git setup (`gitstore.go`), the page shell (`views.go`, `templates/layout.html`) and login page. The test switch works (below). |
+| 2. Pages | Next. Brings what the skeleton's shell still leaves out: `deck_new` and the deck home's module, `show_actions` (top actions, action bar, modules partials). |
+| 3–7 | Not started |
+
+Against Go (`./run.sh go tests`): 91 API tests pass; the other ~800 that go
+through `client` fail on routes not ported yet. `go test` covers what the
+Python tests check on Python internals (throttle clock, client key, secret
+key, settings, session).
+
+Earlier, four spikes, each in its own folder with a README (method, results) and a
 `compare.py` that checks Go against the Python on a real wiki:
 
 | Spike | Folder | Result |
@@ -23,7 +37,7 @@ What the spikes leave open is the bulk, not risk: about 10,000 lines of
 Python (`src/*.py`) and 800 of Jinja templates to port, 15–20k lines of Go,
 2–4 months by the earlier estimate.
 
-**The trade-off** (the user's to weigh):
+**The trade-off** (weighed; kept for the record):
 - **For:** one binary, less memory, faster start, search about 2× faster.
 - **Against:** months of work; cgo in the build (semantic search); a
   second test setup during the move; no speed gain where it's slow
@@ -78,21 +92,18 @@ These are read or written by users, other tools, or the browser code:
 
 ## How to verify each area
 
-- **The browser tests are the oracle** (503, `tests/e2e/`), but they start
-  Flask in-process once per run and repoint it at each test's wiki by
-  patching `config`, `deckstore` and the caches (`tests/conftest.py`
-  `wiki_dir`). A Go server can't be patched. So first: a switch (an
-  environment variable) that makes `base_url`/`wiki` start the Go binary per
-  test with `LEAF_DATA` set to the test's wiki (Go starts in milliseconds).
-  A handful of tests (18 lines) patch more than the wiki: settings
-  (`config.LEAF_PASSWORD`, `LEAF_LOCALE`, `LEAF_DATE_FORMAT`,
-  `LEAF_ALLOW_REMOTE`: pass them as environment) and Flask's view functions
-  (`test_editor.py` `_slow_saves`: needs a test-only delay setting or a
-  proxy). `grep -n "monkeypatch\|server\." tests/e2e/*.py` lists them.
+- **The test switch**: `LEAF_TEST_GO=1` (`./run.sh go [pytest args]`) runs
+  the tests against a Go server per test (`tests/goserver.py`; how it works:
+  `docs/spec/testing.md`). Settings a test patches in `config` reach the
+  server as environment (it restarts when they change). Tests that patch
+  Python internals are marked `python_only` and get a Go test instead;
+  still marked so: `test_editor.py`'s two `_slow_saves` tests (they slow
+  Flask's view down: a test-only delay setting or a proxy would do).
+- **The browser tests are the oracle** (503, `tests/e2e/`).
 - **The unit and API tests** (`tests/*.py`, 1,477: `test_routes.py`,
-  `test_mcp.py`, `test_tasks.py` and others) use Flask's test client. Most can run over HTTP
-  against a server instead (same switch); tests of internals
-  (`mdtext`, `search`, `deckstore` functions) become Go tests.
+  `test_mcp.py`, `test_tasks.py` and others): those through `client` run
+  over HTTP against Go; tests of internals (`mdtext`, `search`, `deckstore`
+  functions) become Go tests.
 - **The harnesses** compare Go with Python on a real wiki: rendering,
   pre-processing (and `--fuzz N`), search, embeddings. Run them on a copy of
   the wiki (`config.py` creates `_assets/` in `LEAF_DATA`).
@@ -129,17 +140,16 @@ These are read or written by users, other tools, or the browser code:
 
 ## Setup a session needs
 
-None of it is in the repo yet; the prototypes' session had it in a scratch
-folder.
-
-- **Go ≥ 1.27** (tested 1.27.3). Better: add it to `Containerfile.tools`, so
-  `./run.sh` builds and tests the Go code like everything else.
+- **Go 1.27.3** is in the tools image (`Containerfile.tools`, pinned with its
+  checksums): `./run.sh go` builds and tests without a local Go. Locally, a
+  Go toolchain on PATH is all `LEAF_TEST_GO=1 pytest …` needs.
 - For `semantic/`: cgo (a C compiler), onnxruntime 1.31.0's shared library
   (the GitHub release, `onnxruntime-linux-x64-1.31.0.tgz`), the model
   (`embed_setup.download_model`, ~615 MB) and a venv with
   `requirements-embed.txt`. `semantic/README.md` has the commands.
-- Go dependencies so far: `github.com/yuin/goldmark`, `golang.org/x/text`,
-  `github.com/yalue/onnxruntime_go`. Pin exact versions (as for Python).
+- Go dependencies: none in `go/` yet; the spikes use `github.com/yuin/goldmark`,
+  `golang.org/x/text`, `github.com/yalue/onnxruntime_go`. Pin exact versions
+  (as for Python).
 
 ## Python and Go differ here
 
@@ -162,7 +172,6 @@ What the spikes ran into, so the port doesn't relearn it:
 
 ## Decisions still open
 
-- Go or stay with Python.
 - `[x](javascript:…)` renders as a link with goldmark (markdown-it: text).
   Not exploitable (the page policy blocks it), but dropping such hrefs is
   five lines.

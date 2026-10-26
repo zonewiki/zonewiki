@@ -21,6 +21,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 ./run.sh logs       # follow container logs
 ./run.sh test       # run unit/API tests inside the app image (extra args go to pytest; a tests/… path replaces the default whole suite)
 ./run.sh e2e        # run browser tests + deck-core.js (Node) tests in the tools image (extra args go to pytest)
+./run.sh go [ARGS]  # the Go port (go/, prototype/PORT.md) in the tools image: go vet + go test, then pytest ARGS against the Go server (LEAF_TEST_GO=1)
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
 ./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image, with semantic search as LEAF_SEMANTIC_SEARCH says

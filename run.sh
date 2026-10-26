@@ -183,6 +183,15 @@ case "${1:-up}" in
        python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider \
          -n "$n" "$@"' -- "${@:2}"
     ;;
+  go)
+    # The Go port (go/, prototype/PORT.md) in the tools image: go vet and go
+    # test, then, given extra args, pytest against the Go server
+    # (LEAF_TEST_GO=1), e.g. ./run.sh go tests/test_routes.py -k Auth.
+    image=$(build_image leaf-tools -f Containerfile.tools)
+    in_image "$image" --ipc=host -e LEAF_TEST_GO=1 -- sh -c \
+      '(cd go && go vet ./... && go test ./...) || exit 1
+       [ $# -eq 0 ] || python3 -m pytest -p no:cacheprovider "$@"' -- "${@:2}"
+    ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args
     # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
@@ -230,13 +239,14 @@ case "${1:-up}" in
       python3 tools/eval_retrieval.py "/wiki-data/$file" "${@:3}"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|go|leaks|screenshots|eval]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
     echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
     echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
+    echo "  go     - build and test the Go port in the tools image (extra args: pytest against it)"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"

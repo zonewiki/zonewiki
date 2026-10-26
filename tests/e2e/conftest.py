@@ -1,6 +1,7 @@
 """Browser (end-to-end) test harness.
 
-Runs the real Flask app on a background thread and drives it with headless
+Runs the real Flask app on a background thread (with LEAF_TEST_GO=1 the Go
+port, a process per test: tests/goserver.py) and drives it with headless
 Chromium via Playwright. Every test gets a fresh temp wiki (with a real git
 repo) and a fresh browser context (clean localStorage/sessionStorage).
 
@@ -22,6 +23,7 @@ from werkzeug.serving import make_server  # noqa: E402
 
 import server  # noqa: E402  (tests/conftest.py set up its import)
 import gitstore  # noqa: E402
+from tests.goserver import LiveServer, free_port, go_enabled  # noqa: E402
 
 SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
@@ -34,8 +36,18 @@ TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
 # ── Server ────────────────────────────────────────────────────────────────────
 
 
+# The Go server of the running test (LEAF_TEST_GO): every request the
+# browser makes passes _new_page's route, which restarts it when the test
+# changed a setting.
+_go: LiveServer | None = None
+
+
 @pytest.fixture(scope="session")
 def base_url():
+    if go_enabled():
+        # One port for the session; each test's wiki fixture starts a server on it.
+        yield f"http://127.0.0.1:{free_port()}"
+        return
     srv = make_server("127.0.0.1", 0, server.app, threaded=True)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -44,10 +56,18 @@ def base_url():
 
 
 @pytest.fixture()
-def wiki(git_wiki_dir, base_url):
+def wiki(git_wiki_dir, base_url, tmp_path_factory):
     """Point the running app at a fresh wiki directory with its own git repo
     (tests/conftest.py)."""
-    return Wiki(git_wiki_dir)
+    global _go
+    if not go_enabled():
+        yield Wiki(git_wiki_dir)
+        return
+    _go = LiveServer(tmp_path_factory.mktemp("go") / "server.log", int(base_url.rsplit(":", 1)[1]))
+    _go.ensure()
+    yield Wiki(git_wiki_dir)
+    _go.stop()
+    _go = None
 
 
 class Wiki:
@@ -109,6 +129,8 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
 
     def route(r):
         if r.request.url.split("//", 1)[1].startswith(host):
+            if _go:
+                _go.ensure()
             r.continue_()
         else:
             external.append(r.request.url)

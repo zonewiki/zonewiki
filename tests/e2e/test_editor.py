@@ -2,6 +2,8 @@
 
 import time
 
+import pytest
+
 from playwright.sync_api import expect
 
 import server
@@ -83,6 +85,7 @@ def _slow_saves(monkeypatch, delay=2.5):
     monkeypatch.setitem(server.app.view_functions, "api_save", slow)
 
 
+@pytest.mark.python_only   # slows Flask's view down (the Go port needs a way)
 def test_overlapping_autosaves_are_no_conflict(page, wiki, monkeypatch):
     # The second auto-save starts while the first one's answer is still out.
     # It used to send the hash from before the first save and be refused:
@@ -99,6 +102,7 @@ def test_overlapping_autosaves_are_no_conflict(page, wiki, monkeypatch):
     assert wiki.read("notes").endswith("one two")
 
 
+@pytest.mark.python_only   # slows Flask's view down (the Go port needs a way)
 def test_done_waits_for_autosave_in_flight(page, wiki, monkeypatch):
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")

@@ -1,0 +1,120 @@
+{{- /* Every view's page: head, the dialogs the client code opens (search, new
+    note, new page, shortcuts, paste link, upload conflict), the status
+    badges, the top actions (desktop) and the action bar (phones). Views
+    define the body block (views.go, page). */ -}}
+{{define "layout" -}}
+<!DOCTYPE html>
+<html lang="en"{{if .sharing}} class="sharing"{{end}}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+  <meta name="generator" content="{{.app_name}} {{.version}}">
+  <title>{{.title}} — {{.app_name}}</title>
+  <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/public/manifest.json">
+  <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="Leaf">
+  <link rel="stylesheet" href="/public/vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="/public/style.css">
+  <script src="/public/vendor/highlight/highlight.min.js" defer></script>
+  <script type="module" src="/public/leaf.js"></script>
+</head>
+<body
+  {{- if .editor}} class="editor-page"{{end}}
+  {{- if .module}} data-module="{{.module}}"{{end}}
+  {{- /* How dates read and the week starts (LEAF_LOCALE, LEAF_DATE_FORMAT;
+      deck-core.js). */}}
+  {{- if .locale}} data-locale="{{.locale}}"{{end}}
+  {{- if .date_format}} data-date-format="{{.date_format}}"{{end}}
+  {{- /* New tasks from any page (c t, the New task button) get the tags the
+      deck's home gives them, are keep tasks if it makes them, and start
+      today when its "+ New" would (js/actions.js openHomeTask). */}}
+  {{- with .deck_new}} data-deck-tags="{{.tags}}"
+    {{- if .keep}} data-deck-keep="1"{{end}}
+    {{- if .today}} data-deck-today="1"{{end}}
+  {{- end}}>
+  <dialog id="search-modal" class="search-modal">
+    <div class="search-modal-controls">
+      <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">
+      <select id="modal-sort">
+        <option value="mtime-desc">Recently edited</option>
+        <option value="title-asc">Title A–Z</option>
+        <option value="title-desc">Title Z–A</option>
+        <option value="links-desc">Most linked</option>
+      </select>
+      <label class="unlinked-label">
+        <input type="checkbox" id="modal-unlinked"> Unlinked only
+      </label>
+      {{- /* Whether content matches are found by meaning too; js/search.js
+          words it and keeps it current from /api/search's X-Leaf-Semantic. */}}
+      <span id="search-mode" class="search-mode" data-state="{{.semantic}}"></span>
+    </div>
+    <div class="modal-results">
+      <ul id="modal-page-list" class="page-list"></ul>
+      <div id="modal-content-matches" class="content-matches hidden"></div>
+    </div>
+    <div id="modal-preview" class="search-preview" aria-live="polite"></div>
+  </dialog>
+  <dialog id="scratch-modal" class="scratch-modal">
+    <p class="scratch-label">New scratch note</p>
+    <form id="scratch-form">
+      <input type="text" id="scratch-title" placeholder="Title…" autocomplete="off" spellcheck="false">
+      <div class="scratch-actions">
+        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
+        <button type="button" class="btn" id="scratch-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="new-page-modal" class="scratch-modal">
+    <p class="scratch-label">New page</p>
+    <form method="post" action="/new" id="new-page-form">
+      <input type="text" id="new-page-input" name="slug" placeholder="Page name…" autocomplete="off" spellcheck="false" required>
+      <div class="scratch-actions">
+        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
+        <button type="button" class="btn" id="new-page-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  {{template "shortcuts" .}}
+  <dialog id="url-name-modal" class="scratch-modal">
+    <p class="scratch-label">Paste link</p>
+    <code id="url-name-href" class="url-name-href"></code>
+    <input type="text" id="url-name-input" placeholder="Display name (optional)" autocomplete="off" spellcheck="false">
+    <div class="scratch-actions">
+      <button type="button" class="btn btn-primary" id="url-name-confirm">Insert</button>
+      <button type="button" class="btn" id="url-name-cancel">Plain URL</button>
+    </div>
+  </dialog>
+  <dialog id="upload-conflict-modal" class="scratch-modal">
+    <p class="scratch-label">File already exists</p>
+    <p id="upload-conflict-msg" class="upload-conflict-msg"></p>
+    <input type="text" id="upload-conflict-name" autocomplete="off" spellcheck="false">
+    <div class="scratch-actions">
+      <button type="button" class="btn btn-primary" id="upload-conflict-confirm">Upload</button>
+      <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
+    </div>
+  </dialog>
+  <main{{if .wide}} class="wide"{{end}}>
+  {{- /* The login page shows it in its form instead (badge_in_form): it has
+      no breadcrumb row for it to sit beside. */}}
+  {{- if and .allow_remote (not .badge_in_form)}}
+  <div class="remote-badge" title="Remote access enabled">🌐</div>
+  {{- end}}
+  <div class="top-badges">
+    <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
+      <span id="uncommitted-count">0</span>
+    </a>
+    {{- if .sign_out}}
+    <form method="post" action="/logout" class="signout-form"><button class="btn" type="submit">Sign out</button></form>
+    {{- end}}
+  </div>
+  {{- block "body" .}}{{end}}
+  </main>
+  {{- /* Version and the commit it was built from, quietly in the corner; the
+      full build (commit date, +dirty) on hover and in the ? modal. */}}
+  <div class="leaf-build"{{with .commit}} title="Build {{$.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{.}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
+</body>
+</html>
+{{end}}

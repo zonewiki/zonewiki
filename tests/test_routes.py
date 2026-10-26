@@ -1332,13 +1332,9 @@ class TestServeUpload:
 class TestAuth:
 
     @pytest.fixture()
-    def auth_client(self, wiki_dir):
-        old_pw = config.LEAF_PASSWORD
-        config.LEAF_PASSWORD = "testpassword"
-        server.app.config["TESTING"] = True
-        with server.app.test_client() as c:
-            yield c
-        config.LEAF_PASSWORD = old_pw
+    def auth_client(self, client, monkeypatch):
+        monkeypatch.setattr(config, "LEAF_PASSWORD", "testpassword")
+        return client
 
     def test_login_page_has_no_action_buttons(self, auth_client):
         assert 'class="action-buttons"' not in auth_client.get("/login", headers=HOST).data.decode()
@@ -1638,6 +1634,7 @@ class TestHttpsAndThrottle:
         assert self.login(auth_client, "pässwört").status_code == 302
         assert self.login(auth_client, "passwort").status_code == 200
 
+    @pytest.mark.python_only
     def test_wrong_passwords_slow_the_guesser_down(self, auth_client, monkeypatch):
         now = [1_000_000.0]
         monkeypatch.setattr(server.time, "time", lambda: now[0])
@@ -1669,6 +1666,7 @@ class TestHttpsAndThrottle:
         assert self.login(auth_client, "pässwört", **{"X-Forwarded-For": "198.51.100.7"}).status_code == 302
         assert self.login(auth_client, "pässwört").status_code == 302    # the proxy host itself
 
+    @pytest.mark.python_only
     def test_forwarded_for_ignored_from_a_public_address(self, client):
         # a client on the internet can't pick its own key
         with server.app.test_request_context(environ_base={"REMOTE_ADDR": "8.8.8.8"},
@@ -2086,33 +2084,33 @@ class TestVersion:
         assert re.fullmatch(r"\d+\.\d+\.\d+", config.VERSION)
 
     def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        v = config.VERSION
         monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert '<p class="leaf-version">Leaf 1.2.3 · abc1234 2026-09-26 12:00</p>' in body
-        assert '<meta name="generator" content="Leaf 1.2.3">' in body
+        assert f'<p class="leaf-version">Leaf {v} · abc1234 2026-09-26 12:00</p>' in body
+        assert f'<meta name="generator" content="Leaf {v}">' in body
         assert client.get("/api/version", headers=HOST).get_json() == {
-            "version": "1.2.3", "build": "abc1234 2026-09-26 12:00"}
+            "version": config.VERSION, "build": "abc1234 2026-09-26 12:00"}
 
     def test_unknown_build_shows_version_only(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        v = config.VERSION
         monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert '<p class="leaf-version">Leaf 1.2.3</p>' in body
+        assert f'<p class="leaf-version">Leaf {v}</p>' in body
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "VERSION", "1.2.3")
+        v = config.VERSION
         monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         for path in ("/page/index", "/deck", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
-                    'Leaf 1.2.3 · abc1234</div>') in body, path
+                    f'Leaf {v} · abc1234</div>') in body, path
         monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert ">Leaf 1.2.3 · abc1234+dirty</div>" in body
+        assert f">Leaf {v} · abc1234+dirty</div>" in body
         monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert '<div class="leaf-build">Leaf 1.2.3</div>' in body
+        assert f'<div class="leaf-build">Leaf {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(config, "LEAF_BUILD", "<b>")

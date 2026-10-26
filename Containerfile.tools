@@ -1,7 +1,7 @@
 # Tools image: what checking Leaf needs beyond the app itself. Microsoft's
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Leaf's
 # Python deps for the browser tests (with pytest-xdist, which runs them in
-# parallel), Node for the deck-core tests, and
+# parallel), Node for the deck-core tests, Go for the Go port, and
 # gitleaks for the secret scan. Test-only — the app image (Containerfile)
 # stays browser-free. The repo is bind-mounted at /repo at run time, so the
 # image only needs rebuilding when dependencies change.
@@ -35,6 +35,23 @@ RUN case "$TARGETARCH" in \
  && echo "$sum  /tmp/gitleaks.tgz" | sha256sum -c - \
  && tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks \
  && rm /tmp/gitleaks.tgz
+
+# Go builds and tests the Go port (go/; ./run.sh go, and the tests against
+# it with LEAF_TEST_GO=1), a pinned release checked against its published
+# checksum (go.dev/dl). To update it, change the version and both sums.
+ARG GO_VERSION=1.27.3
+ARG GO_SHA256_AMD64=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+ARG GO_SHA256_ARM64=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49
+RUN case "$TARGETARCH" in \
+      amd64) sum=$GO_SHA256_AMD64 ;; \
+      arm64) sum=$GO_SHA256_ARM64 ;; \
+      *) echo "no Go build for $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && curl -sSfL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
+ && echo "$sum  /tmp/go.tgz" | sha256sum -c - \
+ && tar -xzf /tmp/go.tgz -C /usr/local \
+ && rm /tmp/go.tgz
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local
 
 COPY src/requirements.txt /tmp/requirements.txt
 RUN pip install --break-system-packages --no-cache-dir \

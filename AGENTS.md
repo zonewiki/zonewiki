@@ -67,6 +67,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 ├── prototype/PORT.md       # The Go port's handoff: status, contracts, how to verify, order (read first)
+├── go/                     # The Go port in progress (one package, a file per Python module; ./run.sh go), not the product yet
 ├── prototype/goldmark/     # Go prototype: render_md's pre-processing and markdown (goldmark), compare.py checks it against a wiki (README there)
 ├── prototype/search/       # Go prototype: search.py and retrieval.py's keyword path, compare.py checks it against a wiki (README there)
 ├── prototype/semantic/     # Go prototype: embed.py's embeddings (tokenizer, onnxruntime), compare.py checks them against Python (README there)
@@ -74,7 +75,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
-├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, gitleaks, git, pngquant
+├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, Go, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
@@ -134,6 +135,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh build|up|down|logs
 ./run.sh test       # unit/API tests in the app image (extra args go to pytest)
 ./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
+./run.sh go [ARGS]  # the Go port: go vet + go test, then pytest ARGS against the Go server (LEAF_TEST_GO=1)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)

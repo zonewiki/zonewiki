@@ -1,0 +1,57 @@
+{{- /* The ? / Ctrl+/ help: keyboard shortcuts, snippets, search syntax, and
+    Leaf's version and build. */ -}}
+{{define "shortcuts" -}}
+  <dialog id="shortcuts-modal" class="shortcuts-modal">
+    <p class="scratch-label">Keyboard shortcuts</p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
+      <tr><td><kbd>Ctrl+N</kbd></td><td>New page</td></tr>
+      <tr><td><kbd>c s</kbd></td><td>New scratch note</td></tr>
+      <tr><td><kbd>c t</kbd></td><td>New task in your deck</td></tr>
+      <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
+      <tr><td><kbd>g s</kbd></td><td>Go to Scratch index</td></tr>
+      <tr><td><kbd>g d</kbd></td><td>Go to Deck (every task)</td></tr>
+      <tr><td><kbd>g t</kbd></td><td>Go to your deck</td></tr>
+      <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
+      <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
+      <tr><td><kbd>Ctrl+S</kbd></td><td>Done / go to page view (editor)</td></tr>
+      <tr><td><kbd>Ctrl+B</kbd> / <kbd>Ctrl+I</kbd></td><td>Bold / italic (editor)</td></tr>
+      <tr><td><kbd>Ctrl+K</kbd></td><td>Link (editor)</td></tr>
+      <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
+      <tr><td><kbd>S</kbd></td><td>Sharing mode: hide what is around the page</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
+      <tr><td><kbd>]</kbd> / <kbd>[</kbd></td><td>Next / previous section</td></tr>
+      <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
+      <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
+      <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search highlight (page opened from search)</td></tr>
+      <tr><td><kbd>v</kbd></td><td>One line per task / full cards (deck)</td></tr>
+      <tr><td><kbd>l</kbd> <kbd>h</kbd> / <kbd>→</kbd> <kbd>←</kbd></td><td>Open / close a one-line task's notes and comments; they stay open as j/k move on (deck)</td></tr>
+      <tr><td><kbd>o</kbd></td><td>Order: manual / by deadline / newest first (deck, Open)</td></tr>
+      <tr><td><kbd>d</kbd></td><td>Plan on / off: Open by start date or as one list (deck)</td></tr>
+      <tr><td><kbd>Shift+F10</kbd> / menu key</td><td>Actions of the selected task (deck; right-click too)</td></tr>
+      <tr><td><kbd>Shift+click</kbd> / <kbd>Ctrl+click</kbd></td><td>Select several tasks: a range / one more (deck; <kbd>Shift+↑↓</kbd> too)</td></tr>
+      <tr><td><kbd>Ctrl+A</kbd></td><td>Select every task shown (deck, with a task selected)</td></tr>
+      <tr><td><kbd>t</kbd> / <kbd>T</kbd></td><td>Add / remove tags of the selected tasks (deck)</td></tr>
+      <tr><td><kbd>f</kbd> / <kbd>F</kbd></td><td>Start the selected task today / tomorrow (deck)</td></tr>
+      <tr><td><kbd>1</kbd>–<kbd>7</kbd> / <kbd>0</kbd></td><td>Start the selected tasks on that day (1 today, 2 tomorrow …) / unplan them (deck)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Clear search highlights</td></tr>
+    </table>
+    <p class="scratch-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>/date</kbd></td><td>Insert current date</td></tr>
+      <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
+      <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
+    </table>
+    <p class="scratch-label">Search syntax</p>
+    <table class="shortcuts-table">
+      <tr><td><kbd>"exact phrase"</kbd></td><td>Words in this order</td></tr>
+      <tr><td><kbd>-word</kbd></td><td>Leave out results with it (also <kbd>-"phrase"</kbd>)</td></tr>
+      <tr><td><kbd>#tag</kbd></td><td>Only pages and tasks with this tag</td></tr>
+      <tr><td><kbd>-#tag</kbd></td><td>None with this tag</td></tr>
+      <tr><td><kbd>edited:2026-09</kbd></td><td>Last edited then (year, month or day); alone: all of it, newest first</td></tr>
+      <tr><td><kbd>after:</kbd> / <kbd>before:</kbd></td><td>Edited on or after / before a day, month or year</td></tr>
+    </table>
+    <p class="leaf-version">{{.app_name}} {{.version}}{{if ne .build "unknown"}} · {{.build}}{{end}}</p>
+  </dialog>
+{{- end}}
