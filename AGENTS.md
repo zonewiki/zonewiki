@@ -68,6 +68,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 ├── prototype/goldmark/     # Go prototype: render_md's pre-processing and markdown (goldmark), compare.py checks it against a wiki (README there)
 ├── prototype/search/       # Go prototype: search.py and retrieval.py's keyword path, compare.py checks it against a wiki (README there)
+├── prototype/semantic/     # Go prototype: embed.py's embeddings (tokenizer, onnxruntime), compare.py checks them against Python (README there)
 ├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
