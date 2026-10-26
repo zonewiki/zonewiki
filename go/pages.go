@@ -61,8 +61,8 @@ func safePath(slug string) string {
 		return ""
 	}
 	target := resolvePath(filepath.Join(cfg.Data, filepath.FromSlash(slug+".md")))
-	rel, err := filepath.Rel(cfg.Data, target)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+	rel, ok := relInside(cfg.Data, target)
+	if !ok {
 		return ""
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
@@ -72,6 +72,15 @@ func safePath(slug string) string {
 		}
 	}
 	return target
+}
+
+// relInside: p relative to root, ok false when p is outside root.
+func relInside(root, p string) (string, bool) {
+	rel, err := filepath.Rel(root, p)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return rel, true
 }
 
 // resolvePath is Path.resolve(): symlinks followed as far as the path exists.
@@ -90,6 +99,11 @@ func resolvePath(p string) string {
 func exists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+func isDir(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 // readText is Path.read_text: a file's text, its line ends as "\n".
@@ -312,7 +326,48 @@ func resolveBareLink(href, source string) string {
 	return resolveRelativeLink(href, source)
 }
 
-const notSpace = `[^)#?\s\pZ\x{85}\x{1c}-\x{1f}]`
+// linkTarget: the slug a relative markdown link from source leads to ("" when
+// external), and whether it names the file (.md).
+func linkTarget(href, source string) (string, bool) {
+	if strings.HasSuffix(href, ".md") {
+		return resolveMdLink(href, source), true
+	}
+	return resolveBareLink(href, source), false
+}
+
+// relHref: a relative link to target from the folder dir, as a .md link or bare.
+func relHref(target, dir string, md bool) string {
+	if md {
+		return relPath(target, dir) + ".md"
+	}
+	return relPath(target, dir)
+}
+
+// wikilink is a [[…]] taken apart: its page, #section and |label, each
+// kept as written.
+type wikilink struct {
+	page, section, label string
+	hasSection, hasLabel bool
+}
+
+func parseWikilink(m string) wikilink {
+	target, label, bar := strings.Cut(m[2:len(m)-2], "|")
+	page, section, hash := strings.Cut(target, "#")
+	return wikilink{page, section, label, hash, bar}
+}
+
+func (l wikilink) String() string {
+	s := "[[" + l.page
+	if l.hasSection {
+		s += "#" + l.section
+	}
+	if l.hasLabel {
+		s += "|" + l.label
+	}
+	return s + "]]"
+}
+
+const notSpace = `[^)#?\s\v\pZ\x{85}]`
 
 // anyMdLinkRE: any markdown link's href, for link targets.
 var anyMdLinkRE = regexp.MustCompile(`\[(?:[^\]]*)\]\((` + notSpace + `+)[^)]*\)`)
@@ -328,13 +383,10 @@ func pageLinkTargets(content, slug string) map[string]bool {
 	for _, m := range anyMdLinkRE.FindAllStringSubmatch(content, -1) {
 		href := m[1]
 		var resolved string
-		switch {
-		case strings.HasPrefix(href, "/page/"):
+		if strings.HasPrefix(href, "/page/") {
 			resolved = href[len("/page/"):] // absolute, as a rename re-points it
-		case strings.HasSuffix(href, ".md"):
-			resolved = resolveMdLink(href, slug)
-		default:
-			resolved = resolveBareLink(href, slug)
+		} else {
+			resolved, _ = linkTarget(href, slug)
 		}
 		if resolved != "" {
 			targets[resolved] = true
@@ -633,24 +685,15 @@ func relPath(target, start string) string {
 func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 	text, stash := maskCode(text)
 	text = wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
-		inner := m[2 : len(m)-2]
-		target, label, bar := strings.Cut(inner, "|")
-		page, sect, hash := strings.Cut(target, "#")
-		sep := ""
-		if bar {
-			sep = "|"
+		l := parseWikilink(m)
+		if page := strings.TrimSpace(l.page); page == "" || page != oldSlug && toSlug(l.page) != oldSlug {
+			return m
 		}
-		if pyStrip(page) != "" && (pyStrip(page) == oldSlug || toSlug(page) == oldSlug) {
-			if !hash && section != "" {
-				return "[[" + newSlug + "#" + section + sep + label + "]]"
-			}
-			h := ""
-			if hash {
-				h = "#"
-			}
-			return "[[" + newSlug + h + sect + sep + label + "]]"
+		l.page = newSlug
+		if !l.hasSection && section != "" {
+			l.section, l.hasSection = section, true
 		}
-		return m
+		return l.String()
 	})
 	sourceDir := posixDir(source)
 	anchor := ""
@@ -668,21 +711,11 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 			}
 			return text[m.start:m.end]
 		}
-		isMd := strings.HasSuffix(m.href, ".md")
-		var target string
-		if isMd {
-			target = resolveMdLink(m.href, source)
-		} else {
-			target = resolveBareLink(m.href, source)
-		}
+		target, isMd := linkTarget(m.href, source)
 		if target != oldSlug || target == "" {
 			return text[m.start:m.end]
 		}
-		href := relPath(newSlug, sourceDir)
-		if isMd {
-			href += ".md"
-		}
-		return m.prefix + href + rest
+		return m.prefix + relHref(newSlug, sourceDir, isMd) + rest
 	})
 	return unmaskCode(text, stash)
 }
@@ -716,10 +749,8 @@ func updateReferences(oldSlug, newSlug, section string) []string {
 func rebaseLinks(text, source, newSource string, moves map[string]string) string {
 	text, stash := maskCode(text)
 	text = wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
-		inner := m[2 : len(m)-2]
-		target, label, bar := strings.Cut(inner, "|")
-		page, sect, hash := strings.Cut(target, "#")
-		key := pyStrip(page)
+		l := parseWikilink(m)
+		key := strings.TrimSpace(l.page)
 		old := key
 		if _, ok := moves[key]; !ok {
 			old = toSlug(key)
@@ -727,14 +758,8 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 		if _, ok := moves[old]; key == "" || !ok {
 			return m
 		}
-		h, sep := "", ""
-		if hash {
-			h = "#"
-		}
-		if bar {
-			sep = "|"
-		}
-		return "[[" + moves[old] + h + sect + sep + label + "]]"
+		l.page = moves[old]
+		return l.String()
 	})
 	sourceDir := posixDir(newSource)
 	text = replaceMdLinks(text, func(m mdLinkMatch) string {
@@ -744,13 +769,7 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 			}
 			return text[m.start:m.end]
 		}
-		isMd := strings.HasSuffix(m.href, ".md")
-		var target string
-		if isMd {
-			target = resolveMdLink(m.href, source)
-		} else {
-			target = resolveBareLink(m.href, source)
-		}
+		target, isMd := linkTarget(m.href, source)
 		if target == "" {
 			return text[m.start:m.end]
 		}
@@ -761,11 +780,7 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 		if newSource == source && newTarget == target {
 			return text[m.start:m.end]
 		}
-		href := relPath(newTarget, sourceDir)
-		if isMd {
-			href += ".md"
-		}
-		return m.prefix + href + m.rest
+		return m.prefix + relHref(newTarget, sourceDir, isMd) + m.rest
 	})
 	return unmaskCode(text, stash)
 }
@@ -831,7 +846,7 @@ func pageFolders(rq *Req) []string {
 // pageFromInput: the slug a page field names: a slug, /page/<slug> (an
 // #anchor dropped) or the page's name.
 func pageFromInput(raw string) string {
-	raw = strings.TrimPrefix(pyStrip(raw), "/page/")
+	raw = strings.TrimPrefix(strings.TrimSpace(raw), "/page/")
 	raw, _, _ = strings.Cut(raw, "#")
 	raw = strings.Trim(raw, "/")
 	if raw != "" {

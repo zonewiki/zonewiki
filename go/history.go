@@ -59,7 +59,7 @@ func historyView(w http.ResponseWriter, r *http.Request) {
 	}
 	path := safePath(slug)
 	if path == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		badRequestPage(w)
 		return
 	}
 	pageExists := exists(path)
@@ -91,24 +91,31 @@ func historyView(w http.ResponseWriter, r *http.Request) {
 		"breadcrumb_html": bc})
 }
 
+// versionArg: the page and the version a /revision/ or /diff/ URL names,
+// and the page's file; answered (404, 400, the hidden page) when there are none.
+func versionArg(w http.ResponseWriter, r *http.Request, rq *Req) (slug, sha, path string, ok bool) {
+	slug, sha, ok = slugAndSha(r.PathValue("rest"))
+	switch {
+	case !ok:
+		http.NotFound(w, r)
+	case hiddenPage(rq, slug):
+		hiddenPageView(w, rq)
+	case !cfg.GitEnabled:
+		http.NotFound(w, r)
+	default:
+		if path = safePath(slug); !shaRE.MatchString(sha) || path == "" {
+			badRequestPage(w)
+			return "", "", "", false
+		}
+		return slug, sha, path, true
+	}
+	return "", "", "", false
+}
+
 func revisionView(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	slug, sha, ok := slugAndSha(r.PathValue("rest"))
+	slug, sha, path, ok := versionArg(w, r, rq)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
-		return
-	}
-	if !cfg.GitEnabled {
-		http.NotFound(w, r)
-		return
-	}
-	path := safePath(slug)
-	if !shaRE.MatchString(sha) || path == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 	entries := gitLog(path, 0)
@@ -118,7 +125,7 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		// A deletion commit: the file isn't at this sha; its parent has it.
 		if par := runGit("rev-parse", "--verify", sha+"^"); par.Code == 0 {
-			restoreSha = pyStrip(par.Stdout)
+			restoreSha = strings.TrimSpace(par.Stdout)
 			content, found = gitShow(restoreSha, versionPath(path, entries, sha))
 		}
 		if !found {
@@ -153,31 +160,13 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 
 func diffView(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	slug, sha, ok := slugAndSha(r.PathValue("rest"))
+	slug, sha, path, ok := versionArg(w, r, rq)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
-		return
-	}
-	if !cfg.GitEnabled {
-		http.NotFound(w, r)
-		return
-	}
-	path := safePath(slug)
-	if !shaRE.MatchString(sha) || path == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 	entries := gitLog(path, 0)
 	i := versionIndex(entries, sha)
-	paths := []string{versionPath(path, entries, sha)}
-	if i >= 0 && i+1 < len(entries) {
-		paths = append(paths, filepath.Join(cfg.Data, filepath.FromSlash(entries[i+1].Path)))
-	}
-	diff, found := gitDiff(sha, paths...)
+	diff, found := versionDiff(path, entries, sha)
 	if !found {
 		http.NotFound(w, r)
 		return
@@ -205,7 +194,7 @@ func restoreRevision(w http.ResponseWriter, r *http.Request) {
 	}
 	path := safePath(slug)
 	if !shaRE.MatchString(sha) || path == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		badRequestPage(w)
 		return
 	}
 	content, found := gitShow(sha, versionPath(path, gitLog(path, 0), sha))
@@ -252,8 +241,7 @@ func diffUncommitted(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	rel, _ := filepath.Rel(cfg.Data, path)
-	rel = filepath.ToSlash(rel)
+	rel, _ := wikiRel(path)
 	var diff gitResult
 	if strings.HasPrefix(runGit("status", "--porcelain", "--", rel).Stdout, "??") {
 		diff = runGit("diff", "--no-index", "--", "/dev/null", rel)

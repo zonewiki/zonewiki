@@ -83,7 +83,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 		}
 		lines := make([]string, len(stubs))
 		for i, s := range stubs {
-			lines[i] = dumpsLineUTF8(s)
+			lines[i] = jsonText(s)
 		}
 		fmt.Fprintln(stdout, strings.Join(lines, ",\n"))
 		return 0
@@ -130,7 +130,7 @@ func loadQuestions(path string) ([]question, int, error) {
 	for i, item := range data {
 		m, _ := item.(map[string]any)
 		q, _ := m["q"].(string)
-		if m == nil || pyStrip(q) == "" {
+		if m == nil || strings.TrimSpace(q) == "" {
 			return nil, 0, fmt.Errorf("%s: question %d needs a \"q\"", path, i+1)
 		}
 		var expect []string
@@ -152,7 +152,7 @@ func loadQuestions(path string) ([]question, int, error) {
 			return nil, 0, fmt.Errorf("%s: question %d: \"expect\" is a list of targets", path, i+1)
 		}
 		if len(expect) > 0 {
-			questions = append(questions, question{pyStrip(q), expect})
+			questions = append(questions, question{strings.TrimSpace(q), expect})
 		} else {
 			open++
 		}
@@ -160,7 +160,7 @@ func loadQuestions(path string) ([]question, int, error) {
 	return questions, open, nil
 }
 
-func normQuery(q string) string { return strings.Join(pySplit(strings.ToLower(q)), " ") }
+func normQuery(q string) string { return strings.Join(strings.Fields(strings.ToLower(q)), " ") }
 
 // newQueries: logged queries the questions file doesn't have, newest first,
 // each once, as stubs: {"q", "expect": [], "results"}.

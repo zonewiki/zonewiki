@@ -41,7 +41,7 @@ func TestMCPProtocol(t *testing.T) {
 	res := r.Get("result").(*Obj)
 	if res.Get("protocolVersion") != "2025-06-18" || res.Get("serverInfo").(*Obj).Get("version") != version ||
 		!strings.Contains(res.Str("instructions"), "search_wiki") {
-		t.Errorf("initialize: %s", dumpsLine(r))
+		t.Errorf("initialize: %s", jsonText(r))
 	}
 	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}`, noTools)
 	if r.Get("result").(*Obj).Get("protocolVersion") != protocolVersions[0] {
@@ -52,7 +52,7 @@ func TestMCPProtocol(t *testing.T) {
 			t.Errorf("answered %s", msg)
 		}
 	}
-	if got := dumpsLine(handle(t, `{"jsonrpc": "2.0", "id": 2, "method": "ping"}`, noTools)); got != `{"jsonrpc": "2.0", "id": 2, "result": {}}` {
+	if got := jsonText(handle(t, `{"jsonrpc": "2.0", "id": 2, "method": "ping"}`, noTools)); got != `{"jsonrpc":"2.0","id":2,"result":{}}` {
 		t.Errorf("ping: %s", got)
 	}
 	code := func(msg string) any { return handle(t, msg, noTools).Get("error").(*Obj).Get("code") }
@@ -69,7 +69,7 @@ func TestMCPProtocol(t *testing.T) {
 	}
 	fail := func(string, *Obj) (string, error) { return "", toolErr("No page 'x'") }
 	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "read_page", "arguments": {"slug": "x"}}}`, fail)
-	if got := dumpsLine(r.Get("result")); got != `{"content": [{"type": "text", "text": "No page 'x'"}], "isError": true}` {
+	if got := jsonText(r.Get("result")); got != `{"content":[{"type":"text","text":"No page 'x'"}],"isError":true}` {
 		t.Errorf("a tool error: %s", got)
 	}
 }

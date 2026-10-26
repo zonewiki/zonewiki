@@ -101,14 +101,14 @@ func writeScratch(args *Obj, content, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name = pyStrip(name)
+	name = strings.TrimSpace(name)
 	title := pageTitle(content, "")
-	if pyStrip(title) == "" && name == "" {
+	if strings.TrimSpace(title) == "" && name == "" {
 		return "", toolErr("Give the note a title: start content with '# Title', or set slug.")
 	}
-	if pyStrip(title) == "" { // the title goes under the frontmatter, if any
+	if strings.TrimSpace(title) == "" { // the title goes under the frontmatter, if any
 		_, body := parseFrontmatter(content)
-		content = content[:len(content)-len(body)] + "# " + name + "\n\n" + strings.TrimLeftFunc(body, pyIsSpace)
+		content = content[:len(content)-len(body)] + "# " + name + "\n\n" + strings.TrimLeftFunc(body, unicode.IsSpace)
 	}
 	// Scratch notes sit at the wiki's root: the wiki's guide applies.
 	if err := checkGuides(args, []string{"scratch-note"}); err != nil {
@@ -156,7 +156,7 @@ func fileScratchNote(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	page, name = pyStrip(page), pyStrip(name)
+	page, name = strings.TrimSpace(page), strings.TrimSpace(name)
 	if (page == "") == (name == "") {
 		return "", toolErr("Give either name (to move the note into the wiki as its own page) " +
 			"or page (to append it to that page as a section), not both.")
@@ -174,7 +174,7 @@ func fileScratchNote(args *Obj, base string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if heading = pyStrip(heading); heading == "" {
+		if heading = strings.TrimSpace(heading); heading == "" {
 			text, err := readText(path)
 			if err != nil {
 				return "", err
@@ -341,7 +341,7 @@ func appendToPage(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	heading = pyStrip(heading)
+	heading = strings.TrimSpace(heading)
 	if err := checkGuides(args, []string{slug}); err != nil {
 		return "", err
 	}
@@ -377,7 +377,7 @@ func appendToPage(args *Obj, base string) (string, error) {
 // "" for a page.
 func folderArg(raw string) string {
 	folder, _ := cleanFolder(raw)
-	if folder == "" || !strings.HasSuffix(pyStrip(raw), "/") && mcpPageSlug(raw) != "" {
+	if folder == "" || !strings.HasSuffix(strings.TrimSpace(raw), "/") && mcpPageSlug(raw) != "" {
 		return ""
 	}
 	for _, p := range iterPages() {
@@ -543,12 +543,10 @@ func restorePage(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	version = strings.ToLower(pyStrip(version))
-	slug := mcpPageSlug(raw)
-	if slug == "" {
-		if slug, err = newSlug(raw); err != nil {
-			return "", err
-		}
+	version = strings.ToLower(strings.TrimSpace(version))
+	slug, err := pageOrNewSlug(raw)
+	if err != nil {
+		return "", err
 	}
 	path := safePath(slug)
 	entries := gitLog(path, 0)
@@ -655,7 +653,7 @@ type templatePart struct {
 	group int
 }
 
-var pyEscapes = map[byte]string{'a': "\a", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t", 'v': "\v", '\\': `\`}
+var templateEscapes = map[byte]string{'a': "\a", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t", 'v': "\v", '\\': `\`}
 
 func isOctal(c byte) bool { return c >= '0' && c <= '7' }
 
@@ -727,8 +725,8 @@ func parseTemplate(t string, re *regexp.Regexp) ([]templatePart, error) {
 			if err := group(n); err != nil {
 				return nil, err
 			}
-		case pyEscapes[c] != "":
-			text(pyEscapes[c])
+		case templateEscapes[c] != "":
+			text(templateEscapes[c])
 		case c < 0x80 && unicode.IsLetter(rune(c)):
 			return nil, fmt.Errorf(`bad escape \%c`, c)
 		default:
@@ -869,10 +867,7 @@ func replaceInPages(args *Obj, base string) (string, error) {
 			}
 		}
 	}
-	where, code := "", ""
-	if under != "" {
-		where = " under " + under + "/"
-	}
+	where, code := underWhere(under), ""
 	if !includeCode {
 		code = " outside code"
 	}

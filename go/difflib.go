@@ -14,10 +14,10 @@ func closeMatches(word string, possibilities []string, n int, cutoff float64) []
 		s     string
 	}
 	b := []rune(word)
-	b2j, junk := buildB2J(b)
+	b2j := buildB2J(b)
 	var result []scored
 	for _, x := range possibilities {
-		if r := ratio([]rune(x), b, b2j, junk); r >= cutoff {
+		if r := ratio([]rune(x), b, b2j); r >= cutoff {
 			result = append(result, scored{r, x})
 		}
 	}
@@ -36,8 +36,9 @@ func closeMatches(word string, possibilities []string, n int, cutoff float64) []
 
 // buildB2J is SequenceMatcher.__chain_b: where each element of b is, with
 // autojunk's "popular" elements (more than 1% of a b of 200 or more) left
-// out. There is no isjunk, so nothing is junk but those.
-func buildB2J(b []rune) (map[rune][]int, map[rune]bool) {
+// out. There is no isjunk, so nothing is junk: popular elements aren't
+// matched from, but may extend a match (find_longest_match).
+func buildB2J(b []rune) map[rune][]int {
 	b2j := map[rune][]int{}
 	for j, r := range b {
 		b2j[r] = append(b2j[r], j)
@@ -54,12 +55,12 @@ func buildB2J(b []rune) (map[rune][]int, map[rune]bool) {
 			delete(b2j, r)
 		}
 	}
-	return b2j, map[rune]bool{} // bjunk: empty without isjunk
+	return b2j
 }
 
 // ratio is SequenceMatcher(None, a, b).ratio(): 2·M / (len a + len b), M
 // the size of the matching blocks.
-func ratio(a, b []rune, b2j map[rune][]int, bjunk map[rune]bool) float64 {
+func ratio(a, b []rune, b2j map[rune][]int) float64 {
 	total := len(a) + len(b)
 	if total == 0 {
 		return 1.0
@@ -70,7 +71,7 @@ func ratio(a, b []rune, b2j map[rune][]int, bjunk map[rune]bool) float64 {
 	for len(queue) > 0 {
 		q := queue[len(queue)-1]
 		queue = queue[:len(queue)-1]
-		i, j, k := longestMatch(a, b, b2j, bjunk, q.alo, q.ahi, q.blo, q.bhi)
+		i, j, k := longestMatch(a, b, b2j, q.alo, q.ahi, q.blo, q.bhi)
 		if k > 0 {
 			matches += k
 			if q.alo < i && q.blo < j {
@@ -84,8 +85,9 @@ func ratio(a, b []rune, b2j map[rune][]int, bjunk map[rune]bool) float64 {
 	return 2.0 * float64(matches) / float64(total)
 }
 
-// longestMatch is SequenceMatcher.find_longest_match.
-func longestMatch(a, b []rune, b2j map[rune][]int, bjunk map[rune]bool, alo, ahi, blo, bhi int) (int, int, int) {
+// longestMatch is SequenceMatcher.find_longest_match without junk: the
+// best match from b2j, then extended by equal elements on both sides.
+func longestMatch(a, b []rune, b2j map[rune][]int, alo, ahi, blo, bhi int) (int, int, int) {
 	besti, bestj, bestsize := alo, blo, 0
 	j2len := map[int]int{}
 	for i := alo; i < ahi; i++ {
@@ -105,16 +107,10 @@ func longestMatch(a, b []rune, b2j map[rune][]int, bjunk map[rune]bool, alo, ahi
 		}
 		j2len = newj2len
 	}
-	for besti > alo && bestj > blo && !bjunk[b[bestj-1]] && a[besti-1] == b[bestj-1] {
+	for besti > alo && bestj > blo && a[besti-1] == b[bestj-1] {
 		besti, bestj, bestsize = besti-1, bestj-1, bestsize+1
 	}
-	for besti+bestsize < ahi && bestj+bestsize < bhi && !bjunk[b[bestj+bestsize]] && a[besti+bestsize] == b[bestj+bestsize] {
-		bestsize++
-	}
-	for besti > alo && bestj > blo && bjunk[b[bestj-1]] && a[besti-1] == b[bestj-1] {
-		besti, bestj, bestsize = besti-1, bestj-1, bestsize+1
-	}
-	for besti+bestsize < ahi && bestj+bestsize < bhi && bjunk[b[bestj+bestsize]] && a[besti+bestsize] == b[bestj+bestsize] {
+	for besti+bestsize < ahi && bestj+bestsize < bhi && a[besti+bestsize] == b[bestj+bestsize] {
 		bestsize++
 	}
 	return besti, bestj, bestsize

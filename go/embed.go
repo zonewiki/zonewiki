@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"os"
@@ -46,9 +47,10 @@ import (
 const maxChunkChars = 800
 
 var (
-	chunkHeadingRE = regexp.MustCompile(`^(#{1,6})` + pySpace + `+(.*?)` + pySpace + `*#*` + pySpace + `*$`)
+	// An ATX heading: its #s and its text (manual.go reads the docs' with it too).
+	chunkHeadingRE = regexp.MustCompile(`^(#{1,6})` + spaceClass + `+(.*?)` + spaceClass + `*#*` + spaceClass + `*$`)
 	chunkLinkRE    = regexp.MustCompile(`(!?\[[^\]]*\])\([^)]*\)`)
-	paragraphRE    = regexp.MustCompile(`\n` + pySpace + `*\n`)
+	paragraphRE    = regexp.MustCompile(`\n` + spaceClass + `*\n`)
 )
 
 // splitLong: text cut at blank lines into pieces of at most maxChars
@@ -57,7 +59,7 @@ func splitLong(text string, maxChars int) []string {
 	var pieces []string
 	cur := ""
 	for _, para := range paragraphRE.Split(text, -1) {
-		p := []rune(pyStrip(para))
+		p := []rune(strings.TrimSpace(para))
 		if len(p) == 0 {
 			continue
 		}
@@ -76,8 +78,8 @@ func splitLong(text string, maxChars int) []string {
 				pieces = append(pieces, cur)
 				cur = ""
 			}
-			pieces = append(pieces, pyStrip(string(p[:cut])))
-			p = []rune(pyStrip(string(p[cut:])))
+			pieces = append(pieces, strings.TrimSpace(string(p[:cut])))
+			p = []rune(strings.TrimSpace(string(p[cut:])))
 		}
 		para := string(p)
 		if cur != "" && runeLen(cur)+2+len(p) > maxChars {
@@ -147,7 +149,7 @@ func chunkSections(text string, maxChars int) []chunkSection {
 			}
 			path = strings.Join(names, " › ")
 		}
-		body := pyStrip(chunkLinkRE.ReplaceAllString(strings.Join(lines, "\n"), "${1}"))
+		body := strings.TrimSpace(chunkLinkRE.ReplaceAllString(strings.Join(lines, "\n"), "${1}"))
 		if body == "" {
 			continue
 		}
@@ -234,7 +236,7 @@ const (
 
 // What doesn't count as prose: [[wikilinks]], [labels] (chunks keep a
 // link's label, its target is already gone), image alts, and bare URLs.
-var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + pyNonSpace + `+|www\.` + pyNonSpace + `+`)
+var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + nonSpaceClass + `+|www\.` + nonSpaceClass + `+`)
 
 // proseChars: letters and digits in text outside links (relatedMinChars).
 func proseChars(text string) int {
@@ -255,7 +257,7 @@ func semLog(format string, args ...any) {
 // for on (1, true, yes), "" for off (0, false, no, empty); anything else is
 // an error.
 func parseSemanticSpec(value string) (string, error) {
-	switch strings.ToLower(pyStrip(value)) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "0", "off", "false", "no":
 		return "", nil
 	case "1", "on", "true", "yes":
@@ -690,7 +692,7 @@ func (x *semanticIndex) doSync() bool {
 		title, body := semanticText(strings.ToValidUTF8(content, "�"), slug)
 		chunks := semanticChunks(title, body)
 		for _, c := range chunks {
-			want(c[0], pyStrip(title+"\n"+c[1]))
+			want(c[0], strings.TrimSpace(title+"\n"+c[1]))
 		}
 		pages[slug] = newSemPage(f.mtime, chunks)
 		changed = true
@@ -701,7 +703,7 @@ func (x *semanticIndex) doSync() bool {
 	var taskOrder []string
 	if x.tasksFn != nil {
 		for _, t := range x.tasksFn() {
-			if pyStrip(t.text) == "" {
+			if strings.TrimSpace(t.text) == "" {
 				continue
 			}
 			if _, ok := tasks[t.id]; !ok {
@@ -712,7 +714,7 @@ func (x *semanticIndex) doSync() bool {
 			want(h, t.text)
 		}
 	}
-	changed = changed || !sameStrings(tasks, x.tasks)
+	changed = changed || !maps.Equal(tasks, x.tasks)
 	newVecs := map[string][]float32{}
 	if len(todoOrder) > 0 {
 		if err := x.embedAll(todoOrder, todo, newVecs); err == nil {
@@ -777,6 +779,21 @@ func (x *semanticIndex) doSync() bool {
 	return true
 }
 
+// embedDocs: the texts' unit vectors, one per text.
+func (x *semanticIndex) embedDocs(texts []string) ([][]float32, error) {
+	vecs, err := x.emb.EmbedDocs(texts)
+	if err == nil && len(vecs) != len(texts) {
+		err = fmt.Errorf("%d vectors for %d texts", len(vecs), len(texts))
+	}
+	if err != nil {
+		return nil, err
+	}
+	for i, v := range vecs {
+		vecs[i] = normalize(v)
+	}
+	return vecs, nil
+}
+
 // embedAll embeds the texts of hashes in batches of 64 into out; on an
 // error, out keeps the batches done.
 func (x *semanticIndex) embedAll(hashes []string, texts map[string]string, out map[string][]float32) error {
@@ -786,30 +803,15 @@ func (x *semanticIndex) embedAll(hashes []string, texts map[string]string, out m
 		for j, h := range batch {
 			in[j] = texts[h]
 		}
-		vecs, err := x.emb.EmbedDocs(in)
-		if err == nil && len(vecs) != len(batch) {
-			err = fmt.Errorf("%d vectors for %d texts", len(vecs), len(batch))
-		}
+		vecs, err := x.embedDocs(in)
 		if err != nil {
 			return err
 		}
 		for j, h := range batch {
-			out[h] = normalize(vecs[j])
+			out[h] = vecs[j]
 		}
 	}
 	return nil
-}
-
-func sameStrings(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if w, ok := b[k]; !ok || w != v {
-			return false
-		}
-	}
-	return true
 }
 
 // start runs sync in a goroutine, now and after every poke.
@@ -855,7 +857,7 @@ func (x *semanticIndex) poke() {
 
 // ── Queries ──────────────────────────────────────────────────────────────────
 
-func queryKey(q string) string { return strings.ToLower(pyStrip(q)) }
+func queryKey(q string) string { return strings.ToLower(strings.TrimSpace(q)) }
 
 func (x *semanticIndex) queryVec(query string) []float32 {
 	key := queryKey(query)
@@ -940,7 +942,7 @@ type chunkScore struct {
 // chunkScores: the sections at least minScore similar to the query (of
 // the pages in known, unless nil), in row order.
 func (x *semanticIndex) chunkScores(query string, known map[string]bool) []chunkScore {
-	if !x.ready.Load() || pyStrip(query) == "" {
+	if !x.ready.Load() || strings.TrimSpace(query) == "" {
 		return nil
 	}
 	rows, scores, _, _ := x.scored(query)
@@ -977,7 +979,7 @@ func (x *semanticIndex) search(query string, known map[string]bool, limit int) [
 // searchTasks: the tasks at least taskMinScore similar to the query (of
 // those in known, unless nil), best first, as (id, score).
 func (x *semanticIndex) searchTasks(query string, known map[string]bool, limit int) []idScore {
-	if !x.ready.Load() || pyStrip(query) == "" {
+	if !x.ready.Load() || strings.TrimSpace(query) == "" {
 		return nil
 	}
 	_, _, rows, scores := x.scored(query)
@@ -1049,21 +1051,18 @@ func (x *semanticIndex) relatedToText(slug, content string, known, exclude map[s
 		keys[i] = chunkKey(title, c)
 		if _, ok := vecs[keys[i]]; !ok {
 			missing = append(missing, keys[i])
-			texts = append(texts, pyStrip(title+"\n"+c))
+			texts = append(texts, strings.TrimSpace(title+"\n"+c))
 		}
 	}
 	fresh := map[string][]float32{}
 	if len(missing) > 0 {
-		got, err := x.emb.EmbedDocs(texts)
-		if err == nil && len(got) != len(texts) {
-			err = fmt.Errorf("%d vectors for %d texts", len(got), len(texts))
-		}
+		got, err := x.embedDocs(texts)
 		if err != nil {
 			semLog("embedding failed, no related pages for %s: %v", slug, err)
 			return nil
 		}
 		for i, h := range missing {
-			fresh[h] = normalize(got[i])
+			fresh[h] = got[i]
 		}
 	}
 	all := make([][]float32, len(keys))
@@ -1141,7 +1140,7 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 	}
 	minScore := math.NaN()
 	if s := getenv("LEAF_SEMANTIC_MIN_SCORE"); s != "" {
-		if f, err := strconv.ParseFloat(pyStrip(s), 64); err == nil {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
 			minScore = f
 		} else {
 			semLog("LEAF_SEMANTIC_MIN_SCORE is not a number; using the default")

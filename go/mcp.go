@@ -150,7 +150,7 @@ func handleMCP(message any, callTool func(name string, args *Obj) (string, error
 func mcpAuthorized(r *http.Request) bool {
 	auth := r.Header.Get("Authorization")
 	return cfg.MCPToken != "" && strings.HasPrefix(auth, "Bearer ") &&
-		sameSecret(pyStrip(auth[len("Bearer "):]), cfg.MCPToken)
+		sameSecret(strings.TrimSpace(auth[len("Bearer "):]), cfg.MCPToken)
 }
 
 // mcpEndpoint: MCP over HTTP, one JSON-RPC message (or a batch) per POST,

@@ -83,15 +83,14 @@ func readListStrict(path string) ([]*Task, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return []*Task{}, nil
 	}
-	if err != nil || pyStrip(string(raw)) == "" {
+	if err != nil || strings.TrimSpace(string(raw)) == "" {
 		return nil, errDeckCorrupt
 	}
-	v, err := loads(raw)
-	l, ok := v.([]any)
-	if err != nil || !ok {
+	tasks, ok := parseTasks(raw)
+	if !ok {
 		return nil, errDeckCorrupt
 	}
-	return normalizeList(l), nil
+	return tasks, nil
 }
 
 // readListLenient reads a task list for reading: missing or unreadable is [].
@@ -100,33 +99,28 @@ func readListLenient(path string) []*Task {
 	if err != nil {
 		return []*Task{}
 	}
+	tasks, ok := parseTasks(raw)
+	if !ok {
+		return []*Task{}
+	}
+	return tasks
+}
+
+// parseTasks: the tasks of a file's text (taskFromObj); ok false when it
+// isn't a JSON list. What isn't an object is no task.
+func parseTasks(raw []byte) ([]*Task, bool) {
 	v, err := loads(raw)
 	l, ok := v.([]any)
 	if err != nil || !ok {
-		return []*Task{}
+		return nil, false
 	}
-	return normalizeList(l)
-}
-
-// normalizeList: the tasks of a file (taskFromObj). What isn't an object
-// is no task.
-func normalizeList(l []any) []*Task {
 	out := make([]*Task, 0, len(l))
 	for _, v := range l {
 		if o, ok := v.(*Obj); ok {
 			out = append(out, taskFromObj(o))
 		}
 	}
-	return out
-}
-
-// strs is a []string as JSON's []any.
-func strs(s []string) []any {
-	l := make([]any, len(s))
-	for i, x := range s {
-		l[i] = x
-	}
-	return l
+	return out, true
 }
 
 func readDeckStrict() ([]*Task, error) { return readListStrict(deckFile()) }
@@ -151,7 +145,7 @@ func archiveGlob() []string {
 	return out
 }
 
-var yearRE = regexp.MustCompile(`^` + pyDigit + `{4}$`)
+var yearRE = regexp.MustCompile(`^\d{4}$`)
 
 // completedYear: the year a completed task belongs to ("" when unusable).
 func completedYear(t *Task) string {
@@ -251,12 +245,11 @@ func writeCompleted(completed []*Task, reformat bool) ([]string, error) {
 
 // sameTasks: a file holds the tasks text has, whatever its format.
 func sameTasks(raw []byte, text string) bool {
-	v, err := loads(raw)
-	l, ok := v.([]any)
-	if err != nil || !ok {
+	tasks, ok := parseTasks(raw)
+	if !ok {
 		return false
 	}
-	have, err := encodeTasks(normalizeList(l))
+	have, err := encodeTasks(tasks)
 	return err == nil && have == text
 }
 
@@ -320,11 +313,7 @@ func readArchived() []*Task {
 func archiveOldCompleted() {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
-	if err != nil {
-		return
-	}
-	completed, err := readCompletedAllStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return
 	}
@@ -358,6 +347,18 @@ func readAll() []*Task {
 
 // allTasks: every task, archived ones too.
 func allTasks() []*Task { return append(readAll(), readArchived()...) }
+
+// readForWriteLocked: the open tasks and every completed task, read for a
+// write (errDeckCorrupt when a file is unreadable).
+func readForWriteLocked() (active, completed []*Task, err error) {
+	if active, err = readDeckStrict(); err != nil {
+		return nil, nil, err
+	}
+	if completed, err = readCompletedAllStrict(); err != nil {
+		return nil, nil, err
+	}
+	return active, completed, nil
+}
 
 func writeDeckLocked(tasks []*Task, message string) error {
 	if err := writeTasks(deckFile(), tasks); err != nil {
@@ -594,8 +595,6 @@ func logEvent(t *Task, event, from, to string) {
 	t.History = append(append([]HistoryEntry{}, h...), entry)
 }
 
-var ymdRE = regexp.MustCompile(`^` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}$`)
-
 // cleanHistory validates a history list from a request or snapshot.
 func cleanHistory(v any) []HistoryEntry {
 	l, _ := v.([]any)
@@ -612,10 +611,10 @@ func cleanHistory(v any) []HistoryEntry {
 		}
 		entry := HistoryEntry{At: runePrefix(at, 16), Event: event}
 		if datedEvents[event] {
-			if s, ok := e.Get("from").(string); ok && ymdRE.MatchString(s) {
+			if s, ok := e.Get("from").(string); ok && isoDateRE.MatchString(s) {
 				entry.From = s
 			}
-			if s, ok := e.Get("to").(string); ok && ymdRE.MatchString(s) {
+			if s, ok := e.Get("to").(string); ok && isoDateRE.MatchString(s) {
 				entry.To = s
 			}
 		}
@@ -661,7 +660,7 @@ func cleanCommentList(cs []Comment) []Comment {
 	out := []Comment{}
 	seen := map[string]bool{}
 	for _, c := range cs {
-		if pyStrip(c.Text) == "" || c.At == "" {
+		if strings.TrimSpace(c.Text) == "" || c.At == "" {
 			continue
 		}
 		id := c.ID
@@ -669,7 +668,7 @@ func cleanCommentList(cs []Comment) []Comment {
 			id = newCommentID()
 		}
 		seen[id] = true
-		out = append(out, Comment{ID: id, At: runePrefix(c.At, 16), Text: runePrefix(pyStrip(c.Text), commentMax)})
+		out = append(out, Comment{ID: id, At: runePrefix(c.At, 16), Text: runePrefix(strings.TrimSpace(c.Text), commentMax)})
 	}
 	return out
 }
@@ -784,9 +783,8 @@ func findTaskBacklinks(slug string) []TaskLink {
 		text := t.Title + "\n" + t.Description
 		found, section, anchor := false, "", ""
 		for _, m := range wikilinkRE.FindAllStringSubmatch(text, -1) {
-			target, _, _ := strings.Cut(m[1], "|")
-			page, sec, _ := strings.Cut(target, "#")
-			page, sec = pyStrip(page), pyStrip(sec)
+			l := parseWikilink(m[0])
+			page, sec := strings.TrimSpace(l.page), strings.TrimSpace(l.section)
 			if page != "" && (page == slug || toSlug(page) == slug) {
 				found = true
 				if sec != "" && section == "" {
@@ -895,7 +893,7 @@ func lastActivity(t *Task) string {
 	return best
 }
 
-var ymdPrefixRE = regexp.MustCompile(`^` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}`)
+var ymdPrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 
 // cleanRecurrence: a recurrence from a request (an undo), its fields
 // validated; nil when it names no repeat type.
@@ -931,7 +929,7 @@ func cleanRecurrence(v any) *Recurrence {
 // delete), known fields only; nil without a usable title. A bad optional
 // value falls back to its default.
 func sanitizeSnapshot(snap *Obj) *Task {
-	title := pyStrip(pyStr(orNone(snap.Get("title"))))
+	title := strings.TrimSpace(pyStr(orNone(snap.Get("title"))))
 	if !snap.Truthy("title") || title == "" {
 		return nil
 	}

@@ -15,44 +15,35 @@ import (
 	"unicode/utf8"
 )
 
-// pySpace is Python's \s in a str pattern; pyDigit its \d.
+// Whitespace in a pattern, as unicode.IsSpace counts it (RE2's \s is
+// ASCII only, without \v): spaceClass and its negation nonSpaceClass.
 const (
-	pySpace = `[\s\pZ\x{85}\x{1c}-\x{1f}]`
-	pyDigit = `\p{Nd}`
+	spaceClass    = `[\s\v\pZ\x{85}]`
+	nonSpaceClass = `[^\s\v\pZ\x{85}]`
 )
 
 var wikilinkRE = regexp.MustCompile(`\[\[([^\[\]]+)\]\]`)
 
 // slugDisplayName is a title from a slug ("my-page" → "My Page").
 func slugDisplayName(slug string) string {
-	return pyTitle(strings.ReplaceAll(slug[strings.LastIndex(slug, "/")+1:], "-", " "))
+	return titleWords(strings.ReplaceAll(slug[strings.LastIndex(slug, "/")+1:], "-", " "))
 }
 
-// pyTitle is str.title: a cased letter after anything but a cased letter
-// is upper (title) case, the others lower.
-func pyTitle(s string) string {
+// titleWords: s with each word's first letter in upper (title) case, the
+// rest as written ("my page" → "My Page", "my_notes" → "My_Notes", "it's
+// 2nd" → "It's 2nd").
+func titleWords(s string) string {
 	var b strings.Builder
-	prevCased := false
+	start := true
 	for _, r := range s {
-		cased := unicode.IsUpper(r) || unicode.IsLower(r) || unicode.IsTitle(r)
-		switch {
-		case cased && !prevCased && titleSpecial[r] != "":
-			b.WriteString(titleSpecial[r])
-		case cased && !prevCased:
-			b.WriteRune(unicode.ToTitle(r))
-		case cased:
-			b.WriteRune(unicode.ToLower(r))
-		default:
-			b.WriteRune(r)
+		if start {
+			r = unicode.ToTitle(r)
 		}
-		prevCased = cased
+		b.WriteRune(r)
+		start = !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '’'
 	}
 	return b.String()
 }
-
-// titleSpecial: characters whose title case is several (Unicode's
-// SpecialCasing, as Python's str.title has them): ß → Ss, ﬁ → Fi …
-var titleSpecial = map[rune]string{0xDF: "Ss", 0x149: "\u02bcN", 0x1F0: "J\u030c", 0x390: "\u0399\u0308\u0301", 0x3B0: "\u03a5\u0308\u0301", 0x587: "\u0535\u0582", 0x1E96: "H\u0331", 0x1E97: "T\u0308", 0x1E98: "W\u030a", 0x1E99: "Y\u030a", 0x1E9A: "A\u02be", 0x1F50: "\u03a5\u0313", 0x1F52: "\u03a5\u0313\u0300", 0x1F54: "\u03a5\u0313\u0301", 0x1F56: "\u03a5\u0313\u0342", 0x1FB2: "\u1fba\u0345", 0x1FB4: "\u0386\u0345", 0x1FB6: "\u0391\u0342", 0x1FB7: "\u0391\u0342\u0345", 0x1FC2: "\u1fca\u0345", 0x1FC4: "\u0389\u0345", 0x1FC6: "\u0397\u0342", 0x1FC7: "\u0397\u0342\u0345", 0x1FD2: "\u0399\u0308\u0300", 0x1FD3: "\u0399\u0308\u0301", 0x1FD6: "\u0399\u0342", 0x1FD7: "\u0399\u0308\u0342", 0x1FE2: "\u03a5\u0308\u0300", 0x1FE3: "\u03a5\u0308\u0301", 0x1FE4: "\u03a1\u0313", 0x1FE6: "\u03a5\u0342", 0x1FE7: "\u03a5\u0308\u0342", 0x1FF2: "\u1ffa\u0345", 0x1FF4: "\u038f\u0345", 0x1FF6: "\u03a9\u0342", 0x1FF7: "\u03a9\u0342\u0345", 0xFB00: "Ff", 0xFB01: "Fi", 0xFB02: "Fl", 0xFB03: "Ffi", 0xFB04: "Ffl", 0xFB05: "St", 0xFB06: "St", 0xFB13: "\u0544\u0576", 0xFB14: "\u0544\u0565", 0xFB15: "\u0544\u056b", 0xFB16: "\u054e\u0576", 0xFB17: "\u0544\u056d"}
 
 var toSlugRE = regexp.MustCompile(`[^a-z0-9_]+`)
 
@@ -60,8 +51,8 @@ var toSlugRE = regexp.MustCompile(`[^a-z0-9_]+`)
 // lowercased, runs of other characters a hyphen.
 func toSlug(name string) string {
 	var parts []string
-	for _, part := range strings.Split(pyStrip(name), "/") {
-		s := strings.Trim(toSlugRE.ReplaceAllString(strings.ToLower(pyStrip(part)), "-"), "-")
+	for _, part := range strings.Split(strings.TrimSpace(name), "/") {
+		s := strings.Trim(toSlugRE.ReplaceAllString(strings.ToLower(strings.TrimSpace(part)), "-"), "-")
 		if s != "" {
 			parts = append(parts, s)
 		}
@@ -69,8 +60,8 @@ func toSlug(name string) string {
 	return strings.Join(parts, "/")
 }
 
-var scratchRE = regexp.MustCompile(`^(` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}_` +
-	pyDigit + `{2}-` + pyDigit + `{2}-` + pyDigit + `{2})_(.+)$`)
+var scratchRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}_` +
+	`\d{2}-\d{2}-\d{2})_(.+)$`)
 
 func isScratch(slug string) bool { return scratchRE.MatchString(slug) }
 
@@ -99,10 +90,10 @@ func h1Text(line string) (string, bool) {
 	if len(rest) == len(line)-1 || rest == "" {
 		return "", false
 	}
-	if r, _ := utf8.DecodeRuneInString(rest); pyIsSpace(r) {
+	if r, _ := utf8.DecodeRuneInString(rest); unicode.IsSpace(r) {
 		return "", false
 	}
-	return pyStrip(rest), true
+	return strings.TrimSpace(rest), true
 }
 
 // splitWikilink: a wikilink's inside as page, section, label: `Page`,
@@ -111,7 +102,7 @@ func h1Text(line string) (string, bool) {
 func splitWikilink(inner string) (page, section, label string) {
 	target, label, bar := strings.Cut(inner, "|")
 	page, section, _ = strings.Cut(target, "#")
-	page, section = pyStrip(page), pyStrip(section)
+	page, section = strings.TrimSpace(page), strings.TrimSpace(section)
 	if !bar {
 		switch {
 		case page != "" && section != "":
@@ -122,7 +113,7 @@ func splitWikilink(inner string) (page, section, label string) {
 			label = page
 		}
 	}
-	return page, section, pyStrip(label)
+	return page, section, strings.TrimSpace(label)
 }
 
 // sectionAnchor is the heading id a wikilink's #Section points at.
@@ -131,7 +122,7 @@ func sectionAnchor(section string) string { return headingID(plainHeading(sectio
 var headingIDRE = regexp.MustCompile(`[^\p{L}\p{N}_\- ]+`)
 
 func headingID(text string) string {
-	return strings.ReplaceAll(strings.ToLower(pyStrip(headingIDRE.ReplaceAllString(text, ""))), " ", "-")
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(headingIDRE.ReplaceAllString(text, ""))), " ", "-")
 }
 
 type rule struct {
@@ -168,15 +159,15 @@ func stripLinks(text string) string { return applyRules(text, stripLinkRules) }
 // plainHeading: a heading's text without inline markdown and links, for
 // its anchor.
 func plainHeading(text string) string {
-	return pyStrip(applyRules(stripLinks(text), plainHeadingRules))
+	return strings.TrimSpace(applyRules(stripLinks(text), plainHeadingRules))
 }
 
 // Task metadata in markdown: - [ ] task <!--t:2026-06-12T18:35:00-->,
 // - [x] task <!--t:2026-06-12T18:35:00 d:2026-06-12T19:00:00-->.
-const isoSecond = pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}T` + pyDigit + `{2}:` + pyDigit + `{2}:` + pyDigit + `{2}`
+const isoSecond = `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`
 
 var (
-	taskMetaSrcRE  = regexp.MustCompile(`<!--t:(` + isoSecond + `)(?:` + pySpace + `+d:(` + isoSecond + `))?-->`)
+	taskMetaSrcRE  = regexp.MustCompile(`<!--t:(` + isoSecond + `)(?:` + spaceClass + `+d:(` + isoSecond + `))?-->`)
 	taskDoneOnlyRE = regexp.MustCompile(`<!--d:(` + isoSecond + `)-->`)
 )
 
@@ -231,7 +222,7 @@ func fencedLines(lines []string) []fencedLine {
 	out := make([]fencedLine, len(lines))
 	inFence, marker := false, ""
 	for i, line := range lines {
-		s := pyStrip(line)
+		s := strings.TrimSpace(line)
 		if !inFence {
 			if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "~~~") {
 				inFence = true
@@ -269,7 +260,7 @@ func maskCode(text string) (string, []string) {
 	return out.String(), stash
 }
 
-var maskTokenRE = regexp.MustCompile("(" + pyDigit + "+)")
+var maskTokenRE = regexp.MustCompile("(\\d+)")
 
 func unmaskCode(text string, stash []string) string {
 	return maskTokenRE.ReplaceAllStringFunc(text, func(m string) string {
@@ -331,7 +322,7 @@ func inlineCodeSpans(line string) [][2]int {
 	return spans
 }
 
-// lookalikeLen: the length of open, digits (any), close at the start of s;
+// lookalikeLen: the length of open, digits, close at the start of s;
 // 0 when s doesn't start so.
 func lookalikeLen(s string, open, close rune) int {
 	r, n := utf8.DecodeRuneInString(s)
@@ -344,7 +335,7 @@ func lookalikeLen(s string, open, close rune) int {
 		if r == close && digits > 0 {
 			return n + size
 		}
-		if !unicode.IsDigit(r) {
+		if r < '0' || r > '9' {
 			return 0
 		}
 		digits++
@@ -384,7 +375,7 @@ func closingRun(s string, from, n int) int {
 // checkbox, so the Nth rendered checkbox is the Nth match here (render.go
 // counts the same; js/page.js taskCheckboxOffsets mirrors it). The
 // lookahead (?=[ \t]+\S) is checked after the match.
-var taskItemRE = regexp.MustCompile(`^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|` + pyDigit + `{1,9}[.)])[ \t]+\[([ xX])\]`)
+var taskItemRE = regexp.MustCompile(`^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\]`)
 
 // taskItem: the byte range of the line's [ ]/[x] mark, when it is a task item.
 func taskItem(line string) (start, end int, ok bool) {
@@ -397,7 +388,7 @@ func taskItem(line string) (start, end int, ok bool) {
 	if len(after) == len(rest) || after == "" {
 		return 0, 0, false
 	}
-	if r, _ := utf8.DecodeRuneInString(after); pyIsSpace(r) {
+	if r, _ := utf8.DecodeRuneInString(after); unicode.IsSpace(r) {
 		return 0, 0, false
 	}
 	return m[2], m[3], true
@@ -454,25 +445,26 @@ func toggleNthCheckbox(content string, idx int, frontmatter bool) string {
 		} else if done := taskDoneOnlyRE.FindStringIndex(body); done != nil {
 			body = body[:done[0]] + "<!--d:" + stamp + "-->" + body[done[1]:]
 		} else {
-			body = pyRstrip(body) + " <!--d:" + stamp + "-->"
+			body = trimRightSpace(body) + " <!--d:" + stamp + "-->"
 		}
 	} else if meta != nil {
 		body = body[:meta[0]] + "<!--t:" + body[meta[2]:meta[3]] + "-->" + body[meta[1]:]
 	} else {
-		body = pyRstrip(taskDoneOnlyRE.ReplaceAllString(body, ""))
+		body = trimRightSpace(taskDoneOnlyRE.ReplaceAllString(body, ""))
 	}
 	lines[it.index] = body + eol
 	return strings.Join(lines, "")
 }
 
-func pyRstrip(s string) string { return strings.TrimRightFunc(s, pyIsSpace) }
+// trimRightSpace: s without trailing whitespace.
+func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
 // ---- sections ----
 
 var (
 	atxSectionRE  = regexp.MustCompile(`^ {0,3}#{2,3} `)
-	listItemRE    = regexp.MustCompile(`^[-*+]` + pySpace)
-	listItemIndRE = regexp.MustCompile(`^[ \t]{0,3}[-*+]` + pySpace)
+	listItemRE    = regexp.MustCompile(`^[-*+]` + spaceClass)
+	listItemIndRE = regexp.MustCompile(`^[ \t]{0,3}[-*+]` + spaceClass)
 )
 
 // splitSections splits at ## and ### headings outside fenced code (ATX with
@@ -483,7 +475,7 @@ func splitSections(content string) []string {
 	var headings []int
 	prevText := -1 // for setext h2
 	for i, l := range fencedLines(lines) {
-		stripped := pyStrip(l.line)
+		stripped := strings.TrimSpace(l.line)
 		switch {
 		case l.inFence:
 			prevText = -1
@@ -563,14 +555,14 @@ func spliceSection(full *string, fileHash string, start, end int, newContent str
 	return merged, contentHash(merged), start, start + utf8.RuneCountInString(replacement), true
 }
 
-var h1LineRE = regexp.MustCompile(`^#` + pySpace + `+`)
+var h1LineRE = regexp.MustCompile(`^#` + spaceClass + `+`)
 
 // stripH1 removes the first H1 line, so it isn't shown twice under the
 // page header.
 func stripH1(content string) string {
 	lines := strings.Split(content, "\n")
 	for i := bodyStart(lines); i < len(lines); i++ {
-		if pyStrip(lines[i]) != "" {
+		if strings.TrimSpace(lines[i]) != "" {
 			if h1LineRE.MatchString(lines[i]) {
 				lines = append(lines[:i], lines[i+1:]...)
 			}
@@ -584,11 +576,11 @@ func stripH1(content string) string {
 
 // frontmatterEnd: the index of the line closing a leading --- block, or -1.
 func frontmatterEnd(lines []string) int {
-	if len(lines) == 0 || pyStrip(lines[0]) != "---" {
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
 		return -1
 	}
 	for i := 1; i < len(lines); i++ {
-		if pyStrip(lines[i]) == "---" {
+		if strings.TrimSpace(lines[i]) == "---" {
 			return i
 		}
 	}
@@ -606,9 +598,9 @@ type Frontmatter struct {
 }
 
 var (
-	fmItemRE  = regexp.MustCompile(`^` + pySpace + `*-` + pySpace + `+(.*?)` + pySpace + `*$`)
+	fmItemRE  = regexp.MustCompile(`^` + spaceClass + `*-` + spaceClass + `+(.*?)` + spaceClass + `*$`)
 	fmValueRE = regexp.MustCompile(`(?:\[[^\]]*\]|\([^)]*\)|[^,])+`)
-	fmBlockRE = regexp.MustCompile(`^([>|])[+-]?` + pyDigit + `?[+-]?$`)
+	fmBlockRE = regexp.MustCompile(`^([>|])[+-]?\d?[+-]?$`)
 	fmParaRE  = regexp.MustCompile(`\n[ \t]*\n`)
 )
 
@@ -627,7 +619,7 @@ func parseFrontmatter(content string) (Frontmatter, string) {
 	open := false
 	for _, line := range lines[1 : end+1] { // the closing fence ends a tldr still open
 		if open {
-			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || pyStrip(line) == "" {
+			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") || strings.TrimSpace(line) == "" {
 				tldr = append(tldr, line)
 				continue
 			}
@@ -651,8 +643,8 @@ func parseFrontmatter(content string) (Frontmatter, string) {
 		if !ok {
 			continue
 		}
-		key = strings.ToLower(pyStrip(k))
-		value = pyStrip(value)
+		key = strings.ToLower(strings.TrimSpace(k))
+		value = strings.TrimSpace(value)
 		switch key {
 		case "tags", "sources":
 			if values := frontmatterValues(value); values != nil {
@@ -667,7 +659,7 @@ func parseFrontmatter(content string) (Frontmatter, string) {
 		}
 	}
 	rest := lines[end+1:]
-	if len(rest) > 0 && pyStrip(rest[0]) == "" {
+	if len(rest) > 0 && strings.TrimSpace(rest[0]) == "" {
 		rest = rest[1:]
 	}
 	return meta, strings.Join(rest, "\n")
@@ -681,8 +673,8 @@ func frontmatterValues(value string) []string {
 	}
 	var out []string
 	for _, v := range fmValueRE.FindAllString(value, -1) {
-		if pyStrip(v) != "" {
-			out = append(out, strings.Trim(pyStrip(v), `"'`))
+		if strings.TrimSpace(v) != "" {
+			out = append(out, strings.Trim(strings.TrimSpace(v), `"'`))
 		}
 	}
 	return out
@@ -701,7 +693,7 @@ func frontmatterText(value string, more []string) string {
 	}
 	var paras []string
 	for _, p := range fmParaRE.Split(strings.Join(lines, "\n"), -1) {
-		if p = strings.Join(pySplit(p), " "); p != "" {
+		if p = strings.Join(strings.Fields(p), " "); p != "" {
 			paras = append(paras, p)
 		}
 	}
@@ -709,7 +701,7 @@ func frontmatterText(value string, more []string) string {
 	if block != nil {
 		return text
 	}
-	return pyStrip(strings.Trim(text, `"'`))
+	return strings.TrimSpace(strings.Trim(text, `"'`))
 }
 
 // dedent is textwrap.dedent (Python 3.13+): lines of whitespace only
@@ -717,7 +709,7 @@ func frontmatterText(value string, more []string) string {
 // of the other lines start with taken off every other line.
 func dedent(s string) string {
 	lines := strings.Split(s, "\n")
-	blank := func(l string) bool { return pyStrip(l) == "" }
+	blank := func(l string) bool { return strings.TrimSpace(l) == "" }
 	lo, hi, first := "", "", true
 	for _, l := range lines {
 		if blank(l) {
@@ -755,8 +747,6 @@ func pageTags(content string) []string {
 	return out
 }
 
-var fmItemLineRE = regexp.MustCompile(`^` + pySpace + `*-` + pySpace + `+(.*?)` + pySpace + `*$`)
-
 // addFrontmatterTags adds the tags content's frontmatter lacks (case
 // ignored) to its `tags:`, adding the line, or the block, when there is none.
 func addFrontmatterTags(content string, tags []string) string {
@@ -782,9 +772,9 @@ func addFrontmatterTags(content string, tags []string) string {
 	}
 	for i := 1; i < end; i++ {
 		k, _, _ := strings.Cut(lines[i], ":")
-		if strings.ToLower(pyStrip(k)) == "tags" {
+		if strings.ToLower(strings.TrimSpace(k)) == "tags" {
 			j := i + 1 // a block list's `- tag` lines: the new line has them
-			for j < end && fmItemLineRE.MatchString(lines[j]) {
+			for j < end && fmItemRE.MatchString(lines[j]) {
 				j++
 			}
 			lines = append(append(append([]string{}, lines[:i]...), line), lines[j:]...)
@@ -797,15 +787,12 @@ func addFrontmatterTags(content string, tags []string) string {
 
 // ---- links and titles ----
 
-var (
-	plainWikiRE = regexp.MustCompile(`\[\[([^\[\]]+)\]\]`)
-	plainMdRE   = regexp.MustCompile(`\[([^\[\]]*)\]\(([^()\s]+)\)`)
-)
+var plainMdRE = regexp.MustCompile(`\[([^\[\]]*)\]\(([^()\s]+)\)`)
 
 // plainTaskTitle: a task title with its links reduced to their labels, as
 // deck.js plainTitle does (for a title inside one link: no nested <a>).
 func plainTaskTitle(title string) string {
-	title = plainWikiRE.ReplaceAllStringFunc(title, func(m string) string {
+	title = wikilinkRE.ReplaceAllStringFunc(title, func(m string) string {
 		_, _, label := splitWikilink(m[2 : len(m)-2])
 		return label
 	})
@@ -844,16 +831,14 @@ var wikilinkBreakers = regexp.MustCompile(`[\[\]|]`)
 // pageWikilink is `[[slug|label]]`, with what would break a wikilink taken
 // out of the label. Mirrored by the Move to wiki dialog in js/pagemenu.js.
 func pageWikilink(slug, label string) string {
-	label = pyStrip(wikilinkBreakers.ReplaceAllString(label, ""))
+	label = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(label, ""))
 	if label == "" {
 		label = slug
 	}
 	return "[[" + slug + "|" + label + "]]"
 }
 
-var (
-	headingLevelRE = regexp.MustCompile(`^(#{1,6})[ \t]`)
-)
+var headingLevelRE = regexp.MustCompile(`^(#{1,6})[ \t]`)
 
 // noteAsSection: a scratch note's text as a `## heading` section of another
 // page, and its frontmatter tags. Its title goes (the heading replaces it),
@@ -881,8 +866,8 @@ func noteAsSection(content, heading string) (string, []string) {
 	if meta.Tldr != "" {
 		var it []string
 		for _, line := range strings.Split(meta.Tldr, "\n") {
-			if pyStrip(line) != "" {
-				it = append(it, "_"+pyStrip(line)+"_")
+			if strings.TrimSpace(line) != "" {
+				it = append(it, "_"+strings.TrimSpace(line)+"_")
 			}
 		}
 		parts = append(parts, strings.Join(it, "\n"))

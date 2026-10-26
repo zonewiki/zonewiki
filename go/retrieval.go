@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -211,7 +212,7 @@ func taskSearchDocs() []*SearchDoc {
 			tags = append(tags, "#"+tag)
 			lowTags = append(lowTags, strings.ToLower(tag))
 		}
-		text := stripLinkTargets(pyStrip(title + " " + t.Description + " " +
+		text := stripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
 		d := &SearchDoc{Slug: deckDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
 			Tokens: append(tokenize(text), repeatTokens(plainTaskTitle(title), titleWeight)...),
@@ -229,6 +230,14 @@ func taskSearchDocs() []*SearchDoc {
 type docIndex struct {
 	docs []*SearchDoc
 	ix   *Index
+}
+
+func newDocIndex(docs []*SearchDoc) *docIndex {
+	tokens := make([][]string, len(docs))
+	for i, d := range docs {
+		tokens[i] = d.Tokens
+	}
+	return &docIndex{docs, NewIndex(tokens)}
 }
 
 // search: the best `limit` docs for the query text.
@@ -252,26 +261,10 @@ type indexCache struct {
 func (c *indexCache) get(docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.index == nil || !sameDocs(c.index.docs, docs) {
-		tokens := make([][]string, len(docs))
-		for i, d := range docs {
-			tokens[i] = d.Tokens
-		}
-		c.index = &docIndex{docs, NewIndex(tokens)}
+	if c.index == nil || !slices.Equal(c.index.docs, docs) {
+		c.index = newDocIndex(docs)
 	}
 	return c.index
-}
-
-func sameDocs(a, b []*SearchDoc) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 var searchIndexCache, chunkIndexCache indexCache
@@ -357,7 +350,7 @@ func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(doc
 // rankedDocs: the `limit` best docs for the query by keywords. Docs that
 // fail the query's filters, or keep when given, take no part.
 func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []*SearchDoc {
-	if pyStrip(q.RankingText()) == "" {
+	if strings.TrimSpace(q.RankingText()) == "" {
 		if len(q.Dates) == 0 {
 			return nil
 		}
@@ -395,7 +388,7 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 	}
 	text := q.RankingText()
 	var pageHits []docScore
-	for _, h := range semantic.search(text, docKeys(pages), depth) {
+	for _, h := range semantic.search(text, keySet(pages), depth) {
 		pageHits = append(pageHits, docScore{pages[h.Slug], h.Score})
 	}
 	tHits := taskHits(text, tasks, depth)
@@ -501,7 +494,7 @@ const (
 // no tasks; scratch only scratch notes (the Scratch page's filter).
 func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 	results := []M{}
-	if pyStrip(raw) == "" {
+	if strings.TrimSpace(raw) == "" {
 		return results
 	}
 	q := ParseQuery(raw)
@@ -547,7 +540,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		excerptOf := d.ExcerptText
 		if !d.isTask() {
 			if section = sections[d.Slug]; section != nil {
-				excerptOf = pyStrip(section.Heading + "\n" + section.Text)
+				excerptOf = strings.TrimSpace(section.Heading + "\n" + section.Text)
 			}
 		}
 		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(Excerpt(excerptOf, text)),
@@ -647,7 +640,7 @@ func inFolder(slug, folder string) bool {
 // folder, with scratch only of scratch notes; either way no tasks.
 func retrieve(raw string, limit int, under string, scratch bool) []*SearchDoc {
 	q := ParseQuery(raw)
-	if pyStrip(q.RankingText()) == "" {
+	if strings.TrimSpace(q.RankingText()) == "" {
 		return nil
 	}
 	x := chunkIndex()
@@ -734,7 +727,7 @@ func logQuery(raw, under string, hits []*SearchDoc) {
 		f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o666)
 	}
 	if err == nil {
-		_, err = f.WriteString(dumpsLineUTF8(entry) + "\n")
+		_, err = f.WriteString(jsonText(entry) + "\n")
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
@@ -799,16 +792,8 @@ type docScore struct {
 // taskHits: the semantic index's tasks among those given, as docs.
 func taskHits(q string, tasks map[string]*SearchDoc, limit int) []docScore {
 	var hits []docScore
-	for _, h := range semantic.searchTasks(q, docKeys(tasks), limit) {
+	for _, h := range semantic.searchTasks(q, keySet(tasks), limit) {
 		hits = append(hits, docScore{tasks[h.ID], h.Score})
 	}
 	return hits
-}
-
-func docKeys(m map[string]*SearchDoc) map[string]bool {
-	out := make(map[string]bool, len(m))
-	for k := range m {
-		out[k] = true
-	}
-	return out
 }

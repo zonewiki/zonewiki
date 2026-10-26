@@ -68,7 +68,7 @@ func asStr(v any, name string) (string, error) {
 	return s, nil
 }
 
-// asInt is Python's int(): numbers and numeric strings, not a bool.
+// asInt: a whole number, or a string of one ("12", " -3 "); not a bool.
 func asInt(v any, name string) (int, error) {
 	bad := badRequest(name + " must be an integer")
 	switch v := v.(type) {
@@ -80,23 +80,12 @@ func asInt(v any, name string) (int, error) {
 		}
 		return int(v), nil
 	case string:
-		// int("  -12 "), int("1_000"): a sign, digits, single underscores between.
-		s := pyStrip(v)
-		neg := strings.HasPrefix(s, "-")
-		s = strings.TrimPrefix(strings.TrimPrefix(s, "-"), "+")
-		if !pyIntRE.MatchString(s) {
-			return 0, bad
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return n, nil
 		}
-		n := pyAtoi(strings.ReplaceAll(s, "_", ""))
-		if neg {
-			n = -n
-		}
-		return n, nil
 	}
 	return 0, bad
 }
-
-var pyIntRE = regexp.MustCompile(`^` + pyDigit + `+(?:_` + pyDigit + `+)*$`)
 
 // asStrList: a list of strings, or one string split on commas; stripped,
 // empties left out.
@@ -118,7 +107,7 @@ func asStrList(v any, name string) ([]string, error) {
 		if !ok {
 			return nil, badRequest(name + " must be a list of strings")
 		}
-		if s = pyStrip(s); s != "" {
+		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
 		}
 	}
@@ -178,7 +167,7 @@ func commentText(v any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if s = pyStrip(s); s == "" {
+	if s = strings.TrimSpace(s); s == "" {
 		return "", badRequest("Comment cannot be empty")
 	}
 	return runePrefix(s, commentMax), nil
@@ -194,7 +183,7 @@ const deckPlaceholder = "LEAFDECKPLACEHOLDER"
 func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
-	if n, err := strconv.Atoi(pyStrip(params.Get("limit"))); err == nil {
+	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
 		limit = strconv.Itoa(max(1, min(99, n)))
 	}
 	// labels=Catalogue,Shopping: the embed's own names for Open and Focus;
@@ -209,7 +198,7 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 		if i >= 2 {
 			break
 		}
-		if name = runePrefix(pyStrip(strings.ReplaceAll(name, "_", " ")), 30); name != "" {
+		if name = runePrefix(strings.TrimSpace(strings.ReplaceAll(name, "_", " ")), 30); name != "" {
 			labels[i] = name
 		}
 	}
@@ -223,7 +212,7 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 		}
 		homes.Set(n, h)
 	}
-	listsJSON, homesJSON := dumpsLine(strs(names)), dumpsLine(homes)
+	listsJSON, homesJSON := jsonText(names), jsonText(homes)
 	sfx := ""
 	if instance > 0 {
 		sfx = "-" + strconv.Itoa(instance)
@@ -449,13 +438,15 @@ func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/deck/batch-update", deckRoute(apiBatchUpdate))
 }
 
+var yearArgRE = regexp.MustCompile(`^\d{4}$`)
+
 // yearArg: ?year=YYYY (a year of the Completed view), default this year.
 func yearArg(r *http.Request) (string, error) {
 	year := r.URL.Query().Get("year")
 	if year == "" {
 		year = currentYear()
 	}
-	if !regexp.MustCompile(`^\d{4}$`).MatchString(year) {
+	if !yearArgRE.MatchString(year) {
 		return "", badRequest("year must be YYYY")
 	}
 	return year, nil
@@ -468,7 +459,7 @@ func createTask(data *Obj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	if pyStrip(title) == "" {
+	if strings.TrimSpace(title) == "" {
 		return nil, badRequest("Title cannot be empty")
 	}
 	deckMu.Lock()
@@ -494,7 +485,7 @@ func applyTaskFields(t *Task, data *Obj) error {
 		if err != nil {
 			return err
 		}
-		if s = pyStrip(s); s == "" {
+		if s = strings.TrimSpace(s); s == "" {
 			return badRequest("Title cannot be empty")
 		}
 		t.Title = s
@@ -504,7 +495,7 @@ func applyTaskFields(t *Task, data *Obj) error {
 		if err != nil {
 			return err
 		}
-		t.Description = pyStrip(s)
+		t.Description = strings.TrimSpace(s)
 	}
 	if data.Has("tags") {
 		v := data.Get("tags")
@@ -639,13 +630,10 @@ func firstNonEmpty(a, b string) string {
 // findForWriteLocked: the open tasks, every completed task, and the one
 // with id (404 when none has it).
 func findForWriteLocked(id string) (active, completed []*Task, task *Task, err error) {
-	if active, err = readDeckStrict(); err != nil {
+	if active, completed, err = readForWriteLocked(); err != nil {
 		return
 	}
-	if completed, err = readCompletedAllStrict(); err != nil {
-		return
-	}
-	for _, t := range append(append([]*Task{}, active...), completed...) {
+	for _, t := range slices.Concat(active, completed) {
 		if t.ID == id {
 			return active, completed, t, nil
 		}
@@ -653,10 +641,13 @@ func findForWriteLocked(id string) (active, completed []*Task, task *Task, err e
 	return nil, nil, nil, errNotFound
 }
 
-func without(tasks []*Task, id string) []*Task {
+func without(tasks []*Task, id string) []*Task { return withoutIDs(tasks, map[string]bool{id: true}) }
+
+// withoutIDs: tasks but those with an id in ids.
+func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 	out := make([]*Task, 0, len(tasks))
 	for _, t := range tasks {
-		if t.ID != id {
+		if !ids[t.ID] {
 			out = append(out, t)
 		}
 	}
@@ -845,24 +836,11 @@ func deleteTask(id, message string) error {
 }
 
 func deleteTasksLocked(ids map[string]bool, message string) error {
-	active, err := readDeckStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return err
 	}
-	completed, err := readCompletedAllStrict()
-	if err != nil {
-		return err
-	}
-	keep := func(tasks []*Task) []*Task {
-		out := []*Task{}
-		for _, t := range tasks {
-			if !ids[t.ID] {
-				out = append(out, t)
-			}
-		}
-		return out
-	}
-	return writeBothLocked(keep(active), keep(completed), message)
+	return writeBothLocked(withoutIDs(active, ids), withoutIDs(completed, ids), message)
 }
 
 func idSet(ids []string) map[string]bool {
@@ -907,16 +885,12 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
-	if err != nil {
-		return err
-	}
-	completed, err := readCompletedAllStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return err
 	}
 	existing := map[string]bool{}
-	for _, t := range append(append([]*Task{}, active...), completed...) {
+	for _, t := range slices.Concat(active, completed) {
 		existing[t.ID] = true
 	}
 	restored := []*Task{}
@@ -962,11 +936,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	set := idSet(ids)
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
-	if err != nil {
-		return err
-	}
-	completed, err := readCompletedAllStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return err
 	}
@@ -979,66 +949,47 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 				updated = append(updated, t)
 			}
 		}
-		var moving, spawned []*Task
-		movingIDs := map[string]bool{}
-		for _, t := range active {
-			if set[t.ID] && t.isOpen() && !t.Keep {
-				moving = append(moving, t)
-				movingIDs[t.ID] = true
-			}
-		}
+		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.isOpen() && !t.Keep })
+		var spawned []*Task
 		for _, t := range moving {
 			if s := completeTask(t, stamp, active); s != nil {
 				spawned = append(spawned, s)
 			}
 			updated = append(updated, t)
 		}
-		var rest []*Task
-		for _, t := range active {
-			if !movingIDs[t.ID] {
-				rest = append(rest, t)
-			}
-		}
-		active = append(rest, spawned...)
+		active = append(withoutIDs(active, movingIDs), spawned...)
 		completed = append(completed, moving...)
 	} else {
-		var moving []*Task
-		movingIDs := map[string]bool{}
-		for _, t := range completed {
-			if set[t.ID] && !t.isOpen() {
-				moving = append(moving, t)
-				movingIDs[t.ID] = true
-			}
-		}
+		moving, movingIDs := selectTasks(completed, func(t *Task) bool { return set[t.ID] && !t.isOpen() })
 		for _, t := range moving {
 			active = uncompleteTask(t, active, set)
 			updated = append(updated, t)
 		}
-		var rest []*Task
-		for _, t := range completed {
-			if !movingIDs[t.ID] {
-				rest = append(rest, t)
-			}
-		}
-		completed = rest
+		completed = withoutIDs(completed, movingIDs)
 		active = append(active, moving...)
 	}
 	msg := "Reopen deck tasks"
 	if markCompleted {
 		msg = "Complete deck tasks"
 	}
-	if err := writeBothLocked(nonNil(active), nonNil(completed), msg); err != nil {
+	if err := writeBothLocked(active, completed, msg); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, updated)
 	return nil
 }
 
-func nonNil(tasks []*Task) []*Task {
-	if tasks == nil {
-		return []*Task{}
+// selectTasks: the tasks that pass keep, and their ids.
+func selectTasks(tasks []*Task, keep func(*Task) bool) ([]*Task, map[string]bool) {
+	var out []*Task
+	ids := map[string]bool{}
+	for _, t := range tasks {
+		if keep(t) {
+			out = append(out, t)
+			ids[t.ID] = true
+		}
 	}
-	return tasks
+	return out, ids
 }
 
 func apiReorder(w http.ResponseWriter, r *http.Request) error {
@@ -1102,47 +1053,22 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 // in one commit; the batch-tag route and the MCP tools share it.
 func tagTasks(ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
-	addTags := cleanTagStrings(add)
-	removeTags := map[string]bool{}
-	for _, t := range cleanTagStrings(remove) {
-		removeTags[strings.ToLower(t)] = true
-	}
+	addTags, removeTags := cleanTagStrings(add), cleanTagStrings(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
 		return nil, badRequest("Give task ids and tags to add or remove")
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
-	if err != nil {
-		return nil, err
-	}
-	completed, err := readCompletedAllStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return nil, err
 	}
 	updated := []*Task{}
-	for _, t := range append(append([]*Task{}, active...), completed...) {
+	for _, t := range slices.Concat(active, completed) {
 		if !set[t.ID] {
 			continue
 		}
-		current := append([]string{}, t.Tags...)
-		have := map[string]bool{}
-		for _, c := range current {
-			have[strings.ToLower(c)] = true
-		}
-		for _, tag := range addTags {
-			if !have[strings.ToLower(tag)] {
-				current = append(current, tag)
-				have[strings.ToLower(tag)] = true
-			}
-		}
-		kept := []string{}
-		for _, c := range current {
-			if !removeTags[strings.ToLower(c)] {
-				kept = append(kept, c)
-			}
-		}
-		t.Tags = kept
+		t.Tags = retag(t.Tags, addTags, removeTags)
 		updated = append(updated, t)
 	}
 	return updated, writeBothLocked(active, completed, message)
@@ -1180,16 +1106,12 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
-	if err != nil {
-		return err
-	}
-	completed, err := readCompletedAllStrict()
+	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return err
 	}
 	byID := map[string]*Task{}
-	for _, t := range append(append([]*Task{}, active...), completed...) {
+	for _, t := range slices.Concat(active, completed) {
 		byID[t.ID] = t
 	}
 	updated := []*Task{}

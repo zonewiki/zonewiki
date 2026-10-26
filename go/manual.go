@@ -7,7 +7,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -25,8 +24,6 @@ var manualSkip = map[string]bool{"testing": true}
 // paragraphs into pieces of at most this, so a hit is the passage, not a
 // whole long section.
 const manualChunkChars = 1500
-
-var manualHeadingRE = regexp.MustCompile(`^(#{1,6})` + pySpace + `+(.*?)` + pySpace + `*#*` + pySpace + `*$`)
 
 func docsRoot() string {
 	candidates := []string{docsDir}
@@ -73,7 +70,7 @@ type docHeading struct {
 func manualHeadings(text string) []docHeading {
 	var out []docHeading
 	for _, l := range fencedLines(strings.Split(text, "\n")) {
-		if m := manualHeadingRE.FindStringSubmatch(l.line); m != nil && !l.inFence {
+		if m := chunkHeadingRE.FindStringSubmatch(l.line); m != nil && !l.inFence {
 			out = append(out, docHeading{len(m[1]), m[2]})
 		}
 	}

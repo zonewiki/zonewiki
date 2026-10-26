@@ -216,7 +216,7 @@ func TestUploadNames(t *testing.T) {
 			t.Errorf("suffix(%q) = %q", in, got)
 		}
 	}
-	if uploadExt("image/jpeg") != ".jpg" || uploadExt("image/png") != ".png" || uploadExt("x/unknown") != "" {
+	if uploadExt("image/jpeg") != ".jpg" || uploadExt("image/png") != ".png" || uploadExt("x/unknown") != ".bin" {
 		t.Error("uploadExt")
 	}
 }

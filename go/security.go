@@ -97,7 +97,7 @@ func contentPolicy(h http.Header) {
 // reverse proxy's, which says so in X-Forwarded-Proto.
 func isHTTPS(r *http.Request) bool {
 	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
-	return r.TLS != nil || strings.ToLower(pyStrip(proto)) == "https"
+	return r.TLS != nil || strings.ToLower(strings.TrimSpace(proto)) == "https"
 }
 
 // secretKey signs session cookies: LEAF_SECRET_KEY, else one Leaf made once
@@ -122,11 +122,6 @@ func secretKey(dataDir string) []byte {
 		_ = os.Chmod(path, 0o600) // WriteFile keeps an existing file's mode
 	}
 	return key
-}
-
-func isDir(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.IsDir()
 }
 
 // The login session: a cookie signed with the secret key, valid for 30 days
@@ -204,7 +199,7 @@ func clientKey(r *http.Request) string {
 	}
 	var forwarded []string
 	for _, a := range strings.Split(r.Header.Get("X-Forwarded-For"), ",") {
-		if a = pyStrip(a); a != "" {
+		if a = strings.TrimSpace(a); a != "" {
 			forwarded = append(forwarded, a)
 		}
 	}

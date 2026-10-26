@@ -81,7 +81,7 @@ func scratchPage(w http.ResponseWriter, r *http.Request) {
 
 var (
 	pidRE         = regexp.MustCompile(`(<h[1-6]\b[^>]*?) id="`)
-	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + pySpace + `+(.+?)` + pySpace + `*#*` + pySpace + `*$`)
+	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + spaceClass + `+(.+?)` + spaceClass + `*#*` + spaceClass + `*$`)
 )
 
 // apiPagePreview: a page for the search modal's preview pane, {title, html}:
@@ -119,31 +119,11 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if !exists(path) {
 		// A page deleted in git history offers to come back.
-		if cfg.GitEnabled {
-			rel := slug + ".md"
-			g := runGit("log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", rel)
-			if out := pyStrip(g.Stdout); g.Code == 0 && out != "" {
-				parts := strings.SplitN(out, "\t", 3)
-				parent := ""
-				if len(parts) > 1 {
-					if ps := pySplit(parts[1]); len(ps) > 0 {
-						parent = ps[0]
-					}
-				}
-				if parent != "" {
-					title := slugDisplayName(slug)
-					if g2 := runGit("show", parent+":"+rel); g2.Code == 0 {
-						title = pageTitle(g2.Stdout, slug)
-					}
-					date := ""
-					if len(parts) > 2 {
-						date = parts[2]
-					}
-					page(w, rq, http.StatusOK, "deleted_page.html", title, shell{}, M{"slug": slug, "sha": parent,
-						"date": date, "breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "")})
-					return
-				}
-			}
+		if parent, date, ok := lastDeletion(slug); ok {
+			title := deletedTitle(parent, slug)
+			page(w, rq, http.StatusOK, "deleted_page.html", title, shell{}, M{"slug": slug, "sha": parent,
+				"date": date, "breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "")})
+			return
 		}
 		http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
 		return
@@ -221,7 +201,7 @@ func intArg(v string, present bool) (int, bool) {
 	if !present {
 		return 0, false
 	}
-	n, err := strconv.Atoi(pyStrip(v))
+	n, err := strconv.Atoi(strings.TrimSpace(v))
 	return n, err == nil
 }
 
@@ -309,105 +289,121 @@ func currentText(path string) (*string, error) {
 	return &s, nil
 }
 
-func savePage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	path := safePath(slug)
-	if path == "" {
+// editorSave is what the editor posts: the text, the file's hash as the
+// editor loaded it, the section's range (when editing one), and the page's
+// text now (nil: no file).
+type editorSave struct {
+	slug, path, text, fileHash string
+	start, end                 int
+	section                    bool
+	current                    *string
+}
+
+// readEditorSave reads the editor's post, or answers it (bad slug, error).
+func readEditorSave(w http.ResponseWriter, r *http.Request) (*editorSave, bool) {
+	s := &editorSave{slug: r.PathValue("slug")}
+	if s.path = safePath(s.slug); s.path == "" {
 		badRequestPage(w)
-		return
+		return nil, false
 	}
-	content := postedContent(r)
-	fileHash := r.PostFormValue("file_hash")
+	s.text, s.fileHash = postedContent(r), r.PostFormValue("file_hash")
 	start, okS := formInt(r, "start_char")
 	end, okE := formInt(r, "end_char")
-	current, err := currentText(path)
+	s.start, s.end, s.section = start, end, s.fileHash != "" && okS && okE
+	current, err := currentText(s.path)
 	if err != nil {
 		serverError(w, r, err)
+		return nil, false
+	}
+	s.current = current
+	return s, true
+}
+
+// changedSince: the page changed since the editor loaded it (whole-page edits).
+func (s *editorSave) changedSince() bool {
+	return s.fileHash != "" && s.current != nil && contentHash(*s.current) != s.fileHash
+}
+
+// write writes content unless the file holds it already.
+func (s *editorSave) write(content string) error {
+	if s.current != nil && *s.current == content {
+		return nil
+	}
+	return writeText(s.path, content)
+}
+
+func savePage(w http.ResponseWriter, r *http.Request) {
+	s, ok := readEditorSave(w, r)
+	if !ok {
 		return
 	}
-	conflict := pathURL("edit", slug) + "?conflict=1"
-	if fileHash != "" && okS && okE {
-		merged, _, _, _, ok := spliceSection(current, fileHash, start, end, content)
+	content := s.text
+	conflict := pathURL("edit", s.slug) + "?conflict=1"
+	if s.section {
+		merged, _, _, _, ok := spliceSection(s.current, s.fileHash, s.start, s.end, content)
 		if !ok {
 			http.Redirect(w, r, conflict, http.StatusFound)
 			return
 		}
 		content = merged
-	} else if fileHash != "" && current != nil && contentHash(*current) != fileHash {
+	} else if s.changedSince() {
 		http.Redirect(w, r, conflict, http.StatusFound)
 		return
 	}
 	// Unchanged: no write, but still a commit when the file is dirty.
-	if current == nil || *current != content {
-		if err := writeText(path, content); err != nil {
-			serverError(w, r, err)
-			return
-		}
+	if err := s.write(content); err != nil {
+		serverError(w, r, err)
+		return
 	}
-	gitCommit("Update "+slug, path)
-	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
+	gitCommit("Update "+s.slug, s.path)
+	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
 
 // apiSave: the editor's auto-save (no commit): a whole page, a section
 // (guarded by the file's hash), or force_section (spliced by index).
 func apiSave(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	path := safePath(slug)
-	if path == "" {
-		badRequestPage(w)
+	s, ok := readEditorSave(w, r)
+	if !ok {
 		return
 	}
-	raw := postedContent(r)
-	fileHash := r.PostFormValue("file_hash")
-	start, okS := formInt(r, "start_char")
-	end, okE := formInt(r, "end_char")
 	force, okF := formInt(r, "force_section")
-	isSection := fileHash != "" && okS && okE
 	isForce := okF && force >= 1
-	current, err := currentText(path)
-	if err != nil {
-		serverError(w, r, err)
-		return
-	}
 	var content, newHash string
 	var newStart, newEnd int
 	switch {
 	case isForce:
 		// Spliced by its index in the file as it is now, without the hash guard.
-		if current == nil {
+		if s.current == nil {
 			http.NotFound(w, r)
 			return
 		}
-		s, e, ok := sectionCharRange(*current, force)
+		start, end, ok := sectionCharRange(*s.current, force)
 		if !ok {
 			badRequestPage(w)
 			return
 		}
-		content, newHash, newStart, newEnd, _ = spliceSection(current, contentHash(*current), s, e, raw)
-	case isSection:
-		var ok bool
-		if content, newHash, newStart, newEnd, ok = spliceSection(current, fileHash, start, end, raw); !ok {
+		content, newHash, newStart, newEnd, _ = spliceSection(s.current, contentHash(*s.current), start, end, s.text)
+	case s.section:
+		if content, newHash, newStart, newEnd, ok = spliceSection(s.current, s.fileHash, s.start, s.end, s.text); !ok {
 			writeJSON(w, http.StatusConflict, M{"error": "file_changed"})
 			return
 		}
 	default:
 		// The whole page: a hash checks for a conflict.
-		if fileHash != "" && current != nil && contentHash(*current) != fileHash {
-			writeJSON(w, http.StatusConflict, M{"error": "file_changed", "file_hash": contentHash(*current)})
+		if s.changedSince() {
+			writeJSON(w, http.StatusConflict, M{"error": "file_changed", "file_hash": contentHash(*s.current)})
 			return
 		}
-		content = raw
+		content = s.text
 	}
-	if current == nil || *current != content {
-		if err := writeText(path, content); err != nil {
-			serverError(w, r, err)
-			return
-		}
+	if err := s.write(content); err != nil {
+		serverError(w, r, err)
+		return
 	}
 	switch {
-	case isSection || isForce:
+	case s.section || isForce:
 		writeJSON(w, http.StatusOK, M{"file_hash": newHash, "start_char": newStart, "end_char": newEnd})
-	case fileHash != "":
+	case s.fileHash != "":
 		writeJSON(w, http.StatusOK, M{"file_hash": contentHash(content)})
 	default:
 		w.WriteHeader(http.StatusNoContent)
@@ -426,7 +422,7 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !exists(path) {
-		if err := writeText(path, "# "+pyTitle(pyStrip(raw))+"\n\n"); err != nil {
+		if err := writeText(path, "# "+titleWords(strings.TrimSpace(raw))+"\n\n"); err != nil {
 			serverError(w, r, err)
 			return
 		}
@@ -453,7 +449,7 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 		back = pathURL("page", slug)
 	}
 	// toSlug keeps underscores, so scratch timestamps survive a rename.
-	newSlug := toSlug(pyStrip(r.PostFormValue("new_name")))
+	newSlug := toSlug(strings.TrimSpace(r.PostFormValue("new_name")))
 	if newSlug == "" || newSlug == slug {
 		http.Redirect(w, r, back, http.StatusFound)
 		return
@@ -474,21 +470,41 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", newSlug), http.StatusFound)
 }
 
-// promotePage moves a scratch note into the wiki (the Move to wiki dialog),
-// links to it following, with its own commit message.
-func promotePage(w http.ResponseWriter, r *http.Request) {
+// scratchNoteArg: the scratch note a Move to wiki or Append route acts on
+// (400 for another page, 404 for none).
+func scratchNoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 	slug := r.PathValue("slug")
 	if !isScratch(slug) {
 		badRequestPage(w)
+		return "", false
+	}
+	if p := safePath(slug); p == "" || !exists(p) {
+		http.NotFound(w, r)
+		return "", false
+	}
+	return slug, true
+}
+
+// scratchFailed answers a failed move or append: a refusal goes back to
+// the page's dialog (back, the message appended), anything else is a 500.
+func scratchFailed(w http.ResponseWriter, r *http.Request, back string, err error) {
+	var se *scratchError
+	if errors.As(err, &se) {
+		http.Redirect(w, r, back+quote(se.msg), http.StatusFound)
 		return
 	}
-	oldPath := safePath(slug)
-	if oldPath == "" || !exists(oldPath) {
-		http.NotFound(w, r)
+	serverError(w, r, err)
+}
+
+// promotePage moves a scratch note into the wiki (the Move to wiki dialog),
+// links to it following, with its own commit message.
+func promotePage(w http.ResponseWriter, r *http.Request) {
+	slug, ok := scratchNoteArg(w, r)
+	if !ok {
 		return
 	}
 	back := pathURL("page", slug) + "?promote_error="
-	rawLink := pyStrip(r.PostFormValue("link_from"))
+	rawLink := strings.TrimSpace(r.PostFormValue("link_from"))
 	linkSlug, linkPath := "", ""
 	if rawLink != "" {
 		linkSlug = pageFromInput(rawLink)
@@ -501,12 +517,8 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	newSlug, err := moveScratch(slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
-	var se *scratchError
-	if errors.As(err, &se) {
-		http.Redirect(w, r, back+quote(se.msg), http.StatusFound)
-		return
-	} else if err != nil {
-		serverError(w, r, err)
+	if err != nil {
+		scratchFailed(w, r, back, err)
 		return
 	}
 	// The page to link it from opens in the editor, the link to paste where
@@ -529,18 +541,12 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 // appendPage appends a scratch note to a page as a section and deletes the
 // note; links to the note point at that section, all in one commit.
 func appendPage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	if !isScratch(slug) {
-		badRequestPage(w)
-		return
-	}
-	oldPath := safePath(slug)
-	if oldPath == "" || !exists(oldPath) {
-		http.NotFound(w, r)
+	slug, ok := scratchNoteArg(w, r)
+	if !ok {
 		return
 	}
 	back := pathURL("page", slug) + "?append_error="
-	raw := pyStrip(r.PostFormValue("page"))
+	raw := strings.TrimSpace(r.PostFormValue("page"))
 	target := pageFromInput(raw)
 	// The error names the page as typed.
 	targetPath := ""
@@ -552,12 +558,8 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	anchor, err := appendScratch(slug, target, r.PostFormValue("heading"), "")
-	var se *scratchError
-	if errors.As(err, &se) {
-		http.Redirect(w, r, back+quote(se.msg), http.StatusFound)
-		return
-	} else if err != nil {
-		serverError(w, r, err)
+	if err != nil {
+		scratchFailed(w, r, back, err)
 		return
 	}
 	http.Redirect(w, r, pathURL("page", target)+"#"+anchor, http.StatusFound)
@@ -625,9 +627,11 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 func deckPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	list := cleanList(r.URL.Query().Get("list"))
-	params, title := DeckParams{}, "Deck"
+	params, title, heading := DeckParams{}, "Deck", "Deck"
 	var home *DeckHome
 	crumbs := []crumb{{"Deck", ""}}
+	// The breadcrumb's key names the view for the navigation trail; no page has it.
+	key := "/deck"
 	if list != "" {
 		if declared, ok := deckLists()[list]; ok {
 			params = declared.Params
@@ -635,17 +639,9 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 			home = &DeckHome{Slug: declared.Slug, Title: t}
 		}
 		params = params.With("list", list)
-		title = list + " · Deck"
+		title, heading = list+" · Deck", list
 		crumbs = []crumb{{"Deck", "/deck"}, {list, ""}}
-	}
-	// The breadcrumb's key names the view for the navigation trail; no page has it.
-	key := "/deck"
-	if list != "" {
 		key += "?list=" + list
-	}
-	heading := "Deck"
-	if list != "" {
-		heading = list
 	}
 	data := M{"heading": heading, "list_name": list, "deck_html": htmlOf(buildDeckEmbed(params, 0, false)),
 		"breadcrumb_html": breadcrumb(rq, crumbs, key, true, title, "")}
@@ -732,7 +728,7 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 // scratch notes only, for the Scratch page's filter).
 func apiSearch(w http.ResponseWriter, r *http.Request) {
 	args := r.URL.Query()
-	q := pyStrip(args.Get("q"))
+	q := strings.TrimSpace(args.Get("q"))
 	if q == "" {
 		writeJSON(w, http.StatusOK, []M{})
 		return
@@ -756,7 +752,7 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 // results").
 func searchPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	q := pyStrip(r.URL.Query().Get("q"))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	unlinked := r.URL.Query().Get("unlinked") == "1"
 	var results []M
 	if q != "" {

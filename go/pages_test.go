@@ -145,3 +145,38 @@ func pageText(t *testing.T, slug string) string {
 	}
 	return string(b)
 }
+
+func TestParseWikilinkRoundTrips(t *testing.T) {
+	for _, link := range []string{"[[Page]]", "[[Page|Label]]", "[[Page#Sec]]", "[[ a/b #Sec|Label ]]", "[[#Sec]]", "[[Page#]]", "[[Page|]]"} {
+		if got := parseWikilink(link).String(); got != link {
+			t.Errorf("%s came back as %s", link, got)
+		}
+	}
+	l := parseWikilink("[[Old Page#Intro|see]]")
+	if l.page != "Old Page" || l.section != "Intro" || l.label != "see" || !l.hasSection || !l.hasLabel {
+		t.Errorf("parts %+v", l)
+	}
+}
+
+func TestRelInside(t *testing.T) {
+	for p, want := range map[string]string{"/w": ".", "/w/a/b.md": "a/b.md", "/w/..x/c": "..x/c"} {
+		if rel, ok := relInside("/w", p); !ok || rel != want {
+			t.Errorf("relInside(/w, %s) = %q, %v", p, rel, ok)
+		}
+	}
+	for _, p := range []string{"/", "/x", "/w/../x", "/wiki"} {
+		if _, ok := relInside("/w", p); ok {
+			t.Errorf("relInside(/w, %s) inside", p)
+		}
+	}
+}
+
+func TestRetag(t *testing.T) {
+	got := retag([]string{"Work", "home"}, []string{"work", "New", "new"}, []string{"HOME"})
+	if !reflect.DeepEqual(got, []string{"Work", "New"}) {
+		t.Errorf("retag: %q", got)
+	}
+	if got := retag(nil, nil, nil); got == nil || len(got) != 0 {
+		t.Errorf("retag of nothing: %#v", got)
+	}
+}

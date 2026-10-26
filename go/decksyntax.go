@@ -10,10 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 )
 
-var spaceRunRE = regexp.MustCompile(pySpace + `+`)
+var spaceRunRE = regexp.MustCompile(spaceClass + `+`)
 
 // pyStr is Python's str() of a JSON value.
 func pyStr(v any) string {
@@ -44,7 +43,7 @@ func cleanTags(tags []any) []string {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, t := range tags {
-		tag := strings.Trim(spaceRunRE.ReplaceAllString(pyStrip(strings.TrimLeft(pyStrip(pyStr(t)), "#")), "-"), "-")
+		tag := strings.Trim(spaceRunRE.ReplaceAllString(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(pyStr(t)), "#")), "-"), "-")
 		if tag != "" && !seen[strings.ToLower(tag)] {
 			seen[strings.ToLower(tag)] = true
 			out = append(out, tag)
@@ -53,22 +52,16 @@ func cleanTags(tags []any) []string {
 	return out
 }
 
-func cleanTagStrings(tags []string) []string {
-	l := make([]any, len(tags))
-	for i, t := range tags {
-		l[i] = t
-	}
-	return cleanTags(l)
-}
+func cleanTagStrings(tags []string) []string { return cleanTags(strs(tags)) }
 
 // cleanList: a list name as stored and matched: trimmed, lowercase, one
 // word, no leading "#"; "" for no list.
 func cleanList(name string) string {
-	return strings.Trim(spaceRunRE.ReplaceAllString(strings.ToLower(pyStrip(strings.TrimLeft(pyStrip(name), "#"))), "-"), "-")
+	return strings.Trim(spaceRunRE.ReplaceAllString(strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "#"))), "-"), "-")
 }
 
 var (
-	deckRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + pySpace + `+([^\]]*))?\]\]`)
+	deckRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + spaceClass + `+([^\]]*))?\]\]`)
 	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )
@@ -99,16 +92,16 @@ func (p DeckParams) With(k, v string) DeckParams {
 // parseDeckParams reads [[deck key=val …]]'s pairs.
 func parseDeckParams(raw string) DeckParams {
 	p := DeckParams{m: map[string]string{}}
-	for _, token := range pySplit(raw) {
+	for _, token := range strings.Fields(raw) {
 		k, v, ok := strings.Cut(token, "=")
 		if !ok {
 			continue
 		}
-		k = strings.ToLower(pyStrip(k))
+		k = strings.ToLower(strings.TrimSpace(k))
 		if _, seen := p.m[k]; !seen {
 			p.keys = append(p.keys, k)
 		}
-		p.m[k] = pyStrip(v)
+		p.m[k] = strings.TrimSpace(v)
 	}
 	return p
 }
@@ -118,7 +111,7 @@ var deckViews = []string{"focus", "open", "plan", "completed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.
 func embedView(p DeckParams) string {
-	v := strings.ToLower(pyStrip(p.Get("view")))
+	v := strings.ToLower(strings.TrimSpace(p.Get("view")))
 	for _, name := range deckViews {
 		if v == name {
 			return v
@@ -128,13 +121,7 @@ func embedView(p DeckParams) string {
 }
 
 // isTrue: a yes/no param (keep=1, home=yes).
-func isTrue(v string) bool {
-	switch strings.ToLower(pyStrip(v)) {
-	case "1", "true", "yes":
-		return true
-	}
-	return false
-}
+func isTrue(v string) bool { return truthy(strings.TrimSpace(v)) }
 
 func taskTagsLower(t *Task) map[string]bool {
 	out := map[string]bool{}
@@ -144,24 +131,51 @@ func taskTagsLower(t *Task) map[string]bool {
 	return out
 }
 
+// retag: tags with those of add it lacks appended and those of remove taken
+// off, case ignored (a tag it has keeps its spelling).
+func retag(tags, add, remove []string) []string {
+	all := append([]string{}, tags...)
+	have := map[string]bool{}
+	for _, t := range tags {
+		have[strings.ToLower(t)] = true
+	}
+	for _, t := range add {
+		if !have[strings.ToLower(t)] {
+			all = append(all, t)
+			have[strings.ToLower(t)] = true
+		}
+	}
+	drop := map[string]bool{}
+	for _, t := range remove {
+		drop[strings.ToLower(t)] = true
+	}
+	out := []string{}
+	for _, t := range all {
+		if !drop[strings.ToLower(t)] {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // tagParamMatches: a task passes an embed's tag= (DeckCore.tagParamToQuery):
 // `a|b` any of them, else comma-separated tags all there, `-tag` excluding.
 func tagParamMatches(t *Task, raw string) bool {
-	raw = pyStrip(raw)
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return true
 	}
 	tags := taskTagsLower(t)
 	if strings.Contains(raw, "|") {
 		for _, x := range strings.Split(raw, "|") {
-			if pyStrip(x) != "" && tags[strings.ToLower(strings.TrimLeft(pyStrip(x), "#"))] {
+			if strings.TrimSpace(x) != "" && tags[strings.ToLower(strings.TrimLeft(strings.TrimSpace(x), "#"))] {
 				return true
 			}
 		}
 		return false
 	}
 	for _, x := range strings.Split(raw, ",") {
-		x = strings.ToLower(strings.TrimLeft(pyStrip(x), "#"))
+		x = strings.ToLower(strings.TrimLeft(strings.TrimSpace(x), "#"))
 		if strings.HasPrefix(x, "-") {
 			if tags[x[1:]] {
 				return false
@@ -177,9 +191,9 @@ func tagParamMatches(t *Task, raw string) bool {
 // list= tag, then the single tags of tag= (not an a|b group, not -tag).
 func newTaskTags(p DeckParams) []string {
 	tags := []any{cleanList(p.Get("list"))}
-	if raw := pyStrip(p.Get("tag")); raw != "" && !strings.Contains(raw, "|") {
+	if raw := strings.TrimSpace(p.Get("tag")); raw != "" && !strings.Contains(raw, "|") {
 		for _, t := range strings.Split(raw, ",") {
-			if t = pyStrip(t); !strings.HasPrefix(t, "-") {
+			if t = strings.TrimSpace(t); !strings.HasPrefix(t, "-") {
 				tags = append(tags, t)
 			}
 		}
@@ -188,8 +202,8 @@ func newTaskTags(p DeckParams) []string {
 }
 
 var (
-	plusDaysRE = regexp.MustCompile(`^\+(` + pyDigit + `{1,3})([dw]?)$`)
-	isoDateRE  = regexp.MustCompile(`^` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}$`)
+	plusDaysRE = regexp.MustCompile(`^\+(\d{1,3})([dw]?)$`)
+	isoDateRE  = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
 
 var weekdays = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
@@ -198,7 +212,7 @@ var weekdays = []string{"monday", "tuesday", "wednesday", "thursday", "friday", 
 // YYYY-MM-DD, "" when it isn't one: today · tomorrow/tmrw · mon…sun (the
 // next one, never today) · +3 / +3d / +2w · 2026-10-03.
 func parseDateWord(word string, today time.Time) string {
-	w := strings.ToLower(pyStrip(word))
+	w := strings.ToLower(strings.TrimSpace(word))
 	switch w {
 	case "today":
 		return isoDay(today)
@@ -206,7 +220,7 @@ func parseDateWord(word string, today time.Time) string {
 		return isoDay(today.AddDate(0, 0, 1))
 	}
 	if m := plusDaysRE.FindStringSubmatch(w); m != nil {
-		n := pyAtoi(m[1])
+		n, _ := strconv.Atoi(m[1]) // at most three digits
 		if m[2] == "w" {
 			n *= 7
 		}
@@ -227,19 +241,6 @@ func parseDateWord(word string, today time.Time) string {
 		}
 	}
 	return ""
-}
-
-// pyAtoi is int() of Unicode digits.
-func pyAtoi(s string) int {
-	n := 0
-	for _, r := range s {
-		zero := r
-		for unicode.IsDigit(zero - 1) {
-			zero--
-		}
-		n = n*10 + int(r-zero)%10
-	}
-	return n
 }
 
 func isoDay(t time.Time) string { return t.Format("2006-01-02") }
@@ -272,6 +273,15 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// keySet: m's keys as a set.
+func keySet[V any](m map[string]V) map[string]bool {
+	set := make(map[string]bool, len(m))
+	for k := range m {
+		set[k] = true
+	}
+	return set
 }
 
 // isWhole: a float64 that is an integer (Python's int() of it is exact).

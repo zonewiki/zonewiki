@@ -46,8 +46,7 @@ func main() {
 	flag.Parse()
 	var err error
 	if cfg, err = loadConfig(os.Getenv); err != nil {
-		fmt.Fprintln(os.Stderr, "Leaf:", err)
-		os.Exit(1)
+		fatal(err)
 	}
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
@@ -60,8 +59,7 @@ func main() {
 	// The semantic index's worker reads tasks: after the deck is set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {
-			fmt.Fprintln(os.Stderr, "Leaf: -semantic-test:", err)
-			os.Exit(1)
+			fatal(fmt.Errorf("-semantic-test: %w", err))
 		}
 	} else if semantic = semanticFromEnv(os.Getenv); semantic != nil {
 		semantic.start()
@@ -73,8 +71,7 @@ func main() {
 	// DNS-rebinding defence.
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Leaf:", err)
-		os.Exit(1)
+		fatal(err)
 	}
 	srv := &http.Server{
 		Handler: newHandler(),
@@ -87,9 +84,14 @@ func main() {
 	// semantic-search worker live in its memory. At most 100 connections,
 	// those beyond the limit wait.
 	if err := srv.Serve(limitListener(ln, 100)); err != nil {
-		fmt.Fprintln(os.Stderr, "Leaf:", err)
-		os.Exit(1)
+		fatal(err)
 	}
+}
+
+// fatal says what stops Leaf from starting (or serving), and exits.
+func fatal(err error) {
+	fmt.Fprintln(os.Stderr, "Leaf:", err)
+	os.Exit(1)
 }
 
 // health: whether Leaf answers at url within 5 seconds (0) or not (1), for
@@ -378,23 +380,22 @@ func init() {
 	}
 }
 
-// uploadExt is the extension for a media type ("" when unknown): what a
-// pasted file without a name is saved as.
+// uploadExts: the extensions of common pasted types, where the system's
+// table has several (or none).
+var uploadExts = map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
+	"image/webp": ".webp", "image/svg+xml": ".svg", "text/plain": ".txt"}
+
+// uploadExt is the extension for a media type (".bin" when unknown): what
+// a pasted file without a name is saved as.
 func uploadExt(mimeType string) string {
 	t, _, _ := mime.ParseMediaType(mimeType)
-	switch t {
-	case "image/jpeg":
-		return ".jpg"
-	case "image/png", "image/gif", "image/webp", "image/svg+xml":
-		return map[string]string{"image/png": ".png", "image/gif": ".gif",
-			"image/webp": ".webp", "image/svg+xml": ".svg"}[t]
-	case "text/plain":
-		return ".txt"
+	if ext, ok := uploadExts[t]; ok {
+		return ext
 	}
 	if exts, _ := mime.ExtensionsByType(t); len(exts) > 0 {
 		return exts[0]
 	}
-	return ""
+	return ".bin"
 }
 
 func apiUpload(w http.ResponseWriter, r *http.Request) {
@@ -411,19 +412,13 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	fileType := header.Header.Get("Content-Type")
 	originalName := baseName(header.Filename)
 	if originalName == "" {
-		ext := uploadExt(fileType)
-		if ext == "" {
-			ext = ".bin"
-		}
-		originalName = "upload" + ext
+		originalName = "upload" + uploadExt(fileType)
 	}
 	// unique=1: a random file name (clipboard screenshots).
 	if r.FormValue("unique") == "1" {
 		ext := strings.ToLower(suffix(originalName))
 		if ext == "" {
-			if ext = uploadExt(fileType); ext == "" {
-				ext = ".bin"
-			}
+			ext = uploadExt(fileType)
 		}
 		raw := make([]byte, 16)
 		_, _ = rand.Read(raw)
@@ -436,7 +431,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	// The client may ask for a name (after the conflict dialog).
 	filename := originalName
-	if requested := pyStrip(r.FormValue("filename")); requested != "" {
+	if requested := strings.TrimSpace(r.FormValue("filename")); requested != "" {
 		filename = baseName(requested)
 	}
 	if filename == "" || strings.HasPrefix(filename, ".") {

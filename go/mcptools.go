@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,7 +35,7 @@ func cleanFolder(raw any) (string, error) {
 	if !ok {
 		return "", toolErr("under must be a string")
 	}
-	s = pyStrip(s)
+	s = strings.TrimSpace(s)
 	if _, after, found := strings.Cut(s, "/page/"); found {
 		s = after
 	}
@@ -43,11 +44,23 @@ func cleanFolder(raw any) (string, error) {
 
 func underArg(args *Obj) (string, error) { return cleanFolder(orDefault(args, "under", "")) }
 
+// underWhere: " under <folder>/" for an answer's text, "" for the whole wiki.
+func underWhere(under string) string {
+	if under == "" {
+		return ""
+	}
+	return " under " + under + "/"
+}
+
+var digitsRE = regexp.MustCompile(`^\d+$`)
+
 // mcpInt: a whole-number argument (a string of digits too), clamped to 1…top.
 func mcpInt(args *Obj, name string, def, top int) (int, error) {
 	v := orDefault(args, name, int64(def))
-	if s, ok := v.(string); ok && pyStrip(s) != "" && regexp.MustCompile(`^`+pyDigit+`+$`).MatchString(pyStrip(s)) {
-		v = int64(pyAtoi(pyStrip(s)))
+	if s, ok := v.(string); ok && digitsRE.MatchString(strings.TrimSpace(s)) {
+		if n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil {
+			v = n
+		}
 	}
 	n, ok := v.(int64)
 	if !ok {
@@ -67,8 +80,8 @@ func strArg(args *Obj, name string, required bool) (string, error) {
 	if !ok {
 		return "", toolErr(name + " must be a string")
 	}
-	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
-	if required && pyStrip(s) == "" {
+	s = newlines(s)
+	if required && strings.TrimSpace(s) == "" {
 		return "", toolErr(name + " must be a non-empty string")
 	}
 	return s, nil
@@ -89,7 +102,7 @@ func idsArg(args *Obj, name, msg string) (map[string]bool, error) {
 		v = []any{}
 	}
 	if s, ok := v.(string); ok {
-		v = strs(pySplit(strings.ReplaceAll(s, ",", " ")))
+		v = strs(strings.Fields(strings.ReplaceAll(s, ",", " ")))
 	}
 	l, ok := v.([]any)
 	if !ok {
@@ -101,7 +114,7 @@ func idsArg(args *Obj, name, msg string) (map[string]bool, error) {
 		if !ok {
 			return nil, toolErr(msg)
 		}
-		set[pyStrip(s)] = true
+		set[strings.TrimSpace(s)] = true
 	}
 	return set, nil
 }
@@ -160,12 +173,7 @@ func plural(n int, word string) string {
 // "/page/<slug>", a full URL, "<slug>.md", or the page's name, "Git
 // Remote"); "" when none.
 func mcpPageSlug(raw string) string {
-	raw = pyStrip(raw)
-	if _, after, found := strings.Cut(raw, "/page/"); found {
-		raw = after
-	}
-	raw, _, _ = strings.Cut(raw, "#")
-	raw = strings.TrimSuffix(strings.Trim(raw, "/"), ".md")
+	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	for _, slug := range []string{raw, toSlug(raw)} {
 		if slug == "" {
 			continue
@@ -177,6 +185,17 @@ func mcpPageSlug(raw string) string {
 		}
 	}
 	return ""
+}
+
+// slugInput: a page argument without what may come with a slug: the
+// address up to /page/ and an #anchor.
+func slugInput(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if _, after, found := strings.Cut(raw, "/page/"); found {
+		raw = after
+	}
+	raw, _, _ = strings.Cut(raw, "#")
+	return raw
 }
 
 // hostFile: a page's file as the host sees it, so a client on the host can
@@ -216,29 +235,15 @@ func existingPage(args *Obj, name string) (string, string, error) {
 // 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
 // in a folder Leaf skips (_assets, _deck, .git …).
 func newSlug(raw string) (string, error) {
-	raw = pyStrip(raw)
-	if _, after, found := strings.Cut(raw, "/page/"); found {
-		raw = after
-	}
-	raw, _, _ = strings.Cut(raw, "#")
-	raw = strings.TrimSuffix(strings.Trim(raw, "/"), ".md")
+	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := toSlug(raw)
-	if slug == "" || slices_contains(strings.Split(slug, "/"), "") {
+	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
 		return "", toolErr(pyRepr(raw) + " is not a usable page name")
 	}
 	if safePath(slug) == "" {
 		return "", toolErr(pyRepr(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	return slug, nil
-}
-
-func slices_contains(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // missingLinks: the links in content, a page at slug, that lead to no
@@ -292,6 +297,15 @@ func normTitle(text string) string {
 
 func lastPart(slug string) string { return slug[strings.LastIndex(slug, "/")+1:] }
 
+// pageOrNewSlug: the existing page raw names, else the slug a new page of
+// that name would get (a deleted page's, say).
+func pageOrNewSlug(raw string) (string, error) {
+	if slug := mcpPageSlug(raw); slug != "" {
+		return slug, nil
+	}
+	return newSlug(raw)
+}
+
 // similarPages: existing pages whose title or file name is close to a new
 // page's, so the model notices it may be extending a page rather than
 // starting one.
@@ -315,9 +329,9 @@ func similarPages(slug, title string) []PageRef {
 		close := false
 		for _, b := range norm(otherTitle, lastPart(p.Slug)) {
 			rb := []rune(b)
-			b2j, junk := buildB2J(rb)
+			b2j := buildB2J(rb)
 			for _, a := range want {
-				close = close || ratio([]rune(a), rb, b2j, junk) >= 0.8
+				close = close || ratio([]rune(a), rb, b2j) >= 0.8
 			}
 		}
 		if close {
@@ -343,7 +357,7 @@ func msgSuffix(args *Obj) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if s = cutRunes(strings.Join(pySplit(s), " "), 200, ""); s != "" {
+	if s = cutRunes(strings.Join(strings.Fields(s), " "), 200, ""); s != "" {
 		return ": " + s + " (MCP)", nil
 	}
 	return " (MCP)", nil
@@ -407,7 +421,7 @@ var guideFiles = map[string]bool{"agents.md": true, "claude.md": true}
 
 // A line "@other.md" in a guide stands for that file's text (Claude Code's
 // import), relative to the guide's folder, nested this deep at most.
-var importRE = regexp.MustCompile(`^@(` + pyNonSpace + `+\.md)$`)
+var importRE = regexp.MustCompile(`^@(` + nonSpaceClass + `+\.md)$`)
 
 const importDepth = 3
 
@@ -435,9 +449,9 @@ func guideText(path string, seen map[string]bool, depth int) string {
 	var out []string
 	for _, line := range splitLines(text) {
 		line = lineBody(line)
-		if m := importRE.FindStringSubmatch(pyStrip(line)); m != nil && depth < importDepth {
+		if m := importRE.FindStringSubmatch(strings.TrimSpace(line)); m != nil && depth < importDepth {
 			target := resolvePath(filepath.Join(filepath.Dir(path), m[1]))
-			if rel, err := filepath.Rel(root, target); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+			if rel, ok := relInside(root, target); ok {
 				if st, err := os.Stat(target); err == nil && st.Mode().IsRegular() &&
 					safePath(strings.TrimSuffix(filepath.ToSlash(rel), ".md")) == target {
 					if !seen[target] {
@@ -449,7 +463,7 @@ func guideText(path string, seen map[string]bool, depth int) string {
 		}
 		out = append(out, line)
 	}
-	return pyStrip(strings.Join(out, "\n"))
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 type guide struct{ id, slug, text string }
@@ -480,8 +494,8 @@ func folderGuides(slug string) []guide {
 		}
 		for _, p := range files {
 			p = resolvePath(p)
-			rel, err := filepath.Rel(root, p)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+			rel, ok := relInside(root, p)
+			if !ok {
 				continue // a link to a file outside the wiki
 			}
 			if seen[p] {
@@ -533,7 +547,7 @@ func checkGuides(args *Obj, slugs []string) error {
 	}
 	out := []string{"Nothing was written. The user keeps guides for these pages, with instructions for writing " +
 		"them, and this call didn't confirm reading " + them + ". Read below, make the change follow it, then " +
-		"call again with guides set to " + dumpsLine(strs(sortedKeys(ids))) + ". Pass every guide id you get in " +
+		"call again with guides set to " + jsonText(sortedKeys(ids)) + ". Pass every guide id you get in " +
 		"this conversation with your later writes too; a guide that changes gets a new id."}
 	for _, g := range missing {
 		out = append(out, "=== guide "+g.slug+" (id "+g.id+") ===\n"+cutGuide(g))
@@ -625,12 +639,7 @@ func readGuides(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	raw = pyStrip(raw)
-	if _, after, found := strings.Cut(raw, "/page/"); found {
-		raw = after
-	}
-	raw, _, _ = strings.Cut(raw, "#")
-	raw = strings.TrimSuffix(raw, ".md")
+	raw = strings.TrimSuffix(slugInput(raw), ".md")
 	folder := strings.Trim(raw, "/")
 	var slug string
 	switch {
@@ -639,10 +648,8 @@ func readGuides(args *Obj, base string) (string, error) {
 	case folder == "":
 		slug = "page"
 	default:
-		if slug = mcpPageSlug(folder); slug == "" {
-			if slug, err = newSlug(folder); err != nil {
-				return "", err
-			}
+		if slug, err = pageOrNewSlug(folder); err != nil {
+			return "", err
 		}
 	}
 	known, err := idsArg(args, "guides", "guides must be a list of guide ids")
@@ -664,7 +671,7 @@ func readGuides(args *Obj, base string) (string, error) {
 		ids[i] = g.id
 	}
 	out := []string{"Guides for " + where + ", the whole wiki's first. Follow them; where they disagree, the more " +
-		"specific one wins. Pass guides=" + dumpsLine(ids) + " with your writes."}
+		"specific one wins. Pass guides=" + jsonText(ids) + " with your writes."}
 	for _, g := range found {
 		if known[g.id] {
 			out = append(out, "=== guide "+g.slug+" (id "+g.id+"): you have it ===")
@@ -681,7 +688,7 @@ func readGuides(args *Obj, base string) (string, error) {
 func guideIDLine(slug, content string) string {
 	for _, g := range folderGuides(slug) {
 		if g.slug == slug {
-			if g.text != pyStrip(content) {
+			if g.text != strings.TrimSpace(content) {
 				return "guide: yes; it imports other pages, read_guides shows it whole\n"
 			}
 			under := guideFolder(slug)
@@ -710,7 +717,7 @@ func instructionsWithGuide() string {
 	guide := ""
 	if p := safePath(guideSlug); p != "" {
 		if text, err := readPageText(p); err == nil {
-			guide = pyStrip(text)
+			guide = strings.TrimSpace(text)
 		}
 	}
 	if guide == "" {
@@ -744,7 +751,7 @@ func headingMatch(line string) (int, string, bool) {
 // text compared without markup and case), from the heading to before the
 // next heading of the same or a higher level, subsections included.
 func sectionLines(lines []string, heading string) (int, int, bool) {
-	want := strings.ToLower(plainHeading(pyStrip(strings.TrimLeft(heading, "#"))))
+	want := strings.ToLower(plainHeading(strings.TrimSpace(strings.TrimLeft(heading, "#"))))
 	start, level, end := -1, 0, len(lines)
 	for i, l := range fencedLines(lines) {
 		if l.inFence {
@@ -792,7 +799,7 @@ func trimNewlines(s string) string { return strings.TrimRight(s, "\n") }
 
 var recurrenceUnits = map[string]string{"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}
 
-func shortID(id string) string { return runePrefix(id, 8) }
+func shortID(id string) string { return runePrefix(id, shortIDLen) }
 
 // mcpTaskText: one deck task for an LLM: title, a line of facts (status,
 // tags, dates, repeat, list), its link in the deck, its notes and comments.
@@ -841,7 +848,7 @@ func mcpTaskText(t *Task, base string) string {
 	}
 	text := "Task: " + t.Title + "\n" + strings.Join(facts, " · ") +
 		"\nid: " + shortID(t.ID) + "\nurl: " + base + taskLink(t, list)
-	if notes := pyStrip(t.Description); notes != "" {
+	if notes := strings.TrimSpace(t.Description); notes != "" {
 		text += "\n\n" + notes
 	}
 	// Comments: the user's status lines, oldest first, each with its time.
@@ -910,7 +917,7 @@ func searchTasks(args *Obj, base string) (string, error) {
 	}
 	want := map[string]bool{}
 	for _, t := range strings.Split(tag, ",") {
-		if t = strings.ToLower(strings.TrimLeft(pyStrip(t), "#")); t != "" {
+		if t = strings.ToLower(strings.TrimLeft(strings.TrimSpace(t), "#")); t != "" {
 			want[t] = true
 		}
 	}
@@ -929,26 +936,15 @@ func searchTasks(args *Obj, base string) (string, error) {
 			docs = append(docs, d)
 		}
 	}
-	if pyStrip(q.Text) != "" {
-		tokens := make([][]string, len(docs))
-		for i, d := range docs {
-			tokens[i] = d.Tokens
-		}
-		var ranked []*SearchDoc
-		for _, h := range NewIndex(tokens).Search(q.Text, max(len(docs), 1)) {
-			ranked = append(ranked, docs[h.Doc])
-		}
+	if strings.TrimSpace(q.Text) != "" {
+		ranked := newDocIndex(docs).search(q.Text, max(len(docs), 1))
 		if semantic != nil {
 			semantic.poke()
 			byID := map[string]*SearchDoc{}
 			for _, d := range docs {
 				byID[d.TaskID] = d
 			}
-			var hits []*SearchDoc
-			for _, h := range semantic.searchTasks(q.Text, docKeys(byID), max(len(byID), 1)) {
-				hits = append(hits, byID[h.ID])
-			}
-			ranked = Fuse([][]*SearchDoc{ranked, hits})
+			ranked = Fuse([][]*SearchDoc{ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))})
 		}
 		docs = ranked
 	} else {
@@ -1000,7 +996,7 @@ var (
 // 8-character short id the tools show), a [[task:…]] reference or a
 // /deck?task=… link.
 func findTask(raw string) (*Task, error) {
-	raw = strings.ToLower(pyStrip(raw))
+	raw = strings.ToLower(strings.TrimSpace(raw))
 	ref := raw
 	if m := taskLinkRE.FindStringSubmatch(raw); m != nil {
 		ref = m[1]
@@ -1022,10 +1018,10 @@ func findTask(raw string) (*Task, error) {
 // ("tomorrow", "fri", "+3d"), resolved with Leaf's today; nil for none.
 func dateArg(args *Obj, name string) (any, error) {
 	s, err := strArg(args, name, false)
-	if err != nil || pyStrip(s) == "" {
+	if err != nil || strings.TrimSpace(s) == "" {
 		return nil, err
 	}
-	day := parseDateWord(pyStrip(s), today())
+	day := parseDateWord(strings.TrimSpace(s), today())
 	if day == "" {
 		return nil, toolErr(name + " must be a date: YYYY-MM-DD, today, tomorrow, a weekday or +3d/+2w")
 	}
@@ -1052,7 +1048,7 @@ func tagListArg(args *Obj, name string) ([]string, error) {
 		if !ok {
 			return nil, toolErr(name + " must be a list of tags")
 		}
-		if s = strings.TrimLeft(pyStrip(s), "#"); s != "" {
+		if s = strings.TrimLeft(strings.TrimSpace(s), "#"); s != "" {
 			out = append(out, s)
 		}
 	}
@@ -1069,7 +1065,7 @@ func taskFields(args *Obj, task *Task) (*Obj, error) {
 			if err != nil {
 				return nil, err
 			}
-			data.Set(f[1], orNone(pyStrip(s)))
+			data.Set(f[1], orNone(strings.TrimSpace(s)))
 		}
 	}
 	for _, f := range [][2]string{{"due", "due_date"}, {"start", "start_date"}} {
@@ -1107,34 +1103,15 @@ func taskFields(args *Obj, task *Task) (*Obj, error) {
 		} else {
 			tags = append([]string{}, task.Tags...)
 		}
-		lower := map[string]bool{}
-		for _, t := range tags {
-			lower[strings.ToLower(t)] = true
-		}
 		add, err := tagListArg(args, "add_tags")
 		if err != nil {
 			return nil, err
-		}
-		for _, t := range add {
-			if !lower[strings.ToLower(t)] {
-				tags = append(tags, t)
-			}
 		}
 		remove, err := tagListArg(args, "remove_tags")
 		if err != nil {
 			return nil, err
 		}
-		drop := map[string]bool{}
-		for _, t := range remove {
-			drop[strings.ToLower(t)] = true
-		}
-		kept := []string{}
-		for _, t := range tags {
-			if !drop[strings.ToLower(t)] {
-				kept = append(kept, t)
-			}
-		}
-		data.Set("tags", strs(kept))
+		data.Set("tags", strs(retag(tags, add, remove)))
 	}
 	if args.Has("repeat") || args.Has("repeat_every") || args.Has("repeat_from") {
 		var rec any = "none"
@@ -1212,13 +1189,9 @@ func tagHints(task *Task) string {
 	text := ParseQuery(task.Title + " " + task.Description).Text
 	counts := map[string]int{}
 	var order []string
-	if pyStrip(text) != "" {
-		tokens := make([][]string, len(others))
-		for i, d := range others {
-			tokens[i] = d.Tokens
-		}
-		for _, h := range NewIndex(tokens).Search(text, similarTasks) {
-			for _, tag := range others[h.Doc].Task.Tags {
+	if strings.TrimSpace(text) != "" {
+		for _, d := range newDocIndex(others).search(text, similarTasks) {
+			for _, tag := range d.Task.Tags {
 				tag = strings.ToLower(tag)
 				if have[tag] {
 					continue
@@ -1327,7 +1300,7 @@ var taskStatusFields = map[string]*Obj{
 func otherArgs(args *Obj, allowed ...string) []string {
 	var other []string
 	for _, k := range args.Keys() {
-		if !slices_contains(allowed, k) {
+		if !slices.Contains(allowed, k) {
 			other = append(other, k)
 		}
 	}
@@ -1476,8 +1449,8 @@ func tagTasksTool(args *Obj) (string, error) {
 	changed := 0
 	var lines []string
 	for _, t := range tasks {
-		tags := append([]string{}, t.Tags...)
-		if strings.Join(tags, "\x00") != strings.Join(before[t.ID], "\x00") || len(tags) != len(before[t.ID]) {
+		tags := t.Tags
+		if !slices.Equal(tags, before[t.ID]) {
 			changed++
 		}
 		shown := "no tags"
@@ -1536,7 +1509,7 @@ func mcpPageLinks(slug, content string) string {
 
 func readPage(args *Obj, base string) (string, error) {
 	raw, ok := args.Get("slug").(string)
-	if !ok || pyStrip(raw) == "" {
+	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
 	}
 	slug := mcpPageSlug(raw)
@@ -1552,7 +1525,7 @@ func readPage(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if heading = pyStrip(heading); heading != "" {
+	if heading = strings.TrimSpace(heading); heading != "" {
 		lines := splitLines(content)
 		start, end, ok := sectionLines(lines, heading)
 		if !ok {
@@ -1622,10 +1595,7 @@ func listPages(args *Obj, base string) (string, error) {
 		}
 		return a.title > b.title
 	})
-	where := ""
-	if under != "" {
-		where = " under " + under + "/"
-	}
+	where := underWhere(under)
 	if len(rows) == 0 {
 		switch {
 		case onlyScratch:
@@ -1691,10 +1661,7 @@ func checkLinks(args *Obj, base string) (string, error) {
 		total += len(links)
 		out = append(out, p.Slug+": "+strings.Join(links, ", "))
 	}
-	where := ""
-	if under != "" {
-		where = " under " + under + "/"
-	}
+	where := underWhere(under)
 	if len(out) == 0 {
 		return "No broken links" + where + ".", nil
 	}
@@ -1705,11 +1672,11 @@ func checkLinks(args *Obj, base string) (string, error) {
 // How much of a long line grep_wiki and replace_in_pages show.
 const grepLineChars = 300
 
-func cutLine(line string) string { return cutRunes(pyStrip(line), grepLineChars, " …") }
+func cutLine(line string) string { return cutRunes(strings.TrimSpace(line), grepLineChars, " …") }
 
 func grepWiki(args *Obj, base string) (string, error) {
 	pattern, ok := args.Get("pattern").(string)
-	if !ok || pyStrip(pattern) == "" {
+	if !ok || strings.TrimSpace(pattern) == "" {
 		return "", toolErr("pattern must be a non-empty string")
 	}
 	under, err := underArg(args)
@@ -1737,10 +1704,7 @@ func grepWiki(args *Obj, base string) (string, error) {
 			pages[h.Slug] = true
 		}
 	}
-	where := ""
-	if under != "" {
-		where = " under " + under + "/"
-	}
+	where := underWhere(under)
 	if len(hits) == 0 {
 		return "No line" + where + " matches " + pyRepr(pattern) + ".", nil
 	}
@@ -1793,7 +1757,7 @@ func history(args *Obj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	raw, version = pyStrip(raw), strings.ToLower(pyStrip(version))
+	raw, version = strings.TrimSpace(raw), strings.ToLower(strings.TrimSpace(version))
 	if version != "" && raw == "" {
 		return "", toolErr("version needs the page's slug too")
 	}
@@ -1809,11 +1773,9 @@ func history(args *Obj, base string) (string, error) {
 		day, _ := since.(string)
 		return recentChanges(day, under, limit), nil
 	}
-	slug := mcpPageSlug(raw) // a deleted page has a history too
-	if slug == "" {
-		if slug, err = newSlug(raw); err != nil {
-			return "", err
-		}
+	slug, err := pageOrNewSlug(raw) // a deleted page has a history too
+	if err != nil {
+		return "", err
 	}
 	path := safePath(slug)
 	entries := gitLog(path, 0)
@@ -1856,11 +1818,7 @@ func pageChange(slug, path string, entries []GitEntry, version string) (string, 
 		return "", toolErr(pyRepr(version) + " is not a version of " + slug + "; history lists them.")
 	}
 	e := entries[i]
-	paths := []string{versionPath(path, entries, e.Sha)}
-	if i+1 < len(entries) {
-		paths = append(paths, filepath.Join(cfg.Data, filepath.FromSlash(entries[i+1].Path)))
-	}
-	diff, _ := gitDiff(e.Sha, paths...)
+	diff, _ := versionDiff(path, entries, e.Sha)
 	if diff == "" {
 		diff = "(no changes)"
 	}
@@ -1882,10 +1840,7 @@ func recentChanges(since, under string, limit int) string {
 	if len(pending) > 0 {
 		out = append(out, "Not committed yet (edited in the browser or on disk): "+strings.Join(pending, ", "))
 	}
-	where, when := "", ""
-	if under != "" {
-		where = " under " + under + "/"
-	}
+	where, when := underWhere(under), ""
 	if since != "" {
 		when = " since " + since
 	}
@@ -1896,7 +1851,7 @@ func recentChanges(since, under string, limit int) string {
 	for _, e := range entries {
 		var labels []string
 		for _, f := range e.Files {
-			if l := fileLabel(f); !slices_contains(labels, l) {
+			if l := fileLabel(f); !slices.Contains(labels, l) {
 				labels = append(labels, l)
 			}
 		}
@@ -1973,7 +1928,7 @@ func leafHelp(args *Obj, base string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		*a.v = pyStrip(s)
+		*a.v = strings.TrimSpace(s)
 	}
 	topic = strings.TrimSuffix(strings.ToLower(topic), ".md")
 	docs := manualTopics()
@@ -2048,7 +2003,7 @@ func leafHelp(args *Obj, base string) (string, error) {
 
 func searchWiki(args *Obj, base string) (string, error) {
 	query, ok := args.Get("query").(string)
-	if !ok || pyStrip(query) == "" {
+	if !ok || strings.TrimSpace(query) == "" {
 		return "", toolErr("query must be a non-empty string")
 	}
 	under, err := underArg(args)

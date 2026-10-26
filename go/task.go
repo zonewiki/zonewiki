@@ -139,10 +139,6 @@ func nullable(s string) any {
 // obj: the task as JSON's object, in the order the files keep, the keys
 // Leaf doesn't know last.
 func (t *Task) obj() *Obj {
-	tags := make([]any, len(t.Tags))
-	for i, s := range t.Tags {
-		tags[i] = s
-	}
 	var sortOrder, rec any
 	if t.SortOrder != nil {
 		sortOrder = *t.SortOrder
@@ -170,7 +166,7 @@ func (t *Task) obj() *Obj {
 	for i, c := range t.Comments {
 		comments[i] = NewObj("id", c.ID, "at", c.At, "text", c.Text)
 	}
-	o := NewObj("id", t.ID, "title", t.Title, "description", t.Description, "tags", tags,
+	o := NewObj("id", t.ID, "title", t.Title, "description", t.Description, "tags", strs(t.Tags),
 		"start_date", nullable(t.StartDate), "due_date", nullable(t.DueDate),
 		"created_at", nullable(t.CreatedAt), "completed_at", nullable(t.CompletedAt),
 		"wont_do", t.WontDo, "keep", t.Keep, "last_done", nullable(t.LastDone),
@@ -204,16 +200,3 @@ func encodeTasks(tasks []*Task) (string, error) {
 
 // isOpen: not completed (nor won't do).
 func (t *Task) isOpen() bool { return t.CompletedAt == "" }
-
-// copyTask: a copy whose lists the original doesn't share.
-func copyTask(t *Task) *Task {
-	c := *t
-	c.Tags = append([]string{}, t.Tags...)
-	c.History = append([]HistoryEntry{}, t.History...)
-	c.Comments = append([]Comment{}, t.Comments...)
-	if t.Recurrence != nil {
-		r := *t.Recurrence
-		c.Recurrence = &r
-	}
-	return &c
-}

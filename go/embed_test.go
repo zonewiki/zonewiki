@@ -546,7 +546,7 @@ func TestSemanticText(t *testing.T) {
 	if strings.Contains(strings.ToLower(body), "deck") || !strings.Contains(body, "Notes  here.") {
 		t.Errorf("deck embeds: %q", body)
 	}
-	if _, body := semanticText("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf"); pyStrip(body) != "" {
+	if _, body := semanticText("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf"); strings.TrimSpace(body) != "" {
 		t.Errorf("only an embed: %q", body)
 	}
 	title, body := semanticText("---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")

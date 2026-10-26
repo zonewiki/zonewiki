@@ -8,6 +8,7 @@
 package main
 
 import (
+	"html"
 	"math"
 	"regexp"
 	"sort"
@@ -37,7 +38,7 @@ func pyWord(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 func casefold(s string) string { return cases.Fold().String(s) }
 
 // squash: folded text with runs of whitespace as one space (phrase checks).
-func squash(text string) string { return strings.Join(pySplit(fold(text)), " ") }
+func squash(text string) string { return strings.Join(strings.Fields(fold(text)), " ") }
 
 func runeLen(s string) int { return len([]rune(s)) }
 
@@ -169,10 +170,8 @@ func queryWords(query string) []string {
 
 // ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates ----
 
-const pyNonSpace = `[^\s\pZ\x{85}\x{1c}-\x{1f}]`
-
 var (
-	queryPartRE  = regexp.MustCompile(`(-?)(?:"([^"]+)"|(` + pyNonSpace + `+))`)
+	queryPartRE  = regexp.MustCompile(`(-?)(?:"([^"]+)"|(` + nonSpaceClass + `+))`)
 	dateFilterRE = regexp.MustCompile(`^(?i)(edited|after|before):(\p{Nd}{4}(?:-\p{Nd}{2}(?:-\p{Nd}{2})?)?)$`)
 )
 
@@ -198,14 +197,14 @@ func ParseQuery(raw string) *Query {
 		negative := m[3] > m[2]
 		if m[4] >= 0 {
 			quoted := raw[m[4]:m[5]]
-			if pyStrip(quoted) == "" {
+			if strings.TrimSpace(quoted) == "" {
 				continue
 			}
 			if negative {
 				q.ExcludePhrases = append(q.ExcludePhrases, squash(quoted))
 			} else {
 				q.Phrases = append(q.Phrases, squash(quoted))
-				phrases = append(phrases, pyStrip(quoted))
+				phrases = append(phrases, strings.TrimSpace(quoted))
 			}
 			continue
 		}
@@ -238,7 +237,7 @@ func ParseQuery(raw string) *Query {
 
 // Phrase: the query's words as one phrase, when there are two or more.
 func (q *Query) Phrase() string {
-	if len(pySplit(q.Text)) >= 2 {
+	if len(strings.Fields(q.Text)) >= 2 {
 		return squash(q.Text)
 	}
 	return ""
@@ -383,7 +382,7 @@ func (ix *Index) expand(qTokens []string) []weighted {
 			bump(t, 1.0)
 			matched = true
 		}
-		if runeLen((t)) >= 3 {
+		if runeLen(t) >= 3 {
 			for i := sort.SearchStrings(ix.vocab, t); i < len(ix.vocab) && strings.HasPrefix(ix.vocab[i], t); i++ {
 				if ix.vocab[i] != t {
 					bump(ix.vocab[i], prefixWeight)
@@ -391,7 +390,7 @@ func (ix *Index) expand(qTokens []string) []weighted {
 				}
 			}
 		}
-		if !matched && runeLen((t)) >= 4 {
+		if !matched && runeLen(t) >= 4 {
 			for _, c := range closeMatches(t, ix.vocab, 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
@@ -492,7 +491,7 @@ func analyzeText(text string) *analyzed {
 	}
 	sort.Strings(a.distinct)
 	for _, s := range a.distinct {
-		n := runeLen((s))
+		n := runeLen(s)
 		a.byLen[n] = append(a.byLen[n], s)
 	}
 	return a
@@ -531,7 +530,7 @@ func matchSpans(text, query string) []span {
 		if i < len(a.distinct) && a.distinct[i] == t {
 			hits[t] = true
 		}
-		if runeLen((t)) >= 3 {
+		if runeLen(t) >= 3 {
 			for ; i < len(a.distinct) && strings.HasPrefix(a.distinct[i], t); i++ {
 				hits[a.distinct[i]] = true
 			}
@@ -539,7 +538,7 @@ func matchSpans(text, query string) []span {
 	}
 	if len(hits) == 0 {
 		for t := range terms {
-			n := runeLen((t))
+			n := runeLen(t)
 			if n < 4 {
 				continue
 			}
@@ -568,7 +567,7 @@ func MatchedWords(text, query string, limit int) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, s := range matchSpans(text, query) {
-		w := strings.Join(pySplit(sliceRunes(r, s.start, s.end)), " ")
+		w := strings.Join(strings.Fields(sliceRunes(r, s.start, s.end)), " ")
 		if k := casefold(w); !seen[k] {
 			seen[k] = true
 			out = append(out, w)
@@ -590,11 +589,11 @@ func Excerpt(text, query string) string {
 	r := []rune(text)
 	spans := matchSpans(text, query)
 	if len(spans) == 0 {
-		head := pyStrip(strings.ReplaceAll(sliceRunes(r, 0, min(150, len(r))), "\n", " "))
+		head := strings.TrimSpace(strings.ReplaceAll(sliceRunes(r, 0, min(150, len(r))), "\n", " "))
 		if len(r) > 150 {
-			return pyEscape(head) + "…"
+			return html.EscapeString(head) + "…"
 		}
-		return pyEscape(head)
+		return html.EscapeString(head)
 	}
 	start := max(0, spans[0].start-before)
 	end := min(len(r), spans[0].end+after)
@@ -604,11 +603,11 @@ func Excerpt(text, query string) string {
 		if s.start < start || s.end > end {
 			continue
 		}
-		out.WriteString(pyEscape(sliceRunes(r, pos, s.start)))
-		out.WriteString("<mark>" + pyEscape(sliceRunes(r, s.start, s.end)) + "</mark>")
+		out.WriteString(html.EscapeString(sliceRunes(r, pos, s.start)))
+		out.WriteString("<mark>" + html.EscapeString(sliceRunes(r, s.start, s.end)) + "</mark>")
 		pos = s.end
 	}
-	out.WriteString(pyEscape(sliceRunes(r, pos, end)))
+	out.WriteString(html.EscapeString(sliceRunes(r, pos, end)))
 	snippet := strings.ReplaceAll(out.String(), "\n", " ")
 	if start > 0 {
 		snippet = "…" + snippet

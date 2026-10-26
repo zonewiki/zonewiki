@@ -46,7 +46,7 @@ func TestWikilinks(t *testing.T) {
 		"[[#Section one]]":           `<a href="#section-one" class="wikilink">Section one</a>`,
 		"[[secret|words stay]]":      `<span class="wikilink-hidden">words stay</span>`,
 		"[[Odd Name]]":               `<a href="/page/Odd%20Name" class="wikilink">Odd Name</a>`,
-		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it&#x27;s</a>`,
+		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it&#39;s</a>`,
 	}
 	for in, want := range cases {
 		if got := processWikilinks(sharing, in, slugs); got != want {
@@ -155,11 +155,11 @@ func TestToSlug(t *testing.T) {
 	}
 }
 
-// Lines of any Python whitespace (\r, U+2028, \x1c …) are blank to dedent.
+// Lines of whitespace only (\r, tabs …) are blank to dedent.
 func TestDedent(t *testing.T) {
 	for in, want := range map[string]string{
 		"    literal\n      more\n ": "literal\n  more\n",
-		"    a\n\r\n  b\n\x1c":       "  a\n\nb\n",
+		"    a\n\r\n  b\n \t":        "  a\n\nb\n",
 	} {
 		if got := dedent(in); got != want {
 			t.Errorf("%q: got %q, want %q", in, got, want)

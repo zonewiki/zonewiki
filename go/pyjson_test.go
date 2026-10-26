@@ -18,7 +18,7 @@ func TestObjKeepsOrder(t *testing.T) {
 	o.Set("b", int64(3)) // an existing key keeps its place
 	o.Set("c", nil)
 	o.Delete("a")
-	if got := dumpsLine(o); got != `{"b": 3, "c": null}` {
+	if got := jsonText(o); got != `{"b":3,"c":null}` {
 		t.Fatal(got)
 	}
 }

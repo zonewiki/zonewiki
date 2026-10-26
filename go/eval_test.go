@@ -102,7 +102,7 @@ not json
 `), 0o666)
 	stubs, err := newQueries(f, []string{old, log, filepath.Join(dir, "missing.jsonl")})
 	if err != nil || len(stubs) != 2 || stubs[1].Str("q") != "Winter tyres" ||
-		dumpsLineUTF8(stubs[0]) != `{"q": "git push", "expect": [], "results": ["r0", "r1", "r2", "r3", "r4"]}` {
+		jsonText(stubs[0]) != `{"q":"git push","expect":[],"results":["r0","r1","r2","r3","r4"]}` {
 		t.Errorf("%v %v", stubs, err)
 	}
 }

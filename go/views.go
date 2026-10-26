@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"embed"
+	"html"
 	"html/template"
 	"net/http"
 	"os"
@@ -19,8 +20,6 @@ import (
 
 //go:embed templates
 var templateFS embed.FS
-
-var jinjaEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&#34;", "'", "&#39;")
 
 // M is a template's data.
 type M = map[string]any
@@ -35,9 +34,9 @@ var funcs = template.FuncMap{
 		return m
 	},
 	"add": func(a, b int) int { return a + b },
-	// text escapes as Jinja (markupsafe) does: html/template also writes "+"
-	// as &#43;, which reads the same but isn't the text a test looks for.
-	"text":       func(s string) template.HTML { return template.HTML(jinjaEscaper.Replace(s)) },
+	// text escapes only what HTML needs: html/template also writes "+" as
+	// &#43;, which reads the same but isn't the text a test looks for.
+	"text":       func(s string) template.HTML { return template.HTML(html.EscapeString(s)) },
 	"runePrefix": runePrefix,
 	"lowerFirst": func(s string) string {
 		r, n := utf8.DecodeRuneInString(s)
@@ -204,7 +203,7 @@ func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query str
 	parts := strings.Split(slug, "/")
 	var crumbs []crumb
 	for i, part := range parts[:len(parts)-1] {
-		crumbs = append(crumbs, crumb{pyTitle(strings.ReplaceAll(part, "-", " ")), pathURL("page", strings.Join(parts[:i+1], "/"))})
+		crumbs = append(crumbs, crumb{titleWords(strings.ReplaceAll(part, "-", " ")), pathURL("page", strings.Join(parts[:i+1], "/"))})
 	}
 	href := ""
 	if len(extra) > 0 || query != "" {
@@ -350,7 +349,7 @@ func railTocItems(article string) template.HTML {
 		if level == "3" {
 			cls = ` class="toc-h3"`
 		}
-		items = append(items, `<li`+cls+`><a href="#`+id+`">`+pyStrip(anchorTagRE.ReplaceAllString(label, ""))+`</a></li>`)
+		items = append(items, `<li`+cls+`><a href="#`+id+`">`+strings.TrimSpace(anchorTagRE.ReplaceAllString(label, ""))+`</a></li>`)
 	}
 	if len(items) < railTocMinHeadings {
 		return ""
@@ -441,7 +440,7 @@ func lastChanged(slug, path, title string) (M, M) {
 	filepath := slug + ".md"
 	// Single-file status: much cheaper than the whole tree's.
 	r := runGit("status", "--porcelain", "--untracked-files=all", "--", filepath)
-	if pyStrip(r.Stdout) != "" {
+	if strings.TrimSpace(r.Stdout) != "" {
 		if st, err := os.Stat(path); err == nil {
 			return M{"date": st.ModTime().Format("2006-01-02"), "rel": relativeTime(st.ModTime())},
 				M{"filepath": filepath, "title": title}

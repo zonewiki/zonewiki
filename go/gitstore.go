@@ -67,6 +67,12 @@ func runGitFor(timeout time.Duration, args ...string) gitResult {
 	return gitResult{code, newlines(stdout.String()), newlines(stderr.String())}
 }
 
+// wikiRel: a file's path relative to the wiki, with "/" (as git names it).
+func wikiRel(path string) (string, bool) {
+	rel, err := filepath.Rel(cfg.Data, path)
+	return filepath.ToSlash(rel), err == nil
+}
+
 // gitSetup makes the wiki a repository (its files as the first commit), or
 // gives an existing one a committer, and points origin at LEAF_GIT_REMOTE.
 func gitSetup() {
@@ -75,17 +81,15 @@ func gitSetup() {
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
 		runGit("init")
-		runGit("config", "user.email", "leaf@localhost")
-		runGit("config", "user.name", "Leaf")
+		setCommitter()
 		gitignore := filepath.Join(cfg.Data, ".gitignore")
 		if _, err := os.Stat(gitignore); err != nil {
 			_ = os.WriteFile(gitignore, nil, 0o666)
 		}
 		runGit("add", ".")
 		runGit("commit", "--allow-empty", "-m", "Initial import")
-	} else if pyStrip(runGit("config", "user.name").Stdout) == "" {
-		runGit("config", "user.email", "leaf@localhost")
-		runGit("config", "user.name", "Leaf")
+	} else if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
+		setCommitter()
 	}
 	if cfg.GitRemote != "" {
 		if runGit("remote", "get-url", "origin").Code == 0 {
@@ -96,6 +100,12 @@ func gitSetup() {
 	}
 }
 
+// setCommitter: Leaf commits as "Leaf <leaf@localhost>".
+func setCommitter() {
+	runGit("config", "user.email", "leaf@localhost")
+	runGit("config", "user.name", "Leaf")
+}
+
 // gitCommit stages paths (in the wiki) and commits them together.
 func gitCommit(message string, paths ...string) {
 	if !cfg.GitEnabled {
@@ -103,8 +113,8 @@ func gitCommit(message string, paths ...string) {
 	}
 	args := []string{"add", "--"}
 	for _, p := range paths {
-		rel, err := filepath.Rel(cfg.Data, p)
-		if err != nil {
+		rel, ok := wikiRel(p)
+		if !ok {
 			return
 		}
 		args = append(args, rel)
@@ -240,11 +250,10 @@ func gitLog(path string, max int) []GitEntry {
 	if !cfg.GitEnabled {
 		return nil
 	}
-	rel, err := filepath.Rel(cfg.Data, path)
-	if err != nil {
+	rel, ok := wikiRel(path)
+	if !ok {
 		return nil
 	}
-	rel = filepath.ToSlash(rel)
 	args := []string{"log", "--follow"}
 	if max > 0 {
 		args = append(args, "-n", strconv.Itoa(max))
@@ -308,7 +317,7 @@ func gitLogAll(since, under string, max int) []LogEntry {
 		}
 		e := LogEntry{Sha: parts[0], Time: parts[1], Msg: parts[2]}
 		for _, n := range splitLines(names) {
-			if n = lineBody(n); pyStrip(n) != "" {
+			if n = lineBody(n); strings.TrimSpace(n) != "" {
 				e.Files = append(e.Files, n)
 			}
 		}
@@ -323,12 +332,12 @@ func isUncommitted(path string) bool {
 	if !cfg.GitEnabled {
 		return false
 	}
-	rel, err := filepath.Rel(cfg.Data, path)
-	if err != nil {
+	rel, ok := wikiRel(path)
+	if !ok {
 		return false
 	}
 	r := runGit("status", "--porcelain", "--", rel)
-	return r.Code == 0 && pyStrip(r.Stdout) != ""
+	return r.Code == 0 && strings.TrimSpace(r.Stdout) != ""
 }
 
 // A pattern search (grepPages) gets far less time than other git calls: a
@@ -413,7 +422,7 @@ func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
 		break
 	}
 	if r.Code != 0 && r.Code != 1 {
-		msg := strings.TrimPrefix(pyStrip(r.Stderr), "fatal: ")
+		msg := strings.TrimPrefix(strings.TrimSpace(r.Stderr), "fatal: ")
 		if msg == "" {
 			msg = fmt.Sprintf("git grep failed (%d)", r.Code)
 		}
@@ -421,12 +430,13 @@ func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
 	}
 	for _, row := range splitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
 		parts := strings.SplitN(lineBody(row), "\x00", 3)
-		if len(parts) != 3 || !pyIntRE.MatchString(parts[1]) || strings.Contains(parts[1], "_") {
+		if len(parts) != 3 {
 			continue
 		}
+		n, err := strconv.Atoi(parts[1])
 		slug, ok := strings.CutSuffix(filepath.ToSlash(parts[0]), ".md")
-		if ok && slugs[slug] { // pages only: not _assets/, _deck/, …
-			hits = append(hits, GrepHit{slug, pyAtoi(parts[1]), parts[2]})
+		if err == nil && ok && slugs[slug] { // pages only: not _assets/, _deck/, …
+			hits = append(hits, GrepHit{slug, n, parts[2]})
 		}
 	}
 	return hits, nil
@@ -434,11 +444,11 @@ func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
 
 // gitShow: a file as a commit has it (ok false when it hasn't).
 func gitShow(sha, path string) (string, bool) {
-	rel, err := filepath.Rel(cfg.Data, path)
-	if err != nil {
+	rel, ok := wikiRel(path)
+	if !ok {
 		return "", false
 	}
-	r := runGit("show", sha+":"+filepath.ToSlash(rel))
+	r := runGit("show", sha+":"+rel)
 	return r.Stdout, r.Code == 0
 }
 
@@ -517,11 +527,11 @@ func gitDiff(sha string, paths ...string) (string, bool) {
 	args := []string{"show", "--format=", "--patch", "-M", sha, "--"}
 	seen := map[string]bool{}
 	for _, p := range paths {
-		rel, err := filepath.Rel(cfg.Data, p)
-		if err != nil {
+		rel, ok := wikiRel(p)
+		if !ok {
 			return "", false
 		}
-		if rel = filepath.ToSlash(rel); !seen[rel] {
+		if !seen[rel] {
 			seen[rel] = true
 			args = append(args, rel)
 		}
@@ -564,35 +574,60 @@ func listDeletedPages() []DeletedPage {
 	var out []DeletedPage
 	var sha, parent, date string
 	for _, raw := range splitLines(r.Stdout) {
-		line := pyRstrip(raw)
+		line := trimRightSpace(raw)
 		if line == "" {
 			continue
 		}
 		if strings.Contains(line, "\t") {
-			parts := strings.SplitN(line, "\t", 3)
-			sha, parent, date = parts[0], "", ""
-			if len(parts) > 1 {
-				if ps := pySplit(parts[1]); len(ps) > 0 {
-					parent = ps[0]
-				}
-			}
-			if len(parts) > 2 {
-				date = parts[2]
-			}
+			sha, parent, date = deletionCommit(line)
 		} else if parent != "" && strings.HasSuffix(line, ".md") && !strings.HasPrefix(line, ".") {
 			slug := strings.TrimSuffix(line, ".md")
 			if existing[slug] || seen[slug] || strings.HasPrefix(slug, "_assets") {
 				continue
 			}
 			seen[slug] = true
-			title := slugDisplayName(slug)
-			if r2 := runGit("show", parent+":"+line); r2.Code == 0 {
-				title = pageTitle(r2.Stdout, slug)
-			}
-			out = append(out, DeletedPage{slug, title, sha, date})
+			out = append(out, DeletedPage{slug, deletedTitle(parent, slug), sha, date})
 		}
 	}
 	return out
+}
+
+// deletionCommit: a commit as "%H\t%P\t%as" reads: its sha, its first
+// parent ("" for none) and its day.
+func deletionCommit(line string) (sha, parent, date string) {
+	parts := strings.SplitN(line, "\t", 3)
+	if len(parts) > 1 {
+		if ps := strings.Fields(parts[1]); len(ps) > 0 {
+			parent = ps[0]
+		}
+	}
+	if len(parts) > 2 {
+		date = parts[2]
+	}
+	return parts[0], parent, date
+}
+
+// lastDeletion: the commit before a page's latest deletion (which has its
+// last text) and the day it was deleted; ok false when git has none.
+func lastDeletion(slug string) (parent, date string, ok bool) {
+	if !cfg.GitEnabled {
+		return "", "", false
+	}
+	r := runGit("log", "-1", "--format=%H\t%P\t%as", "--diff-filter=D", "--", slug+".md")
+	out := strings.TrimSpace(r.Stdout)
+	if r.Code != 0 || out == "" {
+		return "", "", false
+	}
+	_, parent, date = deletionCommit(out)
+	return parent, date, parent != ""
+}
+
+// deletedTitle: a deleted page's title as its last version (at parent) has it.
+func deletedTitle(parent, slug string) string {
+	if r := runGit("show", parent+":"+slug+".md"); r.Code == 0 {
+		return pageTitle(r.Stdout, slug)
+	}
+	return slugDisplayName(slug)
 }
 
 var (
@@ -667,6 +702,15 @@ func versionPath(path string, entries []GitEntry, sha string) string {
 		return filepath.Join(cfg.Data, filepath.FromSlash(entries[i].Path))
 	}
 	return path
+}
+
+// versionDiff: what the version sha of a page (path, its entries) changed.
+func versionDiff(path string, entries []GitEntry, sha string) (string, bool) {
+	paths := []string{versionPath(path, entries, sha)}
+	if i := versionIndex(entries, sha); i >= 0 && i+1 < len(entries) {
+		paths = append(paths, filepath.Join(cfg.Data, filepath.FromSlash(entries[i+1].Path)))
+	}
+	return gitDiff(sha, paths...)
 }
 
 // isCurrent: the newest commit is what the page holds now (no edits on

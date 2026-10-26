@@ -26,11 +26,10 @@ func TestTaskFileRoundTrip(t *testing.T) {
     "history": [{"at": "2026-01-02T10:00", "event": "due", "from": null, "to": "2026-03-01"}, "junk"]
   }
 ]`
-	v, err := loads([]byte(old))
-	if err != nil {
-		t.Fatal(err)
+	tasks, ok := parseTasks([]byte(old))
+	if !ok {
+		t.Fatal("not a task list")
 	}
-	tasks := normalizeList(v.([]any))
 	got, err := encodeTasks(tasks)
 	if err != nil {
 		t.Fatal(err)
@@ -77,8 +76,8 @@ func TestTaskFileRoundTrip(t *testing.T) {
 	if got != want {
 		t.Fatalf("got\n%s", got)
 	}
-	v, _ = loads([]byte(got))
-	if again, _ := encodeTasks(normalizeList(v.([]any))); again != got {
+	again, _ := parseTasks([]byte(got))
+	if again, _ := encodeTasks(again); again != got {
 		t.Errorf("not stable:\n%s", again)
 	}
 }

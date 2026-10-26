@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -36,10 +37,10 @@ func appendHeading(slug, title string) string { return title + " (" + noteDate(s
 // hyphen), with content, or just `# title`; returns its slug. Two notes of
 // one name in the same second: the second gets the next second's stamp.
 func createScratch(title string, content *string, suffix string) (string, error) {
-	if title = pyStrip(title); title == "" {
+	if title = strings.TrimSpace(title); title == "" {
 		title = "Untitled"
 	}
-	name := toSlug(regexp.MustCompile("/").ReplaceAllString(title, "-"))
+	name := toSlug(strings.ReplaceAll(title, "/", "-"))
 	if name == "" {
 		name = "untitled"
 	}
@@ -57,20 +58,13 @@ func createScratch(title string, content *string, suffix string) (string, error)
 	}
 	text := "# " + title + "\n\n"
 	if content != nil {
-		text = trimRightNewlines(*content) + "\n"
+		text = trimNewlines(*content) + "\n"
 	}
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
 	gitCommit("Create "+slug+suffix, path)
 	return slug, nil
-}
-
-func trimRightNewlines(s string) string {
-	for len(s) > 0 && s[len(s)-1] == '\n' {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 func notePath(slug string) (string, error) {
@@ -116,10 +110,7 @@ func moveScratch(slug, folder, name string, keepDate bool, suffix string) (strin
 	return newSlug, nil
 }
 
-var (
-	headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
-	breakersRE    = regexp.MustCompile(`[\[\]|]`)
-)
+var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 
 // appendScratch appends a scratch note to the page target as a `## heading`
 // section (its tags into the page's frontmatter) and deletes the note;
@@ -131,7 +122,7 @@ func appendScratch(slug, target, heading, suffix string) (string, error) {
 		return "", err
 	}
 	// [ ] | would break the wikilinks that now point at the section.
-	heading = pyStrip(breakersRE.ReplaceAllString(heading, ""))
+	heading = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(heading, ""))
 	targetPath := ""
 	if target != "" {
 		targetPath = safePath(target)
@@ -165,7 +156,7 @@ func appendScratch(slug, target, heading, suffix string) (string, error) {
 	}
 	section, tags := noteAsSection(note, heading)
 	pageText = addFrontmatterTags(pageText, tags)
-	if err := writeText(targetPath, trimRightNewlines(pageText)+"\n\n"+section); err != nil {
+	if err := writeText(targetPath, trimNewlines(pageText)+"\n\n"+section); err != nil {
 		return "", err
 	}
 	if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {

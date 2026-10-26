@@ -3,6 +3,7 @@ package main
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -26,7 +27,7 @@ func TestDeckLists(t *testing.T) {
 		t.Errorf("lists %+v", lists)
 	}
 	for tags, want := range map[string]string{"work": "", "GROCERIES": "groceries", "groceries chores": "chores"} {
-		if got := taskList(&Task{Tags: pySplit(tags)}, nil); got != want {
+		if got := taskList(&Task{Tags: strings.Fields(tags)}, nil); got != want {
 			t.Errorf("taskList(%q) = %q, want %q", tags, got, want)
 		}
 	}

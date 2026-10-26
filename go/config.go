@@ -51,7 +51,7 @@ func truthy(s string) bool {
 // hostName is a Host header's name without its port, lowercase ("[::1]:5000"
 // → "[::1]", "Wiki.Example.org:443" → "wiki.example.org").
 func hostName(host string) string {
-	host = strings.ToLower(pyStrip(host))
+	host = strings.ToLower(strings.TrimSpace(host))
 	if strings.HasPrefix(host, "[") {
 		before, _, _ := strings.Cut(host, "]")
 		return before + "]"
@@ -65,7 +65,7 @@ func hostName(host string) string {
 func parseNoshare(spec string) (map[string]bool, []string) {
 	tags, folders := map[string]bool{}, []string{}
 	for _, item := range strings.Split(spec, ",") {
-		item = pyStrip(item)
+		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
 		}
@@ -87,8 +87,8 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 		Build:       getenv("LEAF_BUILD"),
 		Password:    getenv("LEAF_PASSWORD"),
 		MCPToken:    getenv("LEAF_MCP_TOKEN"),
-		BaseURL:     strings.TrimRight(pyStrip(getenv("LEAF_BASE_URL")), "/"),
-		HostData:    strings.TrimRight(pyStrip(getenv("LEAF_HOST_DATA")), "/"),
+		BaseURL:     strings.TrimRight(strings.TrimSpace(getenv("LEAF_BASE_URL")), "/"),
+		HostData:    strings.TrimRight(strings.TrimSpace(getenv("LEAF_HOST_DATA")), "/"),
 		QueryLog:    truthy(getenv("LEAF_QUERY_LOG")),
 		GitRemote:   getenv("LEAF_GIT_REMOTE"),
 		AllowRemote: truthy(getenv("LEAF_ALLOW_REMOTE")),
@@ -98,7 +98,7 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 		c.Build = sourceBuild()
 	}
 	for _, h := range strings.Split(getenv("LEAF_HOSTS"), ",") {
-		if pyStrip(h) != "" {
+		if strings.TrimSpace(h) != "" {
 			c.Hosts[hostName(h)] = true
 		}
 	}
@@ -108,11 +108,11 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 		noshare = "#noshare"
 	}
 	c.NoshareTags, c.NoshareFolder = parseNoshare(noshare)
-	c.Locale = pyStrip(getenv("LEAF_LOCALE"))
+	c.Locale = strings.TrimSpace(getenv("LEAF_LOCALE"))
 	if c.Locale != "" && !localeRE.MatchString(c.Locale) {
 		return nil, fmt.Errorf("LEAF_LOCALE=%s isn't a locale. Use a tag like de-AT or en-GB.", c.Locale)
 	}
-	c.DateFormat = strings.ToLower(pyStrip(getenv("LEAF_DATE_FORMAT")))
+	c.DateFormat = strings.ToLower(strings.TrimSpace(getenv("LEAF_DATE_FORMAT")))
 	if c.DateFormat != "" && c.DateFormat != "iso" {
 		return nil, fmt.Errorf("LEAF_DATE_FORMAT=%s isn't known. Use iso, or leave it unset.", c.DateFormat)
 	}

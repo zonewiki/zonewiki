@@ -5,12 +5,14 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // processWikilinks: [[Page]], [[Page|Label]], [[Page#Section]],
@@ -25,9 +27,9 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
 		page, section, label := splitWikilink(m[2 : len(m)-2])
 		anchor := ""
 		if section != "" {
-			anchor = "#" + pyEscape(sectionAnchor(section))
+			anchor = "#" + html.EscapeString(sectionAnchor(section))
 		}
-		label = pyEscape(label)
+		label = html.EscapeString(label)
 		if page == "" {
 			if anchor == "" {
 				anchor = "#"
@@ -49,11 +51,6 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
 		return `<a href="` + pathURL("page", slug) + anchor + `" class="` + css + `">` + label + `</a>`
 	})
 }
-
-// pyEscape is html.escape: & < > " and '.
-var pyEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#x27;")
-
-func pyEscape(s string) string { return pyEscaper.Replace(s) }
 
 // RenderOpts: what a page view adds to a render. EditSlug gives each ## and
 // ### heading its ✎, SectionTasks (findTaskBacklinks) a heading tasks link
@@ -117,10 +114,10 @@ func renderNotes(rq *Req, texts []string, inline bool) []string {
 // the page's own that looks like a token is masked too and comes back as
 // written (a ref starting with ).
 var (
-	taskRefTokenRE  = regexp.MustCompile("(" + pyDigit + "+)")
-	taskRefMaskedRE = regexp.MustCompile("(" + pyDigit + "+)|" + `\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
+	taskRefTokenRE  = regexp.MustCompile("(\\d+)")
+	taskRefMaskedRE = regexp.MustCompile("(\\d+)|" + `\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	// A reference alone in a list item is a row of its own.
-	taskRefItemRE = regexp.MustCompile(`^(?:` + pySpace + `|<p>)*` + "" + pyDigit + "+" + `(?:` + pySpace + `|</p>)*</li>`)
+	taskRefItemRE = regexp.MustCompile(`^(?:` + spaceClass + `|<p>)*` + "\\d+" + `(?:` + spaceClass + `|</p>)*</li>`)
 )
 
 func maskTaskRefs(text string) (string, []string) {
@@ -185,7 +182,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 func shortDate(iso, day string) string {
 	d, err := time.Parse("2006-01-02", runePrefix(iso, 10))
 	if err != nil {
-		return pyEscape(iso)
+		return html.EscapeString(iso)
 	}
 	text := d.Format("Jan 2")
 	if cfg.DateFormat == "iso" {
@@ -217,12 +214,12 @@ func linkList(t *Task, prefer []string, lists map[string]DeckHome) string {
 // its title linking to it in the deck, badges for what its card shows.
 func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[string]DeckHome) string {
 	if t == nil {
-		return `<span class="task-ref task-ref-missing" title="No task with id ` + pyEscape(ref) + `">task ` + pyEscape(ref) + `?</span>`
+		return `<span class="task-ref task-ref-missing" title="No task with id ` + html.EscapeString(ref) + `">task ` + html.EscapeString(ref) + `?</span>`
 	}
-	title := pyEscape(plainTaskTitle(t.Title))
+	title := html.EscapeString(plainTaskTitle(t.Title))
 	done, wont := !t.isOpen(), t.WontDo
 	list := linkList(t, prefer, lists)
-	href := pyEscape(taskLink(t, list))
+	href := html.EscapeString(taskLink(t, list))
 	cls := "task-ref"
 	var badges []string
 	if done {
@@ -264,7 +261,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 		}
 	}
 	if list != "" {
-		badges = append(badges, `<span class="task-ref-badge task-ref-list">`+pyEscape(list)+`</span>`)
+		badges = append(badges, `<span class="task-ref-badge task-ref-list">`+html.EscapeString(list)+`</span>`)
 	}
 	checked, disabled := "", ""
 	if done && !wont {
@@ -273,7 +270,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 	if wont {
 		disabled = " disabled"
 	}
-	return `<span class="` + cls + `" data-task-id="` + pyEscape(t.ID) + `">` +
+	return `<span class="` + cls + `" data-task-id="` + html.EscapeString(t.ID) + `">` +
 		`<input type="checkbox" class="task-ref-check" aria-label="Done: ` + title + `"` + checked + disabled + `>` +
 		`<a class="task-ref-title" href="` + href + `">` + title + `</a>` + strings.Join(badges, "") + `</span>`
 }
@@ -301,8 +298,8 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 		var items strings.Builder
 		for _, t := range ts {
 			fmt.Fprintf(&items, `<li><a href="%s">%s</a></li>`,
-				pyEscape(taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), "")),
-				pyEscape(plainTaskTitle(t.Title)))
+				html.EscapeString(taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), "")),
+				html.EscapeString(plainTaskTitle(t.Title)))
 		}
 		s := ""
 		if len(ts) > 1 {
@@ -328,11 +325,11 @@ func renderTagsPillsHTML(tags []string) string {
 	var b strings.Builder
 	for _, t := range tags {
 		q := "#" + t
-		if strings.IndexFunc(t, pyIsSpace) >= 0 {
+		if strings.IndexFunc(t, unicode.IsSpace) >= 0 {
 			q = t
 		}
 		fmt.Fprintf(&b, `<a class="task-tag page-tag" href="/search?%s">%s</a>`,
-			url.Values{"q": {q}}.Encode(), pyEscape(t))
+			url.Values{"q": {q}}.Encode(), html.EscapeString(t))
 	}
 	return `<div class="page-tags">` + b.String() + `</div>`
 }
@@ -345,7 +342,7 @@ func renderFrontmatterHTML(meta Frontmatter, showTags, showTldr bool) string {
 	}
 	var parts []string
 	if showTldr && meta.Tldr != "" {
-		parts = append(parts, `<p class="page-tldr">`+pyEscape(meta.Tldr)+`</p>`)
+		parts = append(parts, `<p class="page-tldr">`+html.EscapeString(meta.Tldr)+`</p>`)
 	}
 	if showTags {
 		if pills := renderTagsPillsHTML(meta.Tags); pills != "" {

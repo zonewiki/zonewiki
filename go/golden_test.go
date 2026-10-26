@@ -14,7 +14,8 @@ import (
 // The answers of the Python Leaf (until 2026-10) on every string in Leaf's
 // tests then and some edge cases, recorded before it was removed: the text
 // functions still give them. A deliberate change to one of them changes its
-// cases here too.
+// cases here too: LEAF_GOLDEN_UPDATE=1 go test -run TestGolden writes what
+// they give now (check the mismatches it logs first).
 func TestGolden(t *testing.T) {
 	f, err := os.Open("testdata/golden.json.gz")
 	if err != nil {
@@ -26,8 +27,9 @@ func TestGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	var golden struct {
-		Now, Today string
-		Cases      []map[string]json.RawMessage
+		Now   string                       `json:"now"`
+		Today string                       `json:"today"`
+		Cases []map[string]json.RawMessage `json:"cases"`
 	}
 	if err := json.NewDecoder(zr).Decode(&golden); err != nil {
 		t.Fatal(err)
@@ -36,7 +38,9 @@ func TestGolden(t *testing.T) {
 	clock(t, at)
 	day, _ := time.ParseInLocation("2006-01-02", golden.Today, time.Local)
 
+	update := os.Getenv("LEAF_GOLDEN_UPDATE") == "1"
 	failures := map[string]int{}
+	var c map[string]json.RawMessage
 	check := func(name, text string, got any, raw json.RawMessage) {
 		// Through JSON both, so Go's types compare as Python's.
 		gb, _ := json.Marshal(got)
@@ -46,11 +50,14 @@ func TestGolden(t *testing.T) {
 		if reflect.DeepEqual(g, w) {
 			return
 		}
-		if failures[name]++; failures[name] <= 3 {
+		if failures[name]++; failures[name] <= 3 || update {
 			t.Errorf("%s(%q):\n got %s\nwant %s", name, text, gb, raw)
 		}
+		if update && name != "deck_params" {
+			c[name] = gb
+		}
 	}
-	for _, c := range golden.Cases {
+	for _, c = range golden.Cases {
 		var text string
 		_ = json.Unmarshal(c["text"], &text)
 		slug := "folder/sub/page"
@@ -140,6 +147,22 @@ func TestGolden(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Log(fmt.Sprint("mismatches by function: ", failures))
+	}
+	if update && len(failures) > 0 {
+		out, err := os.Create("testdata/golden.json.gz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		zw := gzip.NewWriter(out)
+		if err := json.NewEncoder(zw).Encode(golden); err != nil {
+			t.Fatal(err)
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := out.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

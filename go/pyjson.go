@@ -1,7 +1,6 @@
 // JSON as Python's json module reads and writes it: objects keep their keys'
 // order (a dict's), numbers stay ints or floats. Requests and MCP messages
-// are read so (their checks are the Python Leaf's), and dumpsLine writes
-// what json.dumps(v) did where text shows JSON (tool replies, the query log).
+// are read so (their checks are the Python Leaf's).
 //
 // Values: nil, bool, string, int64, float64, []any, *Obj.
 package main
@@ -217,122 +216,16 @@ func decodeValue(dec *json.Decoder) (any, error) {
 	}
 }
 
-// dumpString escapes as json.dumps with ensure_ascii=False: only the quote,
-// the backslash and control characters.
-func dumpString(b *strings.Builder, s string) {
-	b.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '"':
-			b.WriteString(`\"`)
-		case '\\':
-			b.WriteString(`\\`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		case '\b':
-			b.WriteString(`\b`)
-		case '\f':
-			b.WriteString(`\f`)
-		default:
-			if r < 0x20 {
-				fmt.Fprintf(b, `\u%04x`, r)
-			} else {
-				b.WriteRune(r)
-			}
-		}
+// jsonText is v as one line of JSON, text as it is (no \u escapes for
+// <, > and &, nor for non-ASCII characters).
+func jsonText(v any) string {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		panic(fmt.Sprintf("jsonText: %v", err))
 	}
-	b.WriteByte('"')
-}
-
-// dumpsLine is json.dumps(v) with its defaults: one line, ", " and ": "
-// between items, every non-ASCII character escaped.
-func dumpsLine(v any) string {
-	var b strings.Builder
-	dumpLine(&b, v, true)
-	return b.String()
-}
-
-// dumpsLineUTF8 is json.dumps(v, ensure_ascii=False): one line, non-ASCII
-// characters as they are.
-func dumpsLineUTF8(v any) string {
-	var b strings.Builder
-	dumpLine(&b, v, false)
-	return b.String()
-}
-
-func dumpLine(b *strings.Builder, v any, ascii bool) {
-	switch v := v.(type) {
-	case string:
-		if !ascii {
-			dumpString(b, v)
-			return
-		}
-		b.WriteByte('"')
-		b.WriteString(dumpsInlineString(v))
-		b.WriteByte('"')
-	case []string:
-		l := make([]any, len(v))
-		for i, s := range v {
-			l[i] = s
-		}
-		dumpLine(b, l, ascii)
-	case []any:
-		b.WriteByte('[')
-		for i, item := range v {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			dumpLine(b, item, ascii)
-		}
-		b.WriteByte(']')
-	case *Obj:
-		b.WriteByte('{')
-		for i, k := range v.keys {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			dumpLine(b, k, ascii)
-			b.WriteString(": ")
-			dumpLine(b, v.m[k], ascii)
-		}
-		b.WriteByte('}')
-	case nil:
-		b.WriteString("null")
-	case bool:
-		b.WriteString(strconv.FormatBool(v))
-	case int:
-		b.WriteString(strconv.Itoa(v))
-	case int64:
-		b.WriteString(strconv.FormatInt(v, 10))
-	case float64:
-		b.WriteString(pyFloatRepr(v))
-	default:
-		panic(fmt.Sprintf("dumpsLine: %T", v))
-	}
-}
-
-// dumpsInlineString: a string's JSON escapes with ensure_ascii (no quotes).
-func dumpsInlineString(s string) string {
-	var b strings.Builder
-	var tmp strings.Builder
-	dumpString(&tmp, s)
-	inner := tmp.String()
-	for _, r := range inner[1 : len(inner)-1] {
-		switch {
-		case r < 0x80:
-			b.WriteRune(r)
-		case r < 0x10000:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			r -= 0x10000
-			fmt.Fprintf(&b, `\u%04x\u%04x`, 0xd800+(r>>10), 0xdc00+(r&0x3ff))
-		}
-	}
-	return b.String()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // pyFloatRepr is Python's repr of a float: the shortest digits that read
@@ -357,6 +250,15 @@ func pyFloatRepr(f float64) string {
 		return s
 	}
 	return e
+}
+
+// strs is a []string as JSON's []any.
+func strs(s []string) []any {
+	l := make([]any, len(s))
+	for i, x := range s {
+		l[i] = x
+	}
+	return l
 }
 
 // number is a JSON number as float64 (a bool is not one).
