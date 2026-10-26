@@ -66,6 +66,7 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
+├── prototype/PORT.md       # The Go port's handoff: status, contracts, how to verify, order (read first)
 ├── prototype/goldmark/     # Go prototype: render_md's pre-processing and markdown (goldmark), compare.py checks it against a wiki (README there)
 ├── prototype/search/       # Go prototype: search.py and retrieval.py's keyword path, compare.py checks it against a wiki (README there)
 ├── prototype/semantic/     # Go prototype: embed.py's embeddings (tokenizer, onnxruntime), compare.py checks them against Python (README there)
