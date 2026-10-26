@@ -31,6 +31,7 @@ func logf(format string, args ...any) {
 func main() {
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
 	public := flag.String("public", "", "the folder of the browser code (default: src/public, found from the binary)")
+	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
 	flag.Parse()
 	var err error
 	if cfg, err = loadConfig(os.Getenv); err != nil {
@@ -112,6 +113,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("POST /api/upload", apiUpload)
 	mux.HandleFunc("GET /public/{path...}", servePublic)
 	mux.HandleFunc("GET /_assets/{filename}", serveUpload)
+	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)
 	deckRoutes(mux)

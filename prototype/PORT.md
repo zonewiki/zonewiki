@@ -18,11 +18,13 @@ Progress by step (see Order):
 | 2. Pages | Done: `mdtext.go`, `pages.go` (link graph, renames re-pointing links), `markdown.go` (goldmark, from the prototype) and `render.go`, `gitstore.go`, `history.go`, `scratch.go`, `routes.go`, `views.go` with every template in `go/templates/`. |
 | 3. Deck | Done with step 2 (the page view needs it): `pyjson.go` (key order, ints/floats, Python's `json.dumps` byte for byte), `decksyntax.go`, `deckstore.go`, `deck.go` (every `/api/deck` route, the embed). |
 | 4. Search | Done: `search.go` (the prototype's, with `difflib.go`), `retrieval.go` (page, section and task documents, per-file caches, `doSearch`, `retrieve`, the query log), `embed.go`'s chunking; `/api/search`, `/search`. `search/compare_servers.py` finds no difference from Python on a wiki but the order of equal scores. |
-| 5. MCP | Next: the protocol and every tool (`retrieve` and `logQuery` are ready for `search_wiki`). |
-| 6–7 | Not started (semantic search, switch-over). `retrieval.go` ranks by keywords only, stubs semantic status ("off") and Related. |
+| 5. MCP | Done: `mcp.go` (protocol, endpoint; `mcp_tools.json` the tool definitions as clients see them), `mcptools.go` (reading, tasks, guides), `mcpwrite.go` (page writes, `replace_in_pages` in RE2), `manual.go` (`leaf_help`; `-docs` flag, which `tests/goserver.py` sets from `manual.docs_root`), gitstore's `grepPages`, `moveFolder`, `gitLogAll`, `isUncommitted`. Tests that patch Python's limits are `python_only`, with Go tests in `mcp_test.go`. |
+| 6. Semantic | Next. |
+| 7 | Not started (switch-over). `retrieval.go` ranks by keywords only, stubs semantic status ("off") and Related. |
 
-Against Go: every API test passes but MCP (~210) and semantic search (8);
-every browser test passes (396, 2 skipped). `go test`:
+Against Go: every API test passes but those needing semantic search (14:
+8 in `test_semantic.py`, 6 in `test_mcp.py`); every browser test passes
+(396, 2 skipped). `go test`:
 Go's own tests, and `testdata/golden.json.gz` (Python's answers of 28 pure
 functions on 6,259 texts, every string in the tests: `testdata/golden.py`
 writes it) all the same.
@@ -36,6 +38,12 @@ Deliberate differences so far (none breaks a page):
 - The session cookie's format (users sign in once more).
 - Search results with equal scores come in the pages' A–Z order (Python:
   the directory listing's).
+- `replace_in_pages`' regex is RE2: no lookarounds or backreferences (an
+  error the model sees), `\d`/`\w` ASCII; it runs in the server, since it
+  can't backtrack (no `regexjob.py` process, no timeout). Replacements take
+  Python's `\1`/`\g<name>` as before. The spec (`mcp.md`) says so at the
+  switch-over.
+- Empty regex matches right after a match are skipped (RE2), Python finds them.
 
 Earlier, four spikes, each in its own folder with a README (method, results) and a
 `compare.py` that checks Go against the Python on a real wiki:
@@ -189,6 +197,12 @@ What the spikes ran into, so the port doesn't relearn it:
 - **Unicode versions**: Python 3.14 has 16.0, Go 1.27 and `x/text` 17.0.
 
 ## Decisions still open
+
+- `pyjson.go` keeps `_deck/*.json` byte for byte Python's while both run on
+  one wiki. At the switch-over it could shrink to a typed task struct and
+  `encoding/json` (unknown keys in a map), at the cost of one commit that
+  reorders every task's keys; the int/float decoding (`UseNumber`) and
+  `pyStr` stay.
 
 - `[x](javascript:…)` renders as a link with goldmark (markdown-it: text).
   Not exploitable (the page policy blocks it), but dropping such hrefs is

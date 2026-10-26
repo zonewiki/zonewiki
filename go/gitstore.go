@@ -7,12 +7,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -38,8 +41,10 @@ type gitResult struct {
 
 // runGit runs git in the wiki. A git that can't start or times out counts
 // as failed, like a git that exits non-zero.
-func runGit(args ...string) gitResult {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+func runGit(args ...string) gitResult { return runGitFor(gitTimeout, args...) }
+
+func runGitFor(timeout time.Duration, args ...string) gitResult {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir, cmd.Env = cfg.Data, gitEnv
@@ -47,7 +52,7 @@ func runGit(args ...string) gitResult {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
-		return gitResult{124, "", fmt.Sprintf("git timed out after %ds", int(gitTimeout.Seconds()))}
+		return gitResult{124, "", fmt.Sprintf("git timed out after %ds", int(timeout.Seconds()))}
 	}
 	code := 0
 	var exit *exec.ExitError
@@ -150,6 +155,58 @@ func movePage(oldPath, newPath, slug, newSlug, message string) ([]string, error)
 	return changed, nil
 }
 
+// moveFolder moves every page in a folder (and its subfolders) to
+// newFolder, as movePage does for one, all in one commit: returns the
+// (slug, new slug) moves, A–Z, and the files whose links changed. The
+// caller checks that no target exists. Other files in the folder (images…)
+// stay; folders left empty go.
+func moveFolder(folder, newFolder, message string) ([][2]string, []string, error) {
+	var moves [][2]string
+	var touched []string
+	moved := map[string]string{}
+	for _, p := range sortedPages() {
+		if !strings.HasPrefix(p.Slug, folder+"/") {
+			continue
+		}
+		newSlug := newFolder + p.Slug[len(folder):]
+		newPath := filepath.Join(cfg.Data, filepath.FromSlash(newSlug+".md"))
+		if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
+			return nil, nil, err
+		}
+		if err := os.Rename(p.Path, newPath); err != nil {
+			return nil, nil, err
+		}
+		moves = append(moves, [2]string{p.Slug, newSlug})
+		moved[p.Slug] = newSlug
+		touched = append(touched, p.Path, newPath)
+	}
+	// All the files are in place before any link is rewritten, so each
+	// page's links are re-based from where it moved to.
+	changed := rewriteMovedLinks(moved)
+	var dirs []string
+	_ = filepath.WalkDir(filepath.Join(cfg.Data, filepath.FromSlash(folder)), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	for i := len(dirs) - 1; i >= 0; i-- { // the deepest first
+		_ = os.Remove(dirs[i]) // fails when not empty
+	}
+	commit := append([]string{}, touched...)
+	var still []string
+	for _, p := range changed {
+		if !slices.Contains(touched, p) {
+			commit = append(commit, p)
+		}
+		if exists(p) {
+			still = append(still, p)
+		}
+	}
+	gitCommit(message, commit...)
+	return moves, still, nil
+}
+
 var renameBracesRE = regexp.MustCompile(`\{([^{}]*) => ([^{}]*)\}`)
 
 // numstatPath: the path after a commit from a --numstat path, which for a
@@ -216,6 +273,160 @@ func gitLog(path string, max int) []GitEntry {
 		entries = append(entries, e)
 	}
 	return entries
+}
+
+// LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), message
+// and the files it changed (relative to the wiki).
+type LogEntry struct {
+	Sha, Time, Msg string
+	Files          []string
+}
+
+// gitLogAll: the wiki's commits, newest first, at most max; since a day
+// (YYYY-MM-DD, from its start), under a folder ("" for either: all).
+func gitLogAll(since, under string, max int) []LogEntry {
+	if !cfg.GitEnabled {
+		return nil
+	}
+	args := []string{"log", "-n", strconv.Itoa(max), "--name-only", "--date=format:%Y-%m-%d %H:%M",
+		"--format=\x1e%H\x1f%ad\x1f%s"}
+	if since != "" {
+		args = append(args, "--since="+since+" 00:00")
+	}
+	if under != "" {
+		args = append(args, "--", under+"/")
+	}
+	var entries []LogEntry
+	for _, record := range strings.Split(runGit(args...).Stdout, "\x1e")[1:] {
+		head, names, _ := strings.Cut(record, "\n")
+		parts := strings.SplitN(head, "\x1f", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		e := LogEntry{Sha: parts[0], Time: parts[1], Msg: parts[2]}
+		for _, n := range splitLines(names) {
+			if n = lineBody(n); pyStrip(n) != "" {
+				e.Files = append(e.Files, n)
+			}
+		}
+		entries = append(entries, e)
+	}
+	return entries
+}
+
+// isUncommitted: the file differs from its last commit (or was never
+// committed): edits auto-saved by the editor, or made on disk.
+func isUncommitted(path string) bool {
+	if !cfg.GitEnabled {
+		return false
+	}
+	rel, err := filepath.Rel(cfg.Data, path)
+	if err != nil {
+		return false
+	}
+	r := runGit("status", "--porcelain", "--", rel)
+	return r.Code == 0 && pyStrip(r.Stdout) != ""
+}
+
+// A pattern search (grepPages) gets far less time than other git calls: a
+// pattern that backtracks badly is killed, instead of a whole minute of work.
+var grepTimeout = 10 * time.Second
+
+// grepPerl: whether this git has Perl-style patterns (grep -P, built with
+// PCRE); else grepPages uses extended regexes (-E). Found out on the first
+// search.
+var grepPerl struct {
+	sync.Mutex
+	known, perl bool
+}
+
+// GrepHit is a line of a page that matched.
+type GrepHit struct {
+	Slug   string
+	Number int
+	Line   string
+}
+
+// grepError: a grepPages pattern git refused (bad syntax) or that took too long.
+type grepError struct{ msg string }
+
+func (e *grepError) Error() string { return e.msg }
+
+// grepPages: every line of every page matching a regex, in file order. git
+// matches (git grep --no-index, so pages not yet committed count too) in
+// its own process, which a timeout can kill. Without git, the pattern is
+// matched as plain text.
+func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
+	slugs := slugSet()
+	var hits []GrepHit
+	if !cfg.GitEnabled {
+		needle := pattern
+		if ignoreCase {
+			needle = strings.ToLower(pattern)
+		}
+		for _, p := range sortedPages() {
+			text, err := readText(p.Path)
+			if err != nil {
+				continue
+			}
+			for n, line := range splitLines(strings.ToValidUTF8(text, "\uFFFD")) {
+				line = lineBody(line)
+				hay := line
+				if ignoreCase {
+					hay = strings.ToLower(line)
+				}
+				if strings.Contains(hay, needle) {
+					hits = append(hits, GrepHit{p.Slug, n + 1, line})
+				}
+			}
+		}
+		return hits, nil
+	}
+	grepPerl.Lock()
+	tries := []bool{true, false}
+	if grepPerl.known {
+		tries = []bool{grepPerl.perl}
+	}
+	grepPerl.Unlock()
+	var r gitResult
+	for _, perl := range tries {
+		args := []string{"grep", "--no-index", "--no-color", "-I", "-n", "-z", "-E"}
+		if perl {
+			args[len(args)-1] = "-P"
+		}
+		if ignoreCase {
+			args = append(args, "-i")
+		}
+		r = runGitFor(grepTimeout, append(args, "-e", pattern, "--", "*.md")...)
+		if r.Code == 124 {
+			return nil, &grepError{fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds()))}
+		}
+		if perl && r.Code != 0 && r.Code != 1 && strings.Contains(r.Stderr, "PCRE") {
+			continue // this git has no -P: extended regexes instead
+		}
+		grepPerl.Lock()
+		grepPerl.known, grepPerl.perl = true, perl
+		grepPerl.Unlock()
+		break
+	}
+	if r.Code != 0 && r.Code != 1 {
+		msg := strings.TrimPrefix(pyStrip(r.Stderr), "fatal: ")
+		if msg == "" {
+			msg = fmt.Sprintf("git grep failed (%d)", r.Code)
+		}
+		return nil, &grepError{msg}
+	}
+	for _, row := range splitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
+		parts := strings.SplitN(lineBody(row), "\x00", 3)
+		if len(parts) != 3 || !pyIntRE.MatchString(parts[1]) || strings.Contains(parts[1], "_") {
+			continue
+		}
+		slug, ok := strings.CutSuffix(filepath.ToSlash(parts[0]), ".md")
+		if ok && slugs[slug] { // pages only: not _assets/, _deck/, …
+			hits = append(hits, GrepHit{slug, pyAtoi(parts[1]), parts[2]})
+		}
+	}
+	return hits, nil
 }
 
 // gitShow: a file as a commit has it (ok false when it hasn't).

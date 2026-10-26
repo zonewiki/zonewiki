@@ -1,0 +1,225 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The MCP server in Go (mcp.go, mcptools.go, mcpwrite.go): the protocol
+// (test_mcp.py's TestHandle calls Python's handler directly) and what the
+// API tests reach by patching Python's limits.
+
+// set changes a variable for one test.
+func set[T any](t *testing.T, v *T, to T) {
+	old := *v
+	*v = to
+	t.Cleanup(func() { *v = old })
+}
+
+func handle(t *testing.T, msg string, call func(string, *Obj) (string, error)) *Obj {
+	t.Helper()
+	v, err := loads([]byte(msg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply, err := handleMCP(v, call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reply
+}
+
+func noTools(string, *Obj) (string, error) { panic("not called") }
+
+func TestMCPProtocol(t *testing.T) {
+	testWiki(t, nil)
+	r := handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}`, noTools)
+	res := r.Get("result").(*Obj)
+	if res.Get("protocolVersion") != "2025-06-18" || res.Get("serverInfo").(*Obj).Get("version") != version ||
+		!strings.Contains(res.Str("instructions"), "search_wiki") {
+		t.Errorf("initialize: %s", dumpsLine(r))
+	}
+	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}`, noTools)
+	if r.Get("result").(*Obj).Get("protocolVersion") != protocolVersions[0] {
+		t.Error("an unknown version doesn't get the newest")
+	}
+	for _, msg := range []string{`{"jsonrpc": "2.0", "method": "notifications/initialized"}`, `{"jsonrpc": "2.0", "id": 5, "result": {}}`} {
+		if handle(t, msg, noTools) != nil {
+			t.Errorf("answered %s", msg)
+		}
+	}
+	if got := dumpsLine(handle(t, `{"jsonrpc": "2.0", "id": 2, "method": "ping"}`, noTools)); got != `{"jsonrpc": "2.0", "id": 2, "result": {}}` {
+		t.Errorf("ping: %s", got)
+	}
+	code := func(msg string) any { return handle(t, msg, noTools).Get("error").(*Obj).Get("code") }
+	for msg, want := range map[string]int{
+		`{"jsonrpc": "2.0", "id": 1, "method": "resources/list"}`: -32601,
+		`{"id": 1, "method": "ping"}`:                             -32600,
+		`[1]`:                                                     -32600,
+		`{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "delete_everything"}}`:           -32602,
+		`{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "read_page", "arguments": [1]}}`: -32602,
+	} {
+		if c := code(msg); c != want {
+			t.Errorf("%s: code %v", msg, c)
+		}
+	}
+	fail := func(string, *Obj) (string, error) { return "", toolErr("No page 'x'") }
+	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "read_page", "arguments": {"slug": "x"}}}`, fail)
+	if got := dumpsLine(r.Get("result")); got != `{"content": [{"type": "text", "text": "No page 'x'"}], "isError": true}` {
+		t.Errorf("a tool error: %s", got)
+	}
+}
+
+func TestMCPToolDefinitions(t *testing.T) {
+	var names []string
+	for _, tool := range mcpTools {
+		names = append(names, tool.(*Obj).Str("name"))
+		if _, ok := mcpToolFuncs[tool.(*Obj).Str("name")]; !ok {
+			t.Errorf("%s has no function", tool.(*Obj).Str("name"))
+		}
+	}
+	if len(names) != len(mcpToolFuncs) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
+		t.Errorf("tools: %q", names)
+	}
+	if len(mcpToolsJSON) > 30000 {
+		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
+	}
+}
+
+func TestLongGuidesAreCut(t *testing.T) {
+	testWiki(t, map[string]string{"wiki-guide": "# Wiki guide\n\n" + strings.Repeat("x", 100),
+		"tickets/CLAUDE": "# Tickets\n\nOne folder per ticket.\n", "tickets/bug-1": "# Bug\n"})
+	set(t, &guideChars, 20)
+	if got := instructionsWithGuide(); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page 'wiki-guide' for the rest]") {
+		t.Errorf("instructions: %q", got[len(got)-100:])
+	}
+	set(t, &folderGuideChars, 10)
+	err := checkGuides(NewObj(), []string{"tickets/bug-1"})
+	if err == nil || !strings.Contains(err.Error(), "# Tickets\n\n\n[… cut here: read_page 'tickets/CLAUDE' for the rest]") {
+		t.Errorf("refusal: %v", err)
+	}
+}
+
+func TestToolListNamesGuidedFolders(t *testing.T) {
+	testWiki(t, nil)
+	desc := func() string {
+		for _, tool := range toolList() {
+			if tool.(*Obj).Get("name") == "read_guides" {
+				return tool.(*Obj).Str("description")
+			}
+		}
+		return ""
+	}
+	if strings.Contains(desc(), "Guides in this wiki") {
+		t.Error("guides named without any")
+	}
+	testWiki(t, map[string]string{"a/CLAUDE": "# A\n", "b/CLAUDE": "# B\n"})
+	set(t, &guidedShown, 1)
+	if d := desc(); !strings.HasSuffix(d, " Guides in this wiki:\n- a/: A\n- … and 1 more folders") {
+		t.Errorf("description: %q", d)
+	}
+}
+
+func TestLinkedFromIsCut(t *testing.T) {
+	testWiki(t, map[string]string{"golf": "# Golf\n", "c": "[[golf]]\n", "d": "[[golf]]\n", "e": "[[golf]]\n"})
+	set(t, &backlinksShown, 2)
+	if got := mcpPageLinks("golf", "# Golf\n"); !strings.HasSuffix(got, "Linked from (3): c, d, … and 1 more") {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestQueryLogMovesAsideWhenFull(t *testing.T) {
+	testWiki(t, map[string]string{"golf": "# Golf\n\nMechaniker, Bremsen.\n"})
+	cfg.QueryLog = true
+	set(t, &queryLogMax, 10)
+	for _, q := range []string{"git push", "Mechaniker", "Bremsen"} {
+		logQuery(q, "", nil)
+	}
+	log, _ := os.ReadFile(queryLogPath())
+	old, _ := os.ReadFile(filepath.Join(filepath.Dir(queryLogPath()), "queries.1.jsonl"))
+	if strings.Count(string(log), "\n") != 1 || !strings.Contains(string(log), `"Bremsen"`) || !strings.Contains(string(old), `"Mechaniker"`) {
+		t.Errorf("log %q, moved aside %q", log, old)
+	}
+}
+
+// A pattern that backtracks for ages in Python (Python ran it in a process
+// of its own, killed after a timeout) is linear in RE2.
+func TestCatastrophicRegexIsFast(t *testing.T) {
+	testWiki(t, map[string]string{"slow": "# Slow\n\n" + strings.Repeat("a", 5000) + "!\n"})
+	start := time.Now()
+	out, err := replaceInPages(NewObj("find", "(a+)+$", "replace", "x", "regex", true, "dry_run", false), "")
+	if err != nil || out != "Nothing matches '(a+)+$' outside code." || time.Since(start) > 2*time.Second {
+		t.Errorf("%q %v in %v", out, err, time.Since(start))
+	}
+}
+
+func TestGrepTimeout(t *testing.T) {
+	testWiki(t, map[string]string{"a": "# A\n"})
+	cfg.GitEnabled = true
+	set(t, &grepTimeout, time.Nanosecond)
+	if _, err := grepPages("(a+)+$", false); err == nil || !strings.Contains(err.Error(), "took longer than") {
+		t.Errorf("err %v", err)
+	}
+}
+
+func TestReplacementTemplates(t *testing.T) {
+	re := regexp.MustCompile(`BUG-(\d+)(?P<rest>x)?`)
+	m := re.FindStringSubmatchIndex("BUG-12")
+	for tmpl, want := range map[string]string{
+		`[[bug-\1]]`:    "[[bug-12]]",
+		`\g<1>\g<0>`:    "12BUG-12",
+		`<\g<rest>>`:    "<>", // a group that didn't take part
+		`a\nb\\c\-d`:    "a\nb\\c\\-d",
+		`\101`:          "A", // octal
+		`\10`:           "",  // group 10: an error below
+		`plain $1 text`: "plain $1 text",
+	} {
+		parts, err := parseTemplate(tmpl, re)
+		if tmpl == `\10` {
+			if err == nil {
+				t.Error(`\10 isn't a group`)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: %v", tmpl, err)
+			continue
+		}
+		if got := expand(parts, "BUG-12", m); got != want {
+			t.Errorf("%s: got %q, want %q", tmpl, got, want)
+		}
+	}
+	for _, bad := range []string{`\2`, `\q`, `\g<nope>`, `\g<1`, `\`} {
+		if _, err := parseTemplate(bad, regexp.MustCompile(`(x)`)); err == nil {
+			t.Errorf("%s: no error", bad)
+		}
+	}
+}
+
+func TestReplaceLinesLeavesCodeAlone(t *testing.T) {
+	re := regexp.MustCompile(regexp.QuoteMeta("BUG"))
+	lit := func(string, []int) (string, error) { return "ONE", nil }
+	text := "BUG and `BUG`\n```\nBUG\n```\nlast BUG"
+	got, changed, _ := replaceLines(text, re, lit, false)
+	if got != "ONE and `BUG`\n```\nBUG\n```\nlast ONE" || len(changed) != 2 || changed[1].number != 5 {
+		t.Errorf("got %q, %+v", got, changed)
+	}
+	if got, _, _ := replaceLines(text, re, lit, true); strings.Contains(got, "BUG") {
+		t.Errorf("include code: %q", got)
+	}
+	if got := pyPattern(`a\Z\d`); got != `a\z\d` {
+		t.Errorf("pyPattern: %q", got)
+	}
+}
+
+func TestPyRepr(t *testing.T) {
+	for in, want := range map[string]string{"a": "'a'", "it's": `"it's"`, `a'b"c`: `'a\'b"c'`, "a\nb\\": `'a\nb\\'`, " é": `'\xa0é'`} {
+		if got := pyRepr(in); got != want {
+			t.Errorf("%q: got %s, want %s", in, got, want)
+		}
+	}
+}

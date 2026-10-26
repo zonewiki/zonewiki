@@ -616,7 +616,7 @@ func retrieve(raw string, limit int, under string, scratch bool) []*SearchDoc {
 // into questions for tools/eval_retrieval.py. In .leaf/, so never in git.
 // Past queryLogMax bytes the log moves to queries.1.jsonl (the one before
 // is dropped), so it can't grow without end.
-const queryLogMax = 1_000_000
+var queryLogMax int64 = 1_000_000
 
 var queryLogMu sync.Mutex
 

@@ -69,16 +69,23 @@ def _settings() -> dict[str, str]:
     return env
 
 
+def _flags() -> list[str]:
+    """The flags for what a test patches that isn't a setting: Leaf's docs
+    folder (manual.docs_root, for leaf_help)."""
+    import manual
+    return ["-docs", str(manual.docs_root() or "/nonexistent")]
+
+
 class GoServer:
     """One Go server process, on addr (a free port: 127.0.0.1:0)."""
 
-    def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0"):
-        self.env = env
+    def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0", flags: list[str] = ()):
+        self.env, self.flags = env, list(flags)
         base = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(
-            [str(self.binary), "-addr", addr, "-public", str(REPO / "src" / "public")],
+            [str(self.binary), "-addr", addr, "-public", str(REPO / "src" / "public"), *self.flags],
             env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log)
         line = self.proc.stdout.readline().decode()
         if " listening on " not in line:
@@ -99,18 +106,18 @@ class GoServer:
 
 class LiveServer:
     """The test's Go server, started on first use and restarted (on the same
-    port, when given one) when the settings in config change."""
+    port, when given one) when the settings in config (or _flags) change."""
 
     def __init__(self, log: Path, port: int = 0):
         self.log, self.port = log, port
         self.server: GoServer | None = None
 
     def ensure(self) -> GoServer:
-        env = _settings()
-        if self.server and self.server.env != env:
+        env, flags = _settings(), _flags()
+        if self.server and (self.server.env, self.server.flags) != (env, flags):
             self.stop()
         if not self.server:
-            self.server = GoServer(env, self.log, f"127.0.0.1:{self.port}")
+            self.server = GoServer(env, self.log, f"127.0.0.1:{self.port}", flags)
         return self.server
 
     def stop(self) -> None:

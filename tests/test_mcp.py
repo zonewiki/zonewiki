@@ -235,6 +235,7 @@ class TestSearchWiki:
         assert second["under"] == "golf" and second["results"] == ["golf#werkstatt"]
         assert first["at"][:2] == "20"
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestQueryLogMovesAsideWhenFull
     def test_the_query_log_moves_aside_when_full(self, client, pages, monkeypatch):
         monkeypatch.setattr(config, "LEAF_QUERY_LOG", True)
         monkeypatch.setattr(retrieval, "QUERY_LOG_MAX", 10)
@@ -632,6 +633,7 @@ class TestGuide:
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- People notes stay private.\n")
         assert self.instructions(client).endswith("- People notes stay private.")
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestLongGuidesAreCut
     def test_a_long_guide_is_cut(self, client, wiki_dir, monkeypatch):
         import mcp_tools
         monkeypatch.setattr(mcp_tools, "_GUIDE_CHARS", 20)
@@ -738,6 +740,7 @@ class TestFolderGuides:
         write_page(guided, "old/a", "# A\n")
         assert guide_ids(call(client, "rename_page", slug="old/", new_slug="tickets/old")[0])
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestLongGuidesAreCut
     def test_a_long_guide_is_cut(self, client, guided, monkeypatch):
         import mcp_tools
         monkeypatch.setattr(mcp_tools, "_FOLDER_GUIDE_CHARS", 10)
@@ -801,6 +804,7 @@ class TestReadGuides:
         # Other tools as they are.
         assert self.tool_list(client)["read_page"] == next(t for t in mcp_server.TOOLS if t["name"] == "read_page")
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestToolListNamesGuidedFolders
     def test_the_description_without_guides_and_with_many(self, client, wiki_dir, monkeypatch):
         import mcp_tools
         desc = self.tool_list(client)["read_guides"]["description"]
@@ -913,6 +917,7 @@ class TestReadPageLinks:
         assert text.endswith("\n\n---\nLinked from (0): no other page\n"
                              "Broken links (no such page): [[Nowhere]]")
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestLinkedFromIsCut
     def test_long_list_is_cut(self, client, pages, monkeypatch):
         import mcp_tools
         monkeypatch.setattr(mcp_tools, "_BACKLINKS_SHOWN", 2)
@@ -1002,6 +1007,7 @@ class TestGrepWiki:
         write_page(git_wiki_dir, "fresh", "# Fresh\n\nnot committed yet\n")
         assert "fresh\n  3: not committed yet" in call(client, "grep_wiki", pattern="committed")[0]
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestGrepTimeout
     def test_slow_pattern_is_stopped(self, client, pages, monkeypatch):
         import gitstore
         import subprocess
@@ -1404,6 +1410,7 @@ class TestReplaceInPages:
         assert call(client, "replace_in_pages", find="OA", replace="y", under="nope")[1]
         assert call(client, "replace_in_pages", find="OA", replace="y", dry_run="no")[1]
 
+    @pytest.mark.python_only  # go/mcp_test.go: TestCatastrophicRegexIsFast (RE2 can't backtrack)
     def test_a_catastrophic_regex_is_stopped(self, client, notes, monkeypatch):
         # (a+)+$ on a long run of a's that doesn't end the line backtracks
         # for ages; it runs in a process of its own (regexjob), killed after
@@ -1416,6 +1423,7 @@ class TestReplaceInPages:
         assert err and "more than 1 seconds" in text and "nothing was written" in text
         assert (notes / "slow.md").read_text() == before
 
+    @pytest.mark.python_only  # Go runs no process for a regex either
     def test_plain_text_runs_without_a_process(self, client, notes, monkeypatch):
         # An escaped pattern can't backtrack, so it needs no process of its own.
         import mcp_tools
