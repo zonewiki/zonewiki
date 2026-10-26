@@ -80,11 +80,25 @@ On a real wiki: 338 pages and 312 tasks; 650 documents for page search,
   maps allocated per call); Python's own caches (`_analyze`, `_fold_stem`)
   are in its number.
 
+## In the port
+
+`go/search.go` is this prototype's `search.go` (and `difflib.go`); the
+documents, caches and routes are `go/retrieval.go` and `go/embed.go`'s
+chunking. `compare_servers.py` checks the port end to end: the same
+queries through `/api/search` of the Python app and of the Go server, each
+on its own copy of the wiki:
+
+```sh
+cd go && go build -o /tmp/leafgo . && cd ..
+.venv/bin/python prototype/search/compare_servers.py ~/leaf /tmp/leafgo [N_QUERIES]
+```
+
+On the 344-page wiki with 3,047 queries: the same results, excerpts,
+highlighted words and sections, except the order of equally scored
+results (Python keeps os.walk's order of the files, Go A–Z).
+
 ## Left for the port
 
-- Building the documents: `retrieval._page_search_doc`, `_page_chunks`
-  (`embed.chunk_sections`), `deckstore.task_search_docs`, the per-file
-  caches. Plain code, but `embed.chunk_sections` decides the sections.
 - Semantic search and its fusion with BM25 (the Go + onnxruntime spike).
 - Two Unicode versions: Python 3.14 has 16.0, Go 1.27 and `x/text` 17.0, so
   they may disagree on characters new in 17.0 (what is a letter, how it

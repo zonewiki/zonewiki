@@ -17,11 +17,12 @@ Progress by step (see Order):
 | 1. Skeleton | Done: settings (`config.go`), the request checks, page policy, login, signed session, throttle (`security.go`), `/public/`, `/_assets/`, `/api/upload`, `/api/version`, git setup. |
 | 2. Pages | Done: `mdtext.go`, `pages.go` (link graph, renames re-pointing links), `markdown.go` (goldmark, from the prototype) and `render.go`, `gitstore.go`, `history.go`, `scratch.go`, `routes.go`, `views.go` with every template in `go/templates/`. |
 | 3. Deck | Done with step 2 (the page view needs it): `pyjson.go` (key order, ints/floats, Python's `json.dumps` byte for byte), `decksyntax.go`, `deckstore.go`, `deck.go` (every `/api/deck` route, the embed). |
-| 4. Search | Next: `/api/search`, `/search` (the prototype's `search/`), the documents and caches. |
-| 5–7 | Not started (MCP, semantic search, switch-over). `retrieval.go` stubs semantic status ("off") and Related. |
+| 4. Search | Done: `search.go` (the prototype's, with `difflib.go`), `retrieval.go` (page, section and task documents, per-file caches, `doSearch`, `retrieve`, the query log), `embed.go`'s chunking; `/api/search`, `/search`. `search/compare_servers.py` finds no difference from Python on a wiki but the order of equal scores. |
+| 5. MCP | Next: the protocol and every tool (`retrieve` and `logQuery` are ready for `search_wiki`). |
+| 6–7 | Not started (semantic search, switch-over). `retrieval.go` ranks by keywords only, stubs semantic status ("off") and Related. |
 
-Against Go: 620 API tests pass, the rest (~280) are search, MCP and
-semantic; 380 of 398 browser tests pass (2 skipped), the 16 others need search. `go test`:
+Against Go: every API test passes but MCP (~210) and semantic search (8);
+every browser test passes (396, 2 skipped). `go test`:
 Go's own tests, and `testdata/golden.json.gz` (Python's answers of 28 pure
 functions on 6,259 texts, every string in the tests: `testdata/golden.py`
 writes it) all the same.
@@ -33,6 +34,8 @@ Deliberate differences so far (none breaks a page):
 - No empty `_deck/completed.json` (and commit) in a wiki without completed tasks.
 - Paths with `.`/`..` segments are 400 (Go's router would redirect).
 - The session cookie's format (users sign in once more).
+- Search results with equal scores come in the pages' A–Z order (Python:
+  the directory listing's).
 
 Earlier, four spikes, each in its own folder with a README (method, results) and a
 `compare.py` that checks Go against the Python on a real wiki:
@@ -158,9 +161,10 @@ These are read or written by users, other tools, or the browser code:
   (the GitHub release, `onnxruntime-linux-x64-1.31.0.tgz`), the model
   (`embed_setup.download_model`, ~615 MB) and a venv with
   `requirements-embed.txt`. `semantic/README.md` has the commands.
-- Go dependencies: none in `go/` yet; the spikes use `github.com/yuin/goldmark`,
-  `golang.org/x/text`, `github.com/yalue/onnxruntime_go`. Pin exact versions
-  (as for Python).
+- Go dependencies (`go/go.mod`, exact versions as for Python):
+  `github.com/yuin/goldmark` v1.8.6, `golang.org/x/text` v0.43.0 (search's
+  case folding and NFKD); semantic search will add
+  `github.com/yalue/onnxruntime_go` (`semantic/`).
 
 ## Python and Go differ here
 
@@ -173,6 +177,9 @@ What the spikes ran into, so the port doesn't relearn it:
   `str.split`, `str.splitlines` and `str.casefold` mean more than Go's
   (a non-breaking space is `\s` in Python; `splitlines` splits at U+2028).
   `goldmark/preprocess.go` and `search/search.go` have Python's versions.
+- **Line ends**: Python reads files and git's output with universal
+  newlines ("\r\n" and "\r" become "\n"); Go's `readText` and `runGit`
+  do it too (`newlines`), anything reading a page another way must.
 - **Text is code points in Python, bytes in Go**: offsets and lengths
   (excerpts, `len`, slicing) count runes.
 - **Order**: dicts keep insertion order; float sums depend on it.

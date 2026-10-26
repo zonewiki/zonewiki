@@ -42,6 +42,8 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
 	mux.HandleFunc("GET /deck", deckPage)
+	mux.HandleFunc("GET /api/search", apiSearch)
+	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", apiToggleCheckbox)
 	mux.HandleFunc("POST /api/preview", apiPreview)
 	mux.HandleFunc("POST /api/render-notes", apiRenderNotes)
@@ -291,7 +293,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
 func postedContent(r *http.Request) string {
-	return strings.ReplaceAll(strings.ReplaceAll(r.PostFormValue("content"), "\r\n", "\n"), "\r", "\n")
+	return newlines(r.PostFormValue("content"))
 }
 
 // currentText is the page's text, nil when the file isn't there.
@@ -303,7 +305,7 @@ func currentText(path string) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := string(b)
+	s := newlines(string(b))
 	return &s, nil
 }
 
@@ -724,4 +726,42 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 		out[k.key] = renderNotes(rq, texts, k.inline)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// apiSearch: the search modal's results (?limit=, ?unlinked=1; ?scratch=1:
+// scratch notes only, for the Scratch page's filter).
+func apiSearch(w http.ResponseWriter, r *http.Request) {
+	args := r.URL.Query()
+	q := pyStrip(args.Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusOK, []M{})
+		return
+	}
+	scratch := args.Get("scratch") == "1"
+	limit, ok := intArg(args.Get("limit"), args.Has("limit"))
+	if !ok {
+		limit = searchLimit
+	}
+	most := searchMaxLimit
+	if scratch {
+		most = scratchFilterLimit
+	}
+	results := doSearch(newReq(r), q, args.Get("unlinked") == "1", max(1, min(limit, most)), scratch)
+	// The search dialog's indicator (js/search.js) follows it: indexing → on.
+	w.Header().Set("X-Leaf-Semantic", semanticStatus())
+	writeJSON(w, http.StatusOK, results)
+}
+
+// searchPage: /search, up to searchPageLimit results (the modal's "All
+// results").
+func searchPage(w http.ResponseWriter, r *http.Request) {
+	rq := newReq(r)
+	q := pyStrip(r.URL.Query().Get("q"))
+	unlinked := r.URL.Query().Get("unlinked") == "1"
+	var results []M
+	if q != "" {
+		results = doSearch(rq, q, unlinked, searchPageLimit, false)
+	}
+	page(w, rq, http.StatusOK, "search.html", "Search: "+q, shell{}, M{"q": q, "results": results,
+		"unlinked": unlinked, "limit": searchPageLimit})
 }

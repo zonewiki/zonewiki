@@ -56,7 +56,7 @@ func runGit(args ...string) gitResult {
 	} else if err != nil {
 		return gitResult{1, "", err.Error()}
 	}
-	return gitResult{code, stdout.String(), stderr.String()}
+	return gitResult{code, newlines(stdout.String()), newlines(stderr.String())}
 }
 
 // gitSetup makes the wiki a repository (its files as the first commit), or

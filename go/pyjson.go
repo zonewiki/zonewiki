@@ -323,31 +323,41 @@ func dumpString(b *strings.Builder, s string) {
 // between items, every non-ASCII character escaped.
 func dumpsLine(v any) string {
 	var b strings.Builder
-	dumpLine(&b, v)
+	dumpLine(&b, v, true)
 	return b.String()
 }
 
-func dumpLine(b *strings.Builder, v any) {
+// dumpsLineUTF8 is json.dumps(v, ensure_ascii=False): one line, non-ASCII
+// characters as they are.
+func dumpsLineUTF8(v any) string {
+	var b strings.Builder
+	dumpLine(&b, v, false)
+	return b.String()
+}
+
+func dumpLine(b *strings.Builder, v any, ascii bool) {
 	switch v := v.(type) {
 	case string:
-		b.WriteByte('"')
-		for _, r := range dumpsInlineString(v) {
-			b.WriteRune(r)
+		if !ascii {
+			dumpString(b, v)
+			return
 		}
+		b.WriteByte('"')
+		b.WriteString(dumpsInlineString(v))
 		b.WriteByte('"')
 	case []string:
 		l := make([]any, len(v))
 		for i, s := range v {
 			l[i] = s
 		}
-		dumpLine(b, l)
+		dumpLine(b, l, ascii)
 	case []any:
 		b.WriteByte('[')
 		for i, item := range v {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			dumpLine(b, item)
+			dumpLine(b, item, ascii)
 		}
 		b.WriteByte(']')
 	case *Obj:
@@ -356,9 +366,9 @@ func dumpLine(b *strings.Builder, v any) {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			dumpLine(b, k)
+			dumpLine(b, k, ascii)
 			b.WriteString(": ")
-			dumpLine(b, v.m[k])
+			dumpLine(b, v.m[k], ascii)
 		}
 		b.WriteByte('}')
 	default:

@@ -92,9 +92,19 @@ func exists(p string) bool {
 	return err == nil
 }
 
+// readText is Path.read_text: a file's text, its line ends as "\n".
 func readText(p string) (string, error) {
 	b, err := os.ReadFile(p)
-	return string(b), err
+	return newlines(string(b)), err
+}
+
+// newlines: "\r\n" and "\r" as "\n", Python's universal newlines (how it
+// reads files and git's output), so a page saved on Windows reads the same.
+func newlines(s string) string {
+	if !strings.Contains(s, "\r") {
+		return s
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 }
 
 func writeText(p, text string) error {
@@ -391,7 +401,7 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	if err != nil {
 		return pageMetaEntry{title: slugDisplayName(slug), targets: map[string]bool{}}
 	}
-	content := strings.ToValidUTF8(string(b), "�")
+	content := newlines(strings.ToValidUTF8(string(b), "�"))
 	entry := pageMetaEntry{st.ModTime(), pageTitle(content, slug), pageLinkTargets(content, slug), pageDeckEmbeds(content)}
 	metaMu.Lock()
 	metaCache[slug] = entry

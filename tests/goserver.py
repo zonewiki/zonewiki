@@ -177,7 +177,8 @@ class GoClient:
         # PATH_INFO is WSGI's: the path's bytes as latin-1.
         target = quote(environ["PATH_INFO"].encode("latin-1") or b"/", safe="/%:@!$&'()*+,;=-._~")
         if environ.get("QUERY_STRING"):
-            target += "?" + environ["QUERY_STRING"]
+            # As Flask's client takes it: "?q=a b" has its space encoded.
+            target += "?" + quote(environ["QUERY_STRING"], safe="/%:@!$&'()*+,;=-._~?")
         headers = [(k, v) for k, v in builder.headers.items()
                    if k.lower() not in ("content-length", "content-type", "host")]
         if environ.get("CONTENT_TYPE"):

@@ -1111,6 +1111,15 @@ class TestSearch:
         assert resp.status_code == 200
         assert {r["slug"] for r in resp.get_json()} == {"latin1", "fine"}
 
+    def test_windows_line_ends_read_as_newlines(self, client, wiki_dir):
+        # A page saved with CRLF line ends reads as Python's read_text reads
+        # it: no "\r" in excerpts, sections found as with "\n".
+        (wiki_dir / "crlf.md").write_bytes(b"# Crlf\r\n\r\n## Part\r\n\r\nzzqword one\r\ntwo\r\n")
+        [r] = client.get("/api/search?q=zzqword", headers=HOST).get_json()
+        assert r["excerpt"] == "Part <mark>zzqword</mark> one two"
+        assert r["href"].endswith("#part")
+
+    @pytest.mark.python_only  # go/retrieval_test.go: TestUnreadablePagesAreSkipped
     def test_page_vanishing_mid_search_is_skipped(self, client, wiki_dir, monkeypatch):
         write_page(wiki_dir, "gone", "# Gone\n\nzzqword\n")
         write_page(wiki_dir, "fine", "# Fine\n\nzzqword here\n")
