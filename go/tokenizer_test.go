@@ -8,7 +8,7 @@ import (
 )
 
 // The model's tokenizer.json is not in the repo: LEAF_MODEL_DIR names the
-// folder embed_setup.py downloads it to. The ids are Hugging Face's.
+// folder it was downloaded to (embed.go). The ids are Hugging Face's.
 func loadTok(t *testing.T) *Tokenizer {
 	dir := os.Getenv("LEAF_MODEL_DIR")
 	if dir == "" {

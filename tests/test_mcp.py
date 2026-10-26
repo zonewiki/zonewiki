@@ -1,7 +1,8 @@
-"""Tests for the MCP server: the protocol handler (src/mcp_server.py), the
-/mcp endpoint with its auth, and the tools (search_wiki, search_tasks,
-read_page, list_pages, grep_wiki, check_links) backed by section-level
-retrieval in server.py, and the writing tools.
+"""Tests for the MCP server: the /mcp endpoint with its auth, the tool
+definitions, and the tools (search_wiki, search_tasks, read_page,
+list_pages, grep_wiki, check_links, the writing tools). The protocol's
+handling and the limits Leaf cuts long answers at have Go tests
+(go/mcp_test.go).
 """
 
 import json
@@ -11,11 +12,9 @@ import re
 
 import pytest
 
-from tests.conftest import HOST, write_page
-import mcp_server
-from tests.test_semantic import make_index
-import config
-import retrieval
+from tests import settings
+from tests.conftest import HOST, content_hash, write_page
+from tests.semantic import make_index
 
 
 TOKEN = "test-token"
@@ -25,7 +24,7 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 @pytest.fixture(autouse=True)
 def mcp_token(monkeypatch):
     """/mcp is off without LEAF_MCP_TOKEN: every test here has one."""
-    monkeypatch.setattr(config, "LEAF_MCP_TOKEN", TOKEN)
+    monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", TOKEN)
 
 
 def rpc(client, method, params=None, id_=1, headers=None):
@@ -44,37 +43,14 @@ def call(client, tool, /, **args):
 
 # ── Protocol ─────────────────────────────────────────────────────────────────
 
-def _no_tools(name, args):
-    raise AssertionError("not called")
+class TestToolDefinitions:
+    """tools/list: what every client session loads."""
 
+    def tools(self, client):
+        return rpc(client, "tools/list").get_json()["result"]["tools"]
 
-class TestHandle:
-    def test_initialize_echoes_a_known_version(self):
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                               "params": {"protocolVersion": "2025-06-18"}}, _no_tools, "1.0.0")
-        res = r["result"]
-        assert res["protocolVersion"] == "2025-06-18"
-        assert res["capabilities"] == {"tools": {"listChanged": False}}
-        assert res["serverInfo"]["name"] == "leaf" and res["serverInfo"]["version"] == "1.0.0"
-        assert "search_wiki" in res["instructions"]
-
-    def test_initialize_unknown_version_gets_newest(self):
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                               "params": {"protocolVersion": "1999-01-01"}}, _no_tools, "x")
-        assert r["result"]["protocolVersion"] == mcp_server.PROTOCOL_VERSIONS[0]
-
-    def test_notification_and_response_get_nothing(self):
-        assert mcp_server.handle({"jsonrpc": "2.0", "method": "notifications/initialized"},
-                                 _no_tools, "x") is None
-        assert mcp_server.handle({"jsonrpc": "2.0", "id": 5, "result": {}}, _no_tools, "x") is None
-
-    def test_ping(self):
-        assert mcp_server.handle({"jsonrpc": "2.0", "id": 2, "method": "ping"},
-                                 _no_tools, "x") == {"jsonrpc": "2.0", "id": 2, "result": {}}
-
-    def test_tools_list(self):
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, _no_tools, "x")
-        tools = r["result"]["tools"]
+    def test_names_and_hints(self, client):
+        tools = self.tools(client)
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "leaf_help", "read_guides",
@@ -88,38 +64,26 @@ class TestHandle:
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
 
-    def test_tool_definitions_stay_small(self):
+    def test_they_stay_small(self, client):
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
-        assert len(json.dumps(mcp_server.TOOLS)) < 25000
-        for shared in (mcp_server._SUMMARY, mcp_server._GUIDES):
-            assert len(shared["description"]) < 100
-        tools = {t["name"]: t for t in mcp_server.TOOLS}
+        tools = {t["name"]: t for t in self.tools(client)}
+        assert len(json.dumps(list(tools.values()))) < 25000
+        props = tools["write_page"]["inputSchema"]["properties"]
+        assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
         assert "as create_task takes it" in tools["update_task"]["inputSchema"]["properties"]["due"]["description"]
 
-    def test_unknown_method(self):
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/list"}, _no_tools, "x")
-        assert r["error"]["code"] == -32601
+    def test_the_writes_take_guides(self, client):
+        writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
+                  "delete_page", "restore_page", "read_guides", "file_scratch_note"}
+        for tool in self.tools(client):
+            assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
 
-    def test_invalid_request(self):
-        assert mcp_server.handle({"id": 1, "method": "ping"}, _no_tools, "x")["error"]["code"] == -32600
-        assert mcp_server.handle([1], _no_tools, "x")["error"]["code"] == -32600
-
-    def test_unknown_tool_and_bad_arguments(self):
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                               "params": {"name": "delete_everything"}}, _no_tools, "x")
-        assert r["error"]["code"] == -32602
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                               "params": {"name": "read_page", "arguments": [1]}}, _no_tools, "x")
-        assert r["error"]["code"] == -32602
-
-    def test_tool_error_is_a_result(self):
-        def fail(name, args):
-            raise mcp_server.ToolError("No page 'x'")
-        r = mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                               "params": {"name": "read_page", "arguments": {"slug": "x"}}}, fail, "x")
-        assert r["result"] == {"content": [{"type": "text", "text": "No page 'x'"}], "isError": True}
+    def test_a_plain_date_is_the_deadline(self, client):
+        fields = next(t for t in self.tools(client) if t["name"] == "create_task")["inputSchema"]["properties"]
+        assert "'tomorrow'" in fields["due"]["description"] and "not in start" in fields["due"]["description"]
+        assert "a plain date is the deadline (due)" in fields["start"]["description"]
 
 
 # ── HTTP transport and auth ──────────────────────────────────────────────────
@@ -161,7 +125,7 @@ class TestEndpoint:
 class TestAuth:
     def test_off_without_a_token(self, client, wiki_dir, monkeypatch):
         # The tools write, so /mcp is never open: not without a password either.
-        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "")
         for headers in ({}, {"Authorization": "Bearer "}, AUTH):
             resp = rpc(client, "ping", headers=headers)
             assert resp.status_code == 403
@@ -179,7 +143,7 @@ class TestAuth:
         assert rpc(client, "ping").status_code == 200
 
     def test_token_works_with_password(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
         assert rpc(client, "ping").status_code == 200
         # and the rest of the wiki still wants a login
         assert client.get("/page/index", headers=HOST).status_code == 302
@@ -223,10 +187,10 @@ class TestSearchWiki:
         assert first.endswith("Crashes at startup.")
 
     def test_queries_are_logged_only_when_asked(self, client, pages, monkeypatch):
-        log = retrieval.query_log_path()
+        log = pages / ".leaf" / "queries.jsonl"
         call(client, "search_wiki", query="git push")
         assert not log.exists()
-        monkeypatch.setattr(config, "LEAF_QUERY_LOG", True)
+        monkeypatch.setattr(settings, "LEAF_QUERY_LOG", True)
         call(client, "search_wiki", query="git push")
         call(client, "search_wiki", query="Mechaniker", under="golf")
         first, second = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
@@ -234,16 +198,6 @@ class TestSearchWiki:
         assert first["results"][0] == "git-remote#pushing"
         assert second["under"] == "golf" and second["results"] == ["golf#werkstatt"]
         assert first["at"][:2] == "20"
-
-    @pytest.mark.python_only  # go/mcp_test.go: TestQueryLogMovesAsideWhenFull
-    def test_the_query_log_moves_aside_when_full(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_QUERY_LOG", True)
-        monkeypatch.setattr(retrieval, "QUERY_LOG_MAX", 10)
-        for q in ("git push", "Mechaniker", "Bremsen"):
-            call(client, "search_wiki", query=q)
-        log = retrieval.query_log_path()
-        assert [json.loads(l)["q"] for l in log.read_text(encoding="utf-8").splitlines()] == ["Bremsen"]
-        assert json.loads(log.with_name("queries.1.jsonl").read_text(encoding="utf-8"))["q"] == "Mechaniker"
 
     def test_last_edit_date(self, client, pages):
         os.utime(pages / "git-remote.md", (1_000_000_000, 1_000_000_000))
@@ -305,15 +259,15 @@ class TestSearchWiki:
         assert "Now about git too." in call(client, "search_wiki", query="git")[0]
 
     def test_finds_by_meaning_with_semantic_on(self, client, pages, monkeypatch):
-        idx = make_index(pages)
+        idx = make_index()
         idx.sync()
-        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        monkeypatch.setattr(settings, "SEMANTIC", idx)
         text, _ = call(client, "search_wiki", query="car repair")
         assert text.startswith("[1] Golf › Werkstatt")
         assert "#werkstatt" in text
 
     def test_keywords_only_without_semantic(self, client, pages, monkeypatch):
-        monkeypatch.setattr(retrieval, "SEMANTIC", None)
+        monkeypatch.setattr(settings, "SEMANTIC", None)
         assert call(client, "search_wiki", query="car repair")[0].startswith("No matching")
 
 
@@ -393,9 +347,9 @@ class TestTasksInSearchWiki:
         assert "status: done 20" in text and "view=completed" in text
 
     def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):
-        idx = make_index(pages)
+        idx = make_index()
         idx.sync()
-        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        monkeypatch.setattr(settings, "SEMANTIC", idx)
         task(client, title="Call the mechaniker")
         text, _ = call(client, "search_wiki", query="mechaniker")
         assert "Task: Call the mechaniker" in text and "Golf › Werkstatt" in text
@@ -404,8 +358,8 @@ class TestTasksInSearchWiki:
 class TestTasksByMeaning:
     @pytest.fixture()
     def semantic_on(self, pages, monkeypatch):
-        idx = make_index(pages)
-        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        idx = make_index()
+        monkeypatch.setattr(settings, "SEMANTIC", idx)
         return idx
 
     def test_search_wiki_finds_task_by_meaning(self, client, semantic_on):
@@ -500,7 +454,7 @@ class TestSearchTasks:
 
 class TestBaseUrl:
     def test_links_use_request_address_by_default(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_BASE_URL", "")
+        monkeypatch.setattr(settings, "LEAF_BASE_URL", "")
         resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000", **AUTH}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
@@ -508,7 +462,7 @@ class TestBaseUrl:
             resp.get_json()["result"]["content"][0]["text"]
 
     def test_base_url_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_BASE_URL", "http://wiki.example.org:5000")
+        monkeypatch.setattr(settings, "LEAF_BASE_URL", "http://wiki.example.org:5000")
         assert "url: http://wiki.example.org:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
         assert "url: http://wiki.example.org:5000/page/git-remote#pushing" in \
             call(client, "search_wiki", query="git push")[0]
@@ -516,17 +470,17 @@ class TestBaseUrl:
 
 class TestHostFile:
     def test_wiki_path_without_host_data(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_HOST_DATA", "")
+        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "")
         first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]
         assert f"#pushing\nfile: {pages.resolve()}/git-remote.md\n\nRun git push" in first
 
     def test_host_data_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_HOST_DATA", "/home/me/leaf")
+        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "/home/me/leaf")
         assert "\nfile: /home/me/leaf/git-remote.md\n" in call(client, "search_wiki", query="git push")[0]
         assert "\nfile: /home/me/leaf/golf.md\n" in call(client, "read_page", slug="golf")[0]
 
     def test_subfolder_and_odd_names_kept(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_HOST_DATA", "/home/me/leaf")
+        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "/home/me/leaf")
         write_page(pages, "notes/My Notes", "# My Notes\n\n## Part\n\nZebrafish facts.\n")
         assert "\nfile: /home/me/leaf/notes/My Notes.md\n" in \
             call(client, "search_wiki", query="zebrafish")[0]
@@ -619,27 +573,20 @@ class TestGuide:
 
     def test_without_a_guide_a_nudge_to_start_one(self, client, wiki_dir):
         text = self.instructions(client)
-        assert text.startswith(mcp_server.INSTRUCTIONS)
+        assert text.startswith("Leaf is the user's personal wiki")
         assert text.endswith("it is shown to you at the start of every session.")
         assert "This wiki has no guide yet" in text
 
     def test_the_guide_follows_the_instructions(self, client, wiki_dir):
+        base = self.instructions(client).split("This wiki has no guide yet")[0]
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- Tickets go in tickets/<id>.\n")
         text = self.instructions(client)
-        assert text.startswith(mcp_server.INSTRUCTIONS)
+        assert text.startswith(base)
         assert "The user's guide for this wiki (the page 'wiki-guide'; read_guides gives it too" in text
         assert text.endswith("\n\n# Wiki guide\n\n- Tickets go in tickets/<id>.")
         # Read when a client connects: an edit shows in the next session.
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n- People notes stay private.\n")
         assert self.instructions(client).endswith("- People notes stay private.")
-
-    @pytest.mark.python_only  # go/mcp_test.go: TestLongGuidesAreCut
-    def test_a_long_guide_is_cut(self, client, wiki_dir, monkeypatch):
-        import mcp_tools
-        monkeypatch.setattr(mcp_tools, "_GUIDE_CHARS", 20)
-        write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n" + "x" * 100)
-        text = self.instructions(client)
-        assert text.endswith("\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page 'wiki-guide' for the rest]")
 
     def test_not_an_orphan(self, client, wiki_dir):
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n")
@@ -740,20 +687,6 @@ class TestFolderGuides:
         write_page(guided, "old/a", "# A\n")
         assert guide_ids(call(client, "rename_page", slug="old/", new_slug="tickets/old")[0])
 
-    @pytest.mark.python_only  # go/mcp_test.go: TestLongGuidesAreCut
-    def test_a_long_guide_is_cut(self, client, guided, monkeypatch):
-        import mcp_tools
-        monkeypatch.setattr(mcp_tools, "_FOLDER_GUIDE_CHARS", 10)
-        text = call(client, "append_to_page", slug="tickets/bug-1", content="x")[0]
-        assert "# Tickets\n\n\n[… cut here: read_page 'tickets/CLAUDE' for the rest]" in text
-
-    def test_the_schemas_take_guides(self):
-        writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
-                  "delete_page", "restore_page", "read_guides", "file_scratch_note"}
-        for tool in mcp_server.TOOLS:
-            assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
-
-
 class TestReadGuides:
     """read_guides: a page's or folder's guides before drafting, their ids
     good for the writes; the folders that have guides in its description."""
@@ -802,18 +735,8 @@ class TestReadGuides:
         assert desc.endswith(" Guides in this wiki:\n- the whole wiki: Wiki guide\n"
                              "- messages/: Messages — Project Instructions\n- tickets/bug-1/: tickets/bug-1/AGENTS")
         # Other tools as they are.
-        assert self.tool_list(client)["read_page"] == next(t for t in mcp_server.TOOLS if t["name"] == "read_page")
-
-    @pytest.mark.python_only  # go/mcp_test.go: TestToolListNamesGuidedFolders
-    def test_the_description_without_guides_and_with_many(self, client, wiki_dir, monkeypatch):
-        import mcp_tools
-        desc = self.tool_list(client)["read_guides"]["description"]
-        assert "Guides in this wiki" not in desc
-        monkeypatch.setattr(mcp_tools, "_GUIDED_SHOWN", 1)
-        write_page(wiki_dir, "a/CLAUDE", "# A\n")
-        write_page(wiki_dir, "b/CLAUDE", "# B\n")
-        assert self.tool_list(client)["read_guides"]["description"].endswith(
-            "- a/: A\n- … and 1 more folders")
+        defined = json.loads((settings.REPO / "go" / "mcp_tools.json").read_text(encoding="utf-8"))
+        assert self.tool_list(client)["read_page"] == next(t for t in defined if t["name"] == "read_page")
 
     def test_read_page_of_a_guide_gives_its_id(self, client, guided):
         text = call(client, "read_page", slug="messages/CLAUDE")[0]
@@ -875,9 +798,9 @@ class TestRelatedByMeaning:
     def semantic_on(self, pages, monkeypatch):
         write_page(pages, "brakes", "# Brakes\n\nThe bremsen need the mechaniker.\n")
         write_page(pages, "budget", "# Budget\n\nRent and savings.\n")
-        idx = make_index(pages)
+        idx = make_index()
         idx.sync()
-        monkeypatch.setattr(retrieval, "SEMANTIC", idx)
+        monkeypatch.setattr(settings, "SEMANTIC", idx)
         return idx
 
     def test_read_page_lists_related_not_linked(self, client, pages, semantic_on):
@@ -918,16 +841,6 @@ class TestReadPageLinks:
         text = call(client, "read_page", slug="a")[0]
         assert text.endswith("\n\n---\nLinked from (0): no other page\n"
                              "Broken links (no such page): [[Nowhere]]")
-
-    @pytest.mark.python_only  # go/mcp_test.go: TestLinkedFromIsCut
-    def test_long_list_is_cut(self, client, pages, monkeypatch):
-        import mcp_tools
-        monkeypatch.setattr(mcp_tools, "_BACKLINKS_SHOWN", 2)
-        for name in "cde":
-            write_page(pages, name, "[[golf]]\n")
-        assert call(client, "read_page", slug="golf")[0].endswith(
-            "Linked from (3): c, d, … and 1 more")
-
 
 class TestCheckLinks:
     def test_reports_broken_links_with_a_guess(self, client, pages):
@@ -1009,19 +922,8 @@ class TestGrepWiki:
         write_page(git_wiki_dir, "fresh", "# Fresh\n\nnot committed yet\n")
         assert "fresh\n  3: not committed yet" in call(client, "grep_wiki", pattern="committed")[0]
 
-    @pytest.mark.python_only  # go/mcp_test.go: TestGrepTimeout
-    def test_slow_pattern_is_stopped(self, client, pages, monkeypatch):
-        import gitstore
-        import subprocess
-
-        def hang(*args, **kwargs):
-            raise subprocess.TimeoutExpired(args[0], gitstore.GREP_TIMEOUT)
-        monkeypatch.setattr(gitstore.subprocess, "run", hang)
-        text, err = call(client, "grep_wiki", pattern="(a+)+$")
-        assert err and "took longer than 10s" in text
-
     def test_without_git_plain_text(self, client, notes, monkeypatch):
-        monkeypatch.setattr(config, "GIT_ENABLED", False)
+        monkeypatch.setattr(settings, "GIT_ENABLED", False)
         text = call(client, "grep_wiki", pattern="bug-12345", ignore_case=True)[0]
         assert text.startswith("2 matching lines on 2 pages; git isn't installed")
         assert call(client, "grep_wiki", pattern=r"BUG-\d+")[0] == r"No line matches 'BUG-\\d+'."
@@ -1184,11 +1086,16 @@ class TestAppendToPage:
 SCRATCH_NOTE = "2026-10-15_09-30-00_alex-prep"
 
 
+def git(wiki, *args):
+    import subprocess
+    return subprocess.run(["git", *args], cwd=wiki, capture_output=True, text=True, check=True,
+                          env=settings.GIT_ENV).stdout
+
+
 def subjects(wiki):
     import subprocess
-    import gitstore
     return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True,
-                          text=True, check=True, env=gitstore._GIT_ENV).stdout.splitlines()
+                          text=True, check=True, env=settings.GIT_ENV).stdout.splitlines()
 
 
 class TestScratchNotes:
@@ -1412,28 +1319,12 @@ class TestReplaceInPages:
         assert call(client, "replace_in_pages", find="OA", replace="y", under="nope")[1]
         assert call(client, "replace_in_pages", find="OA", replace="y", dry_run="no")[1]
 
-    @pytest.mark.python_only  # go/mcp_test.go: TestCatastrophicRegexIsFast (RE2 can't backtrack)
-    def test_a_catastrophic_regex_is_stopped(self, client, notes, monkeypatch):
-        # (a+)+$ on a long run of a's that doesn't end the line backtracks
-        # for ages; it runs in a process of its own (regexjob), killed after
-        # REGEX_TIMEOUT, so the server thread comes back and nothing is written.
-        import mcp_tools
-        monkeypatch.setattr(mcp_tools, "REGEX_TIMEOUT", 1)
-        write_page(notes, "slow", "# Slow\n\n" + "a" * 40 + "!\n")
-        before = (notes / "slow.md").read_text()
-        text, err = call(client, "replace_in_pages", find="(a+)+$", replace="x", regex=True, dry_run=False)
-        assert err and "more than 1 seconds" in text and "nothing was written" in text
-        assert (notes / "slow.md").read_text() == before
-
-    @pytest.mark.python_only  # Go runs no process for a regex either
-    def test_plain_text_runs_without_a_process(self, client, notes, monkeypatch):
-        # An escaped pattern can't backtrack, so it needs no process of its own.
-        import mcp_tools
-        def no_process(*a, **k):
-            raise AssertionError("plain text started a process")
-        monkeypatch.setattr(mcp_tools.subprocess, "run", no_process)
-        text, err = call(client, "replace_in_pages", find="BUG-", replace="ONE-")
-        assert not err and "would replace 2 occurrences" in text
+    def test_a_regex_re2_cant_take_is_refused(self, client, notes):
+        # Lookarounds and backreferences can backtrack without end: RE2 has none.
+        for find in ("BUG(?=-12)", r"(BUG)-\1"):
+            text, err = call(client, "replace_in_pages", find=find, replace="y", regex=True)
+            assert err and "no lookarounds or backreferences" in text, text
+        assert "BUG-12" in (notes / "a.md").read_text()
 
     def test_literal_is_not_a_regex(self, client, notes):
         write_page(notes, "d", "# D\n\ncost $5 (approx.)\n")
@@ -1454,15 +1345,13 @@ class TestDeletePage:
         assert err and (pages / "index.md").exists()
 
 
-@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+@pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 class TestWritesCommit:
     def test_each_write_is_a_commit_marked_mcp(self, client, git_wiki_dir, monkeypatch):
         import subprocess
-        import gitstore
-
         def subjects():
             return subprocess.run(["git", "log", "--format=%s"], cwd=git_wiki_dir, capture_output=True,
-                                  text=True, check=True, env=gitstore._GIT_ENV).stdout.splitlines()
+                                  text=True, check=True, env=settings.GIT_ENV).stdout.splitlines()
 
         call(client, "write_page", slug="mcp-notes", content="# MCP notes\n\nfirst", summary="start notes")
         call(client, "append_to_page", slug="mcp-notes", content="second")
@@ -1487,11 +1376,11 @@ class TestWritesCommit:
             "Create mcp-notes: start notes (MCP)",
         ]
         status = subprocess.run(["git", "status", "--porcelain"], cwd=git_wiki_dir, capture_output=True,
-                                text=True, env=gitstore._GIT_ENV).stdout
+                                text=True, env=settings.GIT_ENV).stdout
         assert status == ""
 
 
-@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+@pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 class TestOpenInTheEditor:
     """The editor auto-saves without committing. A model's write must neither
     take that draft into its own commit nor lose it."""
@@ -1505,32 +1394,27 @@ class TestOpenInTheEditor:
 
     def log(self, wiki):
         import subprocess
-        import gitstore
         return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True, text=True,
-                              env=gitstore._GIT_ENV).stdout.splitlines()
+                              env=settings.GIT_ENV).stdout.splitlines()
 
     def test_draft_committed_as_the_users_first(self, client, draft):
-        import gitstore
         text, err = call(client, "edit_page", slug="p", old_string="line one", new_string="line ONE")
         assert not err and 'committed first, as "Save p", and kept' in text
         assert self.log(draft)[:2] == ["Update p (MCP)", "Save p"]
-        diff = gitstore.git_diff(gitstore.git_log(draft / "p.md")[0]["sha"], draft / "p.md")
+        diff = git(draft, "show", "--format=", "HEAD", "--", "p.md")
         assert "+line ONE" in diff and "+MY DRAFT" not in diff
 
     def test_overwrite_keeps_the_draft_in_history(self, client, draft):
-        import gitstore
         call(client, "write_page", slug="p", content="# P\n\nreplaced", overwrite=True)
-        saved = gitstore.git_log(draft / "p.md")[1]
-        assert saved["msg"] == "Save p"
-        assert "MY DRAFT" in gitstore.git_show(saved["sha"], draft / "p.md")
+        assert self.log(draft)[1] == "Save p"
+        assert "MY DRAFT" in git(draft, "show", "HEAD~1:p.md")
 
     def test_delete_keeps_the_draft_in_history(self, client, draft):
         call(client, "delete_page", slug="p")
         assert self.log(draft)[:2] == ["Delete p (MCP)", "Save p"]
 
     def test_editor_then_sees_a_conflict(self, client, draft):
-        import server
-        hash_before = server.content_hash("# P\n\nline one\nMY DRAFT\n")
+        hash_before = content_hash("# P\n\nline one\nMY DRAFT\n")
         call(client, "append_to_page", slug="p", content="from the model")
         resp = client.post("/api/save/p", data={"content": "# P\n\nmine\n", "file_hash": hash_before},
                            headers=HOST)
@@ -1543,7 +1427,7 @@ class TestOpenInTheEditor:
         assert "Note" not in text and self.log(git_wiki_dir)[0] == "Update q (MCP)"
 
 
-@pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+@pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 class TestHistory:
     @pytest.fixture()
     def versions(self, client, git_wiki_dir):
@@ -1604,15 +1488,14 @@ class TestHistory:
         assert (versions / "other.md").read_text() == "# Other\n"
 
     def test_without_git(self, client, pages, monkeypatch):
-        monkeypatch.setattr(config, "GIT_ENABLED", False)
+        monkeypatch.setattr(settings, "GIT_ENABLED", False)
         assert "git isn't installed" in call(client, "history")[0]
 
 
 def self_log(wiki):
     import subprocess
-    import gitstore
     return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True, text=True,
-                          env=gitstore._GIT_ENV).stdout.splitlines()
+                          env=settings.GIT_ENV).stdout.splitlines()
 
 
 # ── Writing tasks ────────────────────────────────────────────────────────────
@@ -1622,11 +1505,6 @@ def _task_id(text: str) -> str:
 
 
 class TestCreateTask:
-    def test_a_plain_date_is_the_deadline(self):
-        fields = next(t for t in mcp_server.TOOLS if t["name"] == "create_task")["inputSchema"]["properties"]
-        assert "'tomorrow'" in fields["due"]["description"] and "not in start" in fields["due"]["description"]
-        assert "a plain date is the deadline (due)" in fields["start"]["description"]
-
     def test_suggests_the_tags_of_similar_tasks(self, client, wiki_dir):
         task(client, title="Call the plumber about the boiler", tags=["home", "calls"])
         done = task(client, title="Boiler service appointment", tags=["home"])
@@ -1847,7 +1725,6 @@ class TestLeafHelp:
     @pytest.fixture
     def docs(self, tmp_path, monkeypatch):
         """A docs root like the checkout's: README.md and docs/spec/."""
-        import manual
         spec = tmp_path / "docs" / "spec"
         spec.mkdir(parents=True)
         (tmp_path / "README.md").write_text("# Leaf\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
@@ -1856,7 +1733,7 @@ class TestLeafHelp:
             "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
             "```\n# not a heading\n```\n\n## Dates\n\nDue and start dates.\n")
         (spec / "testing.md").write_text("# Testing\n\nFixtures and labels.\n")
-        monkeypatch.setattr(manual, "docs_root", lambda: tmp_path)
+        monkeypatch.setattr(settings, "DOCS", tmp_path)
         return tmp_path
 
     def test_instructions_point_to_it(self, client):
@@ -1902,21 +1779,15 @@ class TestLeafHelp:
         assert "\ndeck: Deck\n  Views\n    Labels\n  Dates" in text
 
     def test_without_docs(self, client, monkeypatch):
-        import manual
-        monkeypatch.setattr(manual, "docs_root", lambda: None)
+        monkeypatch.setattr(settings, "DOCS", None)
         text, err = call(client, "leaf_help", query="deck")
         assert err and "isn't installed" in text
 
     def test_the_real_docs(self, client):
         """The checkout's README and spec, every spec file but testing.md."""
-        import manual
-        from pathlib import Path
-        spec = Path(__file__).parent.parent / "docs" / "spec"
-        assert list(manual.topics()) == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
+        spec = settings.REPO / "docs" / "spec"
+        topics = re.findall(r"^(\w[\w-]*): ", call(client, "leaf_help")[0], re.M)
+        assert topics == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
         text, err = call(client, "leaf_help", query="deck tab names labels")
         assert not err and "topic: deck" in text
 
-    def test_the_image_ships_them(self):
-        from pathlib import Path
-        text = (Path(__file__).parent.parent / "Containerfile").read_text()
-        assert "COPY README.md ./" in text and "COPY docs/spec/ docs/spec/" in text

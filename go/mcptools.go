@@ -1,4 +1,4 @@
-// The MCP tools (src/mcp_tools.py): reading (search_wiki, search_tasks,
+// The MCP tools: reading (search_wiki, search_tasks,
 // grep_wiki, read_page, list_pages, check_links, list_tags, history,
 // leaf_help, read_guides) and writing pages (write_page (also a scratch
 // note), edit_page, replace_in_pages, append_to_page, rename_page (also a

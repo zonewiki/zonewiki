@@ -1,4 +1,4 @@
-// Scratch notes (src/scratch.py): quick notes with a timestamped name,
+// Scratch notes: quick notes with a timestamped name,
 // kept in the Scratch module until moved into the wiki or appended to a
 // page. The web routes and the MCP tools share these, so both make the same
 // files and commits; suffix follows a commit's message (the MCP tools'

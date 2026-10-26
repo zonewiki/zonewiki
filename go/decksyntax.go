@@ -1,4 +1,4 @@
-// The deck's syntax in page text (src/decksyntax.py): [[deck …]] embeds and
+// The deck's syntax in page text: [[deck …]] embeds and
 // their params, [[task:<id>]] references, and how tags are written.
 package main
 

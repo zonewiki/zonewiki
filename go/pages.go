@@ -1,4 +1,4 @@
-// The wiki's pages as files (src/pages.py): slugs and paths, listing,
+// The wiki's pages as files: slugs and paths, listing,
 // sharing mode, the link graph (link targets, backlinks, rewriting links on
 // a rename), the deck's lists and home as pages declare them, url().
 package main

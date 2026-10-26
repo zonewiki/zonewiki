@@ -1,4 +1,4 @@
-// The deck (src/deck.py): the /api/deck routes (their task writes as
+// The deck: the /api/deck routes (their task writes as
 // functions the MCP tools share), the [[deck]] embed's HTML, the module
 // counts.
 package main

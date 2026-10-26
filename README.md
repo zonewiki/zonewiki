@@ -23,8 +23,8 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   save changed, open any version, restore it in one click, bring back a
   deleted page. Renaming a page updates every link to it.
 - **Any browser, nothing to install on the client.** Open a URL on your
-  laptop or your phone; the editor works on both. The server is one Python
-  process with no database, and the frontend has no npm or bundler. It is
+  laptop or your phone; the editor works on both. The server is one Go
+  binary with no database, and the frontend has no npm or bundler. It is
   small enough to read and change.
 - **Your server, no cloud.** Runs on your machine by default, with no account
   and nothing loaded from other hosts. To reach it from elsewhere, put it
@@ -170,16 +170,18 @@ the repository: `compose.nas.yaml` runs the prebuilt image
 `.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS
 or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md).
 
-Without a container, you need Python 3.10 or newer and git:
+Without a container, you need Go 1.27 or newer, a C compiler (for semantic
+search; `CGO_ENABLED=0` builds without it) and git:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r src/requirements.txt
-LEAF_DATA=~/leaf python src/server.py
+(cd go && go build -o leaf .)
+LEAF_DATA=~/leaf go/leaf
 ```
 
-In Windows PowerShell: `.venv\Scripts\Activate.ps1` activates the venv, and
-`$env:LEAF_DATA="$HOME\leaf"; python src/server.py` starts Leaf.
+In Windows PowerShell: `cd go; go build -o leaf.exe .; cd ..`, then
+`$env:LEAF_DATA="$HOME\leaf"; go\leaf.exe` starts Leaf. For semantic search
+outside the container, onnxruntime's library must be where the loader finds
+it (`docs/spec/search.md`).
 
 ## Configuration
 
@@ -192,7 +194,7 @@ Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF
 | `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `.leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
 | `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
-| `LEAF_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 1 GB to the image) |
+| `LEAF_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
 | `LEAF_SEMANTIC_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
 | `LEAF_QUERY_LOG=1` | Keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
@@ -361,7 +363,7 @@ files that any editor opens, with their history in git.
 ## Development
 
 ```bash
-./run.sh test     # unit and API tests (pytest) in the app image
+./run.sh test     # go vet, go test, then the API tests (pytest)
 ./run.sh e2e      # browser tests (Playwright) and the deck logic tests (Node)
 ./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
@@ -372,8 +374,8 @@ All of them run in containers (Podman or Docker, no compose needed); CI runs the
 commits with a secret in them refused, turn on the pre-commit hook once:
 `git config core.hooksPath .githooks`.
 
-Python with Flask and markdown-it-py, plain ES modules in the browser, and
-one stylesheet; no bundler, no npm.
+Go with goldmark for markdown, plain ES modules in the browser, and one
+stylesheet; no bundler, no npm.
 
 ### How Leaf is made
 

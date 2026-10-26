@@ -23,10 +23,10 @@ concurrency:
 
 jobs:
   checks:
-    # The checks run through run.sh, as on your machine, in images built from
-    # the repo's Containerfiles: test in the app image, e2e (browser and
-    # deck-core tests) and leaks (gitleaks over the whole history) in the
-    # tools image. So CI keeps no package lists or commands of its own. Like
+    # The checks run through run.sh, as on your machine, in the image
+    # Containerfile.tools builds: test (go vet, go test, the API tests), e2e
+    # (browser and deck-core tests) and leaks (gitleaks over the whole
+    # history). So CI keeps no package lists or commands of its own. Like
     # the image job, the builds run on the host's engine through the socket,
     # so layers come from its cache unless the dependencies changed.
     # LEAF_COPY_REPO: the checkout lives in this job container, not on the
@@ -86,7 +86,7 @@ jobs:
             refs/heads/main) tags="$tags $image:latest" ;;
             refs/tags/v*)    tags="$tags $image:${GITHUB_REF_NAME#v}" ;;
           esac
-          # Same format as run.sh and config.py's _source_build().
+          # Same format as run.sh's.
           build=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M')
           echo "registry=$registry" >> "$GITHUB_OUTPUT"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"

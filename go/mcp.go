@@ -1,4 +1,4 @@
-// The MCP (Model Context Protocol) server (src/mcp_server.py): lets an LLM
+// The MCP (Model Context Protocol) server: lets an LLM
 // client read and write the wiki through tools, at POST /mcp (MCP's
 // "Streamable HTTP" transport, answering each request with plain JSON; no
 // event stream, no sessions). The tools are in mcptools.go; the tool

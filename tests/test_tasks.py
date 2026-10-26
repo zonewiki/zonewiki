@@ -9,11 +9,8 @@ from datetime import date, timedelta
 
 import pytest
 
-import server
-import deckstore
-import gitstore
-from tests.conftest import create_task
-import pages
+from tests import settings
+from tests.conftest import create_task, git_setup
 
 
 # ---------- CRUD Basics ----------
@@ -1200,7 +1197,7 @@ class TestBatchUpdate:
         a = create_task(client, title="A").get_json()
         b = create_task(client, title="B").get_json()
         log = lambda: subprocess.run(["git", "log", "--format=%s"], cwd=git_wiki_dir, capture_output=True,
-                                     text=True, env=gitstore._GIT_ENV).stdout.splitlines()
+                                     text=True, env=settings.GIT_ENV).stdout.splitlines()
         before = len(log())
         client.post("/api/deck/batch-update", json={"tasks": [
             {"id": a["id"], "start_date": "2099-01-02"}, {"id": b["id"], "start_date": "2099-01-02"}]})
@@ -1210,7 +1207,7 @@ class TestBatchUpdate:
 
 # ---------- Concurrent-write safety (regression for commit 079930f) ----------
 #
-# The Flask dev server is threaded, so two task mutations can run at once. The
+# The server handles requests concurrently, so two task mutations can run at once. The
 # original storage layer did an unguarded read-modify-write on _deck.json with a
 # truncate-in-place write, and read_deck() swallowed a torn/empty read as an
 # empty list. A create landing in that window read [], appended its one task,
@@ -1245,15 +1242,14 @@ class TestConcurrentWriteSafety:
         assert resp.status_code == 201
         assert [t["title"] for t in client.get("/api/deck").get_json()] == ["First"]
 
-    def test_concurrent_creates_lose_no_tasks(self, wiki_dir):
+    def test_concurrent_creates_lose_no_tasks(self, client, wiki_dir):
         """Many creates from many threads must all survive — no lost updates."""
         threads_n, per_thread = 8, 20
 
         def worker(tid):
-            with server.app.test_client() as c:
-                for i in range(per_thread):
-                    r = c.post("/api/deck", json={"title": f"t{tid}-{i}"})
-                    assert r.status_code == 201
+            for i in range(per_thread):
+                r = client.post("/api/deck", json={"title": f"t{tid}-{i}"})
+                assert r.status_code == 201
 
         threads = [threading.Thread(target=worker, args=(t,)) for t in range(threads_n)]
         for t in threads:
@@ -1265,7 +1261,7 @@ class TestConcurrentWriteSafety:
         assert len(titles) == threads_n * per_thread
         assert len(set(titles)) == threads_n * per_thread
 
-    def test_deck_file_always_valid_json_during_concurrent_writes(self, wiki_dir):
+    def test_deck_file_always_valid_json_during_concurrent_writes(self, client, wiki_dir):
         """A reader hammering the file while writers run never sees a torn/empty
         file — atomic replace guarantees a complete document every time."""
         stop = threading.Event()
@@ -1286,9 +1282,8 @@ class TestConcurrentWriteSafety:
                     errors.append("torn read")
 
         def writer():
-            with server.app.test_client() as c:
-                for i in range(40):
-                    c.post("/api/deck", json={"title": f"w{i}"})
+            for i in range(40):
+                client.post("/api/deck", json={"title": f"w{i}"})
 
         r = threading.Thread(target=reader)
         w = threading.Thread(target=writer)
@@ -1636,14 +1631,14 @@ class TestCompletedArchive:
         (wiki_dir / "_deck" / "completed.json").write_text(
             json.dumps(tasks), encoding="utf-8")
 
-    def test_old_years_rolled_into_archives(self, client, wiki_dir):
+    def test_old_years_rolled_into_archives(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
             {"id": "old1", "title": "Ancient", "completed_at": f"{year-2}-05-01T10:00:00"},
             {"id": "old2", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"},
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
-        deckstore.archive_old_completed()
+        git_setup(tmp_path_factory)   # a start archives
         hot = json.loads((wiki_dir / "_deck" / "completed.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in hot] == ["new1"]
         arch1 = json.loads((wiki_dir / "_deck" / f"completed-{year-2}.json").read_text(encoding="utf-8"))
@@ -1651,7 +1646,7 @@ class TestCompletedArchive:
         assert [t["id"] for t in arch1] == ["old1"]
         assert [t["id"] for t in arch2] == ["old2"]
 
-    def test_archive_merges_into_existing_file(self, client, wiki_dir):
+    def test_archive_merges_into_existing_file(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         (wiki_dir / "_deck" / f"completed-{year-1}.json").write_text(
             json.dumps([{"id": "prior", "title": "Already archived",
@@ -1659,25 +1654,25 @@ class TestCompletedArchive:
         self._seed_completed(wiki_dir, [
             {"id": "old", "title": "Old", "completed_at": f"{year-1}-06-01T10:00:00"},
         ])
-        deckstore.archive_old_completed()
+        git_setup(tmp_path_factory)   # a start archives
         arch = json.loads((wiki_dir / "_deck" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch] == ["prior", "old"]
 
-    def test_noop_when_nothing_old(self, client, wiki_dir):
+    def test_noop_when_nothing_old(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
             {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
         ])
-        deckstore.archive_old_completed()
+        git_setup(tmp_path_factory)   # a start archives
         assert not list((wiki_dir / "_deck").glob("completed-*.json"))
 
-    def test_archived_tasks_stay_searchable(self, client, wiki_dir):
+    def test_archived_tasks_stay_searchable(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
             {"id": "old1", "title": "Zephyrscale audit",
              "completed_at": f"{year-1}-05-01T10:00:00"},
         ])
-        deckstore.archive_old_completed()
+        git_setup(tmp_path_factory)   # a start archives
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
 
@@ -1935,24 +1930,6 @@ class TestLists:
     def shop(self, wiki_dir):
         (wiki_dir / "shop.md").write_text(
             "# Shop\n\n[[deck list=Groceries keep=1 labels=Catalogue,,Shopping]]\n", encoding="utf-8")
-
-    def test_declared_by_pages_outside_code(self, client, wiki_dir, shop):
-        (wiki_dir / "code.md").write_text("# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
-                                          encoding="utf-8")
-        lists = pages.deck_lists()
-        assert set(lists) == {"groceries"}
-        assert lists["groceries"]["slug"] == "shop"
-        assert lists["groceries"]["params"]["keep"] == "1"
-
-    def test_first_page_is_the_home(self, client, wiki_dir, shop):
-        (wiki_dir / "a-list.md").write_text("# A\n\n[[deck list=groceries]]\n", encoding="utf-8")
-        assert pages.deck_lists()["groceries"]["slug"] == "a-list"
-
-    def test_task_list_is_its_first_list_tag(self, client, wiki_dir, shop):
-        (wiki_dir / "home.md").write_text("# Home\n\n[[deck list=chores]]\n", encoding="utf-8")
-        assert pages.task_list({"tags": ["work"]}) is None
-        assert pages.task_list({"tags": ["GROCERIES"]}) == "groceries"
-        assert pages.task_list({"tags": ["groceries", "chores"]}) == "chores"
 
     def test_tag_without_a_page_is_no_list(self, client):
         today = date.today().isoformat()
@@ -2271,17 +2248,6 @@ class TestHistory:
 
 
 
-class TestLastActivity:
-    def test_completion_history_creation(self):
-        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00"}) == "2026-01-02"
-        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
-                                    "history": [{"at": "2026-03-04T09:00", "event": "start"}]}) == "2026-03-04"
-        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
-                                    "completed_at": "2026-05-06T08:00:00",
-                                    "history": [{"at": "2026-03-04T09:00"}, "junk"]}) == "2026-05-06"
-        assert deckstore.last_activity({}) is None
-
-
 # ---------- Comments ----------
 
 
@@ -2318,7 +2284,7 @@ class TestComments:
         cid = client.post(self._url(tid), json={"text": "x"}).get_json()["comments"][0]["id"]
         assert client.put(self._url(tid, cid), json={"text": ""}).status_code == 400
         long = client.post(self._url(tid), json={"text": "y" * 5000}).get_json()["comments"][-1]
-        assert len(long["text"]) == deckstore.COMMENT_MAX
+        assert len(long["text"]) == 2000   # at most
 
     def test_on_a_completed_task(self, client):
         tid = create_task(client).get_json()["id"]
@@ -2362,13 +2328,11 @@ class TestComments:
         [restored] = client.post("/api/deck/restore", json={"tasks": [snap]}).get_json()
         assert restored["comments"] == snap["comments"]
 
-    def test_searchable_and_count_as_activity(self, client):
+    def test_searchable(self, client):
         tid = create_task(client, title="Plan on-call").get_json()["id"]
         client.post(self._url(tid), json={"text": "asked alex about headcount"})
         results = client.get("/api/search?q=headcount", headers={"Host": "localhost:5000"}).get_json()
         assert [r.get("task_id") for r in results] == [tid]
-        assert deckstore.last_activity({"created_at": "2026-01-02T10:00:00",
-                                           "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}) == "2026-04-01"
 
 
 # ---------- Notes rendered as pages, checkboxes in them ----------

@@ -1,13 +1,12 @@
 """Task references: [[task:<id>]] in a page renders the deck task as a live
-chip (render._task_ref_html), and search, Linked tasks and MCP know them.
+chip, and search, Linked tasks and MCP know them.
 """
 
 import re
 from datetime import date, timedelta
 
+from tests import settings
 from tests.conftest import HOST, write_page
-import config
-import render
 
 
 def task(client, **fields):
@@ -73,7 +72,7 @@ class TestRendering:
         body = view(client)
         m = re.search(r'class="task-ref" data-task-id="([^"]+)"', body)
         assert m and m.group(1) != t["id"], "should be the spawned next occurrence, open"
-        assert f"⏰ {render._short_date(day(7), day(0))}" in body
+        assert f'⏰ <time class="local-date" datetime="{day(7)}">' in body
 
     def test_badges(self, client, wiki_dir):
         late = task(client, title="Late", due_date=day(-2))
@@ -88,22 +87,9 @@ class TestRendering:
         assert 'class="task-ref-badge task-ref-due overdue"' in body
         assert 'class="task-ref-badge task-ref-due due-today"' in body
         assert 'class="task-ref-badge task-ref-start start-later"' in body
-        assert f"⟲ ✓ {render._short_date(day(0), day(0))}" in body
+        assert f'⟲ ✓ <time class="local-date" datetime="{day(0)}">' in body
         assert f'href="/deck?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
         assert '<span class="task-ref-badge task-ref-list">groceries</span>' in body
-
-    def test_dates_are_time_elements_the_browser_localizes(self):
-        # js/util.js localizeDates rewrites them in LEAF_LOCALE.
-        assert render._short_date("2026-10-05", "2026-10-18") == \
-            '<time class="local-date" datetime="2026-10-05">Oct 5</time>'
-        assert render._short_date("2025-10-05T09:30", "2026-10-18") == \
-            '<time class="local-date" datetime="2025-10-05">Oct 5, 2025</time>'
-        assert render._short_date("<b>", "2026-10-18") == "&lt;b&gt;"
-
-    def test_iso_dates(self, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
-        assert render._short_date("2026-10-05T09:30", "2026-10-18") == \
-            '<time class="local-date" datetime="2026-10-05">2026-10-05</time>'
 
     def test_alone_in_a_list_item_is_a_row(self, client, wiki_dir):
         t = task(client, title="Row")
@@ -145,7 +131,7 @@ class TestLinkedTasks:
 
 class TestTwoLists:
     """A task in two lists links, from a page declaring one of them, to that
-    list rather than to its first list A–Z (render.link_list)."""
+    list rather than to its first list A–Z."""
 
     def _setup(self, client, wiki_dir):
         write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
@@ -201,7 +187,7 @@ class TestSearch:
 
 class TestMcp:
     def test_read_page_lists_the_referenced_tasks(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_MCP_TOKEN", "t")
+        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "t")
         t = task(client, title="Book flights", due_date="2030-01-02")
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]] and [[task:deadbeef]]\n")
         resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer t"}, json={

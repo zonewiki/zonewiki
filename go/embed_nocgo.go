@@ -1,7 +1,7 @@
 //go:build !cgo
 
 // Built without cgo (no C compiler): no onnxruntime, so semantic search is
-// off, as Python's is without its packages.
+// off and search works by keywords.
 package main
 
 import "errors"

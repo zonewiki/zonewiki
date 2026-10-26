@@ -28,9 +28,9 @@ env:
 
 jobs:
   checks:
-    # Through run.sh, as on your machine, in images built from the repo's
-    # Containerfiles: test in the app image, e2e (browser and deck-core
-    # tests) and leaks (gitleaks over the whole history) in the tools image.
+    # Through run.sh, as on your machine, in the image Containerfile.tools
+    # builds: test (go vet, go test, the API tests), e2e (browser and
+    # deck-core tests) and leaks (gitleaks over the whole history).
     # The runners have podman, which run.sh prefers.
     strategy:
       fail-fast: false
@@ -49,8 +49,9 @@ jobs:
 
   image:
     # One image per architecture, each on a runner of its own (no emulation:
-    # the arm64 build installs onnxruntime and downloads the model natively),
-    # pushed by digest only; `manifest` joins them under the tags.
+    # the arm64 build compiles with cgo and fetches onnxruntime's arm64
+    # build natively), pushed by digest only; `manifest` joins them under
+    # the tags.
     needs: [checks]
     if: github.event_name != 'pull_request'
     strategy:
@@ -70,7 +71,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build string
         id: meta
-        # Same format as run.sh and config.py's _source_build().
+        # Same format as run.sh's.
         run: |
           echo "build=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M')" >> "$GITHUB_OUTPUT"
           echo "image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"

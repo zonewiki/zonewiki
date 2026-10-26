@@ -1,6 +1,6 @@
 # Leaf
 
-A self-hosted, browser-based wiki. Markdown files are served and rendered at runtime by a Python server. Pages can be edited directly on disk or via an in-browser editor. Full-text search runs server-side.
+A self-hosted, browser-based wiki. Markdown files are served and rendered at runtime by a Go server (one binary). Pages can be edited directly on disk or via an in-browser editor. Full-text search runs server-side.
 
 ---
 
@@ -41,17 +41,18 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 
 | Concern             | Choice                                       |
 |---------------------|----------------------------------------------|
-| Server              | Python + Flask, served by waitress (one process, a thread pool) |
-| Markdown render     | `markdown-it-py` (server renders to HTML)    |
-| HTML views          | Jinja2 templates in `src/templates` (comes with Flask), auto-escaped |
+| Server              | Go (`net/http`), one process, one binary (`go/`) |
+| Markdown render     | `goldmark` (server renders to HTML), with Leaf's rules (`go/markdown.go`) |
+| HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped |
 | Syntax highlight    | `highlight.js` (vendored in `src/public/vendor/`, no CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | BM25 in `search.py`, optionally fused with semantic search (`embed.py`); search modal (Ctrl+P) and `/search` |
+| Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
 | Storage             | Plain `.md` files in `$LEAF_DATA` (deck tasks in `_deck/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
+| Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
-No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
+No build step for the browser code (no bundler: the server serves `src/public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
 
 ---
 
@@ -65,17 +66,11 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
-├── tools/eval_retrieval.py # Measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
-├── prototype/PORT.md       # The Go port's handoff: status, contracts, how to verify, order (read first)
-├── go/                     # The Go port in progress (one package, a file per Python module; ./run.sh go), not the product yet
-├── prototype/goldmark/     # Go prototype: render_md's pre-processing and markdown (goldmark), compare.py checks it against a wiki (README there)
-├── prototype/search/       # Go prototype: search.py and retrieval.py's keyword path, compare.py checks it against a wiki (README there)
-├── prototype/semantic/     # Go prototype: embed.py's embeddings (tokenizer, onnxruntime), compare.py checks them against Python (README there)
-├── Containerfile           # Ubuntu 26.04 LTS-based container image (also ships README.md and docs/spec/ for leaf_help)
+├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
-├── Containerfile.tools     # Tools image: Playwright + Chromium for browser tests, Node for deck-core tests, Go, gitleaks, git, pngquant
+├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for deck-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
@@ -84,48 +79,54 @@ No build step. No database. Jinja2 comes with Flask. Auth is optional (`LEAF_PAS
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
-└── src/
-    ├── requirements.txt    # runtime packages, exact versions (transitive too)
-    ├── requirements-embed.txt  # semantic search: onnxruntime, tokenizers and their packages, exact versions
-    ├── server.py           # Flask app: request checks, wiki routes (pages, editor, scratch, search, uploads, /deck, /mcp)
-    ├── config.py           # Settings from the environment, the wiki's directories (read as config.X, so tests can patch them)
-    ├── mdtext.py           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
-    ├── pages.py            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home, url()
-    ├── gitstore.py         # Git: commits, moving a page (move_page), grep over pages (grep_pages), a page's log, versions, diffs, uncommitted files, deleted pages
-    ├── render.py           # Markdown → HTML: wikilinks, [[deck]], [[task:…]], post-processing
-    ├── retrieval.py        # Search and LLM retrieval (BM25 + optional semantic index)
-    ├── views.py            # HTML building blocks: shell, breadcrumb, modules, menus, dialogs, side columns
-    ├── mcp_tools.py        # The MCP tools: search (also grep), read, link checks, write pages and deck tasks (the protocol is mcp_server.py)
-    ├── regexjob.py         # replace_in_pages' regex, run in its own process with a timeout (no ReDoS)
-    ├── scratch.py          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
-    ├── history.py          # Blueprint: history, revisions, diffs, restore, deleted pages, uncommitted changes
-    ├── templating.py       # The Jinja2 environment: render(), macro()
-    ├── templates/          # Jinja2 templates of every view (layout.html, view.html, edit.html, …; partials/, history/)
-    ├── deck.py             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed's HTML, the module counts
-    ├── deckstore.py        # Deck tasks on disk: _deck/ files, lock, recurrence, history, comments, backlinks, search docs
-    ├── decksyntax.py       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules
-    ├── search.py           # BM25 search ranking (stemming, fuzzy, excerpts), rank fusion
-    ├── embed.py            # Optional semantic search: section embeddings, Related pages
-    ├── embed_setup.py      # Model choice + install/download at image build (kept small: own image layer)
-    ├── mcp_server.py       # MCP protocol (JSON-RPC) for /mcp: wiki tools for LLM clients
-    ├── manual.py           # Leaf's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
-    └── public/
-        ├── style.css       # All styling
-        ├── leaf.js         # The entry ES module every page loads; imports the modules below
-        ├── js/             # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-        │                   #   shortcuts, mdedit, editor, page, present (see Client code in `docs/spec/rendering.md`)
-        ├── deck-core.js    # Pure deck logic (no DOM), an ES module — shared by deck.js, the editor and Node-run tests
-        ├── deck.js         # Deck (task management) app, an ES module leaf.js imports; initDecks() starts each .tasks-app
-        ├── favicon.svg     # Browser tab icon
-        ├── icon.svg        # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
-        ├── manifest.json   # Web app manifest (Add to home screen)
-        ├── vendor/highlight/  # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
-        └── vendor/gemoji/     # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
+├── go/                     # The server: one package (main), a file per area
+│   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health
+│   ├── config.go           # Settings from the environment (read once into cfg)
+│   ├── security.go         # Host and Origin checks, the page policy, login, signed session, throttles
+│   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
+│   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
+│   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
+│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home
+│   ├── markdown.go         # Markdown → HTML on goldmark, with Leaf's rules (checkboxes, callouts, heading ids …)
+│   ├── render.go           # A page's render: wikilinks, [[deck]], [[task:…]], frontmatter, sources
+│   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
+│   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
+│   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
+│   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
+│   ├── deckstore.go        # Deck tasks on disk: _deck/ files, lock, recurrence, history, comments, backlinks, search docs
+│   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
+│   ├── pyjson.go, pystr.go # JSON and string functions as the Python Leaf had them (the _deck files stay byte for byte)
+│   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
+│   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
+│   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
+│   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
+│   ├── tokenizer.go        # The model's tokenizer
+│   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
+│   ├── mcptools.go         # The MCP tools that read, and the deck's; mcpwrite.go those that write pages
+│   ├── manual.go           # Leaf's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
+│   ├── eval.go             # leaf eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
+│   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
+│   └── *_test.go, testdata/  # Go tests (go test ./...)
+├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
+└── src/public/             # The browser code, served as it is
+    ├── style.css           # All styling
+    ├── leaf.js             # The entry ES module every page loads; imports the modules below
+    ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
+    │                       #   shortcuts, mdedit, editor, page, present (see Client code in `docs/spec/rendering.md`)
+    ├── deck-core.js        # Pure deck logic (no DOM), an ES module — shared by deck.js, the editor and Node-run tests
+    ├── deck.js             # Deck (task management) app, an ES module leaf.js imports; initDecks() starts each .tasks-app
+    ├── favicon.svg         # Browser tab icon
+    ├── icon.svg            # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
+    ├── manifest.json       # Web app manifest (Add to home screen)
+    ├── vendor/highlight/   # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
+    └── vendor/gemoji/      # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `LEAF_DATA` (default: `~/leaf`), where markdown files sit at the root and uploads live under `_assets/`.
 
 Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
+
 ---
 
 ## Running
@@ -133,9 +134,8 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ```bash
 ./run.sh            # build the image and start Leaf (default: "up"), via compose
 ./run.sh build|up|down|logs
-./run.sh test       # unit/API tests in the app image (extra args go to pytest)
+./run.sh test       # go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
-./run.sh go [ARGS]  # the Go port: go vet + go test, then pytest ARGS against the Go server (LEAF_TEST_GO=1)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
@@ -143,13 +143,12 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 
 Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
 
-Without the container:
+Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r src/requirements.txt
-LEAF_DATA=~/leaf python src/server.py          # waitress on http://localhost:5000
-LEAF_DATA=~/leaf flask --app src/server.py run --debug   # auto-reload during development
+(cd go && go build -o leaf .)
+LEAF_DATA=~/leaf go/leaf                 # http://localhost:5000 (finds src/public from the binary)
+LEAF_DATA=~/leaf go/leaf eval FILE       # measure retrieval
 ```
 
 ---
@@ -169,20 +168,23 @@ LEAF_DATA=~/leaf flask --app src/server.py run --debug   # auto-reload during de
 
 ## Tests
 
-**Always run the full test suite before and after making changes to the Python modules in `src/`.**
+**Always run the full test suite before and after making changes to the server (`go/`).**
 
 **Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix). A feature or fix is not complete until it has test coverage.
 
 ```bash
-pytest tests/ -q                      # unit and API tests: in-process Flask client, a temp wiki per test
-pytest tests/test_mcp.py -q           # one module
-./run.sh test                         # the same in the app image, without a local venv
+./run.sh test                         # go vet, go test, then the unit/API tests (pytest over HTTP), in the tools image
+./run.sh test tests/test_mcp.py -n 0  # one module, in one process
 ./run.sh e2e                          # browser tests (Playwright) and deck-core.js under Node
+(cd go && go test ./...)              # the server's own tests, with a local Go
+pytest tests/ --ignore=tests/e2e      # the API tests, with a local Go and pip install -r tests/requirements.txt
 ```
 
-Both `run.sh` commands run the tests in parallel with pytest-xdist (`-n`): `test` with a worker per CPU (8 s → 3 s), `e2e` with one per two CPUs, since each worker runs its own Chromium and more starve the browsers until timing-sensitive tests fail (~2.5 min → ~30 s). Pass `-n 0` to run in one process, e.g. to debug one test. Locally: `pip install pytest-xdist`, then `pytest tests/ -q -n auto`; without `-n`, `pytest` runs in one process. Each worker is its own process with its own temp wikis, server thread and browser, so tests must not share anything outside `tmp_path`.
+Two kinds of tests: **Go tests** (`go/*_test.go`) for what is inside the server (text functions, search ranking, the semantic index, git helpers, the MCP protocol); **pytest** (`tests/`) for everything a user or client reaches over HTTP, against the real server: each test gets a temp wiki and a server process on it (`tests/goserver.py`; the binary is built once per run). Settings a test changes go in `tests/settings.py` (`monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")`); the server restarts with them. Prefer an HTTP test when the behaviour shows through a route, a Go test when it doesn't.
 
-Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `write_page`, …). Browser tests skip without Playwright, Node tests without Node. Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `Containerfile.tools` equal to its image tag. CI runs the same `run.sh` commands in the images the two Containerfiles build, so a dependency or a test command changes in one place.
+Both `run.sh` commands run pytest in parallel with pytest-xdist (`-n`): `test` with a worker per CPU, `e2e` with one per two CPUs, since each worker runs its own Chromium and more starve the browsers until timing-sensitive tests fail. Pass `-n 0` to run in one process, e.g. to debug one test. Each worker is its own process with its own temp wikis, servers and browser, so tests must not share anything outside `tmp_path`.
+
+Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `write_page`, `preview`, `section_fields`, `backlinks` …). Browser tests skip without Playwright, Node tests without Node. Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag. CI runs the same `run.sh` commands in the image `Containerfile.tools` builds, so a dependency or a test command changes in one place.
 
 **Secrets never go into the repo.** Turn on the pre-commit hook once per clone (`git config core.hooksPath .githooks`): it refuses a commit whose staged changes contain a secret (gitleaks); CI scans the whole history (`./run.sh leaks`).
 
@@ -190,28 +192,29 @@ Use the fixtures in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`, `client`, `
 
 ## Dependencies
 
-`src/requirements.txt`: flask, jinja2, markdown-it-py, mdit-py-plugins, waitress. Nothing else at runtime; add a dependency only when it clearly pays for itself. **Every package is pinned to an exact version, the transitive ones too** (a build installs what was tested, not the newest release; `tests/test_semantic.py` checks it): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and pin what pip then resolves.
+`go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search). Nothing else; add a dependency only when it clearly pays for itself. **Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and commit the new pins.
 
-- **One process.** `python src/server.py` serves with waitress (8 threads, at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckstore._LOCK`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several worker processes (gunicorn `-w 4` and the like) would lose task writes.
+- **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
 - `highlight.js` 11.9.0 is vendored in `src/public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `src/public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
-- Optional: onnxruntime, Hugging Face's `tokenizers` and NumPy for semantic search (`embed.OnnxEmbedder` runs the one model itself; fastembed and its 26 packages were dropped), installed by the `Containerfile` only when `LEAF_SEMANTIC_SEARCH` is on (`embed_setup.py`, which also downloads the model, pinned to a revision and SHA-256 hashes), at the exact versions `src/requirements-embed.txt` pins, with `--no-deps` (five packages; not `packaging`, which Ubuntu's pip brings and pip can't replace); `embed.py` works without NumPy. Locally: `pip install --no-deps -r src/requirements-embed.txt` (and `packaging`).
+- Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `LEAF_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/leaf-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Leaf searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
+- The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
 
 ---
 
 ## Key Constraints
 
 - Do not use a database. Files are the only storage.
-- Do not add a build step or bundler.
+- Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
   - `/mcp` requires `LEAF_MCP_TOKEN`: without one it is off (403), password or not. Don't make it open again.
-  - `check_host` validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
-  - `check_origin` refuses cross-site writes (an `Origin` of another site, or `null`).
-  - Every response carries the page policy (`content_policy`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.
+  - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
+  - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
+  - Every response carries the page policy (`pageCSP`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
 - `LEAF_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
-- **Git calls time out** after `GIT_TIMEOUT` (60s, `run_git`): a hung git counts as failed (returncode 124).
-- Slugs are file paths relative to `LEAF_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `to_slug()` keeps `/` and slugifies each part; `iter_pages()` skips `_*` and hidden folders. Flask routes use `<path:slug>`.
-- **Writes stay inside the wiki**: resolve the path and check it with `safe_path()` (`relative_to`; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_deck/` …) before reading or writing; create parent folders (`mkdir(parents=True, exist_ok=True)`); write with `encoding="utf-8"`.
+- **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
+- Slugs are file paths relative to `LEAF_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `toSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders. Routes take the rest of the path as the slug (`{slug...}`).
+- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_deck/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
 - `index.md` is the home page and must always exist (Leaf creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).

@@ -1,12 +1,13 @@
-"""The Go port under the tests (LEAF_TEST_GO=1): the `client` fixture talks
-HTTP to a Go server on the test's wiki instead of to Flask in-process.
+"""Leaf's server under the tests: the `client` fixture talks HTTP to a Go
+server on the test's wiki, the browser tests drive one.
 
-GoClient takes the calls of Flask's test client (get/post/put/delete with
-headers, data, json, query_string, content_type, follow_redirects;
-set_cookie) and answers with werkzeug's TestResponse, so a test runs
-unchanged against either. The settings a test patches in config (a
-password, LEAF_HOSTS …) go to the server as its environment: when they
-change, the server restarts on the same wiki before the next request."""
+GoClient takes the calls of Flask's test client, which the tests were
+written for (get/post/put/delete with headers, data, json, query_string,
+content_type, follow_redirects; set_cookie), and answers with werkzeug's
+TestResponse. The settings a test
+patches in tests/settings.py (a password, LEAF_HOSTS …) go to the server
+as its environment: when they change, the server restarts on the same wiki
+before the next request."""
 
 import http.client
 import json
@@ -22,73 +23,64 @@ from urllib.parse import quote
 from werkzeug.datastructures import Headers
 from werkzeug.test import EnvironBuilder, TestResponse
 
-import config
+from tests import settings
 
 REPO = Path(__file__).resolve().parent.parent
 _binary: Path | None = None
 
 
-def go_enabled() -> bool:
-    return os.environ.get("LEAF_TEST_GO", "").lower() in ("1", "true", "yes")
-
-
 def binary() -> Path:
-    """The Go server, built once per test process."""
+    """The server, built once per test run: by the first process (pytest's,
+    or with xdist its controller, before the workers start), which hands its
+    path on in LEAF_TEST_BINARY."""
     global _binary
     if _binary is None:
-        out = Path(tempfile.mkdtemp(prefix="leaf_go_")) / "leaf"
-        go = shutil.which("go") or "go"
-        subprocess.run([go, "build", "-o", str(out), "."], cwd=REPO / "go", check=True)
-        _binary = out
+        if os.environ.get("LEAF_TEST_BINARY"):
+            _binary = Path(os.environ["LEAF_TEST_BINARY"])
+        else:
+            out = Path(tempfile.mkdtemp(prefix="leaf_go_")) / "leaf"
+            go = shutil.which("go") or "go"
+            subprocess.run([go, "build", "-o", str(out), "."], cwd=REPO / "go", check=True)
+            os.environ["LEAF_TEST_BINARY"] = str(out)
+            _binary = out
     return _binary
 
 
 def _settings() -> dict[str, str]:
-    """The environment that gives the Go server config's settings now."""
-    noshare = [f"#{t}" for t in sorted(config.NOSHARE_TAGS)] + list(config.NOSHARE_FOLDERS)
+    """The environment that gives the server the settings now."""
+    noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
     env = {
-        "LEAF_DATA": str(config.LEAF_DATA),
-        "LEAF_BUILD": config.LEAF_BUILD,
-        "LEAF_PASSWORD": config.LEAF_PASSWORD,
-        "LEAF_MCP_TOKEN": config.LEAF_MCP_TOKEN,
-        "LEAF_BASE_URL": config.LEAF_BASE_URL,
-        "LEAF_HOST_DATA": config.LEAF_HOST_DATA,
-        "LEAF_QUERY_LOG": "1" if config.LEAF_QUERY_LOG else "",
-        "LEAF_GIT_REMOTE": config.LEAF_GIT_REMOTE,
-        "LEAF_ALLOW_REMOTE": "1" if config.LEAF_ALLOW_REMOTE else "",
-        "LEAF_HOSTS": ",".join(sorted(config.LEAF_HOSTS)),
+        "LEAF_DATA": str(settings.LEAF_DATA),
+        "LEAF_BUILD": settings.LEAF_BUILD,
+        "LEAF_PASSWORD": settings.LEAF_PASSWORD,
+        "LEAF_MCP_TOKEN": settings.LEAF_MCP_TOKEN,
+        "LEAF_BASE_URL": settings.LEAF_BASE_URL,
+        "LEAF_HOST_DATA": settings.LEAF_HOST_DATA,
+        "LEAF_QUERY_LOG": "1" if settings.LEAF_QUERY_LOG else "",
+        "LEAF_GIT_REMOTE": settings.LEAF_GIT_REMOTE,
+        "LEAF_ALLOW_REMOTE": "1" if settings.LEAF_ALLOW_REMOTE else "",
+        "LEAF_HOSTS": ",".join(sorted(settings.LEAF_HOSTS)),
         "LEAF_NOSHARE": ",".join(noshare) or ",",
-        "LEAF_LOCALE": config.LEAF_LOCALE,
-        "LEAF_DATE_FORMAT": config.LEAF_DATE_FORMAT,
+        "LEAF_LOCALE": settings.LEAF_LOCALE,
+        "LEAF_DATE_FORMAT": settings.LEAF_DATE_FORMAT,
+        **settings.ENV,
     }
     if os.environ.get("LEAF_SECRET_KEY"):
         env["LEAF_SECRET_KEY"] = os.environ["LEAF_SECRET_KEY"]
-    if not config.GIT_ENABLED:
-        # No git on its PATH: the server finds none, as config.GIT_ENABLED says.
+    if not settings.GIT_ENABLED:
+        # No git on its PATH: the server finds none.
         env["PATH"] = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
                                       if d and not os.path.exists(os.path.join(d, "git")))
     return env
 
 
 def _flags() -> list[str]:
-    """The flags for what a test patches that isn't a setting: Leaf's docs
-    folder (manual.docs_root, for leaf_help), and the semantic index
-    (retrieval.SEMANTIC, with the tests' FakeEmbedder): the server gets the
-    same embedder and floors, and syncs once at start when Python's index
-    has synced. Each sync that changes Python's index (a new generation)
-    restarts the server, so it sees the wiki as Python's index does."""
-    import manual
-    import retrieval
-    flags = ["-docs", str(manual.docs_root() or "/nonexistent")]
-    idx = retrieval.SEMANTIC
-    if idx is not None:
-        e = idx.embedder
-        flags += ["-semantic-test", json.dumps({
-            "name": e.name, "model_name": e.model_name, "concepts": e.concepts, "dim": e.dim,
-            "fail": e.fail, "min_score": idx.min_score, "related_min_score": idx.related_min_score,
-            "task_min_score": idx.task_min_score, "related_min_chars": idx.related_min_chars,
-            "synced": idx.ready, "generation": idx._gen,
-        })]
+    """The flags for what a test sets that isn't a setting: Leaf's docs
+    folder (for leaf_help), and the semantic index with the tests' fake
+    embedder (tests/semantic.py)."""
+    flags = ["-docs", str(settings.DOCS or "/nonexistent")]
+    if settings.SEMANTIC is not None:
+        flags += ["-semantic-test", json.dumps(settings.SEMANTIC.flag())]
     return flags
 
 
@@ -122,7 +114,7 @@ class GoServer:
 
 class LiveServer:
     """The test's Go server, started on first use and restarted (on the same
-    port, when given one) when the settings in config (or _flags) change."""
+    port, when given one) when the settings (or _flags) change."""
 
     def __init__(self, log: Path, port: int = 0):
         self.log, self.port = log, port

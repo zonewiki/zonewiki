@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import json
 import base64
 import urllib.request
@@ -32,7 +31,7 @@ os.environ.pop("LEAF_ALLOW_REMOTE", None)
 os.environ["LEAF_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
     capture_output=True, text=True).stdout.strip() or "unknown"
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 TODAY = date.today()
 # The phone pair's width in CSS px (its PNG is twice that); the README's <img
@@ -167,15 +166,11 @@ def post(base, path, data):
 
 def main():
     from playwright.sync_api import sync_playwright
-    from werkzeug.serving import make_server
+    from tests.goserver import GoServer
 
-    build_wiki()                     # before the import: Leaf's first commit takes them in
-    import server                    # noqa: E402
-    import gitstore                  # noqa: E402
-
-    srv = make_server("127.0.0.1", 0, server.app, threaded=True)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{srv.server_port}"
+    build_wiki()                     # before Leaf starts: its first commit takes them in
+    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("LEAF_")}, WIKI.parent / "leaf.log")
+    base = f"http://127.0.0.1:{srv.port}"
 
     ids = [post(base, "/api/deck", t)["id"] for t in TASKS]
     post(base, f"/api/deck/{ids[0]}/comments", {"text": "Hardware store has them on Saturday."})
@@ -184,7 +179,7 @@ def main():
     shed.write_text(shed.read_text().replace(
         "- Shelves now, or once the walls are stained?\n",
         f"- Shelves now, or once the walls are stained?\n\nNext: [[task:{ids[0][:8]}]]\n"))
-    gitstore.git_commit(shed, "Next step")
+    subprocess.run(["git", "commit", "-qm", "Next step", "--", str(shed)], cwd=WIKI, check=True)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -234,7 +229,7 @@ def main():
         frame.screenshot(path=OUT / "phone.png")
 
         browser.close()
-    srv.shutdown()
+    srv.stop()
     compress(sorted(OUT.glob("*.png")))
     print("wrote", ", ".join(p.name for p in sorted(OUT.glob("*.png"))))
 

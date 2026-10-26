@@ -1,4 +1,4 @@
-// The wiki's routes (src/server.py): pages, the editor, scratch notes, the
+// The wiki's routes: pages, the editor, scratch notes, the
 // deck page, previews, page lists.
 package main
 

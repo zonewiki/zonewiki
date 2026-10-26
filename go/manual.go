@@ -1,4 +1,4 @@
-// Leaf's own documentation, for the MCP tool leaf_help (src/manual.py): the
+// Leaf's own documentation, for the MCP tool leaf_help: the
 // README and the spec (docs/spec/*.md), searched by section with BM25, so
 // an assistant answers questions about Leaf itself (how to rename a deck's
 // tabs, a setting, the query syntax) from the docs rather than from guesses.

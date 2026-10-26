@@ -6,21 +6,13 @@ import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-import server
-import decksyntax
-import deckstore
-from mdtext import content_hash, section_char_range
-from tests.conftest import HOST, write_page
-import config
-import mdtext
-import pages
-import gitstore
-import retrieval
+from tests import settings
+from tests.conftest import HOST, backlinks, section_fields, task_backlinks, write_page
+from tests.goserver import binary
 
 
 # ===========================================================================
@@ -390,12 +382,12 @@ class TestViewPage:
         assert '<a href="/edit/garden" class="btn">Edit</a>' in header
         assert body.count('class="btn page-menu-btn"') == 2
         menu = body.split('<div class="page-menu" id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * config.GIT_ENABLED + ["Rename…", "Delete…"]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Rename…", "Delete…"]
         assert 'id="page-rename-dialog"' in body and 'id="page-delete-dialog"' in body
         # The home page can't be renamed or deleted: only Present is left.
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * config.GIT_ENABLED
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED
         assert 'id="page-rename-dialog"' not in body
 
     def test_only_page_views_are_wide(self, client, wiki_dir):
@@ -419,21 +411,6 @@ class TestPagePreview:
     def test_missing_page(self, client, wiki_dir):
         assert client.get("/api/page-preview/nowhere", headers=HOST).status_code == 404
         assert client.get("/api/page-preview/../etc/passwd", headers=HOST).status_code in (400, 404)
-
-
-class TestNewTaskTags:
-    """decksyntax.new_task_tags: what a new task in an embed gets, as its "+ New"."""
-
-    def test_list_then_single_tags(self):
-        assert decksyntax.new_task_tags({"list": "Shop", "tag": "weekly, food"}) == ["shop", "weekly", "food"]
-
-    def test_excluded_and_any_of_add_nothing(self):
-        assert decksyntax.new_task_tags({"tag": "work,-mary"}) == ["work"]
-        assert decksyntax.new_task_tags({"list": "task", "tag": "a|b"}) == ["task"]
-
-    def test_nothing(self):
-        assert decksyntax.new_task_tags({}) == []
-        assert decksyntax.new_task_tags({"list": "task", "tag": "Task"}) == ["task"]
 
 
 # ===========================================================================
@@ -561,14 +538,8 @@ class TestApiSave:
     def test_section_save_returns_json(self, client, wiki_dir):
         content = "# T\n\npre\n\n## S\n\nbody\n"
         write_page(wiki_dir, "api-section", content)
-        rng = section_char_range(content, 1)
-        s, e = rng
-        resp = client.post("/api/save/api-section", data={
-            "content": "## S\n\nupdated body\n",
-            "file_hash": content_hash(content),
-            "start_char": str(s),
-            "end_char": str(e),
-        }, headers=HOST)
+        fields = section_fields(client, "api-section", 1)
+        resp = client.post("/api/save/api-section", data={**fields, "content": "## S\n\nupdated body\n"}, headers=HOST)
         assert resp.status_code == 200
         data = resp.get_json()
         assert "file_hash" in data
@@ -578,14 +549,9 @@ class TestApiSave:
     def test_section_conflict_returns_409(self, client, wiki_dir):
         content = "# T\n\npre\n\n## S\n\nbody\n"
         write_page(wiki_dir, "conflict-section", content)
-        rng = section_char_range(content, 1)
-        s, e = rng
-        resp = client.post("/api/save/conflict-section", data={
-            "content": "## S\n\nnew\n",
-            "file_hash": "wrong_hash",
-            "start_char": str(s),
-            "end_char": str(e),
-        }, headers=HOST)
+        fields = section_fields(client, "conflict-section", 1)
+        resp = client.post("/api/save/conflict-section", data={**fields, "content": "## S\n\nnew\n",
+                                                                "file_hash": "wrong_hash"}, headers=HOST)
         assert resp.status_code == 409
 
     def test_full_file_hash_conflict_returns_409(self, client, wiki_dir):
@@ -829,14 +795,6 @@ class TestApiPagesList:
 # ===========================================================================
 
 class TestIterPages:
-    def test_skips_underscore_and_hidden_folders(self, wiki_dir):
-        write_page(wiki_dir, "top", "# Top\n")
-        write_page(wiki_dir, "a/b/deep", "# Deep\n")
-        for skipped in ("_assets/x", ".leaf/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"):
-            write_page(wiki_dir, skipped, "# no\n")
-        assert sorted(slug for _p, slug in pages.iter_pages()) == ["a/b/deep", "index", "top"]
-        assert all(p.is_file() and p.suffix == ".md" for p, _s in pages.iter_pages())
-
     @pytest.mark.parametrize("slug", [".leaf/index/n", ".git/n", "_deck/n", "a/_drafts/n", "a/.hidden/n",
                                       "a/../.leaf/n"])
     def test_pages_in_skipped_folders_are_not_served(self, client, wiki_dir, slug):
@@ -844,18 +802,12 @@ class TestIterPages:
         path = wiki_dir / (slug.replace("a/../", "") + ".md")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# secret\n\nhidden_token_q\n", encoding="utf-8")
-        assert pages.safe_path(slug) is None
         for url in (f"/page/{slug}", f"/edit/{slug}", f"/api/page-preview/{slug}"):
             resp = client.get(url, headers=HOST)
             assert b"hidden_token_q" not in resp.data and resp.status_code in (400, 404), url
         resp = client.post(f"/api/save/{slug}", json={"content": "# x\n"}, headers=HOST)
         assert resp.status_code in (400, 404)
         assert path.read_text(encoding="utf-8") == "# secret\n\nhidden_token_q\n"
-
-    def test_pages_named_with_underscore_at_any_level_still_work(self, wiki_dir):
-        assert pages.safe_path("_notes") is not None
-        assert pages.safe_path("a/_notes") is not None
-
 
 class TestSearch:
 
@@ -1119,29 +1071,11 @@ class TestSearch:
         assert r["excerpt"] == "Part <mark>zzqword</mark> one two"
         assert r["href"].endswith("#part")
 
-    @pytest.mark.python_only  # go/retrieval_test.go: TestUnreadablePagesAreSkipped
-    def test_page_vanishing_mid_search_is_skipped(self, client, wiki_dir, monkeypatch):
-        write_page(wiki_dir, "gone", "# Gone\n\nzzqword\n")
-        write_page(wiki_dir, "fine", "# Fine\n\nzzqword here\n")
-        real = Path.read_text
-
-        def flaky(self, *a, **kw):
-            if self.name == "gone.md":
-                raise FileNotFoundError(self)
-            return real(self, *a, **kw)
-
-        monkeypatch.setattr(Path, "read_text", flaky)
-        resp = client.get("/api/search?q=zzqword", headers=HOST)
-        assert resp.status_code == 200
-        assert [r["slug"] for r in resp.get_json()] == ["fine"]
-
     def test_index_is_reused_until_something_changes(self, client, wiki_dir):
         path = write_page(wiki_dir, "cached", "# Cached\n\nzzqold\n")
-        first = retrieval._search_index()
-        assert retrieval._search_index() is first
+        assert [r["slug"] for r in client.get("/api/search?q=zzqold", headers=HOST).get_json()] == ["cached"]
         path.write_text("# Cached\n\nzzqnew\n", encoding="utf-8")
         os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 5))
-        assert retrieval._search_index() is not first
         assert [r["slug"] for r in client.get("/api/search?q=zzqnew", headers=HOST).get_json()] == ["cached"]
         assert client.get("/api/search?q=zzqold", headers=HOST).get_json() == []
 
@@ -1342,7 +1276,7 @@ class TestAuth:
 
     @pytest.fixture()
     def auth_client(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_PASSWORD", "testpassword")
+        monkeypatch.setattr(settings, "LEAF_PASSWORD", "testpassword")
         return client
 
     def test_login_page_has_no_action_buttons(self, auth_client):
@@ -1354,11 +1288,11 @@ class TestAuth:
         assert "signout-form" in auth_client.get("/page/index", headers=HOST).data.decode()
 
     def test_login_page_shows_remote_badge_in_its_form(self, auth_client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", True)
+        monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", True)
         body = auth_client.get("/login", headers=HOST).data.decode()
         assert body.count('class="remote-badge"') == 1
         assert re.search(r'<h2>Sign in to Leaf<span class="remote-badge"[^>]*>🌐</span></h2>', body)
-        monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", False)
+        monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", False)
         assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
 
     def test_unauthenticated_redirects_to_login(self, auth_client):
@@ -1437,31 +1371,6 @@ class TestAuth:
 
 
 # ===========================================================================
-# update_references (called during rename)
-# ===========================================================================
-
-class TestUpdateReferences:
-
-    def test_returns_list_of_modified_files(self, wiki_dir):
-        write_page(wiki_dir, "old-page", "# Old\n\ncontent\n")
-        ref = write_page(wiki_dir, "referencer", "# Ref\n\n[[old-page]]\n")
-        write_page(wiki_dir, "no-link", "# No Link\n\nbody\n")
-
-        modified = pages.update_references("old-page", "new-page")
-
-        assert ref in modified
-        assert len(modified) == 1  # only the referencing page was modified
-
-    def test_unmodified_pages_not_returned(self, wiki_dir):
-        write_page(wiki_dir, "target", "# T\n\ncontent\n")
-        write_page(wiki_dir, "no-ref", "# No Ref\n\nbody only\n")
-
-        modified = pages.update_references("target", "new-target")
-
-        assert modified == []
-
-
-# ===========================================================================
 # API pages — special virtual pages
 # ===========================================================================
 
@@ -1537,38 +1446,32 @@ class TestSpecialPages:
 class TestHostHeader:
 
     def test_bad_host_returns_400(self, client):
-        old_allow_remote = config.LEAF_ALLOW_REMOTE
-        config.LEAF_ALLOW_REMOTE = False
+        old_allow_remote = settings.LEAF_ALLOW_REMOTE
+        settings.LEAF_ALLOW_REMOTE = False
         try:
             resp = client.get("/page/index", headers={"Host": "evil.com"})
             assert resp.status_code == 400
         finally:
-            config.LEAF_ALLOW_REMOTE = old_allow_remote
+            settings.LEAF_ALLOW_REMOTE = old_allow_remote
 
     def test_allow_remote_skips_check(self, client):
-        old = config.LEAF_ALLOW_REMOTE
-        config.LEAF_ALLOW_REMOTE = True
+        old = settings.LEAF_ALLOW_REMOTE
+        settings.LEAF_ALLOW_REMOTE = True
         try:
             resp = client.get("/page/index", headers={"Host": "any.host.example"})
             assert resp.status_code != 400
         finally:
-            config.LEAF_ALLOW_REMOTE = old
+            settings.LEAF_ALLOW_REMOTE = old
 
 
     def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
+        monkeypatch.setattr(settings, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
         for allow_remote in (False, True):   # set, the check stays on even with LEAF_ALLOW_REMOTE
-            monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", allow_remote)
+            monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", allow_remote)
             for host in ("wiki.example.org", "Wiki.Example.org:8443", "localhost:5000", "[::1]:5000"):
                 assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
             for host in ("evil.example", "wiki.example.org.evil.example", "192.168.1.5:5000"):
                 assert client.get("/page/index", headers={"Host": host}).status_code == 400, host
-
-    def test_host_name(self):
-        assert config.host_name("Wiki.Example.org:443") == "wiki.example.org"
-        assert config.host_name("[::1]:5000") == "[::1]"
-        assert config.host_name("leaf.home.arpa") == "leaf.home.arpa"
-
 
 # ===========================================================================
 # Behind an HTTPS proxy: the login cookie, throttling guesses
@@ -1590,7 +1493,7 @@ class TestProduction:
         for path in ("/page/evil", "/edit/evil", "/deck", "/api/deck", "/login", "/public/leaf.js"):
             resp = client.get(path, headers=HOST)
             csp = resp.headers["Content-Security-Policy"]
-            assert csp == server.PAGE_CSP, path
+            assert csp == client.get("/page/index", headers=HOST).headers["Content-Security-Policy"], path
             assert "script-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp
             for rule in ("object-src 'none'", "base-uri 'self'", "form-action 'self'"):
                 assert rule in csp, (path, rule)
@@ -1601,33 +1504,11 @@ class TestProduction:
         csp = client.get("/_assets/x.svg", headers=HOST).headers["Content-Security-Policy"]
         assert csp.startswith("sandbox; default-src 'none'") and csp.endswith("; frame-ancestors 'self'")
 
-    def test_secret_key_is_made_once_and_kept(self, wiki_dir, monkeypatch):
-        monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
-        key = server._secret_key()
-        path = wiki_dir / ".leaf" / "secret_key"
-        assert len(key) == 64 and path.read_bytes() == key
-        assert path.stat().st_mode & 0o777 == 0o600
-        assert server._secret_key() == key           # a restart keeps it
-        monkeypatch.setenv("LEAF_SECRET_KEY", "from-env")
-        assert server._secret_key() == b"from-env"
-        assert ".leaf" not in [slug.split("/")[0] for slug in pages.all_slugs()]
-
-    def test_secret_key_without_a_writable_wiki(self, wiki_dir, monkeypatch):
-        monkeypatch.delenv("LEAF_SECRET_KEY", raising=False)
-        (wiki_dir / ".leaf").write_text("not a folder")
-        first, second = server._secret_key(), server._secret_key()
-        assert len(first) == len(second) == 64 and first != second   # works, not kept
-
-    def test_production_server_is_installed(self):
-        import importlib.util
-        assert importlib.util.find_spec("waitress")   # server.py's __main__ serves with it
-
-
 class TestHttpsAndThrottle:
 
     @pytest.fixture()
     def auth_client(self, client, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_PASSWORD", "pässwört")
+        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pässwört")
         return client
 
     def login(self, client, password, **headers):
@@ -1643,29 +1524,6 @@ class TestHttpsAndThrottle:
         assert self.login(auth_client, "pässwört").status_code == 302
         assert self.login(auth_client, "passwort").status_code == 200
 
-    @pytest.mark.python_only
-    def test_wrong_passwords_slow_the_guesser_down(self, auth_client, monkeypatch):
-        now = [1_000_000.0]
-        monkeypatch.setattr(server.time, "time", lambda: now[0])
-        for _ in range(5):
-            assert "Incorrect password." in self.login(auth_client, "nope").get_data(as_text=True)
-        resp = self.login(auth_client, "pässwört")      # even the right one waits
-        assert resp.status_code == 429
-        assert "Try again in 1 minute." in resp.get_data(as_text=True)
-        now[0] += 61
-        assert self.login(auth_client, "nope").status_code == 200    # 6th failure: 2 minutes now
-        assert "2 minutes" in self.login(auth_client, "pässwört").get_data(as_text=True)
-        now[0] += 121
-        assert self.login(auth_client, "pässwört").status_code == 302
-        # a success forgets the failures
-        assert self.login(auth_client, "nope").status_code == 200
-
-    def test_longest_wait_is_an_hour(self):
-        t = server.Throttle()
-        for _ in range(30):
-            t.failed("x")
-        assert 3500 < t.wait("x") <= 3600
-
     def test_each_client_counts_alone(self, auth_client, monkeypatch):
         # Behind a proxy (requests from 127.0.0.1) the client is the address
         # the proxy appended last to X-Forwarded-For.
@@ -1674,18 +1532,6 @@ class TestHttpsAndThrottle:
         assert self.login(auth_client, "pässwört", **{"X-Forwarded-For": "203.0.113.9"}).status_code == 429
         assert self.login(auth_client, "pässwört", **{"X-Forwarded-For": "198.51.100.7"}).status_code == 302
         assert self.login(auth_client, "pässwört").status_code == 302    # the proxy host itself
-
-    @pytest.mark.python_only
-    def test_forwarded_for_ignored_from_a_public_address(self, client):
-        # a client on the internet can't pick its own key
-        with server.app.test_request_context(environ_base={"REMOTE_ADDR": "8.8.8.8"},
-                                             headers={"X-Forwarded-For": "10.0.0.1"}):
-            assert server._client_key() == "8.8.8.8"
-        # a proxy in a container network: the last entry is the one it added
-        with server.app.test_request_context(environ_base={"REMOTE_ADDR": "10.0.0.2"},
-                                             headers={"X-Forwarded-For": "1.1.1.1, 9.9.9.9"}):
-            assert server._client_key() == "9.9.9.9"
-
 
 # ===========================================================================
 # Search result hrefs (server-computed destination URLs)
@@ -1803,12 +1649,12 @@ class TestTaskBacklinks:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Chores",
                                        "description": "see [[garden|the beds]]"}, headers=HOST)
-        assert [t["title"] for t in deckstore.find_task_backlinks("garden")] == ["Chores"]
+        assert task_backlinks(client, "garden") == ["Chores"]
 
     def test_markdown_page_link_counts(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
-        assert len(deckstore.find_task_backlinks("garden")) == 1
+        assert len(task_backlinks(client, "garden")) == 1
 
     def test_completed_and_unrelated_tasks_excluded(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
@@ -1828,21 +1674,6 @@ class TestTaskBacklinks:
 
 
 class TestPlainTaskTitle:
-
-    def test_plain_text_unchanged(self):
-        assert mdtext.plain_task_title("a < b & c") == "a < b & c"
-
-    def test_wikilink_and_label(self):
-        assert mdtext.plain_task_title("[[My Page]]") == "My Page"
-        assert mdtext.plain_task_title("[[my-page|Label]]") == "Label"
-
-    def test_markdown_page_link(self):
-        assert mdtext.plain_task_title("see [x](/page/foo) now") == "see x now"
-
-    def test_external_markdown_link_becomes_its_label(self):
-        # A pasted URL with its name (the title's paste dialog): the label.
-        assert mdtext.plain_task_title("read [x](https://e.x) today") == "read x today"
-        assert mdtext.plain_task_title("[](https://e.x)") == "https://e.x"
 
     def test_search_shows_a_task_title_plain(self, client):
         client.post("/api/deck", json={"title": "Read [the RFC](https://e.x/rfc) on [[Garden]]"}, headers=HOST)
@@ -1896,14 +1727,14 @@ class TestRenameUpdatesAllReferences:
         self.rename(client, "notes/old", "archive/new")
         assert sibling.read_text() == "[s](../archive/new) [s2](../archive/new.md)\n"
         assert cousin.read_text() == "[c](../archive/new)\n"
-        assert pages.find_backlinks("archive/new") and len(pages.find_backlinks("archive/new")) == 2
+        assert len(backlinks(client, "archive/new")) == 2
 
     def test_backlinks_survive_rename(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         write_page(wiki_dir, "ref", "# Ref\n\n[x](old.md) and [[old]]\n")
-        assert [b["slug"] for b in pages.find_backlinks("old")] == ["ref"]
+        assert backlinks(client, "old") == ["ref"]
         self.rename(client, "old", "new")
-        assert [b["slug"] for b in pages.find_backlinks("new")] == ["ref"]
+        assert backlinks(client, "new") == ["ref"]
 
     def test_links_inside_code_untouched(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
@@ -2089,52 +1920,54 @@ class TestCrossSiteWrites:
 
 
 class TestVersion:
-    def test_version_is_semver(self):
-        assert re.fullmatch(r"\d+\.\d+\.\d+", config.VERSION)
-
     def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
-        v = config.VERSION
-        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        v = client.get("/api/version", headers=HOST).get_json()["version"]
+        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<p class="leaf-version">Leaf {v} · abc1234 2026-09-26 12:00</p>' in body
         assert f'<meta name="generator" content="Leaf {v}">' in body
         assert client.get("/api/version", headers=HOST).get_json() == {
-            "version": config.VERSION, "build": "abc1234 2026-09-26 12:00"}
+            "version": v, "build": "abc1234 2026-09-26 12:00"}
 
     def test_unknown_build_shows_version_only(self, client, wiki_dir, monkeypatch):
-        v = config.VERSION
-        monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
+        v = client.get("/api/version", headers=HOST).get_json()["version"]
+        monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<p class="leaf-version">Leaf {v}</p>' in body
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
-        v = config.VERSION
-        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        v = client.get("/api/version", headers=HOST).get_json()["version"]
+        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         for path in ("/page/index", "/deck", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
                     f'Leaf {v} · abc1234</div>') in body, path
-        monkeypatch.setattr(config, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
+        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f">Leaf {v} · abc1234+dirty</div>" in body
-        monkeypatch.setattr(config, "LEAF_BUILD", "unknown")
+        monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<div class="leaf-build">Leaf {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_BUILD", "<b>")
+        monkeypatch.setattr(settings, "LEAF_BUILD", "<b>")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "· &lt;b&gt;</p>" in body
 
     @staticmethod
     def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
-        """Import Leaf in a fresh Python with LEAF_DATA=wiki (None: unset)."""
-        src = Path(__file__).resolve().parent.parent / "src"
-        env = {k: v for k, v in os.environ.items() if k != "LEAF_DATA"}
+        """Start Leaf with LEAF_DATA=wiki (None: unset) until it listens."""
+        env = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         if wiki is not None:
             env["LEAF_DATA"] = str(wiki)
-        return subprocess.run([sys.executable, "-c", "import server"], cwd=src, capture_output=True,
-                              text=True, env=env, timeout=60)
+        proc = subprocess.Popen([str(binary()), "-addr", "127.0.0.1:0"], env=env, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out = proc.stdout.readline()
+        if " listening on " in out:
+            proc.terminate()
+        _out, err = proc.communicate(timeout=60)
+        return subprocess.CompletedProcess(proc.args, 0 if " listening on " in out else proc.returncode,
+                                           out, err)
 
     @pytest.mark.parametrize("wiki", [None, ""])
     def test_refuses_to_start_without_leaf_data(self, wiki):
@@ -2142,7 +1975,6 @@ class TestVersion:
         r = self._start(wiki)
         assert r.returncode != 0
         assert "LEAF_DATA isn't set" in r.stderr
-        assert not (Path(__file__).resolve().parent.parent / "src" / "data").exists()
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
         # Leaf never makes the wiki itself, so a mistyped LEAF_DATA can't
@@ -2157,69 +1989,14 @@ class TestVersion:
         assert r.returncode == 0, r.stderr
         assert (tmp_path / "index.md").exists() and (tmp_path / "_assets").is_dir()
 
-    @pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
-    def test_source_build_from_git(self, tmp_path):
-        def git(*args):
-            subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
-                            *args], check=True, capture_output=True, env=gitstore._GIT_ENV)
-        git("init", "-q")
-        (tmp_path / "src").mkdir()
-        (tmp_path / "src" / "a.py").write_text("x\n")
-        git("add", "-A")
-        git("commit", "-q", "-m", "c")
-        v = config._source_build(tmp_path)
-        assert re.fullmatch(r"[0-9a-f]{7,} \d{4}-\d\d-\d\d \d\d:\d\d", v), v
-        (tmp_path / "src" / "a.py").write_text("y\n")
-        assert config._source_build(tmp_path) == v + " +dirty"
-        (tmp_path / "README").write_text("outside src\n")
-        (tmp_path / "src" / "a.py").write_text("x\n")
-        assert config._source_build(tmp_path) == v   # only src/ counts
-
-    def test_source_build_without_git_repo(self, tmp_path):
-        assert config._source_build(tmp_path) == "unknown"
-
-
-# ===========================================================================
-# deck.tag_param_matches (an embed's tag= on the server, for the due count)
-# ===========================================================================
-
-@pytest.mark.parametrize("raw,tags,expected", [
-    ("", ["a"], True),
-    ("a", ["A", "b"], True),
-    ("a,b", ["a"], False),
-    ("a,b", ["a", "b"], True),
-    ("a,-b", ["a", "b"], False),
-    ("a,-b", ["a"], True),
-    ("a|b", ["b"], True),
-    ("a|b", ["c"], False),
-])
-def test_tag_param_matches(raw, tags, expected):
-    assert decksyntax.tag_param_matches({"tags": tags}, raw) is expected
-
-
 class TestLocale:
     """LEAF_LOCALE: a BCP 47 tag the browser formats dates with (data-locale)."""
-
-    def test_check(self):
-        assert config._check_locale(" de-AT ") == "de-AT"
-        assert config._check_locale("en") == "en"
-        assert config._check_locale("zh-Hant-TW") == "zh-Hant-TW"
-        assert config._check_locale("") == ""
-        for bad in ("de_AT", "german", "de-AT;x", '"><script>'):
-            with pytest.raises(SystemExit):
-                config._check_locale(bad)
-
-    def test_check_date_format(self):
-        assert config._check_date_format(" ISO ") == "iso"
-        assert config._check_date_format("") == ""
-        with pytest.raises(SystemExit):
-            config._check_date_format("yyyy-mm-dd")
 
     def test_on_the_body_when_set(self, client, monkeypatch):
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "data-locale" not in body and "data-date-format" not in body
-        monkeypatch.setattr(config, "LEAF_LOCALE", "de-AT")
-        monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
+        monkeypatch.setattr(settings, "LEAF_LOCALE", "de-AT")
+        monkeypatch.setattr(settings, "LEAF_DATE_FORMAT", "iso")
         for url in ("/page/index", "/deck", "/edit/index"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert 'data-locale="de-AT"' in body and 'data-date-format="iso"' in body, url
@@ -2230,20 +2007,14 @@ class TestNoshare:
 
     @pytest.fixture(autouse=True)
     def _config(self, monkeypatch):
-        tags, folders = config._parse_noshare("#noshare, #People ,personal/")
-        monkeypatch.setattr(config, "NOSHARE_TAGS", tags)
-        monkeypatch.setattr(config, "NOSHARE_FOLDERS", folders)
-        pages._noshare_tag_cache.clear()
+        monkeypatch.setattr(settings, "NOSHARE_TAGS", frozenset({"noshare", "people"}))
+        monkeypatch.setattr(settings, "NOSHARE_FOLDERS", ("personal/",))
 
     def _wiki(self, wiki_dir):
         write_page(wiki_dir, "home2", "# Home2\n\n[[Bob]], [[personal/diary|my diary]] and [[Garden]].\n")
         write_page(wiki_dir, "bob", "---\ntags: people\n---\n# Bob Secret\n\nAbout [[Home2]]. Garden too.\n")
         write_page(wiki_dir, "personal/diary", "# Diary Secret\n\nGarden thoughts, see [[Home2]].\n")
         write_page(wiki_dir, "garden", "# Garden\n\nBeds. See [[Home2]].\n")
-
-    def test_parse(self):
-        assert config._parse_noshare("#a, b ,x/,/y/ ,") == (frozenset({"a", "b"}), ("x/", "y/"))
-        assert config._parse_noshare("") == (frozenset(), ())
 
     def test_off_everything_shows(self, client, wiki_dir):
         self._wiki(wiki_dir)
@@ -2313,13 +2084,6 @@ class TestPromotePage:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert "Move to wiki" not in body
 
-    def test_promoted_slug(self):
-        assert mdtext.promoted_slug("", "Meeting with Alex") == "meeting-with-alex"
-        assert mdtext.promoted_slug("conversations/", "Alex & Sam", "2026-07-08") == \
-            "conversations/2026-07-08_alex-sam"
-        assert mdtext.promoted_slug("A/B", "x/y") == "a/b/x-y"
-        assert mdtext.promoted_slug("people", "  ") == ""
-
     def test_promote_moves_the_note_and_its_links(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
         ref = write_page(wiki_dir, "ref", f"# Ref\n\nSee [[{SCRATCH}]] and [x](/page/{SCRATCH}#a).\n")
@@ -2349,11 +2113,6 @@ class TestPromotePage:
             assert '<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="Notes" data-open>' in body
             assert error in body
         assert (wiki_dir / f"{SCRATCH}.md").exists()
-
-    def test_page_wikilink(self):
-        assert mdtext.page_wikilink("a/b", "Title") == "[[a/b|Title]]"
-        assert mdtext.page_wikilink("b", "x | [y]") == "[[b|x  y]]"
-        assert mdtext.page_wikilink("b", "[]") == "[[b|b]]"
 
     def test_promote_opens_the_page_to_link_from(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Alex sync\n")
@@ -2423,26 +2182,6 @@ class TestAppendToPage:
         assert SCRATCH not in pages                                 # no scratch notes offered
         assert 'list="wiki-pages"' in dialog
         assert 'id="append-heading" value="Alex 1:1 (2026-10-08)"' in dialog
-
-    def test_note_as_section(self):
-        note = ("---\ntags: alex, 1on1\ntldr: All good\n---\n# Title\n\nIntro\n\n"
-                "## Topics\n\n### Detail\n\n```\n# not a heading\n```\n")
-        section, tags = mdtext.note_as_section(note, "Alex 1:1 (2026-10-08)")
-        assert section == ("## Alex 1:1 (2026-10-08)\n\n_All good_\n\nIntro\n\n"
-                           "### Topics\n\n#### Detail\n\n```\n# not a heading\n```\n")
-        assert tags == ["alex", "1on1"]
-        assert mdtext.note_as_section("# Only a title\n", "H") == ("## H\n", [])
-        assert mdtext.note_as_section("---\ntldr: |\n  a\n  b\n---\n# T\n", "H") == ("## H\n\n_a_\n_b_\n", [])
-        assert mdtext.note_as_section("---\nsources: https://a.example, [[b]]\n---\n# T\n\nText\n", "H") == (
-            "## H\n\nText\n\nSources:\n\n- https://a.example\n- [[b]]\n", [])
-
-    def test_add_frontmatter_tags(self):
-        add = mdtext.add_frontmatter_tags
-        assert add("# P\n", ["a"]) == "---\ntags: a\n---\n# P\n"
-        assert add("---\ntags: [A, b]\n---\n# P\n", ["a", "c"]) == "---\ntags: A, b, c\n---\n# P\n"
-        assert add("---\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: c\ntldr: x\n---\n# P\n"
-        assert add("# P\n", []) == "# P\n"
-        assert add("---\ntags:\n  - a\n  - b\ntldr: x\n---\n# P\n", ["c"]) == "---\ntags: a, b, c\ntldr: x\n---\n# P\n"
 
     def test_append_moves_note_into_the_page(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "---\ntags: sync\n---\n# Alex 1:1\n\nnotes\n\n## Next\n\nsteps\n")
@@ -2563,76 +2302,3 @@ class TestRenamePageMkdir:
 # e.g. [Ivo](ivo-petrenko) — not a wikilink, not a .md link
 # ===========================================================================
 
-class TestBareSlugBacklinks:
-
-    def test_bare_slug_link_detected_as_target(self, wiki_dir):
-        """[Label](slug) with no extension must appear in page_link_targets."""
-        targets = pages.page_link_targets(
-            "- [Ivo](ivo-petrenko)\n",
-            "state",
-            known_slugs={"ivo-petrenko"},
-        )
-        assert "ivo-petrenko" in targets
-
-    def test_bare_slug_backlink_shows_in_find_backlinks(self, wiki_dir):
-        """find_backlinks must return the source page when it contains [Label](slug)."""
-        write_page(wiki_dir, "ivo-petrenko", "# Ivo Petrenko\n")
-        write_page(wiki_dir, "state", "# State\n\n- [Ivo](ivo-petrenko)\n")
-
-        backlinks = pages.find_backlinks("ivo-petrenko")
-
-        slugs = [b["slug"] for b in backlinks]
-        assert "state" in slugs, f"Expected 'state' in backlinks, got {slugs}"
-
-    def test_bare_slug_in_list_item(self, wiki_dir):
-        """Bare slug inside a list item must be detected."""
-        targets = pages.page_link_targets(
-            "## Team\n\n- Kim\n  - [Ivo](ivo-petrenko)\n    - [ ] task\n",
-            "state",
-            known_slugs={"ivo-petrenko"},
-        )
-        assert "ivo-petrenko" in targets
-
-    def test_absolute_page_link_is_a_backlink(self, wiki_dir):
-        """[Label](/page/slug) counts, as a rename re-points it; anchors and
-        titles aside. It once didn't, so such pages showed as unlinked."""
-        write_page(wiki_dir, "people/ivo", "# Ivo\n")
-        write_page(wiki_dir, "state", '# State\n\n[Ivo](/page/people/ivo#role "Ivo") and [x](/page/)\n')
-        assert [b["slug"] for b in pages.find_backlinks("people/ivo")] == ["state"]
-        assert pages.all_backlink_counts().get("people/ivo") == 1
-
-    def test_link_with_anchor_or_title_is_a_backlink(self, wiki_dir):
-        """The href up to an #anchor or a title counts; the pattern once
-        wanted ")" right after it, so these were no backlinks at all."""
-        write_page(wiki_dir, "golf", "# Golf\n")
-        write_page(wiki_dir, "a", "# A\n\n[Golf](golf.md#werkstatt)\n")
-        write_page(wiki_dir, "b", '# B\n\n[Golf](golf "the car")\n')
-        assert [b["slug"] for b in pages.find_backlinks("golf")] == ["a", "b"]
-
-    def test_external_url_not_counted_as_backlink(self, wiki_dir):
-        """External http links must never be treated as page targets."""
-        targets = pages.page_link_targets(
-            "[link](https://example.com/ivo-petrenko)\n",
-            "state",
-            known_slugs={"ivo-petrenko"},
-        )
-        assert "ivo-petrenko" not in targets
-
-    def test_bare_slug_not_in_known_slugs_is_ignored(self, wiki_dir):
-        """A bare link whose target page doesn't exist must not appear in targets."""
-        targets = pages.page_link_targets(
-            "[Ghost](nonexistent-page)\n",
-            "state",
-            known_slugs={"ivo-petrenko"},
-        )
-        assert "nonexistent-page" not in targets
-
-    def test_wikilink_still_works_alongside_bare_link(self, wiki_dir):
-        """Both [[wikilink]] and bare slug links must be detected in the same page."""
-        targets = pages.page_link_targets(
-            "[[Signals]]\n[Ivo](ivo-petrenko)\n",
-            "state",
-            known_slugs={"signals", "ivo-petrenko"},
-        )
-        assert "signals" in targets
-        assert "ivo-petrenko" in targets

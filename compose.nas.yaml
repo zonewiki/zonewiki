@@ -42,8 +42,7 @@ services:
           # A mistyped path must not start an empty wiki somewhere else.
           create_host_path: false
     healthcheck:
-      test: ["CMD", "python3", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:5000/public/manifest.json', timeout=5)"]
+      test: ["CMD", "/app/leaf", "health"]
       interval: 30s
       timeout: 10s
       retries: 3

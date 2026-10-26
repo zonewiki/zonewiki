@@ -1,11 +1,11 @@
-// Semantic search (src/embed.py): embeddings of page sections, searched by
+// Semantic search: embeddings of page sections, searched by
 // meaning. Opt-in via LEAF_SEMANTIC_SEARCH (semanticFromEnv). Each page is
 // cut into sections (chunkSections), each section turned into a vector by
 // an embedding model (embed_onnx.go), and a query is compared against every
 // vector (cosine similarity, brute force). That is plenty fast at wiki
 // scale, so there is no vector database: the vectors live in memory and in
 // a rebuildable cache file, .leaf/index/embeddings.json in the wiki (kept
-// out of git), the same file Python's index keeps.
+// out of git), the same file the Python Leaf kept: its cache stays valid.
 //
 // Vectors are content-addressed: a section's vector is keyed by a hash of
 // its text, so editing one section re-embeds only that section, and a page
@@ -182,8 +182,9 @@ func sha1Hex(s string) string {
 
 // ── The model and the settings ──────────────────────────────────────────────
 
-// The only model (embed_setup.py): German and English, also mixed. Its
-// files at a fixed revision, each checked against its SHA-256.
+// The only model: German and English, also mixed. Its files at a fixed
+// revision, each checked against its SHA-256 (the Containerfile downloads
+// the same; tests/test_image.py checks they agree).
 const (
 	defaultModel  = "jinaai/jina-embeddings-v2-base-de"
 	modelRevision = "3f9eede875721714945b6a99a3198299243cf2be"

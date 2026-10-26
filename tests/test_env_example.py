@@ -6,8 +6,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 # Set by run.sh or the build, not by the user: .env.example needn't list them.
-# LEAF_TEST_GO: run.sh go runs the tests against the Go port with it.
-INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO", "LEAF_MODEL_DIR", "LEAF_TEST_GO"}
+INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO", "LEAF_MODEL_DIR"}
 
 
 def _example_keys() -> set[str]:
@@ -17,11 +16,10 @@ def _example_keys() -> set[str]:
 
 def _used_keys() -> set[str]:
     text = "".join(p.read_text(encoding="utf-8")
-                   for p in [*(REPO / "src").glob("*.py"), *(REPO / "go").glob("*.go"),
-                             REPO / "run.sh", REPO / "compose.yaml",
-                             REPO / "compose.nas.yaml"])
+                   for p in [*(REPO / "go").glob("*.go"), REPO / "run.sh", REPO / "compose.yaml",
+                             REPO / "compose.nas.yaml"] if not p.name.endswith("_test.go"))
     # The old names of renamed settings, read only to say so.
-    renamed = set(re.findall(r'"(LEAF_[A-Z0-9_]+)": "LEAF_', (REPO / "src" / "embed_setup.py").read_text()))
+    renamed = set(re.findall(r'\{"(LEAF_[A-Z0-9_]+)", "LEAF_', (REPO / "go" / "embed.go").read_text()))
     return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL - renamed
 
 

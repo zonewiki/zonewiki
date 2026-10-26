@@ -1,4 +1,4 @@
-// A page's markdown to HTML (src/render.py): Leaf's directives
+// A page's markdown to HTML: Leaf's directives
 // (wikilinks, [[deck]], [[task:…]]) around markdown.go, and the HTML after
 // it (task chips, deck embeds, the frontmatter block, sources).
 package main

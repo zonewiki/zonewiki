@@ -132,8 +132,8 @@ def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
 def test_every_build_names_its_containerfile(sandbox):
     # docker, unlike podman, looks only for a Dockerfile when -f is missing.
     repo, env, log = sandbox
-    for check, file in (("test", "Containerfile"), ("e2e", "Containerfile.tools"),
-                        ("go", "Containerfile.tools"), ("screenshots", "Containerfile.tools")):
+    for check, file in (("test", "Containerfile.tools"), ("e2e", "Containerfile.tools"),
+                        ("screenshots", "Containerfile.tools")):
         log.unlink(missing_ok=True)
         r = subprocess.run(["./run.sh", check], cwd=repo, env=env,
                            capture_output=True, text=True)
@@ -149,7 +149,7 @@ def test_tests_run_in_parallel(sandbox):
     r = subprocess.run(["./run.sh", "test"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     run = log.read_text()   # the script spans lines
-    assert "pytest-xdist" in run and "-n auto" in run
+    assert "-n auto" in run
     log.unlink()
     r = subprocess.run(["./run.sh", "e2e"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -157,13 +157,13 @@ def test_tests_run_in_parallel(sandbox):
     assert "$(nproc) / 2" in run and '-n "$n"' in run
 
 
-def test_go_tests_the_port_and_runs_pytest_against_it(sandbox):
+def test_test_checks_the_server_then_runs_pytest_against_it(sandbox):
     repo, env, log = sandbox
-    r = subprocess.run(["./run.sh", "go", "tests/test_routes.py", "-k", "Auth"], cwd=repo, env=env,
+    r = subprocess.run(["./run.sh", "test", "tests/test_routes.py", "-k", "Auth"], cwd=repo, env=env,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     (run,) = [l for l in log.read_text().split("\nrun ") if "go test" in l]
-    assert "-e LEAF_TEST_GO=1" in run and "go vet ./..." in run
+    assert "go vet ./..." in run and "--ignore=tests/e2e" in run
     assert run.rstrip().endswith("tests/test_routes.py -k Auth")
 
 
@@ -228,4 +228,4 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     (run,) = _engine_calls(log, "run")
     assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
     assert "-e LEAF_SEMANTIC_SEARCH=on -e LEAF_SEMANTIC_MIN_SCORE=0.3" in run
-    assert run.endswith("tools/eval_retrieval.py /wiki-data/_eval/retrieval.json -k 5")
+    assert run.endswith("/app/leaf eval /wiki-data/_eval/retrieval.json -k 5")

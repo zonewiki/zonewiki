@@ -1,5 +1,5 @@
 // Leaf's settings: from the environment (.env through run.sh), and the
-// wiki's directories (src/config.py). Read once at start; a test starts a
+// wiki's directories. Read once at start; a test starts a
 // server per setting.
 package main
 
@@ -17,7 +17,6 @@ import (
 const appName = "Leaf"
 
 // Leaf's version (semver), bumped by hand when a change is worth a number.
-// Equal to config.VERSION while Python is the product (tests/test_go.py).
 const version = "1.1.0"
 
 type Config struct {

@@ -1,9 +1,9 @@
 """Browser (end-to-end) test harness.
 
-Runs the real Flask app on a background thread (with LEAF_TEST_GO=1 the Go
-port, a process per test: tests/goserver.py) and drives it with headless
-Chromium via Playwright. Every test gets a fresh temp wiki (with a real git
-repo) and a fresh browser context (clean localStorage/sessionStorage).
+Runs Leaf's server, a process per test (tests/goserver.py), and drives it
+with headless Chromium via Playwright. Every test gets a fresh temp wiki
+(with a real git repo) and a fresh browser context (clean
+localStorage/sessionStorage).
 
 Skipped automatically when Playwright is not installed, so a plain
 `pytest tests/` keeps working everywhere. Run it via the dedicated image:
@@ -12,19 +12,15 @@ Skipped automatically when Playwright is not installed, so a plain
 """
 
 import subprocess
-import threading
 from pathlib import Path
 
 import pytest
 
 pytest.importorskip("playwright.sync_api", reason="playwright not installed (use ./run.sh e2e)")
 from playwright.sync_api import sync_playwright  # noqa: E402
-from werkzeug.serving import make_server  # noqa: E402
 
-import config  # noqa: E402
-import server  # noqa: E402  (tests/conftest.py set up its import)
-import gitstore  # noqa: E402
-from tests.goserver import LiveServer, free_port, go_enabled  # noqa: E402
+from tests import settings  # noqa: E402
+from tests.goserver import LiveServer, free_port  # noqa: E402
 
 SCREENSHOT_DIR = Path(__file__).parent / "_screenshots"
 
@@ -37,44 +33,33 @@ TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
 # ── Server ────────────────────────────────────────────────────────────────────
 
 
-# The Go server of the running test (LEAF_TEST_GO). A setting the test
-# changes in config restarts it at once (_WatchedConfig): requests the test
-# makes itself (page.request) don't pass _new_page's route.
+# The server of the running test. A setting the test changes restarts it at
+# once (_WatchedSettings): requests the test makes itself (page.request)
+# don't pass _new_page's route.
 _go: LiveServer | None = None
 
 
-class _WatchedConfig(type(config)):
+class _WatchedSettings(type(settings)):
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
         if _go:
             _go.ensure()
 
 
-if go_enabled():
-    config.__class__ = _WatchedConfig
+settings.__class__ = _WatchedSettings
 
 
 @pytest.fixture(scope="session")
 def base_url():
-    if go_enabled():
-        # One port for the session; each test's wiki fixture starts a server on it.
-        yield f"http://127.0.0.1:{free_port()}"
-        return
-    srv = make_server("127.0.0.1", 0, server.app, threaded=True)
-    thread = threading.Thread(target=srv.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{srv.server_port}"
-    srv.shutdown()
+    # One port for the session; each test's wiki fixture starts a server on it.
+    yield f"http://127.0.0.1:{free_port()}"
 
 
 @pytest.fixture()
 def wiki(git_wiki_dir, base_url, tmp_path_factory):
-    """Point the running app at a fresh wiki directory with its own git repo
+    """A server on a fresh wiki directory with its own git repo
     (tests/conftest.py)."""
     global _go
-    if not go_enabled():
-        yield Wiki(git_wiki_dir)
-        return
     _go = LiveServer(tmp_path_factory.mktemp("go") / "server.log", int(base_url.rsplit(":", 1)[1]))
     _go.ensure()
     yield Wiki(git_wiki_dir)
@@ -99,7 +84,7 @@ class Wiki:
 
     def git(self, *args: str) -> str:
         return subprocess.run(["git", *args], cwd=self.root, capture_output=True,
-                              text=True, check=True, env=gitstore._GIT_ENV).stdout
+                              text=True, check=True, env=settings.GIT_ENV).stdout
 
     def head(self) -> str:
         return self.git("rev-parse", "HEAD").strip()

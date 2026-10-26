@@ -1,12 +1,14 @@
 """Editor: auto-save, the unsaved indicator, Done, and save-on-navigate."""
 
+import http.client
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
-
 from playwright.sync_api import expect
 
-import server
+from conftest import _new_page
 
 
 def test_autosave_writes_file_without_commit(page, wiki):
@@ -73,26 +75,52 @@ def test_navigating_away_saves_pending_edit(page, wiki):
     assert wiki.read("draft").endswith("not yet auto-saved")
 
 
-def _slow_saves(monkeypatch, delay=2.5):
-    """Auto-saves write the file at once but answer *delay* seconds later,
-    as over a slow connection."""
-    orig = server.app.view_functions["api_save"]
+@pytest.fixture()
+def slow_saves(browser, base_url, wiki):
+    """A page that reaches Leaf through a proxy: auto-saves write the file at
+    once, but their answer comes 2.5 seconds later, as over a slow
+    connection."""
+    upstream = base_url.split("//", 1)[1]
 
-    def slow(*args, **kwargs):
-        res = orig(*args, **kwargs)
-        time.sleep(delay)
-        return res
-    monkeypatch.setitem(server.app.view_functions, "api_save", slow)
+    class Proxy(BaseHTTPRequestHandler):
+        def _forward(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            conn = http.client.HTTPConnection(upstream, timeout=30)
+            conn.request(self.command, self.path, body or None, dict(self.headers))
+            resp = conn.getresponse()
+            data = resp.read()
+            if self.path.startswith("/api/save/"):
+                time.sleep(2.5)
+            self.send_response(resp.status)
+            for k, v in resp.getheaders():
+                if k.lower() not in ("transfer-encoding", "connection", "content-length"):
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            conn.close()
+
+        do_GET = do_POST = do_PUT = do_DELETE = _forward
+
+        def log_message(self, *args):
+            pass
+
+    proxy = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    threading.Thread(target=proxy.serve_forever, daemon=True).start()
+    ctx, pg = _new_page(browser, f"http://127.0.0.1:{proxy.server_port}")
+    yield pg
+    ctx.close()
+    proxy.shutdown()
+    assert pg.js_errors == [], f"uncaught JS errors: {pg.js_errors}"
 
 
-@pytest.mark.python_only   # slows Flask's view down (the Go port needs a way)
-def test_overlapping_autosaves_are_no_conflict(page, wiki, monkeypatch):
+def test_overlapping_autosaves_are_no_conflict(slow_saves, wiki):
     # The second auto-save starts while the first one's answer is still out.
     # It used to send the hash from before the first save and be refused:
     # "File was modified on disk while you were editing."
+    page = slow_saves
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")
-    _slow_saves(monkeypatch)
     page.keyboard.press("Control+End")
     page.keyboard.type("one")
     page.wait_for_timeout(2300)
@@ -102,11 +130,10 @@ def test_overlapping_autosaves_are_no_conflict(page, wiki, monkeypatch):
     assert wiki.read("notes").endswith("one two")
 
 
-@pytest.mark.python_only   # slows Flask's view down (the Go port needs a way)
-def test_done_waits_for_autosave_in_flight(page, wiki, monkeypatch):
+def test_done_waits_for_autosave_in_flight(slow_saves, wiki):
+    page = slow_saves
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")
-    _slow_saves(monkeypatch)
     page.keyboard.press("Control+End")
     page.keyboard.type("one")
     page.wait_for_timeout(2300)

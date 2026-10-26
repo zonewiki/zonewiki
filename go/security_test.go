@@ -182,7 +182,8 @@ func TestLoadConfig(t *testing.T) {
 	if c, _ := loadConfig(env()); !c.NoshareTags["noshare"] {
 		t.Fatal("LEAF_NOSHARE's default")
 	}
-	for _, bad := range [][]string{{"LEAF_LOCALE", "de_AT"}, {"LEAF_DATE_FORMAT", "us"},
+	for _, bad := range [][]string{{"LEAF_LOCALE", "de_AT"}, {"LEAF_LOCALE", "german"}, {"LEAF_LOCALE", "de-AT;x"},
+		{"LEAF_LOCALE", `"><script>`}, {"LEAF_DATE_FORMAT", "us"}, {"LEAF_DATE_FORMAT", "yyyy-mm-dd"},
 		{"LEAF_DATA", ""}, {"LEAF_DATA", filepath.Join(wiki, "missing")}} {
 		if _, err := loadConfig(env(bad...)); err == nil {
 			t.Errorf("%v: no error", bad)
@@ -191,17 +192,16 @@ func TestLoadConfig(t *testing.T) {
 	if c, err := loadConfig(env("LEAF_LOCALE", " de-AT ", "LEAF_DATE_FORMAT", "ISO")); err != nil || c.Locale != "de-AT" || c.DateFormat != "iso" {
 		t.Fatalf("%v %+v", err, c)
 	}
+	for _, tag := range []string{"en", "zh-Hant-TW", ""} {
+		if c, err := loadConfig(env("LEAF_LOCALE", tag)); err != nil || c.Locale != tag {
+			t.Errorf("LEAF_LOCALE=%s: %v", tag, err)
+		}
+	}
 }
 
-// The version is Python's while both exist.
-func TestVersionIsPythons(t *testing.T) {
-	src, err := os.ReadFile("../src/config.py")
-	if err != nil {
-		t.Skip("no Python source")
-	}
-	m := regexp.MustCompile(`(?m)^VERSION = "([^"]+)"`).FindSubmatch(src)
-	if m == nil || string(m[1]) != version {
-		t.Fatalf("Python's %q, Go's %q", m, version)
+func TestVersionIsSemver(t *testing.T) {
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(version) {
+		t.Errorf("version %q", version)
 	}
 }
 
@@ -218,5 +218,17 @@ func TestUploadNames(t *testing.T) {
 	}
 	if uploadExt("image/jpeg") != ".jpg" || uploadExt("image/png") != ".png" || uploadExt("x/unknown") != "" {
 		t.Error("uploadExt")
+	}
+}
+
+func TestHealth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ok" {
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	if health(srv.URL+"/ok") != 0 || health(srv.URL+"/missing") != 1 || health("http://127.0.0.1:1/") != 1 {
+		t.Error("health")
 	}
 }

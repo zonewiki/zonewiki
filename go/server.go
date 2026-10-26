@@ -1,5 +1,7 @@
-// Leaf's web server (src/server.py): one process, its request checks and
-// routes. Run: LEAF_DATA=~/leaf leaf [-addr :5000] [-public dir].
+// Leaf's web server: one process, its request checks and routes.
+// Run: LEAF_DATA=~/leaf leaf [-addr :5000] [-public dir]. Also: leaf eval
+// measures retrieval (eval.go), leaf health asks a running Leaf whether
+// it answers (the container's healthcheck).
 package main
 
 import (
@@ -29,6 +31,14 @@ func logf(format string, args ...any) {
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "eval":
+			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
+		case "health":
+			os.Exit(health("http://localhost:5000/public/manifest.json"))
+		}
+	}
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
 	public := flag.String("public", "", "the folder of the browser code (default: src/public, found from the binary)")
 	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
@@ -80,6 +90,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Leaf:", err)
 		os.Exit(1)
 	}
+}
+
+// health: whether Leaf answers at url within 5 seconds (0) or not (1), for
+// the container's healthcheck (compose.yaml), which has no curl.
+func health(url string) int {
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Leaf:", err)
+		return 1
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "Leaf:", resp.Status)
+		return 1
+	}
+	return 0
 }
 
 // findPublic finds src/public from the binary: next to it (public/) or in

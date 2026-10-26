@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// The MCP server in Go (mcp.go, mcptools.go, mcpwrite.go): the protocol
-// (test_mcp.py's TestHandle calls Python's handler directly) and what the
-// API tests reach by patching Python's limits.
+// The MCP server (mcp.go, mcptools.go, mcpwrite.go): the protocol's
+// handling and the limits long answers are cut at, which the API tests
+// (tests/test_mcp.py) can't reach.
 
 // set changes a variable for one test.
 func set[T any](t *testing.T, v *T, to T) {

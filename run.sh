@@ -62,10 +62,10 @@ elif [[ $ENGINE == docker && "$(id -u)" -ne 0 ]] &&
 fi
 
 # The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
-# uncommitted source changes), shown next to config.py's VERSION; same format
-# as config.py's _source_build().
+# uncommitted source changes), shown next to Leaf's version; same format as
+# a local go build's (go/config.go sourceBuild).
 LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
-if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- src 2>/dev/null)" ]]; then
+if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go src 2>/dev/null)" ]]; then
   LEAF_BUILD="$LEAF_BUILD +dirty"
 fi
 export LEAF_BUILD="${LEAF_BUILD:-unknown}"
@@ -158,17 +158,16 @@ case "${1:-up}" in
     compose logs -f
     ;;
   test)
-    # Unit/API tests inside the app image (repo mounted; pytest and
-    # pytest-xdist added on the fly), one worker per CPU (-n 0: one process).
-    # Extra args go to pytest; without a tests/… path the whole suite runs.
-    # Built without compose, which would want a .env the tests don't need.
-    # -f: docker, unlike podman, doesn't fall back to Containerfile.
-    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD")
+    # The server's own checks (go vet, go test), then the unit/API tests
+    # against it, in the tools image (Containerfile.tools), one worker per
+    # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
+    # path the whole suite runs but the browser and deck-core tests (e2e).
+    image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" -- sh -c \
-      'pip install --break-system-packages -q pytest pytest-xdist 2>/dev/null
+      '(cd go && go vet ./... && go test ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
-       [ -n "$paths" ] || set -- tests "$@"
-       python3 -m pytest -q -n auto "$@"' -- "${@:2}"
+       [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_deck_core.py "$@"
+       python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
     ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
@@ -182,15 +181,6 @@ case "${1:-up}" in
       'n=$(( $(nproc) / 2 )); [ "$n" -ge 1 ] || n=1
        python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider \
          -n "$n" "$@"' -- "${@:2}"
-    ;;
-  go)
-    # The Go port (go/, prototype/PORT.md) in the tools image: go vet and go
-    # test, then, given extra args, pytest against the Go server
-    # (LEAF_TEST_GO=1), e.g. ./run.sh go tests/test_routes.py -k Auth.
-    image=$(build_image leaf-tools -f Containerfile.tools)
-    in_image "$image" --ipc=host -e LEAF_TEST_GO=1 -- sh -c \
-      '(cd go && go vet ./... && go test ./...) || exit 1
-       [ $# -eq 0 ] || python3 -m pytest -p no:cacheprovider "$@"' -- "${@:2}"
     ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args
@@ -222,13 +212,13 @@ case "${1:-up}" in
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   eval)
-    # Retrieval quality on your wiki (tools/eval_retrieval.py): the questions
+    # Retrieval quality on your wiki (leaf eval, go/eval.go): the questions
     # are a file in the wiki (default _eval/retrieval.json), the wiki is
     # mounted read-only. The image is the app's with LEAF_SEMANTIC_SEARCH's model
     # baked in, as up builds it, so it compares keyword and hybrid ranking.
     file="${2:-_eval/retrieval.json}"
     if [[ ! -f "$LEAF_DATA/$file" ]]; then
-      echo "No questions at $LEAF_DATA/$file (format: tools/eval_retrieval.py)." >&2
+      echo "No questions at $LEAF_DATA/$file (format: go/eval.go)." >&2
       exit 1
     fi
     semantic=$(env_val LEAF_SEMANTIC_SEARCH)
@@ -236,17 +226,16 @@ case "${1:-up}" in
       --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
     in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
       -e "LEAF_SEMANTIC_SEARCH=$semantic" -e "LEAF_SEMANTIC_MIN_SCORE=$(env_val LEAF_SEMANTIC_MIN_SCORE)" -- \
-      python3 tools/eval_retrieval.py "/wiki-data/$file" "${@:3}"
+      /app/leaf eval "/wiki-data/$file" "${@:3}"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|go|leaks|screenshots|eval]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
     echo "  logs   - follow container logs"
-    echo "  test   - run unit/API tests in the app image (extra args go to pytest)"
+    echo "  test   - go vet, go test and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
-    echo "  go     - build and test the Go port in the tools image (extra args: pytest against it)"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"

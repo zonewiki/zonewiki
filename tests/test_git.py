@@ -5,6 +5,7 @@ Unlike the other test modules, the wiki here is a real git repo
 (git_wiki_dir), so every git code path actually executes.
 """
 
+import html
 import re
 import subprocess
 from datetime import datetime, timedelta
@@ -12,14 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import HOST
-import config
-import pages
-import gitstore
-import server
-import views
+from tests import settings
+from tests.conftest import HOST, git_setup
 
-pytestmark = pytest.mark.skipif(not config.GIT_ENABLED, reason="git not installed")
+pytestmark = pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 
 
 @pytest.fixture()
@@ -29,7 +26,7 @@ def wiki_dir(git_wiki_dir):
 
 def git(wiki_dir: Path, *args: str) -> str:
     r = subprocess.run(["git", *args], cwd=wiki_dir, capture_output=True, text=True, check=True,
-                       env=gitstore._GIT_ENV)  # no detached maintenance: it would linger as a zombie
+                       env=settings.GIT_ENV)  # no detached maintenance: it would linger as a zombie
     return r.stdout
 
 
@@ -44,6 +41,19 @@ def head_sha(wiki_dir: Path) -> str:
 
 def is_clean(wiki_dir: Path) -> bool:
     return git(wiki_dir, "status", "--porcelain", "--untracked-files=all").strip() == ""
+
+
+def deleted_pages(client) -> list[tuple[str, str, str]]:
+    """The Deleted Pages list: (slug, title, sha), newest deletion first."""
+    page = client.get("/page/_deleted", headers=HOST).get_data(as_text=True)
+    return [(slug, html.unescape(title), sha) for sha, title, slug in re.findall(
+        r'<a href="/revision/[^"]+/(\w+)" class="deleted-page-title">([^<]*)</a><span class="note-date">([^ ]+) ',
+        page)]
+
+
+def history_labels(client, slug: str) -> list[str]:
+    page = client.get(f"/history/{slug}", headers=HOST).get_data(as_text=True)
+    return [html.unescape(x) for x in re.findall(r'<span class="hist-what">([^<]*)</span>', page)]
 
 
 def save(client, slug: str, content: str):
@@ -64,21 +74,21 @@ class TestGitSetup:
         assert "index.md" in git(wiki_dir, "ls-files").splitlines()
         assert is_clean(wiki_dir)
 
-    def test_rerun_is_idempotent(self, wiki_dir):
-        gitstore.git_setup()
+    def test_rerun_is_idempotent(self, wiki_dir, tmp_path_factory):
+        git_setup(tmp_path_factory)
         assert commit_messages(wiki_dir) == ["Initial import"]
 
-    def test_rerun_restores_missing_identity(self, wiki_dir):
+    def test_rerun_restores_missing_identity(self, wiki_dir, tmp_path_factory):
         git(wiki_dir, "config", "--unset", "user.name")
-        gitstore.git_setup()
+        git_setup(tmp_path_factory)
         assert git(wiki_dir, "config", "user.name").strip() == "Leaf"
 
-    def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch):
-        monkeypatch.setattr(config, "LEAF_GIT_REMOTE", "https://example.invalid/a.git")
-        gitstore.git_setup()
+    def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch, tmp_path_factory):
+        monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "https://example.invalid/a.git")
+        git_setup(tmp_path_factory)
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/a.git"
-        monkeypatch.setattr(config, "LEAF_GIT_REMOTE", "https://example.invalid/b.git")
-        gitstore.git_setup()
+        monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "https://example.invalid/b.git")
+        git_setup(tmp_path_factory)
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/b.git"
 
 
@@ -169,17 +179,17 @@ class TestWritesCommit:
 
 class TestHomePage:
 
-    def test_a_wiki_without_index_gets_one(self, client, wiki_dir):
+    def test_a_wiki_without_index_gets_one(self, client, wiki_dir, tmp_path_factory):
         (wiki_dir / "index.md").unlink()
         git(wiki_dir, "commit", "-qam", "no home")
-        server.ensure_home_page()
+        git_setup(tmp_path_factory)   # a start
         assert (wiki_dir / "index.md").read_text() == "# Home\n\n"
         assert commit_messages(wiki_dir)[0] == "Create index"
         assert client.get("/page/index", headers=HOST).status_code == 200
 
-    def test_an_existing_index_is_left_alone(self, wiki_dir):
+    def test_an_existing_index_is_left_alone(self, wiki_dir, tmp_path_factory):
         before = head_sha(wiki_dir)
-        server.ensure_home_page()
+        git_setup(tmp_path_factory)
         assert (wiki_dir / "index.md").read_text() == "# Home\n\nWelcome.\n"
         assert head_sha(wiki_dir) == before
 
@@ -266,13 +276,7 @@ class TestHistory:
     def test_history_follows_renames(self, client, wiki_dir):
         save(client, "before", "# Page\n\nv1\n")
         client.post("/rename/before", data={"new_name": "after"}, headers=HOST)
-        entries = gitstore.git_log(wiki_dir / "after.md")
-        assert [e["msg"] for e in entries] == ["Rename before to after", "Update before"]
-
-    def test_git_log_max_count(self, client, wiki_dir):
-        save(client, "p", "v1\n")
-        save(client, "p", "v2\n")
-        assert len(gitstore.git_log(wiki_dir / "p.md", max_count=1)) == 1
+        assert history_labels(client, "after") == ["Renamed from “before”", "Edited"]
 
     def test_history_of_uncommitted_page_shows_empty_state(self, client, wiki_dir):
         (wiki_dir / "loose.md").write_text("# Loose\n", encoding="utf-8")
@@ -407,8 +411,7 @@ class TestDiff:
     def test_diffs_hidden_in_sharing_mode(self, client, wiki_dir, monkeypatch):
         # Regression: history and revisions said "Hidden page", but a diff
         # showed what a page not for sharing said.
-        monkeypatch.setattr(config, "NOSHARE_TAGS", frozenset({"noshare"}))
-        pages._noshare_tag_cache.clear()
+        monkeypatch.setattr(settings, "NOSHARE_TAGS", frozenset({"noshare"}))
         save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nold words\n")
         save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nnew words\n")
         client.post("/api/save/secret", data={"content": "---\ntags: noshare\n---\n# Secret\n\nunsaved words\n"},
@@ -468,41 +471,40 @@ class TestDeletedPages:
             save(client, slug, f"# {slug}\n")
         client.post("/delete/first", headers=HOST)
         client.post("/delete/second", headers=HOST)
-        assert [p["slug"] for p in gitstore.list_deleted_pages()] == ["second", "first"]
+        assert [p[0] for p in deleted_pages(client)] == ["second", "first"]
 
     def test_page_deleted_twice_listed_once(self, client, wiki_dir):
         save(client, "gone", "# Gone\n")
         client.post("/delete/gone", headers=HOST)
         save(client, "gone", "# Gone again\n")
         client.post("/delete/gone", headers=HOST)
-        pages = gitstore.list_deleted_pages()
-        assert [p["slug"] for p in pages] == ["gone"]
-        assert pages[0]["title"] == "Gone again"
+        assert [p[:2] for p in deleted_pages(client)] == [("gone", "Gone again")]
 
     def test_recreated_page_not_listed(self, client, wiki_dir):
         save(client, "gone", "# Gone\n")
         client.post("/delete/gone", headers=HOST)
         save(client, "gone", "# Back\n")
-        assert gitstore.list_deleted_pages() == []
+        assert deleted_pages(client) == []
 
     def test_deleted_assets_not_listed(self, client, wiki_dir):
         (wiki_dir / "_assets" / "note.md").write_text("x", encoding="utf-8")
-        gitstore.git_commit(wiki_dir / "_assets" / "note.md", "add")
-        (wiki_dir / "_assets" / "note.md").unlink()
-        gitstore.git_commit(wiki_dir / "_assets" / "note.md", "rm")
-        assert gitstore.list_deleted_pages() == []
+        git(wiki_dir, "add", "_assets/note.md")
+        git(wiki_dir, "commit", "-qm", "add")
+        git(wiki_dir, "rm", "-q", "_assets/note.md")
+        git(wiki_dir, "commit", "-qm", "rm")
+        assert deleted_pages(client) == []
 
     def test_restore_from_deleted_list_roundtrip(self, client, wiki_dir):
         save(client, "gone", "# Gone\n\nbody\n")
         client.post("/delete/gone", headers=HOST)
-        entry = gitstore.list_deleted_pages()[0]
+        sha = deleted_pages(client)[0][2]
         # The listed sha is the deletion commit; the revision view resolves to
         # its parent for the actual restore.
-        html = client.get(f"/revision/gone/{entry['sha']}", headers=HOST).get_data(as_text=True)
-        restore_sha = html.split('action="/restore/gone/')[1].split('"')[0]
+        page = client.get(f"/revision/gone/{sha}", headers=HOST).get_data(as_text=True)
+        restore_sha = page.split('action="/restore/gone/')[1].split('"')[0]
         client.post(f"/restore/gone/{restore_sha}", headers=HOST)
         assert (wiki_dir / "gone.md").read_text() == "# Gone\n\nbody\n"
-        assert gitstore.list_deleted_pages() == []
+        assert deleted_pages(client) == []
 
     def test_visiting_deleted_page_offers_restore(self, client, wiki_dir):
         save(client, "gone", "# Gone\n")
@@ -621,7 +623,7 @@ class TestGitDisabled:
 
     @pytest.fixture()
     def nogit(self, client, monkeypatch):
-        monkeypatch.setattr(config, "GIT_ENABLED", False)
+        monkeypatch.setattr(settings, "GIT_ENABLED", False)
         return client
 
     @pytest.mark.parametrize("url", [
@@ -648,75 +650,13 @@ class TestGitDisabled:
         html = nogit.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "Last changed" not in html
 
-    def test_helpers_return_empty(self, nogit, wiki_dir):
-        assert gitstore.git_log(wiki_dir / "index.md") == []
-        assert gitstore.git_uncommitted_files() == []
-        assert gitstore.list_deleted_pages() == []
+    def test_no_history_no_deleted_pages(self, nogit, wiki_dir):
+        assert history_labels(nogit, "index") == []
+        assert deleted_pages(nogit) == []
 
 
-# ===========================================================================
-# Pure helpers
-# ===========================================================================
-
-
-class TestHelpers:
-
-    @pytest.mark.parametrize("delta,expected", [
-        (timedelta(seconds=5), "just now"),
-        (timedelta(minutes=1, seconds=5), "1 minute ago"),
-        (timedelta(minutes=5, seconds=5), "5 minutes ago"),
-        (timedelta(hours=1, minutes=1), "1 hour ago"),
-        (timedelta(hours=3, minutes=1), "3 hours ago"),
-        (timedelta(days=1, minutes=1), "1 day ago"),
-        (timedelta(days=10, minutes=1), "10 days ago"),
-        (timedelta(days=65), "2 months ago"),
-        (timedelta(days=366), "1 year ago"),
-        (timedelta(days=800), "2 years ago"),
-    ])
-    def test_relative_time(self, delta, expected):
-        assert gitstore.relative_time(datetime.now() - delta) == expected
-
-    def test_diff_to_html_empty(self):
-        assert views.diff_to_html("") == '<span class="diff-ctx">(no changes)</span>'
-
-    def test_diff_to_html_leaves_out_file_headers(self):
-        # Only what comes before the first @@ is a header: a removed line
-        # "-- x" reads "--- x" in the diff and stays.
-        out = views.diff_to_html("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n"
-                                   "@@ -1,2 +1,2 @@\n context\n--- x\n+++ y")
-        assert out == ('<span class="diff-hunk">⋯</span><span class="diff-ctx"> context</span>'
-                       '<span class="diff-del">--- x</span><span class="diff-add">+++ y</span>')
-
-    @pytest.mark.parametrize("filepath,expected", [
-        ("notes.md", "Save notes"),
-        ("journal/day.md", "Save journal/day"),
-        ("_assets/a.png", "Update _assets/a.png"),
-    ])
-    def test_commit_message(self, filepath, expected):
-        assert gitstore.commit_message(filepath) == expected
-
-
-
-class TestGitDoesNotDetach:
-    def test_maintenance_runs_in_the_foreground(self, wiki_dir):
-        # Regression: git (2.47+) detached its auto-maintenance after each
-        # commit; with Leaf as the container's PID 1 nobody reaped it, and
-        # zombies piled up to the PID limit.
-        for key in ("maintenance.autoDetach", "gc.autoDetach"):
-            assert gitstore.run_git("git", "config", "--get", key).stdout.strip() == "false"
-
-
-def test_secret_key_folder_is_kept_out_of_git(wiki_dir):
-    server.exclude_from_git(wiki_dir)
-    (wiki_dir / ".leaf").mkdir(exist_ok=True)
-    (wiki_dir / ".leaf" / "secret_key").write_text("x" * 64)
+def test_secret_key_folder_is_kept_out_of_git(client, wiki_dir):
+    assert (wiki_dir / ".leaf" / "secret_key").exists()
     assert ".leaf" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
 
 
-def test_hung_git_counts_as_failed(wiki_dir, monkeypatch):
-    def hang(*args, **kwargs):
-        raise subprocess.TimeoutExpired(args[0], kwargs.get("timeout"))
-    monkeypatch.setattr(gitstore.subprocess, "run", hang)
-    r = gitstore.run_git("git", "status")
-    assert r.returncode != 0 and "timed out" in r.stderr
-    gitstore.git_commit(wiki_dir / "index.md", "no hang")   # returns instead of blocking

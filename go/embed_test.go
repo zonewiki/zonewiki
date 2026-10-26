@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// src/embed.py's index in Go (embed.go), with tests/test_semantic.py's
-// fake embedder: words map to a few "concepts", so texts sharing no words
-// can still be similar.
+// The semantic index (embed.go), with the tests' fake embedder (as
+// tests/semantic.py's): words map to a few "concepts", so texts sharing no
+// words can still be similar.
 
 var testConcepts = map[string]int{
 	"backup": 0, "remote": 0, "push": 0, "copy": 0, "git": 0,
@@ -481,5 +481,105 @@ func TestVectorCodec(t *testing.T) {
 	}
 	if got := normalize([]float32{0, 0}); !reflect.DeepEqual(got, []float32{0, 0}) {
 		t.Errorf("normalize zero: %v", got)
+	}
+}
+
+// chunks: a text's sections as embedded, heading path then text.
+func chunks(text string, maxChars int) []string {
+	var out []string
+	for _, s := range chunkSections(text, maxChars) {
+		out = append(out, chunkText(s.Path, s.Body))
+	}
+	return out
+}
+
+func TestChunkPage(t *testing.T) {
+	if got := chunks("Intro text.\n\n## Setup\n\nDo this.\n\n### Detail\n\nAnd that.\n", maxChunkChars); !reflect.DeepEqual(got,
+		[]string{"Intro text.", "Setup\nDo this.", "Setup › Detail\nAnd that."}) {
+		t.Errorf("headings: %q", got)
+	}
+	if got := chunks("## Empty\n\n## Full\n\nText.\n", maxChunkChars); !reflect.DeepEqual(got, []string{"Full\nText."}) {
+		t.Errorf("empty sections: %q", got)
+	}
+	// A fence closes only on its own kind: a ```python line inside a
+	// ```` block doesn't, and the "# comment" after it is no heading.
+	var heads []string
+	for _, s := range chunkSections("## Example\n\n````md\n```python\n# not a heading\n```\n````\n\n## Next\n\nText.\n", maxChunkChars) {
+		heads = append(heads, s.Heading)
+	}
+	if !reflect.DeepEqual(heads, []string{"Example", "Next"}) {
+		t.Errorf("fence: %q", heads)
+	}
+	// A long section is split at paragraphs, one huge paragraph cut.
+	var paras []string
+	for i := range 10 {
+		paras = append(paras, "Paragraph "+itoa(i)+" "+strings.Repeat("word ", 30))
+	}
+	got := chunks("## Long\n\n"+strings.Join(paras, "\n\n"), 400)
+	if len(got) < 2 || strings.Count(strings.Join(got, ""), "Paragraph") != 10 {
+		t.Errorf("long section: %q", got)
+	}
+	for _, c := range got {
+		if !strings.HasPrefix(c, "Long\n") || len([]rune(c)) > 400+len("Long\n") {
+			t.Errorf("long section's chunk %q", c)
+		}
+	}
+	got = chunks(strings.Repeat("x ", 1000), 300)
+	if len(got) < 2 {
+		t.Errorf("huge paragraph: %q", got)
+	}
+	for _, c := range got {
+		if len([]rune(c)) > 300 {
+			t.Errorf("huge paragraph's chunk of %d", len([]rune(c)))
+		}
+	}
+	got = chunks("See [the docs](https://example.com/page) and ![img](/_assets/a.png).", maxChunkChars)
+	if strings.Contains(got[0], "example.com") || strings.Contains(got[0], "_assets") || !strings.Contains(got[0], "the docs") {
+		t.Errorf("links: %q", got)
+	}
+}
+
+func TestSemanticText(t *testing.T) {
+	testWiki(t, nil)
+	// Deck embeds are markup: pages of only an embed were each other's closest match.
+	_, body := semanticText("# Leaf\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
+	if strings.Contains(strings.ToLower(body), "deck") || !strings.Contains(body, "Notes  here.") {
+		t.Errorf("deck embeds: %q", body)
+	}
+	if _, body := semanticText("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf"); pyStrip(body) != "" {
+		t.Errorf("only an embed: %q", body)
+	}
+	title, body := semanticText("---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")
+	if title != "Golf" || !strings.HasPrefix(body, "Notes on the car\ncars repair") || strings.Contains(body, "# Golf") || strings.Contains(body, "---") {
+		t.Errorf("frontmatter: %q %q", title, body)
+	}
+}
+
+func TestFuse(t *testing.T) {
+	if got := Fuse([][]string{{"a", "b"}, {"c", "b"}}); got[0] != "b" {
+		t.Errorf("in both lists wins: %q", got)
+	}
+	if got := Fuse([][]string{{"a"}, {"b"}}); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Errorf("ties keep the first list's order: %q", got)
+	}
+	if got := Fuse([][]string{{"a"}, {"a"}}); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("no duplicates: %q", got)
+	}
+}
+
+// .leaf/ (the cache, the session key) is in .git/info/exclude, once.
+func TestExcludeFromGit(t *testing.T) {
+	dir := t.TempDir()
+	excludeFromGit(dir, "/.leaf/")
+	if exists(filepath.Join(dir, ".git")) {
+		t.Fatal("made a .git")
+	}
+	info := filepath.Join(dir, ".git", "info")
+	_ = os.MkdirAll(info, 0o777)
+	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~"), 0o666)
+	excludeFromGit(dir, "/.leaf/")
+	excludeFromGit(dir, "/.leaf/")
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
+		t.Errorf("exclude %q", b)
 	}
 }

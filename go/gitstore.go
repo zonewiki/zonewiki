@@ -1,4 +1,4 @@
-// Version history in git (src/gitstore.py): setting the wiki's repository
+// Version history in git: setting the wiki's repository
 // up, commits.
 package main
 
@@ -48,6 +48,9 @@ func runGitFor(timeout time.Duration, args ...string) gitResult {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir, cmd.Env = cfg.Data, gitEnv
+	// A process git started (a hook, an alias) may hold its output open
+	// after git is killed: stop waiting for it soon after.
+	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

@@ -56,8 +56,7 @@ services:
     # Reported as unhealthy when Leaf stops answering (compose ps); restarting
     # then is podman's --health-on-failure or an autoheal container's job.
     healthcheck:
-      test: ["CMD", "python3", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:5000/public/manifest.json', timeout=5)"]
+      test: ["CMD", "/app/leaf", "health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,10 +1,10 @@
-// Lexical search (src/search.py): folding, stemming, the query syntax and
+// Lexical search: folding, stemming, the query syntax and
 // its filters, BM25 with prefix and typo expansion, the words a query
-// matched, excerpts. prototype/search/compare.py checked it against Python
-// on a wiki: the same results on 11,094 queries.
+// matched, excerpts. Ported from the Python Leaf, checked against it on a
+// wiki: the same results on 11,094 queries.
 //
-// Python's text model is code points, Go's bytes: offsets into a text
-// (spans, excerpt windows) are counted in runes here.
+// Offsets into a text (spans, excerpt windows) are counted in runes, as
+// the browser counts characters.
 package main
 
 import (

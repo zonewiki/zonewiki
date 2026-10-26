@@ -1,10 +1,10 @@
-// Markdown to HTML on goldmark (what render.py's markdown-it did). Not a
+// Markdown to HTML on goldmark (the Python Leaf used markdown-it). Not a
 // copy of markdown-it's HTML: goldmark's own output where Leaf doesn't care
 // (footnotes, deflists, entities, URL escaping), Leaf's rules where a
 // feature depends on them: checkboxes the page can tick (counted as mdtext
 // counts them), callouts, heading ids that [[Page#Section]] points at, ✎
 // and ☑ N per section, image width and img-block, external links in a new
-// tab, task-date chips. prototype/goldmark/README.md has the differences.
+// tab, task-date chips. docs/spec/rendering.md has the differences.
 package main
 
 import (

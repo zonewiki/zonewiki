@@ -1,4 +1,4 @@
-// Deck tasks on disk and their model (src/deckstore.py): the _deck/ files
+// Deck tasks on disk and their model: the _deck/ files
 // (open tasks, completed, yearly archives) under one lock with atomic
 // writes, recurrence, history, comments, and what pages need from tasks
 // (links to pages, [[task:…]] references). A task is an *Obj, so a file

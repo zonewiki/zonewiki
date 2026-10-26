@@ -1,10 +1,10 @@
 //go:build cgo
 
-// The model on onnxruntime (embed.OnnxEmbedder), through onnxruntime_go,
+// The model on onnxruntime, through onnxruntime_go,
 // which loads libonnxruntime.so with dlopen when semantic search first
 // embeds: the binary itself links only libc, and an image without the
-// library runs with keyword search only. The vectors are Python's, bit for
-// bit (prototype/semantic).
+// library runs with keyword search only. The vectors are bit for bit those
+// the Python Leaf's fastembed made, so its cache stays valid.
 package main
 
 import (

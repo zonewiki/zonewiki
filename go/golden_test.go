@@ -11,8 +11,10 @@ import (
 	"time"
 )
 
-// Python's answers on every string in Leaf's tests and some edge cases
-// (testdata/golden.py writes them): Go gives the same.
+// The answers of the Python Leaf (until 2026-10) on every string in Leaf's
+// tests then and some edge cases, recorded before it was removed: the text
+// functions still give them. A deliberate change to one of them changes its
+// cases here too.
 func TestGolden(t *testing.T) {
 	f, err := os.Open("testdata/golden.json.gz")
 	if err != nil {

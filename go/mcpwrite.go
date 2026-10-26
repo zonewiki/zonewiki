@@ -1,4 +1,4 @@
-// The MCP tools that write pages (src/mcp_tools.py): write_page (also a
+// The MCP tools that write pages: write_page (also a
 // scratch note), edit_page, append_to_page, replace_in_pages, rename_page
 // (also a folder), delete_page, restore_page, file_scratch_note. Each write
 // is a git commit, refused while a guide for the page isn't confirmed
@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"time"
@@ -803,7 +804,12 @@ func replaceInPages(args *Obj, base string) (string, error) {
 		pattern = pyPattern(find)
 	}
 	if _, err := regexp.Compile(pattern); err != nil {
-		return "", toolErr("find is not a valid regex: " + strings.TrimPrefix(err.Error(), "error parsing regexp: "))
+		msg := "find is not a valid regex: " + strings.TrimPrefix(err.Error(), "error parsing regexp: ")
+		var perr *syntax.Error
+		if errors.As(err, &perr) && (perr.Code == syntax.ErrInvalidPerlOp || perr.Code == syntax.ErrInvalidEscape) {
+			msg += " (no lookarounds or backreferences here: match more and keep it with a group, \\1)"
+		}
+		return "", toolErr(msg)
 	}
 	under, err := underArg(args)
 	if err != nil {

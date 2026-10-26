@@ -1,4 +1,4 @@
-// Version history and uncommitted changes (src/history.py): a page's
+// Version history and uncommitted changes: a page's
 // history, revisions, diffs, restore, deleted pages, committing.
 package main
 

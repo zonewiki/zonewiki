@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from conftest import open_tab, real_density
-import config
+from tests import settings
 
 
 def tomorrow() -> str:
@@ -2282,7 +2282,7 @@ GERMAN_MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
 def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
     # LEAF_LOCALE: dates in German, a calendar with German heads from Monday,
     # and the task chips the server writes in English rewritten in the page.
-    monkeypatch.setattr(config, "LEAF_LOCALE", "de-DE")
+    monkeypatch.setattr(settings, "LEAF_LOCALE", "de-DE")
     long_ago = date(date.today().year - 1, 3, 4)
     t = page.request.post("/api/deck", data={"title": "Started last year", "start_date": long_ago.isoformat(),
                                               "due_date": (date.today() + timedelta(days=400)).isoformat()}).json()
@@ -2307,8 +2307,8 @@ def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
 def test_iso_date_format(page, wiki, monkeypatch):
     # LEAF_DATE_FORMAT=iso: YYYY-MM-DD on cards, the board and in chips; the
     # locale still names the weekdays and starts the week.
-    monkeypatch.setattr(config, "LEAF_LOCALE", "en-US")
-    monkeypatch.setattr(config, "LEAF_DATE_FORMAT", "iso")
+    monkeypatch.setattr(settings, "LEAF_LOCALE", "en-US")
+    monkeypatch.setattr(settings, "LEAF_DATE_FORMAT", "iso")
     start = date.today() - timedelta(days=5)
     t = page.request.post("/api/deck", data={"title": "Started", "start_date": start.isoformat(),
                                               "due_date": (date.today() + timedelta(days=40)).isoformat()}).json()

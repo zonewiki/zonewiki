@@ -1,4 +1,4 @@
-// Search and retrieval (src/retrieval.py): BM25 over pages and deck tasks
+// Search and retrieval: BM25 over pages and deck tasks
 // (search.go), fused with the optional semantic index (embed.go), for the
 // browser (doSearch) and for LLMs (retrieve: sections rather than pages).
 package main
@@ -690,7 +690,7 @@ func retrieve(raw string, limit int, under string, scratch bool) []*SearchDoc {
 }
 
 // search_wiki's queries, one JSON line each (LEAF_QUERY_LOG), for turning
-// into questions for tools/eval_retrieval.py. In .leaf/, so never in git.
+// into questions for leaf eval (eval.go). In .leaf/, so never in git.
 // Past queryLogMax bytes the log moves to queries.1.jsonl (the one before
 // is dropped), so it can't grow without end.
 var queryLogMax int64 = 1_000_000

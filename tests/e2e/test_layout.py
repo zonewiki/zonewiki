@@ -13,7 +13,7 @@ import pytest
 from playwright.sync_api import expect
 
 from conftest import DESKTOP, PHONE, SCREENSHOT_DIR, TOUCH_PHONE, open_tab
-import config
+from tests import settings
 
 # A page that stresses every wide element: long unbroken words/URLs, a wide
 # table, a long code line, an oversized image, and a deep list.
@@ -702,7 +702,7 @@ def test_top_row_is_one_aligned_row(new_page, wiki, monkeypatch, width):
     # and left of the row, and the icons' padding pushed them inside the
     # content's edge. Now badges, switcher and icons share the row's centre
     # line, and the last button (the search pill) ends on the content's right edge.
-    monkeypatch.setattr(config, "LEAF_ALLOW_REMOTE", True)
+    monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", True)
     _side_wiki(wiki)                                   # uncommitted pages: the badge shows
     page = new_page(viewport={"width": width, "height": 700})
     page.goto("/page/release")

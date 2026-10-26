@@ -1,0 +1,147 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"testing"
+)
+
+// The wiki's pages (pages.go): listing, safe paths, link targets and
+// backlinks, renames' references; and the deck syntax's tag rules.
+
+func TestIterPagesSkipsUnderscoreAndHiddenFolders(t *testing.T) {
+	pages := map[string]string{"index": "# Home\n", "top": "# Top\n", "a/b/deep": "# Deep\n"}
+	for _, skipped := range []string{"_assets/x", ".leaf/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"} {
+		pages[skipped] = "# no\n"
+	}
+	testWiki(t, pages)
+	var slugs []string
+	for _, p := range iterPages() {
+		slugs = append(slugs, p.Slug)
+		if filepath.Ext(p.Path) != ".md" {
+			t.Errorf("not a page: %s", p.Path)
+		}
+	}
+	sort.Strings(slugs)
+	if !reflect.DeepEqual(slugs, []string{"a/b/deep", "index", "top"}) {
+		t.Errorf("pages %q", slugs)
+	}
+	// What iterPages skips no route reads or writes; a page named _x is fine.
+	for _, slug := range []string{".leaf/index/n", ".git/n", "_deck/n", "a/_drafts/n", "a/.hidden/n", "a/../.leaf/n"} {
+		if safePath(slug) != "" {
+			t.Errorf("safePath(%q) allowed", slug)
+		}
+	}
+	for _, slug := range []string{"_notes", "a/_notes"} {
+		if safePath(slug) == "" {
+			t.Errorf("safePath(%q) refused", slug)
+		}
+	}
+}
+
+func TestUpdateReferences(t *testing.T) {
+	testWiki(t, map[string]string{"old-page": "# Old\n\ncontent\n", "referencer": "# Ref\n\n[[old-page]]\n", "no-link": "# No Link\n\nbody\n"})
+	got := updateReferences("old-page", "new-page", "")
+	if !reflect.DeepEqual(got, []string{filepath.Join(cfg.Data, "referencer.md")}) {
+		t.Errorf("modified %q", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg.Data, "referencer.md")); string(b) != "# Ref\n\n[[new-page]]\n" {
+		t.Errorf("referencer %q", b)
+	}
+	if got := updateReferences("no-link", "elsewhere", ""); got != nil {
+		t.Errorf("nothing links to no-link: %q", got)
+	}
+}
+
+func TestPlainTaskTitle(t *testing.T) {
+	for in, want := range map[string]string{
+		"a < b & c":                   "a < b & c",
+		"[[My Page]]":                 "My Page",
+		"[[my-page|Label]]":           "Label",
+		"see [x](/page/foo) now":      "see x now",
+		"read [x](https://e.x) today": "read x today", // a pasted URL with its name: the label
+		"[](https://e.x)":             "https://e.x",
+	} {
+		if got := plainTaskTitle(in); got != want {
+			t.Errorf("plainTaskTitle(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNewTaskTags(t *testing.T) {
+	for raw, want := range map[string][]string{
+		"list=Shop tag=weekly,food": {"shop", "weekly", "food"},
+		"tag=work,-mary":            {"work"},
+		"list=task tag=a|b":         {"task"},
+		"":                          nil,
+		"list=task tag=Task":        {"task"},
+	} {
+		if got := newTaskTags(parseDeckParams(raw)); len(got)+len(want) > 0 && !reflect.DeepEqual(got, want) {
+			t.Errorf("newTaskTags(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+// An embed's tag= on the server (the due count), as deck-core.js reads it.
+func TestTagParamMatches(t *testing.T) {
+	for _, c := range []struct {
+		raw  string
+		tags []any
+		want bool
+	}{
+		{"", []any{"a"}, true}, {"a", []any{"A", "b"}, true}, {"a,b", []any{"a"}, false}, {"a,b", []any{"a", "b"}, true},
+		{"a,-b", []any{"a", "b"}, false}, {"a,-b", []any{"a"}, true}, {"a|b", []any{"b"}, true}, {"a|b", []any{"c"}, false},
+	} {
+		if got := tagParamMatches(NewObj("tags", c.tags), c.raw); got != c.want {
+			t.Errorf("tag=%q on %v: %v", c.raw, c.tags, got)
+		}
+	}
+}
+
+// Markdown links count as links (backlinks, renames): [x](slug),
+// [x](slug.md), [x](/page/slug), with an anchor or a title; not URLs.
+func TestMarkdownLinksAreBacklinks(t *testing.T) {
+	testWiki(t, map[string]string{
+		"ivo-petrenko": "# Ivo Petrenko\n", "signals": "# Signals\n", "people/ivo": "# Ivo\n", "golf": "# Golf\n",
+		"state": "# State\n\n## Team\n\n- Kim\n  - [Ivo](ivo-petrenko)\n    - [ ] task\n[[Signals]]\n" +
+			"[Ivo](/page/people/ivo#role \"Ivo\") and [x](/page/)\n[Ghost](nonexistent-page)\n[l](https://example.com/golf)\n",
+		"a": "# A\n\n[Golf](golf.md#werkstatt)\n",
+		"b": "# B\n\n[Golf](golf \"the car\")\n",
+	})
+	targets := pageLinkTargets(pageText(t, "state"), "state")
+	for _, want := range []string{"ivo-petrenko", "signals", "people/ivo"} {
+		if !targets[want] {
+			t.Errorf("%s not a target of state: %v", want, targets)
+		}
+	}
+	if targets["golf"] {
+		t.Error("an external URL is a target of state")
+	}
+	backlinks := func(slug string) []string {
+		var out []string
+		for _, b := range findBacklinks(slug) {
+			out = append(out, b.Slug)
+		}
+		return out
+	}
+	if got := backlinks("ivo-petrenko"); !reflect.DeepEqual(got, []string{"state"}) {
+		t.Errorf("backlinks of ivo-petrenko %q", got)
+	}
+	if got := backlinks("people/ivo"); !reflect.DeepEqual(got, []string{"state"}) || allBacklinkCounts()["people/ivo"] != 1 {
+		t.Errorf("backlinks of people/ivo %q", got)
+	}
+	if got := backlinks("golf"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Errorf("backlinks of golf %q", got)
+	}
+}
+
+func pageText(t *testing.T, slug string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(cfg.Data, slug+".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

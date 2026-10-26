@@ -1,4 +1,4 @@
-// Leaf's views (src/views.py): the page shell every view shares, the
+// Leaf's views: the page shell every view shares, the
 // breadcrumb and module switcher, menus and dialogs, side columns, around
 // each view's template (templates/, html/template, auto-escaped). A value
 // that is HTML Leaf built itself is a template.HTML; nothing else is.

@@ -6,11 +6,10 @@ import (
 	"testing"
 )
 
-// src/retrieval.py in Go (retrieval.go): what the API tests can't reach.
+// Search and retrieval (retrieval.go): what the API tests can't reach.
 
 // A page whose file vanishes or can't be read between listing and reading is
-// left out of the search, not a failed search (test_routes.py's
-// test_page_vanishing_mid_search_is_skipped does it by patching Python).
+// left out of the search, not a failed search.
 func TestUnreadablePagesAreSkipped(t *testing.T) {
 	testWiki(t, map[string]string{"fine": "# Fine\n\nzzqword here\n"})
 	// A dangling link fails the stat, a link to a folder the read.

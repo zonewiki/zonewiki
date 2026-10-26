@@ -1,8 +1,0 @@
-{#- A page not for sharing, in sharing mode: neither its title nor its
-    text, and no stop in the navigation trail. -#}
-{% extends "layout.html" %}
-{% block body %}
-{{ breadcrumb_html|safe }}
-<header class="page-header"><h1>Hidden page</h1></header>
-<article class="page-content"><p class="hidden-page-note">This page is not shown in sharing mode. Turn sharing mode off (the eye at the top, or <kbd>S</kbd>) to see it.</p></article>
-{% endblock %}

@@ -1,4 +1,4 @@
-// Markdown source text (src/mdtext.py): frontmatter, fenced code, code
+// Markdown source text: frontmatter, fenced code, code
 // masking, headings and their anchors, wikilink syntax, sections,
 // task-list checkboxes. Pure functions on strings, no files. Offsets into
 // a text (sections, splices) count characters (runes), as Python's do: the
