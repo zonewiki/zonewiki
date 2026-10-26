@@ -136,17 +136,17 @@ func isTrue(v string) bool {
 	return false
 }
 
-func taskTagsLower(t *Obj) map[string]bool {
+func taskTagsLower(t *Task) map[string]bool {
 	out := map[string]bool{}
-	for _, tag := range t.List("tags") {
-		out[strings.ToLower(pyStr(tag))] = true
+	for _, tag := range t.Tags {
+		out[strings.ToLower(tag)] = true
 	}
 	return out
 }
 
 // tagParamMatches: a task passes an embed's tag= (DeckCore.tagParamToQuery):
 // `a|b` any of them, else comma-separated tags all there, `-tag` excluding.
-func tagParamMatches(t *Obj, raw string) bool {
+func tagParamMatches(t *Task, raw string) bool {
 	raw = pyStrip(raw)
 	if raw == "" {
 		return true
@@ -258,7 +258,7 @@ func today() time.Time {
 
 // inScope: a task belongs to a deck view: scope is a list name (its tasks)
 // or "" for every task.
-func inScope(t *Obj, scope string) bool {
+func inScope(t *Task, scope string) bool {
 	return scope == "" || taskTagsLower(t)[scope]
 }
 

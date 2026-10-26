@@ -198,7 +198,7 @@ func shortDate(iso, day string) string {
 
 // linkList: the list a link to a task opens it in: one of prefer (the
 // lists the linking page declares) when the task is in it, else its own.
-func linkList(t *Obj, prefer []string, lists map[string]DeckHome) string {
+func linkList(t *Task, prefer []string, lists map[string]DeckHome) string {
 	tags := taskTagsLower(t)
 	var hits []string
 	for _, p := range prefer {
@@ -215,12 +215,12 @@ func linkList(t *Obj, prefer []string, lists map[string]DeckHome) string {
 
 // taskRefHTML: a task as an inline chip: its checkbox (completes it, js/page.js),
 // its title linking to it in the deck, badges for what its card shows.
-func taskRefHTML(ref string, t *Obj, day string, prefer []string, lists map[string]DeckHome) string {
+func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[string]DeckHome) string {
 	if t == nil {
 		return `<span class="task-ref task-ref-missing" title="No task with id ` + pyEscape(ref) + `">task ` + pyEscape(ref) + `?</span>`
 	}
-	title := pyEscape(plainTaskTitle(t.Str("title")))
-	done, wont := t.Truthy("completed_at"), t.Truthy("wont_do")
+	title := pyEscape(plainTaskTitle(t.Title))
+	done, wont := !t.isOpen(), t.WontDo
 	list := linkList(t, prefer, lists)
 	href := pyEscape(taskLink(t, list))
 	cls := "task-ref"
@@ -233,10 +233,10 @@ func taskRefHTML(ref string, t *Obj, day string, prefer []string, lists map[stri
 		} else {
 			cls += " task-ref-done"
 		}
-		badges = append(badges, `<span class="task-ref-badge">`+mark+" "+shortDate(pyStr(t.Get("completed_at")), day)+`</span>`)
+		badges = append(badges, `<span class="task-ref-badge">`+mark+" "+shortDate(t.CompletedAt, day)+`</span>`)
 	} else {
-		due, start := t.Str("due_date"), t.Str("start_date")
-		if t.Truthy("due_date") {
+		due, start := t.DueDate, t.StartDate
+		if due != "" {
 			state := ""
 			if due < day {
 				state = " overdue"
@@ -245,20 +245,20 @@ func taskRefHTML(ref string, t *Obj, day string, prefer []string, lists map[stri
 			}
 			badges = append(badges, `<span class="task-ref-badge task-ref-due`+state+`" title="Due `+due+`">⏰ `+shortDate(due, day)+`</span>`)
 		}
-		if t.Truthy("start_date") && start >= day {
+		if start != "" && start >= day {
 			state, label := " start-later", shortDate(start, day)
 			if start == day {
 				state, label = " start-today", "today"
 			}
 			badges = append(badges, `<span class="task-ref-badge task-ref-start`+state+`" title="Start `+start+`">📅 `+label+`</span>`)
 		}
-		if t.Truthy("recurrence") {
+		if t.Recurrence != nil {
 			badges = append(badges, `<span class="task-ref-badge" title="Repeats">↻</span>`)
 		}
-		if t.Truthy("keep") {
+		if t.Keep {
 			last := ""
-			if t.Truthy("last_done") {
-				last = " ✓ " + shortDate(pyStr(t.Get("last_done")), day)
+			if t.LastDone != "" {
+				last = " ✓ " + shortDate(t.LastDone, day)
 			}
 			badges = append(badges, `<span class="task-ref-badge" title="Keep task: stays after done">⟲`+last+`</span>`)
 		}
@@ -273,7 +273,7 @@ func taskRefHTML(ref string, t *Obj, day string, prefer []string, lists map[stri
 	if wont {
 		disabled = " disabled"
 	}
-	return `<span class="` + cls + `" data-task-id="` + pyEscape(t.Str("id")) + `">` +
+	return `<span class="` + cls + `" data-task-id="` + pyEscape(t.ID) + `">` +
 		`<input type="checkbox" class="task-ref-check" aria-label="Done: ` + title + `"` + checked + disabled + `>` +
 		`<a class="task-ref-title" href="` + href + `">` + title + `</a>` + strings.Join(badges, "") + `</span>`
 }
@@ -315,8 +315,8 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 }
 
 // taskLinkObj is a TaskLink as a task, for linkList.
-func taskLinkObj(t TaskLink) *Obj {
-	return NewObj("id", t.ID, "title", t.Title, "tags", strs(t.Tags))
+func taskLinkObj(t TaskLink) *Task {
+	return &Task{ID: t.ID, Title: t.Title, Tags: t.Tags}
 }
 
 // renderTagsPillsHTML: tags as pills searching #tag (pages and tasks with
@@ -392,9 +392,9 @@ func taskHref(id, tab, list, year string) string {
 
 // taskLink: taskHref for a task as it is now: open on Open, done on
 // Completed (in its year's archive for an earlier year).
-func taskLink(t *Obj, list string) string {
-	if !t.Truthy("completed_at") {
-		return taskHref(t.Str("id"), "open", list, "")
+func taskLink(t *Task, list string) string {
+	if t.isOpen() {
+		return taskHref(t.ID, "open", list, "")
 	}
-	return taskHref(t.Str("id"), "completed", list, pastYear(t))
+	return taskHref(t.ID, "completed", list, pastYear(t))
 }

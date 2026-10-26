@@ -1,8 +1,7 @@
 // JSON as Python's json module reads and writes it: objects keep their keys'
-// order (a dict's), numbers stay ints or floats, and dumps writes what
-// json.dumps(v, indent=2, ensure_ascii=False) does, byte for byte. The deck's
-// files (_deck/*.json) are written so: the same key order and formatting as
-// Python, or every write would be a noisy git diff.
+// order (a dict's), numbers stay ints or floats. Requests and MCP messages
+// are read so (their checks are the Python Leaf's), and dumpsLine writes
+// what json.dumps(v) did where text shows JSON (tool replies, the query log).
 //
 // Values: nil, bool, string, int64, float64, []any, *Obj.
 package main
@@ -103,22 +102,27 @@ func (o *Obj) Copy() *Obj {
 	return c
 }
 
-// MarshalJSON writes the keys in order (Go's encoder for API answers).
+// MarshalJSON writes the keys in order. It leaves <, > and & as they are:
+// the encoder that called it escapes them for HTML when it should (API
+// answers), a deck file keeps its text as written.
 func (o *Obj) MarshalJSON() ([]byte, error) {
 	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
 	b.WriteByte('{')
 	for i, k := range o.keys {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		kb, _ := json.Marshal(k)
-		b.Write(kb)
-		b.WriteByte(':')
-		vb, err := json.Marshal(jsonable(o.m[k]))
-		if err != nil {
+		if err := enc.Encode(k); err != nil {
 			return nil, err
 		}
-		b.Write(vb)
+		b.Truncate(b.Len() - 1) // Encode's newline
+		b.WriteByte(':')
+		if err := enc.Encode(jsonable(o.m[k])); err != nil {
+			return nil, err
+		}
+		b.Truncate(b.Len() - 1)
 	}
 	b.WriteByte('}')
 	return b.Bytes(), nil
@@ -213,81 +217,6 @@ func decodeValue(dec *json.Decoder) (any, error) {
 	}
 }
 
-// dumps is json.dumps(v, indent=2, ensure_ascii=False).
-func dumps(v any) string {
-	var b strings.Builder
-	dumpValue(&b, v, 0)
-	return b.String()
-}
-
-func dumpValue(b *strings.Builder, v any, depth int) {
-	switch v := v.(type) {
-	case nil:
-		b.WriteString("null")
-	case bool:
-		if v {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
-	case string:
-		dumpString(b, v)
-	case int:
-		b.WriteString(strconv.Itoa(v))
-	case int64:
-		b.WriteString(strconv.FormatInt(v, 10))
-	case float64:
-		b.WriteString(pyFloatRepr(v))
-	case []string:
-		l := make([]any, len(v))
-		for i, s := range v {
-			l[i] = s
-		}
-		dumpValue(b, l, depth)
-	case []any:
-		if len(v) == 0 {
-			b.WriteString("[]")
-			return
-		}
-		b.WriteString("[")
-		for i, item := range v {
-			if i > 0 {
-				b.WriteString(",")
-			}
-			newline(b, depth+1)
-			dumpValue(b, item, depth+1)
-		}
-		newline(b, depth)
-		b.WriteString("]")
-	case *Obj:
-		if v.Len() == 0 {
-			b.WriteString("{}")
-			return
-		}
-		b.WriteString("{")
-		for i, k := range v.keys {
-			if i > 0 {
-				b.WriteString(",")
-			}
-			newline(b, depth+1)
-			dumpString(b, k)
-			b.WriteString(": ")
-			dumpValue(b, v.m[k], depth+1)
-		}
-		newline(b, depth)
-		b.WriteString("}")
-	default:
-		panic(fmt.Sprintf("dumps: %T", v))
-	}
-}
-
-func newline(b *strings.Builder, depth int) {
-	b.WriteByte('\n')
-	for range depth {
-		b.WriteString("  ")
-	}
-}
-
 // dumpString escapes as json.dumps with ensure_ascii=False: only the quote,
 // the backslash and control characters.
 func dumpString(b *strings.Builder, s string) {
@@ -371,8 +300,18 @@ func dumpLine(b *strings.Builder, v any, ascii bool) {
 			dumpLine(b, v.m[k], ascii)
 		}
 		b.WriteByte('}')
+	case nil:
+		b.WriteString("null")
+	case bool:
+		b.WriteString(strconv.FormatBool(v))
+	case int:
+		b.WriteString(strconv.Itoa(v))
+	case int64:
+		b.WriteString(strconv.FormatInt(v, 10))
+	case float64:
+		b.WriteString(pyFloatRepr(v))
 	default:
-		dumpValue(b, v, 0)
+		panic(fmt.Sprintf("dumpsLine: %T", v))
 	}
 }
 
@@ -418,49 +357,6 @@ func pyFloatRepr(f float64) string {
 		return s
 	}
 	return e
-}
-
-// pyEqual is Python's == on JSON values (1 == 1.0, dicts regardless of key
-// order).
-func pyEqual(a, b any) bool {
-	switch a := a.(type) {
-	case nil:
-		return b == nil
-	case bool:
-		bb, ok := b.(bool)
-		return ok && a == bb
-	case string:
-		bs, ok := b.(string)
-		return ok && a == bs
-	case int64, float64:
-		af, aok := number(a)
-		bf, bok := number(b)
-		return aok && bok && af == bf
-	case []any:
-		bl, ok := b.([]any)
-		if !ok || len(a) != len(bl) {
-			return false
-		}
-		for i := range a {
-			if !pyEqual(a[i], bl[i]) {
-				return false
-			}
-		}
-		return true
-	case *Obj:
-		bo, ok := b.(*Obj)
-		if !ok || a.Len() != bo.Len() {
-			return false
-		}
-		for _, k := range a.keys {
-			bv, ok := bo.m[k]
-			if !ok || !pyEqual(a.m[k], bv) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
 }
 
 // number is a JSON number as float64 (a bool is not one).

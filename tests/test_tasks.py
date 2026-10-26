@@ -1623,6 +1623,50 @@ class TestLimitParam:
         assert '<script type="module" src="/public/leaf.js"></script>' in html_out
 
 
+# ── The files' format ─────────────────────────────────────────────────────────
+
+
+class TestFileFormat:
+    """Leaf writes each task's fields in one order; files in another (the
+    Python Leaf's, a hand edit) are rewritten once, at start, in a commit of
+    their own. Keys Leaf doesn't know stay."""
+
+    OLD = [{"id": "a1", "title": "Old", "description": "", "tags": [], "due_date": None,
+            "created_at": "2026-01-02T10:00:00", "completed_at": None, "wont_do": False,
+            "sort_order": 1.0, "recurrence": None, "blocked_by": ["x"], "spawned_from": None}]
+
+    def log(self, wiki):
+        return subprocess.run(["git", "log", "--format=%s"], cwd=wiki, capture_output=True, text=True,
+                              env=settings.GIT_ENV).stdout.splitlines()
+
+    def test_rewritten_once_at_start(self, git_wiki_dir, tmp_path_factory):
+        deck = git_wiki_dir / "_deck" / "tasks.json"
+        deck.write_text(json.dumps(self.OLD, indent=2), encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
+        subprocess.run(["git", "commit", "-qm", "old"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
+        git_setup(tmp_path_factory)   # a start
+        assert self.log(git_wiki_dir)[0] == "Write the deck's files in Leaf's format"
+        task = json.loads(deck.read_text(encoding="utf-8"))[0]
+        assert list(task)[:5] == ["id", "title", "description", "tags", "start_date"]
+        assert list(task)[-1] == "blocked_by" and task["blocked_by"] == ["x"]
+        assert task["sort_order"] == 1 and task["comments"] == [] and task["keep"] is False
+        before = self.log(git_wiki_dir)
+        git_setup(tmp_path_factory)   # nothing left to rewrite
+        assert self.log(git_wiki_dir) == before
+
+    def test_unknown_keys_survive_an_edit(self, client, wiki_dir):
+        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps(self.OLD), encoding="utf-8")
+        resp = client.put("/api/deck/a1", json={"title": "New"})
+        assert resp.get_json()["blocked_by"] == ["x"]
+        task = json.loads((wiki_dir / "_deck" / "tasks.json").read_text(encoding="utf-8"))[0]
+        assert task["title"] == "New" and task["blocked_by"] == ["x"]
+
+    def test_text_is_written_as_it_is(self, client, wiki_dir):
+        create_task(client, title="Fix <b> & “quotes” ü")
+        raw = (wiki_dir / "_deck" / "tasks.json").read_text(encoding="utf-8")
+        assert '"title": "Fix <b> & “quotes” ü"' in raw
+
+
 # ── Round 2: completed-task year archives ─────────────────────────────────────
 
 

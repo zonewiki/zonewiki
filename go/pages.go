@@ -263,7 +263,7 @@ func pageTaskRefs(content string) map[string]bool {
 	out := map[string]bool{}
 	for _, t := range resolveTaskRefs(refs) {
 		if t != nil {
-			out[t.Str("id")] = true
+			out[t.ID] = true
 		}
 	}
 	return out
@@ -438,7 +438,7 @@ func deckLists() map[string]DeckHome {
 
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page
 // declares as a list, or "".
-func taskList(t *Obj, names map[string]DeckHome) string {
+func taskList(t *Task, names map[string]DeckHome) string {
 	if names == nil {
 		names = deckLists()
 	}

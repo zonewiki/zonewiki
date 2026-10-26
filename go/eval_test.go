@@ -33,7 +33,7 @@ func TestEvalRank(t *testing.T) {
 			t.Errorf("%q: rank %d, want %d", c.expect, got, c.want)
 		}
 	}
-	task := &SearchDoc{Slug: "_deck", Task: NewObj(), TaskID: "t1"}
+	task := &SearchDoc{Slug: "_deck", Task: &Task{ID: "t1"}, TaskID: "t1"}
 	if rankOf([]*SearchDoc{task}, []string{"task:t1"}) != 1 {
 		t.Error("task target")
 	}

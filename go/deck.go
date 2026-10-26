@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -148,25 +149,26 @@ func idList(data *Obj) ([]string, error) {
 // strptime's %Y-%m-%d: four digits, then a month and a day of one or two.
 var strptimeDayRE = regexp.MustCompile(`^(\d{4})-(1[0-2]|0[1-9]|[1-9])-(3[01]|[12]\d|0[1-9]|[1-9]| [1-9])$`)
 
-// validateDate: v as a date field: falsy is nil, else a valid YYYY-MM-DD.
-func validateDate(v any) (any, error) {
+// validateDate: v as a date field: falsy is none (""), else a valid
+// YYYY-MM-DD.
+func validateDate(v any) (string, error) {
 	if !truthyValue(v) {
-		return nil, nil
+		return "", nil
 	}
 	bad := badRequest("Invalid date format, expected YYYY-MM-DD")
 	s, ok := v.(string)
 	if !ok {
-		return nil, bad
+		return "", bad
 	}
 	m := strptimeDayRE.FindStringSubmatch(s)
 	if m == nil {
-		return nil, bad
+		return "", bad
 	}
 	y, _ := strconv.Atoi(m[1])
 	mo, _ := strconv.Atoi(m[2])
 	d, _ := strconv.Atoi(strings.TrimSpace(m[3]))
 	if d > daysIn(y, time.Month(mo)) {
-		return nil, bad
+		return "", bad
 	}
 	return s, nil
 }
@@ -293,7 +295,7 @@ func deckCounts(rq *Req) DeckCounts {
 		if !inScope(t, scope) || !tagParamMatches(t, tag) {
 			continue
 		}
-		due, start := t.Str("due_date"), t.Str("start_date")
+		due, start := t.DueDate, t.StartDate
 		if start != "" && start <= day || due != "" && due <= day {
 			c.Focus++
 		}
@@ -311,7 +313,7 @@ func deckCounts(rq *Req) DeckCounts {
 
 func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/deck", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, objList(readDeck()))
+		writeJSON(w, http.StatusOK, readDeck())
 		return nil
 	}))
 	// A hidden deck app, for a page without one that wants its edit modal
@@ -325,7 +327,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, objList(completedInYear(year)))
+		writeJSON(w, http.StatusOK, completedInYear(year))
 		return nil
 	}))
 	mux.HandleFunc("GET /api/deck/completed-years", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -441,7 +443,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, objList(tasks))
+		writeJSON(w, http.StatusOK, tasks)
 		return nil
 	}))
 	mux.HandleFunc("POST /api/deck/batch-update", deckRoute(apiBatchUpdate))
@@ -461,7 +463,7 @@ func yearArg(r *http.Request) (string, error) {
 
 // createTask: a new open task from the fields in data (as the API takes
 // them); the MCP tools share it.
-func createTask(data *Obj, message string) (*Obj, error) {
+func createTask(data *Obj, message string) (*Task, error) {
 	title, err := asStr(orDefault(data, "title", ""), "title")
 	if err != nil {
 		return nil, err
@@ -475,8 +477,8 @@ func createTask(data *Obj, message string) (*Obj, error) {
 	if err := applyTaskFields(t, data); err != nil {
 		return nil, err
 	}
-	t.Set("history", []any{}) // its first dates are not changes
-	logEvent(t, "created", nil, nil)
+	t.History = []HistoryEntry{} // its first dates are not changes
+	logEvent(t, "created", "", "")
 	active, err := readDeckStrict()
 	if err != nil {
 		return nil, err
@@ -485,8 +487,8 @@ func createTask(data *Obj, message string) (*Obj, error) {
 }
 
 // applyTaskFields applies the field changes in data (not completion).
-func applyTaskFields(t *Obj, data *Obj) error {
-	oldDue := t.Get("due_date")
+func applyTaskFields(t *Task, data *Obj) error {
+	oldDue := t.DueDate
 	if data.Has("title") {
 		s, err := asStr(data.Get("title"), "title")
 		if err != nil {
@@ -495,14 +497,14 @@ func applyTaskFields(t *Obj, data *Obj) error {
 		if s = pyStrip(s); s == "" {
 			return badRequest("Title cannot be empty")
 		}
-		t.Set("title", s)
+		t.Title = s
 	}
 	if data.Has("description") {
 		s, err := asStr(orNone(data.Get("description")), "description")
 		if err != nil {
 			return err
 		}
-		t.Set("description", pyStrip(s))
+		t.Description = pyStrip(s)
 	}
 	if data.Has("tags") {
 		v := data.Get("tags")
@@ -513,55 +515,57 @@ func applyTaskFields(t *Obj, data *Obj) error {
 		if err != nil {
 			return err
 		}
-		t.Set("tags", strs(cleanTagStrings(tags)))
+		t.Tags = cleanTagStrings(tags)
 	}
 	if data.Has("comments") { // the whole list, for undoing a comment's delete or edit
 		if _, ok := data.Get("comments").([]any); !ok {
 			return badRequest("comments must be a list")
 		}
-		t.Set("comments", cleanComments(data.Get("comments")))
+		t.Comments = cleanComments(data.Get("comments"))
 	}
 	if data.Has("due_date") {
 		d, err := validateDate(data.Get("due_date"))
 		if err != nil {
 			return err
 		}
-		t.Set("due_date", d)
-		if !pyEqual(d, oldDue) {
+		t.DueDate = d
+		if d != oldDue {
 			logEvent(t, "due", oldDue, d)
 		}
 	}
 	if data.Has("sort_order") {
-		v := data.Get("sort_order")
-		switch v.(type) {
-		case nil, int64, float64:
+		switch v := data.Get("sort_order").(type) {
+		case nil:
+			t.SortOrder = nil
+		case int64, float64:
+			f, _ := number(v)
+			t.SortOrder = &f
 		default:
 			return badRequest("sort_order must be a number")
 		}
-		t.Set("sort_order", v)
 	}
 	if data.Has("keep") {
-		t.Set("keep", data.Truthy("keep"))
+		t.Keep = data.Truthy("keep")
 	}
 	if data.Has("last_done") {
 		d, err := validateDate(data.Get("last_done"))
 		if err != nil {
 			return err
 		}
-		t.Set("last_done", d)
+		t.LastDone = d
 	}
-	oldStart := t.Get("start_date")
-	oldRec, _ := t.Get("recurrence").(*Obj)
+	oldStart := t.StartDate
+	oldRec := t.Recurrence
 	if oldRec == nil {
-		oldRec = NewObj()
+		oldRec = &Recurrence{}
 	}
 	if data.Has("start_date") {
 		d, err := validateDate(data.Get("start_date"))
 		if err != nil {
 			return err
 		}
-		t.Set("start_date", d)
-		if !pyEqual(d, oldStart) {
+		t.StartDate = d
+		if d != oldStart {
 			logEvent(t, "start", oldStart, d)
 		}
 	}
@@ -578,58 +582,55 @@ func applyTaskFields(t *Obj, data *Obj) error {
 				return badRequest("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
 			}
 			from := "due"
-			if pyEqual(data.Get("rec_from"), "completion") {
+			if data.Get("rec_from") == "completion" {
 				from = "completion"
 			}
-			rec := NewObj("type", rtype, "interval", int64(n), "from", from)
+			rec := &Recurrence{Type: rtype, Interval: n, From: from}
 			// Re-saving the modal re-sends the recurrence: keep the series'
 			// day of month unless its type or primary date changed …
-			oldPrimary := firstTruthy(oldDue, oldStart)
-			newPrimary := firstTruthy(t.Get("due_date"), t.Get("start_date"))
-			if oldRec.Truthy("day") && pyEqual(oldRec.Get("type"), rtype) && pyEqual(newPrimary, oldPrimary) {
-				rec.Set("day", oldRec.Get("day"))
+			oldPrimary := firstNonEmpty(oldDue, oldStart)
+			newPrimary := firstNonEmpty(t.DueDate, t.StartDate)
+			if oldRec.Day > 0 && oldRec.Type == rtype && newPrimary == oldPrimary {
+				rec.Day = oldRec.Day
 			}
 			// … and a clamped start's remembered gap while neither date changed.
-			if oldRec.Get("lead") != nil && pyEqual(t.Get("due_date"), oldDue) && pyEqual(t.Get("start_date"), oldStart) {
-				rec.Set("lead", oldRec.Get("lead"))
+			if oldRec.Lead != nil && t.DueDate == oldDue && t.StartDate == oldStart {
+				lead := *oldRec.Lead
+				rec.Lead = &lead
 			}
-			t.Set("recurrence", rec)
+			t.Recurrence = rec
 		default:
-			t.Set("recurrence", nil)
+			t.Recurrence = nil
 		}
 	}
 	// A date changed by hand defines the gap from now on; moving the primary
 	// date re-anchors the series' day of month.
-	if rec, ok := t.Get("recurrence").(*Obj); ok && rec.Len() > 0 {
-		if rec.Has("lead") && (!pyEqual(t.Get("due_date"), oldDue) || !pyEqual(t.Get("start_date"), oldStart)) {
-			rec.Delete("lead")
+	if rec := t.Recurrence; rec != nil {
+		if rec.Lead != nil && (t.DueDate != oldDue || t.StartDate != oldStart) {
+			rec.Lead = nil
 		}
-		if rec.Has("day") && !pyEqual(firstTruthy(t.Get("due_date"), t.Get("start_date")), firstTruthy(oldDue, oldStart)) {
-			rec.Delete("day")
+		if rec.Day > 0 && firstNonEmpty(t.DueDate, t.StartDate) != firstNonEmpty(oldDue, oldStart) {
+			rec.Day = 0
 		}
 	}
 	// An undo sends the whole old recurrence, day and lead included.
 	if data.Has("recurrence") {
 		rec := cleanRecurrence(data.Get("recurrence"))
-		if rec == nil {
-			t.Set("recurrence", nil)
-			if data.Get("recurrence") != nil {
-				return badRequest("recurrence must be null or have a type")
-			}
-		} else {
-			t.Set("recurrence", rec)
+		t.Recurrence = rec
+		if rec == nil && data.Get("recurrence") != nil {
+			return badRequest("recurrence must be null or have a type")
 		}
 	}
 	// Keep and Repeat answer the same question: a keep task never repeats.
-	if t.Truthy("keep") {
-		t.Set("recurrence", nil)
+	if t.Keep {
+		t.Recurrence = nil
 	}
 	return nil
 }
 
-// firstTruthy is Python's a or b.
-func firstTruthy(a, b any) any {
-	if truthyValue(a) {
+// firstNonEmpty is Python's a or b, of two strings.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
 		return a
 	}
 	return b
@@ -637,25 +638,25 @@ func firstTruthy(a, b any) any {
 
 // findForWriteLocked: the open tasks, every completed task, and the one
 // with id (404 when none has it).
-func findForWriteLocked(id string) (active, completed []*Obj, task *Obj, err error) {
+func findForWriteLocked(id string) (active, completed []*Task, task *Task, err error) {
 	if active, err = readDeckStrict(); err != nil {
 		return
 	}
 	if completed, err = readCompletedAllStrict(); err != nil {
 		return
 	}
-	for _, t := range append(append([]*Obj{}, active...), completed...) {
-		if t.Str("id") == id {
+	for _, t := range append(append([]*Task{}, active...), completed...) {
+		if t.ID == id {
 			return active, completed, t, nil
 		}
 	}
 	return nil, nil, nil, errNotFound
 }
 
-func without(tasks []*Obj, id string) []*Obj {
-	out := make([]*Obj, 0, len(tasks))
+func without(tasks []*Task, id string) []*Task {
+	out := make([]*Task, 0, len(tasks))
 	for _, t := range tasks {
-		if t.Str("id") != id {
+		if t.ID != id {
 			out = append(out, t)
 		}
 	}
@@ -665,13 +666,13 @@ func without(tasks []*Obj, id string) []*Obj {
 // updateTask changes a task's fields and status (complete, won't do, skip,
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
-func updateTask(id string, data *Obj, suffix string) (*Obj, error) {
+func updateTask(id string, data *Obj, suffix string) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	return updateTaskLocked(id, data, suffix)
 }
 
-func updateTaskLocked(id string, data *Obj, suffix string) (*Obj, error) {
+func updateTaskLocked(id string, data *Obj, suffix string) (*Task, error) {
 	active, completed, t, err := findForWriteLocked(id)
 	if err != nil {
 		return nil, err
@@ -679,29 +680,29 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Obj, error) {
 	if err := applyTaskFields(t, data); err != nil {
 		return nil, err
 	}
-	didSkip := data.Truthy("skip") && !t.Truthy("completed_at")
+	didSkip := data.Truthy("skip") && t.isOpen()
 	switch {
 	case didSkip:
 		// Skip this occurrence: archived as won't-do, the next one spawned
 		// (a plain won't-do ends the series).
-		logEvent(t, "skipped", nil, nil)
+		logEvent(t, "skipped", "", "")
 		spawned := spawnRecurring(t, active, true)
-		t.Set("completed_at", timestamp())
-		t.Set("wont_do", true)
+		t.CompletedAt = timestamp()
+		t.WontDo = true
 		active = without(active, id)
 		completed = append(completed, t)
 		if spawned != nil {
 			active = append(active, spawned)
 		}
 	case data.Has("wont_do"):
-		if data.Truthy("wont_do") && !t.Truthy("completed_at") {
+		if data.Truthy("wont_do") && t.isOpen() {
 			// Won't do: to completed, abandoned; no next occurrence.
-			t.Set("completed_at", timestamp())
-			t.Set("wont_do", true)
-			logEvent(t, "wontdo", nil, nil)
+			t.CompletedAt = timestamp()
+			t.WontDo = true
+			logEvent(t, "wontdo", "", "")
 			active = without(active, id)
 			completed = append(completed, t)
-		} else if !data.Truthy("wont_do") && t.Truthy("completed_at") {
+		} else if !data.Truthy("wont_do") && !t.isOpen() {
 			// Reopen (also takes away what a skip spawned).
 			active = uncompleteTask(t, active, nil)
 			completed = without(completed, id)
@@ -709,16 +710,16 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Obj, error) {
 		}
 	case data.Has("completed"):
 		switch {
-		case data.Truthy("completed") && t.Truthy("keep") && !t.Truthy("completed_at"):
+		case data.Truthy("completed") && t.Keep && t.isOpen():
 			keepDone(t) // stays open, back in the pool
-		case data.Truthy("completed") && !t.Truthy("completed_at"):
+		case data.Truthy("completed") && t.isOpen():
 			spawned := completeTask(t, "", active)
 			active = without(active, id)
 			completed = append(completed, t)
 			if spawned != nil {
 				active = append(active, spawned)
 			}
-		case !data.Truthy("completed") && t.Truthy("completed_at"):
+		case !data.Truthy("completed") && !t.isOpen():
 			active = uncompleteTask(t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
@@ -726,7 +727,7 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Obj, error) {
 	}
 	// An undo sends the old history back with the old fields.
 	if data.Has("history") {
-		t.Set("history", cleanHistory(data.Get("history")))
+		t.History = cleanHistory(data.Get("history"))
 	}
 	msg := "Update deck task"
 	switch {
@@ -747,14 +748,14 @@ func updateTaskLocked(id string, data *Obj, suffix string) (*Obj, error) {
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
-func toggleNoteCheck(id string, idx int) (*Obj, error) {
+func toggleNoteCheck(id string, idx int) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	_, _, t, err := findForWriteLocked(id)
 	if err != nil {
 		return nil, err
 	}
-	text := pyStr(orNone(t.Get("description")))
+	text := t.Description
 	toggled := toggleNthCheckbox(text, idx, false)
 	if toggled == text {
 		return t, nil
@@ -763,7 +764,7 @@ func toggleNoteCheck(id string, idx int) (*Obj, error) {
 }
 
 // addComment adds a comment (a status line) to a task, open or done.
-func addComment(id string, text any, message string) (*Obj, error) {
+func addComment(id string, text any, message string) (*Task, error) {
 	s, err := commentText(text)
 	if err != nil {
 		return nil, err
@@ -774,21 +775,21 @@ func addComment(id string, text any, message string) (*Obj, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.Set("comments", append(cleanComments(t.Get("comments")),
-		NewObj("id", newCommentID(), "at", now().Format("2006-01-02T15:04"), "text", s)))
+	t.Comments = append(cleanCommentList(t.Comments),
+		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), Text: s})
 	return t, writeBothLocked(active, completed, message)
 }
 
-// taskComment: a task's comment by id (its comments cleaned first).
-func taskComment(t *Obj, cid string) (*Obj, error) {
-	comments := cleanComments(t.Get("comments"))
-	t.Set("comments", comments)
-	for _, c := range comments {
-		if c.(*Obj).Str("id") == cid {
-			return c.(*Obj), nil
+// taskComment: the index of a task's comment by id (its comments cleaned
+// first).
+func taskComment(t *Task, cid string) (int, error) {
+	t.Comments = cleanCommentList(t.Comments)
+	for i, c := range t.Comments {
+		if c.ID == cid {
+			return i, nil
 		}
 	}
-	return nil, errNotFound
+	return 0, errNotFound
 }
 
 func apiEditComment(w http.ResponseWriter, r *http.Request) error {
@@ -806,11 +807,11 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	c, err := taskComment(t, r.PathValue("cid"))
+	i, err := taskComment(t, r.PathValue("cid"))
 	if err != nil {
 		return err
 	}
-	c.Set("text", text)
+	t.Comments[i].Text = text
 	if err := writeBothLocked(active, completed, "Edit deck task comment"); err != nil {
 		return err
 	}
@@ -825,17 +826,11 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	c, err := taskComment(t, r.PathValue("cid"))
+	i, err := taskComment(t, r.PathValue("cid"))
 	if err != nil {
 		return err
 	}
-	var kept []any
-	for _, x := range t.List("comments") {
-		if x != any(c) {
-			kept = append(kept, x)
-		}
-	}
-	t.Set("comments", listOrEmpty(kept))
+	t.Comments = slices.Delete(t.Comments, i, i+1)
 	if err := writeBothLocked(active, completed, "Delete deck task comment"); err != nil {
 		return err
 	}
@@ -858,10 +853,10 @@ func deleteTasksLocked(ids map[string]bool, message string) error {
 	if err != nil {
 		return err
 	}
-	keep := func(tasks []*Obj) []*Obj {
-		out := []*Obj{}
+	keep := func(tasks []*Task) []*Task {
+		out := []*Task{}
 		for _, t := range tasks {
-			if !ids[t.Str("id")] {
+			if !ids[t.ID] {
 				out = append(out, t)
 			}
 		}
@@ -921,21 +916,21 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	existing := map[string]bool{}
-	for _, t := range append(append([]*Obj{}, active...), completed...) {
-		existing[t.Str("id")] = true
+	for _, t := range append(append([]*Task{}, active...), completed...) {
+		existing[t.ID] = true
 	}
-	restored := []*Obj{}
+	restored := []*Task{}
 	for _, s := range snaps {
 		snap, ok := s.(*Obj)
 		if !ok {
 			continue
 		}
 		t := sanitizeSnapshot(snap)
-		if t == nil || existing[t.Str("id")] {
+		if t == nil || existing[t.ID] {
 			continue
 		}
-		existing[t.Str("id")] = true
-		if t.Truthy("completed_at") {
+		existing[t.ID] = true
+		if !t.isOpen() {
 			completed = append(completed, t)
 		} else {
 			active = append(active, t)
@@ -947,7 +942,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusCreated, objList(restored))
+	writeJSON(w, http.StatusCreated, restored)
 	return nil
 }
 
@@ -976,20 +971,20 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	stamp := timestamp()
-	updated := []*Obj{}
+	updated := []*Task{}
 	if markCompleted {
 		for _, t := range active {
-			if set[t.Str("id")] && t.Truthy("keep") && !t.Truthy("completed_at") {
+			if set[t.ID] && t.Keep && t.isOpen() {
 				keepDone(t) // stays open, back in the pool
 				updated = append(updated, t)
 			}
 		}
-		var moving, spawned []*Obj
+		var moving, spawned []*Task
 		movingIDs := map[string]bool{}
 		for _, t := range active {
-			if set[t.Str("id")] && !t.Truthy("completed_at") && !t.Truthy("keep") {
+			if set[t.ID] && t.isOpen() && !t.Keep {
 				moving = append(moving, t)
-				movingIDs[t.Str("id")] = true
+				movingIDs[t.ID] = true
 			}
 		}
 		for _, t := range moving {
@@ -998,30 +993,30 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 			}
 			updated = append(updated, t)
 		}
-		var rest []*Obj
+		var rest []*Task
 		for _, t := range active {
-			if !movingIDs[t.Str("id")] {
+			if !movingIDs[t.ID] {
 				rest = append(rest, t)
 			}
 		}
 		active = append(rest, spawned...)
 		completed = append(completed, moving...)
 	} else {
-		var moving []*Obj
+		var moving []*Task
 		movingIDs := map[string]bool{}
 		for _, t := range completed {
-			if set[t.Str("id")] && t.Truthy("completed_at") {
+			if set[t.ID] && !t.isOpen() {
 				moving = append(moving, t)
-				movingIDs[t.Str("id")] = true
+				movingIDs[t.ID] = true
 			}
 		}
 		for _, t := range moving {
 			active = uncompleteTask(t, active, set)
 			updated = append(updated, t)
 		}
-		var rest []*Obj
+		var rest []*Task
 		for _, t := range completed {
-			if !movingIDs[t.Str("id")] {
+			if !movingIDs[t.ID] {
 				rest = append(rest, t)
 			}
 		}
@@ -1035,13 +1030,13 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if err := writeBothLocked(nonNil(active), nonNil(completed), msg); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, objList(updated))
+	writeJSON(w, http.StatusOK, updated)
 	return nil
 }
 
-func nonNil(tasks []*Obj) []*Obj {
+func nonNil(tasks []*Task) []*Task {
 	if tasks == nil {
-		return []*Obj{}
+		return []*Task{}
 	}
 	return tasks
 }
@@ -1071,13 +1066,14 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	byID := map[string]*Obj{}
+	byID := map[string]*Task{}
 	for _, t := range active {
-		byID[t.Str("id")] = t
+		byID[t.ID] = t
 	}
 	for i, id := range order {
 		if s, ok := id.(string); ok && byID[s] != nil {
-			byID[s].Set("sort_order", int64(i))
+			f := float64(i)
+			byID[s].SortOrder = &f
 		}
 	}
 	for _, x := range updates {
@@ -1087,14 +1083,11 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 		val := u.Get("sort_order")
 		// null clears it: the task leaves the manual order.
 		if val == nil && t != nil {
-			t.Set("sort_order", nil)
+			t.SortOrder = nil
 			continue
 		}
-		switch val.(type) {
-		case int64, float64:
-			if t != nil {
-				t.Set("sort_order", val)
-			}
+		if f, ok := number(val); ok && t != nil {
+			t.SortOrder = &f
 		}
 	}
 	if err := writeDeckLocked(active, "Reorder deck"); err != nil {
@@ -1107,7 +1100,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 // tagTasks adds the tags add to the tasks ids and takes remove off them
 // (case ignored; a tag a task has keeps its spelling), open and completed,
 // in one commit; the batch-tag route and the MCP tools share it.
-func tagTasks(ids, add, remove []string, message string) ([]*Obj, error) {
+func tagTasks(ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
 	addTags := cleanTagStrings(add)
 	removeTags := map[string]bool{}
@@ -1127,12 +1120,12 @@ func tagTasks(ids, add, remove []string, message string) ([]*Obj, error) {
 	if err != nil {
 		return nil, err
 	}
-	updated := []*Obj{}
-	for _, t := range append(append([]*Obj{}, active...), completed...) {
-		if !set[t.Str("id")] {
+	updated := []*Task{}
+	for _, t := range append(append([]*Task{}, active...), completed...) {
+		if !set[t.ID] {
 			continue
 		}
-		current := tagList(t)
+		current := append([]string{}, t.Tags...)
 		have := map[string]bool{}
 		for _, c := range current {
 			have[strings.ToLower(c)] = true
@@ -1149,7 +1142,7 @@ func tagTasks(ids, add, remove []string, message string) ([]*Obj, error) {
 				kept = append(kept, c)
 			}
 		}
-		t.Set("tags", strs(kept))
+		t.Tags = kept
 		updated = append(updated, t)
 	}
 	return updated, writeBothLocked(active, completed, message)
@@ -1195,11 +1188,11 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	byID := map[string]*Obj{}
-	for _, t := range append(append([]*Obj{}, active...), completed...) {
-		byID[t.Str("id")] = t
+	byID := map[string]*Task{}
+	for _, t := range append(append([]*Task{}, active...), completed...) {
+		byID[t.ID] = t
 	}
-	updated := []*Obj{}
+	updated := []*Task{}
 	for _, c := range changes {
 		change := c.(*Obj)
 		t := byID[change.Str("id")]
@@ -1210,7 +1203,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if change.Has("history") {
-			t.Set("history", cleanHistory(change.Get("history")))
+			t.History = cleanHistory(change.Get("history"))
 		}
 		updated = append(updated, t)
 	}
@@ -1219,6 +1212,6 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusOK, objList(updated))
+	writeJSON(w, http.StatusOK, updated)
 	return nil
 }

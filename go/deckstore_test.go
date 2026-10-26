@@ -26,11 +26,7 @@ func TestDeckLists(t *testing.T) {
 		t.Errorf("lists %+v", lists)
 	}
 	for tags, want := range map[string]string{"work": "", "GROCERIES": "groceries", "groceries chores": "chores"} {
-		var ts []any
-		for _, tag := range pySplit(tags) {
-			ts = append(ts, tag)
-		}
-		if got := taskList(NewObj("tags", ts), nil); got != want {
+		if got := taskList(&Task{Tags: pySplit(tags)}, nil); got != want {
 			t.Errorf("taskList(%q) = %q, want %q", tags, got, want)
 		}
 	}
@@ -42,9 +38,10 @@ func TestDeckLists(t *testing.T) {
 
 // A task's last activity: its completion, history, comments, creation.
 func TestLastActivity(t *testing.T) {
-	task := func(kv ...any) *Obj { return NewObj(kv...) }
+	// As a file has them: a junk history entry is no event.
+	task := func(kv ...any) *Task { return taskFromObj(NewObj(kv...)) }
 	for _, c := range []struct {
-		t    *Obj
+		t    *Task
 		want string
 	}{
 		{task("created_at", "2026-01-02T10:00:00"), "2026-01-02"},
@@ -55,7 +52,7 @@ func TestLastActivity(t *testing.T) {
 		{task(), ""},
 	} {
 		if got := lastActivity(c.t); got != c.want {
-			t.Errorf("lastActivity(%s) = %q, want %q", dumpsLine(c.t), got, c.want)
+			t.Errorf("lastActivity(%+v) = %q, want %q", c.t, got, c.want)
 		}
 	}
 }

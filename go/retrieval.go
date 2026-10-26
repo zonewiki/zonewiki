@@ -31,7 +31,7 @@ type SearchDoc struct {
 
 	// A task: the whole task (the MCP tools' dates and tags), its status
 	// ("open", "done"), the year of its archive, its last activity (dates).
-	Task                         *Obj
+	Task                         *Task
 	TaskID, Status, Year, Edited string
 
 	squashOnce sync.Once
@@ -78,7 +78,7 @@ func taskRefsAsTitles(content string) string {
 	tasks := resolveTaskRefs(refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
-			return plainTaskTitle(t.Str("title"))
+			return plainTaskTitle(t.Title)
 		}
 		return ""
 	})
@@ -189,8 +189,8 @@ var taskDocs struct {
 	done bool
 }
 
-// taskSearchDocs: every task as a BM25 document (deckstore.task_search_docs),
-// the title weighted, cached until a deck file changes.
+// taskSearchDocs: every task as a BM25 document, the title weighted,
+// cached until a deck file changes.
 func taskSearchDocs() []*SearchDoc {
 	key := deckMtimes()
 	taskDocs.mu.Lock()
@@ -200,25 +200,23 @@ func taskSearchDocs() []*SearchDoc {
 	}
 	docs := []*SearchDoc{}
 	for _, t := range allTasks() {
-		title := t.Str("title")
+		title := t.Title
 		var comments, tags, lowTags []string
-		for _, c := range t.List("comments") {
-			if o, ok := c.(*Obj); ok {
-				comments = append(comments, o.Str("text"))
-			}
+		for _, c := range t.Comments {
+			comments = append(comments, c.Text)
 		}
 		// Tags as "#tag" words, so a page's tag pill (/search?q=<tag>) finds
 		// the tasks with that tag too, and the excerpt can show the match.
-		for _, tag := range t.List("tags") {
-			tags = append(tags, "#"+pyStr(tag))
-			lowTags = append(lowTags, strings.ToLower(pyStr(tag)))
+		for _, tag := range t.Tags {
+			tags = append(tags, "#"+tag)
+			lowTags = append(lowTags, strings.ToLower(tag))
 		}
-		text := stripLinkTargets(pyStrip(title + " " + t.Str("description") + " " +
+		text := stripLinkTargets(pyStrip(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
 		d := &SearchDoc{Slug: deckDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
 			Tokens: append(tokenize(text), repeatTokens(plainTaskTitle(title), titleWeight)...),
-			Task:   t, TaskID: t.Str("id"), Status: "open", Tags: lowTags, Edited: lastActivity(t)}
-		if t.Truthy("completed_at") {
+			Task:   t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
+		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
 		}
 		docs = append(docs, d)
@@ -459,11 +457,11 @@ func bestSections(q *Query, slugs map[string]bool) map[string]*SearchDoc {
 }
 
 // taskStatus: "open", "done" or "won't do".
-func taskStatus(t *Obj) string {
+func taskStatus(t *Task) string {
 	switch {
-	case !t.Truthy("completed_at"):
+	case t.isOpen():
 		return "open"
-	case t.Truthy("wont_do"):
+	case t.WontDo:
 		return "won't do"
 	}
 	return "done"
@@ -476,7 +474,7 @@ func resultMeta(d *SearchDoc, names map[string]DeckHome) string {
 	if d.isTask() {
 		status := taskStatus(d.Task)
 		if status != "open" {
-			status += " " + runePrefix(pyStr(d.Task.Get("completed_at")), 10)
+			status += " " + runePrefix(d.Task.CompletedAt, 10)
 		}
 		where := "Deck"
 		if l := taskList(d.Task, names); l != "" {

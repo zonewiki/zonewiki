@@ -96,7 +96,8 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
 │   ├── deckstore.go        # Deck tasks on disk: _deck/ files, lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
-│   ├── pyjson.go, pystr.go # JSON and string functions as the Python Leaf had them (the _deck files stay byte for byte)
+│   ├── task.go             # A deck task (Task): its fields, read leniently from a file, written in a fixed key order
+│   ├── pyjson.go, pystr.go # JSON and string functions as the Python Leaf had them (requests, MCP messages, tool replies)
 │   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages

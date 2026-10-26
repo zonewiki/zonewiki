@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -795,42 +796,42 @@ func shortID(id string) string { return runePrefix(id, 8) }
 
 // mcpTaskText: one deck task for an LLM: title, a line of facts (status,
 // tags, dates, repeat, list), its link in the deck, its notes and comments.
-func mcpTaskText(t *Obj, base string) string {
+func mcpTaskText(t *Task, base string) string {
 	status := taskStatus(t)
 	fact := "status: " + status
 	if status != "open" {
-		fact += " " + runePrefix(pyStr(t.Get("completed_at")), 10)
+		fact += " " + runePrefix(t.CompletedAt, 10)
 	}
 	facts := []string{fact}
-	if t.Truthy("tags") {
+	if len(t.Tags) > 0 {
 		var tags []string
-		for _, tag := range t.List("tags") {
-			tags = append(tags, "#"+pyStr(tag))
+		for _, tag := range t.Tags {
+			tags = append(tags, "#"+tag)
 		}
 		facts = append(facts, "tags: "+strings.Join(tags, " "))
 	}
-	for _, k := range []string{"start", "due"} {
-		if t.Truthy(k + "_date") {
-			facts = append(facts, k+": "+pyStr(t.Get(k+"_date")))
-		}
+	if t.StartDate != "" {
+		facts = append(facts, "start: "+t.StartDate)
 	}
-	if rec, ok := t.Get("recurrence").(*Obj); ok {
-		if unit, ok := recurrenceUnits[pyStr(rec.Get("type"))]; ok && isString(rec.Get("type")) {
-			n := firstTruthy(rec.Get("interval"), int64(1))
-			every := pyStr(rec.Get("type"))
-			if f, ok := number(n); !ok || f != 1 {
-				every = "every " + pyStr(n) + " " + unit + "s"
+	if t.DueDate != "" {
+		facts = append(facts, "due: "+t.DueDate)
+	}
+	if rec := t.Recurrence; rec != nil {
+		if unit, ok := recurrenceUnits[rec.Type]; ok {
+			every := rec.Type
+			if rec.Interval != 1 {
+				every = "every " + strconv.Itoa(rec.Interval) + " " + unit + "s"
 			}
-			if rec.Get("from") == "completion" {
+			if rec.From == "completion" {
 				every += " after completion"
 			}
 			facts = append(facts, "repeats "+every)
 		}
 	}
-	if t.Truthy("keep") {
+	if t.Keep {
 		keep := "keep task (back to the list when done"
-		if t.Truthy("last_done") {
-			keep += ", last done " + pyStr(t.Get("last_done"))
+		if t.LastDone != "" {
+			keep += ", last done " + t.LastDone
 		}
 		facts = append(facts, keep+")")
 	}
@@ -838,17 +839,17 @@ func mcpTaskText(t *Obj, base string) string {
 	if list != "" {
 		facts = append(facts, "list: "+list)
 	}
-	text := "Task: " + pyStr(orDefault(t, "title", "")) + "\n" + strings.Join(facts, " · ") +
-		"\nid: " + shortID(t.Str("id")) + "\nurl: " + base + taskLink(t, list)
-	if notes := pyStrip(pyStr(firstTruthy(t.Get("description"), ""))); notes != "" {
+	text := "Task: " + t.Title + "\n" + strings.Join(facts, " · ") +
+		"\nid: " + shortID(t.ID) + "\nurl: " + base + taskLink(t, list)
+	if notes := pyStrip(t.Description); notes != "" {
 		text += "\n\n" + notes
 	}
 	// Comments: the user's status lines, oldest first, each with its time.
 	var comments []string
-	for _, c := range t.List("comments") {
-		if o, ok := c.(*Obj); ok && o.Truthy("text") {
-			at := strings.ReplaceAll(runePrefix(pyStr(orDefault(o, "at", "")), 16), "T", " ")
-			comments = append(comments, "- "+at+": "+pyStr(o.Get("text")))
+	for _, c := range t.Comments {
+		if c.Text != "" {
+			at := strings.ReplaceAll(runePrefix(c.At, 16), "T", " ")
+			comments = append(comments, "- "+at+": "+c.Text)
 		}
 	}
 	if len(comments) > 0 {
@@ -856,8 +857,6 @@ func mcpTaskText(t *Obj, base string) string {
 	}
 	return text
 }
-
-func isString(v any) bool { _, ok := v.(string); return ok }
 
 // mcpTaskRefs: for read_page, what each [[task:…]] on the page stands for,
 // since the raw markdown holds only the id.
@@ -883,12 +882,13 @@ func mcpTaskRefs(content, base string) string {
 			continue
 		}
 		facts := []string{taskStatus(t)}
-		for _, k := range []string{"start", "due"} {
-			if t.Truthy(k + "_date") {
-				facts = append(facts, k+" "+pyStr(t.Get(k+"_date")))
-			}
+		if t.StartDate != "" {
+			facts = append(facts, "start "+t.StartDate)
 		}
-		lines = append(lines, "- [[task:"+ref+"]]: "+pyStr(orDefault(t, "title", ""))+" ("+strings.Join(facts, ", ")+") "+
+		if t.DueDate != "" {
+			facts = append(facts, "due "+t.DueDate)
+		}
+		lines = append(lines, "- [[task:"+ref+"]]: "+t.Title+" ("+strings.Join(facts, ", ")+") "+
 			base+taskLink(t, taskList(t, nil)))
 	}
 	return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
@@ -917,7 +917,7 @@ func searchTasks(args *Obj, base string) (string, error) {
 	q := ParseQuery(query)
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if status != "all" && (status == "open") == d.Task.Truthy("completed_at") {
+		if status != "all" && (status == "open") != d.Task.isOpen() {
 			continue
 		}
 		have := taskTagsLower(d.Task)
@@ -954,25 +954,25 @@ func searchTasks(args *Obj, base string) (string, error) {
 	} else {
 		var open, done []*SearchDoc
 		for _, d := range docs {
-			if d.Task.Truthy("completed_at") {
-				done = append(done, d)
-			} else {
+			if d.Task.isOpen() {
 				open = append(open, d)
+			} else {
+				done = append(done, d)
 			}
 		}
-		or9 := func(d *SearchDoc, k string) string { return pyStr(firstTruthy(d.Task.Get(k), "9999")) }
+		or9 := func(s string) string { return firstNonEmpty(s, "9999") }
 		sort.SliceStable(open, func(i, j int) bool {
-			a, b := open[i], open[j]
-			if x, y := or9(a, "due_date"), or9(b, "due_date"); x != y {
+			a, b := open[i].Task, open[j].Task
+			if x, y := or9(a.DueDate), or9(b.DueDate); x != y {
 				return x < y
 			}
-			if x, y := or9(a, "start_date"), or9(b, "start_date"); x != y {
+			if x, y := or9(a.StartDate), or9(b.StartDate); x != y {
 				return x < y
 			}
-			return strings.ToLower(pyStr(orDefault(a.Task, "title", ""))) < strings.ToLower(pyStr(orDefault(b.Task, "title", "")))
+			return strings.ToLower(a.Title) < strings.ToLower(b.Title)
 		})
 		sort.SliceStable(done, func(i, j int) bool {
-			return pyStr(done[i].Task.Get("completed_at")) > pyStr(done[j].Task.Get("completed_at"))
+			return done[i].Task.CompletedAt > done[j].Task.CompletedAt
 		})
 		docs = append(open, done...)
 	}
@@ -999,7 +999,7 @@ var (
 // findTask: the task a reference names: its id or a prefix of it (the
 // 8-character short id the tools show), a [[task:…]] reference or a
 // /deck?task=… link.
-func findTask(raw string) (*Obj, error) {
+func findTask(raw string) (*Task, error) {
 	raw = strings.ToLower(pyStrip(raw))
 	ref := raw
 	if m := taskLinkRE.FindStringSubmatch(raw); m != nil {
@@ -1061,7 +1061,7 @@ func tagListArg(args *Obj, name string) ([]string, error) {
 
 // taskFields: the deck API's fields from the tools' arguments (only those
 // given); task, when updating one, for add_tags/remove_tags and repeat.
-func taskFields(args *Obj, task *Obj) (*Obj, error) {
+func taskFields(args *Obj, task *Task) (*Obj, error) {
 	data := NewObj()
 	for _, f := range [][2]string{{"title", "title"}, {"notes", "description"}} {
 		if args.Has(f[0]) {
@@ -1105,7 +1105,7 @@ func taskFields(args *Obj, task *Obj) (*Obj, error) {
 				tags = append(tags, pyStr(t))
 			}
 		} else {
-			tags = tagList(task)
+			tags = append([]string{}, task.Tags...)
 		}
 		lower := map[string]bool{}
 		for _, t := range tags {
@@ -1137,13 +1137,12 @@ func taskFields(args *Obj, task *Obj) (*Obj, error) {
 		data.Set("tags", strs(kept))
 	}
 	if args.Has("repeat") || args.Has("repeat_every") || args.Has("repeat_from") {
-		rec := NewObj()
-		if task != nil {
-			if r, ok := task.Get("recurrence").(*Obj); ok {
-				rec = r
-			}
+		var rec any = "none"
+		interval, from := any(int64(1)), any("due")
+		if task != nil && task.Recurrence != nil {
+			rec, interval, from = task.Recurrence.Type, int64(task.Recurrence.Interval), task.Recurrence.From
 		}
-		repeat := orDefault(args, "repeat", firstTruthy(rec.Get("type"), "none"))
+		repeat := orDefault(args, "repeat", rec)
 		switch repeat {
 		case "daily", "weekly", "monthly", "yearly":
 			data.Set("rec_type", repeat)
@@ -1152,8 +1151,8 @@ func taskFields(args *Obj, task *Obj) (*Obj, error) {
 		default:
 			return nil, toolErr("repeat must be daily, weekly, monthly, yearly or none")
 		}
-		data.Set("rec_interval", orDefault(args, "repeat_every", firstTruthy(rec.Get("interval"), int64(1))))
-		from := orDefault(args, "repeat_from", firstTruthy(rec.Get("from"), "due"))
+		data.Set("rec_interval", orDefault(args, "repeat_every", interval))
+		from = orDefault(args, "repeat_from", from)
 		if from != "due" && from != "completion" {
 			return nil, toolErr("repeat_from must be due or completion")
 		}
@@ -1161,6 +1160,16 @@ func taskFields(args *Obj, task *Obj) (*Obj, error) {
 	}
 	return data, nil
 }
+
+// firstTruthy is Python's a or b.
+func firstTruthy(a, b any) any {
+	if truthyValue(a) {
+		return a
+	}
+	return b
+}
+
+func isString(v any) bool { _, ok := v.(string); return ok }
 
 func firstNonNil(v, d any) any {
 	if v == nil {
@@ -1192,15 +1201,15 @@ const (
 // (by its title and notes; open and done ones), most common first, which
 // it lacks, so the model can offer them; and its tags no other task or page
 // uses, which may be near-duplicates of existing ones.
-func tagHints(task *Obj) string {
+func tagHints(task *Task) string {
 	var others []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if d.TaskID != task.Str("id") {
+		if d.TaskID != task.ID {
 			others = append(others, d)
 		}
 	}
 	have := taskTagsLower(task)
-	text := ParseQuery(pyStr(orDefault(task, "title", "")) + " " + pyStr(orDefault(task, "description", ""))).Text
+	text := ParseQuery(task.Title + " " + task.Description).Text
 	counts := map[string]int{}
 	var order []string
 	if pyStrip(text) != "" {
@@ -1209,7 +1218,7 @@ func tagHints(task *Obj) string {
 			tokens[i] = d.Tokens
 		}
 		for _, h := range NewIndex(tokens).Search(text, similarTasks) {
-			for _, tag := range tagList(others[h.Doc].Task) {
+			for _, tag := range others[h.Doc].Task.Tags {
 				tag = strings.ToLower(tag)
 				if have[tag] {
 					continue
@@ -1356,10 +1365,10 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if _, err := deckWrite(struct{}{}, deleteTask(task.Str("id"), msg)); err != nil {
+		if _, err := deckWrite(struct{}{}, deleteTask(task.ID, msg)); err != nil {
 			return "", err
 		}
-		return "Deleted task " + shortID(task.Str("id")) + ": " + pyStr(orDefault(task, "title", "")), nil
+		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
 	}
 	var comment *string
 	if args.Has("comment") {
@@ -1390,12 +1399,12 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 		return "", err
 	}
 	if data.Len() > 0 {
-		if task, err = deckWrite(updateTask(task.Str("id"), data, suffix)); err != nil {
+		if task, err = deckWrite(updateTask(task.ID, data, suffix)); err != nil {
 			return "", err
 		}
 	}
 	if comment != nil {
-		if task, err = deckWrite(addComment(task.Str("id"), *comment, "Comment on deck task"+suffix)); err != nil {
+		if task, err = deckWrite(addComment(task.ID, *comment, "Comment on deck task"+suffix)); err != nil {
 			return "", err
 		}
 	}
@@ -1408,7 +1417,7 @@ func updateTaskTool(args *Obj, base string) (string, error) {
 	out := head + "\n\n" + mcpTaskText(task, base)
 	if status == "done" || status == "skip" {
 		for _, t := range readDeck() {
-			if t.Get("spawned_from") == task.Get("id") && !t.Truthy("completed_at") {
+			if t.SpawnedFrom == task.ID && t.isOpen() {
 				out += "\n\nNext occurrence:\n\n" + mcpTaskText(t, base)
 				break
 			}
@@ -1451,9 +1460,9 @@ func tagTasksTool(args *Obj) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if _, ok := before[t.Str("id")]; !ok {
-			found = append(found, t.Str("id"))
-			before[t.Str("id")] = tagList(t)
+		if _, ok := before[t.ID]; !ok {
+			found = append(found, t.ID)
+			before[t.ID] = append([]string{}, t.Tags...)
 		}
 	}
 	msg, err := commitMsg("Tag deck tasks", args)
@@ -1467,15 +1476,15 @@ func tagTasksTool(args *Obj) (string, error) {
 	changed := 0
 	var lines []string
 	for _, t := range tasks {
-		tags := tagList(t)
-		if strings.Join(tags, "\x00") != strings.Join(before[t.Str("id")], "\x00") || len(tags) != len(before[t.Str("id")]) {
+		tags := append([]string{}, t.Tags...)
+		if strings.Join(tags, "\x00") != strings.Join(before[t.ID], "\x00") || len(tags) != len(before[t.ID]) {
 			changed++
 		}
 		shown := "no tags"
 		if len(tags) > 0 {
 			shown = "#" + strings.Join(tags, " #")
 		}
-		lines = append(lines, "- "+pyStr(orDefault(t, "title", ""))+" ("+shortID(t.Str("id"))+"): "+shown)
+		lines = append(lines, "- "+t.Title+" ("+shortID(t.ID)+"): "+shown)
 	}
 	s := ""
 	if len(tasks) != 1 {

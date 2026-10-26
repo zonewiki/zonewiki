@@ -1,25 +1,6 @@
 package main
 
-import (
-	"os"
-	"testing"
-)
-
-// A file Python's json.dumps(indent=2, ensure_ascii=False) wrote reads and
-// writes back byte for byte: key order, ints and floats, escapes.
-func TestDumpsIsPythons(t *testing.T) {
-	want, err := os.ReadFile("testdata/python.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := loads(want)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := dumps(v); got != string(want) {
-		t.Fatalf("got\n%s\nwant\n%s", got, want)
-	}
-}
+import "testing"
 
 func TestPyFloatRepr(t *testing.T) {
 	for f, want := range map[float64]string{
@@ -37,10 +18,7 @@ func TestObjKeepsOrder(t *testing.T) {
 	o.Set("b", int64(3)) // an existing key keeps its place
 	o.Set("c", nil)
 	o.Delete("a")
-	if got := dumps(o); got != "{\n  \"b\": 3,\n  \"c\": null\n}" {
+	if got := dumpsLine(o); got != `{"b": 3, "c": null}` {
 		t.Fatal(got)
-	}
-	if !pyEqual(NewObj("x", int64(1), "y", 1.5), NewObj("y", 1.5, "x", 1.0)) {
-		t.Fatal("pyEqual: key order or 1 == 1.0")
 	}
 }

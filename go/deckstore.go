@@ -1,8 +1,7 @@
 // Deck tasks on disk and their model: the _deck/ files
 // (open tasks, completed, yearly archives) under one lock with atomic
 // writes, recurrence, history, comments, and what pages need from tasks
-// (links to pages, [[task:…]] references). A task is an *Obj, so a file
-// written back keeps its keys' order and any key Leaf doesn't know.
+// (links to pages, [[task:…]] references). A task is a *Task (task.go).
 package main
 
 import (
@@ -12,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -42,12 +42,12 @@ func initDeck() { archiveOldCompleted() }
 // timestamp is the current time as tasks store it (created_at, completed_at).
 func timestamp() string { return now().Format("2006-01-02T15:04:05") }
 
-func writeTasks(path string, tasks []*Obj) error {
-	l := make([]any, len(tasks))
-	for i, t := range tasks {
-		l[i] = t
+func writeTasks(path string, tasks []*Task) error {
+	text, err := encodeTasks(tasks)
+	if err != nil {
+		return err
 	}
-	return atomicWrite(path, dumps(l))
+	return atomicWrite(path, text)
 }
 
 // atomicWrite writes a temp file and renames it into place: a reader sees
@@ -78,10 +78,10 @@ func atomicWrite(path, text string) error {
 
 // readListStrict reads a task list for a write: a file that is there but
 // unusable (empty, not JSON, not a list) is errDeckCorrupt, never [].
-func readListStrict(path string) ([]*Obj, error) {
+func readListStrict(path string) ([]*Task, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return []*Obj{}, nil
+		return []*Task{}, nil
 	}
 	if err != nil || pyStrip(string(raw)) == "" {
 		return nil, errDeckCorrupt
@@ -95,32 +95,27 @@ func readListStrict(path string) ([]*Obj, error) {
 }
 
 // readListLenient reads a task list for reading: missing or unreadable is [].
-func readListLenient(path string) []*Obj {
+func readListLenient(path string) []*Task {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return []*Obj{}
+		return []*Task{}
 	}
 	v, err := loads(raw)
 	l, ok := v.([]any)
 	if err != nil || !ok {
-		return []*Obj{}
+		return []*Task{}
 	}
 	return normalizeList(l)
 }
 
-// normalizeList: the tasks of a file, their tags cleaned (a file edited by
-// hand may have "local llm" or "#work"). What isn't an object is no task.
-func normalizeList(l []any) []*Obj {
-	out := make([]*Obj, 0, len(l))
+// normalizeList: the tasks of a file (taskFromObj). What isn't an object
+// is no task.
+func normalizeList(l []any) []*Task {
+	out := make([]*Task, 0, len(l))
 	for _, v := range l {
-		t, ok := v.(*Obj)
-		if !ok {
-			continue
+		if o, ok := v.(*Obj); ok {
+			out = append(out, taskFromObj(o))
 		}
-		if tags, ok := t.Get("tags").([]any); ok {
-			t.Set("tags", strs(cleanTags(tags)))
-		}
-		out = append(out, t)
 	}
 	return out
 }
@@ -134,21 +129,12 @@ func strs(s []string) []any {
 	return l
 }
 
-// tagList is a task's tags as strings.
-func tagList(t *Obj) []string {
-	var out []string
-	for _, x := range t.List("tags") {
-		out = append(out, pyStr(x))
-	}
-	return out
-}
-
-func readDeckStrict() ([]*Obj, error) { return readListStrict(deckFile()) }
+func readDeckStrict() ([]*Task, error) { return readListStrict(deckFile()) }
 
 // readDeck: the open tasks.
-func readDeck() []*Obj { return readListLenient(deckFile()) }
+func readDeck() []*Task { return readListLenient(deckFile()) }
 
-func readCompleted() []*Obj { return readListLenient(completedPath()) }
+func readCompleted() []*Task { return readListLenient(completedPath()) }
 
 var archiveNameRE = regexp.MustCompile(`^completed-(\d{4})\.json$`)
 
@@ -168,8 +154,8 @@ func archiveGlob() []string {
 var yearRE = regexp.MustCompile(`^` + pyDigit + `{4}$`)
 
 // completedYear: the year a completed task belongs to ("" when unusable).
-func completedYear(t *Obj) string {
-	year := runePrefix(t.Str("completed_at"), 4)
+func completedYear(t *Task) string {
+	year := runePrefix(t.CompletedAt, 4)
 	if yearRE.MatchString(year) {
 		return year
 	}
@@ -192,9 +178,9 @@ func currentYear() string { return now().Format("2006") }
 
 // pastYear: the task's completion year when it is before this one (its
 // archive's), else "" (the current completed file).
-func pastYear(t *Obj) string { return pastYearOf(t, currentYear()) }
+func pastYear(t *Task) string { return pastYearOf(t, currentYear()) }
 
-func pastYearOf(t *Obj, current string) string {
+func pastYearOf(t *Task, current string) string {
 	if y := completedYear(t); y != "" && y < current {
 		return y
 	}
@@ -203,8 +189,8 @@ func pastYearOf(t *Obj, current string) string {
 
 // readCompletedAllStrict: every completed task, the archives first, for a
 // write (writeCompleted files each by year again).
-func readCompletedAllStrict() ([]*Obj, error) {
-	var tasks []*Obj
+func readCompletedAllStrict() ([]*Task, error) {
+	var tasks []*Task
 	for _, p := range archiveGlob() {
 		l, err := readListStrict(p)
 		if err != nil {
@@ -221,14 +207,15 @@ func readCompletedAllStrict() ([]*Obj, error) {
 
 // writeCompleted writes completed tasks split by year (this year's into
 // completed.json, earlier ones into completed-YYYY.json); only files whose
-// content changes. Returns their paths, for the commit.
-func writeCompleted(completed []*Obj) ([]string, error) {
+// tasks change (with reformat also those in another format). Returns
+// their paths, for the commit.
+func writeCompleted(completed []*Task, reformat bool) ([]string, error) {
 	current := currentYear()
 	order := []string{completedPath()}
-	byPath := map[string][]*Obj{completedPath(): {}}
+	byPath := map[string][]*Task{completedPath(): {}}
 	for _, p := range archiveGlob() {
 		order = append(order, p)
-		byPath[p] = []*Obj{}
+		byPath[p] = []*Task{}
 	}
 	for _, t := range completed {
 		p := completedPath()
@@ -245,14 +232,16 @@ func writeCompleted(completed []*Obj) ([]string, error) {
 		tasks := byPath[p]
 		raw, err := os.ReadFile(p)
 		if errors.Is(err, os.ErrNotExist) && len(tasks) == 0 {
-			continue // no file for no tasks (Python wrote an empty one, and committed it)
+			continue // no file for no tasks
 		}
-		if err == nil {
-			if v, err := loads(raw); err == nil && pyEqual(v, objList(tasks)) {
-				continue
-			}
+		text, encErr := encodeTasks(tasks)
+		if encErr != nil {
+			return changed, encErr
 		}
-		if err := writeTasks(p, tasks); err != nil {
+		if err == nil && (string(raw) == text || !reformat && sameTasks(raw, text)) {
+			continue
+		}
+		if err := atomicWrite(p, text); err != nil {
 			return changed, err
 		}
 		changed = append(changed, p)
@@ -260,17 +249,20 @@ func writeCompleted(completed []*Obj) ([]string, error) {
 	return changed, nil
 }
 
-func objList(tasks []*Obj) []any {
-	l := make([]any, len(tasks))
-	for i, t := range tasks {
-		l[i] = t
+// sameTasks: a file holds the tasks text has, whatever its format.
+func sameTasks(raw []byte, text string) bool {
+	v, err := loads(raw)
+	l, ok := v.([]any)
+	if err != nil || !ok {
+		return false
 	}
-	return l
+	have, err := encodeTasks(normalizeList(l))
+	return err == nil && have == text
 }
 
 // completedInYear: the Completed view of one year (this year's view takes
 // tasks without a usable date too).
-func completedInYear(year string) []*Obj {
+func completedInYear(year string) []*Task {
 	current := currentYear()
 	deckMu.Lock()
 	tasks := readCompleted()
@@ -278,7 +270,7 @@ func completedInYear(year string) []*Obj {
 		tasks = append(tasks, readListLenient(archivePath(year))...)
 	}
 	deckMu.Unlock()
-	out := []*Obj{}
+	out := []*Task{}
 	for _, t := range tasks {
 		if year == current && pastYearOf(t, current) == "" || year != current && completedYear(t) == year {
 			out = append(out, t)
@@ -312,8 +304,8 @@ func completedYears(scope string) []string {
 	return out
 }
 
-func readArchived() []*Obj {
-	var tasks []*Obj
+func readArchived() []*Task {
+	var tasks []*Task
 	for _, p := range archiveGlob() {
 		tasks = append(tasks, readListLenient(p)...)
 	}
@@ -321,31 +313,53 @@ func readArchived() []*Obj {
 }
 
 // archiveOldCompleted rolls earlier years' completed tasks into their
-// archives (at start; every write files by year too). An unreadable file
-// is left alone: archiving is never worth failing over.
+// archives (at start; every write files by year too), and writes files in
+// another format (the Python Leaf's key order, a hand-edited file) as
+// Leaf writes them, so later commits show only what changed. An
+// unreadable file is left alone: this is never worth failing over.
 func archiveOldCompleted() {
 	deckMu.Lock()
 	defer deckMu.Unlock()
+	active, err := readDeckStrict()
+	if err != nil {
+		return
+	}
 	completed, err := readCompletedAllStrict()
 	if err != nil {
 		return
 	}
-	if changed, err := writeCompleted(completed); err == nil && len(changed) > 0 {
-		gitCommit("Archive completed deck tasks", changed...)
+	moved := false
+	for _, t := range readCompleted() {
+		moved = moved || pastYear(t) != ""
 	}
+	var changed []string
+	if raw, err := os.ReadFile(deckFile()); err == nil {
+		if text, err := encodeTasks(active); err == nil && string(raw) != text && atomicWrite(deckFile(), text) == nil {
+			changed = append(changed, deckFile())
+		}
+	}
+	more, err := writeCompleted(completed, true)
+	if changed = append(changed, more...); err != nil || len(changed) == 0 {
+		return
+	}
+	msg := "Write the deck's files in Leaf's format"
+	if moved {
+		msg = "Archive completed deck tasks"
+	}
+	gitCommit(msg, changed...)
 }
 
 // readAll: open and completed tasks, one consistent snapshot.
-func readAll() []*Obj {
+func readAll() []*Task {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	return append(readDeck(), readCompleted()...)
 }
 
 // allTasks: every task, archived ones too.
-func allTasks() []*Obj { return append(readAll(), readArchived()...) }
+func allTasks() []*Task { return append(readAll(), readArchived()...) }
 
-func writeDeckLocked(tasks []*Obj, message string) error {
+func writeDeckLocked(tasks []*Task, message string) error {
 	if err := writeTasks(deckFile(), tasks); err != nil {
 		return err
 	}
@@ -355,11 +369,11 @@ func writeDeckLocked(tasks []*Obj, message string) error {
 
 // writeBothLocked writes the open tasks and every completed task (filed by
 // year) in one commit.
-func writeBothLocked(active, completed []*Obj, message string) error {
+func writeBothLocked(active, completed []*Task, message string) error {
 	if err := writeTasks(deckFile(), active); err != nil {
 		return err
 	}
-	changed, err := writeCompleted(completed)
+	changed, err := writeCompleted(completed, false)
 	if err != nil {
 		return err
 	}
@@ -377,19 +391,9 @@ func uuid4() string {
 	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }
 
-// newTask: a task with every field at its default (the schema, in order),
-// then overrides (key, value pairs).
-func newTask(overrides ...any) *Obj {
-	t := NewObj(
-		"id", uuid4(), "title", "", "description", "", "tags", []any{},
-		"due_date", nil, "created_at", timestamp(), "completed_at", nil, "wont_do", false,
-		"start_date", nil, "sort_order", nil, "recurrence", nil, "spawned_from", nil,
-		"keep", false, "last_done", nil, "history", []any{}, "comments", []any{},
-	)
-	for i := 0; i+1 < len(overrides); i += 2 {
-		t.Set(overrides[i].(string), overrides[i+1])
-	}
-	return t
+// newTask: a new task, created now, every other field at its default.
+func newTask() *Task {
+	return &Task{ID: uuid4(), CreatedAt: timestamp(), Tags: []string{}, History: []HistoryEntry{}, Comments: []Comment{}}
 }
 
 // ---- recurrence ----
@@ -452,32 +456,24 @@ func intValue(v any) (int, bool) {
 
 // nextOccurrence steps a recurrence from base and catches up to >= today
 // (> today with afterToday: a skipped occurrence isn't offered again).
-// Monthly and yearly series remember their day of month in recurrence.day
+// Monthly and yearly series remember their day of month in rec.Day
 // (stepping from a clamped date would drift: Jan 31 → Feb 28 → Mar 28);
-// from the completion day there is no anchor.
-func nextOccurrence(rec *Obj, base time.Time, anchored bool, today time.Time, afterToday bool) (time.Time, *Obj) {
-	rtype := "daily"
-	if v, ok := rec.Lookup("type"); ok {
-		rtype = pyStr(v)
-	}
-	interval := 1
-	if v, ok := rec.Lookup("interval"); ok {
-		interval, _ = intValue(v)
-	}
-	rec = rec.Copy()
+// from the completion day there is no anchor. Returns the series as the
+// next occurrence carries it.
+func nextOccurrence(rec *Recurrence, base time.Time, anchored bool, today time.Time, afterToday bool) (time.Time, *Recurrence) {
+	next := *rec
 	day := 0
-	if (rtype == "monthly" || rtype == "yearly") && anchored {
-		day, _ = intValue(rec.Get("day"))
-		if day == 0 {
+	if (rec.Type == "monthly" || rec.Type == "yearly") && anchored {
+		if day = rec.Day; day == 0 {
 			day = base.Day()
 		}
-		rec.Set("day", int64(day))
+		next.Day = day
 	}
-	next := recStep(base, rtype, interval, day)
-	for next.Before(today) || afterToday && next.Equal(today) {
-		next = recStep(next, rtype, interval, day)
+	at := recStep(base, rec.Type, rec.Interval, day)
+	for at.Before(today) || afterToday && at.Equal(today) {
+		at = recStep(at, rec.Type, rec.Interval, day)
 	}
-	return next, rec
+	return at, &next
 }
 
 // spawnRecurring: the next instance of a recurring task, or nil (none, or
@@ -489,43 +485,43 @@ func nextOccurrence(rec *Obj, base time.Time, anchored bool, today time.Time, af
 // today is today, and the series then remembers the gap (recurrence.lead).
 // skip catches up past today: a backlog of missed occurrences collapses
 // into the next one after today.
-func spawnRecurring(task *Obj, active []*Obj, skip bool) *Obj {
-	rec, ok := task.Get("recurrence").(*Obj)
-	if !ok || rec.Len() == 0 {
+func spawnRecurring(task *Task, active []*Task, skip bool) *Task {
+	rec := task.Recurrence
+	if rec == nil {
 		return nil
 	}
 	for _, t := range active {
-		if t.Str("spawned_from") == task.Str("id") && t.Get("spawned_from") != nil && !t.Truthy("completed_at") {
+		if t.SpawnedFrom != "" && t.SpawnedFrom == task.ID && t.isOpen() {
 			return nil
 		}
 	}
 	day0 := today()
-	due, hasDue := parseTaskDate(task.Get("due_date"))
-	start, hasStart := parseTaskDate(task.Get("start_date"))
+	due, hasDue := parseTaskDate(task.DueDate)
+	start, hasStart := parseTaskDate(task.StartDate)
 	primary, hasPrimary := due, hasDue
 	if !hasDue {
 		primary, hasPrimary = start, hasStart
 	}
-	anchored := hasPrimary && pyStr(rec.Get("from")) != "completion"
+	anchored := hasPrimary && rec.From != "completion"
 	base := day0
 	if anchored {
 		base = primary
 	}
 	next, nextRec := nextOccurrence(rec, base, anchored, day0, skip)
-	nextRec.Delete("lead")
-	var newDue, newStart any
+	nextRec.Lead = nil
+	var newDue, newStart string
 	switch {
 	case hasDue:
 		newDue = isoDay(next)
 		if hasStart {
 			lead := daysBetween(start, due)
-			if v, ok := rec.Lookup("lead"); ok {
-				lead, _ = intValue(v)
+			if rec.Lead != nil {
+				lead = *rec.Lead
 			}
 			ns := next.AddDate(0, 0, -lead)
 			if ns.Before(day0) {
 				ns = day0
-				nextRec.Set("lead", int64(lead))
+				nextRec.Lead = &lead
 			}
 			newStart = isoDay(ns)
 		}
@@ -535,25 +531,20 @@ func spawnRecurring(task *Obj, active []*Obj, skip bool) *Obj {
 		// No date at all: the series gets a due date (API-created only).
 		newDue = isoDay(next)
 	}
-	sortOrder := any(int64(0))
-	if v, ok := task.Lookup("sort_order"); ok {
-		sortOrder = v
-	}
-	tags := task.Get("tags")
-	if tags == nil {
-		tags = []any{}
-	}
-	spawned := newTask("title", task.Get("title"), "description", orDefault(task, "description", ""),
-		"tags", tags, "due_date", newDue, "start_date", newStart, "sort_order", sortOrder,
-		"recurrence", nextRec, "spawned_from", task.Get("id"))
+	spawned := newTask()
+	spawned.Title, spawned.Description = task.Title, task.Description
+	spawned.Tags = append([]string{}, task.Tags...)
+	spawned.DueDate, spawned.StartDate = newDue, newStart
+	spawned.SortOrder = task.SortOrder
+	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	// The next occurrence carries the series' history and comments on.
-	spawned.Set("history", append([]any{}, task.List("history")...))
-	spawned.Set("comments", append([]any{}, task.List("comments")...))
+	spawned.History = append([]HistoryEntry{}, task.History...)
+	spawned.Comments = append([]Comment{}, task.Comments...)
 	when := newDue
-	if when == nil {
+	if when == "" {
 		when = newStart
 	}
-	logEvent(spawned, "repeat", nil, when)
+	logEvent(spawned, "repeat", "", when)
 	return spawned
 }
 
@@ -566,9 +557,8 @@ func orDefault(t *Obj, k string, d any) any {
 }
 
 // parseTaskDate reads a YYYY-MM-DD field.
-func parseTaskDate(v any) (time.Time, bool) {
-	s, ok := v.(string)
-	if !ok || s == "" {
+func parseTaskDate(s string) (time.Time, bool) {
+	if s == "" {
 		return time.Time{}, false
 	}
 	return parseDay(s)
@@ -590,45 +580,43 @@ var datedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 const historyLimit = 30
 
-func logEvent(t *Obj, event string, from, to any) {
-	entry := NewObj("at", now().Format("2006-01-02T15:04"), "event", event)
+// logEvent adds an event to a task's history; from and to are the days a
+// dated event moved between ("" none).
+func logEvent(t *Task, event, from, to string) {
+	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event}
 	if datedEvents[event] {
-		entry.Set("from", from)
-		entry.Set("to", to)
+		entry.From, entry.To = from, to
 	}
-	h := t.List("history")
+	h := t.History
 	if len(h) > historyLimit-1 {
 		h = h[len(h)-(historyLimit-1):]
 	}
-	t.Set("history", append(append([]any{}, h...), entry))
+	t.History = append(append([]HistoryEntry{}, h...), entry)
 }
 
 var ymdRE = regexp.MustCompile(`^` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}$`)
 
 // cleanHistory validates a history list from a request or snapshot.
-func cleanHistory(v any) []any {
+func cleanHistory(v any) []HistoryEntry {
 	l, _ := v.([]any)
-	out := []any{}
+	out := []HistoryEntry{}
 	for _, x := range l {
 		e, ok := x.(*Obj)
 		if !ok {
 			continue
 		}
 		at, isStr := e.Get("at").(string)
-		if !isStr || !historyEvents[e.Str("event")] {
+		event, isStrEvent := e.Get("event").(string)
+		if !isStr || !isStrEvent || !historyEvents[event] {
 			continue
 		}
-		if _, isStrEvent := e.Get("event").(string); !isStrEvent {
-			continue
-		}
-		entry := NewObj("at", runePrefix(at, 16), "event", e.Str("event"))
-		if datedEvents[e.Str("event")] {
-			for _, k := range []string{"from", "to"} {
-				if s, ok := e.Get(k).(string); ok && ymdRE.MatchString(s) {
-					entry.Set(k, s)
-				} else {
-					entry.Set(k, nil)
-				}
+		entry := HistoryEntry{At: runePrefix(at, 16), Event: event}
+		if datedEvents[event] {
+			if s, ok := e.Get("from").(string); ok && ymdRE.MatchString(s) {
+				entry.From = s
+			}
+			if s, ok := e.Get("to").(string); ok && ymdRE.MatchString(s) {
+				entry.To = s
 			}
 		}
 		out = append(out, entry)
@@ -648,10 +636,9 @@ const commentMax = 2000
 func newCommentID() string { return strings.ReplaceAll(uuid4(), "-", "")[:8] }
 
 // cleanComments validates a comment list from a request or snapshot.
-func cleanComments(v any) []any {
+func cleanComments(v any) []Comment {
 	l, _ := v.([]any)
-	out := []any{}
-	seen := map[string]bool{}
+	var cs []Comment
 	for _, x := range l {
 		c, ok := x.(*Obj)
 		if !ok {
@@ -659,111 +646,88 @@ func cleanComments(v any) []any {
 		}
 		text, isText := c.Get("text").(string)
 		at, isAt := c.Get("at").(string)
-		if !isText || pyStrip(text) == "" || !isAt {
+		if !isText || !isAt {
 			continue
 		}
 		id, _ := c.Get("id").(string)
+		cs = append(cs, Comment{ID: id, At: at, Text: text})
+	}
+	return cleanCommentList(cs)
+}
+
+// cleanCommentList: comments with text and a time, each with an id of its
+// own, the time to the minute, the text stripped and capped.
+func cleanCommentList(cs []Comment) []Comment {
+	out := []Comment{}
+	seen := map[string]bool{}
+	for _, c := range cs {
+		if pyStrip(c.Text) == "" || c.At == "" {
+			continue
+		}
+		id := c.ID
 		if id == "" || seen[id] {
 			id = newCommentID()
 		}
 		seen[id] = true
-		out = append(out, NewObj("id", id, "at", runePrefix(at, 16), "text", runePrefix(pyStrip(text), commentMax)))
+		out = append(out, Comment{ID: id, At: runePrefix(c.At, 16), Text: runePrefix(pyStrip(c.Text), commentMax)})
 	}
 	return out
 }
 
 // keepDone completes a keep task: never archived, it returns to Open
 // without start or due date (it leaves Focus), the day kept in last_done.
-func keepDone(t *Obj) {
-	logEvent(t, "done", nil, nil)
-	t.Set("last_done", isoDay(today()))
-	t.Set("start_date", nil)
-	t.Set("due_date", nil)
+func keepDone(t *Task) {
+	logEvent(t, "done", "", "")
+	t.LastDone = isoDay(today())
+	t.StartDate, t.DueDate = "", ""
 }
 
 // completeTask stamps a task completed; returns the spawned recurring
 // instance, if any.
-func completeTask(t *Obj, at string, active []*Obj) *Obj {
+func completeTask(t *Task, at string, active []*Task) *Task {
 	if at == "" {
 		at = timestamp()
 	}
-	t.Set("completed_at", at)
-	t.Set("wont_do", false)
-	logEvent(t, "done", nil, nil)
+	t.CompletedAt, t.WontDo = at, false
+	logEvent(t, "done", "", "")
 	return spawnRecurring(t, active, false)
-}
-
-func listOrEmpty(v any) []any {
-	if l, ok := v.([]any); ok {
-		return l
-	}
-	return []any{}
 }
 
 // untouchedSpawn: the occurrence task spawned is still as the spawn made it
 // (its history ends with the "repeat", its title, notes, tags and comments
 // are task's); only such a spawn may go when task is reopened.
-func untouchedSpawn(spawn, task *Obj) bool {
-	h := spawn.List("history")
-	if len(h) == 0 {
+func untouchedSpawn(spawn, task *Task) bool {
+	h := spawn.History
+	if len(h) == 0 || h[len(h)-1].Event != "repeat" || spawn.Keep {
 		return false
 	}
-	last, ok := h[len(h)-1].(*Obj)
-	if !ok || last.Str("event") != "repeat" || spawn.Truthy("keep") {
+	if spawn.Title != task.Title || spawn.Description != task.Description || !slices.Equal(spawn.Tags, task.Tags) {
 		return false
 	}
-	if !pyEqual(spawn.Get("title"), task.Get("title")) ||
-		descOf(spawn) != descOf(task) ||
-		!pyEqual(listOrEmpty(spawn.Get("tags")), listOrEmpty(task.Get("tags"))) {
-		return false
-	}
-	comments := listOrEmpty(task.Get("comments"))
-	for _, c := range listOrEmpty(spawn.Get("comments")) {
-		found := false
-		for _, d := range comments {
-			if pyEqual(c, d) {
-				found = true
-				break
-			}
-		}
-		if !found {
+	for _, c := range spawn.Comments {
+		if !slices.Contains(task.Comments, c) {
 			return false
 		}
 	}
 	return true
 }
 
-// descOf is (t.get("description") or "").
-func descOf(t *Obj) any {
-	if v := t.Get("description"); truthyValue(v) {
-		return v
-	}
-	return ""
-}
-
 // uncompleteTask clears the completion and returns active without the
 // open instance spawned when it was completed, unless that was changed
 // since (untouchedSpawn); protect ids are never removed.
-func uncompleteTask(t *Obj, active []*Obj, protect map[string]bool) []*Obj {
-	if t.Truthy("recurrence") {
-		drop := map[string]bool{}
-		for _, a := range active {
-			if a.Get("spawned_from") != nil && a.Str("spawned_from") == t.Str("id") && !a.Truthy("completed_at") &&
-				untouchedSpawn(a, t) && !protect[a.Str("id")] {
-				drop[a.Str("id")] = true
-			}
-		}
+func uncompleteTask(t *Task, active []*Task, protect map[string]bool) []*Task {
+	if t.Recurrence != nil {
 		kept := active[:0:0]
 		for _, a := range active {
-			if !drop[a.Str("id")] {
-				kept = append(kept, a)
+			if a.SpawnedFrom != "" && a.SpawnedFrom == t.ID && a.isOpen() && untouchedSpawn(a, t) && !protect[a.ID] {
+				continue
 			}
+			kept = append(kept, a)
 		}
 		active = kept
 	}
-	t.Set("completed_at", nil)
-	t.Set("wont_do", false)
-	logEvent(t, "reopened", nil, nil)
+	t.CompletedAt, t.WontDo = "", false
+	logEvent(t, "reopened", "", "")
 	return active
 }
 
@@ -782,10 +746,10 @@ func renamePageRefs(rewrite func(string) string) ([]string, error) {
 		}
 		dirty := false
 		for _, t := range tasks {
-			for _, field := range []string{"title", "description"} {
-				if s, ok := t.Get(field).(string); ok && s != "" {
-					if n := rewrite(s); n != s {
-						t.Set(field, n)
+			for _, field := range []*string{&t.Title, &t.Description} {
+				if *field != "" {
+					if n := rewrite(*field); n != *field {
+						*field = n
 						dirty = true
 					}
 				}
@@ -814,10 +778,10 @@ type TaskLink struct {
 func findTaskBacklinks(slug string) []TaskLink {
 	var out []TaskLink
 	for _, t := range readAll() {
-		if t.Truthy("completed_at") {
+		if !t.isOpen() {
 			continue
 		}
-		text := t.Str("title") + "\n" + t.Str("description")
+		text := t.Title + "\n" + t.Description
 		found, section, anchor := false, "", ""
 		for _, m := range wikilinkRE.FindAllStringSubmatch(text, -1) {
 			target, _, _ := strings.Cut(m[1], "|")
@@ -840,8 +804,7 @@ func findTaskBacklinks(slug string) []TaskLink {
 			}
 		}
 		if found {
-			out = append(out, TaskLink{ID: t.Str("id"), Title: t.Str("title"), Tags: tagList(t),
-				Section: section, Anchor: anchor})
+			out = append(out, TaskLink{ID: t.ID, Title: t.Title, Tags: t.Tags, Section: section, Anchor: anchor})
 		}
 	}
 	return out
@@ -851,8 +814,8 @@ func findTaskBacklinks(slug string) []TaskLink {
 // task, nil when none has it. An open task wins over a completed one; a
 // completed recurring task stands for its series: the reference follows
 // spawned_from to the occurrence current now.
-func resolveTaskRefs(refs []string) map[string]*Obj {
-	out := map[string]*Obj{}
+func resolveTaskRefs(refs []string) map[string]*Task {
+	out := map[string]*Task{}
 	if len(refs) == 0 {
 		return out
 	}
@@ -860,18 +823,18 @@ func resolveTaskRefs(refs []string) map[string]*Obj {
 	active := readDeck()
 	done := append(readCompleted(), readArchived()...)
 	deckMu.Unlock()
-	successor := map[string]*Obj{}
-	for _, t := range append(append([]*Obj{}, active...), done...) {
-		if t.Truthy("spawned_from") {
-			successor[t.Str("spawned_from")] = t
+	successor := map[string]*Task{}
+	for _, t := range append(append([]*Task{}, active...), done...) {
+		if t.SpawnedFrom != "" {
+			successor[t.SpawnedFrom] = t
 		}
 	}
 	for _, ref := range refs {
 		ref = strings.ToLower(ref)
-		var task *Obj
-		for _, list := range [][]*Obj{active, done} {
+		var task *Task
+		for _, list := range [][]*Task{active, done} {
 			for _, t := range list {
-				if strings.HasPrefix(strings.ToLower(t.Str("id")), ref) {
+				if strings.HasPrefix(strings.ToLower(t.ID), ref) {
 					task = t
 					break
 				}
@@ -881,9 +844,9 @@ func resolveTaskRefs(refs []string) map[string]*Obj {
 			}
 		}
 		seen := map[string]bool{}
-		for task != nil && task.Truthy("completed_at") && successor[task.Str("id")] != nil && !seen[task.Str("id")] {
-			seen[task.Str("id")] = true
-			task = successor[task.Str("id")]
+		for task != nil && !task.isOpen() && successor[task.ID] != nil && !seen[task.ID] {
+			seen[task.ID] = true
+			task = successor[task.ID]
 		}
 		out[ref] = task
 	}
@@ -892,13 +855,13 @@ func resolveTaskRefs(refs []string) map[string]*Obj {
 
 // findTasks: every task whose id starts with prefix (lowercase); only the
 // one with exactly that id when there is one.
-func findTasks(prefix string) []*Obj {
+func findTasks(prefix string) []*Task {
 	deckMu.Lock()
 	tasks := append(append(readDeck(), readCompleted()...), readArchived()...)
 	deckMu.Unlock()
-	var found, exact []*Obj
+	var found, exact []*Task
 	for _, t := range tasks {
-		id := strings.ToLower(t.Str("id"))
+		id := strings.ToLower(t.ID)
 		if strings.HasPrefix(id, prefix) {
 			found = append(found, t)
 			if id == prefix {
@@ -913,26 +876,18 @@ func findTasks(prefix string) []*Obj {
 }
 
 // lastActivity: the day a task last changed as far as it records.
-func lastActivity(t *Obj) string {
-	stamps := []any{t.Get("completed_at"), t.Get("created_at")}
-	for _, e := range t.List("history") {
-		if o, ok := e.(*Obj); ok {
-			stamps = append(stamps, o.Get("at"))
-		}
+func lastActivity(t *Task) string {
+	stamps := []string{t.CompletedAt, t.CreatedAt}
+	for _, e := range t.History {
+		stamps = append(stamps, e.At)
 	}
-	for _, c := range t.List("comments") {
-		if o, ok := c.(*Obj); ok {
-			stamps = append(stamps, o.Get("at"))
-		}
+	for _, c := range t.Comments {
+		stamps = append(stamps, c.At)
 	}
 	best := ""
 	for _, s := range stamps {
-		if !truthyValue(s) {
-			continue
-		}
-		str := pyStr(s)
-		if ymdPrefixRE.MatchString(str) {
-			if d := runePrefix(str, 10); d > best {
+		if ymdPrefixRE.MatchString(s) {
+			if d := runePrefix(s, 10); d > best {
 				best = d
 			}
 		}
@@ -942,9 +897,9 @@ func lastActivity(t *Obj) string {
 
 var ymdPrefixRE = regexp.MustCompile(`^` + pyDigit + `{4}-` + pyDigit + `{2}-` + pyDigit + `{2}`)
 
-// cleanRecurrence: a recurrence from a snapshot or an undo, its fields
+// cleanRecurrence: a recurrence from a request (an undo), its fields
 // validated; nil when it names no repeat type.
-func cleanRecurrence(v any) *Obj {
+func cleanRecurrence(v any) *Recurrence {
 	rec, ok := v.(*Obj)
 	if !ok {
 		return nil
@@ -955,20 +910,19 @@ func cleanRecurrence(v any) *Obj {
 	default:
 		return nil
 	}
-	interval := int64(1)
+	out := &Recurrence{Type: rtype, Interval: 1, From: "due"}
 	if n, ok := rec.Get("interval").(int64); ok && n >= 1 && n <= recIntervalMax {
-		interval = n
+		out.Interval = int(n)
 	}
-	from := "due"
 	if rec.Str("from") == "completion" {
-		from = "completion"
+		out.From = "completion"
 	}
-	out := NewObj("type", rtype, "interval", interval, "from", from)
 	if n, ok := rec.Get("day").(int64); ok && n >= 1 && n <= 31 {
-		out.Set("day", n)
+		out.Day = int(n)
 	}
 	if n, ok := rec.Get("lead").(int64); ok && n >= 0 {
-		out.Set("lead", n)
+		lead := int(n)
+		out.Lead = &lead
 	}
 	return out
 }
@@ -976,45 +930,39 @@ func cleanRecurrence(v any) *Obj {
 // sanitizeSnapshot rebuilds a task from an untrusted snapshot (undo after
 // delete), known fields only; nil without a usable title. A bad optional
 // value falls back to its default.
-func sanitizeSnapshot(snap *Obj) *Obj {
+func sanitizeSnapshot(snap *Obj) *Task {
 	title := pyStrip(pyStr(orNone(snap.Get("title"))))
 	if !snap.Truthy("title") || title == "" {
 		return nil
 	}
-	t := newTask("title", title)
-	t.Set("description", "")
+	t := newTask()
+	t.Title = title
 	if snap.Truthy("description") {
-		t.Set("description", pyStr(snap.Get("description")))
+		t.Description = pyStr(snap.Get("description"))
 	}
 	tags, _ := snap.Get("tags").([]any)
-	t.Set("tags", strs(cleanTags(tags)))
-	for _, f := range []string{"due_date", "start_date", "last_done"} {
+	t.Tags = cleanTags(tags)
+	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
 		if s, ok := snap.Get(f).(string); ok {
 			if _, ok := parseDay(s); ok {
-				t.Set(f, s)
+				*field = s
 			}
 		}
 	}
-	if s, ok := snap.Get("id").(string); ok && s != "" {
-		t.Set("id", s)
-	}
-	for _, f := range []string{"created_at", "completed_at", "spawned_from"} {
+	for f, field := range map[string]*string{"id": &t.ID, "created_at": &t.CreatedAt,
+		"completed_at": &t.CompletedAt, "spawned_from": &t.SpawnedFrom} {
 		if s, ok := snap.Get(f).(string); ok && s != "" {
-			t.Set(f, s)
+			*field = s
 		}
 	}
-	switch v := snap.Get("sort_order").(type) {
-	case int64, float64:
-		t.Set("sort_order", v)
+	if f, ok := number(snap.Get("sort_order")); ok {
+		t.SortOrder = &f
 	}
-	t.Set("wont_do", snap.Truthy("wont_do"))
-	t.Set("keep", snap.Truthy("keep"))
-	t.Set("history", cleanHistory(snap.Get("history")))
-	t.Set("comments", cleanComments(snap.Get("comments")))
-	if rec := cleanRecurrence(snap.Get("recurrence")); rec != nil && !t.Truthy("keep") {
-		t.Set("recurrence", rec)
-	} else {
-		t.Set("recurrence", nil)
+	t.WontDo, t.Keep = snap.Truthy("wont_do"), snap.Truthy("keep")
+	t.History = cleanHistory(snap.Get("history"))
+	t.Comments = cleanComments(snap.Get("comments"))
+	if !t.Keep {
+		t.Recurrence = cleanRecurrence(snap.Get("recurrence"))
 	}
 	return t
 }

@@ -88,13 +88,13 @@ func TestNewTaskTags(t *testing.T) {
 func TestTagParamMatches(t *testing.T) {
 	for _, c := range []struct {
 		raw  string
-		tags []any
+		tags []string
 		want bool
 	}{
-		{"", []any{"a"}, true}, {"a", []any{"A", "b"}, true}, {"a,b", []any{"a"}, false}, {"a,b", []any{"a", "b"}, true},
-		{"a,-b", []any{"a", "b"}, false}, {"a,-b", []any{"a"}, true}, {"a|b", []any{"b"}, true}, {"a|b", []any{"c"}, false},
+		{"", []string{"a"}, true}, {"a", []string{"A", "b"}, true}, {"a,b", []string{"a"}, false}, {"a,b", []string{"a", "b"}, true},
+		{"a,-b", []string{"a", "b"}, false}, {"a,-b", []string{"a"}, true}, {"a|b", []string{"b"}, true}, {"a|b", []string{"c"}, false},
 	} {
-		if got := tagParamMatches(NewObj("tags", c.tags), c.raw); got != c.want {
+		if got := tagParamMatches(&Task{Tags: c.tags}, c.raw); got != c.want {
 			t.Errorf("tag=%q on %v: %v", c.raw, c.tags, got)
 		}
 	}
