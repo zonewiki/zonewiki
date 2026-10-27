@@ -151,8 +151,26 @@ class TestAuthors:
         text = mcp(client, "alice-token", "search_tasks", query="Sam").get_json()["result"]["content"][0]["text"]
         assert "(alice): Called" in text
 
-    def test_without_users_comments_have_no_author(self, client, git_wiki_dir):
+    def test_task_history_names_who_did_what(self, client, git_wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        task = client.post("/api/deck", json={"title": "Water plants", "due_date": "2030-01-01",
+                                              "recurrence": {"type": "weekly", "interval": 1}}, headers=HOST).get_json()
+        client.put(f"/api/deck/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        done = client.put(f"/api/deck/{task['id']}", json={"completed": True}, headers=HOST).get_json()
+        events = [(e["event"], e.get("by")) for e in done["history"]]
+        assert events == [("created", "alice"), ("due", "alice"), ("done", "bob")]
+        [spawn] = [t for t in client.get("/api/deck", headers=HOST).get_json() if t["spawned_from"] == task["id"]]
+        assert spawn["history"][-1]["event"] == "repeat" and spawn["history"][-1]["by"] == "bob"
+        # Undo puts a snapshot back: the authors stay.
+        client.put(f"/api/deck/{task['id']}", json={"completed": False, "history": done["history"][:2]}, headers=HOST)
+        [back] = [t for t in client.get("/api/deck", headers=HOST).get_json() if t["id"] == task["id"]]
+        assert [e.get("by") for e in back["history"]][:2] == ["alice", "alice"]
+
+    def test_without_users_comments_and_history_have_no_author(self, client, git_wiki_dir):
         task = client.post("/api/deck", json={"title": "Call Sam"}, headers=HOST).get_json()
         client.post(f"/api/deck/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
+        client.put(f"/api/deck/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
         assert '"by"' not in (git_wiki_dir / "_deck" / "tasks.json").read_text()
         assert "hist-by" not in client.get("/history/index", headers=HOST).data.decode()

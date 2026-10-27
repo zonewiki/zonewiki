@@ -38,10 +38,11 @@ type Recurrence struct {
 	Lead     *int
 }
 
-// HistoryEntry: what happened to a task (event) and when (at); the dated
-// events (start, due, repeat) say from and to which day ("" none).
+// HistoryEntry: what happened to a task (event), when (at) and by whom (by:
+// a user, with users; "" none); the dated events (start, due, repeat) say
+// from and to which day ("" none).
 type HistoryEntry struct {
-	At, Event, From, To string
+	At, Event, By, From, To string
 }
 
 // Comment: a status line on a task; By is who wrote it (with users; ""
@@ -92,7 +93,7 @@ func taskFromJSON(o jsonObj) *Task {
 	}
 	for _, e := range objList(o["history"]) {
 		t.History = append(t.History, HistoryEntry{At: strField(e, "at"), Event: strField(e, "event"),
-			From: strField(e, "from"), To: strField(e, "to")})
+			By: strField(e, "by"), From: strField(e, "from"), To: strField(e, "to")})
 	}
 	for _, c := range objList(o["comments"]) {
 		t.Comments = append(t.Comments, Comment{ID: strField(c, "id"), At: strField(c, "at"), By: strField(c, "by"),
@@ -162,20 +163,23 @@ func (r *Recurrence) MarshalJSON() ([]byte, error) {
 }
 
 // MarshalJSON: the dated events say from and to which day (null none),
-// the others neither.
+// the others neither; by only when someone is named, so a wiki without
+// users keeps its files as they were.
 func (e HistoryEntry) MarshalJSON() ([]byte, error) {
 	if !datedEvents[e.Event] {
 		return marshalText(struct {
 			At    string `json:"at"`
 			Event string `json:"event"`
-		}{e.At, e.Event})
+			By    string `json:"by,omitempty"`
+		}{e.At, e.Event, e.By})
 	}
 	return marshalText(struct {
 		At    string  `json:"at"`
 		Event string  `json:"event"`
+		By    string  `json:"by,omitempty"`
 		From  *string `json:"from"`
 		To    *string `json:"to"`
-	}{e.At, e.Event, nullable(e.From), nullable(e.To)})
+	}{e.At, e.Event, e.By, nullable(e.From), nullable(e.To)})
 }
 
 // MarshalJSON: by only when someone is named, so a wiki without users

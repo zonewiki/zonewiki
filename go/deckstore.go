@@ -472,7 +472,7 @@ func nextOccurrence(rec *Recurrence, base time.Time, anchored bool, today time.T
 // today is today, and the series then remembers the gap (recurrence.lead).
 // skip catches up past today: a backlog of missed occurrences collapses
 // into the next one after today.
-func spawnRecurring(task *Task, active []*Task, skip bool) *Task {
+func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	rec := task.Recurrence
 	if rec == nil {
 		return nil
@@ -531,7 +531,7 @@ func spawnRecurring(task *Task, active []*Task, skip bool) *Task {
 	if when == "" {
 		when = newStart
 	}
-	logEvent(spawned, "repeat", "", when)
+	logEvent(spawned, user, "repeat", "", when)
 	return spawned
 }
 
@@ -559,10 +559,10 @@ var datedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 const historyLimit = 30
 
-// logEvent adds an event to a task's history; from and to are the days a
-// dated event moved between ("" none).
-func logEvent(t *Task, event, from, to string) {
-	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event}
+// logEvent adds an event to a task's history, by user ("" no one: Leaf, or
+// no users); from and to are the days a dated event moved between ("" none).
+func logEvent(t *Task, user, event, from, to string) {
+	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event, By: user}
 	if datedEvents[event] {
 		entry.From, entry.To = from, to
 	}
@@ -582,7 +582,8 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 		if !isStr || !isStrEvent || !historyEvents[event] {
 			continue
 		}
-		entry := HistoryEntry{At: runePrefix(at, 16), Event: event}
+		by, _ := as[string](e["by"])
+		entry := HistoryEntry{At: runePrefix(at, 16), Event: event, By: by}
 		if datedEvents[event] {
 			if s, ok := as[string](e["from"]); ok && isoDateRE.MatchString(s) {
 				entry.From = s
@@ -646,21 +647,21 @@ func cleanCommentList(cs []Comment) []Comment {
 
 // keepDone completes a keep task: never archived, it returns to Open
 // without start or due date (it leaves Focus), the day kept in last_done.
-func keepDone(t *Task) {
-	logEvent(t, "done", "", "")
+func keepDone(user string, t *Task) {
+	logEvent(t, user, "done", "", "")
 	t.LastDone = isoDay(today())
 	t.StartDate, t.DueDate = "", ""
 }
 
-// completeTask stamps a task completed; returns the spawned recurring
-// instance, if any.
-func completeTask(t *Task, at string, active []*Task) *Task {
+// completeTask stamps a task completed (by user, at at; "" now); returns
+// the spawned recurring instance, if any.
+func completeTask(user string, t *Task, at string, active []*Task) *Task {
 	if at == "" {
 		at = timestamp()
 	}
 	t.CompletedAt, t.WontDo = at, false
-	logEvent(t, "done", "", "")
-	return spawnRecurring(t, active, false)
+	logEvent(t, user, "done", "", "")
+	return spawnRecurring(user, t, active, false)
 }
 
 // untouchedSpawn: the occurrence task spawned is still as the spawn made it
@@ -685,7 +686,7 @@ func untouchedSpawn(spawn, task *Task) bool {
 // uncompleteTask clears the completion and returns active without the
 // open instance spawned when it was completed, unless that was changed
 // since (untouchedSpawn); protect ids are never removed.
-func uncompleteTask(t *Task, active []*Task, protect map[string]bool) []*Task {
+func uncompleteTask(user string, t *Task, active []*Task, protect map[string]bool) []*Task {
 	if t.Recurrence != nil {
 		kept := active[:0:0]
 		for _, a := range active {
@@ -697,7 +698,7 @@ func uncompleteTask(t *Task, active []*Task, protect map[string]bool) []*Task {
 		active = kept
 	}
 	t.CompletedAt, t.WontDo = "", false
-	logEvent(t, "reopened", "", "")
+	logEvent(t, user, "reopened", "", "")
 	return active
 }
 

@@ -3147,7 +3147,7 @@ function renderHistory(task) {
   historyDetails.open = false;
   document.getElementById('task-edit-history-count' + sfx).textContent = entries.length || '';
   document.getElementById('task-edit-history-list' + sfx).innerHTML = entries.slice().reverse().map(e =>
-    `<li><span class="task-history-at">${esc(shortDate(e.at.slice(0, 10)))} ${esc(e.at.slice(11, 16))}</span> ` +
+    `<li><span class="task-history-at">${esc(commentStamp(e))}</span> ` +
     `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
 }
 
@@ -3163,7 +3163,8 @@ let commentsTaskId = null;
 function commentWhen(at) {
   return `${shortDate(at.slice(0, 10))} ${at.slice(11, 16)}`;
 }
-// When, and with users who: "12 Mar 09:30 · alice".
+// When, and with users who: "12 Mar 09:30 · alice" (a comment, or a
+// History entry).
 function commentStamp(c) {
   return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
 }

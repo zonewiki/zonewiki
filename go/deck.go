@@ -463,11 +463,11 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	t := newTask()
-	if err := applyTaskFields(t, data); err != nil {
+	if err := applyTaskFields(user, t, data); err != nil {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
-	logEvent(t, "created", "", "")
+	logEvent(t, user, "created", "", "")
 	active, err := readDeckStrict()
 	if err != nil {
 		return nil, err
@@ -476,7 +476,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 }
 
 // applyTaskFields applies the field changes in data (not completion).
-func applyTaskFields(t *Task, data jsonObj) error {
+func applyTaskFields(user string, t *Task, data jsonObj) error {
 	oldDue := t.DueDate
 	if data.has("title") {
 		s, err := asStr(data["title"], "title")
@@ -521,7 +521,7 @@ func applyTaskFields(t *Task, data jsonObj) error {
 		}
 		t.DueDate = d
 		if d != oldDue {
-			logEvent(t, "due", oldDue, d)
+			logEvent(t, user, "due", oldDue, d)
 		}
 	}
 	if data.has("sort_order") {
@@ -561,7 +561,7 @@ func applyTaskFields(t *Task, data jsonObj) error {
 		}
 		t.StartDate = d
 		if d != oldStart {
-			logEvent(t, "start", oldStart, d)
+			logEvent(t, user, "start", oldStart, d)
 		}
 	}
 	if data.has("rec_type") {
@@ -683,7 +683,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := applyTaskFields(t, data); err != nil {
+	if err := applyTaskFields(user, t, data); err != nil {
 		return nil, err
 	}
 	didSkip := skip && t.isOpen()
@@ -691,8 +691,8 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	case didSkip:
 		// Skip this occurrence: archived as won't-do, the next one spawned
 		// (a plain won't-do ends the series).
-		logEvent(t, "skipped", "", "")
-		spawned := spawnRecurring(t, active, true)
+		logEvent(t, user, "skipped", "", "")
+		spawned := spawnRecurring(user, t, active, true)
 		t.CompletedAt = timestamp()
 		t.WontDo = true
 		active = without(active, id)
@@ -705,28 +705,28 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			// Won't do: to completed, abandoned; no next occurrence.
 			t.CompletedAt = timestamp()
 			t.WontDo = true
-			logEvent(t, "wontdo", "", "")
+			logEvent(t, user, "wontdo", "", "")
 			active = without(active, id)
 			completed = append(completed, t)
 		} else if !wontDo && !t.isOpen() {
 			// Reopen (also takes away what a skip spawned).
-			active = uncompleteTask(t, active, nil)
+			active = uncompleteTask(user, t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
 		}
 	case data.has("completed"):
 		switch {
 		case done && t.Keep && t.isOpen():
-			keepDone(t) // stays open, back in the pool
+			keepDone(user, t) // stays open, back in the pool
 		case done && t.isOpen():
-			spawned := completeTask(t, "", active)
+			spawned := completeTask(user, t, "", active)
 			active = without(active, id)
 			completed = append(completed, t)
 			if spawned != nil {
 				active = append(active, spawned)
 			}
 		case !done && !t.isOpen():
-			active = uncompleteTask(t, active, nil)
+			active = uncompleteTask(user, t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
 		}
@@ -970,14 +970,14 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if markCompleted {
 		for _, t := range active {
 			if set[t.ID] && t.Keep && t.isOpen() {
-				keepDone(t) // stays open, back in the pool
+				keepDone(userOf(r), t) // stays open, back in the pool
 				updated = append(updated, t)
 			}
 		}
 		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.isOpen() && !t.Keep })
 		var spawned []*Task
 		for _, t := range moving {
-			if s := completeTask(t, stamp, active); s != nil {
+			if s := completeTask(userOf(r), t, stamp, active); s != nil {
 				spawned = append(spawned, s)
 			}
 			updated = append(updated, t)
@@ -987,7 +987,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		moving, movingIDs := selectTasks(completed, func(t *Task) bool { return set[t.ID] && !t.isOpen() })
 		for _, t := range moving {
-			active = uncompleteTask(t, active, set)
+			active = uncompleteTask(userOf(r), t, active, set)
 			updated = append(updated, t)
 		}
 		completed = withoutIDs(completed, movingIDs)
@@ -1144,7 +1144,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if t == nil {
 			continue
 		}
-		if err := applyTaskFields(t, change); err != nil {
+		if err := applyTaskFields(userOf(r), t, change); err != nil {
 			return err
 		}
 		if change.has("history") {
