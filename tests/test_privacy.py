@@ -1,6 +1,7 @@
-"""Private pages don't leak (docs/spec/users.md): with alice's private page,
-upload and draft in the wiki, bob, signed in or through his MCP token, must
-not see a word of them anywhere, nor change them.
+"""Private pages and tasks don't leak (docs/spec/users.md): with alice's
+private page, upload, draft and deck tasks in the wiki, bob, signed in or
+through his MCP token, must not see a word of them anywhere, nor change
+them.
 
 Every route Leaf registers is either probed here or listed as exempt
 (test_every_route_is_covered), so a new route gets checked too. Probes for
@@ -29,6 +30,22 @@ NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her scratch note
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
 
+# alice's private tasks: open (linking to the shared page plans, which
+# refers to it), completed this year, archived.
+TASK_ID = "a11ce000-0000-4000-8000-000000000001"
+DONE_ID = "a11ce000-0000-4000-8000-000000000002"
+OLD_ID = "a11ce000-0000-4000-8000-000000000003"
+COMMENT_ID = "c0ffee01"
+
+
+def private_task(id, title, completed_at=None):
+    return {"id": id, "title": f"{title} {SECRET} {QUERY}", "description": f"{QUERY} {SECRET} for [[plans]]\n\n- [ ] Step",
+            "tags": [f"{QUERY}-{SECRET}", "secretlist"], "start_date": None, "due_date": "2026-01-01",
+            "created_at": "2026-01-01T10:00:00", "completed_at": completed_at, "wont_do": False, "keep": False,
+            "last_done": None, "sort_order": None, "recurrence": {"type": "weekly", "interval": 1, "from": "due"},
+            "spawned_from": None, "history": [],
+            "comments": [{"id": COMMENT_ID, "at": "2026-01-02T10:00", "by": "alice", "text": SECRET}]}
+
 
 def git(wiki, *args):
     return subprocess.run(["git", *args], cwd=wiki, capture_output=True, text=True, check=True,
@@ -49,7 +66,17 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/old.md").write_text(f"# Old {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "_assets/private/alice/photo.png").write_bytes(SECRET.encode())
-    (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n")
+    (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
+    # Her deck: her own home and a list of hers, and her tasks.
+    (w / "private/alice/deck.md").write_text(f"# My deck {SECRET}\n\n[[deck home=1 list=secretlist]]\n")
+    deck = w / "_deck" / "users" / "alice"
+    deck.mkdir(parents=True)
+    this_year = __import__("datetime").date.today().year
+    (deck / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
+    (deck / "completed.json").write_text(
+        json.dumps([private_task(DONE_ID, "Done", f"{this_year}-01-05T10:00:00")], indent=2) + "\n")
+    (deck / "completed-2001.json").write_text(
+        json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
     git(w, "rm", "-q", "private/alice/old.md")
@@ -108,12 +135,17 @@ READS = [
     ("GET /deck", "GET", "/deck", {}),
     ("GET /api/deck", "GET", "/api/deck", {}),
     ("GET /api/deck/completed", "GET", "/api/deck/completed", {}),
+    ("GET /api/deck/completed", "GET", "/api/deck/completed", {"query_string": {"year": "2001"}}),
     ("GET /api/deck/completed-count", "GET", "/api/deck/completed-count", {}),
     ("GET /api/deck/completed-years", "GET", "/api/deck/completed-years", {}),
+    ("GET /deck", "GET", "/deck", {"query_string": {"list": "secretlist"}}),
     ("GET /api/deck/due-count", "GET", "/api/deck/due-count", {}),
     ("GET /api/deck/headless", "GET", "/api/deck/headless", {}),
     ("POST /api/preview", "POST", "/api/preview", {"data": f"[[{DIARY}]] [[private/alice/old]] [[private/alice/draft]]"}),
     ("POST /api/render-notes", "POST", "/api/render-notes", {"json": {"notes": [f"[[{DIARY}]]"], "comments": []}}),
+    ("POST /api/render-notes", "POST", "/api/render-notes",
+     {"json": {"notes": [f"[[task:{TASK_ID[:8]}]]"], "comments": [f"[[task:{DONE_ID}]]"]}}),
+    ("POST /api/preview", "POST", "/api/preview", {"data": f"[[task:{TASK_ID[:8]}]] [[task:{OLD_ID}]]"}),
 ]
 
 
@@ -132,6 +164,9 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
     body = resp.data.decode(errors="replace")
     assert SECRET not in body
     assert not re.search(r'href="[^"]*private/alice', body), "a link to alice's page"
+    assert not any(id in body and id not in str(kwargs) for id in (TASK_ID, DONE_ID, OLD_ID)), "alice's task"
+    assert "secretlist" not in body or "secretlist" in str(kwargs), "alice's list"
+    assert "2001" not in body or "2001" in str(kwargs), "the year of alice's archive"
     if path.startswith(f"/page/{DIARY}") or "/private/alice/" in path:
         assert resp.status_code == 404
 
@@ -140,7 +175,14 @@ def test_alice_sees_her_own(client, wiki):
     client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
     assert SECRET in client.get(f"/page/{DIARY}", headers=HOST).data.decode()
     assert SECRET in client.get("/api/search", query_string={"q": QUERY}, headers=HOST).data.decode()
-    assert 'href="/page/private/alice/diary"' in client.get("/page/plans", headers=HOST).data.decode()
+    plans = client.get("/page/plans", headers=HOST).data.decode()
+    assert 'href="/page/private/alice/diary"' in plans
+    assert f"Task {SECRET}" in plans                                 # the [[task:…]] chip
+    deck = client.get("/api/deck", headers=HOST).get_json()
+    assert [t["private"] for t in deck if t["id"] == TASK_ID] == [True]
+    assert "2001" in client.get("/api/deck/completed-years", headers=HOST).get_json()["years"]
+    # Her deck home is hers: the Deck link goes there.
+    assert 'href="/page/private/alice/deck"' in client.get("/page/index", headers=HOST).data.decode()
 
 
 def test_a_private_page_of_no_one_is_seen_by_no_one(client, wiki):
@@ -277,6 +319,63 @@ def test_links_from_invisible_pages_dont_count(alice, wiki):
     assert links(bob)["plans"] == 0
 
 
+def test_a_new_task_in_a_private_place_is_private(alice, wiki):
+    """An embed on a page in her folder, and New task / c t with her deck
+    home there, start a new task private; /deck doesn't."""
+    assert 'data-init-private="1"' in alice.get("/page/private/alice/deck", headers=HOST).data.decode()
+    index = alice.get("/page/index", headers=HOST).data.decode()
+    assert 'data-deck-private="1"' in index
+    deck = alice.get("/deck", headers=HOST).data.decode()
+    assert 'id="task-edit-private"' in deck and "data-init-private" not in deck
+    assert 'data-private-folder="private/alice"' in deck
+    assert 'data-init-private="1"' in alice.get("/api/deck/headless", headers=HOST).data.decode()
+    sign_in(alice, "bob")
+    bob = alice
+    index = bob.get("/page/index", headers=HOST).data.decode()
+    assert "data-deck-private" not in index and 'id="task-edit-private"' in bob.get("/deck", headers=HOST).data.decode()
+
+
+def test_no_private_box_without_users(client, wiki_dir):
+    deck = client.get("/deck", headers=HOST).data.decode()
+    assert "task-edit-private" not in deck and "data-private-folder" not in deck
+    assert "private" not in client.post("/api/deck", json={"title": "x"}, headers=HOST).get_json()
+    resp = client.post("/api/deck", json={"title": "y", "private": True}, headers=HOST)
+    assert resp.status_code == 400
+
+
+def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
+    task = alice.post("/api/deck", json={"title": "Gift", "private": True}, headers=HOST).get_json()
+    assert task["private"] is True
+    mine, shared = wiki / "_deck/users/alice/tasks.json", wiki / "_deck/tasks.json"
+    assert task["id"] in mine.read_text() and task["id"] not in shared.read_text()
+    assert alice.put(f"/api/deck/{task['id']}", json={"private": False}, headers=HOST).get_json()["private"] is False
+    assert task["id"] in shared.read_text() and task["id"] not in mine.read_text()
+    # One commit, both files, in her name.
+    assert git(wiki, "show", "--name-only", "--format=%an", "HEAD").split() == [
+        "alice", "_deck/tasks.json", "_deck/users/alice/tasks.json"]
+    sign_in(alice, "bob")
+    assert task["id"] in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
+
+
+def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
+    snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
+    assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204
+    restored = alice.post("/api/deck/restore", json={"tasks": [snap]}, headers=HOST).get_json()
+    assert [t["private"] for t in restored] == [True]
+    assert TASK_ID in (wiki / "_deck/users/alice/tasks.json").read_text()
+
+
+def test_alices_assistant_makes_private_tasks(client, wiki):
+    """Her deck home is in her folder: create_task makes private tasks
+    unless told otherwise, as c t does."""
+    text = mcp(client, "create_task", token="alice-token", title="Call mum")
+    assert "· private ·" in text
+    text = mcp(client, "create_task", token="alice-token", title="Team lunch", private=False)
+    assert "private" not in text.split("\n")[3]
+    assert "Team lunch" in mcp(client, "search_tasks", query="lunch")
+    assert "Call mum" not in mcp(client, "search_tasks", query="mum")
+
+
 # ── MCP ──────────────────────────────────────────────────────────────────────
 
 def rpc(client, method, params, token="bob-token"):
@@ -309,6 +408,8 @@ MCP_READS = [
     ("search_tasks", {"query": QUERY}),
     ("read_guides", {"slug": DIARY}),
     ("read_guides", {"slug": "private/alice/"}),
+    ("search_tasks", {"query": QUERY, "status": "all"}),
+    ("search_tasks", {"tag": "secretlist", "status": "all"}),
     ("replace_in_pages", {"find": QUERY, "replace": "x"}),       # a dry run
 ]
 
@@ -319,6 +420,7 @@ def test_bobs_assistant_reads_nothing_of_alices(client, wiki, tool, args):
     # The slug asked for, and the shared page's own links, may name the diary.
     named = text.replace(args.get("slug", "\0"), "").replace(f"[[{DIARY}", "")
     assert SECRET not in text and "private/alice" not in named
+    assert TASK_ID[:8] not in text.replace(f"[[task:{TASK_ID[:8]}]]", "") and "secretlist" not in text
     assert sha(wiki)[:7] not in text or tool == "history" and not args, "the diary's versions"
 
 
@@ -328,6 +430,8 @@ def test_alices_assistant_sees_her_own(client, wiki):
     assert DIARY in mcp(client, "search_wiki", token="alice-token", query=QUERY)
     assert DIARY in mcp(client, "grep_wiki", token="alice-token", pattern=QUERY)
     assert "Delete private/alice/old" in mcp(client, "history", token="alice-token")
+    assert f"Task {SECRET}" in mcp(client, "search_tasks", token="alice-token", query=QUERY)
+    assert "private" in mcp(client, "search_tasks", token="alice-token", query=QUERY).split("\n")[3]
 
 
 def test_guides_in_private_folders_stay_private(client, wiki):
@@ -399,6 +503,22 @@ WRITES = [
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "x.png"),
                                                                   "filename": "../private/alice/photo.png",
                                                                   "overwrite": "1"}}),
+    # alice's tasks, by id; bob's own private task goes into his files.
+    ("POST /api/deck", "POST", "/api/deck", {"json": {"title": "Bob's", "private": True}}),
+    ("PUT /api/deck/{id}", "PUT", f"/api/deck/{TASK_ID}", {"json": {"title": "Bob was here"}}),
+    ("PUT /api/deck/{id}", "PUT", f"/api/deck/{DONE_ID}", {"json": {"completed": False}}),
+    ("DELETE /api/deck/{id}", "DELETE", f"/api/deck/{TASK_ID}", {}),
+    ("POST /api/deck/{id}/toggle-check", "POST", f"/api/deck/{TASK_ID}/toggle-check", {"json": {"idx": 0}}),
+    ("POST /api/deck/{id}/comments", "POST", f"/api/deck/{TASK_ID}/comments", {"json": {"text": "Bob's"}}),
+    ("PUT /api/deck/{id}/comments/{cid}", "PUT", f"/api/deck/{TASK_ID}/comments/{COMMENT_ID}", {"json": {"text": "Bob's"}}),
+    ("DELETE /api/deck/{id}/comments/{cid}", "DELETE", f"/api/deck/{TASK_ID}/comments/{COMMENT_ID}", {}),
+    ("POST /api/deck/batch-complete", "POST", "/api/deck/batch-complete", {"json": {"ids": [TASK_ID]}}),
+    ("POST /api/deck/batch-complete", "POST", "/api/deck/batch-complete", {"json": {"ids": [DONE_ID], "completed": False}}),
+    ("POST /api/deck/batch-delete", "POST", "/api/deck/batch-delete", {"json": {"ids": [TASK_ID, DONE_ID, OLD_ID]}}),
+    ("POST /api/deck/batch-tag", "POST", "/api/deck/batch-tag", {"json": {"ids": [TASK_ID], "add": ["bob"]}}),
+    ("POST /api/deck/batch-update", "POST", "/api/deck/batch-update", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob"}]}}),
+    ("POST /api/deck/reorder", "POST", "/api/deck/reorder", {"json": {"order": [TASK_ID], "updates": [{"id": TASK_ID, "sort_order": 1}]}}),
+    ("POST /api/deck/restore", "POST", "/api/deck/restore", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob's"}]}}),
 ]
 
 
@@ -408,8 +528,14 @@ def _write_params():
 
 
 def _alices_files(wiki):
-    return {p.relative_to(wiki).as_posix(): p.read_bytes()
-            for folder in ("private", "_assets/private") for p in (wiki / folder).rglob("*") if p.is_file()}
+    """alice's private files, and whether a shared deck file holds one of
+    her task ids (a restore of a snapshot with her id)."""
+    files = {p.relative_to(wiki).as_posix(): p.read_bytes()
+             for folder in ("private", "_assets/private", "_deck/users/alice")
+             for p in (wiki / folder).rglob("*") if p.is_file()}
+    shared = "".join(p.read_text() for p in (wiki / "_deck").glob("*.json"))
+    files["shared deck has her ids"] = str(TASK_ID in shared or DONE_ID in shared)
+    return files
 
 
 @pytest.mark.parametrize("method,path,kwargs", _write_params())
@@ -418,8 +544,11 @@ def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
         path = path.replace("{bobs}", bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"])
     kwargs = {k: v() if callable(v) else v for k, v in kwargs.items()}
     before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
-    bob.open(fill(path, wiki), method=method, headers=HOST, **kwargs)
+    resp = bob.open(fill(path, wiki), method=method, headers=HOST, **kwargs)
     assert _alices_files(wiki) == before
+    assert SECRET not in resp.data.decode(errors="replace")
+    if f"/api/deck/{TASK_ID}/" in path or method == "PUT" and "/api/deck/" in path:
+        assert resp.status_code == 404   # as for no such task
     new = git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split() if log else []
     for commit in new:
         assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
@@ -443,6 +572,11 @@ MCP_WRITES = [
     ("file_scratch_note", {"slug": NOTE, "name": "stolen"}),
     ("file_scratch_note", {"slug": "{bobs}", "page": DIARY}),
     ("file_scratch_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
+    ("create_task", {"title": "Bob's", "private": True}),
+    ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
+    ("update_task", {"id": TASK_ID, "status": "deleted"}),
+    ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
+    ("update_task", {"ids": [TASK_ID, OLD_ID], "add_tags": ["bob"]}),
 ]
 
 
@@ -471,7 +605,7 @@ def test_moving_the_private_folder_is_refused(client, wiki):
 
 def test_every_tool_is_covered():
     tools = {t["name"] for t in json.loads((REPO / "go/mcp_tools.json").read_text())}
-    covered = {t[0] for t in MCP_READS} | {t[0] for t in MCP_WRITES} | {"leaf_help"} | DECK_TOOLS
+    covered = {t[0] for t in MCP_READS} | {t[0] for t in MCP_WRITES} | {"leaf_help"}
     assert tools - covered == set(), "tools neither probed nor exempt"
     assert covered - tools == set(), "probes of tools that don't exist"
 
@@ -484,19 +618,11 @@ EXEMPT = {
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
     "POST /api/scratch",            # makes bob's own note
 }
-# The deck's writes take task ids: private tasks come in phase 5, with their probes.
-DECK_TOOLS = {"create_task", "update_task"}
-DECK_WRITES = {
-    "POST /api/deck", "PUT /api/deck/{id}", "DELETE /api/deck/{id}", "POST /api/deck/{id}/toggle-check",
-    "POST /api/deck/{id}/comments", "PUT /api/deck/{id}/comments/{cid}", "DELETE /api/deck/{id}/comments/{cid}",
-    "POST /api/deck/batch-complete", "POST /api/deck/batch-delete", "POST /api/deck/batch-tag",
-    "POST /api/deck/batch-update", "POST /api/deck/reorder", "POST /api/deck/restore",
-}
 
 
 def test_every_route_is_covered():
     source = "".join(p.read_text() for p in (REPO / "go").glob("*.go") if not p.name.endswith("_test.go"))
     routes = set(re.findall(r'HandleFunc\("([^"]+)"', source))
-    covered = {r[0] for r in READS} | {w[0] for w in WRITES} | EXEMPT | DECK_WRITES
+    covered = {r[0] for r in READS} | {w[0] for w in WRITES} | EXEMPT
     assert routes - covered == set(), "routes neither probed nor exempt"
     assert covered - routes == set(), "probes of routes that don't exist"

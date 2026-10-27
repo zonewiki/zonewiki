@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 )
 
 type Task struct {
@@ -25,6 +26,10 @@ type Task struct {
 	History                []HistoryEntry
 	Comments               []Comment
 	Extra                  map[string]json.RawMessage // keys Leaf doesn't know, as the file had them
+	// Owner: the user whose private task it is, "" a shared one. Not in
+	// the file: it is whose files the task was read from (deckDir), and a
+	// write files it there; the API shows it as "private".
+	Owner string
 }
 
 // Recurrence: a task's series. Day (monthly, yearly) is the day of month
@@ -54,7 +59,7 @@ type Comment struct {
 var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "tags": true,
 	"start_date": true, "due_date": true, "created_at": true, "completed_at": true, "wont_do": true,
 	"keep": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
-	"history": true, "comments": true}
+	"history": true, "comments": true, "private": true}
 
 // strField: a field as text: a string as it is, a number or a bool as its
 // JSON text (an id of 7 is "7"), anything else "" (a file edited by hand).
@@ -193,9 +198,18 @@ func (c Comment) MarshalJSON() ([]byte, error) {
 	}{c.ID, c.At, c.By, c.Text})
 }
 
-// MarshalJSON writes the fields in the order the files keep, the keys
-// Leaf doesn't know last, A–Z.
-func (t *Task) MarshalJSON() ([]byte, error) {
+// MarshalJSON: a task as the API and the browser get it: as in its file
+// and, with users, "private" (whether it is its user's own).
+func (t *Task) MarshalJSON() ([]byte, error) { return t.marshal(cfg.Users != nil) }
+
+// fileTask: a task as its file keeps it.
+type fileTask struct{ *Task }
+
+func (f fileTask) MarshalJSON() ([]byte, error) { return f.marshal(false) }
+
+// marshal writes the fields in the order the files keep (private after
+// them), the keys Leaf doesn't know last, A–Z.
+func (t *Task) marshal(private bool) ([]byte, error) {
 	tags, history, comments := t.Tags, t.History, t.Comments
 	if tags == nil {
 		tags = []string{}
@@ -226,6 +240,9 @@ func (t *Task) MarshalJSON() ([]byte, error) {
 	}{t.ID, t.Title, t.Description, tags, nullable(t.StartDate), nullable(t.DueDate),
 		nullable(t.CreatedAt), nullable(t.CompletedAt), t.WontDo, t.Keep, nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, nullable(t.SpawnedFrom), history, comments})
+	if err == nil && private {
+		b = append(b[:len(b)-1], `,"private":`+strconv.FormatBool(t.Owner != "")+"}"...)
+	}
 	if err != nil || len(t.Extra) == 0 {
 		return b, err
 	}
@@ -240,14 +257,15 @@ func (t *Task) MarshalJSON() ([]byte, error) {
 // encodeTasks: a deck file's text, two spaces of indent, text as it is
 // (no \u escapes but those JSON needs).
 func encodeTasks(tasks []*Task) (string, error) {
-	if tasks == nil {
-		tasks = []*Task{}
+	file := make([]fileTask, len(tasks))
+	for i, t := range tasks {
+		file[i] = fileTask{t}
 	}
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(tasks); err != nil {
+	if err := enc.Encode(file); err != nil {
 		return "", err
 	}
 	return b.String(), nil

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -16,7 +19,7 @@ func TestDeckLists(t *testing.T) {
 		"code": "# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
 		"home": "# Home\n\n[[deck list=chores]]\n",
 	})
-	lists := deckLists()
+	lists := deckLists("")
 	var names []string
 	for n := range lists {
 		names = append(names, n)
@@ -27,12 +30,12 @@ func TestDeckLists(t *testing.T) {
 		t.Errorf("lists %+v", lists)
 	}
 	for tags, want := range map[string]string{"work": "", "GROCERIES": "groceries", "groceries chores": "chores"} {
-		if got := taskList(&Task{Tags: strings.Fields(tags)}, nil); got != want {
+		if got := taskList(&Task{Tags: strings.Fields(tags)}, lists); got != want {
 			t.Errorf("taskList(%q) = %q, want %q", tags, got, want)
 		}
 	}
 	putPage(t, "a-list", "# A\n\n[[deck list=groceries]]\n")
-	if home := deckLists()["groceries"].Slug; home != "a-list" {
+	if home := deckLists("")["groceries"].Slug; home != "a-list" {
 		t.Errorf("home %q", home)
 	}
 }
@@ -88,5 +91,218 @@ func TestParseDeckParams(t *testing.T) {
 		if got := parseDeckParams(raw).m; !reflect.DeepEqual(got, want) {
 			t.Errorf("parseDeckParams(%q) = %v, want %v", raw, got, want)
 		}
+	}
+}
+
+// newTestTask creates a task as user through the API's path; private asks
+// for it to be theirs alone.
+func newTestTask(t *testing.T, user, title string, private bool, more ...string) *Task {
+	t.Helper()
+	data := jsonObj{}
+	data.set("title", title)
+	if private {
+		data.set("private", true)
+	}
+	for i := 0; i+1 < len(more); i += 2 {
+		data.set(more[i], more[i+1])
+	}
+	task, err := createTask(user, data, "Create deck task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return task
+}
+
+func titles(tasks []*Task) []string {
+	out := []string{}
+	for _, t := range tasks {
+		out = append(out, t.Title)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func fileText(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// With users, a private task lives in its user's own files, which only
+// they read; the files never say "private" (whose files they are does),
+// the API does.
+func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	newTestTask(t, "alice", "Shared one", false)
+	mine := newTestTask(t, "alice", "Alice's own", true)
+	if mine.Owner != "alice" {
+		t.Fatalf("owner %q", mine.Owner)
+	}
+	if got := titles(readDeck("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
+		t.Errorf("alice sees %v", got)
+	}
+	if got := titles(readDeck("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+		t.Errorf("bob sees %v", got)
+	}
+	if got := titles(readDeck("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+		t.Errorf("Leaf sees %v", got)
+	}
+	shared, own := fileText(t, deckFile("")), fileText(t, filepath.Join(cfg.Data, "_deck/users/alice/tasks.json"))
+	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
+		strings.Contains(own, "Shared one") || strings.Contains(own+shared, `"private"`) {
+		t.Errorf("files:\n%s\n%s", shared, own)
+	}
+	if _, err := os.Stat(deckFile("bob")); err == nil {
+		t.Error("bob got files of his own for no task")
+	}
+	b, _ := json.Marshal(mine)
+	if !strings.Contains(string(b), `"private":true`) {
+		t.Errorf("API JSON %s", b)
+	}
+	// Another user's private task is no task at all.
+	for _, err := range []error{
+		func() error { _, err := updateTask("bob", mine.ID, jsonObj{}, ""); return err }(),
+		func() error { _, err := addComment("bob", mine.ID, "hi", "c"); return err }(),
+	} {
+		if err != errNotFound {
+			t.Errorf("bob's write: %v", err)
+		}
+	}
+	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(readDeck("alice")) != 2 {
+		t.Errorf("bob's delete took alice's task: %v", err)
+	}
+	if len(findTasks("bob", strings.ToLower(mine.ID[:8]))) != 0 || len(findTasks("alice", mine.ID)) != 1 {
+		t.Error("findTasks")
+	}
+	if refs := resolveTaskRefs("bob", []string{mine.ID[:8]}); refs[mine.ID[:8]] != nil {
+		t.Error("bob resolves alice's [[task:…]]")
+	}
+	if refs := resolveTaskRefs("alice", []string{mine.ID[:8]}); refs[mine.ID[:8]] == nil {
+		t.Error("alice doesn't resolve her own [[task:…]]")
+	}
+}
+
+// Private toggled moves the task between the files; completing files it in
+// its user's completed.json, and the next occurrence of a series stays
+// private.
+func TestPrivateTaskMovesAndCompletes(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	task := newTestTask(t, "alice", "Water plants", false, "due_date", isoDay(today()), "rec_type", "weekly")
+	data := jsonObj{}
+	data.set("private", true)
+	if _, err := updateTask("alice", task.ID, data, ""); err != nil {
+		t.Fatal(err)
+	}
+	if titles(readDeck("bob")); len(readDeck("bob")) != 0 || len(readDeck("alice")) != 1 {
+		t.Fatalf("after private: bob %v, alice %v", titles(readDeck("bob")), titles(readDeck("alice")))
+	}
+	if strings.Contains(fileText(t, deckFile("")), "Water") {
+		t.Error("still in the shared file")
+	}
+	done := jsonObj{}
+	done.set("completed", true)
+	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fileText(t, completedPath("alice")), task.ID) || strings.Contains(fileText(t, completedPath("")), "Water") {
+		t.Error("completed into the wrong file")
+	}
+	open := readDeck("alice")
+	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(readDeck("bob")) != 0 {
+		t.Errorf("next occurrence %+v", open)
+	}
+	if got := completedInYear("bob", currentYear()); len(got) != 0 {
+		t.Errorf("bob's Completed %v", titles(got))
+	}
+	shared := jsonObj{}
+	shared.set("private", false)
+	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(readDeck("bob")) != 1 || fileText(t, deckFile("alice")) != "[]\n" {
+		t.Errorf("back to shared: bob %v, alice's file %q", titles(readDeck("bob")), fileText(t, deckFile("alice")))
+	}
+}
+
+// Without users nothing is private: the API refuses it and its JSON is as
+// before (no "private").
+func TestNoPrivateTasksWithoutUsers(t *testing.T) {
+	testWiki(t, nil)
+	data := jsonObj{}
+	data.set("title", "x")
+	data.set("private", true)
+	if _, err := createTask("", data, "c"); err == nil {
+		t.Error("a private task without users")
+	}
+	task := newTestTask(t, "", "y", false)
+	if b, _ := json.Marshal(task); strings.Contains(string(b), "private") {
+		t.Errorf("JSON %s", b)
+	}
+}
+
+// The deck home and the lists are per user: a home in your private folder
+// wins over a shared one; a list declared on a private page is its owner's.
+func TestDeckHomeAndListsPerUser(t *testing.T) {
+	testWiki(t, map[string]string{
+		"deck":                "# Deck\n\n[[deck home=1]]\n",
+		"private/alice/mine":  "# Mine\n\n[[deck home=1 list=secret]]\n",
+		"private/bob/nothing": "# Nothing\n",
+	})
+	withUsers(t, "alice", "bob")
+	if h := lookupDeckHome("alice"); h == nil || h.Slug != "private/alice/mine" {
+		t.Errorf("alice's home %+v", h)
+	}
+	for _, u := range []string{"bob", ""} {
+		if h := lookupDeckHome(u); h == nil || h.Slug != "deck" {
+			t.Errorf("%q's home %+v", u, h)
+		}
+	}
+	if _, ok := deckLists("alice")["secret"]; !ok {
+		t.Error("alice's list")
+	}
+	if _, ok := deckLists("bob")["secret"]; ok {
+		t.Error("bob sees alice's list")
+	}
+}
+
+// What Leaf does over all decks reaches every user's files: a rename's
+// links, the yearly archive, the search index.
+func TestEveryUsersFiles(t *testing.T) {
+	testWiki(t, map[string]string{"old": "# Old\n"})
+	withUsers(t, "alice", "bob")
+	mine := newTestTask(t, "alice", "See [[old]]", true)
+	changed, err := renamePageRefs(func(s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
+	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, deckFile("alice")), "[[new]]") {
+		t.Errorf("rename: %v %v", changed, err)
+	}
+	last := jsonObj{}
+	last.set("completed", true)
+	if _, err := updateTask("alice", mine.ID, last, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Completed last year: the start of Leaf files it into her archive.
+	done := readListLenient(completedPath("alice"))
+	done[0].CompletedAt = "2001-05-01T10:00:00"
+	if err := writeTasks(completedPath("alice"), done); err != nil {
+		t.Fatal(err)
+	}
+	archiveOldCompleted()
+	if !strings.Contains(fileText(t, archivePath("alice", "2001")), mine.ID) {
+		t.Error("not archived in alice's files")
+	}
+	found := false
+	for _, d := range taskSearchDocs() {
+		found = found || d.TaskID == mine.ID && d.Task.Owner == "alice"
+	}
+	if !found {
+		t.Error("the search index lacks alice's task")
+	}
+	if !taskIDsLocked()[mine.ID] {
+		t.Error("taskIDsLocked")
 	}
 }

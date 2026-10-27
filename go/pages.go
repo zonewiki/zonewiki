@@ -30,6 +30,15 @@ func newReq(r *http.Request) *Req {
 	return &Req{r: r, user: userOf(r), sharing: sharingOn(r)}
 }
 
+// who: the user asking, "" for none (rq nil: Leaf itself, which has no
+// private tasks of its own).
+func (rq *Req) who() string {
+	if rq == nil {
+		return ""
+	}
+	return rq.user
+}
+
 // pathURL is a path in Leaf from its parts, each percent-encoded ("/" kept), as
 // urllib's quote(p, safe="/"): letters, digits, _.-~ and / stay.
 func pathURL(parts ...string) string {
@@ -305,15 +314,16 @@ func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
 	return false
 }
 
-// pageTaskRefs: the ids of the tasks a page refers to with [[task:…]].
-func pageTaskRefs(content string) map[string]bool {
+// pageTaskRefs: the ids of the tasks a page refers to with [[task:…]],
+// those user sees.
+func pageTaskRefs(user, content string) map[string]bool {
 	masked, _ := maskCode(content)
 	var refs []string
 	for _, m := range taskRefRE.FindAllStringSubmatch(masked, -1) {
 		refs = append(refs, strings.ToLower(m[1]))
 	}
 	out := map[string]bool{}
-	for _, t := range resolveTaskRefs(refs) {
+	for _, t := range resolveTaskRefs(user, refs) {
 		if t != nil {
 			out[t.ID] = true
 		}
@@ -511,11 +521,16 @@ type DeckHome struct {
 	Params      DeckParams
 }
 
-// deckLists: every list some page declares ([[deck list=<name>]]), by name;
-// when several pages declare one, the first slug A–Z is its home.
-func deckLists() map[string]DeckHome {
+// deckLists: every list a page user sees declares ([[deck list=<name>]]),
+// by name; when several pages declare one, the first slug A–Z is its home.
+// A list declared on a private page is its owner's alone: for others its
+// name is a plain tag.
+func deckLists(user string) map[string]DeckHome {
 	out := map[string]DeckHome{}
 	for _, p := range sortedPages() {
+		if !canSee(user, p.Slug) {
+			continue
+		}
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, l := range embedsLists(e.embeds) {
 			if _, ok := out[l.Name]; !ok {
@@ -527,11 +542,8 @@ func deckLists() map[string]DeckHome {
 }
 
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page
-// declares as a list, or "".
+// declares as a list (names: deckLists), or "".
 func taskList(t *Task, names map[string]DeckHome) string {
-	if names == nil {
-		names = deckLists()
-	}
 	var hits []string
 	for tag := range taskTagsLower(t) {
 		if _, ok := names[tag]; ok {
@@ -545,30 +557,46 @@ func taskList(t *Task, names map[string]DeckHome) string {
 	return ""
 }
 
-// lookupDeckHome: the page with a [[deck … home=1]] embed, the user's own
-// deck (the first slug A–Z when several declare one); nil: the Deck link
-// goes to /deck.
-func lookupDeckHome() *DeckHome {
+// lookupDeckHome: the page with a [[deck … home=1]] embed, user's own
+// deck: one in their private folder first, else a shared one (the first
+// slug A–Z when several declare one); nil: the Deck link goes to /deck.
+func lookupDeckHome(user string) *DeckHome {
+	var shared *DeckHome
 	for _, p := range sortedPages() {
+		own := ownPrivate(user, p.Slug)
+		if !canSee(user, p.Slug) || shared != nil && !own {
+			continue
+		}
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, params := range e.embeds {
 			if isTrue(params.Get("home")) {
-				return &DeckHome{p.Slug, e.title, params}
+				if own {
+					return &DeckHome{p.Slug, e.title, params}
+				}
+				shared = &DeckHome{p.Slug, e.title, params}
+				break
 			}
 		}
 	}
-	return nil
+	return shared
 }
 
 // deckHome is lookupDeckHome, once per request.
 func (rq *Req) deckHome() *DeckHome {
 	if rq == nil {
-		return lookupDeckHome()
+		return lookupDeckHome("")
 	}
 	if !rq.homeDone {
-		rq.home, rq.homeDone = lookupDeckHome(), true
+		rq.home, rq.homeDone = lookupDeckHome(rq.user), true
 	}
 	return rq.home
+}
+
+// homePrivate: the deck home is in the user's own folder, so a task from
+// New task or c t is private.
+func (rq *Req) homePrivate() bool {
+	h := rq.deckHome()
+	return h != nil && ownPrivate(rq.who(), h.Slug)
 }
 
 func (rq *Req) deckHomeSlug() string {

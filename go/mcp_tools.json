@@ -754,6 +754,10 @@
      "type": "boolean",
      "description": "A keep task: done, it goes back to the list instead of being archived (shopping list staples)."
     },
+    "private": {
+     "type": "boolean",
+     "description": "With users: seen by the user alone. Default: private if their deck home is in their private folder."
+    },
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
@@ -838,6 +842,10 @@
     "keep": {
      "type": "boolean",
      "description": "A keep task: done, it goes back to the list instead of being archived (shopping list staples)."
+    },
+    "private": {
+     "type": "boolean",
+     "description": "With users: true private (the user's alone), false shared."
     },
     "add_tags": {
      "type": "array",

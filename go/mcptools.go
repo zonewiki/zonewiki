@@ -791,15 +791,19 @@ var recurrenceUnits = map[string]string{"daily": "day", "weekly": "week", "month
 
 func shortID(id string) string { return runePrefix(id, shortIDLen) }
 
-// mcpTaskText: one deck task for an LLM: title, a line of facts (status,
-// tags, dates, repeat, list), its link in the deck, its notes and comments.
-func mcpTaskText(t *Task, base string) string {
+// mcpTaskText: one deck task for user's LLM: title, a line of facts
+// (status, private, tags, dates, repeat, list), its link in the deck, its
+// notes and comments.
+func mcpTaskText(t *Task, base, user string) string {
 	status := taskStatus(t)
 	fact := "status: " + status
 	if status != "open" {
 		fact += " " + runePrefix(t.CompletedAt, 10)
 	}
 	facts := []string{fact}
+	if t.Owner != "" {
+		facts = append(facts, "private")
+	}
 	if len(t.Tags) > 0 {
 		var tags []string
 		for _, tag := range t.Tags {
@@ -832,7 +836,7 @@ func mcpTaskText(t *Task, base string) string {
 		}
 		facts = append(facts, keep+")")
 	}
-	list := taskList(t, nil)
+	list := taskList(t, deckLists(user))
 	if list != "" {
 		facts = append(facts, "list: "+list)
 	}
@@ -861,7 +865,7 @@ func mcpTaskText(t *Task, base string) string {
 
 // mcpTaskRefs: for read_page, what each [[task:…]] on the page stands for,
 // since the raw markdown holds only the id.
-func mcpTaskRefs(content, base string) string {
+func mcpTaskRefs(content, base, user string) string {
 	masked, _ := maskCode(content)
 	var refs []string
 	seen := map[string]bool{}
@@ -874,7 +878,8 @@ func mcpTaskRefs(content, base string) string {
 	if len(refs) == 0 {
 		return ""
 	}
-	tasks := resolveTaskRefs(refs)
+	tasks := resolveTaskRefs(user, refs)
+	lists := deckLists(user)
 	var lines []string
 	for _, ref := range refs {
 		t := tasks[ref]
@@ -890,7 +895,7 @@ func mcpTaskRefs(content, base string) string {
 			facts = append(facts, "due "+t.DueDate)
 		}
 		lines = append(lines, "- [[task:"+ref+"]]: "+t.Title+" ("+strings.Join(facts, ", ")+") "+
-			base+taskLink(t, taskList(t, nil)))
+			base+taskLink(t, taskList(t, lists)))
 	}
 	return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
 }
@@ -921,7 +926,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	q := ParseQuery(query)
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if status != "all" && (status == "open") != d.Task.isOpen() {
+		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.isOpen() {
 			continue
 		}
 		have := taskTagsLower(d.Task)
@@ -979,7 +984,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	}
 	var body []string
 	for _, d := range docs[:min(limit, len(docs))] {
-		body = append(body, mcpTaskText(d.Task, base))
+		body = append(body, mcpTaskText(d.Task, base, user))
 	}
 	return "Today is " + day + ". " + count + ":\n\n" + strings.Join(body, "\n\n---\n\n"), nil
 }
@@ -991,8 +996,8 @@ var (
 
 // findTask: the task a reference names: its id or a prefix of it (the
 // 8-character short id the tools show), a [[task:…]] reference or a
-// /deck?task=… link.
-func findTask(raw string) (*Task, error) {
+// /deck?task=… link; of the tasks user sees.
+func findTask(raw, user string) (*Task, error) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	ref := raw
 	if m := taskLinkRE.FindStringSubmatch(raw); m != nil {
@@ -1001,7 +1006,7 @@ func findTask(raw string) (*Task, error) {
 	if !taskIDRE.MatchString(ref) {
 		return nil, toolErr(strconv.Quote(raw) + " is not a task id; search_tasks shows each task's id")
 	}
-	found := findTasks(ref)
+	found := findTasks(user, ref)
 	if len(found) == 0 {
 		return nil, toolErr("No task with id " + strconv.Quote(ref) + ". search_tasks shows each task's id.")
 	}
@@ -1065,12 +1070,14 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	if title, _ := as[string](data["title"]); data.has("title") && title == "" {
 		return nil, toolErr("title must be a non-empty string")
 	}
-	if args.has("keep") {
-		keep, ok := as[bool](args["keep"])
-		if !ok {
-			return nil, toolErr("keep must be true or false")
+	for _, f := range []string{"keep", "private"} {
+		if args.has(f) {
+			b, ok := as[bool](args[f])
+			if !ok {
+				return nil, toolErr(f + " must be true or false")
+			}
+			data.set(f, b)
 		}
-		data.set("keep", keep)
 	}
 	if args.has("tags") {
 		data["tags"] = args["tags"]
@@ -1148,7 +1155,7 @@ const (
 func tagHints(task *Task, user string) string {
 	var others []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if d.TaskID != task.ID {
+		if d.TaskID != task.ID && canSeeTask(user, d.Task) {
 			others = append(others, d)
 		}
 	}
@@ -1212,9 +1219,9 @@ func tagHints(task *Task, user string) string {
 
 // homeTags: a new task's tags, the deck home's new-task tags (its list, its
 // single tags, as its "+ New" and c t give them) before the ones given, so
-// the task shows in the user's deck. Not when the given tags already name a
+// the task shows in user's deck. Not when the given tags already name a
 // declared list: the task is filed there.
-func homeTags(tags json.RawMessage) json.RawMessage {
+func homeTags(tags json.RawMessage, user string) json.RawMessage {
 	l, ok := as[[]string](tags)
 	if s, isStr := as[string](tags); isStr {
 		l, ok = splitComma(s), true
@@ -1222,11 +1229,11 @@ func homeTags(tags json.RawMessage) json.RawMessage {
 	if !ok && !isNull(tags) {
 		return tags // createTask refuses it
 	}
-	home := lookupDeckHome()
+	home := lookupDeckHome(user)
 	if home == nil {
 		return tags
 	}
-	lists := deckLists()
+	lists := deckLists(user)
 	for _, t := range l {
 		if _, ok := lists[strings.ToLower(strings.TrimLeft(t, "#"))]; ok {
 			return tags
@@ -1244,7 +1251,11 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data["tags"] = homeTags(data["tags"])
+	data["tags"] = homeTags(data["tags"], user)
+	// As c t in the browser: private when the user's deck home is theirs alone.
+	if h := lookupDeckHome(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
+		data.set("private", true)
+	}
 	msg, err := commitMsg("Create deck task", args)
 	if err != nil {
 		return "", err
@@ -1253,7 +1264,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base) + tagHints(task, user), nil
+	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base, user) + tagHints(task, user), nil
 }
 
 // taskStatusFields: a status as the deck API's field and its value.
@@ -1291,7 +1302,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	task, err := findTask(raw)
+	task, err := findTask(raw, user)
 	if err != nil {
 		return "", err
 	}
@@ -1351,11 +1362,11 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	} else if len(data) > 0 {
 		head = "Updated."
 	}
-	out := head + "\n\n" + mcpTaskText(task, base)
+	out := head + "\n\n" + mcpTaskText(task, base, user)
 	if status == "done" || status == "skip" {
-		for _, t := range readDeck() {
+		for _, t := range readDeck(user) {
 			if t.SpawnedFrom == task.ID && t.isOpen() {
-				out += "\n\nNext occurrence:\n\n" + mcpTaskText(t, base)
+				out += "\n\nNext occurrence:\n\n" + mcpTaskText(t, base, user)
 				break
 			}
 		}
@@ -1394,7 +1405,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 	before := map[string][]string{}
 	for _, id := range ids {
 		raw, _ := as[string](id)
-		t, err := findTask(raw) // an unknown id fails the whole call
+		t, err := findTask(raw, user) // an unknown id fails the whole call
 		if err != nil {
 			return "", err
 		}
@@ -1504,7 +1515,7 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	} else {
 		head += guideIDLine(slug, content, user)
 	}
-	return head + "\n" + content + mcpTaskRefs(content, base) + mcpPageLinks(slug, content, user), nil
+	return head + "\n" + content + mcpTaskRefs(content, base, user) + mcpPageLinks(slug, content, user), nil
 }
 
 // isOrphan: no other page links to it. The home page, the deck's home and
@@ -1533,7 +1544,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	counts := allBacklinkCounts(&Req{user: user})
 	home := ""
-	if h := lookupDeckHome(); h != nil {
+	if h := lookupDeckHome(user); h != nil {
 		home = h.Slug
 	}
 	type row struct {
@@ -1874,7 +1885,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 			}
 		}
 	}
-	for _, t := range allTasks() {
+	for _, t := range allTasks(user) {
 		column := 2
 		if taskStatus(t) == "open" {
 			column = 1
@@ -1886,7 +1897,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 	if len(counts) == 0 {
 		return "No tags yet: neither pages (frontmatter tags:) nor tasks have any.", nil
 	}
-	lists := deckLists()
+	lists := deckLists(user)
 	tags := sortedKeys(counts)
 	sum := func(t string) int { c := counts[t]; return c[0] + c[1] + c[2] }
 	sort.SliceStable(tags, func(i, j int) bool { return sum(tags[i]) > sum(tags[j]) })
@@ -2017,7 +2028,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	var out []string
 	for i, d := range hits {
 		if d.isTask() {
-			out = append(out, fmt.Sprintf("[%d] ", i+1)+mcpTaskText(d.Task, base))
+			out = append(out, fmt.Sprintf("[%d] ", i+1)+mcpTaskText(d.Task, base, user))
 			continue
 		}
 		where := d.Title

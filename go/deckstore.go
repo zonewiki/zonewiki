@@ -1,10 +1,12 @@
 // Deck tasks on disk and their model: the _deck/ files
-// (open tasks, completed, yearly archives) under one lock with atomic
-// writes, recurrence, history, comments, and what pages need from tasks
-// (links to pages, [[task:…]] references). A task is a *Task (task.go).
+// (open tasks, completed, yearly archives; with users each user's private
+// ones in _deck/users/<user>/) under one lock with atomic writes,
+// recurrence, history, comments, and what pages need from tasks (links to
+// pages, [[task:…]] references). A task is a *Task (task.go).
 package main
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -27,10 +29,46 @@ var deckMu sync.Mutex
 
 const deckDirName = "_deck"
 
-func deckFile() string      { return filepath.Join(cfg.Data, deckDirName, "tasks.json") }
-func completedPath() string { return filepath.Join(cfg.Data, deckDirName, "completed.json") }
-func archivePath(year string) string {
-	return filepath.Join(cfg.Data, deckDirName, "completed-"+year+".json")
+// deckDir: the folder of owner's deck files: _deck/ for the shared tasks
+// (owner ""), _deck/users/<owner>/ for a user's private ones. The files
+// in each are the same: tasks.json, completed.json, completed-YYYY.json.
+func deckDir(owner string) string {
+	if owner == "" {
+		return filepath.Join(cfg.Data, deckDirName)
+	}
+	return filepath.Join(cfg.Data, deckDirName, "users", owner)
+}
+
+func deckFile(owner string) string      { return filepath.Join(deckDir(owner), "tasks.json") }
+func completedPath(owner string) string { return filepath.Join(deckDir(owner), "completed.json") }
+func archivePath(owner, year string) string {
+	return filepath.Join(deckDir(owner), "completed-"+year+".json")
+}
+
+// deckOwners: whose deck files user reads and writes: the shared ones and,
+// with users, their own.
+func deckOwners(user string) []string {
+	if privateFolder(user) == "" {
+		return []string{""}
+	}
+	return []string{"", user}
+}
+
+// everyOwner: the owners of every deck, for what Leaf does over all of
+// them (the yearly archive, a rename's links, the search index).
+func everyOwner() []string { return append([]string{""}, sortedKeys(cfg.Users)...) }
+
+// eachOwner: the tasks list gives for each of owners, marked as theirs
+// (Task.Owner), in that order.
+func eachOwner(owners []string, list func(owner string) []*Task) []*Task {
+	out := []*Task{}
+	for _, o := range owners {
+		for _, t := range list(o) {
+			t.Owner = o
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // errDeckCorrupt: a deck file is there but unreadable; a write refuses
@@ -123,22 +161,36 @@ func parseTasks(raw []byte) ([]*Task, bool) {
 	return out, true
 }
 
-func readDeckStrict() ([]*Task, error) { return readListStrict(deckFile()) }
+// readDeckStrict: the open tasks user sees, read for a write.
+func readDeckStrict(user string) ([]*Task, error) {
+	var err error
+	tasks := eachOwner(deckOwners(user), func(o string) []*Task {
+		l, e := readListStrict(deckFile(o))
+		err = cmp.Or(err, e)
+		return l
+	})
+	return tasks, err
+}
 
-// readDeck: the open tasks.
-func readDeck() []*Task { return readListLenient(deckFile()) }
+// readDeck: the open tasks user sees (shared and their own).
+func readDeck(user string) []*Task {
+	return eachOwner(deckOwners(user), func(o string) []*Task { return readListLenient(deckFile(o)) })
+}
 
-func readCompleted() []*Task { return readListLenient(completedPath()) }
+// readCompleted: this year's completed tasks user sees.
+func readCompleted(user string) []*Task {
+	return eachOwner(deckOwners(user), func(o string) []*Task { return readListLenient(completedPath(o)) })
+}
 
 var archiveNameRE = regexp.MustCompile(`^completed-(\d{4})\.json$`)
 
-// archiveGlob: the yearly archives (completed-2025.json …), sorted.
-func archiveGlob() []string {
-	entries, _ := os.ReadDir(filepath.Join(cfg.Data, deckDirName))
+// archiveGlob: owner's yearly archives (completed-2025.json …), sorted.
+func archiveGlob(owner string) []string {
+	entries, _ := os.ReadDir(deckDir(owner))
 	var out []string
 	for _, e := range entries {
 		if archiveNameRE.MatchString(e.Name()) {
-			out = append(out, filepath.Join(cfg.Data, deckDirName, e.Name()))
+			out = append(out, filepath.Join(deckDir(owner), e.Name()))
 		}
 	}
 	sort.Strings(out)
@@ -181,40 +233,40 @@ func pastYearOf(t *Task, current string) string {
 	return ""
 }
 
-// readCompletedAllStrict: every completed task, the archives first, for a
-// write (writeCompleted files each by year again).
-func readCompletedAllStrict() ([]*Task, error) {
+// readCompletedAllStrict: every completed task of owner's, the archives
+// first, for a write (writeCompleted files each by year again).
+func readCompletedAllStrict(owner string) ([]*Task, error) {
 	var tasks []*Task
-	for _, p := range archiveGlob() {
+	for _, p := range archiveGlob(owner) {
 		l, err := readListStrict(p)
 		if err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, l...)
 	}
-	l, err := readListStrict(completedPath())
+	l, err := readListStrict(completedPath(owner))
 	if err != nil {
 		return nil, err
 	}
 	return append(tasks, l...), nil
 }
 
-// writeCompleted writes completed tasks split by year (this year's into
+// writeCompleted writes owner's completed tasks split by year (this year's into
 // completed.json, earlier ones into completed-YYYY.json); only files whose
 // tasks change (with reformat also those in another format). Returns
 // their paths, for the commit.
-func writeCompleted(completed []*Task, reformat bool) ([]string, error) {
+func writeCompleted(owner string, completed []*Task, reformat bool) ([]string, error) {
 	current := currentYear()
-	order := []string{completedPath()}
-	byPath := map[string][]*Task{completedPath(): {}}
-	for _, p := range archiveGlob() {
+	order := []string{completedPath(owner)}
+	byPath := map[string][]*Task{completedPath(owner): {}}
+	for _, p := range archiveGlob(owner) {
 		order = append(order, p)
 		byPath[p] = []*Task{}
 	}
 	for _, t := range completed {
-		p := completedPath()
+		p := completedPath(owner)
 		if y := pastYearOf(t, current); y != "" {
-			p = archivePath(y)
+			p = archivePath(owner, y)
 		}
 		if _, ok := byPath[p]; !ok {
 			order = append(order, p)
@@ -253,14 +305,16 @@ func sameTasks(raw []byte, text string) bool {
 	return err == nil && have == text
 }
 
-// completedInYear: the Completed view of one year (this year's view takes
-// tasks without a usable date too).
-func completedInYear(year string) []*Task {
+// completedInYear: the Completed view of one year, of the tasks user sees
+// (this year's view takes tasks without a usable date too).
+func completedInYear(user, year string) []*Task {
 	current := currentYear()
 	deckMu.Lock()
-	tasks := readCompleted()
+	tasks := readCompleted(user)
 	if year != current {
-		tasks = append(tasks, readListLenient(archivePath(year))...)
+		tasks = append(tasks, eachOwner(deckOwners(user), func(o string) []*Task {
+			return readListLenient(archivePath(o, year))
+		})...)
 	}
 	deckMu.Unlock()
 	out := []*Task{}
@@ -272,22 +326,24 @@ func completedInYear(year string) []*Task {
 	return out
 }
 
-// completedYears: years with completed tasks in scope, newest first; this
-// year always.
-func completedYears(scope string) []string {
+// completedYears: years with completed tasks in scope that user sees,
+// newest first; this year always.
+func completedYears(user, scope string) []string {
 	current := currentYear()
 	years := map[string]bool{current: true}
 	deckMu.Lock()
-	for _, t := range readCompleted() {
+	for _, t := range readCompleted(user) {
 		if inScope(t, scope) && pastYearOf(t, current) != "" {
 			years[completedYear(t)] = true
 		}
 	}
-	for _, p := range archiveGlob() {
-		for _, t := range readListLenient(p) {
-			if inScope(t, scope) {
-				years[archiveNameRE.FindStringSubmatch(filepath.Base(p))[1]] = true
-				break
+	for _, o := range deckOwners(user) {
+		for _, p := range archiveGlob(o) {
+			for _, t := range readListLenient(p) {
+				if inScope(t, scope) {
+					years[archiveNameRE.FindStringSubmatch(filepath.Base(p))[1]] = true
+					break
+				}
 			}
 		}
 	}
@@ -297,38 +353,45 @@ func completedYears(scope string) []string {
 	return out
 }
 
-func readArchived() []*Task {
-	var tasks []*Task
-	for _, p := range archiveGlob() {
-		tasks = append(tasks, readListLenient(p)...)
-	}
-	return tasks
+// readArchived: the archived tasks (earlier years') of owners.
+func readArchived(owners []string) []*Task {
+	return eachOwner(owners, func(o string) []*Task {
+		var tasks []*Task
+		for _, p := range archiveGlob(o) {
+			tasks = append(tasks, readListLenient(p)...)
+		}
+		return tasks
+	})
 }
 
 // archiveOldCompleted rolls earlier years' completed tasks into their
 // archives (at start; every write files by year too), and writes files in
 // another format (the Python Leaf's key order, a hand-edited file) as
-// Leaf writes them, so later commits show only what changed. An
-// unreadable file is left alone: this is never worth failing over.
+// Leaf writes them, so later commits show only what changed; every
+// owner's files, in one commit. An unreadable file is left alone (its
+// owner's files are): this is never worth failing over.
 func archiveOldCompleted() {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, err := readForWriteLocked()
-	if err != nil {
-		return
-	}
 	moved := false
-	for _, t := range readCompleted() {
-		moved = moved || pastYear(t) != ""
-	}
 	var changed []string
-	if raw, err := os.ReadFile(deckFile()); err == nil {
-		if text, err := encodeTasks(active); err == nil && string(raw) != text && atomicWrite(deckFile(), text) == nil {
-			changed = append(changed, deckFile())
+	for _, o := range everyOwner() {
+		active, completed, err := readOwnerStrict(o)
+		if err != nil {
+			continue
 		}
+		for _, t := range readListLenient(completedPath(o)) {
+			moved = moved || pastYear(t) != ""
+		}
+		if raw, err := os.ReadFile(deckFile(o)); err == nil {
+			if text, err := encodeTasks(active); err == nil && string(raw) != text && atomicWrite(deckFile(o), text) == nil {
+				changed = append(changed, deckFile(o))
+			}
+		}
+		more, _ := writeCompleted(o, completed, true)
+		changed = append(changed, more...)
 	}
-	more, err := writeCompleted(completed, true)
-	if changed = append(changed, more...); err != nil || len(changed) == 0 {
+	if len(changed) == 0 {
 		return
 	}
 	msg := "Write the deck's files in Leaf's format"
@@ -338,49 +401,146 @@ func archiveOldCompleted() {
 	gitCommit("", msg, changed...)
 }
 
-// readAll: open and completed tasks, one consistent snapshot.
-func readAll() []*Task {
+// readAll: the open and completed tasks user sees, one consistent snapshot.
+func readAll(user string) []*Task {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	return append(readDeck(), readCompleted()...)
+	return append(readDeck(user), readCompleted(user)...)
 }
 
-// allTasks: every task, archived ones too.
-func allTasks() []*Task { return append(readAll(), readArchived()...) }
+// allTasks: every task user sees, archived ones too.
+func allTasks(user string) []*Task { return append(readAll(user), readArchived(deckOwners(user))...) }
 
-// readForWriteLocked: the open tasks and every completed task, read for a
-// write (errDeckCorrupt when a file is unreadable).
-func readForWriteLocked() (active, completed []*Task, err error) {
-	if active, err = readDeckStrict(); err != nil {
+// everyTask: every task of every owner (Task.Owner says whose), for what
+// keeps all of them and filters by user later (the search index).
+func everyTask() []*Task {
+	deckMu.Lock()
+	defer deckMu.Unlock()
+	return everyTaskLocked()
+}
+
+func everyTaskLocked() []*Task {
+	owners := everyOwner()
+	return slices.Concat(eachOwner(owners, func(o string) []*Task { return readListLenient(deckFile(o)) }),
+		eachOwner(owners, func(o string) []*Task { return readListLenient(completedPath(o)) }),
+		readArchived(owners))
+}
+
+// readOwnerStrict: owner's open tasks and every completed one, read for a
+// write (errDeckCorrupt when a file is unreadable), marked as owner's.
+func readOwnerStrict(owner string) (active, completed []*Task, err error) {
+	if active, err = readListStrict(deckFile(owner)); err != nil {
 		return nil, nil, err
 	}
-	if completed, err = readCompletedAllStrict(); err != nil {
+	if completed, err = readCompletedAllStrict(owner); err != nil {
 		return nil, nil, err
+	}
+	for _, t := range slices.Concat(active, completed) {
+		t.Owner = owner
 	}
 	return active, completed, nil
 }
 
-// writeDeckLocked writes the open tasks, committed by user.
-func writeDeckLocked(user string, tasks []*Task, message string) error {
-	if err := writeTasks(deckFile(), tasks); err != nil {
-		return err
+// readForWriteLocked: the open tasks and every completed task user sees
+// (shared and their own), read for a write.
+func readForWriteLocked(user string) (active, completed []*Task, err error) {
+	active, completed = []*Task{}, []*Task{}
+	for _, o := range deckOwners(user) {
+		a, c, err := readOwnerStrict(o)
+		if err != nil {
+			return nil, nil, err
+		}
+		active, completed = append(active, a...), append(completed, c...)
 	}
-	gitCommit(user, message, deckFile())
-	return nil
+	return active, completed, nil
+}
+
+// byOwner: tasks split by their owner, each of user's owners present
+// (one whose last task left still gets its file written); a task of
+// someone else's is refused: it can't have been read for user.
+func byOwner(user string, tasks []*Task) (map[string][]*Task, error) {
+	out := map[string][]*Task{}
+	for _, o := range deckOwners(user) {
+		out[o] = []*Task{}
+	}
+	for _, t := range tasks {
+		if _, ok := out[t.Owner]; !ok {
+			return nil, errors.New("deck: a task of " + t.Owner + "'s in a write by " + user)
+		}
+		out[t.Owner] = append(out[t.Owner], t)
+	}
+	return out, nil
+}
+
+// writeOpenLocked writes the open tasks into their owners' files, those
+// whose tasks changed (and the shared one when it is missing); returns
+// their paths.
+func writeOpenLocked(user string, tasks []*Task) ([]string, error) {
+	split, err := byOwner(user, tasks)
+	if err != nil {
+		return nil, err
+	}
+	var changed []string
+	for _, o := range deckOwners(user) {
+		text, err := encodeTasks(split[o])
+		if err != nil {
+			return changed, err
+		}
+		raw, rerr := os.ReadFile(deckFile(o))
+		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && o != "" && len(split[o]) == 0 {
+			continue
+		}
+		if err := atomicWrite(deckFile(o), text); err != nil {
+			return changed, err
+		}
+		changed = append(changed, deckFile(o))
+	}
+	return changed, nil
+}
+
+// commitDeck commits the deck files a write changed, by user.
+func commitDeck(user, message string, changed []string) {
+	if len(changed) > 0 {
+		gitCommit(user, message, changed...)
+	}
+}
+
+// writeDeckLocked writes the open tasks (each into its owner's file),
+// committed by user.
+func writeDeckLocked(user string, tasks []*Task, message string) error {
+	changed, err := writeOpenLocked(user, tasks)
+	commitDeck(user, message, changed)
+	return err
 }
 
 // writeBothLocked writes the open tasks and every completed task (filed by
-// year) in one commit, by user.
+// owner and year) in one commit, by user.
 func writeBothLocked(user string, active, completed []*Task, message string) error {
-	if err := writeTasks(deckFile(), active); err != nil {
-		return err
+	changed, err := writeOpenLocked(user, active)
+	if err == nil {
+		var split map[string][]*Task
+		if split, err = byOwner(user, completed); err == nil {
+			for _, o := range deckOwners(user) {
+				more, werr := writeCompleted(o, split[o], false)
+				changed = append(changed, more...)
+				if err = werr; err != nil {
+					break
+				}
+			}
+		}
 	}
-	changed, err := writeCompleted(completed, false)
-	if err != nil {
-		return err
+	commitDeck(user, message, changed)
+	return err
+}
+
+// taskIDsLocked: the ids of every owner's tasks, so a restored task never
+// takes one another file has.
+func taskIDsLocked() map[string]bool {
+	ids := map[string]bool{}
+	for _, t := range everyTaskLocked() {
+		ids[t.ID] = true
 	}
-	gitCommit(user, message, append([]string{deckFile()}, changed...)...)
-	return nil
+	return ids
 }
 
 // uuid4 is a random UUID, as Python's str(uuid.uuid4()).
@@ -524,6 +684,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.DueDate, spawned.StartDate = newDue, newStart
 	spawned.SortOrder = task.SortOrder
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
+	spawned.Owner = task.Owner // a private series stays private
 	// The next occurrence carries the series' history and comments on.
 	spawned.History = append([]HistoryEntry{}, task.History...)
 	spawned.Comments = append([]Comment{}, task.Comments...)
@@ -703,13 +864,15 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 }
 
 // renamePageRefs follows a page rename in the deck: links in task titles
-// and descriptions rewritten (by rewrite). Writes the files that changed,
-// doesn't commit: returns them for the rename's commit.
+// and descriptions rewritten (by rewrite), every owner's tasks. Writes the
+// files that changed, doesn't commit: returns them for the rename's commit.
 func renamePageRefs(rewrite func(string) string) ([]string, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	paths := append([]string{deckFile(), completedPath()}, archiveGlob()...)
-	var changed []string
+	var paths, changed []string
+	for _, o := range everyOwner() {
+		paths = append(append(paths, deckFile(o), completedPath(o)), archiveGlob(o)...)
+	}
 	for _, p := range paths {
 		tasks, err := readListStrict(p)
 		if err != nil {
@@ -744,11 +907,11 @@ type TaskLink struct {
 	Section, Anchor string
 }
 
-// findTaskBacklinks: open tasks whose title or notes link to slug (a
-// wikilink, or a markdown link to /page/<slug>).
-func findTaskBacklinks(slug string) []TaskLink {
+// findTaskBacklinks: open tasks user sees whose title or notes link to
+// slug (a wikilink, or a markdown link to /page/<slug>).
+func findTaskBacklinks(user, slug string) []TaskLink {
 	var out []TaskLink
-	for _, t := range readAll() {
+	for _, t := range readAll(user) {
 		if !t.isOpen() {
 			continue
 		}
@@ -781,17 +944,18 @@ func findTaskBacklinks(slug string) []TaskLink {
 }
 
 // resolveTaskRefs maps each reference (an id prefix, lowercased) to its
-// task, nil when none has it. An open task wins over a completed one; a
-// completed recurring task stands for its series: the reference follows
+// task among those user sees, nil when none has it (another user's private
+// task is as none). An open task wins over a completed one; a completed
+// recurring task stands for its series: the reference follows
 // spawned_from to the occurrence current now.
-func resolveTaskRefs(refs []string) map[string]*Task {
+func resolveTaskRefs(user string, refs []string) map[string]*Task {
 	out := map[string]*Task{}
 	if len(refs) == 0 {
 		return out
 	}
 	deckMu.Lock()
-	active := readDeck()
-	done := append(readCompleted(), readArchived()...)
+	active := readDeck(user)
+	done := append(readCompleted(user), readArchived(deckOwners(user))...)
 	deckMu.Unlock()
 	successor := map[string]*Task{}
 	for _, t := range append(append([]*Task{}, active...), done...) {
@@ -823,12 +987,10 @@ func resolveTaskRefs(refs []string) map[string]*Task {
 	return out
 }
 
-// findTasks: every task whose id starts with prefix (lowercase); only the
-// one with exactly that id when there is one.
-func findTasks(prefix string) []*Task {
-	deckMu.Lock()
-	tasks := append(append(readDeck(), readCompleted()...), readArchived()...)
-	deckMu.Unlock()
+// findTasks: every task user sees whose id starts with prefix (lowercase);
+// only the one with exactly that id when there is one.
+func findTasks(user, prefix string) []*Task {
+	tasks := allTasks(user)
 	var found, exact []*Task
 	for _, t := range tasks {
 		id := strings.ToLower(t.ID)

@@ -14,7 +14,8 @@ import { linkAutocomplete } from './completion.js';
 // preventDefault), formats (more bar buttons by data-fmt, e.g. the editor's
 // Make task), tabIndents (Tab inserts two spaces after a failed snippet; the
 // deck's modal leaves Tab to move between its fields), page (the slug of
-// the page being edited: an upload for a private page is private too).
+// the page being edited, or a function giving it: an upload for a private
+// page is private too).
 
 export function markdownEditor(textarea, { bar = null, attachInput = null, onChange = () => {},
                                           onEnter = null, formats = {}, tabIndents = true,
@@ -99,7 +100,8 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     if (filenameOverride) fd.append('filename', filenameOverride);
     if (overwrite) fd.append('overwrite', '1');
     // The page the file goes in: a private page's uploads are private too.
-    if (page) fd.append('page', page);
+    const into = typeof page === 'function' ? page() : page;
+    if (into) fd.append('page', into);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (res.status === 409) {

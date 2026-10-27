@@ -28,11 +28,13 @@
   {{- if .locale}} data-locale="{{.locale}}"{{end}}
   {{- if .date_format}} data-date-format="{{.date_format}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the
-      deck's home gives them, are keep tasks if it makes them, and start
-      today when its "+ New" would (js/actions.js openHomeTask). */}}
+      deck's home gives them, are keep tasks if it makes them, start
+      today when its "+ New" would, and are private when it is in the
+      user's private folder (js/actions.js openHomeTask). */}}
   {{- with .deck_new}} data-deck-tags="{{.tags}}"
     {{- if .keep}} data-deck-keep="1"{{end}}
     {{- if .today}} data-deck-today="1"{{end}}
+    {{- if .private}} data-deck-private="1"{{end}}
   {{- end}}>
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">

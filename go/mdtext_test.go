@@ -59,7 +59,7 @@ func TestWikilinks(t *testing.T) {
 // swapped for placeholders, wikilinks, code back.
 func prepare(text string) (string, []deckEmbed, []string) {
 	text, stash := maskCode(text)
-	text, embeds := processDeckEmbeds(nil, text)
+	text, embeds := processDeckEmbeds(nil, text, false)
 	text, refs := maskTaskRefs(text)
 	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}), stash), embeds, refs
 }

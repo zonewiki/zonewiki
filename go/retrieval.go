@@ -65,9 +65,12 @@ func (d *SearchDoc) hasPhrase(phrase string) bool {
 	return strings.Contains(d.squashed, phrase)
 }
 
-// taskRefsAsTitles: page text with each [[task:…]] replaced by its task's
-// title, what the reader sees there and what search should match.
-func taskRefsAsTitles(content string) string {
+// taskRefsAsTitles: the text of the page slug with each [[task:…]]
+// replaced by its task's title, what the reader sees there and what search
+// should match; only tasks everyone who sees the page sees (a private
+// page's owner's own, else shared ones), so the index can't carry a
+// private task's title into a shared page.
+func taskRefsAsTitles(slug, content string) string {
 	ms := taskRefRE.FindAllStringSubmatch(content, -1)
 	if ms == nil {
 		return content
@@ -76,7 +79,8 @@ func taskRefsAsTitles(content string) string {
 	for i, m := range ms {
 		refs[i] = strings.ToLower(m[1])
 	}
-	tasks := resolveTaskRefs(refs)
+	owner, _ := pageOwner(slug)
+	tasks := resolveTaskRefs(owner, refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
 			return plainTaskTitle(t.Title)
@@ -153,7 +157,7 @@ func repeatTokens(text string, times int) []string {
 // page says.
 func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
 	title := pageTitle(content, slug)
-	text := stripLinkTargets(taskRefsAsTitles(content))
+	text := stripLinkTargets(taskRefsAsTitles(slug, content))
 	tokens := append(tokenize(text), repeatTokens(title, titleWeight)...)
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
 		Tags: pageTags(content), ExcerptText: text, Tokens: append(tokens, tokenize(slug)...)}
@@ -169,11 +173,15 @@ func pageSearchDocs() []*SearchDoc {
 		func(d *SearchDoc, key string) bool { return !d.TaskRefs || key == deckKey })
 }
 
-// deckMtimes: the deck files' paths and mtimes, archives included (a cache
-// key).
+// deckMtimes: every owner's deck files' paths and mtimes, archives
+// included (a cache key).
 func deckMtimes() string {
 	var b strings.Builder
-	for _, p := range append([]string{deckFile(), completedPath()}, archiveGlob()...) {
+	var paths []string
+	for _, o := range everyOwner() {
+		paths = append(append(paths, deckFile(o), completedPath(o)), archiveGlob(o)...)
+	}
+	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil {
 			fmt.Fprintf(&b, "%s\x00%d\x00", p, st.ModTime().UnixNano())
 		} else {
@@ -191,7 +199,8 @@ var taskDocs struct {
 }
 
 // taskSearchDocs: every task as a BM25 document, the title weighted,
-// cached until a deck file changes.
+// cached until a deck file changes; every owner's (searches keep those
+// their user sees: canSeeTask).
 func taskSearchDocs() []*SearchDoc {
 	key := deckMtimes()
 	taskDocs.mu.Lock()
@@ -200,7 +209,7 @@ func taskSearchDocs() []*SearchDoc {
 		return taskDocs.docs
 	}
 	docs := []*SearchDoc{}
-	for _, t := range allTasks() {
+	for _, t := range everyTask() {
 		title := t.Title
 		var comments, tags, lowTags []string
 		for _, c := range t.Comments {
@@ -279,7 +288,7 @@ func searchIndex() *docIndex {
 // content: pages holding nothing but a deck embed came out as each other's
 // closest match).
 func semanticText(content, slug string) (string, string) {
-	meta, body := parseFrontmatter(taskRefsAsTitles(content))
+	meta, body := parseFrontmatter(taskRefsAsTitles(slug, content))
 	var lead []string
 	for _, s := range []string{meta.Tldr, strings.Join(meta.Tags, " ")} {
 		if s != "" {
@@ -449,6 +458,15 @@ func bestSections(q *Query, slugs map[string]bool) map[string]*SearchDoc {
 	return best
 }
 
+// hiddenDoc: a search result to leave out for rq (nil: Leaf, which sees
+// all): another user's private task (canSeeTask), a page hiddenPage hides.
+func hiddenDoc(rq *Req, d *SearchDoc) bool {
+	if d.isTask() {
+		return rq != nil && !canSeeTask(rq.user, d.Task)
+	}
+	return hiddenPage(rq, d.Slug)
+}
+
 // taskStatus: "open", "done" or "won't do".
 func taskStatus(t *Task) string {
 	switch {
@@ -513,7 +531,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && isScratch(d.Slug) })
 	}
 	if rq.sharing || cfg.Users != nil {
-		tests = append(tests, func(d *SearchDoc) bool { return d.isTask() || !hiddenPage(rq, d.Slug) })
+		tests = append(tests, func(d *SearchDoc) bool { return !hiddenDoc(rq, d) })
 	}
 	var keep func(*SearchDoc) bool
 	if tests != nil {
@@ -534,7 +552,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		}
 	}
 	sections := bestSections(q, slugs)
-	names := deckLists()
+	names := deckLists(rq.user)
 	for _, d := range docs {
 		var section *SearchDoc
 		excerptOf := d.ExcerptText
@@ -651,7 +669,9 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 	}
 	var keep func(*SearchDoc) bool
 	if pagesOnly || rq != nil && cfg.Users != nil {
-		keep = func(d *SearchDoc) bool { return d.isTask() && !pagesOnly || !d.isTask() && pageOK(d.Slug) }
+		keep = func(d *SearchDoc) bool {
+			return d.isTask() && !pagesOnly && !hiddenDoc(rq, d) || !d.isTask() && pageOK(d.Slug)
+		}
 	}
 	ranked := bm25(x, q, fuseDepth, keep)
 	if semantic != nil {
@@ -663,7 +683,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 			case !passes(q, d, nil):
 			case !d.isTask() && pageOK(d.Slug):
 				byKey[d.Key], slugs[d.Slug] = d, true
-			case d.isTask() && !pagesOnly:
+			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):
 				tasks[d.TaskID] = d
 			}
 		}

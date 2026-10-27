@@ -53,7 +53,7 @@ func TestEvalUnknownTargets(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.Data, "_deck"), 0o777); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.WriteFile(deckFile(), []byte(`[{"id": "t1", "title": "Reifen wechseln", "tags": []}]`), 0o666)
+	_ = os.WriteFile(deckFile(""), []byte(`[{"id": "t1", "title": "Reifen wechseln", "tags": []}]`), 0o666)
 	bad := unknownTargets([]question{{"a", []string{"golf", "golf#werkstatt", "task:t1"}},
 		{"b", []string{"golfe", "golf#bremsen", "task:nope"}}})
 	var first []string

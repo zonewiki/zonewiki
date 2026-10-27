@@ -140,7 +140,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Tasks the page shows inline already aren't repeated under Linked tasks.
-	inline := pageTaskRefs(content)
+	inline := pageTaskRefs(rq.user, content)
 	// A section a task links to is named as the page's heading says it.
 	masked, _ := maskCode(content)
 	headingNames := map[string]string{}
@@ -148,7 +148,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		headingNames[sectionAnchor(m[1])] = plainHeading(m[1])
 	}
 	var tasks []TaskLink
-	for _, t := range findTaskBacklinks(slug) {
+	for _, t := range findTaskBacklinks(rq.user, slug) {
 		if inline[t.ID] {
 			continue
 		}
@@ -161,7 +161,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	for _, l := range pageDeckLists(content) {
 		lists = append(lists, l.Name)
 	}
-	sections := linkSections(backlinks, tasks, lists)
+	sections := linkSections(rq, backlinks, tasks, lists)
 	if rel := relatedSection(rq, slug, path, backlinks); rel != nil {
 		sections = append(sections, rel)
 	}
@@ -173,7 +173,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	var menu M
 	if fromUncommitted {
 		bc = buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", chip, "", crumb{title, ""})
-		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{}))
+		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{Page: slug}))
 	} else {
 		qs := ""
 		if r.URL.RawQuery != "" {
@@ -186,7 +186,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		meta, _ := parseFrontmatter(content)
 		metaRow = macro("meta_row", M{"tags_html": htmlOf(renderTagsPillsHTML(meta.Tags)), "tldr": meta.Tldr,
 			"changed": changed, "commit": commit})
-		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{HideTags: true, HideTldr: true,
+		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionTasks: tasks}))
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted,
@@ -266,7 +266,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"),
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
-		"deck_html":       htmlOf(buildDeckEmbed(DeckParams{}, 0, true))})
+		"deck_html":       htmlOf(buildDeckEmbed(rq.user, DeckParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -650,7 +650,7 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/deck"
 	if list != "" {
-		if declared, ok := deckLists()[list]; ok {
+		if declared, ok := deckLists(rq.user)[list]; ok {
 			params = declared.Params
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
 			home = &DeckHome{Slug: declared.Slug, Title: t}
@@ -660,7 +660,9 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 		crumbs = []crumb{{"Deck", "/deck"}, {list, ""}}
 		key += "?list=" + list
 	}
-	data := M{"heading": heading, "list_name": list, "deck_html": htmlOf(buildDeckEmbed(params, 0, false)),
+	// A list declared in the user's private folder makes private tasks, as there.
+	private := home != nil && ownPrivate(rq.user, home.Slug)
+	data := M{"heading": heading, "list_name": list, "deck_html": htmlOf(buildDeckEmbed(rq.user, params, 0, false, private)),
 		"breadcrumb_html": breadcrumb(rq, crumbs, key, true, title, "")}
 	if home != nil {
 		data["home"] = home

@@ -16,11 +16,11 @@ import { openSearchModal } from './search.js';
 export async function openHomeTask() {
   const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
   if (homeAdd) { homeAdd.click(); return; }
-  const { deckTags = '', deckKeep, deckToday } = document.body.dataset;
+  const { deckTags = '', deckKeep, deckToday, deckPrivate } = document.body.dataset;
   // The start date as the home's "+ New" gives it (today on Focus); without
   // a home, as /deck's Focus does.
   const homeless = !('deckTags' in document.body.dataset);
-  const opts = { tags: deckTags, keep: deckKeep === '1',
+  const opts = { tags: deckTags, keep: deckKeep === '1', private: deckPrivate === '1',
                  start_date: homeless || deckToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {

@@ -51,6 +51,17 @@ func canSee(user, slug string) bool {
 // the same pages they may see, since everything shared is editable.
 func canWrite(user, slug string) bool { return canSee(user, slug) }
 
+// canSeeTask: user may see (and change) the task t: a shared one, or one
+// of their own private ones.
+func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
+
+// ownPrivate: slug is a page in user's own private folder (where a new
+// task defaults to private).
+func ownPrivate(user, slug string) bool {
+	owner, _ := pageOwner(slug)
+	return owner != "" && owner == user
+}
+
 // privateFolder: user's private folder ("private/alice"), "" without
 // users (or for Leaf itself, which has no user).
 func privateFolder(user string) string {

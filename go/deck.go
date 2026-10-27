@@ -176,10 +176,11 @@ func commentText(s string) (string, error) {
 
 const deckPlaceholder = "LEAFDECKPLACEHOLDER"
 
-// buildDeckEmbed renders the deck app for a page (instance numbers a
-// page's embeds); headless hides it but for its edit modal (the editor's
-// Make task, c t on any page), and deck.js skips its shortcuts.
-func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
+// buildDeckEmbed renders the deck app for user on a page (instance numbers
+// a page's embeds); headless hides it but for its edit modal (the editor's
+// Make task, c t on any page), and deck.js skips its shortcuts. private:
+// a new task here is private (a page in user's own folder).
+func buildDeckEmbed(user string, params DeckParams, instance int, headless, private bool) string {
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
 	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
@@ -201,7 +202,7 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 			labels[i] = name
 		}
 	}
-	lists := deckLists()
+	lists := deckLists(user)
 	names = sortedKeys(lists)
 	homes := map[string]string{}
 	for _, n := range names {
@@ -222,7 +223,10 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
 		// keep=1: new tasks here are keep tasks; home=1: the user's own deck.
 		"keep": keep, "home": isTrue(params.Get("home")),
-		"lists_json": listsJSON, "homes_json": homesJSON,
+		// With users, the modal's Private box; ticked for a new task here.
+		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
+		"private_folder": privateFolder(user),
+		"lists_json":     listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {
 		logf("deck embed: %v", err)
@@ -233,13 +237,14 @@ func buildDeckEmbed(params DeckParams, instance int, headless bool) string {
 type deckEmbed struct{ placeholder, html string }
 
 // processDeckEmbeds swaps each [[deck …]] for a placeholder; the embeds'
-// HTML replaces them after rendering (injectDeckEmbeds).
-func processDeckEmbeds(rq *Req, text string) (string, []deckEmbed) {
+// HTML replaces them after rendering (injectDeckEmbeds). private: the page
+// is in rq's user's own folder.
+func processDeckEmbeds(rq *Req, text string, private bool) (string, []deckEmbed) {
 	var embeds []deckEmbed
 	text = deckRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := deckRE.FindStringSubmatch(m)
 		ph := deckPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, deckEmbed{ph, buildDeckEmbed(parseDeckParams(g[1]), len(embeds), false)})
+		embeds = append(embeds, deckEmbed{ph, buildDeckEmbed(rq.who(), parseDeckParams(g[1]), len(embeds), false, private)})
 		return ph
 	})
 	return text, embeds
@@ -275,7 +280,7 @@ func deckCounts(rq *Req) DeckCounts {
 	}
 	scope, tag := cleanList(params.Get("list")), params.Get("tag")
 	var c DeckCounts
-	for _, t := range readDeck() {
+	for _, t := range readDeck(rq.who()) {
 		if !inScope(t, scope) || !tagParamMatches(t, tag) {
 			continue
 		}
@@ -297,30 +302,31 @@ func deckCounts(rq *Req) DeckCounts {
 
 func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/deck", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, readDeck())
+		writeJSON(w, http.StatusOK, readDeck(userOf(r)))
 		return nil
 	}))
 	// A hidden deck app, for a page without one that wants its edit modal
 	// (js/actions.js openHomeTask: c t, the New task button).
 	mux.HandleFunc("GET /api/deck/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, buildDeckEmbed(DeckParams{}, 0, true))
+		rq := newReq(r)
+		_, _ = io.WriteString(w, buildDeckEmbed(rq.user, DeckParams{}, 0, true, rq.homePrivate()))
 	})
 	mux.HandleFunc("GET /api/deck/completed", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, completedInYear(year))
+		writeJSON(w, http.StatusOK, completedInYear(userOf(r), year))
 		return nil
 	}))
 	mux.HandleFunc("GET /api/deck/completed-years", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(cleanList(r.URL.Query().Get("list")))})
+		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(userOf(r), cleanList(r.URL.Query().Get("list")))})
 		return nil
 	}))
 	mux.HandleFunc("GET /api/deck/completed-count", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
 		scope, n := cleanList(r.URL.Query().Get("list")), 0
-		for _, t := range completedInYear(currentYear()) {
+		for _, t := range completedInYear(userOf(r), currentYear()) {
 			if inScope(t, scope) {
 				n++
 			}
@@ -468,7 +474,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")
-	active, err := readDeckStrict()
+	active, err := readDeckStrict(user)
 	if err != nil {
 		return nil, err
 	}
@@ -541,6 +547,19 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 			return err
 		}
 		t.Keep = keep
+	}
+	if data.has("private") { // moves it into the user's own files, or out to the shared ones
+		private, err := asBool(data["private"], "private")
+		if err != nil {
+			return err
+		}
+		if private && privateFolder(user) == "" {
+			return badRequest("Only a signed-in user's tasks can be private")
+		}
+		t.Owner = ""
+		if private {
+			t.Owner = user
+		}
 	}
 	if data.has("last_done") {
 		d, err := validateDate(data["last_done"])
@@ -634,10 +653,10 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// findForWriteLocked: the open tasks, every completed task, and the one
-// with id (404 when none has it).
-func findForWriteLocked(id string) (active, completed []*Task, task *Task, err error) {
-	if active, completed, err = readForWriteLocked(); err != nil {
+// findForWriteLocked: the open tasks and every completed task user sees,
+// and the one with id (404 when none of them has it).
+func findForWriteLocked(user, id string) (active, completed []*Task, task *Task, err error) {
+	if active, completed, err = readForWriteLocked(user); err != nil {
 		return
 	}
 	for _, t := range slices.Concat(active, completed) {
@@ -679,7 +698,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		}
 	}
 	skip, wontDo, done := status[0], status[1], status[2]
-	active, completed, t, err := findForWriteLocked(id)
+	active, completed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
@@ -757,7 +776,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 func toggleNoteCheck(user, id string, idx int) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	_, _, t, err := findForWriteLocked(id)
+	_, _, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
@@ -779,7 +798,7 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, t, err := findForWriteLocked(id)
+	active, completed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
@@ -814,7 +833,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, t, err := findForWriteLocked(r.PathValue("id"))
+	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
 	}
@@ -833,7 +852,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, t, err := findForWriteLocked(r.PathValue("id"))
+	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
 	}
@@ -856,7 +875,7 @@ func deleteTask(user, id, message string) error {
 }
 
 func deleteTasksLocked(user string, ids map[string]bool, message string) error {
-	active, completed, err := readForWriteLocked()
+	active, completed, err := readForWriteLocked(user)
 	if err != nil {
 		return err
 	}
@@ -905,14 +924,12 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, err := readForWriteLocked()
+	user := userOf(r)
+	active, completed, err := readForWriteLocked(user)
 	if err != nil {
 		return err
 	}
-	existing := map[string]bool{}
-	for _, t := range slices.Concat(active, completed) {
-		existing[t.ID] = true
-	}
+	existing := taskIDsLocked() // every owner's: ids stay unique across the files
 	restored := []*Task{}
 	for _, s := range snaps {
 		snap, ok := as[jsonObj](s)
@@ -923,6 +940,9 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
+		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
+			t.Owner = user
+		}
 		existing[t.ID] = true
 		if !t.isOpen() {
 			completed = append(completed, t)
@@ -932,7 +952,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		restored = append(restored, t)
 	}
 	if len(restored) > 0 {
-		if err := writeBothLocked(userOf(r), active, completed, "Restore deck tasks"); err != nil {
+		if err := writeBothLocked(user, active, completed, "Restore deck tasks"); err != nil {
 			return err
 		}
 	}
@@ -961,7 +981,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	set := idSet(ids)
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, err := readForWriteLocked()
+	active, completed, err := readForWriteLocked(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -1039,7 +1059,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, err := readDeckStrict()
+	active, err := readDeckStrict(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -1083,7 +1103,7 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, err := readForWriteLocked()
+	active, completed, err := readForWriteLocked(user)
 	if err != nil {
 		return nil, err
 	}
@@ -1129,7 +1149,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	active, completed, err := readForWriteLocked()
+	active, completed, err := readForWriteLocked(userOf(r))
 	if err != nil {
 		return err
 	}

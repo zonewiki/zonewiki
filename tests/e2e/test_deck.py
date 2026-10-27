@@ -1788,6 +1788,38 @@ def test_keep_checkbox_in_modal(page, wiki):
     wait_for_field(page, "Bread", "keep", False)
 
 
+def test_private_checkbox_in_modal(page, wiki, monkeypatch):
+    # With users: an embed on a page in your private folder makes private
+    # tasks (🔒 on the card, in your own deck files); unticked, it is shared.
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("private/alice/todo", "# Todo\n\n[[deck view=open]]\n")
+    page.goto("/page/private/alice/todo")
+    page.locator("#task-add-btn").click()
+    private = page.locator("#task-edit-private")
+    expect(private).to_be_checked()
+    page.locator("#task-edit-title").fill("Gift for Bob")
+    page.locator("#task-edit-form button[type=submit]").click()
+    expect(card(page, "Gift for Bob").locator(".task-private")).to_be_visible()
+    wait_for_field(page, "Gift for Bob", "private", True)
+    assert "Gift for Bob" in (wiki.root / "_deck/users/alice/tasks.json").read_text()
+
+    page.keyboard.press("Enter")   # the new task is selected: edit it
+    expect(private).to_be_checked()
+    private.uncheck()
+    page.locator("#task-edit-form button[type=submit]").click()
+    wait_for_field(page, "Gift for Bob", "private", False)
+    expect(card(page, "Gift for Bob").locator(".task-private")).to_have_count(0)
+    assert "Gift for Bob" in (wiki.root / "_deck/tasks.json").read_text()
+
+
+def test_no_private_checkbox_without_users(page, wiki):
+    page.goto("/deck")
+    page.locator("#task-add-btn").click()
+    expect(page.locator("#task-edit-title")).to_be_visible()
+    expect(page.locator("#task-edit-private")).to_have_count(0)
+
+
 def test_checkboxes_in_task_notes(page, wiki):
     # "- [ ] item" lines in the notes are real checkboxes, as on a page;
     # ticking one edits the notes (recording when, shown as a date chip),

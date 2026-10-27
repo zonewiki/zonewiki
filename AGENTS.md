@@ -22,7 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users (`LEAF_USERS`): setup, password hashes (`leaf passwd`), signing in, per-user MCP tokens, private pages, commit authors |
+| `docs/spec/users.md` | Several users (`LEAF_USERS`): setup, password hashes (`leaf passwd`), signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
@@ -98,7 +98,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
-│   ├── deckstore.go        # Deck tasks on disk: _deck/ files, lock, recurrence, history, comments, backlinks, search docs
+│   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in _deck/users/<user>/), lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A deck task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): deck requests, MCP messages and arguments, task files
@@ -214,7 +214,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
   - `LEAF_USERS` instead: a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Private pages** (`private/<user>/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes). A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Private pages and tasks** (`private/<user>/`, `_deck/users/<user>/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires `LEAF_MCP_TOKEN` (with users, a user's own token): without one it is off (403), password or not. Don't make it open again.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).

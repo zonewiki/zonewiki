@@ -141,6 +141,8 @@ const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
 const deleteBtn = document.getElementById('task-edit-delete' + sfx);
 const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
 const keepCb = document.getElementById('task-edit-keep' + sfx);
+// With users only: the task is the user's alone.
+const privateCb = document.getElementById('task-edit-private' + sfx);
 const deleteModal = document.getElementById('task-delete-modal' + sfx);
 const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
 const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -575,6 +577,8 @@ function listTooltip(name) {
 const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
 // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
+// An embed on a page in the user's private folder: new tasks are private.
+const initPrivate = appEl?.dataset.initPrivate === '1';
 // Compact: one line per task (title, then tags, markers and dates; notes
 // hidden; selecting or a tap expands a task). The default on every tab;
 // the density button and v switch it, remembered per deck and tab in this
@@ -1060,6 +1064,7 @@ function editSnapshot(t) {
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
     last_done: t.last_done || null, sort_order: t.sort_order ?? null,
     recurrence: rec ?? null, history: t.history || [],
+    ...(privateCb ? { private: !!t.private } : {}),
   };
 }
 
@@ -2284,11 +2289,13 @@ function render() {
       ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
       : '';
     const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
+    const privateDisplay = task.private
+      ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';
     const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-      task.keep || task.completed_at || commentsDisplay || notesDisplay);
-    const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || tagsRight || notesDisplay;
+      task.keep || task.private || task.completed_at || commentsDisplay || notesDisplay);
+    const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
     const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-    const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+    const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
     const descHtml = task.description ? `<div class="task-desc page-content">${htmlOf('notes', task.description)}</div>` : '';
     // The latest comments, newest first: shown only when a compact task is
     // expanded (full cards have the 💬 count; the modal has them all).
@@ -2669,8 +2676,10 @@ notesPreview?.addEventListener('change', async e => {
   notesPreview.focus({ preventScroll: true });
 });
 if (descTextarea) {
+  // A private task's files go where a private page's do (the user's folder).
+  const privateDir = appEl?.dataset.privateFolder;
   markdownEditor(descTextarea, { bar: notesBar, attachInput: document.getElementById('task-edit-attach' + sfx),
-                                 tabIndents: false });
+                                 tabIndents: false, page: () => privateCb?.checked ? privateDir + '/task' : '' });
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -3289,6 +3298,7 @@ function openEditModal(taskId, opts) {
   titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
   syncQuickPreview();
   keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : initKeep;
+  if (privateCb) privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
   const recType = task?.recurrence?.type || '';
   recTypeSelect.value = recType;
   document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
@@ -3439,6 +3449,7 @@ form.addEventListener('submit', async e => {
     rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + sfx).value) || 1,
     rec_from: document.getElementById('task-edit-rec-from' + sfx)?.checked ? 'completion' : 'due',
     keep: keepCb.checked,
+    ...(privateCb ? { private: privateCb.checked } : {}),
   };
   if (batchTitles && !id) {
     const titles = batchTitles, created = onCreated;

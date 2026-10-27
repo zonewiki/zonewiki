@@ -237,7 +237,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 			// today; elsewhere a new task has no start date.
 			v := embedView(home.Params)
 			ctx["deck_new"] = M{"tags": strings.Join(newTaskTags(home.Params), ","),
-				"keep": isTrue(home.Params.Get("keep")), "today": v == "" || v == "focus"}
+				"keep": isTrue(home.Params.Get("keep")), "today": v == "" || v == "focus", "private": rq.homePrivate()}
 		}
 	}
 	if ctx["show_actions"] == true {
@@ -302,13 +302,13 @@ func pageLinks(pages []PageRef) []M {
 
 // linkSections: the sections at a page's end (and in the right column):
 // Backlinks and Linked tasks. prefer: the lists the page declares.
-func linkSections(backlinks []PageRef, tasks []TaskLink, prefer []string) []M {
+func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []string) []M {
 	var sections []M
 	if len(backlinks) > 0 {
 		sections = append(sections, M{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(backlinks)})
 	}
 	if len(tasks) > 0 {
-		lists := deckLists()
+		lists := deckLists(rq.user)
 		var links []M
 		for _, t := range tasks {
 			links = append(links, M{"href": taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),

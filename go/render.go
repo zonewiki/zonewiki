@@ -56,6 +56,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
 // ### heading its ✎, SectionTasks (findTaskBacklinks) a heading tasks link
 // to its ☑ N chip; PreferLists are lists a task chip links into.
 type RenderOpts struct {
+	Page               string // the page rendered, "" none (a preview): its deck embeds make private tasks in the user's own folder
 	HideTags, HideTldr bool
 	PreferLists        []string
 	EditSlug           string
@@ -72,7 +73,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	prefer = append(prefer, o.PreferLists...)
 	fmHTML := renderFrontmatterHTML(meta, !o.HideTags, !o.HideTldr)
 	text, stash := maskCode(text)
-	text, embeds := processDeckEmbeds(rq, text)
+	text, embeds := processDeckEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
 	text = unmaskCode(processWikilinks(rq, text, nil), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq)}
@@ -144,7 +145,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 			ids = append(ids, r)
 		}
 	}
-	tasks := resolveTaskRefs(ids)
+	tasks := resolveTaskRefs(rq.who(), ids)
 	day := isoDay(today())
 	// <li> before a reference alone in its item: <li class="task-ref-item">.
 	var b strings.Builder
@@ -162,7 +163,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 		}
 		html = html[i+4:]
 	}
-	lists := deckLists()
+	lists := deckLists(rq.who())
 	return taskRefTokenRE.ReplaceAllStringFunc(b.String(), func(m string) string {
 		i, err := strconv.Atoi(taskRefTokenRE.FindStringSubmatch(m)[1])
 		if err != nil || i >= len(refs) {
@@ -292,7 +293,7 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 	if len(order) == 0 {
 		return chips
 	}
-	lists := deckLists()
+	lists := deckLists(rq.who())
 	for _, anchor := range order {
 		ts := byAnchor[anchor]
 		var items strings.Builder
