@@ -123,7 +123,7 @@ func knownTool(name string) bool {
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
 // other error (a failed write) is returned, for a 500.
-func handleMCP(message json.RawMessage, callTool func(name string, args jsonObj) (string, error)) (*rpcResponse, error) {
+func handleMCP(message json.RawMessage, user string, callTool func(name string, args jsonObj) (string, error)) (*rpcResponse, error) {
 	msg, ok := parseObj(message)
 	if v, _ := as[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
@@ -155,7 +155,7 @@ func handleMCP(message json.RawMessage, callTool func(name string, args jsonObj)
 	case "ping":
 		return rpcResult(id, struct{}{}), nil
 	case "tools/list":
-		return rpcResult(id, map[string]any{"tools": toolList()}), nil
+		return rpcResult(id, map[string]any{"tools": toolList(user)}), nil
 	case "tools/call":
 		name, isStr := as[string](params["name"])
 		if !isStr || !knownTool(name) {
@@ -262,7 +262,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if batch, ok := as[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
-			reply, err := handleMCP(m, call)
+			reply, err := handleMCP(m, user, call)
 			if err != nil {
 				serverError(w, r, err)
 				return
@@ -278,7 +278,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(body, call)
+	reply, err := handleMCP(body, user, call)
 	if err != nil {
 		serverError(w, r, err)
 		return

@@ -7,6 +7,7 @@ Every route Leaf registers is either probed here or listed as exempt
 what a later phase of docs/plans/multi-user.md closes are marked xfail with
 that phase, strictly: once it passes, the mark must go."""
 
+import json
 import re
 import subprocess
 from io import BytesIO
@@ -278,33 +279,99 @@ def test_links_from_invisible_pages_dont_count(alice, wiki):
 
 # ── MCP ──────────────────────────────────────────────────────────────────────
 
-def mcp(client, tool, **args):
-    resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer bob-token"}, json={
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+def rpc(client, method, params, token="bob-token"):
+    resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": method, "params": params})
     assert resp.status_code == 200
-    return resp.get_json()["result"]["content"][0]["text"]
+    return resp.get_json()["result"]
+
+
+def mcp(client, tool, token="bob-token", **args):
+    return rpc(client, "tools/call", {"name": tool, "arguments": args}, token)["content"][0]["text"]
 
 
 MCP_READS = [
-    pytest.param("read_page", {"slug": DIARY}, marks=later(4)),
-    pytest.param("search_wiki", {"query": QUERY}, marks=later(4)),
-    pytest.param("grep_wiki", {"pattern": QUERY}, marks=later(4)),
-    pytest.param("list_pages", {}, marks=later(4)),
-    pytest.param("list_pages", {"under": "private"}, marks=later(4)),
+    ("read_page", {"slug": DIARY}),
+    ("read_page", {"slug": "plans"}),                            # links to the diary
+    ("search_wiki", {"query": QUERY}),
+    ("search_wiki", {"query": QUERY, "under": "private"}),
+    ("search_wiki", {"query": QUERY, "scratch": True}),
+    ("grep_wiki", {"pattern": QUERY}),
+    ("list_pages", {}),
+    ("list_pages", {"under": "private"}),
+    ("list_pages", {"scratch": True}),
     ("check_links", {}),
-    pytest.param("list_tags", {}, marks=later(4)),
-    pytest.param("history", {"slug": DIARY}, marks=later(4)),
-    pytest.param("history", {}, marks=later(4)),                 # recent changes
+    ("list_tags", {}),
+    ("history", {"slug": DIARY}),
+    ("history", {"slug": "private/alice/old"}),                  # deleted
+    ("history", {}),                                             # recent changes
+    ("history", {"under": "private"}),
     ("search_tasks", {"query": QUERY}),
     ("read_guides", {"slug": DIARY}),
+    ("read_guides", {"slug": "private/alice/"}),
+    ("replace_in_pages", {"find": QUERY, "replace": "x"}),       # a dry run
 ]
 
 
 @pytest.mark.parametrize("tool,args", MCP_READS)
 def test_bobs_assistant_reads_nothing_of_alices(client, wiki, tool, args):
     text = mcp(client, tool, **args)
-    assert SECRET not in text and "private/alice" not in text.replace(args.get("slug", "\0"), "")
+    # The slug asked for, and the shared page's own links, may name the diary.
+    named = text.replace(args.get("slug", "\0"), "").replace(f"[[{DIARY}", "")
+    assert SECRET not in text and "private/alice" not in named
     assert sha(wiki)[:7] not in text or tool == "history" and not args, "the diary's versions"
+
+
+def test_alices_assistant_sees_her_own(client, wiki):
+    assert SECRET in mcp(client, "read_page", token="alice-token", slug=DIARY)
+    assert DIARY in mcp(client, "list_pages", token="alice-token")
+    assert DIARY in mcp(client, "search_wiki", token="alice-token", query=QUERY)
+    assert DIARY in mcp(client, "grep_wiki", token="alice-token", pattern=QUERY)
+    assert "Delete private/alice/old" in mcp(client, "history", token="alice-token")
+
+
+def test_guides_in_private_folders_stay_private(client, wiki):
+    """A guide in alice's folder, and a shared one importing her diary:
+    bob's assistant gets neither her guide nor the diary's text."""
+    (wiki / "private/alice/CLAUDE.md").write_text(f"# Alice's rules {SECRET}\n")
+    (wiki / "notes").mkdir()
+    (wiki / "notes/AGENTS.md").write_text(f"# Notes guide\n\n@../{DIARY}.md\n")
+    tools = rpc(client, "tools/list", {})["tools"]
+    guides = next(t for t in tools if t["name"] == "read_guides")["description"]
+    assert "notes/" in guides and "private/alice" not in guides
+    text = mcp(client, "read_guides", slug="notes/")
+    assert "Notes guide" in text and SECRET not in text
+    refusal = mcp(client, "write_page", slug="notes/x", content="# X\n")
+    assert "Notes guide" in refusal and SECRET not in refusal
+    alices = rpc(client, "tools/list", {}, token="alice-token")["tools"]
+    assert "private/alice/" in next(t for t in alices if t["name"] == "read_guides")["description"]
+    assert SECRET in mcp(client, "read_guides", token="alice-token", slug="notes/")
+
+
+def test_history_names_no_private_page(client, wiki):
+    """A commit that moved alice's note into the wiki is in the shared
+    page's history, but its message doesn't name the note for bob."""
+    alice = "alice-token"
+    mcp(client, "file_scratch_note", token=alice, slug=NOTE, name="Idea")
+    assert NOTE in mcp(client, "history", token=alice, slug="idea")
+    for text in (mcp(client, "history", slug="idea"), mcp(client, "history")):
+        assert "Promote a private page to idea" in text and "private/alice" not in text
+
+
+def test_recent_changes_fill_the_limit_with_visible_commits(client, wiki):
+    for i in range(3):
+        (wiki / f"private/alice/p{i}.md").write_text("# P\n")
+        git(wiki, "add", "-A")
+        git(wiki, "commit", "-q", "-m", f"Create private/alice/p{i}")
+    text = mcp(client, "history", limit=2)
+    assert "(2, the limit)" in text and "private/alice" not in text
+
+
+def test_bobs_assistant_writes_scratch_notes_in_his_folder(client, wiki):
+    text = mcp(client, "write_page", scratch=True, slug="Thought", content="Hm\n")
+    assert "Created scratch note private/bob/" in text
+    assert "private/bob/" in mcp(client, "list_pages", scratch=True)
+    assert "private/bob/" not in mcp(client, "list_pages", token="alice-token", scratch=True)
 
 
 # ── Writes ───────────────────────────────────────────────────────────────────
@@ -358,6 +425,57 @@ def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
         assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
 
 
+# What bob's assistant tries on alice's pages; "{bobs}" is a scratch note of
+# his, "{old}" the version that still had her deleted page.
+MCP_WRITES = [
+    ("write_page", {"slug": DIARY, "content": "# Bob was here\n", "overwrite": True}),
+    ("write_page", {"slug": "private/alice/bobs", "content": "# Bob was here\n"}),
+    ("edit_page", {"slug": DIARY, "old_string": QUERY, "new_string": "bob"}),
+    ("append_to_page", {"slug": DIARY, "content": "Bob was here"}),
+    ("replace_in_pages", {"find": QUERY, "replace": "bob", "dry_run": False}),
+    ("rename_page", {"slug": DIARY, "new_slug": "stolen"}),
+    ("rename_page", {"slug": "plans", "new_slug": "private/alice/plans"}),
+    ("rename_page", {"slug": "private/", "new_slug": "stolen"}),
+    ("rename_page", {"slug": "private/alice/", "new_slug": "stolen"}),
+    ("delete_page", {"slug": DIARY}),
+    ("restore_page", {"slug": "private/alice/old", "version": "{old}"}),
+    ("restore_page", {"slug": DIARY, "version": "{sha}"}),
+    ("file_scratch_note", {"slug": NOTE, "name": "stolen"}),
+    ("file_scratch_note", {"slug": "{bobs}", "page": DIARY}),
+    ("file_scratch_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
+]
+
+
+@pytest.mark.parametrize("tool,args", [pytest.param(t, a, id=f"{t} {i}") for i, (t, a) in enumerate(MCP_WRITES)])
+def test_bobs_assistant_changes_nothing_of_alices(client, wiki, tool, args):
+    if "{bobs}" in args.values():
+        bobs = mcp(client, "write_page", scratch=True, slug="Bobs", content="Bob's\n")
+        args = {k: re.search(r"note (\S+)", bobs)[1] if v == "{bobs}" else v for k, v in args.items()}
+    args = {k: fill(v, wiki) if isinstance(v, str) else v for k, v in args.items()}
+    before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
+    text = mcp(client, tool, **args)
+    assert _alices_files(wiki) == before, text
+    for commit in git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split():
+        assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
+    assert SECRET not in text
+
+
+def test_moving_the_private_folder_is_refused(client, wiki):
+    """With a note of bob's in private/, private/ is a folder he sees, but
+    it holds alice's too: nothing moves."""
+    mcp(client, "write_page", scratch=True, slug="Bobs", content="Bob's\n")
+    before = _alices_files(wiki)
+    assert "Nothing was moved" in mcp(client, "rename_page", slug="private/", new_slug="stolen")
+    assert _alices_files(wiki) == before and not (wiki / "stolen").exists()
+
+
+def test_every_tool_is_covered():
+    tools = {t["name"] for t in json.loads((REPO / "go/mcp_tools.json").read_text())}
+    covered = {t[0] for t in MCP_READS} | {t[0] for t in MCP_WRITES} | {"leaf_help"} | DECK_TOOLS
+    assert tools - covered == set(), "tools neither probed nor exempt"
+    assert covered - tools == set(), "probes of tools that don't exist"
+
+
 # ── Every route is covered ───────────────────────────────────────────────────
 
 # Routes that show or change no page: nothing of alice's to leak.
@@ -367,6 +485,7 @@ EXEMPT = {
     "POST /api/scratch",            # makes bob's own note
 }
 # The deck's writes take task ids: private tasks come in phase 5, with their probes.
+DECK_TOOLS = {"create_task", "update_task"}
 DECK_WRITES = {
     "POST /api/deck", "PUT /api/deck/{id}", "DELETE /api/deck/{id}", "POST /api/deck/{id}/toggle-check",
     "POST /api/deck/{id}/comments", "PUT /api/deck/{id}/comments/{cid}", "DELETE /api/deck/{id}/comments/{cid}",

@@ -313,36 +313,50 @@ type LogEntry struct {
 	Files                  []string
 }
 
-// gitLogAll: the wiki's commits, newest first, at most max; since a day
-// (YYYY-MM-DD, from its start), under a folder ("" for either: all).
-func gitLogAll(since, under string, max int) []LogEntry {
+// gitLogAll: the wiki's commits, newest first, at most limit; since a day
+// (YYYY-MM-DD, from its start), under a folder ("" for either: all). Of
+// each commit only the files see takes (nil: all), and a commit with none
+// of them is left out; git is asked for more until limit are found.
+func gitLogAll(since, under string, limit int, see func(path string) bool) []LogEntry {
 	if !cfg.GitEnabled {
 		return nil
 	}
-	args := []string{"log", "-n", strconv.Itoa(max), "--name-only", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%ad\x1f%an\x1f%s"}
-	if since != "" {
-		args = append(args, "--since="+since+" 00:00")
-	}
-	if under != "" {
-		args = append(args, "--", under+"/")
+	batch := limit
+	if see != nil {
+		batch = max(2*limit, 50)
 	}
 	var entries []LogEntry
-	for _, record := range strings.Split(runGit(args...).Stdout, "\x1e")[1:] {
-		head, names, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 4)
-		if len(parts) != 4 {
-			continue
+	for skip := 0; len(entries) < limit; skip += batch {
+		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-only",
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%an\x1f%s"}
+		if since != "" {
+			args = append(args, "--since="+since+" 00:00")
 		}
-		e := LogEntry{Sha: parts[0], Time: parts[1], Author: commitAuthor(parts[2]), Msg: parts[3]}
-		for _, n := range splitLines(names) {
-			if n = lineBody(n); strings.TrimSpace(n) != "" {
-				e.Files = append(e.Files, n)
+		if under != "" {
+			args = append(args, "--", under+"/")
+		}
+		records := strings.Split(runGit(args...).Stdout, "\x1e")[1:]
+		for _, record := range records {
+			head, names, _ := strings.Cut(record, "\n")
+			parts := strings.SplitN(head, "\x1f", 4)
+			if len(parts) != 4 {
+				continue
+			}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Author: commitAuthor(parts[2]), Msg: parts[3]}
+			for _, n := range splitLines(names) {
+				if n = lineBody(n); strings.TrimSpace(n) != "" && (see == nil || see(n)) {
+					e.Files = append(e.Files, n)
+				}
+			}
+			if see == nil || len(e.Files) > 0 {
+				entries = append(entries, e)
 			}
 		}
-		entries = append(entries, e)
+		if len(records) < batch {
+			break
+		}
 	}
-	return entries
+	return entries[:min(limit, len(entries))]
 }
 
 // isUncommitted: the file differs from its last commit (or was never
@@ -386,9 +400,11 @@ func (e *grepError) Error() string { return e.msg }
 // grepPages: every line of every page matching a regex, in file order. git
 // matches (git grep --no-index, so pages not yet committed count too) in
 // its own process, which a timeout can kill. Without git, the pattern is
-// matched as plain text.
-func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
-	slugs := slugSet()
+// matched as plain text. Only the pages in slugs (nil: every page).
+func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHit, error) {
+	if slugs == nil {
+		slugs = slugSet()
+	}
 	var hits []GrepHit
 	if !cfg.GitEnabled {
 		needle := pattern
@@ -396,6 +412,9 @@ func grepPages(pattern string, ignoreCase bool) ([]GrepHit, error) {
 			needle = strings.ToLower(pattern)
 		}
 		for _, p := range sortedPages() {
+			if !slugs[p.Slug] {
+				continue
+			}
 			text, err := readText(p.Path)
 			if err != nil {
 				continue

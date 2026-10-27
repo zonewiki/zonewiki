@@ -2,7 +2,7 @@
 
 Part of Leaf's spec (see `AGENTS.md` for the index).
 
-Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them. Everything in the wiki is shared and editable by every user, except each user's private folder, `private/<name>/`, which only they see. (Private deck tasks and the MCP tools' filtering are still being built: `docs/plans/multi-user.md`.)
+Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them. Everything in the wiki is shared and editable by every user, except each user's private folder, `private/<name>/`, which only they see. (Private deck tasks are still being built: `docs/plans/multi-user.md`.)
 
 Without `LEAF_USERS` none of this applies: one `LEAF_PASSWORD` (or none) and one `LEAF_MCP_TOKEN`, as before, and Leaf commits as itself.
 
@@ -34,6 +34,14 @@ LEAF_USER_BOB_PASSWORD=pbkdf2-sha256:600000:<salt>:<hash>
 
 With users, `/mcp` takes any user's token (`LEAF_USER_<NAME>_MCP_TOKEN`) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
 
+An assistant sees and changes what its user does in the browser, no more (`docs/spec/mcp.md` has the tools):
+
+- **Another user's private page is no page**: `read_page`, `edit_page`, `append_to_page`, `rename_page`, `delete_page`, `file_scratch_note` answer "No page …" for it, as for a page that doesn't exist (`mcpPageSlug(raw, user)`, `existingPage`). A new slug in `private/` outside your own folder (`write_page`, a rename's or a restore's target, `history` or `read_guides` of a page there) is refused with "of private/, only your own folder private/<you>/ is yours to read or write", whether or not anything is there (`newSlug(raw, user)`, `notYours`).
+- **Lists and searches leave them out** (`visiblePages(user)`, `visibleSlugs`): `list_pages` (and its link counts), `search_wiki` (`retrieve(rq, …)` filters before the limit), `grep_wiki` (`grepPages` takes the visible slugs; the hits are counted after), `check_links` (a link to a page you can't see isn't broken, and never suggested), `list_tags`, `replace_in_pages` (matches and changes only pages you may change), read_page's Linked from and Related, delete_page's "still link to it", write_page's similar pages, create_task's tag hints.
+- **History**: `history` of a page as `pageLog` gives it (versions from before a page was yours are left out); recent changes (`history` without a slug) show of each commit only the files you may see and leave out a commit with none of them, asking git for more until `limit` are found (`gitLogAll(…, see)`); the uncommitted files likewise. A commit message naming another user's private page (`Promote private/alice/…_idea to idea`) names it "a private page" (`hideNames`), here and in the browser's history. `restore_page` takes only versions `pageLog` lists.
+- **Scratch notes** from `write_page` with `scratch` go to your folder (its guides apply: `checkGuides` with `private/<you>/scratch-note`).
+- **Guides**: a `CLAUDE.md`/`AGENTS.md` in another user's folder isn't a guide for you (`folderGuides(slug, user)`, `canSeePath`), not listed in read_guides' description (`toolList(user)`), and a guide's `@import` of a page you can't see stays as written (`guideText`). `rename_page` of a folder holding pages you may not move (`private/` itself) moves nothing.
+
 ## Private pages
 
 Pages in `private/<name>/` (and its subfolders) are that user's: only they see and change them. Make one with **New page** (Ctrl+N) and its **Private** box (`private=1` on `POST /new` puts the slug in your folder; the box shows only with users), by naming a page there (`private/alice/diary`), or by renaming a page into it. Rename it out of the folder to share it.
@@ -47,7 +55,7 @@ Pages in `private/<name>/` (and its subfolders) are that user's: only they see a
 - **Uploads** for a private page are private: the editor sends the page's slug with an upload (`page`, `markdownEditor`'s `page` option), and a file for a page in your own folder goes to `_assets/private/<you>/` (URL `/_assets/private/<you>/<file>`); any other page's uploads go to `_assets/` as before. `GET /_assets/{path...}` serves `_assets/<file>`, and `_assets/private/<user>/<file>` only to that user (404 for anyone else, and for any other subfolder).
 - **History and commits**: a page's history, its versions and diffs leave out versions from when the page was another user's private page, before a rename (`pageLog`, `canSeePath` on the version's path). The uncommitted list shows, and Commit all commits, only files you may see (`visibleUncommitted`): another user's draft stays uncommitted until they commit it.
 - **Everywhere else** another user's private pages are left out as sharing mode leaves out pages not for sharing (`hiddenPage(rq, slug)`, which checks both; see Sharing mode in `docs/spec/navigation.md`): search, the search modal's list, Scratch, Deleted Pages, the uncommitted list, Backlinks, Links to, Related, folder suggestions, link counts (the search modal's, "unlinked" in search: `allBacklinkCounts(rq)` counts links only from pages you may see); a wikilink to one renders as its words without a link.
-- **Tests**: `tests/test_privacy.py` gives alice a private page (committed, deleted, uncommitted), a scratch note and an upload, holding a word no response to bob may contain, and probes every route and MCP read tool as bob, and every write route (her files and the commits must stay as they were); a route Leaf registers must be probed or listed as exempt there. Further tests there cover what alice does with her own (scratch notes, uploads, a new private page, history, Commit all).
+- **Tests**: `tests/test_privacy.py` gives alice a private page (committed, deleted, uncommitted), a scratch note and an upload, holding a word no response to bob may contain, and probes every route and MCP read tool as bob, and every write route and MCP write tool (her files and the commits must stay as they were); a route Leaf registers, and an MCP tool, must be probed or listed as exempt there (`test_every_route_is_covered`, `test_every_tool_is_covered`). Further tests there cover what alice does with her own (scratch notes, uploads, a new private page, history, Commit all).
 
 ## Who made a change
 

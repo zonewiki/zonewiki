@@ -37,18 +37,18 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	existing := mcpPageSlug(raw)
+	existing := mcpPageSlug(raw, user)
 	if existing != "" && !overwrite {
 		return "", toolErr("Page " + strconv.Quote(existing) + " already exists. Change it with edit_page or append_to_page, " +
 			"or set overwrite=true to replace all of it.")
 	}
 	slug := existing
 	if slug == "" {
-		if slug, err = newSlug(raw); err != nil {
+		if slug, err = newSlug(raw, user); err != nil {
 			return "", err
 		}
 	}
-	if err := checkGuides(args, []string{slug}); err != nil {
+	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
 	path := safePath(slug)
@@ -76,7 +76,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if existing != "" {
 		out = "Replaced page " + slug + ".\n" + pageInfo(slug, base)
 	} else {
-		similar := similarPages(slug, pageTitle(content, slug))
+		similar := similarPages(slug, pageTitle(content, slug), user)
 		named := map[string]bool{}
 		if len(similar) > 0 {
 			out += "\nNote: pages with similar names exist; if this one repeats one of them, " +
@@ -86,9 +86,9 @@ func writePage(args jsonObj, base, user string) (string, error) {
 				named[p.Slug] = true
 			}
 		}
-		out += closeInContent(slug, content, named)
+		out += closeInContent(slug, content, named, user)
 	}
-	return out + pending + linkWarning(slug, old, content) + guideNote(slug), nil
+	return out + pending + linkWarning(slug, old, content) + guideNote(slug, user), nil
 }
 
 // writeScratch: write_page with scratch, a new scratch note, named by slug
@@ -111,8 +111,13 @@ func writeScratch(args jsonObj, content, base, user string) (string, error) {
 		_, body := parseFrontmatter(content)
 		content = content[:len(content)-len(body)] + "# " + name + "\n\n" + strings.TrimLeftFunc(body, unicode.IsSpace)
 	}
-	// Scratch notes sit at the wiki's root: the wiki's guide applies.
-	if err := checkGuides(args, []string{"scratch-note"}); err != nil {
+	// Scratch notes sit at the wiki's root, with users in the user's
+	// private folder: the guides of that folder apply.
+	where := "scratch-note"
+	if own := privateFolder(user); own != "" {
+		where = own + "/" + where
+	}
+	if err := checkGuides(args, []string{where}, user); err != nil {
 		return "", err
 	}
 	suffix, err := msgSuffix(args)
@@ -142,7 +147,7 @@ func scratchErr(s string, err error) (string, error) {
 // fileScratchNote: the scratch note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
 func fileScratchNote(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug")
+	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +172,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	if page != "" {
-		target := mcpPageSlug(page)
+		target := mcpPageSlug(page, user)
 		if target == "" {
 			return "", toolErr("No page " + strconv.Quote(page) + ". Use search_wiki or list_pages to find its slug.")
 		}
@@ -182,7 +187,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 			}
 			heading = appendHeading(slug, pageTitle(text, slug))
 		}
-		if err := checkGuides(args, []string{target}); err != nil {
+		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
 		}
 		pending := savePending(path, slug) + savePending(safePath(target), target)
@@ -207,7 +212,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 		date = noteDate(slug)
 	}
 	if s := promotedSlug(folder, name, date); s != "" {
-		if err := checkGuides(args, []string{s}); err != nil {
+		if err := checkGuides(args, []string{s}, user); err != nil {
 			return "", err
 		}
 	}
@@ -248,11 +253,11 @@ func applyEdit(content, slug string, edit jsonObj, which string) (string, int, e
 }
 
 func editPageTool(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug")
+	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
-	if err := checkGuides(args, []string{slug}); err != nil {
+	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
 	edits := []jsonObj{args}
@@ -310,7 +315,7 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 		done = fmt.Sprintf("applied %d edits, %s", len(edits), what)
 	}
 	return "Edited page " + slug + ": " + done + ".\n" + pageInfo(slug, base) + pending +
-		linkWarning(slug, content, text) + guideNote(slug), nil
+		linkWarning(slug, content, text) + guideNote(slug, user), nil
 }
 
 // appendAt: content with addition at the end of the section under heading;
@@ -329,7 +334,7 @@ func appendAt(content, addition, heading string) (string, bool) {
 }
 
 func appendToPage(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug")
+	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
@@ -343,7 +348,7 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	heading = strings.TrimSpace(heading)
-	if err := checkGuides(args, []string{slug}); err != nil {
+	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
 	pending := savePending(path, slug)
@@ -370,18 +375,18 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 	}
 	gitCommit(user, msg, path)
 	return "Appended to page " + slug + where + ".\n" + pageInfo(slug, base) + pending +
-		linkWarning(slug, content, text) + guideNote(slug), nil
+		linkWarning(slug, content, text) + guideNote(slug, user), nil
 }
 
 // folderArg: the folder rename_page's slug names, if it names one: a
 // trailing "/" ("projects/"), or no page by that name but pages below it.
 // "" for a page.
-func folderArg(raw string) string {
+func folderArg(raw, user string) string {
 	folder := cleanFolder(raw)
-	if folder == "" || !strings.HasSuffix(strings.TrimSpace(raw), "/") && mcpPageSlug(raw) != "" {
+	if folder == "" || !strings.HasSuffix(strings.TrimSpace(raw), "/") && mcpPageSlug(raw, user) != "" {
 		return ""
 	}
-	for _, p := range iterPages() {
+	for _, p := range visiblePages(user) {
 		if strings.HasPrefix(p.Slug, folder+"/") {
 			return folder
 		}
@@ -397,7 +402,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err != nil {
 		return "", err
 	}
-	newFolder, err := newSlug(raw)
+	newFolder, err := newSlug(raw, user)
 	if err != nil {
 		return "", err
 	}
@@ -414,6 +419,11 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 		if strings.HasPrefix(p.Slug, folder+"/") {
 			paths = append(paths, p.Path)
 			n := newFolder + p.Slug[len(folder):]
+			if !canWrite(user, p.Slug) || !canWrite(user, n) {
+				// private/ itself, say: it holds other users' folders.
+				return "", toolErr("Nothing was moved: " + folder + "/ holds pages that aren't yours to move, " +
+					"or they would land in a private folder not yours. Move the pages one by one.")
+			}
 			if np := safePath(n); np != "" && exists(np) {
 				taken = append(taken, n)
 			}
@@ -422,7 +432,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if len(taken) > 0 {
 		return "", toolErr("These pages already exist, so nothing was moved: " + strings.Join(taken, ", "))
 	}
-	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}); err != nil {
+	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}, user); err != nil {
 		return "", err
 	}
 	msg, err := commitMsg("Move "+folder+"/ to "+newFolder+"/", args)
@@ -453,10 +463,10 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if folder := folderArg(raw); folder != "" {
+	if folder := folderArg(raw, user); folder != "" {
 		return renameFolder(folder, args, base, user)
 	}
-	slug, path, err := existingPage(args, "slug")
+	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
@@ -467,7 +477,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	newS, err := newSlug(rawNew)
+	newS, err := newSlug(rawNew, user)
 	if err != nil {
 		return "", err
 	}
@@ -478,7 +488,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if exists(newPath) {
 		return "", toolErr("A page " + strconv.Quote(newS) + " already exists")
 	}
-	if err := checkGuides(args, []string{slug, newS}); err != nil {
+	if err := checkGuides(args, []string{slug, newS}, user); err != nil {
 		return "", err
 	}
 	msg, err := commitMsg("Rename "+slug+" to "+newS, args)
@@ -498,21 +508,26 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 }
 
 func deletePageTool(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug")
+	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
 	if isProtected(slug) {
 		return "", toolErr(slug + " is the home page; it can't be deleted")
 	}
-	if err := checkGuides(args, []string{slug}); err != nil {
+	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
 	msg, err := commitMsg("Delete "+slug, args)
 	if err != nil {
 		return "", err
 	}
-	linking := findBacklinks(slug)
+	var linking []PageRef
+	for _, b := range findBacklinks(slug) {
+		if canSee(user, b.Slug) {
+			linking = append(linking, b)
+		}
+	}
 	pending := savePending(path, slug)
 	if err := os.Remove(path); err != nil {
 		return "", err
@@ -545,12 +560,12 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	version = strings.ToLower(strings.TrimSpace(version))
-	slug, err := pageOrNewSlug(raw)
+	slug, err := pageOrNewSlug(raw, user)
 	if err != nil {
 		return "", err
 	}
 	path := safePath(slug)
-	entries := gitLog(path, 0)
+	entries := pageLog(user, path)
 	i := versionOf(entries, version)
 	if i < 0 {
 		return "", toolErr(strconv.Quote(version) + " is not a version of " + slug + "; history(slug) lists them.")
@@ -571,7 +586,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 			return "", toolErr(slug + " already reads as version " + runePrefix(sha, 7) + ".")
 		}
 	}
-	if err := checkGuides(args, []string{slug}); err != nil {
+	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
 	msg, err := commitMsg("Restore "+slug+" to "+runePrefix(sha, 7), args)
@@ -587,7 +602,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 		what = "Restored"
 	}
 	return what + " " + slug + " as of version " + runePrefix(sha, 7) + " (" + entries[i].Time + ").\n" +
-		pageInfo(slug, base) + pending + linkWarning(slug, old, content) + guideNote(slug), nil
+		pageInfo(slug, base) + pending + linkWarning(slug, old, content) + guideNote(slug, user), nil
 }
 
 // ── replace_in_pages ────────────────────────────────────────────────────────
@@ -817,7 +832,7 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if under != "" && !anyPageIn(under) {
+	if under != "" && !anyPageIn(under, user) {
 		return "", toolErr("No pages under " + strconv.Quote(under) + ". list_pages shows the slugs.")
 	}
 	maxPages, err := mcpInt(args, "max_pages", 50, 1000)
@@ -853,7 +868,7 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 	var hits []replaceHit
 	total := 0
 	for _, p := range sortedPages() {
-		if !inFolder(p.Slug, under) {
+		if !inFolder(p.Slug, under) || !canWrite(user, p.Slug) {
 			continue
 		}
 		content, err := readText(p.Path)
@@ -914,7 +929,7 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 		slugs = append(slugs, h.slug)
 		paths = append(paths, h.path)
 	}
-	if err := checkGuides(args, slugs); err != nil {
+	if err := checkGuides(args, slugs, user); err != nil {
 		return "", err
 	}
 	on := hits[0].slug
@@ -950,11 +965,11 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 // closest to it in meaning, which a similar name doesn't catch (a crash
 // analysis written up anew when the ticket's page already covers it).
 // Pages it links to, or already named for a similar name, are left out.
-func closeInContent(slug, content string, named map[string]bool) string {
+func closeInContent(slug, content string, named map[string]bool, user string) string {
 	if semantic == nil {
 		return ""
 	}
-	known := slugSet()
+	known := visibleSlugs(user)
 	delete(known, slug)
 	exclude := maps.Clone(named)
 	for s := range pageLinkTargets(content, slug) {

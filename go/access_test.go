@@ -109,3 +109,23 @@ func TestScratchNotesInPrivateFolders(t *testing.T) {
 		t.Error("noteDate, privateFolder")
 	}
 }
+
+func TestHideNames(t *testing.T) {
+	testWiki(t, nil)
+	msg := "Promote private/alice/2026-10-27_12-00-00_idea to idea (MCP)"
+	if hideNames("bob", msg) != msg {
+		t.Error("without users nothing is private")
+	}
+	withUsers(t, "alice", "bob")
+	for user, want := range map[string]string{
+		"alice": msg,
+		"bob":   "Promote a private page to idea (MCP)",
+	} {
+		if got := hideNames(user, msg); got != want {
+			t.Errorf("%s: %q", user, got)
+		}
+	}
+	if got := hideNames("bob", "Rename private/bob/a to private/alice/b."); got != "Rename private/bob/a to a private page." {
+		t.Errorf("%q", got)
+	}
+}

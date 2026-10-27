@@ -9,6 +9,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -90,4 +91,43 @@ func strayPrivate() []string {
 		}
 	}
 	return stray
+}
+
+// visiblePages: the pages user may see, as iterPages lists them.
+func visiblePages(user string) []PageFile {
+	var out []PageFile
+	for _, p := range iterPages() {
+		if canSee(user, p.Slug) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// visibleSlugs: the slugs of visiblePages, as a set.
+func visibleSlugs(user string) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range visiblePages(user) {
+		out[p.Slug] = true
+	}
+	return out
+}
+
+// privateNameRE: a page's or file's path in private/ as a commit message
+// names it ("Move private/alice/2026-…_idea into the wiki as ideas/x").
+var privateNameRE = regexp.MustCompile(privateDir + `/[\w./-]*[\w/]`)
+
+// hideNames: a commit message for user, the paths in it user may not see
+// as "a private page": a commit that moved a page out of a private folder,
+// or rewrote links in one, is in the shared page's history too.
+func hideNames(user, msg string) string {
+	if cfg.Users == nil || !strings.Contains(msg, privateDir+"/") {
+		return msg
+	}
+	return privateNameRE.ReplaceAllStringFunc(msg, func(name string) string {
+		if canSeePath(user, strings.TrimSuffix(name, ".md")) {
+			return name
+		}
+		return "a private page"
+	})
 }

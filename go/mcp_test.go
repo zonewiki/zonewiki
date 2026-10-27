@@ -24,7 +24,7 @@ func set[T any](t *testing.T, v *T, to T) {
 // replyText: the reply to msg as JSON text ("null" for none).
 func replyText(t *testing.T, msg string, call func(string, jsonObj) (string, error)) string {
 	t.Helper()
-	reply, err := handleMCP(json.RawMessage(msg), call)
+	reply, err := handleMCP(json.RawMessage(msg), "", call)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestLongGuidesAreCut(t *testing.T) {
 		t.Errorf("instructions: %q", got[len(got)-100:])
 	}
 	set(t, &folderGuideChars, 10)
-	err := checkGuides(jsonObj{}, []string{"tickets/bug-1"})
+	err := checkGuides(jsonObj{}, []string{"tickets/bug-1"}, "")
 	if err == nil || !strings.Contains(err.Error(), "# Tickets\n\n\n[… cut here: read_page \"tickets/CLAUDE\" for the rest]") {
 		t.Errorf("refusal: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestLongGuidesAreCut(t *testing.T) {
 func TestToolListNamesGuidedFolders(t *testing.T) {
 	testWiki(t, nil)
 	desc := func() string {
-		for _, tool := range toolList() {
+		for _, tool := range toolList("") {
 			if tool["name"] == "read_guides" {
 				return tool["description"].(string)
 			}
@@ -145,7 +145,7 @@ func TestToolListNamesGuidedFolders(t *testing.T) {
 func TestLinkedFromIsCut(t *testing.T) {
 	testWiki(t, map[string]string{"golf": "# Golf\n", "c": "[[golf]]\n", "d": "[[golf]]\n", "e": "[[golf]]\n"})
 	set(t, &backlinksShown, 2)
-	if got := mcpPageLinks("golf", "# Golf\n"); !strings.HasSuffix(got, "Linked from (3): c, d, … and 1 more") {
+	if got := mcpPageLinks("golf", "# Golf\n", ""); !strings.HasSuffix(got, "Linked from (3): c, d, … and 1 more") {
 		t.Errorf("got %q", got)
 	}
 }
@@ -180,7 +180,7 @@ func TestGrepTimeout(t *testing.T) {
 	testWiki(t, map[string]string{"a": "# A\n"})
 	cfg.GitEnabled = true
 	set(t, &grepTimeout, time.Nanosecond)
-	if _, err := grepPages("(a+)+$", false); err == nil || !strings.Contains(err.Error(), "took longer than") {
+	if _, err := grepPages("(a+)+$", false, nil); err == nil || !strings.Contains(err.Error(), "took longer than") {
 		t.Errorf("err %v", err)
 	}
 }

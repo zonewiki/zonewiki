@@ -27,6 +27,7 @@ func pageLog(user, path string) []GitEntry {
 	var out []GitEntry
 	for _, e := range gitLog(path, 0) {
 		if canSeePath(user, e.Path) {
+			e.Msg = hideNames(user, e.Msg)
 			out = append(out, e)
 		}
 	}

@@ -143,15 +143,15 @@ func plural(n int, word string) string {
 
 // mcpPageSlug: the existing page a slug-ish string names (a slug,
 // "/page/<slug>", a full URL, "<slug>.md", or the page's name, "Git
-// Remote"); "" when none.
-func mcpPageSlug(raw string) string {
+// Remote"); "" when none, or when user may not see it.
+func mcpPageSlug(raw, user string) string {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	for _, slug := range []string{raw, toSlug(raw)} {
 		if slug == "" {
 			continue
 		}
 		if p := safePath(slug); p != "" {
-			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
+			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && canSee(user, slug) {
 				return slug
 			}
 		}
@@ -191,12 +191,12 @@ func readPageText(path string) (string, error) {
 	return strings.ToValidUTF8(text, "�"), err
 }
 
-func existingPage(args jsonObj, name string) (string, string, error) {
+func existingPage(args jsonObj, name, user string) (string, string, error) {
 	raw, err := strArg(args, name, true)
 	if err != nil {
 		return "", "", err
 	}
-	slug := mcpPageSlug(raw)
+	slug := mcpPageSlug(raw, user)
 	if slug == "" {
 		return "", "", toolErr("No page " + strconv.Quote(raw) + ". Use search_wiki or list_pages to find its slug.")
 	}
@@ -205,8 +205,9 @@ func existingPage(args jsonObj, name string) (string, string, error) {
 
 // newSlug: the slug a new page gets from a name or slug ("Tickets/BUG
 // 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
-// in a folder Leaf skips (_assets, _deck, .git …).
-func newSlug(raw string) (string, error) {
+// in a folder Leaf skips (_assets, _deck, .git …), or in private/ outside
+// user's own folder.
+func newSlug(raw, user string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := toSlug(raw)
 	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
@@ -214,6 +215,9 @@ func newSlug(raw string) (string, error) {
 	}
 	if safePath(slug) == "" {
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
+	}
+	if !canWrite(user, slug) {
+		return "", toolErr(notYours(slug, user))
 	}
 	return slug, nil
 }
@@ -271,17 +275,26 @@ func lastPart(slug string) string { return slug[strings.LastIndex(slug, "/")+1:]
 
 // pageOrNewSlug: the existing page raw names, else the slug a new page of
 // that name would get (a deleted page's, say).
-func pageOrNewSlug(raw string) (string, error) {
-	if slug := mcpPageSlug(raw); slug != "" {
+func pageOrNewSlug(raw, user string) (string, error) {
+	if slug := mcpPageSlug(raw, user); slug != "" {
 		return slug, nil
 	}
-	return newSlug(raw)
+	return newSlug(raw, user)
+}
+
+// notYours: the refusal of a page in private/ that isn't in user's own
+// folder (which says nothing of whether it exists).
+func notYours(slug, user string) string {
+	if own := privateFolder(user); own != "" {
+		return strconv.Quote(slug) + ": of private/, only your own folder " + own + "/ is yours to read or write"
+	}
+	return strconv.Quote(slug) + ": private/ holds the users' private folders, which only their users see"
 }
 
 // similarPages: existing pages whose title or file name is close to a new
 // page's, so the model notices it may be extending a page rather than
 // starting one.
-func similarPages(slug, title string) []PageRef {
+func similarPages(slug, title, user string) []PageRef {
 	norm := func(names ...string) []string {
 		var out []string
 		for _, n := range names {
@@ -293,7 +306,7 @@ func similarPages(slug, title string) []PageRef {
 	}
 	want := norm(title, lastPart(slug))
 	var found []PageRef
-	for _, p := range iterPages() {
+	for _, p := range visiblePages(user) {
 		if p.Slug == slug {
 			continue
 		}
@@ -410,8 +423,8 @@ var (
 
 // guideText: a guide file's text with its imports in place. Files in seen
 // (already part of another guide) are left out; an import that isn't a page
-// of the wiki stays as written.
-func guideText(path string, seen map[string]bool, depth int) string {
+// of the wiki, or one user may not see, stays as written.
+func guideText(path, user string, seen map[string]bool, depth int) string {
 	seen[path] = true
 	text, err := readPageText(path)
 	if err != nil {
@@ -425,9 +438,10 @@ func guideText(path string, seen map[string]bool, depth int) string {
 			target := resolvePath(filepath.Join(filepath.Dir(path), m[1]))
 			if rel, ok := relInside(root, target); ok {
 				if st, err := os.Stat(target); err == nil && st.Mode().IsRegular() &&
-					safePath(strings.TrimSuffix(filepath.ToSlash(rel), ".md")) == target {
+					safePath(strings.TrimSuffix(filepath.ToSlash(rel), ".md")) == target &&
+					canSeePath(user, filepath.ToSlash(rel)) {
 					if !seen[target] {
-						out = append(out, guideText(target, seen, depth+1))
+						out = append(out, guideText(target, user, seen, depth+1))
 					}
 					continue
 				}
@@ -441,8 +455,9 @@ func guideText(path string, seen map[string]bool, depth int) string {
 type guide struct{ id, slug, text string }
 
 // folderGuides: the guides for a page at slug: the wiki's first, then each
-// folder's on the way down to the page's.
-func folderGuides(slug string) []guide {
+// folder's on the way down to the page's. Those user may see: not the
+// guide in another user's private folder.
+func folderGuides(slug, user string) []guide {
 	root := resolvePath(cfg.Data)
 	parts := strings.Split(slug, "/")
 	parts = parts[:len(parts)-1]
@@ -470,10 +485,10 @@ func folderGuides(slug string) []guide {
 			if !ok {
 				continue // a link to a file outside the wiki
 			}
-			if seen[p] {
+			if seen[p] || !canSeePath(user, filepath.ToSlash(rel)) {
 				continue
 			}
-			if text := guideText(p, seen, 0); text != "" {
+			if text := guideText(p, user, seen, 0); text != "" {
 				sum := sha256.Sum256([]byte(text))
 				g := strings.TrimSuffix(filepath.ToSlash(rel), filepath.Ext(rel))
 				found = append(found, guide{g + ":" + hex.EncodeToString(sum[:])[:8], g, text})
@@ -489,7 +504,7 @@ func cutGuide(g guide) string {
 
 // checkGuides refuses a write to these pages while a guide for them isn't
 // among the ids in args' guides: the error gives the missing guides' text.
-func checkGuides(args jsonObj, slugs []string) error {
+func checkGuides(args jsonObj, slugs []string, user string) error {
 	given, err := idsArg(args, "guides", "guides must be a list of guide ids")
 	if err != nil {
 		return err
@@ -497,7 +512,7 @@ func checkGuides(args jsonObj, slugs []string) error {
 	var needed []guide
 	ids := map[string]bool{}
 	for _, slug := range slugs {
-		for _, g := range folderGuides(slug) {
+		for _, g := range folderGuides(slug, user) {
 			if !ids[g.id] {
 				ids[g.id] = true
 				needed = append(needed, g)
@@ -535,8 +550,8 @@ func guideFolder(g string) string {
 }
 
 // guidedFolders: the folders with a guide of their own, as (folder, the
-// guide's title), the root ("") first.
-func guidedFolders() [][2]string {
+// guide's title), the root ("") first; those user may see.
+func guidedFolders(user string) [][2]string {
 	root := resolvePath(cfg.Data)
 	var folders []string
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -562,7 +577,7 @@ func guidedFolders() [][2]string {
 		if folder != "" {
 			page = folder + "/page"
 		}
-		for _, g := range folderGuides(page) {
+		for _, g := range folderGuides(page, user) {
 			if guideFolder(g.slug) == folder {
 				title := cutRunes(pageTitle(g.text, ""), 60, "")
 				if title == "" {
@@ -579,8 +594,8 @@ func guidedFolders() [][2]string {
 // toolList: the tools for tools/list. read_guides' description names the
 // folders that have guides, so the model knows to read one before drafting
 // for it.
-func toolList() []map[string]any {
-	folders := guidedFolders()
+func toolList(user string) []map[string]any {
+	folders := guidedFolders(user)
 	if len(folders) == 0 {
 		return mcpTools
 	}
@@ -620,15 +635,18 @@ func readGuides(args jsonObj, base, user string) (string, error) {
 	case folder == "":
 		slug = "page"
 	default:
-		if slug, err = pageOrNewSlug(folder); err != nil {
+		if slug, err = pageOrNewSlug(folder, user); err != nil {
 			return "", err
 		}
+	}
+	if !canSee(user, slug) {
+		return "", toolErr(notYours(folder+"/", user))
 	}
 	known, err := idsArg(args, "guides", "guides must be a list of guide ids")
 	if err != nil {
 		return "", err
 	}
-	found := folderGuides(slug)
+	found := folderGuides(slug, user)
 	where := "the wiki"
 	if folder != "" && slug == folder+"/page" {
 		where = folder + "/"
@@ -657,8 +675,8 @@ func readGuides(args jsonObj, base, user string) (string, error) {
 // guideIDLine: for read_page of a whole guide, its id, as reading it counts
 // as reading the guide. Not when it imports other pages, which the model
 // hasn't seen then.
-func guideIDLine(slug, content string) string {
-	for _, g := range folderGuides(slug) {
+func guideIDLine(slug, content, user string) string {
+	for _, g := range folderGuides(slug, user) {
 		if g.slug == slug {
 			if g.text != strings.TrimSpace(content) {
 				return "guide: yes; it imports other pages, read_guides shows it whole\n"
@@ -674,8 +692,8 @@ func guideIDLine(slug, content string) string {
 }
 
 // guideNote: after a write to a guide, its new id, which the next writes pass.
-func guideNote(slug string) string {
-	for _, g := range folderGuides(slug) {
+func guideNote(slug, user string) string {
+	for _, g := range folderGuides(slug, user) {
 		if g.slug == slug {
 			return "\nNote: " + slug + " is a guide; its id is now " + g.id + ": pass that one from now on."
 		}
@@ -1127,7 +1145,7 @@ const (
 // (by its title and notes; open and done ones), most common first, which
 // it lacks, so the model can offer them; and its tags no other task or page
 // uses, which may be near-duplicates of existing ones.
-func tagHints(task *Task) string {
+func tagHints(task *Task, user string) string {
 	var others []*SearchDoc
 	for _, d := range taskSearchDocs() {
 		if d.TaskID != task.ID {
@@ -1171,7 +1189,7 @@ func tagHints(task *Task) string {
 			used[t] = true
 		}
 	}
-	for _, p := range iterPages() {
+	for _, p := range visiblePages(user) {
 		if content, err := readPageText(p.Path); err == nil {
 			for _, t := range pageTags(content) {
 				used[t] = true
@@ -1235,7 +1253,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base) + tagHints(task), nil
+	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base) + tagHints(task, user), nil
 }
 
 // taskStatusFields: a status as the deck API's field and its value.
@@ -1421,10 +1439,13 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 
 // mcpPageLinks: for read_page, the pages that link to it and its links that
 // lead nowhere, so the model sees where a page sits without reading others.
-func mcpPageLinks(slug, content string) string {
+// Of the pages user may see; a link to one they may not isn't broken.
+func mcpPageLinks(slug, content, user string) string {
 	var linking []string
 	for _, b := range findBacklinks(slug) {
-		linking = append(linking, b.Slug)
+		if canSee(user, b.Slug) {
+			linking = append(linking, b.Slug)
+		}
 	}
 	shown := strings.Join(linking[:min(len(linking), backlinksShown)], ", ")
 	if shown == "" {
@@ -1434,8 +1455,7 @@ func mcpPageLinks(slug, content string) string {
 		shown += fmt.Sprintf(", … and %d more", len(linking)-backlinksShown)
 	}
 	out := fmt.Sprintf("\n\n---\nLinked from (%d): %s", len(linking), shown)
-	slugs := slugSet()
-	if missing := missingLinks(content, slugs, slug); len(missing) > 0 {
+	if missing := missingLinks(content, slugSet(), slug); len(missing) > 0 {
 		out += "\nBroken links (no such page): " + strings.Join(sortedKeys(missing), ", ")
 	}
 	if semantic != nil {
@@ -1447,7 +1467,7 @@ func mcpPageLinks(slug, content string) string {
 		for _, s := range linking {
 			linked[s] = true
 		}
-		if related := semantic.related(slug, slugs, linked, 5); len(related) > 0 {
+		if related := semantic.related(slug, visibleSlugs(user), linked, 5); len(related) > 0 {
 			out += "\nRelated, not linked (close in meaning): " + joinIDs(related)
 		}
 	}
@@ -1459,7 +1479,7 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
 	}
-	slug := mcpPageSlug(raw)
+	slug := mcpPageSlug(raw, user)
 	if slug == "" {
 		return "", toolErr("No page " + strconv.Quote(raw) + ". Use search_wiki or list_pages to find its slug.")
 	}
@@ -1482,9 +1502,9 @@ func readPage(args jsonObj, base, user string) (string, error) {
 		head += fmt.Sprintf("section: lines %d–%d of %d\n", start+1, end, len(lines))
 		content = trimNewlines(strings.Join(lines[start:end], "")) + "\n"
 	} else {
-		head += guideIDLine(slug, content)
+		head += guideIDLine(slug, content, user)
 	}
-	return head + "\n" + content + mcpTaskRefs(content, base) + mcpPageLinks(slug, content), nil
+	return head + "\n" + content + mcpTaskRefs(content, base) + mcpPageLinks(slug, content, user), nil
 }
 
 // isOrphan: no other page links to it. The home page, the deck's home and
@@ -1511,7 +1531,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	counts := allBacklinkCounts(nil)
+	counts := allBacklinkCounts(&Req{user: user})
 	home := ""
 	if h := lookupDeckHome(); h != nil {
 		home = h.Slug
@@ -1521,7 +1541,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 		slug, title string
 	}
 	var rows []row
-	for _, p := range iterPages() {
+	for _, p := range visiblePages(user) {
 		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyScratch && !isScratch(p.Slug) {
 			continue
 		}
@@ -1578,12 +1598,18 @@ func checkLinks(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A link to a page user may not see isn't broken, nor suggested.
 	slugs := slugSet()
-	all := allSlugs()
+	var all []string
+	for _, s := range allSlugs() {
+		if canSee(user, s) {
+			all = append(all, s)
+		}
+	}
 	var out []string
 	total := 0
 	for _, p := range sortedPages() {
-		if !inFolder(p.Slug, under) {
+		if !inFolder(p.Slug, under) || !canSee(user, p.Slug) {
 			continue
 		}
 		content, err := readPageText(p.Path)
@@ -1638,7 +1664,7 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	found, err := grepPages(pattern, ignoreCase)
+	found, err := grepPages(pattern, ignoreCase, visibleSlugs(user))
 	var ge *grepError
 	if errors.As(err, &ge) {
 		return "", toolErr("grep_wiki: " + ge.msg)
@@ -1717,14 +1743,14 @@ func history(args jsonObj, base, user string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return recentChanges(since, under, limit), nil
+		return recentChanges(since, under, limit, user), nil
 	}
-	slug, err := pageOrNewSlug(raw) // a deleted page has a history too
+	slug, err := pageOrNewSlug(raw, user) // a deleted page has a history too
 	if err != nil {
 		return "", err
 	}
 	path := safePath(slug)
-	entries := gitLog(path, 0)
+	entries := pageLog(user, path)
 	if len(entries) == 0 {
 		return "", toolErr("No history for " + strconv.Quote(raw) + ". Use list_pages to find its slug.")
 	}
@@ -1780,10 +1806,15 @@ func pageChange(slug, path string, entries []GitEntry, version string) (string, 
 	return slug + ", version " + runePrefix(e.Sha, 7) + " of " + e.Time + ": " + e.Msg + "\n\n" + diff, nil
 }
 
-func recentChanges(since, under string, limit int) string {
-	entries := gitLogAll(since, under, limit)
+// recentChanges: the wiki's latest commits, as user sees them: only the
+// files they may see, without a commit that changed none of those.
+func recentChanges(since, under string, limit int, user string) string {
+	entries := gitLogAll(since, under, limit, func(path string) bool { return canSeePath(user, path) })
 	var out, pending []string
 	for _, f := range gitUncommittedFiles() {
+		if !canSeePath(user, f.Filepath) {
+			continue
+		}
 		if label := fileLabel(f.Filepath); under == "" || inFolder(label, under) {
 			if f.Rel != "" {
 				pending = append(pending, label+" ("+f.Rel+")")
@@ -1810,7 +1841,8 @@ func recentChanges(since, under string, limit int) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author)+" | "+strings.Join(labels, ", "))
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+hideNames(user, e.Msg)+byAuthor(e.Author)+" | "+
+			strings.Join(labels, ", "))
 	}
 	theLimit := ""
 	if len(rows) == limit {
@@ -1829,7 +1861,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 		}
 		counts[tag][column]++
 	}
-	for _, p := range iterPages() {
+	for _, p := range visiblePages(user) {
 		content, err := readPageText(p.Path)
 		if err != nil {
 			continue
@@ -1965,7 +1997,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if under != "" && !anyPageIn(under) {
+	if under != "" && !anyPageIn(under, user) {
 		return "", toolErr("No pages under " + strconv.Quote(under) + ". list_pages shows the slugs, " +
 			"whose folders are the part before the last '/'.")
 	}
@@ -1977,7 +2009,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	hits := retrieve(query, limit, under, scratch)
+	hits := retrieve(&Req{user: user}, query, limit, under, scratch)
 	logQuery(query, under, hits)
 	if len(hits) == 0 {
 		return "No matching sections or tasks. Try other words, or list_pages to browse.", nil
@@ -1998,8 +2030,8 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	return strings.Join(out, "\n\n---\n\n"), nil
 }
 
-func anyPageIn(folder string) bool {
-	for _, p := range iterPages() {
+func anyPageIn(folder, user string) bool {
+	for _, p := range visiblePages(user) {
 		if inFolder(p.Slug, folder) {
 			return true
 		}

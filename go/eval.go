@@ -276,7 +276,7 @@ func unknownTargets(questions []question) []string {
 func evalRun(questions []question, k int) []int {
 	ranks := make([]int, len(questions))
 	for i, q := range questions {
-		ranks[i] = rankOf(retrieve(q.Q, k, "", false), q.Expect)
+		ranks[i] = rankOf(retrieve(nil, q.Q, k, "", false), q.Expect)
 	}
 	return ranks
 }

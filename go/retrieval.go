@@ -637,18 +637,21 @@ func inFolder(slug, folder string) bool {
 
 // retrieve: the sections and tasks most relevant to the query, best first.
 // The query syntax applies. With under, only sections of pages in that
-// folder, with scratch only of scratch notes; either way no tasks.
-func retrieve(raw string, limit int, under string, scratch bool) []*SearchDoc {
+// folder, with scratch only of scratch notes; either way no tasks. Only
+// pages rq may see (nil: Leaf itself, which sees all).
+func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*SearchDoc {
 	q := ParseQuery(raw)
 	if strings.TrimSpace(q.RankingText()) == "" {
 		return nil
 	}
 	x := chunkIndex()
 	pagesOnly := under != "" || scratch
-	pageOK := func(slug string) bool { return inFolder(slug, under) && (!scratch || isScratch(slug)) }
+	pageOK := func(slug string) bool {
+		return inFolder(slug, under) && (!scratch || isScratch(slug)) && !hiddenPage(rq, slug)
+	}
 	var keep func(*SearchDoc) bool
-	if pagesOnly {
-		keep = func(d *SearchDoc) bool { return !d.isTask() && pageOK(d.Slug) }
+	if pagesOnly || rq != nil && cfg.Users != nil {
+		keep = func(d *SearchDoc) bool { return d.isTask() && !pagesOnly || !d.isTask() && pageOK(d.Slug) }
 	}
 	ranked := bm25(x, q, fuseDepth, keep)
 	if semantic != nil {
