@@ -374,6 +374,34 @@ def test_a_task_in_her_private_list_is_private(alice, wiki):
     assert bob.post("/api/deck", json={"title": "D", "tags": ["secretlist"]}, headers=HOST).get_json()["private"] is False
 
 
+def test_only_its_creator_makes_a_task_private(alice, wiki):
+    """Making a task private takes it from everyone else: only a task no
+    one else has worked on. One from before users (no one named) is anyone's."""
+    sign_in(alice, "bob")
+    bobs = alice.post("/api/deck", json={"title": "Bob's"}, headers=HOST).get_json()
+    sign_in(alice, "alice")
+    resp = alice.put(f"/api/deck/{bobs['id']}", json={"private": True}, headers=HOST)
+    assert resp.status_code == 400 and "creator" in resp.get_json()["error"]
+    # Not by wiping his traces in the same request, nor in a batch, nor by the assistant.
+    resp = alice.put(f"/api/deck/{bobs['id']}", json={"private": True, "comments": []}, headers=HOST)
+    assert resp.status_code == 400
+    alice.post("/api/deck/batch-update", json={"tasks": [{"id": bobs["id"], "private": True}]}, headers=HOST)
+    assert "creator" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], private=True)
+    assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
+    # Hers, until bob comments on it.
+    mine = alice.post("/api/deck", json={"title": "Mine", "private": False}, headers=HOST).get_json()
+    assert alice.put(f"/api/deck/{mine['id']}", json={"private": True}, headers=HOST).get_json()["private"]
+    alice.put(f"/api/deck/{mine['id']}", json={"private": False}, headers=HOST)
+    sign_in(alice, "bob")
+    alice.post(f"/api/deck/{mine['id']}/comments", json={"text": "Me too"}, headers=HOST)
+    sign_in(alice, "alice")
+    assert alice.put(f"/api/deck/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
+    # From before users: no one is named.
+    (wiki / "_deck/tasks.json").write_text(json.dumps([{"id": "0ld00000-0000-4000-8000-000000000000", "title": "Old"}]))
+    assert alice.put("/api/deck/0ld00000-0000-4000-8000-000000000000", json={"private": True},
+                     headers=HOST).get_json()["private"]
+
+
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204

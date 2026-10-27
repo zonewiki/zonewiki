@@ -1836,13 +1836,30 @@ def test_adding_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Book", "private", False)
 
-    # An existing shared task: the box ticks in front of you, before saving.
+    # An existing shared task: only a suggestion; the box decides.
     open_edit(page, "Scarf")
     expect(private).not_to_be_checked()
     page.locator("#task-edit-tags").fill("gifts ")
-    expect(private).to_be_checked()
+    expect(note).to_contain_text("tick Private")
+    expect(private).not_to_be_checked()
+    private.check()
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Scarf", "private", True)
+
+
+def test_private_box_is_off_on_someone_elses_task(page, wiki, monkeypatch):
+    # bob made it: alice can't take it from him.
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.request.post("/api/deck", data={"title": "Bob's errand"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.request.post("/api/deck", data={"title": "Mine"})
+    page.goto("/deck?view=open")
+    modal = open_edit(page, "Bob's errand")
+    expect(page.locator("#task-edit-private")).to_be_disabled()
+    modal.locator("#task-edit-cancel").click()
+    open_edit(page, "Mine")
+    expect(page.locator("#task-edit-private")).to_be_enabled()
 
 
 def test_no_private_checkbox_without_users(page, wiki):

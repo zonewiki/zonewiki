@@ -489,6 +489,8 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 // applyTaskFields applies the field changes in data (not completion).
 func applyTaskFields(user string, t *Task, data jsonObj) error {
 	oldDue := t.DueDate
+	// As the task was: comments the same request rewrites don't count.
+	mayPrivate := mayMakePrivate(user, t)
 	if data.has("title") {
 		s, err := asStr(data["title"], "title")
 		if err != nil {
@@ -558,8 +560,11 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if err != nil {
 			return err
 		}
-		if private && privateFolder(user) == "" {
+		switch {
+		case private && privateFolder(user) == "":
 			return badRequest("Only a signed-in user's tasks can be private")
+		case private && !mayPrivate:
+			return badRequest("Only its creator can make this task private, and only while no one else has worked on it")
 		}
 		t.Owner = ""
 		if private {
@@ -945,7 +950,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
-		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
+		if jsonTrue(snap["private"]) && mayMakePrivate(user, t) {
 			t.Owner = user
 		}
 		existing[t.ID] = true

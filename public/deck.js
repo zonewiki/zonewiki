@@ -144,12 +144,23 @@ const keepCb = document.getElementById('task-edit-keep' + sfx);
 // With users only: the task is the user's alone.
 const privateCb = document.getElementById('task-edit-private' + sfx);
 const privateNote = document.getElementById('task-edit-private-note' + sfx);
-// The user's private lists (declared in their private folder): adding one's
-// tag in the modal ticks Private, with a note, until the box is clicked.
+// The user's private lists (declared in their private folder): a new task
+// given one's tag is ticked Private, with a note, until the box is clicked;
+// on an existing task the note only suggests it.
 let privateLists = new Set();
 try { privateLists = new Set(JSON.parse(appEl?.dataset.privateLists || '[]')); } catch (_) {}
-let privateBase = null;   // as the modal opened: {checked, tags (lower case)}
+let privateBase = null;   // as the modal opened: {checked, isNew, tags (lower case)}
 let privateTouched = false;
+const me = appEl?.dataset.privateFolder?.split('/')[1] || '';
+const privateLabel = privateCb?.closest('label');
+const privateTitle = privateLabel?.title;
+// As the server's mayMakePrivate: a shared task only while no one else has
+// worked on it (every history event and comment naming someone names you).
+function mayMakePrivate(task) {
+  if (!task || task.private) return true;
+  const others = x => x.by && x.by !== me;
+  return !(task.history || []).some(others) && !(task.comments || []).some(others);
+}
 const deleteModal = document.getElementById('task-delete-modal' + sfx);
 const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
 const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -3149,15 +3160,19 @@ function addedPrivateLists() {
   return [...editTags(), ...(q ? q.tags : [])].map(t => t.toLowerCase())
     .filter(t => privateLists.has(t) && !privateBase.tags.has(t));
 }
-// Adding a private list's tag makes the task private (unless the box was
-// clicked); taking the tag away again undoes that. Never the other way.
+// A private list's tag makes a new task private (unless the box was
+// clicked; taking the tag away again undoes that) and only suggests it for
+// an existing one: its privacy changes only by the box.
 function syncAutoPrivate() {
   if (!privateCb || !privateBase) return;
   const added = addedPrivateLists();
-  if (!privateTouched) privateCb.checked = privateBase.checked || added.length > 0;
-  const auto = added.length > 0 && privateCb.checked && !privateBase.checked;
-  privateNote.hidden = !auto;
-  if (auto) privateNote.textContent = `#${added[0]} is your private list`;
+  if (privateBase.isNew && !privateTouched) privateCb.checked = privateBase.checked || added.length > 0;
+  const show = added.length > 0 && !privateBase.checked && !privateCb.disabled;
+  privateNote.hidden = !show;
+  if (show) {
+    privateNote.textContent = privateCb.checked ? `#${added[0]} is your private list`
+      : `#${added[0]} is your private list: tick Private to keep this task to yourself`;
+  }
 }
 privateCb?.addEventListener('change', () => { privateTouched = true; syncAutoPrivate(); });
 titleInput.addEventListener('input', syncQuickPreview);
@@ -3328,7 +3343,10 @@ function openEditModal(taskId, opts) {
   keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : initKeep;
   if (privateCb) {
     privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
-    privateBase = { checked: privateCb.checked, tags: new Set(startTags.map(t => t.toLowerCase())) };
+    privateCb.disabled = !mayMakePrivate(task);
+    privateLabel.title = privateCb.disabled
+      ? 'Only its creator can make this task private, and only while no one else has worked on it' : privateTitle;
+    privateBase = { checked: privateCb.checked, isNew: !task, tags: new Set(startTags.map(t => t.toLowerCase())) };
     privateTouched = false;
     syncAutoPrivate();
   }

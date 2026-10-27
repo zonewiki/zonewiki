@@ -342,3 +342,27 @@ func TestEveryUsersFiles(t *testing.T) {
 		t.Error("taskIDsLocked")
 	}
 }
+
+// Only a task no one else has worked on may become someone's private one.
+func TestMayMakePrivate(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	for _, c := range []struct {
+		task *Task
+		want bool
+	}{
+		{&Task{}, true}, // from before users
+		{&Task{History: []HistoryEntry{{Event: "created", By: "alice"}}}, true},
+		{&Task{History: []HistoryEntry{{Event: "created", By: "bob"}}}, false},
+		{&Task{History: []HistoryEntry{{Event: "created", By: "alice"}}, Comments: []Comment{{By: "bob"}}}, false},
+		{&Task{History: []HistoryEntry{{Event: "created"}, {Event: "done", By: "bob"}}}, false},
+		{&Task{Owner: "alice"}, true},
+	} {
+		if got := mayMakePrivate("alice", c.task); got != c.want {
+			t.Errorf("%+v: %v", c.task, got)
+		}
+	}
+	if mayMakePrivate("", &Task{}) {
+		t.Error("Leaf has no private tasks")
+	}
+}
