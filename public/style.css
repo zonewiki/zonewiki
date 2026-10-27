@@ -475,9 +475,8 @@ main {
   color: var(--fg);
 }
 
-/* The copy-link icon by the page title and each heading (js/page.js): in
-   the margin left of it where there is room, after it on narrow screens.
-   Sized in em, so it scales with the heading, and centred on the first line. */
+/* The copy-link icon by the page title and each heading (js/page.js),
+   after its text. Sized in em, so it scales with the heading, and centred on the first line. */
 :is(.page-header, .page-content) .heading-link {
   display: inline-flex;
   vertical-align: middle;
@@ -492,13 +491,76 @@ main {
 :is(h1, h2, h3):hover > .heading-link { opacity: .7; }
 :is(.page-header, .page-content) .heading-link:is(:hover, :focus-visible, .copied) { opacity: 1; background: var(--btn-bg); color: var(--fg); }
 :is(.page-header, .page-content) .heading-link.copied { color: var(--green-text, var(--btn-primary)); }
-@media (min-width: 800px) {
-  :is(h1, h2, h3):has(> .heading-link) { position: relative; }
-  :is(.page-header, .page-content) .heading-link { position: absolute; right: 100%; top: .5lh; translate: 0 -50%; margin: 0 .25em 0 0; }
-  /* The margin left of the heading counts as hovering it. */
-  .heading-link::before { content: ""; position: absolute; inset: 0 -.25em 0 0; }
-}
 .slide-body .heading-link { display: none; }
+
+/* The chevron that folds a section (js/fold.js): after the heading on
+   narrow screens, always shown; in the margin left of it from 800px,
+   shown on hover and while folded. */
+.page-content .section-fold {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: .3em;
+  padding: .2em;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  opacity: .5;
+  transition: opacity .15s, background .15s, color .15s, rotate .15s;
+}
+.section-fold svg { width: max(.875rem, .6em); height: max(.875rem, .6em); }
+.section-folded .section-fold { rotate: -90deg; }
+/* A folded section's heading: a wavy line in place of its rule (on the
+   header of a ##, on the heading of a ###), so it shows that more is there. */
+.section-header-h2.section-folded, .section-folded > h3 { border-bottom-color: transparent; position: relative; }
+.section-folded.section-header-h2::after, .section-folded > h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 6px;
+  background: color-mix(in srgb, var(--muted) 70%, var(--border));
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpath d='M0 3q3-3 6 0t6 0' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") repeat-x left center / 12px 6px;
+}
+.page-content .section-fold:is(:hover, :focus-visible) { opacity: 1; background: var(--btn-bg); color: var(--fg); }
+@media (pointer: coarse) { .page-content .section-fold { padding: .35em; margin-block: -.2em; } }
+@media (min-width: 800px) {
+  :is(h2, h3):has(> .section-fold) { position: relative; }
+  .page-content .section-fold { position: absolute; right: 100%; top: .5lh; translate: 0 -50%; margin: 0 .25em 0 0; opacity: 0; }
+  :is(h2, h3):hover > .section-fold, .section-folded .section-fold { opacity: .7; }
+}
+/* Folded content: hidden="until-found" keeps an element's box (only its
+   content is hidden), so its margins, padding and borders go too. */
+.page-content [data-fold-hidden] { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+/* "folded" in the middle of the wavy line; a click unfolds the section. */
+.section-folded-label { display: none; }
+/* A short ###'s line is long enough for the wave to show on both sides. */
+.section-folded > h3 { min-width: 8rem; }
+.section-folded > .section-folded-label, .section-folded > h3 > .section-folded-label {
+  display: block;
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  translate: -50% 50%;
+  z-index: 1;                        /* over the wave (::after) */
+  padding: 0 .5rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.section-folded-label:is(:hover, :focus-visible) { color: var(--fg); background: var(--btn-bg); }
+@media (pointer: coarse) { .section-folded > .section-folded-label, .section-folded > h3 > .section-folded-label { padding: .3rem .75rem; } }
+.slide-body :is(.section-fold, .section-folded-label) { display: none; }
+@media print { :is(.section-fold, .section-folded-label) { display: none; } }
 
 .page-content p { margin-bottom: .875rem; }
 .page-content ul, .page-content ol { margin: .375rem 0 .875rem 1.5rem; }

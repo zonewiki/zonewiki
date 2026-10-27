@@ -855,6 +855,9 @@ def test_heading_links_copy_page_and_section_urls(page, wiki):
     title_link = page.locator(".page-header h1 .heading-link")
     section_link = page.locator("article h2#first-part .heading-link")
     expect(page.locator("article .heading-link")).to_have_count(2)
+    # After the heading's text, not in the margin left of it.
+    for h, link in ((page.locator(".page-header h1"), title_link), (page.locator("article h2#first-part"), section_link)):
+        assert link.bounding_box()["x"] > h.bounding_box()["x"] + 20
     expect(section_link).to_have_css("opacity", "0")
     page.locator("article h2#first-part").hover()
     expect(section_link).not_to_have_css("opacity", "0")

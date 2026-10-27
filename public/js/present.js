@@ -30,6 +30,12 @@ import { openLightbox } from './page.js';
     }
 
     for (const node of article.children) {
+      // Folded sections (js/fold.js) show on their slides.
+      const clone = node.cloneNode(true);
+      if (clone.hasAttribute('data-fold-hidden')) {
+        clone.removeAttribute('hidden');
+        clone.removeAttribute('data-fold-hidden');
+      }
       const isH2 = node.matches('div.section-header') || node.tagName === 'H2';
       if (isH2 || node.tagName === 'H3') {
         if (current.children.length) groups.push(current);
@@ -39,10 +45,8 @@ import { openLightbox } from './page.js';
         const editLink = node.querySelector('.section-edit-btn');
         const m = editLink && editLink.getAttribute('href').match(/[?&]section=(\d+)/);
         current.dataset.sectionN = m ? m[1] : '';
-        current.appendChild(node.cloneNode(true));
-      } else {
-        current.appendChild(node.cloneNode(true));
       }
+      current.appendChild(clone);
     }
     if (current.children.length) groups.push(current);
 

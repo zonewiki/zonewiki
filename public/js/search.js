@@ -1,5 +1,6 @@
 import { closeOnBackdropClick, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
+import { revealElement } from './fold.js';
 
 // ── Search modal ──────────────────────────────────────────────────────────────
 
@@ -470,7 +471,7 @@ function markTerms(root, terms) {
   const alternatives = [...terms].sort((a, b) => b.length - a.length).map(escape).join('|');
   const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, 'giu');
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app')
+    acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app, .section-folded-label')
       ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
   });
   const nodes = [];
@@ -515,6 +516,7 @@ function searchHighlightBar(article, params, marks, terms) {
     current = (i + marks.length) % marks.length;
     marks[current].classList.add('current');
     bar.querySelector('.search-hl-count').textContent = `${current + 1} of ${marks.length}`;
+    revealElement(marks[current]);
     if (scroll) marks[current].scrollIntoView({ block: 'center' });
   };
   const clear = () => {

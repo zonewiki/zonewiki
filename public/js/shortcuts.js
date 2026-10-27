@@ -2,6 +2,7 @@ import { closeOnBackdropClick, keyPrefix } from './util.js';
 import { deckHomeHref, openHomeTask, openNewPage, openScratch, toggleSharing } from './actions.js';
 import { openSearchModal } from './search.js';
 import { togglePreview } from './editor.js';
+import { foldAll } from './fold.js';
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
@@ -12,7 +13,9 @@ import { togglePreview } from './editor.js';
 function jumpSection(step) {
   const article = document.querySelector('article.page-content');
   if (!article || document.querySelector('.presentation-overlay')) return false;
-  const heads = [...article.querySelectorAll('h2[id], h3[id]')].filter(h => !h.closest('.tasks-app'));
+  // Not those inside a folded section.
+  const heads = [...article.querySelectorAll('h2[id], h3[id]')]
+    .filter(h => !h.closest('.tasks-app, [data-fold-hidden]'));
   if (!heads.length) return false;
   let current = -1;
   heads.forEach((h, i) => { if (h.getBoundingClientRect().top < 121) current = i; });
@@ -131,6 +134,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'e') {
     const editLink = document.querySelector('a[href^="/edit/"]');
     if (editLink) window.location.href = editLink.href;
+  }
+
+  // Z — fold / unfold every section
+  if (e.key === 'z' && !document.querySelector('.presentation-overlay')) {
+    foldAll();
   }
 
   // P — enter presentation mode

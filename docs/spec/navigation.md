@@ -78,6 +78,7 @@ Defined in the `keydown` listener in `js/shortcuts.js`. Bare-key shortcuts are s
 | **S** | anywhere | Sharing mode on/off (see Sharing mode) |
 | **e** | page view | Navigate to edit mode |
 | **]** / **[** | page view | Next / previous section (`##`/`###`, not a deck embed's; `jumpSection` in `js/shortcuts.js`): scrolls it to the top and puts its anchor in the URL; the current one is the last heading scrolled past, as the side TOC marks it; `[` before the first goes to the top |
+| **z** | page view | Fold every section, or unfold them all when all are folded (see Folding sections in `docs/spec/rendering.md`) |
 | **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
@@ -92,6 +93,7 @@ Defined in the `keydown` listener in `js/shortcuts.js`. Bare-key shortcuts are s
 - **Present** is in the page's ⋯ menu (see Page header) whenever the page has a heading.
 - Choosing Present (or pressing **`p`**) opens a fullscreen dark overlay, splitting the article into slides at each `<h2>` boundary.
 - Content before the first `<h2>` (if any) becomes an intro slide.
+- Folded sections (Folding sections in `docs/spec/rendering.md`) show on their slides.
 - Navigation: **← →** arrow keys, or click "← Prev" / "Next →" buttons. **Esc** exits.
 - The slide counter (`1 / N`) is shown in the centre of the control bar.
 - Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay. CSS custom properties are overridden to force dark colours.

@@ -11,5 +11,6 @@ import './js/pagemenu.js';    // the page's ⋯ menu and its dialogs
 import './js/shortcuts.js';   // keyboard shortcuts
 import './js/editor.js';      // the editor
 import './js/page.js';        // the page view: checkboxes, task chips, tables, lightbox
+import './js/fold.js';        // folding sections
 import './js/present.js';     // presentation mode
 import './deck.js';           // deck apps on the page

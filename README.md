@@ -60,7 +60,8 @@ editor; a change on disk shows up immediately.
   search, "Related pages". On wide screens the table of contents sits on the
   left and the links on the right, both following as you scroll.
 - Callouts (`> [!WARNING]`), sortable tables, image sizing,
-  frontmatter tags, a one-line summary and sources.
+  frontmatter tags, a one-line summary and sources. Fold a long page's
+  sections while reading (the chevron by a heading, or `z` for all).
 - An editor with live preview and auto-save, a formatting bar, completion
   for links, pages and emoji (`:tada` → 🎉), snippets (`/date`), list continuation, and editing a
   single section from its heading. Paste or drop files and images to upload

@@ -15,7 +15,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | File | Covers |
 |------|--------|
 | `docs/spec/routes.md` | Every route, what each page view includes, side columns on big screens |
-| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
+| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
@@ -114,7 +114,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     ├── style.css           # All styling
     ├── leaf.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, editor, page, present (see Client code in `docs/spec/rendering.md`)
+    │                       #   shortcuts, mdedit, editor, page, fold, present (see Client code in `docs/spec/rendering.md`)
     ├── deck-core.js        # Pure deck logic (no DOM), an ES module — shared by deck.js, the editor and Node-run tests
     ├── deck.js             # Deck (task management) app, an ES module leaf.js imports; initDecks() starts each .tasks-app
     ├── favicon.svg         # Browser tab icon

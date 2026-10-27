@@ -115,7 +115,8 @@
     const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
     const line = atEnd ? window.innerHeight : 120;
     let current = 0;
-    heads.forEach((h, i) => { if (h && h.getBoundingClientRect().top < line) current = i; });
+    // A heading in a folded section has no box: it counts as not reached.
+    heads.forEach((h, i) => { if (h?.getClientRects().length && h.getBoundingClientRect().top < line) current = i; });
     links.forEach((a, i) => {
       a.classList.toggle('active', i === current);
       if (i === current) a.setAttribute('aria-current', 'location');
