@@ -525,7 +525,11 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if _, ok := as[[]json.RawMessage](data["comments"]); !ok {
 			return badRequest("comments must be a list")
 		}
-		t.Comments = cleanComments(data["comments"])
+		cs, err := keepOthersComments(user, cleanCommentList(t.Comments), cleanComments(data["comments"]))
+		if err != nil {
+			return err
+		}
+		t.Comments = cs
 	}
 	if data.has("due_date") {
 		d, err := validateDate(data["due_date"])
@@ -817,6 +821,39 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	return t, writeBothLocked(user, active, completed, message)
 }
 
+var errOthersComment = badRequest("That comment is someone else's: only its author can change or delete it")
+
+// keepOthersComments: a task's comments as a request sends the whole list
+// (an undo), checked against those it has: a comment someone else wrote
+// must stay as it is, and every comment keeps the author it has (a new
+// one is user's), so no one changes, deletes or forges another's words.
+func keepOthersComments(user string, have, given []Comment) ([]Comment, error) {
+	old := map[string]Comment{}
+	for _, c := range have {
+		old[c.ID] = c
+	}
+	seen := map[string]bool{}
+	out := []Comment{}
+	for _, c := range given {
+		if o, ok := old[c.ID]; ok {
+			if !ownComment(user, o) && (c.Text != o.Text || c.At != o.At) {
+				return nil, errOthersComment
+			}
+			c.By = o.By
+		} else {
+			c.By = user
+		}
+		seen[c.ID] = true
+		out = append(out, c)
+	}
+	for _, o := range have {
+		if !seen[o.ID] && !ownComment(user, o) {
+			return nil, errOthersComment
+		}
+	}
+	return out, nil
+}
+
 // taskComment: the index of a task's comment by id (its comments cleaned
 // first).
 func taskComment(t *Task, cid string) (int, error) {
@@ -851,6 +888,9 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if !ownComment(userOf(r), t.Comments[i]) {
+		return errOthersComment
+	}
 	t.Comments[i].Text = text
 	if err := writeBothLocked(userOf(r), active, completed, "Edit deck task comment"); err != nil {
 		return err
@@ -869,6 +909,9 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	i, err := taskComment(t, r.PathValue("cid"))
 	if err != nil {
 		return err
+	}
+	if !ownComment(userOf(r), t.Comments[i]) {
+		return errOthersComment
 	}
 	t.Comments = slices.Delete(t.Comments, i, i+1)
 	if err := writeBothLocked(userOf(r), active, completed, "Delete deck task comment"); err != nil {

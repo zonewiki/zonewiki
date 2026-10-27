@@ -1862,6 +1862,20 @@ def test_private_box_is_off_on_someone_elses_task(page, wiki, monkeypatch):
     expect(page.locator("#task-edit-private")).to_be_enabled()
 
 
+def test_only_your_own_comments_can_be_edited(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    task = page.request.post("/api/deck", data={"title": "Errand"}).json()
+    page.request.post(f"/api/deck/{task['id']}/comments", data={"text": "From Bob"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.request.post(f"/api/deck/{task['id']}/comments", data={"text": "From Alice"})
+    page.goto("/deck?view=open")
+    open_edit(page, "Errand")
+    items = page.locator("#task-edit-comment-list li")
+    expect(items.filter(has_text="From Alice").locator("[data-comment-action]")).to_have_count(2)
+    expect(items.filter(has_text="From Bob").locator("[data-comment-action]")).to_have_count(0)
+
+
 def test_no_private_checkbox_without_users(page, wiki):
     page.goto("/deck")
     page.locator("#task-add-btn").click()

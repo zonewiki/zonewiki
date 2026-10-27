@@ -402,6 +402,35 @@ def test_only_its_creator_makes_a_task_private(alice, wiki):
                      headers=HOST).get_json()["private"]
 
 
+def test_comments_are_their_authors_to_change(alice, wiki):
+    """alice may edit and delete her own comments and those of no one (from
+    before users), not bob's: not by their routes, nor by sending the whole
+    list (an undo), nor in a batch; nor write one in his name."""
+    task = alice.post("/api/deck", json={"title": "Shared", "private": False}, headers=HOST).get_json()
+    url = f"/api/deck/{task['id']}/comments"
+    hers = alice.post(url, json={"text": "Hers"}, headers=HOST).get_json()["comments"][-1]
+    sign_in(alice, "bob")
+    his = alice.post(url, json={"text": "His"}, headers=HOST).get_json()["comments"][-1]
+    sign_in(alice, "alice")
+    assert his["by"] == "bob"
+    for resp in (alice.put(f"{url}/{his['id']}", json={"text": "Changed"}, headers=HOST),
+                 alice.delete(f"{url}/{his['id']}", headers=HOST),
+                 alice.put(f"/api/deck/{task['id']}", json={"comments": [hers]}, headers=HOST),
+                 alice.put(f"/api/deck/{task['id']}", json={"comments": [hers, {**his, "text": "Changed"}]}, headers=HOST),
+                 alice.post("/api/deck/batch-update", json={"tasks": [{"id": task["id"], "comments": []}]}, headers=HOST)):
+        assert resp.status_code == 400 and "someone else's" in resp.get_json()["error"]
+    assert alice.put(f"{url}/{hers['id']}", json={"text": "Hers, edited"}, headers=HOST).status_code == 200
+    forged = {"id": "f0f0f0f0", "at": "2026-01-01T10:00", "by": "bob", "text": "Forged"}
+    after = alice.put(f"/api/deck/{task['id']}", json={"comments": [his, forged]}, headers=HOST).get_json()
+    assert [(c["text"], c["by"]) for c in after["comments"]] == [("His", "bob"), ("Forged", "alice")]
+    assert alice.delete(f"{url}/f0f0f0f0", headers=HOST).status_code == 200
+    # From before users: no one's, so anyone's.
+    (wiki / "_deck/tasks.json").write_text(json.dumps([{"id": "0ld00000-0000-4000-8000-000000000000", "title": "Old",
+        "comments": [{"id": "0c0c0c0c", "at": "2025-01-01T10:00", "text": "Old"}]}]))
+    assert alice.delete("/api/deck/0ld00000-0000-4000-8000-000000000000/comments/0c0c0c0c",
+                        headers=HOST).status_code == 200
+
+
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204

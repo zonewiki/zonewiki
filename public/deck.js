@@ -3229,8 +3229,11 @@ function renderComments(task) {
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
     `<span class="task-comment-text">${htmlOf('comments', c.text)}</span>` +
+    // Only your own (or no one's, from before users) to edit or delete.
+    (c.by && c.by !== me ? '' :
     `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
-    `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button></li>`).join('');
+    `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button>`) +
+    '</li>').join('');
 }
 // A comment route answered with the task: take it in and redraw.
 async function commentWrite(url, method, body) {
