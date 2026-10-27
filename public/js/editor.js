@@ -18,6 +18,8 @@ if (textarea && previewPane) {
   // Auto-show preview on wide screens
   if (window.innerWidth >= 1000) togglePreview();
 
+  const pageSlug = decodeURIComponent((document.getElementById('editor-form')?.getAttribute('action') || '')
+    .replace(/^\/edit\//, ''));
   // The markdown helpers (js/mdedit.js), shared with the deck's task notes;
   // Enter on a [[wikilink]] follows it (after saving).
   const { replaceRange, selectedLines } = markdownEditor(textarea, {
@@ -25,6 +27,7 @@ if (textarea && previewPane) {
     attachInput: document.getElementById('fmt-attach-input'),
     onChange: schedulePreview,
     formats: { maketask: makeTasks },
+    page: pageSlug,
     onEnter: e => {
       const wlText = wikilinkAtCursor();
       if (wlText === null) return;
@@ -51,8 +54,6 @@ if (textarea && previewPane) {
   // #work due:fri`), and the task's notes link back to this page.
   const LIST_PREFIX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])\s+)(?:\[[ xX]\]\s+)?/;
   const TASK_REF_ONLY_RE = /^\[\[task:[^\]]*\]\]$/;
-  const pageSlug = (document.getElementById('editor-form')?.getAttribute('action') || '')
-    .replace(/^\/edit\//, '');
 
   async function makeTasks() {
     const v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;

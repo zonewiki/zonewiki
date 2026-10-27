@@ -9,6 +9,7 @@ that phase, strictly: once it passes, the mark must go."""
 
 import re
 import subprocess
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ REPO = Path(__file__).resolve().parent.parent
 SECRET = "quokkaflute"
 QUERY = "zebracorn"
 DIARY = "private/alice/diary"
+NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her scratch note
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
 
@@ -34,8 +36,9 @@ def git(wiki, *args):
 
 @pytest.fixture()
 def wiki(git_wiki_dir, monkeypatch):
-    """alice's private pages, committed (the diary; an old page, deleted)
-    and not (a draft); a shared page linking to the diary, which links back."""
+    """alice's private pages, committed (the diary, a scratch note; an old
+    page, deleted) and not (a draft); a shared page linking to the diary,
+    which links back."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     w = git_wiki_dir
     (w / "private" / "alice").mkdir(parents=True)
@@ -43,6 +46,7 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / f"{DIARY}.md").write_text(
         f"---\ntags: [{QUERY}-{SECRET}]\n---\n# Diary {SECRET}\n\n{QUERY} {SECRET} with [[plans]].\n\n- [ ] Call\n")
     (w / "private/alice/old.md").write_text(f"# Old {SECRET}\n\n{QUERY} {SECRET}\n")
+    (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "_assets/private/alice/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n")
     git(w, "add", "-A")
@@ -99,7 +103,7 @@ READS = [
     ("GET /uncommitted", "GET", "/uncommitted", {}),
     ("GET /api/uncommitted", "GET", "/api/uncommitted", {}),
     ("GET /new", "GET", "/new", {}),
-    ("GET /_assets/{filename}", "GET", "/_assets/private/alice/photo.png", {}),
+    ("GET /_assets/{path...}", "GET", "/_assets/private/alice/photo.png", {}),
     ("GET /deck", "GET", "/deck", {}),
     ("GET /api/deck", "GET", "/api/deck", {}),
     ("GET /api/deck/completed", "GET", "/api/deck/completed", {}),
@@ -153,6 +157,125 @@ def test_stray_private_content_is_logged(client, wiki):
     assert "private/carol is in private/ but no user's folder there" in client.live.log.read_text()
 
 
+# ── What alice does with her own ─────────────────────────────────────────────
+
+def sign_in(client, name):
+    client.post("/login", data={"username": name, "password": USERS[name][0]}, headers=HOST)
+
+
+@pytest.fixture()
+def alice(client, wiki):
+    sign_in(client, "alice")
+    return client
+
+
+def scratch_titles(client):
+    return re.findall(r'<a href="/page/([^"]+)"', client.get("/page/_scratch", headers=HOST).data.decode())
+
+
+def test_scratch_notes_are_private(alice, wiki):
+    (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: stays shared
+    slug = alice.post("/api/scratch", data={"title": "Mine"}, headers=HOST).get_json()["slug"]
+    assert re.fullmatch(r"private/alice/\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_mine", slug)
+    assert (wiki / f"{slug}.md").exists()
+    notes = scratch_titles(alice)
+    assert slug in notes and NOTE in notes and "2026-01-01_10-00-00_shared" in notes
+    sign_in(alice, "bob")
+    bob = alice
+    notes = scratch_titles(bob)
+    assert "2026-01-01_10-00-00_shared" in notes and not any("alice" in n for n in notes)
+
+
+def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):
+    resp = alice.post(f"/promote/{NOTE}", data={"folder": "ideas", "name": "Idea"}, headers=HOST)
+    assert resp.headers["Location"] == "/page/ideas/idea"
+    assert (wiki / "ideas/idea.md").exists() and not (wiki / f"{NOTE}.md").exists()
+
+
+def test_append_moves_a_private_note_out(alice, wiki):
+    resp = alice.post(f"/append/{NOTE}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
+    assert resp.headers["Location"] == "/page/plans#idea"
+    assert SECRET in (wiki / "plans.md").read_text() and not (wiki / f"{NOTE}.md").exists()
+
+
+def upload(client, page="", name="pic.png", **extra):
+    return client.post("/api/upload", data={"file": (BytesIO(b"\x89PNG"), name), "page": page, **extra},
+                       content_type="multipart/form-data", headers=HOST)
+
+
+def test_an_upload_for_a_private_page_is_private(alice, wiki):
+    resp = upload(alice, DIARY)
+    assert resp.get_json()["url"] == "/_assets/private/alice/pic.png"
+    assert (wiki / "_assets/private/alice/pic.png").read_bytes() == b"\x89PNG"
+    assert upload(alice, DIARY).status_code == 409                      # the same name there again
+    assert upload(alice, "plans").get_json()["url"] == "/_assets/pic.png"   # a shared page's: shared
+    assert alice.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 200
+    assert "Upload private/alice/pic.png" in git(wiki, "log", "--format=%s")
+    sign_in(alice, "bob")
+    bob = alice
+    assert bob.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 404
+    assert bob.get("/_assets/pic.png", headers=HOST).status_code == 200
+    assert upload(bob, DIARY, "b.png").get_json()["url"] == "/_assets/b.png"   # not into alice's folder
+
+
+def test_assets_in_other_folders_are_not_served(alice, wiki):
+    (wiki / "_assets/sub").mkdir()
+    (wiki / "_assets/sub/a.png").write_bytes(b"x")
+    (wiki / "_assets/private/alice/deeper").mkdir()
+    (wiki / "_assets/private/alice/deeper/a.png").write_bytes(b"x")
+    for path in ("/_assets/sub/a.png", "/_assets/private/alice/deeper/a.png", "/_assets/private/alice/"):
+        assert alice.get(path, headers=HOST).status_code == 404, path
+
+
+def test_new_private_page(alice, wiki):
+    assert 'name="private"' in alice.get("/new", headers=HOST).data.decode()
+    resp = alice.post("/new", data={"slug": "Gift ideas", "private": "1"}, headers=HOST)
+    assert resp.headers["Location"] == "/edit/private/alice/gift-ideas"
+    assert (wiki / "private/alice/gift-ideas.md").exists()
+    alice.post("/new", data={"slug": "private/alice/two", "private": "1"}, headers=HOST)
+    assert (wiki / "private/alice/two.md").exists()
+
+
+def test_no_private_checkbox_without_users(client, wiki_dir):
+    assert 'name="private"' not in client.get("/new", headers=HOST).data.decode()
+    client.post("/new", data={"slug": "x", "private": "1"}, headers=HOST)
+    assert (wiki_dir / "x.md").exists()
+
+
+def test_rename_into_another_users_folder_is_refused(bob, wiki):
+    resp = bob.post("/rename/plans", data={"new_name": "private/alice/plans"}, headers=HOST)
+    assert "rename_error" in resp.headers["Location"]
+    assert (wiki / "plans.md").exists() and not (wiki / "private/alice/plans.md").exists()
+
+
+def test_history_leaves_out_versions_from_before_a_page_was_shared(alice, wiki):
+    alice.post(f"/rename/{DIARY}", data={"new_name": "diary"}, headers=HOST)
+    shas = git(wiki, "log", "--follow", "--format=%h", "--", "diary.md").split()
+    assert len(shas) == 2   # the rename, and alice's commit before it
+    sign_in(alice, "bob")
+    bob = alice
+    body = bob.get("/history/diary", headers=HOST).data.decode()
+    assert shas[0] in body and shas[1] not in body
+    assert bob.get(f"/revision/diary/{shas[1]}", headers=HOST).status_code == 404
+
+
+def test_commit_all_commits_only_what_you_see(bob, wiki):
+    (wiki / "notes.md").write_text("# Bob's\n")
+    assert bob.post("/api/commit-all", headers=HOST).get_json()["files"] == ["notes.md"]
+    assert "private/alice/draft.md" in git(wiki, "status", "--porcelain")
+    sign_in(bob, "alice")
+    assert bob.post("/api/commit-all", headers=HOST).get_json()["files"] == ["private/alice/draft.md"]
+
+
+def test_links_from_invisible_pages_dont_count(alice, wiki):
+    def links(client):
+        return {p["slug"]: p["links"] for p in client.get("/api/pages-list", headers=HOST).get_json()}
+    assert links(alice)["plans"] == 1   # her diary links there
+    sign_in(alice, "bob")
+    bob = alice
+    assert links(bob)["plans"] == 0
+
+
 # ── MCP ──────────────────────────────────────────────────────────────────────
 
 def mcp(client, tool, **args):
@@ -194,35 +317,45 @@ WRITES = [
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),
     ("POST /delete/{slug...}", "POST", f"/delete/{DIARY}", {}),
     ("POST /restore/{rest...}", "POST", "/restore/private/alice/old/{old}", {}),
-    # Scratch notes aren't private until phase 3, which gives these an
-    # alice's note to aim at; until then they are refused as no note.
-    ("POST /promote/{slug...}", "POST", f"/promote/{DIARY}", {"data": {"folder": "", "name": "stolen"}}),
-    ("POST /append/{slug...}", "POST", f"/append/{DIARY}", {"data": {"page": "plans", "heading": "Stolen"}}),
+    ("POST /promote/{slug...}", "POST", f"/promote/{NOTE}", {"data": {"folder": "", "name": "stolen"}}),
+    ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "private/alice", "name": "x"}}),
+    ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "", "name": "x", "link_from": DIARY}}),
+    ("POST /append/{slug...}", "POST", f"/append/{NOTE}", {"data": {"page": "plans", "heading": "Stolen"}}),
+    ("POST /append/{slug...}", "POST", "/append/{bobs}", {"data": {"page": DIARY, "heading": "Bob's"}}),
     ("POST /api/toggle-checkbox/{slug...}", "POST", f"/api/toggle-checkbox/{DIARY}", {"data": {"idx": "0"}}),
     ("POST /api/commit-file", "POST", "/api/commit-file", {"json": {"filepath": "private/alice/draft.md"}}),
-    ("POST /api/upload", "POST", "/api/upload", {}),   # checked in phase 3 (where an upload goes)
+    ("POST /api/commit-all", "POST", "/api/commit-all", {}),
+    ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "photo.png"),
+                                                                  "page": DIARY, "overwrite": "1"}}),
+    ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "private/alice/photo.png"),
+                                                                  "overwrite": "1"}}),
+    ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "x.png"),
+                                                                  "filename": "../private/alice/photo.png",
+                                                                  "overwrite": "1"}}),
 ]
-WRITES_LATER = {"POST /edit/{slug...}", "POST /api/save/{slug...}", "POST /new", "POST /rename/{slug...}",
-                "POST /delete/{slug...}", "POST /restore/{rest...}", "POST /api/toggle-checkbox/{slug...}",
-                "POST /api/commit-file"}
 
 
 def _write_params():
-    return [pytest.param(method, path, kwargs, id=f"{method} {path}",
-                         marks=[later(3)] if route in WRITES_LATER else [])
-            for route, method, path, kwargs in WRITES if route != "POST /api/upload"]
+    return [pytest.param(method, path, kwargs, id=f"{method} {path} {i}")
+            for i, (route, method, path, kwargs) in enumerate(WRITES)]
 
 
 def _alices_files(wiki):
-    return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in (wiki / "private").rglob("*") if p.is_file()}
+    return {p.relative_to(wiki).as_posix(): p.read_bytes()
+            for folder in ("private", "_assets/private") for p in (wiki / folder).rglob("*") if p.is_file()}
 
 
 @pytest.mark.parametrize("method,path,kwargs", _write_params())
 def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
+    if "{bobs}" in path:   # bob's own scratch note, aiming at alice's pages from there
+        path = path.replace("{bobs}", bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"])
+    kwargs = {k: v() if callable(v) else v for k, v in kwargs.items()}
     before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
     bob.open(fill(path, wiki), method=method, headers=HOST, **kwargs)
     assert _alices_files(wiki) == before
-    assert git(wiki, "log", "--format=%H") == log or "private/alice" not in git(wiki, "show", "--stat", "HEAD")
+    new = git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split() if log else []
+    for commit in new:
+        assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
 
 
 # ── Every route is covered ───────────────────────────────────────────────────
@@ -232,7 +365,6 @@ EXEMPT = {
     "/mcp",                         # its tools: MCP_READS
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
     "POST /api/scratch",            # makes bob's own note
-    "POST /api/commit-all",         # commits what bob may see (phase 3)
 }
 # The deck's writes take task ids: private tasks come in phase 5, with their probes.
 DECK_WRITES = {

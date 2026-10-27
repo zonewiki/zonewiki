@@ -12,7 +12,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
 | GET    | `/new`                | Editor for a new page (slug entered by user)    |
-| POST   | `/new`                | Create `<slug>.md` and redirect to it           |
+| POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |
@@ -21,7 +21,8 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
 | GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version in `docs/spec/deployment.md`) |
-| POST   | `/api/upload`         | Upload an image file; returns `{ url }` for insertion into markdown |
+| POST   | `/api/upload`         | Upload a file; returns `{ url }` for insertion into markdown; `page`: the page it is for (a private page's go to `_assets/private/<user>/`) |
+| GET    | `/_assets/<path>`     | An upload: `<file>`, or `private/<user>/<file>` for that user only |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
 | GET    | `/api/deck`           | JSON list of all open tasks (`_deck/tasks.json`) |

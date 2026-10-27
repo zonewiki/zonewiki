@@ -1511,7 +1511,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	counts := allBacklinkCounts()
+	counts := allBacklinkCounts(nil)
 	home := ""
 	if h := lookupDeckHome(); h != nil {
 		home = h.Slug

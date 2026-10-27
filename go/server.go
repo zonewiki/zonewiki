@@ -159,7 +159,7 @@ func newHandler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/upload", apiUpload)
 	mux.HandleFunc("GET /public/{path...}", servePublic)
-	mux.HandleFunc("GET /_assets/{filename}", serveUpload)
+	mux.HandleFunc("GET /_assets/{path...}", serveUpload)
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)
@@ -356,11 +356,16 @@ func serveFile(w http.ResponseWriter, r *http.Request, dir, name, disposition st
 // when the file is opened directly.
 const svgCSP = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
 
+// serveUpload: an upload, in _assets/ or (with users) in a user's
+// private folder there, _assets/private/<user>/, which only that user sees.
 func serveUpload(w http.ResponseWriter, r *http.Request) {
-	filename := r.PathValue("filename")
+	filename := r.PathValue("path")
 	if strings.Contains(filename, "/") {
-		http.NotFound(w, r)
-		return
+		owner, _ := ownerIn("_assets/"+privateDir, "_assets/"+filename)
+		if owner == "" || owner != userOf(r) || strings.Count(filename, "/") != 2 {
+			http.NotFound(w, r)
+			return
+		}
 	}
 	mimeType := mediaType(filename)
 	inline := strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") ||
@@ -440,6 +445,11 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if originalName == "" {
 		originalName = "upload" + uploadExt(fileType)
 	}
+	// An upload for a page in the user's private folder goes in theirs.
+	folder := ""
+	if owner, private := pageOwner(r.FormValue("page")); private && owner != "" && owner == userOf(r) {
+		folder = privateDir + "/" + owner + "/"
+	}
 	// unique=1: a random file name (clipboard screenshots).
 	if r.FormValue("unique") == "1" {
 		ext := strings.ToLower(suffix(originalName))
@@ -448,7 +458,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		raw := make([]byte, 16)
 		_, _ = rand.Read(raw)
-		filename := hex.EncodeToString(raw) + ext
+		filename := folder + hex.EncodeToString(raw) + ext
 		if !saveUpload(w, r, f, filename) {
 			return
 		}
@@ -464,26 +474,31 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest) // "..", ".git" and friends: not an asset name
 		return
 	}
-	dest := filepath.Join(cfg.Uploads, filename)
+	dest := filepath.Join(cfg.Uploads, filepath.FromSlash(folder), filename)
 	if _, err := os.Stat(dest); err == nil && r.FormValue("overwrite") != "1" {
 		writeJSON(w, http.StatusConflict, map[string]any{"conflict": true, "filename": filename})
 		return
 	}
-	if !saveUpload(w, r, f, filename) {
+	if !saveUpload(w, r, f, folder+filename) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": "/_assets/" + filename})
+	writeJSON(w, http.StatusOK, map[string]string{"url": "/_assets/" + folder + filename})
 }
 
 // uploadMu keeps two uploads from writing one file at once.
 var uploadMu sync.Mutex
 
-// saveUpload writes an upload to _assets/ and commits it.
+// saveUpload writes an upload to _assets/ (filename may start with a
+// user's private folder) and commits it.
 func saveUpload(w http.ResponseWriter, r *http.Request, src io.Reader, filename string) bool {
-	dest := filepath.Join(cfg.Uploads, filename)
+	dest := filepath.Join(cfg.Uploads, filepath.FromSlash(filename))
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
-	out, err := os.Create(dest)
+	err := os.MkdirAll(filepath.Dir(dest), 0o777)
+	var out *os.File
+	if err == nil {
+		out, err = os.Create(dest)
+	}
 	if err == nil {
 		_, err = io.Copy(out, src)
 		if cerr := out.Close(); err == nil {

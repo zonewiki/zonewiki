@@ -3,6 +3,7 @@
 from playwright.sync_api import expect
 
 from conftest import TOUCH_PHONE
+from tests import settings
 
 
 def _edit(page, wiki, text, sel_start, sel_end=None):
@@ -184,6 +185,18 @@ def test_attach_uploads_and_inserts_a_link(page, wiki):
         {"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
     expect(textarea).to_have_value("# Fmt\n\nFile: [notes.txt](/_assets/notes.txt)")
     assert (wiki.root / "_assets" / "notes.txt").read_bytes() == b"hello"
+
+
+def test_attach_to_a_private_page_keeps_the_file_private(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("private/alice/fmt", "# Fmt\n\n")
+    page.goto("/edit/private/alice/fmt")
+    page.locator("#fmt-attach-input").set_input_files(
+        {"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
+    expect(page.locator("#editor-textarea")).to_have_value(
+        "# Fmt\n\n[notes.txt](/_assets/private/alice/notes.txt)")
+    assert (wiki.root / "_assets/private/alice/notes.txt").read_bytes() == b"hello"
 
 
 def test_phone_bar_is_finger_sized_and_scrolls_sideways(new_page, wiki):

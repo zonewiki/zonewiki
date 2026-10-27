@@ -93,3 +93,19 @@ func TestStrayPrivate(t *testing.T) {
 		t.Errorf("%v", got)
 	}
 }
+
+func TestScratchNotesInPrivateFolders(t *testing.T) {
+	testWiki(t, nil)
+	note := "private/alice/2026-10-27_12-00-00_idea"
+	if !isScratch("2026-10-27_12-00-00_idea") || isScratch(note) {
+		t.Error("without users only top-level notes are scratch notes")
+	}
+	withUsers(t, "alice")
+	if !isScratch(note) || isScratch("private/carol/2026-10-27_12-00-00_idea") ||
+		isScratch("private/alice/x/2026-10-27_12-00-00_idea") || isScratch("notes/2026-10-27_12-00-00_idea") {
+		t.Error("with users: at the top of a user's folder")
+	}
+	if noteDate(note) != "2026-10-27" || privateFolder("alice") != "private/alice" || privateFolder("") != "" {
+		t.Error("noteDate, privateFolder")
+	}
+}

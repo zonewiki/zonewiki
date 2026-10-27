@@ -70,6 +70,9 @@
     <p class="scratch-label">New page</p>
     <form method="post" action="/new" id="new-page-form">
       <input type="text" id="new-page-input" name="slug" placeholder="Page name…" autocomplete="off" spellcheck="false" required>
+      {{- with .user}}
+      <label class="promote-check"><input type="checkbox" name="private" value="1" id="new-page-private"> Private: in private/{{.}}/, only you see it</label>
+      {{- end}}
       <div class="scratch-actions">
         <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
         <button type="button" class="btn" id="new-page-cancel">Cancel</button>

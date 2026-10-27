@@ -34,7 +34,8 @@ func noteDate(slug string) string {
 func appendHeading(slug, title string) string { return title + " (" + noteDate(slug) + ")" }
 
 // createScratch makes a scratch note named after title (a / in it is a
-// hyphen), with content, or just `# title`; returns its slug. Two notes of
+// hyphen), with content, or just `# title`; returns its slug. With users
+// it goes in the user's private folder: scratch notes are your own. Two notes of
 // one name in the same second: the second gets the next second's stamp.
 func createScratch(user, title string, content *string, suffix string) (string, error) {
 	if title = strings.TrimSpace(title); title == "" {
@@ -44,10 +45,14 @@ func createScratch(user, title string, content *string, suffix string) (string, 
 	if name == "" {
 		name = "untitled"
 	}
+	folder := privateFolder(user)
+	if folder != "" {
+		folder += "/"
+	}
 	at := now()
 	var slug, path string
 	for {
-		slug = at.Format("2006-01-02_15-04-05") + "_" + name
+		slug = folder + at.Format("2006-01-02_15-04-05") + "_" + name
 		if path = safePath(slug); path == "" {
 			return "", refuse("'" + title + "' can't name a scratch note")
 		}
@@ -67,9 +72,10 @@ func createScratch(user, title string, content *string, suffix string) (string, 
 	return slug, nil
 }
 
-func notePath(slug string) (string, error) {
+// notePath: the file of a scratch note user may change.
+func notePath(user, slug string) (string, error) {
 	p := ""
-	if isScratch(slug) {
+	if isScratch(slug) && canWrite(user, slug) {
 		p = safePath(slug)
 	}
 	if p == "" || !exists(p) {
@@ -82,7 +88,7 @@ func notePath(slug string) (string, error) {
 // to folder/name, links following, with its own commit message. Returns
 // the new slug.
 func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) (string, error) {
-	oldPath, err := notePath(slug)
+	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", err
 	}
@@ -101,6 +107,9 @@ func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) 
 	if newPath == "" {
 		return "", refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
 	}
+	if !canWrite(user, newSlug) {
+		return "", refuse("“" + newSlug + "”: that folder is another user's")
+	}
 	if exists(newPath) {
 		return "", refuse("A page named “" + newSlug + "” already exists")
 	}
@@ -117,14 +126,14 @@ var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 // links to the note point at that section, all in one commit. Returns the
 // section's anchor.
 func appendScratch(user, slug, target, heading, suffix string) (string, error) {
-	oldPath, err := notePath(slug)
+	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", err
 	}
 	// [ ] | would break the wikilinks that now point at the section.
 	heading = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(heading, ""))
 	targetPath := ""
-	if target != "" {
+	if target != "" && canWrite(user, target) {
 		targetPath = safePath(target)
 	}
 	if targetPath == "" || !exists(targetPath) {

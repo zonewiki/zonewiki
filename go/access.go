@@ -50,6 +50,15 @@ func canSee(user, slug string) bool {
 // the same pages they may see, since everything shared is editable.
 func canWrite(user, slug string) bool { return canSee(user, slug) }
 
+// privateFolder: user's private folder ("private/alice"), "" without
+// users (or for Leaf itself, which has no user).
+func privateFolder(user string) string {
+	if cfg.Users == nil || user == "" {
+		return ""
+	}
+	return privateDir + "/" + user
+}
+
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, an
 // upload in _assets/private/<user>/, a deck file in _deck/users/<user>/,

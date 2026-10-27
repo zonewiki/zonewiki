@@ -502,7 +502,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 	var tests []func(*SearchDoc) bool
 	if unlinked {
 		linked := map[string]bool{}
-		for slug, n := range allBacklinkCounts() {
+		for slug, n := range allBacklinkCounts(rq) {
 			if n > 0 {
 				linked[slug] = true
 			}

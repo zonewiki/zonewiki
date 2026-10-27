@@ -185,26 +185,37 @@ type ScratchNote struct {
 }
 
 // listScratch: every scratch note, newest first (in sharing mode without
-// those not for sharing).
+// those not for sharing): the wiki's top level, and with users the top of
+// the user's private folder.
 func listScratch(rq *Req) []ScratchNote {
-	entries, _ := os.ReadDir(cfg.Data)
+	folders := []string{""}
+	if own := privateFolder(rq.user); own != "" {
+		folders = append(folders, own)
+	}
 	var notes []ScratchNote
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".md") {
-			continue
+	for _, folder := range folders {
+		prefix := ""
+		if folder != "" {
+			prefix = folder + "/"
 		}
-		stem := strings.TrimSuffix(name, ".md")
-		m := scratchRE.FindStringSubmatch(stem)
-		if m == nil || hiddenPage(rq, stem) {
-			continue
+		entries, _ := os.ReadDir(filepath.Join(cfg.Data, filepath.FromSlash(folder)))
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".md") {
+				continue
+			}
+			slug := prefix + strings.TrimSuffix(name, ".md")
+			m := scratchRE.FindStringSubmatch(slug)
+			if m == nil || !isScratch(slug) || hiddenPage(rq, slug) {
+				continue
+			}
+			ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], time.Local)
+			if err != nil {
+				continue
+			}
+			title, _ := pageMeta(filepath.Join(cfg.Data, filepath.FromSlash(slug)+".md"), slug)
+			notes = append(notes, ScratchNote{slug, title, ts.Format("2006-01-02 15:04"), ts})
 		}
-		ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], time.Local)
-		if err != nil {
-			continue
-		}
-		title, _ := pageMeta(filepath.Join(cfg.Data, name), stem)
-		notes = append(notes, ScratchNote{stem, title, ts.Format("2006-01-02 15:04"), ts})
 	}
 	sort.SliceStable(notes, func(i, j int) bool { return notes[i].ts.After(notes[j].ts) })
 	return notes
@@ -279,6 +290,16 @@ func refusePage(w http.ResponseWriter, r *http.Request, rq *Req, slug string) bo
 	}
 	if hiddenPage(rq, slug) {
 		hiddenPageView(w, rq)
+		return true
+	}
+	return false
+}
+
+// refuseWrite answers a change to a page the user may not change: 404, as
+// refusePage. False: go ahead.
+func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
+	if !canWrite(userOf(r), slug) {
+		http.NotFound(w, r)
 		return true
 	}
 	return false
@@ -557,10 +578,14 @@ func (rq *Req) deckHomeSlug() string {
 	return ""
 }
 
-// allBacklinkCounts: how many pages link to each slug.
-func allBacklinkCounts() map[string]int {
+// allBacklinkCounts: how many pages link to each slug, of those the
+// request may see (rq nil: all).
+func allBacklinkCounts(rq *Req) map[string]int {
 	counts := map[string]int{}
 	for _, p := range iterPages() {
+		if hiddenPage(rq, p.Slug) {
+			continue
+		}
 		_, targets := pageMeta(p.Path, p.Slug)
 		for t := range targets {
 			if t != p.Slug {

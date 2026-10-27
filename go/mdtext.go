@@ -60,10 +60,24 @@ func toSlug(name string) string {
 	return strings.Join(parts, "/")
 }
 
-var scratchRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}_` +
+// scratchRE: a scratch note's slug, at the wiki's top level or at the top
+// of a user's private folder (isScratch checks the user); the first group
+// is its timestamp.
+var scratchRE = regexp.MustCompile(`^(?:` + privateDir + `/[a-z0-9-]+/)?(\d{4}-\d{2}-\d{2}_` +
 	`\d{2}-\d{2}-\d{2})_(.+)$`)
 
-func isScratch(slug string) bool { return scratchRE.MatchString(slug) }
+// isScratch: slug is a scratch note: at the top level, or (with users) at
+// the top of a user's private folder.
+func isScratch(slug string) bool {
+	if !scratchRE.MatchString(slug) {
+		return false
+	}
+	if !strings.HasPrefix(slug, privateDir+"/") {
+		return true
+	}
+	owner, _ := pageOwner(slug)
+	return owner != ""
+}
 
 // pageTitle is the first "# " heading in the file (not in frontmatter or
 // fenced code: a shell comment in an example never becomes the title), else

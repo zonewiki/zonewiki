@@ -304,6 +304,9 @@ func readEditorSave(w http.ResponseWriter, r *http.Request) (*editorSave, bool) 
 		badRequestPage(w)
 		return nil, false
 	}
+	if refuseWrite(w, r, s.slug) {
+		return nil, false
+	}
 	s.text, s.fileHash = postedContent(r), r.PostFormValue("file_hash")
 	start, okS := formInt(r, "start_char")
 	end, okE := formInt(r, "end_char")
@@ -408,15 +411,24 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// createPage: /new, the New page dialog; private=1 puts the page in the
+// user's private folder.
 func createPage(w http.ResponseWriter, r *http.Request) {
 	raw := r.PostFormValue("slug")
 	slug := toSlug(raw)
+	if own := privateFolder(userOf(r)); own != "" && slug != "" && r.PostFormValue("private") == "1" &&
+		!strings.HasPrefix(slug, own+"/") {
+		slug = own + "/" + slug
+	}
 	path := ""
 	if slug != "" {
 		path = safePath(slug)
 	}
 	if path == "" {
 		badRequestPage(w)
+		return
+	}
+	if refuseWrite(w, r, slug) {
 		return
 	}
 	if !exists(path) {
@@ -436,7 +448,7 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	oldPath := safePath(slug)
-	if oldPath == "" || !exists(oldPath) {
+	if oldPath == "" || !exists(oldPath) || !canWrite(userOf(r), slug) {
 		http.NotFound(w, r)
 		return
 	}
@@ -457,6 +469,10 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
+	if !canWrite(userOf(r), newSlug) {
+		http.Redirect(w, r, back+"?rename_error="+quote("“"+newSlug+"”: that folder is another user's"), http.StatusFound)
+		return
+	}
 	if exists(newPath) {
 		http.Redirect(w, r, back+"?rename_error=A+page+named+%22"+newSlug+"%22+already+exists", http.StatusFound)
 		return
@@ -472,6 +488,9 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 // (400 for another page, 404 for none).
 func scratchNoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 	slug := r.PathValue("slug")
+	if refuseWrite(w, r, slug) {
+		return "", false
+	}
 	if !isScratch(slug) {
 		badRequestPage(w)
 		return "", false
@@ -506,7 +525,7 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 	linkSlug, linkPath := "", ""
 	if rawLink != "" {
 		linkSlug = pageFromInput(rawLink)
-		if linkSlug != "" {
+		if linkSlug != "" && canWrite(userOf(r), linkSlug) {
 			linkPath = safePath(linkSlug)
 		}
 		if linkPath == "" || !exists(linkPath) || linkSlug == slug {
@@ -548,7 +567,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 	target := pageFromInput(raw)
 	// The error names the page as typed.
 	targetPath := ""
-	if target != "" {
+	if target != "" && canWrite(userOf(r), target) {
 		targetPath = safePath(target)
 	}
 	if raw != "" && (targetPath == "" || !exists(targetPath)) {
@@ -570,7 +589,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := safePath(slug)
-	if path == "" || !exists(path) {
+	if path == "" || !exists(path) || !canWrite(userOf(r), slug) {
 		http.NotFound(w, r)
 		return
 	}
@@ -591,7 +610,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 // pinned to the top of the empty query's list (special).
 func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	counts := allBacklinkCounts()
+	counts := allBacklinkCounts(rq)
 	pages := []M{}
 	for _, p := range iterPages() {
 		if hiddenPage(rq, p.Slug) {
@@ -651,7 +670,7 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	path := safePath(r.PathValue("slug"))
-	if path == "" || !exists(path) {
+	if path == "" || !exists(path) || !canWrite(userOf(r), r.PathValue("slug")) {
 		http.NotFound(w, r)
 		return
 	}

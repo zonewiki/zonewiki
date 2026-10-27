@@ -129,7 +129,7 @@ func TestMarkdownLinksAreBacklinks(t *testing.T) {
 	if got := backlinks("ivo-petrenko"); !reflect.DeepEqual(got, []string{"state"}) {
 		t.Errorf("backlinks of ivo-petrenko %q", got)
 	}
-	if got := backlinks("people/ivo"); !reflect.DeepEqual(got, []string{"state"}) || allBacklinkCounts()["people/ivo"] != 1 {
+	if got := backlinks("people/ivo"); !reflect.DeepEqual(got, []string{"state"}) || allBacklinkCounts(nil)["people/ivo"] != 1 {
 		t.Errorf("backlinks of people/ivo %q", got)
 	}
 	if got := backlinks("golf"); !reflect.DeepEqual(got, []string{"a", "b"}) {

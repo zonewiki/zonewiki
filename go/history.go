@@ -21,6 +21,18 @@ func historyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/commit-file", apiCommitFile)
 }
 
+// pageLog: a page's versions (gitLog) user may see: not those from when
+// it was another user's private page, before a rename.
+func pageLog(user, path string) []GitEntry {
+	var out []GitEntry
+	for _, e := range gitLog(path, 0) {
+		if canSeePath(user, e.Path) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // slugAndSha splits "<slug>/<sha>" (Flask's <path:slug>/<sha>).
 func slugAndSha(rest string) (string, string, bool) {
 	i := strings.LastIndex(rest, "/")
@@ -67,7 +79,7 @@ func historyView(w http.ResponseWriter, r *http.Request) {
 		text, _ := readText(path)
 		title = pageTitle(text, slug)
 	}
-	entries := gitLog(path, 0)
+	entries := pageLog(rq.user, path)
 	if len(entries) == 0 && !pageExists {
 		http.NotFound(w, r)
 		return
@@ -116,7 +128,7 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	entries := gitLog(path, 0)
+	entries := pageLog(rq.user, path)
 	i := versionIndex(entries, sha)
 	content, found := gitShow(sha, versionPath(path, entries, sha))
 	restoreSha := sha
@@ -162,7 +174,7 @@ func diffView(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	entries := gitLog(path, 0)
+	entries := pageLog(rq.user, path)
 	i := versionIndex(entries, sha)
 	diff, found := versionDiff(path, entries, sha)
 	if !found {
@@ -195,7 +207,12 @@ func restoreRevision(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	content, found := gitShow(sha, versionPath(path, gitLog(path, 0), sha))
+	user := userOf(r)
+	if !canWrite(user, slug) {
+		http.NotFound(w, r)
+		return
+	}
+	content, found := gitShow(sha, versionPath(path, pageLog(user, path), sha))
 	if !found {
 		http.NotFound(w, r)
 		return
@@ -214,12 +231,7 @@ func uncommittedView(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	var files []UncommittedFile
-	for _, f := range uncommittedEntries() {
-		if f.Slug == "" || !hiddenPage(rq, f.Slug) {
-			files = append(files, f)
-		}
-	}
+	files := visibleUncommitted(rq, uncommittedEntries())
 	page(w, rq, http.StatusOK, "history/uncommitted.html", "Uncommitted Changes", shell{}, M{"files": files,
 		"breadcrumb_html": buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "")})
 }
@@ -260,10 +272,7 @@ func diffUncommitted(w http.ResponseWriter, r *http.Request) {
 func apiUncommitted(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	out := []M{}
-	for _, f := range uncommittedEntries() {
-		if f.Slug != "" && hiddenPage(rq, f.Slug) {
-			continue
-		}
+	for _, f := range visibleUncommitted(rq, uncommittedEntries()) {
 		var slug any
 		if f.Slug != "" {
 			slug = f.Slug
@@ -273,14 +282,27 @@ func apiUncommitted(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// apiCommitAll commits every uncommitted file, one commit each.
+// visibleUncommitted: the uncommitted files the request may see: pages
+// as hiddenPage says, other files (uploads, deck files) as canSeePath.
+func visibleUncommitted(rq *Req, files []UncommittedFile) []UncommittedFile {
+	var out []UncommittedFile
+	for _, f := range files {
+		if canSeePath(rq.user, f.Filepath) && (f.Slug == "" || !hiddenPage(rq, f.Slug)) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// apiCommitAll commits every uncommitted file the user may see, one commit
+// each.
 func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 	if !cfg.GitEnabled {
 		writeJSON(w, http.StatusBadRequest, M{"error": "Git not enabled"})
 		return
 	}
 	committed := []string{}
-	for _, f := range gitUncommittedFiles() {
+	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
 		gitCommit(userOf(r), commitMessage(f.Filepath), filepath.Join(cfg.Data, f.Filepath))
 		committed = append(committed, f.Filepath)
 	}
@@ -301,7 +323,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	found := false
-	for _, f := range gitUncommittedFiles() {
+	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
 		if f.Filepath == fp {
 			found = true
 		}
