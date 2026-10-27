@@ -56,6 +56,10 @@ func main() {
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}
+	for _, p := range strayPrivate() {
+		logf("%s is in %s/ but no user's folder there: no one sees it (a removed user's?). "+
+			"Move it to a user's folder (%s/<name>/) or out of %s/.", p, privateDir, privateDir, privateDir)
+	}
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
 	excludeFromGit(cfg.Data, "/.leaf/") // the secret key

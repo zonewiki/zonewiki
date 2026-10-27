@@ -113,8 +113,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
+	if refusePage(w, r, rq, slug) {
 		return
 	}
 	if !exists(path) {
@@ -221,8 +220,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
+	if refusePage(w, r, rq, slug) {
 		return
 	}
 	var content, title string

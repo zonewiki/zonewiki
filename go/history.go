@@ -49,8 +49,7 @@ func deletedPagesView(w http.ResponseWriter, r *http.Request) {
 
 func historyView(w http.ResponseWriter, r *http.Request) {
 	rq, slug := newReq(r), r.PathValue("slug")
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
+	if refusePage(w, r, rq, slug) {
 		return
 	}
 	if !cfg.GitEnabled {
@@ -98,8 +97,7 @@ func versionArg(w http.ResponseWriter, r *http.Request, rq *Req) (slug, sha, pat
 	switch {
 	case !ok:
 		http.NotFound(w, r)
-	case hiddenPage(rq, slug):
-		hiddenPageView(w, rq)
+	case refusePage(w, r, rq, slug):
 	case !cfg.GitEnabled:
 		http.NotFound(w, r)
 	default:
@@ -228,8 +226,7 @@ func uncommittedView(w http.ResponseWriter, r *http.Request) {
 
 func diffUncommitted(w http.ResponseWriter, r *http.Request) {
 	rq, slug := newReq(r), r.PathValue("slug")
-	if hiddenPage(rq, slug) {
-		hiddenPageView(w, rq)
+	if refusePage(w, r, rq, slug) {
 		return
 	}
 	if !cfg.GitEnabled {

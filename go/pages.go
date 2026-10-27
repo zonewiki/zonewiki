@@ -262,10 +262,26 @@ func isNoshare(slug string) bool {
 	return hidden
 }
 
-// hiddenPage: a page to leave out of this response: sharing mode is on and
-// the page is not for sharing.
+// hiddenPage: a page to leave out of this response: another user's private
+// page (canSee), or sharing mode is on and the page is not for sharing.
 func hiddenPage(rq *Req, slug string) bool {
-	return rq != nil && rq.sharing && isNoshare(slug)
+	return rq != nil && (!canSee(rq.user, slug) || rq.sharing && isNoshare(slug))
+}
+
+// refusePage answers a request to open a page it may not: 404 for one the
+// user can't see, as for no page at all (it doesn't tell that the page
+// exists; another user's private folder is 404 throughout), "Hidden page"
+// for one sharing mode hides. False: go ahead.
+func refusePage(w http.ResponseWriter, r *http.Request, rq *Req, slug string) bool {
+	if !canSee(rq.user, slug) {
+		http.NotFound(w, r)
+		return true
+	}
+	if hiddenPage(rq, slug) {
+		hiddenPageView(w, rq)
+		return true
+	}
+	return false
 }
 
 // pageTaskRefs: the ids of the tasks a page refers to with [[task:…]].

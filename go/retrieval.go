@@ -512,8 +512,8 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 	if scratch {
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && isScratch(d.Slug) })
 	}
-	if rq.sharing {
-		tests = append(tests, func(d *SearchDoc) bool { return d.isTask() || !isNoshare(d.Slug) })
+	if rq.sharing || cfg.Users != nil {
+		tests = append(tests, func(d *SearchDoc) bool { return d.isTask() || !hiddenPage(rq, d.Slug) })
 	}
 	var keep func(*SearchDoc) bool
 	if tests != nil {

@@ -2,7 +2,7 @@
 
 Part of Leaf's spec (see `AGENTS.md` for the index).
 
-Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them. Everything in the wiki is shared and editable by every user. (Private pages and private deck tasks per user are being built: `docs/plans/multi-user.md`.)
+Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them. Everything in the wiki is shared and editable by every user, except each user's private folder, `private/<name>/`, which only they see. (Private pages are being completed and private deck tasks built: `docs/plans/multi-user.md`.)
 
 Without `LEAF_USERS` none of this applies: one `LEAF_PASSWORD` (or none) and one `LEAF_MCP_TOKEN`, as before, and Leaf commits as itself.
 
@@ -33,6 +33,17 @@ LEAF_USER_BOB_PASSWORD=pbkdf2-sha256:600000:<salt>:<hash>
 ## MCP
 
 With users, `/mcp` takes any user's token (`LEAF_USER_<NAME>_MCP_TOKEN`) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
+
+## Private pages
+
+Pages in `private/<name>/` (and its subfolders) are that user's: only they see and change them. Make one by creating a page there (`private/alice/diary`) or moving one in.
+
+- **What "private" means**: hidden inside Leaf, from other users and their assistants. Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a `LEAF_GIT_REMOTE` hold everything. Search's keyword statistics count private pages too (they don't show, they only weigh words slightly).
+- **The rule lives in one place** (`go/access.go`): `pageOwner(slug)` (the user, and whether the page is private at all), `canSee(user, slug)`, `canWrite(user, slug)` (the same pages: everything shared is editable), `canSeePath(user, rel)` for files as git names them (pages, `_assets/private/<user>/`, `_deck/users/<user>/`). Names compare in lower case. Without users nothing is private, and `private/` is an ordinary folder.
+- **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer in `LEAF_USERS`) is seen by no one; Leaf logs each such entry when it starts (`strayPrivate`), so the admin can move it.
+- **Opening another user's page** (view, editor, history, a version, a diff, the search preview) is a plain 404, the same as for a page that doesn't exist, for every slug in their folder (`refusePage`), so it doesn't tell what exists there. Sharing mode's "Hidden page" stays for pages `LEAF_NOSHARE` hides.
+- **Everywhere else** another user's private pages are left out as sharing mode leaves out pages not for sharing (`hiddenPage(rq, slug)`, which checks both; see Sharing mode in `docs/spec/navigation.md`): search, the search modal's list, Scratch, Deleted Pages, the uncommitted list, Backlinks, Links to, Related, folder suggestions; a wikilink to one renders as its words without a link.
+- **Tests**: `tests/test_privacy.py` gives alice a private page (committed, deleted, uncommitted) and an upload, holding a word no response to bob may contain, and probes every route and MCP read tool as bob; a route Leaf registers must be probed or listed as exempt there.
 
 ## Who made a change
 
