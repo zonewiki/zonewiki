@@ -357,6 +357,23 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     assert task["id"] in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
 
 
+def test_a_task_in_her_private_list_is_private(alice, wiki):
+    """secretlist is declared in her folder: a new task with its tag is
+    private unless the request says otherwise; bulk tag changes no task's
+    privacy."""
+    assert 'data-private-lists="[&#34;secretlist&#34;]"' in alice.get("/deck", headers=HOST).data.decode()
+    assert alice.post("/api/deck", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()["private"]
+    shared = alice.post("/api/deck", json={"title": "B", "tags": ["secretlist"], "private": False}, headers=HOST)
+    assert shared.get_json()["private"] is False
+    c = alice.post("/api/deck", json={"title": "C", "private": False}, headers=HOST).get_json()
+    tagged = alice.post("/api/deck/batch-tag", json={"ids": [c["id"]], "add": ["secretlist"]}, headers=HOST)
+    assert tagged.get_json()[0]["private"] is False
+    sign_in(alice, "bob")
+    bob = alice
+    assert "data-private-lists=\"[]\"" in bob.get("/deck", headers=HOST).data.decode()
+    assert bob.post("/api/deck", json={"title": "D", "tags": ["secretlist"]}, headers=HOST).get_json()["private"] is False
+
+
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204

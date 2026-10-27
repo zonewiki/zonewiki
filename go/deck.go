@@ -204,6 +204,7 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 	}
 	lists := deckLists(user)
 	names = sortedKeys(lists)
+	privateNames := sortedKeys(privateLists(lists, user))
 	homes := map[string]string{}
 	for _, n := range names {
 		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
@@ -225,8 +226,8 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 		"keep": keep, "home": isTrue(params.Get("home")),
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
-		"private_folder": privateFolder(user),
-		"lists_json":     listsJSON, "homes_json": homesJSON,
+		"private_folder": privateFolder(user), "private_lists_json": jsonText(privateNames),
+		"lists_json": listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {
 		logf("deck embed: %v", err)
@@ -473,6 +474,10 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
+	// Unless the request says, a new task in one of the user's private lists is private.
+	if !data.has("private") && hasPrivateList(user, t.Tags) {
+		t.Owner = user
+	}
 	logEvent(t, user, "created", "", "")
 	active, err := readDeckStrict(user)
 	if err != nil {

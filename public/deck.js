@@ -143,6 +143,13 @@ const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
 const keepCb = document.getElementById('task-edit-keep' + sfx);
 // With users only: the task is the user's alone.
 const privateCb = document.getElementById('task-edit-private' + sfx);
+const privateNote = document.getElementById('task-edit-private-note' + sfx);
+// The user's private lists (declared in their private folder): adding one's
+// tag in the modal ticks Private, with a note, until the box is clicked.
+let privateLists = new Set();
+try { privateLists = new Set(JSON.parse(appEl?.dataset.privateLists || '[]')); } catch (_) {}
+let privateBase = null;   // as the modal opened: {checked, tags (lower case)}
+let privateTouched = false;
 const deleteModal = document.getElementById('task-delete-modal' + sfx);
 const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
 const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -3030,9 +3037,10 @@ function chipsOnSeparators(input, chips) {
   });
 }
 const editChips = editTagsInput && chipField(editTagsInput, {
-  label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
+  label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()), onChange: () => syncAutoPrivate() });
 if (editTagsInput) {
   chipsOnSeparators(editTagsInput, editChips);
+  editTagsInput.addEventListener('input', () => syncAutoPrivate());
   // Enter with no suggestion open (the dropdown takes it first when one
   // is): a typed tag becomes a chip rather than saving the task.
   editTagsInput.addEventListener('keydown', e => {
@@ -3128,10 +3136,30 @@ function setBatch(titles) {
 
 function syncQuickPreview() {
   const q = !batchTitles && quickParse();
+  syncAutoPrivate();
   quickPreview.hidden = !q;
   if (!q) return;
   quickPreview.textContent = quickText(q);
 }
+
+// Tags of the user's private lists the modal added (in Tags, or as #tag in
+// a new task's title), lower case.
+function addedPrivateLists() {
+  const q = !batchTitles && quickParse();
+  return [...editTags(), ...(q ? q.tags : [])].map(t => t.toLowerCase())
+    .filter(t => privateLists.has(t) && !privateBase.tags.has(t));
+}
+// Adding a private list's tag makes the task private (unless the box was
+// clicked); taking the tag away again undoes that. Never the other way.
+function syncAutoPrivate() {
+  if (!privateCb || !privateBase) return;
+  const added = addedPrivateLists();
+  if (!privateTouched) privateCb.checked = privateBase.checked || added.length > 0;
+  const auto = added.length > 0 && privateCb.checked && !privateBase.checked;
+  privateNote.hidden = !auto;
+  if (auto) privateNote.textContent = `#${added[0]} is your private list`;
+}
+privateCb?.addEventListener('change', () => { privateTouched = true; syncAutoPrivate(); });
 titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
@@ -3298,7 +3326,12 @@ function openEditModal(taskId, opts) {
   titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
   syncQuickPreview();
   keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : initKeep;
-  if (privateCb) privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
+  if (privateCb) {
+    privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
+    privateBase = { checked: privateCb.checked, tags: new Set(startTags.map(t => t.toLowerCase())) };
+    privateTouched = false;
+    syncAutoPrivate();
+  }
   const recType = task?.recurrence?.type || '';
   recTypeSelect.value = recType;
   document.getElementById('task-edit-rec-interval' + sfx).value = task?.recurrence?.interval || 1;
@@ -3458,8 +3491,10 @@ form.addEventListener('submit', async e => {
     const today = todayStr(), made = [];
     for (const title of titles) {
       const q = parseQuickAdd(title, today);
+      // A line's #tag of a private list makes that one private, as in the title.
+      const own = privateCb && !privateTouched && q.tags.some(t => privateLists.has(t.toLowerCase()));
       const task = await createTask({
-        ...data, title: q.title,
+        ...data, title: q.title, ...(own ? { private: true } : {}),
         start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
         tags: [...new Set([...data.tags, ...q.tags])],
       });

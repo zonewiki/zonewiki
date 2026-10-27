@@ -270,6 +270,42 @@ func TestDeckHomeAndListsPerUser(t *testing.T) {
 	}
 }
 
+// Your own declaration of a list is its home for you, whatever the names
+// A–Z; a task given one of your private lists' tags is private, unless
+// the request says otherwise.
+func TestPrivateLists(t *testing.T) {
+	testWiki(t, map[string]string{
+		"deck/gifts":          "# Gifts\n\n[[deck list=gifts]]\n",
+		"private/alice/gifts": "# My gifts\n\n[[deck list=gifts]]\n",
+		"private/alice/diary": "# Diary\n\n[[deck list=diary]]\n",
+		"zebra":               "# Z\n\n[[deck list=diary]]\n",
+	})
+	withUsers(t, "alice", "bob")
+	lists := deckLists("alice")
+	if lists["gifts"].Slug != "private/alice/gifts" || lists["diary"].Slug != "private/alice/diary" {
+		t.Errorf("alice's homes %+v", lists)
+	}
+	if got := sortedKeys(privateLists(lists, "alice")); !reflect.DeepEqual(got, []string{"diary", "gifts"}) {
+		t.Errorf("private lists %v", got)
+	}
+	if deckLists("bob")["gifts"].Slug != "deck/gifts" || len(privateLists(deckLists("bob"), "bob")) != 0 {
+		t.Error("bob's lists")
+	}
+	if task := newTestTask(t, "alice", "Scarf", false, "tags", "Gifts"); task.Owner != "alice" {
+		t.Error("a task in her private list is shared")
+	}
+	data := jsonObj{}
+	data.set("title", "Cake")
+	data.set("tags", "gifts")
+	data.set("private", false)
+	if task, _ := createTask("alice", data, "c"); task.Owner != "" {
+		t.Error("private: false ignored")
+	}
+	if task := newTestTask(t, "bob", "Book", false, "tags", "gifts"); task.Owner != "" {
+		t.Error("bob's task in the shared list is private")
+	}
+}
+
 // What Leaf does over all decks reaches every user's files: a rename's
 // links, the yearly archive, the search index.
 func TestEveryUsersFiles(t *testing.T) {

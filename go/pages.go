@@ -522,23 +522,50 @@ type DeckHome struct {
 }
 
 // deckLists: every list a page user sees declares ([[deck list=<name>]]),
-// by name; when several pages declare one, the first slug A–Z is its home.
-// A list declared on a private page is its owner's alone: for others its
-// name is a plain tag.
+// by name; when several pages declare one, its home is the first A–Z in
+// user's private folder, else the first shared one A–Z. A list declared on
+// a private page is its owner's alone: for others its name is a plain tag.
 func deckLists(user string) map[string]DeckHome {
 	out := map[string]DeckHome{}
 	for _, p := range sortedPages() {
 		if !canSee(user, p.Slug) {
 			continue
 		}
+		own := ownPrivate(user, p.Slug)
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, l := range embedsLists(e.embeds) {
-			if _, ok := out[l.Name]; !ok {
+			if have, ok := out[l.Name]; !ok || own && !ownPrivate(user, have.Slug) {
 				out[l.Name] = DeckHome{p.Slug, e.title, l.Params}
 			}
 		}
 	}
 	return out
+}
+
+// privateLists: user's private lists, those whose home (deckLists) is in
+// their private folder; a task given one's tag becomes private.
+func privateLists(lists map[string]DeckHome, user string) map[string]bool {
+	out := map[string]bool{}
+	for name, home := range lists {
+		if ownPrivate(user, home.Slug) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// hasPrivateList: one of tags names one of user's private lists.
+func hasPrivateList(user string, tags []string) bool {
+	if privateFolder(user) == "" {
+		return false
+	}
+	private := privateLists(deckLists(user), user)
+	for _, t := range tags {
+		if private[strings.ToLower(t)] {
+			return true
+		}
+	}
+	return false
 }
 
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page

@@ -1813,6 +1813,38 @@ def test_private_checkbox_in_modal(page, wiki, monkeypatch):
     assert "Gift for Bob" in (wiki.root / "_deck/tasks.json").read_text()
 
 
+def test_adding_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
+    # gifts is declared in alice's folder: its tag ticks Private (with a
+    # note), taking it away unticks it; a click on the box wins.
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("private/alice/gifts", "# Gifts\n\n[[deck list=gifts]]\n")
+    page.request.post("/api/deck", data={"title": "Scarf", "private": False})
+    page.goto("/deck?view=open")
+    page.locator("#task-add-btn").click()
+    private, note = page.locator("#task-edit-private"), page.locator("#task-edit-private-note")
+    expect(private).not_to_be_checked()
+    page.locator("#task-edit-title").fill("Book #gifts")
+    expect(private).to_be_checked()
+    expect(note).to_have_text("#gifts is your private list")
+    page.locator("#task-edit-title").fill("Book")
+    expect(private).not_to_be_checked()
+    expect(note).to_be_hidden()
+    page.locator("#task-edit-tags").fill("gifts ")
+    expect(private).to_be_checked()
+    private.uncheck()                                   # the user's choice stays
+    page.locator("#task-edit-form button[type=submit]").click()
+    wait_for_field(page, "Book", "private", False)
+
+    # An existing shared task: the box ticks in front of you, before saving.
+    open_edit(page, "Scarf")
+    expect(private).not_to_be_checked()
+    page.locator("#task-edit-tags").fill("gifts ")
+    expect(private).to_be_checked()
+    page.locator("#task-edit-form button[type=submit]").click()
+    wait_for_field(page, "Scarf", "private", True)
+
+
 def test_no_private_checkbox_without_users(page, wiki):
     page.goto("/deck")
     page.locator("#task-add-btn").click()

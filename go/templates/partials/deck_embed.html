@@ -3,7 +3,7 @@
     on any page). Its params reach deck.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "deck_embed" -}}
-<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .home}} data-home="1"{{end}}>
+<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}" data-private-lists="{{$.private_lists_json}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .home}} data-home="1"{{end}}>
   <div class="deck-header">
     <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .labels 0}}</button>
@@ -121,6 +121,7 @@
     {{- if .can_private}}
     <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search">
       <input type="checkbox" id="task-edit-private{{.sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>
+      <span class="field-hint task-private-note" id="task-edit-private-note{{.sfx}}" hidden></span>
     </label>
     {{- end}}
     <div class="task-edit-extras">

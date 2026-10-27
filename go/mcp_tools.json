@@ -756,7 +756,7 @@
     },
     "private": {
      "type": "boolean",
-     "description": "With users: seen by the user alone. Default: private if their deck home is in their private folder."
+     "description": "With users: seen by the user alone. Default: private if their deck home is in their private folder or a tag is a private list."
     },
     "summary": {
      "type": "string",
