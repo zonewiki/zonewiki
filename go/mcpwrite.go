@@ -21,7 +21,7 @@ import (
 
 func unixNano(n int64) time.Time { return time.Unix(0, n) }
 
-func writePage(args jsonObj, base string) (string, error) {
+func writePage(args jsonObj, base, user string) (string, error) {
 	content, err := strArg(args, "content", true)
 	if err != nil {
 		return "", err
@@ -30,7 +30,7 @@ func writePage(args jsonObj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	} else if scratch {
-		return writeScratch(args, content, base)
+		return writeScratch(args, content, base, user)
 	}
 	overwrite := jsonTrue(args["overwrite"])
 	raw, err := strArg(args, "slug", true)
@@ -71,7 +71,7 @@ func writePage(args jsonObj, base string) (string, error) {
 	if err := writeText(path, content); err != nil {
 		return "", err
 	}
-	gitCommit(msg, path)
+	gitCommit(user, msg, path)
 	out := "Created page " + slug + ".\n" + pageInfo(slug, base)
 	if existing != "" {
 		out = "Replaced page " + slug + ".\n" + pageInfo(slug, base)
@@ -93,7 +93,7 @@ func writePage(args jsonObj, base string) (string, error) {
 
 // writeScratch: write_page with scratch, a new scratch note, named by slug
 // (any words; Leaf puts the time in front) or else by the content's title.
-func writeScratch(args jsonObj, content, base string) (string, error) {
+func writeScratch(args jsonObj, content, base, user string) (string, error) {
 	if jsonTrue(args["overwrite"]) {
 		return "", toolErr("A scratch note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
@@ -122,7 +122,7 @@ func writeScratch(args jsonObj, content, base string) (string, error) {
 	if name == "" {
 		name = title
 	}
-	slug, err := scratchErr(createScratch(name, &content, suffix))
+	slug, err := scratchErr(createScratch(user, name, &content, suffix))
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +141,7 @@ func scratchErr(s string, err error) (string, error) {
 
 // fileScratchNote: the scratch note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
-func fileScratchNote(args jsonObj, base string) (string, error) {
+func fileScratchNote(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -186,7 +186,7 @@ func fileScratchNote(args jsonObj, base string) (string, error) {
 			return "", err
 		}
 		pending := savePending(path, slug) + savePending(safePath(target), target)
-		anchor, err := scratchErr(appendScratch(slug, target, heading, suffix))
+		anchor, err := scratchErr(appendScratch(user, slug, target, heading, suffix))
 		if err != nil {
 			return "", err
 		}
@@ -212,7 +212,7 @@ func fileScratchNote(args jsonObj, base string) (string, error) {
 		}
 	}
 	pending := savePending(path, slug)
-	moved, err := scratchErr(moveScratch(slug, folder, name, keepDate, suffix))
+	moved, err := scratchErr(moveScratch(user, slug, folder, name, keepDate, suffix))
 	if err != nil {
 		return "", err
 	}
@@ -247,7 +247,7 @@ func applyEdit(content, slug string, edit jsonObj, which string) (string, int, e
 	return strings.ReplaceAll(content, old, repl), count, nil
 }
 
-func editPageTool(args jsonObj, base string) (string, error) {
+func editPageTool(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -300,7 +300,7 @@ func editPageTool(args jsonObj, base string) (string, error) {
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
-	gitCommit(msg, path)
+	gitCommit(user, msg, path)
 	what := "1 occurrence"
 	if total > 1 {
 		what = fmt.Sprintf("%d occurrences", total)
@@ -328,7 +328,7 @@ func appendAt(content, addition, heading string) (string, bool) {
 	return out, true
 }
 
-func appendToPage(args jsonObj, base string) (string, error) {
+func appendToPage(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -368,7 +368,7 @@ func appendToPage(args jsonObj, base string) (string, error) {
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
-	gitCommit(msg, path)
+	gitCommit(user, msg, path)
 	return "Appended to page " + slug + where + ".\n" + pageInfo(slug, base) + pending +
 		linkWarning(slug, content, text) + guideNote(slug), nil
 }
@@ -392,7 +392,7 @@ func folderArg(raw string) string {
 // A list of moved pages in rename_page's result stops after this many.
 const movesShown = 20
 
-func renameFolder(folder string, args jsonObj, base string) (string, error) {
+func renameFolder(folder string, args jsonObj, base, user string) (string, error) {
 	raw, err := strArg(args, "new_slug", true)
 	if err != nil {
 		return "", err
@@ -430,7 +430,7 @@ func renameFolder(folder string, args jsonObj, base string) (string, error) {
 		return "", err
 	}
 	pending := savePendingPages(paths, folder+"/")
-	moves, changed, err := moveFolder(folder, newFolder, msg)
+	moves, changed, err := moveFolder(user, folder, newFolder, msg)
 	if err != nil {
 		return "", err
 	}
@@ -448,13 +448,13 @@ func renameFolder(folder string, args jsonObj, base string) (string, error) {
 	return strings.Join(out, "\n") + pending, nil
 }
 
-func renamePageTool(args jsonObj, base string) (string, error) {
+func renamePageTool(args jsonObj, base, user string) (string, error) {
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
 		return "", err
 	}
 	if folder := folderArg(raw); folder != "" {
-		return renameFolder(folder, args, base)
+		return renameFolder(folder, args, base, user)
 	}
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
@@ -486,7 +486,7 @@ func renamePageTool(args jsonObj, base string) (string, error) {
 		return "", err
 	}
 	pending := savePending(path, slug)
-	changed, err := movePage(path, newPath, slug, newS, msg)
+	changed, err := movePage(user, path, newPath, slug, newS, msg)
 	if err != nil {
 		return "", err
 	}
@@ -497,7 +497,7 @@ func renamePageTool(args jsonObj, base string) (string, error) {
 	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pending, nil
 }
 
-func deletePageTool(args jsonObj, base string) (string, error) {
+func deletePageTool(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug")
 	if err != nil {
 		return "", err
@@ -517,7 +517,7 @@ func deletePageTool(args jsonObj, base string) (string, error) {
 	if err := os.Remove(path); err != nil {
 		return "", err
 	}
-	gitCommit(msg, path)
+	gitCommit(user, msg, path)
 	out := "Deleted page " + slug + "."
 	if cfg.GitEnabled {
 		out += " It can be restored from Deleted Pages (git history)."
@@ -532,7 +532,7 @@ func deletePageTool(args jsonObj, base string) (string, error) {
 	return out + pending, nil
 }
 
-func restorePage(args jsonObj, base string) (string, error) {
+func restorePage(args jsonObj, base, user string) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -581,7 +581,7 @@ func restorePage(args jsonObj, base string) (string, error) {
 	if err := writeText(path, content); err != nil {
 		return "", err
 	}
-	gitCommit(msg, path)
+	gitCommit(user, msg, path)
 	what := "Brought back the deleted page"
 	if existed {
 		what = "Restored"
@@ -773,7 +773,7 @@ type replaceHit struct {
 	changed              []changedLine
 }
 
-func replaceInPages(args jsonObj, base string) (string, error) {
+func replaceInPages(args jsonObj, base, user string) (string, error) {
 	find, err := strArg(args, "find", true)
 	if err != nil {
 		return "", err
@@ -931,7 +931,7 @@ func replaceInPages(args jsonObj, base string) (string, error) {
 			return "", err
 		}
 	}
-	gitCommit(msg, paths...)
+	gitCommit(user, msg, paths...)
 	all := slugSet()
 	brokenSet := map[string]bool{}
 	for _, h := range hits {

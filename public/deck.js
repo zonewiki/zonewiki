@@ -2248,7 +2248,7 @@ function render() {
     const comments = task.comments || [];
     const lastComment = comments[comments.length - 1];
     const commentsDisplay = lastComment
-      ? `<button type="button" class="task-comments-btn" data-id="${task.id}" title="${esc(commentWhen(lastComment.at) + ': ' + lastComment.text)}" aria-label="${comments.length} comment${comments.length === 1 ? '' : 's'}">💬 ${comments.length}</button>` : '';
+      ? `<button type="button" class="task-comments-btn" data-id="${task.id}" title="${esc(commentStamp(lastComment) + ': ' + lastComment.text)}" aria-label="${comments.length} comment${comments.length === 1 ? '' : 's'}">💬 ${comments.length}</button>` : '';
     // A planned task is either in Focus already (start today or earlier) or
     // planned for later; the card's left edge and its 📅 date say which, the
     // same on every tab.
@@ -2295,7 +2295,7 @@ function render() {
     const earlier = comments.length - 3;
     const commentsHtml = comments.length
       ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
-          `<p><span class="task-comment-when">${esc(commentWhen(c.at))}</span> ${htmlOf('comments', c.text)}</p>`).join('')}` +
+          `<p><span class="task-comment-when">${esc(commentStamp(c))}</span> ${htmlOf('comments', c.text)}</p>`).join('')}` +
         (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
@@ -3163,6 +3163,10 @@ let commentsTaskId = null;
 function commentWhen(at) {
   return `${shortDate(at.slice(0, 10))} ${at.slice(11, 16)}`;
 }
+// When, and with users who: "12 Mar 09:30 · alice".
+function commentStamp(c) {
+  return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
+}
 function renderComments(task) {
   commentsTaskId = task?.id || null;
   commentsBox.hidden = !task;
@@ -3170,7 +3174,7 @@ function renderComments(task) {
   const comments = task.comments || [];
   document.getElementById('task-edit-comments-count' + sfx).textContent = comments.length || '';
   commentList.innerHTML = comments.slice().reverse().map(c =>
-    `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentWhen(c.at))}</span>` +
+    `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
     `<span class="task-comment-text">${htmlOf('comments', c.text)}</span>` +
     `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
     `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button></li>`).join('');

@@ -37,6 +37,11 @@ func main() {
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
 			os.Exit(health("http://localhost:5000/public/manifest.json"))
+		case "passwd":
+			restore := echoOff()
+			code := passwdMain(os.Args[2:], os.Stdin, os.Stdout, os.Stderr)
+			restore()
+			os.Exit(code)
 		}
 	}
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
@@ -132,7 +137,7 @@ func ensureHomePage() {
 	path := filepath.Join(cfg.Data, "index.md")
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		if os.WriteFile(path, []byte("# Home\n\n"), 0o666) == nil {
-			gitCommit("Create index", path)
+			gitCommit("", "Create index", path)
 		}
 	}
 }
@@ -177,15 +182,16 @@ func checks(next http.Handler) http.Handler {
 			http.Error(w, "Cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if cfg.Password != "" && !authExempt(r) {
-			ok, renew := signedIn(r)
+		if cfg.authOn() && !authExempt(r) {
+			user, ok, renew := signedIn(r)
 			if !ok {
 				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.Path), http.StatusFound)
 				return
 			}
 			if renew {
-				setSession(w, r)
+				setSession(w, r, user)
 			}
+			r = withUser(r, user)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -256,7 +262,7 @@ func isLocalPath(u string) bool {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	if cfg.Password == "" {
+	if !cfg.authOn() {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -267,9 +273,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 			// Refused unchecked, even the right password: guessing doesn't
 			// go on in the meantime.
 			errorText, status = waitMessage(wait), http.StatusTooManyRequests
-		} else if sameSecret(r.PostFormValue("password"), cfg.Password) {
+		} else if user, ok := checkLogin(r); ok {
 			loginThrottle.succeeded(key)
-			setSession(w, r)
+			setSession(w, r, user)
 			next := r.URL.Query().Get("next")
 			if !r.URL.Query().Has("next") || !isLocalPath(next) {
 				next = "/"
@@ -279,10 +285,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 		} else {
 			loginThrottle.failed(key)
 			errorText = "Incorrect password."
+			if cfg.Users != nil {
+				errorText = "Incorrect user name or password."
+			}
 		}
 	}
 	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true}, M{
-		"error": errorText, "next_url": r.URL.Query().Get("next"), "badge_in_form": true})
+		"error": errorText, "next_url": r.URL.Query().Get("next"), "badge_in_form": true,
+		"users": cfg.Users != nil, "username": r.PostFormValue("username")})
+}
+
+// checkLogin: the login form's password is right, for the user it names
+// (with users) or LEAF_PASSWORD (without).
+func checkLogin(r *http.Request) (user string, ok bool) {
+	if cfg.Users == nil {
+		return "", sameSecret(r.PostFormValue("password"), cfg.Password)
+	}
+	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil {
+		return u.Name, true
+	}
+	return "", false
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
@@ -423,7 +445,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 		raw := make([]byte, 16)
 		_, _ = rand.Read(raw)
 		filename := hex.EncodeToString(raw) + ext
-		if !saveUpload(w, f, filename) {
+		if !saveUpload(w, r, f, filename) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"url": "/_assets/" + filename})
@@ -443,7 +465,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"conflict": true, "filename": filename})
 		return
 	}
-	if !saveUpload(w, f, filename) {
+	if !saveUpload(w, r, f, filename) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": "/_assets/" + filename})
@@ -453,7 +475,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 var uploadMu sync.Mutex
 
 // saveUpload writes an upload to _assets/ and commits it.
-func saveUpload(w http.ResponseWriter, src io.Reader, filename string) bool {
+func saveUpload(w http.ResponseWriter, r *http.Request, src io.Reader, filename string) bool {
 	dest := filepath.Join(cfg.Uploads, filename)
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
@@ -469,7 +491,7 @@ func saveUpload(w http.ResponseWriter, src io.Reader, filename string) bool {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return false
 	}
-	gitCommit("Upload "+filename, dest)
+	gitCommit(userOf(r), "Upload "+filename, dest)
 	return true
 }
 

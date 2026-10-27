@@ -170,7 +170,7 @@ func TestCatastrophicRegexIsFast(t *testing.T) {
 	testWiki(t, map[string]string{"slow": "# Slow\n\n" + strings.Repeat("a", 5000) + "!\n"})
 	start := time.Now()
 	args, _ := parseObj([]byte(`{"find": "(a+)+$", "replace": "x", "regex": true, "dry_run": false}`))
-	out, err := replaceInPages(args, "")
+	out, err := replaceInPages(args, "", "")
 	if err != nil || out != `Nothing matches "(a+)+$" outside code.` || time.Since(start) > 2*time.Second {
 		t.Errorf("%q %v in %v", out, err, time.Since(start))
 	}

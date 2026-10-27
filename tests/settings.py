@@ -14,6 +14,9 @@ LEAF_DATA: Path = Path("/nonexistent")   # each test's wiki (conftest's wiki_dir
 LEAF_BUILD = "test"
 LEAF_PASSWORD = ""
 LEAF_MCP_TOKEN = ""
+# Users (LEAF_USERS): name → (password, MCP token or ""); the server gets
+# their hashes (goserver.py).
+LEAF_USERS: dict[str, tuple[str, str]] = {}
 LEAF_BASE_URL = ""
 LEAF_HOST_DATA = ""
 LEAF_QUERY_LOG = False

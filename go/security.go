@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -125,7 +126,8 @@ func secretKey(dataDir string) []byte {
 }
 
 // The login session: a cookie signed with the secret key, valid for 30 days
-// and renewed as it is used. Only "signed in" is in it.
+// and renewed as it is used. It says who signed in: with users, their name;
+// with LEAF_PASSWORD, no one in particular ("").
 const (
 	sessionCookie   = "session"
 	sessionLifetime = 30 * 24 * time.Hour
@@ -134,8 +136,9 @@ const (
 var sessionKey []byte
 
 type session struct {
-	Auth   bool  `json:"auth"`
-	Issued int64 `json:"iat"`
+	Auth   bool   `json:"auth"`
+	Issued int64  `json:"iat"`
+	User   string `json:"user,omitempty"`
 }
 
 func sign(payload string) string {
@@ -144,38 +147,64 @@ func sign(payload string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// signedIn: the request carries a valid session cookie; renew says it is
-// old enough (a day) to be given a fresh one.
-func signedIn(r *http.Request) (ok, renew bool) {
+// signedIn: the request carries a valid session cookie, user is who it
+// belongs to; renew says it is old enough (a day) to be given a fresh one.
+// With users, the session must name one of them, so a user taken out of
+// LEAF_USERS is signed out at once; without, it must name no one, so
+// switching between a password and users signs everyone out.
+func signedIn(r *http.Request) (user string, ok, renew bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return false, false
+		return "", false, false
 	}
 	payload, sig, found := strings.Cut(c.Value, ".")
 	if !found || !hmac.Equal([]byte(sig), []byte(sign(payload))) {
-		return false, false
+		return "", false, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(payload)
 	var s session
 	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth {
-		return false, false
+		return "", false, false
+	}
+	if cfg.Users != nil && cfg.Users[s.User] == nil || cfg.Users == nil && s.User != "" {
+		return "", false, false
 	}
 	age := now().Sub(time.Unix(s.Issued, 0))
-	return age < sessionLifetime, age > 24*time.Hour
+	return s.User, age < sessionLifetime, age > 24*time.Hour
 }
 
 // The cookie is Secure (HTTPS only) when the request came over HTTPS, so
 // behind an HTTPS proxy the browser never sends it in the clear; over plain
 // http (localhost, the LAN) it still works. A client faking the header only
 // gets a cookie its own http requests leave out.
-func setSession(w http.ResponseWriter, r *http.Request) {
-	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix()})
+func setSession(w http.ResponseWriter, r *http.Request, user string) {
+	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user})
 	payload := base64.RawURLEncoding.EncodeToString(raw)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: payload + "." + sign(payload), Path: "/",
 		Expires: now().Add(sessionLifetime), HttpOnly: true, Secure: isHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// The user a request is made by (users.go): the checks put the session's
+// user, /mcp its token's, into the request's context. "": no users, or
+// none signed in.
+type userKey struct{}
+
+func withUser(r *http.Request, user string) *http.Request {
+	if user == "" {
+		return r
+	}
+	return r.WithContext(context.WithValue(r.Context(), userKey{}, user))
+}
+
+func userOf(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	u, _ := r.Context().Value(userKey{}).(string)
+	return u
 }
 
 func clearSession(w http.ResponseWriter, r *http.Request) {

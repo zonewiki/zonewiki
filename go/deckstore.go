@@ -335,7 +335,7 @@ func archiveOldCompleted() {
 	if moved {
 		msg = "Archive completed deck tasks"
 	}
-	gitCommit(msg, changed...)
+	gitCommit("", msg, changed...)
 }
 
 // readAll: open and completed tasks, one consistent snapshot.
@@ -360,17 +360,18 @@ func readForWriteLocked() (active, completed []*Task, err error) {
 	return active, completed, nil
 }
 
-func writeDeckLocked(tasks []*Task, message string) error {
+// writeDeckLocked writes the open tasks, committed by user.
+func writeDeckLocked(user string, tasks []*Task, message string) error {
 	if err := writeTasks(deckFile(), tasks); err != nil {
 		return err
 	}
-	gitCommit(message, deckFile())
+	gitCommit(user, message, deckFile())
 	return nil
 }
 
 // writeBothLocked writes the open tasks and every completed task (filed by
-// year) in one commit.
-func writeBothLocked(active, completed []*Task, message string) error {
+// year) in one commit, by user.
+func writeBothLocked(user string, active, completed []*Task, message string) error {
 	if err := writeTasks(deckFile(), active); err != nil {
 		return err
 	}
@@ -378,7 +379,7 @@ func writeBothLocked(active, completed []*Task, message string) error {
 	if err != nil {
 		return err
 	}
-	gitCommit(message, append([]string{deckFile()}, changed...)...)
+	gitCommit(user, message, append([]string{deckFile()}, changed...)...)
 	return nil
 }
 
@@ -600,8 +601,9 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 
 // ---- comments ----
 
-// A task's comments: short status lines, oldest first, {id, at, text},
-// never capped; undo of other changes leaves them alone.
+// A task's comments: short status lines, oldest first, {id, at, by, text}
+// (by: who wrote it, with users), never capped; undo of other changes
+// leaves them alone.
 const commentMax = 2000
 
 func newCommentID() string { return strings.ReplaceAll(uuid4(), "-", "")[:8] }
@@ -616,7 +618,8 @@ func cleanComments(raw json.RawMessage) []Comment {
 			continue
 		}
 		id, _ := as[string](c["id"])
-		cs = append(cs, Comment{ID: id, At: at, Text: text})
+		by, _ := as[string](c["by"])
+		cs = append(cs, Comment{ID: id, At: at, By: by, Text: text})
 	}
 	return cleanCommentList(cs)
 }
@@ -635,7 +638,8 @@ func cleanCommentList(cs []Comment) []Comment {
 			id = newCommentID()
 		}
 		seen[id] = true
-		out = append(out, Comment{ID: id, At: runePrefix(c.At, 16), Text: runePrefix(strings.TrimSpace(c.Text), commentMax)})
+		out = append(out, Comment{ID: id, At: runePrefix(c.At, 16), By: c.By,
+			Text: runePrefix(strings.TrimSpace(c.Text), commentMax)})
 	}
 	return out
 }

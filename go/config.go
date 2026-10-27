@@ -21,11 +21,12 @@ const version = "1.1.0"
 
 type Config struct {
 	Build         string
-	Password      string // optional login gate (checkAuth)
-	MCPToken      string // bearer token for /mcp; without it /mcp is off
-	BaseURL       string // Leaf's address as the user's browser knows it
-	HostData      string // the wiki folder as the host sees it
-	QueryLog      bool   // keep search_wiki's queries in .leaf/queries.jsonl
+	Password      string           // optional login gate (checkAuth), without users
+	MCPToken      string           // bearer token for /mcp without users; without it /mcp is off
+	Users         map[string]*User // LEAF_USERS (users.go); nil: no users
+	BaseURL       string           // Leaf's address as the user's browser knows it
+	HostData      string           // the wiki folder as the host sees it
+	QueryLog      bool             // keep search_wiki's queries in .leaf/queries.jsonl
 	GitRemote     string
 	AllowRemote   bool            // listen on the LAN: no Host check unless Hosts is set
 	Hosts         map[string]bool // names besides localhost, without port, lowercase
@@ -39,6 +40,9 @@ type Config struct {
 }
 
 var cfg *Config
+
+// authOn: the wiki has a login gate, a password or users.
+func (c *Config) authOn() bool { return c.Password != "" || c.Users != nil }
 
 func truthy(s string) bool {
 	switch strings.ToLower(s) {
@@ -97,6 +101,10 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 	if c.Build == "" {
 		c.Build = sourceBuild()
 	}
+	var err error
+	if c.Users, err = loadUsers(getenv); err != nil {
+		return nil, err
+	}
 	for _, h := range strings.Split(getenv("LEAF_HOSTS"), ",") {
 		if strings.TrimSpace(h) != "" {
 			c.Hosts[hostName(h)] = true
@@ -131,7 +139,7 @@ func loadConfig(getenv func(string) string) (*Config, error) {
 	}
 	c.Uploads = filepath.Join(c.Data, "_assets")
 	_ = os.Mkdir(c.Uploads, 0o777)
-	_, err := exec.LookPath("git")
+	_, err = exec.LookPath("git")
 	c.GitEnabled = err == nil
 	return c, nil
 }

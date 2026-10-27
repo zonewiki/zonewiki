@@ -81,7 +81,7 @@ The edit modal's "Days before due" is just another way to enter the start date (
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
-| `comments` | `[{ id, at, text }]` | The user's status lines, oldest first, uncapped (see Comments). |
+| `comments` | `[{ id, at, by, text }]` | The user's status lines, oldest first, uncapped (see Comments); `by` only with users. |
 | `history` | `[{ at, event, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date). `at` is `YYYY-MM-DDTHH:MM`. See History. |
 
 ### Views
@@ -149,7 +149,7 @@ The edit modal shows it in a closed **History** section (newest first, with a co
 
 ### Comments
 
-Quick status lines on a task ("called Bob, waiting", "Alex: 6 people"), in `comments` (`[{ id, at, text }]`, oldest first; `id` 8 hex chars, `at` `YYYY-MM-DDTHH:MM`, text up to `commentMax` = 2000 chars). Not part of the History: they are never capped, undo of other changes never touches them, and adding one logs no event.
+Quick status lines on a task ("called Bob, waiting", "Alex: 6 people"), in `comments` (`[{ id, at, by, text }]`, oldest first; `id` 8 hex chars, `at` `YYYY-MM-DDTHH:MM`, text up to `commentMax` = 2000 chars; `by` the user who wrote it, written only when there is one (with users, `docs/spec/users.md`), so a wiki without users keeps its files as they were; an edit keeps it; shown after the time, "12 Mar 09:30 · alice", `commentStamp`). Not part of the History: they are never capped, undo of other changes never touches them, and adding one logs no event.
 
 - **Routes**: `POST /api/deck/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and completed tasks alike (`findForWriteLocked`). `PUT /api/deck/<id>` with `comments` replaces the whole list, for undoing a delete; `cleanComments` validates it (and restore snapshots), dropping bad entries and renumbering duplicate ids.
 - **Edit modal** (`renderComments` in `deck.js`): a Comments field under Description, hidden for a new task, with the list newest first. Enter (or Add) saves a comment at once, not with Save, so Cancel never loses one. Pasting a URL into the comment field asks for its name, as in the description. ✎ edits one in place (Enter or leaving the field saves, Esc cancels without closing the modal), × deletes it with an undo toast.

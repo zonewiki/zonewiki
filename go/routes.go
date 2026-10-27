@@ -19,7 +19,7 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
 	mux.HandleFunc("POST /api/scratch", func(w http.ResponseWriter, r *http.Request) {
-		slug, err := createScratch(r.PostFormValue("title"), nil, "")
+		slug, err := createScratch(userOf(r), r.PostFormValue("title"), nil, "")
 		if err != nil {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -355,7 +355,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	gitCommit("Update "+s.slug, s.path)
+	gitCommit(userOf(r), "Update "+s.slug, s.path)
 	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
 
@@ -426,7 +426,7 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 			serverError(w, r, err)
 			return
 		}
-		gitCommit("Create "+slug, path)
+		gitCommit(userOf(r), "Create "+slug, path)
 	}
 	http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
 }
@@ -463,7 +463,7 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back+"?rename_error=A+page+named+%22"+newSlug+"%22+already+exists", http.StatusFound)
 		return
 	}
-	if _, err := movePage(oldPath, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug); err != nil {
+	if _, err := movePage(userOf(r), oldPath, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug); err != nil {
 		serverError(w, r, err)
 		return
 	}
@@ -516,7 +516,7 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	newSlug, err := moveScratch(slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
+	newSlug, err := moveScratch(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
 	if err != nil {
 		scratchFailed(w, r, back, err)
 		return
@@ -557,7 +557,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back+quote("There is no page “"+raw+"”"), http.StatusFound)
 		return
 	}
-	anchor, err := appendScratch(slug, target, r.PostFormValue("heading"), "")
+	anchor, err := appendScratch(userOf(r), slug, target, r.PostFormValue("heading"), "")
 	if err != nil {
 		scratchFailed(w, r, back, err)
 		return
@@ -580,7 +580,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	gitCommit("Delete "+slug, path)
+	gitCommit(userOf(r), "Delete "+slug, path)
 	next := r.PostFormValue("next")
 	if !isLocalPath(next) || strings.Contains(next, "/page/"+slug) || strings.Contains(next, "/edit/"+slug) {
 		next = "/page/index"

@@ -36,7 +36,7 @@ func appendHeading(slug, title string) string { return title + " (" + noteDate(s
 // createScratch makes a scratch note named after title (a / in it is a
 // hyphen), with content, or just `# title`; returns its slug. Two notes of
 // one name in the same second: the second gets the next second's stamp.
-func createScratch(title string, content *string, suffix string) (string, error) {
+func createScratch(user, title string, content *string, suffix string) (string, error) {
 	if title = strings.TrimSpace(title); title == "" {
 		title = "Untitled"
 	}
@@ -63,7 +63,7 @@ func createScratch(title string, content *string, suffix string) (string, error)
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
-	gitCommit("Create "+slug+suffix, path)
+	gitCommit(user, "Create "+slug+suffix, path)
 	return slug, nil
 }
 
@@ -81,7 +81,7 @@ func notePath(slug string) (string, error) {
 // moveScratch moves a scratch note into the wiki (Move to wiki): a rename
 // to folder/name, links following, with its own commit message. Returns
 // the new slug.
-func moveScratch(slug, folder, name string, keepDate bool, suffix string) (string, error) {
+func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) (string, error) {
 	oldPath, err := notePath(slug)
 	if err != nil {
 		return "", err
@@ -104,7 +104,7 @@ func moveScratch(slug, folder, name string, keepDate bool, suffix string) (strin
 	if exists(newPath) {
 		return "", refuse("A page named “" + newSlug + "” already exists")
 	}
-	if _, err := movePage(oldPath, newPath, slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
+	if _, err := movePage(user, oldPath, newPath, slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
 		return "", err
 	}
 	return newSlug, nil
@@ -116,7 +116,7 @@ var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 // section (its tags into the page's frontmatter) and deletes the note;
 // links to the note point at that section, all in one commit. Returns the
 // section's anchor.
-func appendScratch(slug, target, heading, suffix string) (string, error) {
+func appendScratch(user, slug, target, heading, suffix string) (string, error) {
 	oldPath, err := notePath(slug)
 	if err != nil {
 		return "", err
@@ -163,6 +163,6 @@ func appendScratch(slug, target, heading, suffix string) (string, error) {
 		return "", err
 	}
 	refs := updateReferences(slug, target, heading)
-	gitCommit("Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)
+	gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)
 	return anchor, nil
 }

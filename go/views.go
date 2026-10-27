@@ -226,7 +226,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		"semantic": semanticStatus(), "app_name": appName, "version": version, "build": cfg.Build,
 		"allow_remote": cfg.AllowRemote, "locale": cfg.Locale, "date_format": cfg.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		"sign_out": cfg.Password != "" && isSignedIn(rq.r),
+		"sign_out": cfg.authOn() && isSignedIn(rq.r), "user": rq.user,
 	}
 	if !o.editor {
 		ctx["module"] = currentModule(rq)
@@ -280,7 +280,7 @@ func isSignedIn(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-	ok, _ := signedIn(r)
+	_, ok, _ := signedIn(r)
 	return ok
 }
 

@@ -730,7 +730,7 @@ main {
 .rename-form input[type="text"],
 #modal-filter,
 .scratch-modal input[type="text"],
-.login-form input[type="password"] {
+.login-form input {
   padding: .5rem .75rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -744,7 +744,7 @@ main {
 .rename-form input[type="text"]:focus,
 #modal-filter:focus,
 .scratch-modal input[type="text"]:focus,
-.login-form input[type="password"]:focus { border-color: var(--link); }
+.login-form input:focus { border-color: var(--link); }
 
 /* ── New page form ─────────────────────────────────────────────────────────── */
 
@@ -1302,7 +1302,13 @@ kbd {
   bottom: 1rem;
   right: 1rem;
   z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
 }
+
+/* Who is signed in (with users), beside Sign out. */
+.signout-user { color: var(--muted); font-size: .85rem; }
 
 .top-badges {
   position: fixed;
@@ -1405,7 +1411,7 @@ kbd {
   justify-content: space-between;
 }
 
-.login-form input[type="password"] { width: 100%; }
+.login-form input { width: 100%; }
 
 .login-error {
   color: var(--link-missing);

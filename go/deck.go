@@ -336,7 +336,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := createTask(data, "Create deck task")
+		t, err := createTask(userOf(r), data, "Create deck task")
 		if err != nil {
 			return err
 		}
@@ -348,7 +348,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := updateTask(r.PathValue("id"), data, "")
+		t, err := updateTask(userOf(r), r.PathValue("id"), data, "")
 		if err != nil {
 			return err
 		}
@@ -367,7 +367,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if idx < 0 {
 			return badRequest("idx must not be negative")
 		}
-		t, err := toggleNoteCheck(r.PathValue("id"), idx)
+		t, err := toggleNoteCheck(userOf(r), r.PathValue("id"), idx)
 		if err != nil {
 			return err
 		}
@@ -383,7 +383,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := addComment(r.PathValue("id"), text, "Comment on deck task")
+		t, err := addComment(userOf(r), r.PathValue("id"), text, "Comment on deck task")
 		if err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/deck/{id}/comments/{cid}", deckRoute(apiEditComment))
 	mux.HandleFunc("DELETE /api/deck/{id}/comments/{cid}", deckRoute(apiDeleteComment))
 	mux.HandleFunc("DELETE /api/deck/{id}", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		if err := deleteTask(r.PathValue("id"), "Delete deck task"); err != nil {
+		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete deck task"); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -423,7 +423,7 @@ func deckRoutes(mux *http.ServeMux) {
 				}
 			}
 		}
-		tasks, err := tagTasks(ids, tags[0], tags[1], "Tag deck tasks")
+		tasks, err := tagTasks(userOf(r), ids, tags[0], tags[1], "Tag deck tasks")
 		if err != nil {
 			return err
 		}
@@ -449,7 +449,7 @@ func yearArg(r *http.Request) (string, error) {
 
 // createTask: a new open task from the fields in data (as the API takes
 // them); the MCP tools share it.
-func createTask(data jsonObj, message string) (*Task, error) {
+func createTask(user string, data jsonObj, message string) (*Task, error) {
 	title := ""
 	if data.has("title") {
 		var err error
@@ -472,7 +472,7 @@ func createTask(data jsonObj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return t, writeDeckLocked(append(active, t), message)
+	return t, writeDeckLocked(user, append(active, t), message)
 }
 
 // applyTaskFields applies the field changes in data (not completion).
@@ -664,13 +664,13 @@ func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 // updateTask changes a task's fields and status (complete, won't do, skip,
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
-func updateTask(id string, data jsonObj, suffix string) (*Task, error) {
+func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	return updateTaskLocked(id, data, suffix)
+	return updateTaskLocked(user, id, data, suffix)
 }
 
-func updateTaskLocked(id string, data jsonObj, suffix string) (*Task, error) {
+func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, error) {
 	var status [3]bool
 	for i, k := range []string{"skip", "wont_do", "completed"} {
 		var err error
@@ -750,11 +750,11 @@ func updateTaskLocked(id string, data jsonObj, suffix string) (*Task, error) {
 			msg = "Uncomplete deck task"
 		}
 	}
-	return t, writeBothLocked(active, completed, msg+suffix)
+	return t, writeBothLocked(user, active, completed, msg+suffix)
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
-func toggleNoteCheck(id string, idx int) (*Task, error) {
+func toggleNoteCheck(user, id string, idx int) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	_, _, t, err := findForWriteLocked(id)
@@ -768,11 +768,11 @@ func toggleNoteCheck(id string, idx int) (*Task, error) {
 	}
 	data := jsonObj{}
 	data.set("description", toggled)
-	return updateTaskLocked(id, data, "")
+	return updateTaskLocked(user, id, data, "")
 }
 
 // addComment adds a comment (a status line) to a task, open or done.
-func addComment(id string, text string, message string) (*Task, error) {
+func addComment(user, id string, text string, message string) (*Task, error) {
 	s, err := commentText(text)
 	if err != nil {
 		return nil, err
@@ -784,8 +784,8 @@ func addComment(id string, text string, message string) (*Task, error) {
 		return nil, err
 	}
 	t.Comments = append(cleanCommentList(t.Comments),
-		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), Text: s})
-	return t, writeBothLocked(active, completed, message)
+		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user, Text: s})
+	return t, writeBothLocked(user, active, completed, message)
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned
@@ -823,7 +823,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	t.Comments[i].Text = text
-	if err := writeBothLocked(active, completed, "Edit deck task comment"); err != nil {
+	if err := writeBothLocked(userOf(r), active, completed, "Edit deck task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, t)
@@ -842,25 +842,25 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	t.Comments = slices.Delete(t.Comments, i, i+1)
-	if err := writeBothLocked(active, completed, "Delete deck task comment"); err != nil {
+	if err := writeBothLocked(userOf(r), active, completed, "Delete deck task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, t)
 	return nil
 }
 
-func deleteTask(id, message string) error {
+func deleteTask(user, id, message string) error {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	return deleteTasksLocked(map[string]bool{id: true}, message)
+	return deleteTasksLocked(user, map[string]bool{id: true}, message)
 }
 
-func deleteTasksLocked(ids map[string]bool, message string) error {
+func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 	active, completed, err := readForWriteLocked()
 	if err != nil {
 		return err
 	}
-	return writeBothLocked(withoutIDs(active, ids), withoutIDs(completed, ids), message)
+	return writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
 }
 
 func idSet(ids []string) map[string]bool {
@@ -885,7 +885,7 @@ func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	if err := deleteTasksLocked(idSet(ids), "Delete deck tasks"); err != nil {
+	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete deck tasks"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -932,7 +932,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		restored = append(restored, t)
 	}
 	if len(restored) > 0 {
-		if err := writeBothLocked(active, completed, "Restore deck tasks"); err != nil {
+		if err := writeBothLocked(userOf(r), active, completed, "Restore deck tasks"); err != nil {
 			return err
 		}
 	}
@@ -997,7 +997,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if markCompleted {
 		msg = "Complete deck tasks"
 	}
-	if err := writeBothLocked(active, completed, msg); err != nil {
+	if err := writeBothLocked(userOf(r), active, completed, msg); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, updated)
@@ -1065,7 +1065,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 			t.SortOrder = &f
 		}
 	}
-	if err := writeDeckLocked(active, "Reorder deck"); err != nil {
+	if err := writeDeckLocked(userOf(r), active, "Reorder deck"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1075,7 +1075,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 // tagTasks adds the tags add to the tasks ids and takes remove off them
 // (case ignored; a tag a task has keeps its spelling), open and completed,
 // in one commit; the batch-tag route and the MCP tools share it.
-func tagTasks(ids, add, remove []string, message string) ([]*Task, error) {
+func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
 	addTags, removeTags := cleanTags(add), cleanTags(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
@@ -1095,7 +1095,7 @@ func tagTasks(ids, add, remove []string, message string) ([]*Task, error) {
 		t.Tags = retag(t.Tags, addTags, removeTags)
 		updated = append(updated, t)
 	}
-	return updated, writeBothLocked(active, completed, message)
+	return updated, writeBothLocked(user, active, completed, message)
 }
 
 // apiBatchUpdate changes fields of several tasks in one commit: tasks is a
@@ -1153,7 +1153,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		updated = append(updated, t)
 	}
 	if len(updated) > 0 {
-		if err := writeBothLocked(active, completed, "Update deck tasks"); err != nil {
+		if err := writeBothLocked(userOf(r), active, completed, "Update deck tasks"); err != nil {
 			return err
 		}
 	}

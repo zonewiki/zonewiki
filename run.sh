@@ -228,8 +228,24 @@ case "${1:-up}" in
       -e "LEAF_SEMANTIC_SEARCH=$semantic" -e "LEAF_SEMANTIC_MIN_SCORE=$(env_val LEAF_SEMANTIC_MIN_SCORE)" -- \
       /app/leaf eval "/wiki-data/$file" "${@:3}"
     ;;
+  passwd)
+    # A user's password hash for .env (LEAF_USER_<NAME>_PASSWORD, see
+    # docs/spec/users.md): leaf passwd in the app's image, as up builds it.
+    # The container reads a pipe, so the terminal's echo is turned off here.
+    if [[ -z "$2" ]]; then
+      echo "Usage: $0 passwd NAME" >&2
+      exit 1
+    fi
+    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
+      --build-arg "LEAF_SEMANTIC_SEARCH=$(env_val LEAF_SEMANTIC_SEARCH)")
+    if [[ -t 0 ]]; then
+      stty -echo
+      trap 'stty echo' EXIT
+    fi
+    $ENGINE run --rm -i "$image" /app/leaf passwd "$2"
+    ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|passwd]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
@@ -239,6 +255,7 @@ case "${1:-up}" in
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
+    echo "  passwd NAME - a user's password hash for .env (LEAF_USER_<NAME>_PASSWORD)"
     exit 1
     ;;
 esac

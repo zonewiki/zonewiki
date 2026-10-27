@@ -22,6 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
+| `docs/spec/users.md` | Several users (`LEAF_USERS`): setup, password hashes (`leaf passwd`), signing in, per-user MCP tokens, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
@@ -52,7 +53,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
-No build step for the browser code (no bundler: the server serves `public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, see Key Constraints).
+No build step for the browser code (no bundler: the server serves `public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, or users with `LEAF_USERS`; see Key Constraints).
 
 ---
 
@@ -65,6 +66,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
+├── docs/plans/             # Working plans for changes in progress (multi-user.md), deleted when done
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
@@ -81,9 +83,10 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── go/                     # The server: one package (main), a file per area
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health, leaf passwd
 │   ├── config.go           # Settings from the environment (read once into cfg)
-│   ├── security.go         # Host and Origin checks, the page policy, login, signed session, throttles
+│   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
+│   ├── users.go            # Users (LEAF_USERS): settings, password hashes, sign-in, leaf passwd
 │   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
@@ -140,6 +143,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
+./run.sh passwd NAME  # a user's password hash for .env (LEAF_USER_<NAME>_PASSWORD)
 ```
 
 Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
@@ -208,7 +212,8 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
-  - `/mcp` requires `LEAF_MCP_TOKEN`: without one it is off (403), password or not. Don't make it open again.
+  - `LEAF_USERS` instead: a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
+  - `/mcp` requires `LEAF_MCP_TOKEN` (with users, a user's own token): without one it is off (403), password or not. Don't make it open again.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - Every response carries the page policy (`pageCSP`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.

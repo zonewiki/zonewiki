@@ -349,7 +349,7 @@ func savePending(path, slug string) string {
 	if path == "" || !exists(path) || !isUncommitted(path) {
 		return ""
 	}
-	gitCommit("Save "+slug, path)
+	gitCommit("", "Save "+slug, path)
 	return "\nNote: " + slug + " had changes that weren't committed yet (the user may be editing it " +
 		"in the browser); they were committed first, as \"Save " + slug + "\", and kept."
 }
@@ -370,7 +370,7 @@ func savePendingPages(paths []string, what string) string {
 	if len(save) == 0 {
 		return ""
 	}
-	gitCommit("Save "+what, save...)
+	gitCommit("", "Save "+what, save...)
 	return fmt.Sprintf("\nNote: %d of the pages had changes that weren't committed yet (the user may be "+
 		"editing them in the browser); they were committed first, as \"Save %s\", and kept.", len(save), what)
 }
@@ -606,7 +606,7 @@ func toolList() []map[string]any {
 	return tools
 }
 
-func readGuides(args jsonObj, base string) (string, error) {
+func readGuides(args jsonObj, base, user string) (string, error) {
 	raw, err := strArg(args, "slug", false)
 	if err != nil {
 		return "", err
@@ -823,11 +823,15 @@ func mcpTaskText(t *Task, base string) string {
 	if notes := strings.TrimSpace(t.Description); notes != "" {
 		text += "\n\n" + notes
 	}
-	// Comments: the user's status lines, oldest first, each with its time.
+	// Comments: the user's status lines, oldest first, each with its time
+	// (and with users, who wrote it).
 	var comments []string
 	for _, c := range t.Comments {
 		if c.Text != "" {
 			at := strings.ReplaceAll(runePrefix(c.At, 16), "T", " ")
+			if c.By != "" {
+				at += " (" + c.By + ")"
+			}
 			comments = append(comments, "- "+at+": "+c.Text)
 		}
 	}
@@ -873,7 +877,7 @@ func mcpTaskRefs(content, base string) string {
 	return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
 }
 
-func searchTasks(args jsonObj, base string) (string, error) {
+func searchTasks(args jsonObj, base, user string) (string, error) {
 	query, err1 := strArg(args, "query", false)
 	tag, err2 := strArg(args, "tag", false)
 	if err1 != nil || err2 != nil {
@@ -1214,7 +1218,7 @@ func homeTags(tags json.RawMessage) json.RawMessage {
 	return b
 }
 
-func createTaskTool(args jsonObj, base string) (string, error) {
+func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if _, err := strArg(args, "title", true); err != nil {
 		return "", err
 	}
@@ -1227,7 +1231,7 @@ func createTaskTool(args jsonObj, base string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	task, err := deckWrite(createTask(data, msg))
+	task, err := deckWrite(createTask(user, data, msg))
 	if err != nil {
 		return "", err
 	}
@@ -1254,7 +1258,7 @@ func otherArgs(args jsonObj, allowed ...string) []string {
 
 // updateTaskTool: one task's fields, status and comment; status deleted
 // deletes it; ids instead of id tags several tasks (tagTasksTool).
-func updateTaskTool(args jsonObj, base string) (string, error) {
+func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if args.has("ids") {
 		if args.has("id") {
 			return "", toolErr("Give id or ids, not both")
@@ -1263,7 +1267,7 @@ func updateTaskTool(args jsonObj, base string) (string, error) {
 			return "", toolErr("With ids only add_tags and remove_tags work, not " + strings.Join(other, ", ") +
 				"; change the rest one task (id) at a time")
 		}
-		return tagTasksTool(args)
+		return tagTasksTool(args, user)
 	}
 	raw, err := strArg(args, "id", true)
 	if err != nil {
@@ -1282,7 +1286,7 @@ func updateTaskTool(args jsonObj, base string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if _, err := deckWrite(struct{}{}, deleteTask(task.ID, msg)); err != nil {
+		if _, err := deckWrite(struct{}{}, deleteTask(user, task.ID, msg)); err != nil {
 			return "", err
 		}
 		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
@@ -1314,12 +1318,12 @@ func updateTaskTool(args jsonObj, base string) (string, error) {
 		return "", err
 	}
 	if len(data) > 0 {
-		if task, err = deckWrite(updateTask(task.ID, data, suffix)); err != nil {
+		if task, err = deckWrite(updateTask(user, task.ID, data, suffix)); err != nil {
 			return "", err
 		}
 	}
 	if comment != nil {
-		if task, err = deckWrite(addComment(task.ID, *comment, "Comment on deck task"+suffix)); err != nil {
+		if task, err = deckWrite(addComment(user, task.ID, *comment, "Comment on deck task"+suffix)); err != nil {
 			return "", err
 		}
 	}
@@ -1344,7 +1348,7 @@ func updateTaskTool(args jsonObj, base string) (string, error) {
 // More ids than this in one call is likely a mistake (a whole deck retagged).
 const tagTasksMax = 200
 
-func tagTasksTool(args jsonObj) (string, error) {
+func tagTasksTool(args jsonObj, user string) (string, error) {
 	ids, ok := as[[]json.RawMessage](args["ids"])
 	if !ok || len(ids) == 0 {
 		return "", toolErr("ids must be a non-empty list of task ids")
@@ -1385,7 +1389,7 @@ func tagTasksTool(args jsonObj) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tasks, err := deckWrite(tagTasks(found, add, remove, msg))
+	tasks, err := deckWrite(tagTasks(user, found, add, remove, msg))
 	if err != nil {
 		return "", err
 	}
@@ -1450,7 +1454,7 @@ func mcpPageLinks(slug, content string) string {
 	return out
 }
 
-func readPage(args jsonObj, base string) (string, error) {
+func readPage(args jsonObj, base, user string) (string, error) {
 	raw, ok := as[string](args["slug"])
 	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
@@ -1490,7 +1494,7 @@ func isOrphan(slug string, counts map[string]int, home string) bool {
 	return counts[slug] == 0 && !isProtected(slug) && slug != home && slug != guideSlug && !isScratch(slug)
 }
 
-func listPages(args jsonObj, base string) (string, error) {
+func listPages(args jsonObj, base, user string) (string, error) {
 	limit, err := mcpInt(args, "limit", 100, 1000)
 	if err != nil {
 		return "", err
@@ -1569,7 +1573,7 @@ func listPages(args jsonObj, base string) (string, error) {
 		"slug | title | last edit | pages linking to it:\n" + strings.Join(lines, "\n"), nil
 }
 
-func checkLinks(args jsonObj, base string) (string, error) {
+func checkLinks(args jsonObj, base, user string) (string, error) {
 	under, err := underArg(args)
 	if err != nil {
 		return "", err
@@ -1617,7 +1621,7 @@ const grepLineChars = 300
 
 func cutLine(line string) string { return cutRunes(strings.TrimSpace(line), grepLineChars, " …") }
 
-func grepWiki(args jsonObj, base string) (string, error) {
+func grepWiki(args jsonObj, base, user string) (string, error) {
 	pattern, ok := as[string](args["pattern"])
 	if !ok || strings.TrimSpace(pattern) == "" {
 		return "", toolErr("pattern must be a non-empty string")
@@ -1684,7 +1688,7 @@ func fileLabel(fp string) string {
 
 func noGit() error { return toolErr("There is no history: git isn't installed where Leaf runs.") }
 
-func history(args jsonObj, base string) (string, error) {
+func history(args jsonObj, base, user string) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -1729,7 +1733,8 @@ func history(args jsonObj, base string) (string, error) {
 	}
 	var rows []string
 	for _, e := range entries[:min(limit, len(entries))] {
-		rows = append(rows, fmt.Sprintf("%s | %s | +%d -%d | %s", runePrefix(e.Sha, 7), e.Time, e.Added, e.Deleted, e.Msg))
+		rows = append(rows, fmt.Sprintf("%s | %s | +%d -%d | %s", runePrefix(e.Sha, 7), e.Time, e.Added, e.Deleted,
+			e.Msg+byAuthor(e.Author)))
 	}
 	shown := fmt.Sprintf("all %d", len(entries))
 	if len(rows) < len(entries) {
@@ -1744,6 +1749,14 @@ func history(args jsonObj, base string) (string, error) {
 	return "Versions of " + slug + state + ", newest first (" + shown + "); version | when | lines added and " +
 		"removed | what (\"(MCP)\": written by an assistant). history with a version shows " +
 		"what it changed:\n" + strings.Join(rows, "\n"), nil
+}
+
+// byAuthor: " (by alice)" after a commit's message; nothing for Leaf's own.
+func byAuthor(author string) string {
+	if author == "" {
+		return ""
+	}
+	return " (by " + author + ")"
 }
 
 func versionOf(entries []GitEntry, version string) int {
@@ -1797,7 +1810,7 @@ func recentChanges(since, under string, limit int) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+" | "+strings.Join(labels, ", "))
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author)+" | "+strings.Join(labels, ", "))
 	}
 	theLimit := ""
 	if len(rows) == limit {
@@ -1808,7 +1821,7 @@ func recentChanges(since, under string, limit int) string {
 	return strings.Join(out, "\n\n")
 }
 
-func listTags(args jsonObj, base string) (string, error) {
+func listTags(args jsonObj, base, user string) (string, error) {
 	counts := map[string]*[3]int{} // tag → pages, open tasks, done tasks
 	count := func(tag string, column int) {
 		if counts[tag] == nil {
@@ -1860,7 +1873,7 @@ func listTags(args jsonObj, base string) (string, error) {
 
 // leafHelp: Leaf's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
-func leafHelp(args jsonObj, base string) (string, error) {
+func leafHelp(args jsonObj, base, user string) (string, error) {
 	var query, topic, heading string
 	for _, a := range []struct {
 		name string
@@ -1943,7 +1956,7 @@ func leafHelp(args jsonObj, base string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-func searchWiki(args jsonObj, base string) (string, error) {
+func searchWiki(args jsonObj, base, user string) (string, error) {
 	query, ok := as[string](args["query"])
 	if !ok || strings.TrimSpace(query) == "" {
 		return "", toolErr("query must be a non-empty string")
@@ -1996,7 +2009,7 @@ func anyPageIn(folder string) bool {
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
-var mcpToolFuncs = map[string]func(args jsonObj, base string) (string, error){
+var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, error){
 	"search_wiki": searchWiki, "search_tasks": searchTasks, "grep_wiki": grepWiki, "read_page": readPage,
 	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
 	"leaf_help": leafHelp, "read_guides": readGuides,
@@ -2006,8 +2019,8 @@ var mcpToolFuncs = map[string]func(args jsonObj, base string) (string, error){
 	"update_task": updateTaskTool,
 }
 
-// callMCPTool runs a tool for the request r: links in its answer use
-// LEAF_BASE_URL, else the address the client reached Leaf at.
+// callMCPTool runs a tool for the request r, as its token's user: links in
+// its answer use LEAF_BASE_URL, else the address the client reached Leaf at.
 func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	base := cfg.BaseURL
 	if base == "" {
@@ -2021,7 +2034,7 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	if !ok {
 		return "", toolErr("Unknown tool: " + name)
 	}
-	return f(args, base)
+	return f(args, base, userOf(r))
 }
 
 func joinIDs(hits []idScore) string {

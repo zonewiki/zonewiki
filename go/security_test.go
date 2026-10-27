@@ -125,34 +125,64 @@ func TestSecretKeyWithoutAWritableWiki(t *testing.T) {
 }
 
 func TestSession(t *testing.T) {
+	testWiki(t, nil)
 	sessionKey = []byte(strings.Repeat("k", 64))
 	at := clock(t, time.Unix(1_000_000, 0))
 	w := httptest.NewRecorder()
-	setSession(w, httptest.NewRequest("GET", "/", nil))
+	setSession(w, httptest.NewRequest("GET", "/", nil), "")
 	cookie := w.Result().Cookies()[0]
-	request := func(value string) *http.Request {
-		r := httptest.NewRequest("GET", "/", nil)
-		r.AddCookie(&http.Cookie{Name: sessionCookie, Value: value})
-		return r
-	}
-	if ok, renew := signedIn(request(cookie.Value)); !ok || renew {
+	if user, ok, renew := signedIn(withCookie(cookie.Value)); !ok || renew || user != "" {
 		t.Fatal("a fresh session isn't valid")
 	}
-	if ok, _ := signedIn(request(cookie.Value + "x")); ok {
+	if _, ok, _ := signedIn(withCookie(cookie.Value + "x")); ok {
 		t.Fatal("a forged signature passes")
 	}
 	sessionKey = []byte(strings.Repeat("o", 64))
-	if ok, _ := signedIn(request(cookie.Value)); ok {
+	if _, ok, _ := signedIn(withCookie(cookie.Value)); ok {
 		t.Fatal("another key's session passes")
 	}
 	sessionKey = []byte(strings.Repeat("k", 64))
 	*at = at.Add(2 * 24 * time.Hour)
-	if ok, renew := signedIn(request(cookie.Value)); !ok || !renew {
+	if _, ok, renew := signedIn(withCookie(cookie.Value)); !ok || !renew {
 		t.Fatal("an older session isn't renewed")
 	}
 	*at = at.Add(30 * 24 * time.Hour)
-	if ok, _ := signedIn(request(cookie.Value)); ok {
+	if _, ok, _ := signedIn(withCookie(cookie.Value)); ok {
 		t.Fatal("an expired session passes")
+	}
+}
+
+func withCookie(value string) *http.Request {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: value})
+	return r
+}
+
+// A session names its user; it is valid only while that user is in
+// LEAF_USERS, and a user's session is no good without users (nor the other
+// way round).
+func TestUserSession(t *testing.T) {
+	testWiki(t, nil)
+	sessionKey = []byte(strings.Repeat("k", 64))
+	session := func(user string) string {
+		w := httptest.NewRecorder()
+		setSession(w, httptest.NewRequest("GET", "/", nil), user)
+		return w.Result().Cookies()[0].Value
+	}
+	alice, anyone := session("alice"), session("")
+	if _, ok, _ := signedIn(withCookie(alice)); ok {
+		t.Error("a user's session passes without users")
+	}
+	cfg.Users = map[string]*User{"alice": {Name: "alice"}, "bob": {Name: "bob"}}
+	if user, ok, _ := signedIn(withCookie(alice)); !ok || user != "alice" {
+		t.Errorf("alice's session: %q %v", user, ok)
+	}
+	if _, ok, _ := signedIn(withCookie(anyone)); ok {
+		t.Error("a password session passes with users")
+	}
+	delete(cfg.Users, "alice")
+	if _, ok, _ := signedIn(withCookie(alice)); ok {
+		t.Error("a removed user's session passes")
 	}
 }
 

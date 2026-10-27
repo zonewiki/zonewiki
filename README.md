@@ -199,6 +199,7 @@ Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF
 | `LEAF_SEMANTIC_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
 | `LEAF_QUERY_LOG=1` | Keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
+| `LEAF_USERS` | Several users instead of one password: each signs in with their own (`LEAF_USER_<NAME>_PASSWORD`, a hash from `./run.sh passwd NAME`) and may have their own MCP token; changes are committed in their name (see `docs/spec/users.md`) |
 | `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
 | `LEAF_NOSHARE` | Pages hidden in sharing mode, e.g. `#noshare,people/` |
 | `LEAF_LOCALE` | How dates read and the day weeks start on, e.g. `de-AT` or `en-GB` (default: US English dates, weeks from Monday). The UI's words stay English |
@@ -278,8 +279,8 @@ under [Security](#security).
 
 ## Security
 
-Leaf is for one person: run it on your own machine, or self-host it on a
-server. Out of the box it listens on localhost only, refuses requests with a
+Leaf is for one person, or a few who share a wiki (`LEAF_USERS`): run it on
+your own machine, or self-host it on a server. Out of the box it listens on localhost only, refuses requests with a
 foreign `Host` header (DNS rebinding) and cross-site writes (another site
 posting to `localhost:5000`). HTML in your pages is shown as written, but no
 script in it runs: only Leaf's own code does, so a page that an AI assistant
@@ -314,7 +315,8 @@ sends it unencrypted. Wrong passwords slow a guesser down, with or without
 HTTPS: after 5, each try waits, from 1 minute doubling up to an hour, per
 client.
 
-There is one shared password and no second factor. If only you need to
+There is one shared password (or, with `LEAF_USERS`, one per user) and no
+second factor. If only you need to
 reach Leaf from outside, a VPN (WireGuard, Tailscale) is safer still than a
 public address.
 
@@ -322,8 +324,8 @@ Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
   delete everything. With `LEAF_ALLOW_REMOTE=1` that is your whole network: set
-  `LEAF_PASSWORD`. There are no user accounts, so share the password with no
-  one you wouldn't hand the files to.
+  `LEAF_PASSWORD`, or users with `LEAF_USERS`. Every user can read and change
+  everything, so give access to no one you wouldn't hand the files to.
 - **Plain `http://` is readable on the network.** The password when you sign
   in, the login cookie after it, the MCP token and your pages all travel
   unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN)
@@ -369,6 +371,7 @@ files that any editor opens, with their history in git.
 ./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ./run.sh eval     # measure how well search finds answers in your wiki
+./run.sh passwd NAME   # a user's password hash for .env (LEAF_USERS)
 ```
 
 All of them run in containers (Podman or Docker, no compose needed); CI runs the same commands. To have

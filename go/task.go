@@ -44,8 +44,10 @@ type HistoryEntry struct {
 	At, Event, From, To string
 }
 
+// Comment: a status line on a task; By is who wrote it (with users; ""
+// none, and not in the file).
 type Comment struct {
-	ID, At, Text string
+	ID, At, By, Text string
 }
 
 var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "tags": true,
@@ -93,7 +95,8 @@ func taskFromJSON(o jsonObj) *Task {
 			From: strField(e, "from"), To: strField(e, "to")})
 	}
 	for _, c := range objList(o["comments"]) {
-		t.Comments = append(t.Comments, Comment{ID: strField(c, "id"), At: strField(c, "at"), Text: strField(c, "text")})
+		t.Comments = append(t.Comments, Comment{ID: strField(c, "id"), At: strField(c, "at"), By: strField(c, "by"),
+			Text: strField(c, "text")})
 	}
 	for k, v := range o {
 		if !taskKeys[k] {
@@ -175,12 +178,15 @@ func (e HistoryEntry) MarshalJSON() ([]byte, error) {
 	}{e.At, e.Event, nullable(e.From), nullable(e.To)})
 }
 
+// MarshalJSON: by only when someone is named, so a wiki without users
+// keeps its files as they were.
 func (c Comment) MarshalJSON() ([]byte, error) {
 	return marshalText(struct {
 		ID   string `json:"id"`
 		At   string `json:"at"`
+		By   string `json:"by,omitempty"`
 		Text string `json:"text"`
-	}{c.ID, c.At, c.Text})
+	}{c.ID, c.At, c.By, c.Text})
 }
 
 // MarshalJSON writes the fields in the order the files keep, the keys

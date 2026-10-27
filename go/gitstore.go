@@ -106,8 +106,20 @@ func setCommitter() {
 	runGit("config", "user.name", "Leaf")
 }
 
-// gitCommit stages paths (in the wiki) and commits them together.
-func gitCommit(message string, paths ...string) {
+// commitAuthor: who a commit is by, as the history shows it, with users: a
+// user's name, or whoever committed by hand; "" for Leaf's own, and without
+// users, so a wiki without them shows no names.
+func commitAuthor(name string) string {
+	if cfg.Users == nil || name == appName {
+		return ""
+	}
+	return name
+}
+
+// gitCommit stages paths (in the wiki) and commits them together, by user
+// (the author; "": Leaf itself, or a wiki without users). The committer is
+// always Leaf.
+func gitCommit(user, message string, paths ...string) {
 	if !cfg.GitEnabled {
 		return
 	}
@@ -120,6 +132,10 @@ func gitCommit(message string, paths ...string) {
 		args = append(args, rel)
 	}
 	runGit(args...)
+	if user != "" {
+		runGit("commit", "--author", user+" <"+user+"@leaf>", "-m", message)
+		return
+	}
 	runGit("commit", "-m", message)
 }
 
@@ -155,8 +171,9 @@ func excludeFromGit(wiki, entry string) {
 var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
 // movePage moves a page's file, points every link to it at the new slug,
-// and commits the move with the pages and deck files whose links changed.
-func movePage(oldPath, newPath, slug, newSlug, message string) ([]string, error) {
+// and commits the move (by user) with the pages and deck files whose links
+// changed.
+func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
 	if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
 		return nil, err
 	}
@@ -164,7 +181,7 @@ func movePage(oldPath, newPath, slug, newSlug, message string) ([]string, error)
 		return nil, err
 	}
 	changed := rewriteMovedLinks(map[string]string{slug: newSlug})
-	gitCommit(message, append([]string{oldPath, newPath}, changed...)...)
+	gitCommit(user, message, append([]string{oldPath, newPath}, changed...)...)
 	return changed, nil
 }
 
@@ -173,7 +190,7 @@ func movePage(oldPath, newPath, slug, newSlug, message string) ([]string, error)
 // (slug, new slug) moves, A–Z, and the files whose links changed. The
 // caller checks that no target exists. Other files in the folder (images…)
 // stay; folders left empty go.
-func moveFolder(folder, newFolder, message string) ([][2]string, []string, error) {
+func moveFolder(user, folder, newFolder, message string) ([][2]string, []string, error) {
 	var moves [][2]string
 	var touched []string
 	moved := map[string]string{}
@@ -216,7 +233,7 @@ func moveFolder(folder, newFolder, message string) ([][2]string, []string, error
 			still = append(still, p)
 		}
 	}
-	gitCommit(message, commit...)
+	gitCommit(user, message, commit...)
 	return moves, still, nil
 }
 
@@ -236,12 +253,13 @@ func numstatPath(p string) string {
 }
 
 // GitEntry is a commit of a page: its sha, day, relative date, time
-// (YYYY-MM-DD HH:MM), message, lines added and deleted, and the file's path
-// at that commit (relative to the wiki; another before a rename).
+// (YYYY-MM-DD HH:MM), message, author (commitAuthor), lines added and
+// deleted, and the file's path at that commit (relative to the wiki;
+// another before a rename).
 type GitEntry struct {
-	Sha, Date, Rel, Time, Msg string
-	Added, Deleted            int
-	Path                      string
+	Sha, Date, Rel, Time, Msg, Author string
+	Added, Deleted                    int
+	Path                              string
 }
 
 // gitLog: the commits of a file, newest first, across renames (--follow);
@@ -259,17 +277,18 @@ func gitLog(path string, max int) []GitEntry {
 		args = append(args, "-n", strconv.Itoa(max))
 	}
 	args = append(args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%s", "--", rel)
+		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f%s", "--", rel)
 	r := runGit(args...)
 	var entries []GitEntry
 	records := strings.Split(r.Stdout, "\x1e")
 	for _, record := range records[1:] {
 		head, stats, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 5)
-		if len(parts) != 5 {
+		parts := strings.SplitN(head, "\x1f", 6)
+		if len(parts) != 6 {
 			continue
 		}
-		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Msg: parts[4], Path: rel}
+		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
+			Msg: parts[5], Path: rel}
 		for _, line := range splitLines(stats) {
 			cols := strings.SplitN(lineBody(line), "\t", 3)
 			if len(cols) == 3 {
@@ -287,11 +306,11 @@ func gitLog(path string, max int) []GitEntry {
 	return entries
 }
 
-// LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), message
-// and the files it changed (relative to the wiki).
+// LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), message,
+// author (commitAuthor) and the files it changed (relative to the wiki).
 type LogEntry struct {
-	Sha, Time, Msg string
-	Files          []string
+	Sha, Time, Msg, Author string
+	Files                  []string
 }
 
 // gitLogAll: the wiki's commits, newest first, at most max; since a day
@@ -301,7 +320,7 @@ func gitLogAll(since, under string, max int) []LogEntry {
 		return nil
 	}
 	args := []string{"log", "-n", strconv.Itoa(max), "--name-only", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%ad\x1f%s"}
+		"--format=\x1e%H\x1f%ad\x1f%an\x1f%s"}
 	if since != "" {
 		args = append(args, "--since="+since+" 00:00")
 	}
@@ -311,11 +330,11 @@ func gitLogAll(since, under string, max int) []LogEntry {
 	var entries []LogEntry
 	for _, record := range strings.Split(runGit(args...).Stdout, "\x1e")[1:] {
 		head, names, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(head, "\x1f", 4)
+		if len(parts) != 4 {
 			continue
 		}
-		e := LogEntry{Sha: parts[0], Time: parts[1], Msg: parts[2]}
+		e := LogEntry{Sha: parts[0], Time: parts[1], Author: commitAuthor(parts[2]), Msg: parts[3]}
 		for _, n := range splitLines(names) {
 			if n = lineBody(n); strings.TrimSpace(n) != "" {
 				e.Files = append(e.Files, n)

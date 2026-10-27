@@ -9,6 +9,8 @@ patches in tests/settings.py (a password, LEAF_HOSTS …) go to the server
 as its environment: when they change, the server restarts on the same wiki
 before the next request."""
 
+import base64
+import hashlib
 import http.client
 import json
 import os
@@ -65,6 +67,13 @@ def _settings() -> dict[str, str]:
         "LEAF_DATE_FORMAT": settings.LEAF_DATE_FORMAT,
         **settings.ENV,
     }
+    if settings.LEAF_USERS:
+        env["LEAF_USERS"] = ",".join(settings.LEAF_USERS)
+        for name, (password, token) in settings.LEAF_USERS.items():
+            var = "LEAF_USER_" + name.upper().replace("-", "_")
+            env[var + "_PASSWORD"] = password_hash(password)
+            if token:
+                env[var + "_MCP_TOKEN"] = token
     if os.environ.get("LEAF_SECRET_KEY"):
         env["LEAF_SECRET_KEY"] = os.environ["LEAF_SECRET_KEY"]
     if not settings.GIT_ENABLED:
@@ -72,6 +81,16 @@ def _settings() -> dict[str, str]:
         env["PATH"] = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
                                       if d and not os.path.exists(os.path.join(d, "git")))
     return env
+
+
+def password_hash(password: str, iterations: int = 1000) -> str:
+    """A password's hash as `leaf passwd` makes it (go/users.go), with a
+    fixed salt so the settings, and so the server, stay the same between
+    requests, and few iterations, so a login is quick."""
+    salt = b"leaf-tests-salt!"
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations, 32)
+    b64 = lambda b: base64.b64encode(b).decode().rstrip("=")
+    return f"pbkdf2-sha256:{iterations}:{b64(salt)}:{b64(key)}"
 
 
 def _flags() -> list[str]:

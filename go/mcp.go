@@ -184,22 +184,51 @@ func handleMCP(message json.RawMessage, callTool func(name string, args jsonObj)
 	return rpcError(id, -32601, "Method not found: "+method), nil
 }
 
-// mcpAuthorized: the request carries LEAF_MCP_TOKEN as a bearer token. The
-// tools write (pages, tasks), so /mcp is off until a token is set: open, it
-// would let anything that reaches the port change the wiki, password or not.
-func mcpAuthorized(r *http.Request) bool {
+// mcpAuthorized: the request carries LEAF_MCP_TOKEN as a bearer token, or
+// with users one user's token (LEAF_USER_<NAME>_MCP_TOKEN): the tools act
+// as that user. The tools write (pages, tasks), so /mcp is off until a
+// token is set: open, it would let anything that reaches the port change
+// the wiki, password or not.
+func mcpAuthorized(r *http.Request) (user string, ok bool) {
 	auth := r.Header.Get("Authorization")
-	return cfg.MCPToken != "" && strings.HasPrefix(auth, "Bearer ") &&
-		sameSecret(strings.TrimSpace(auth[len("Bearer "):]), cfg.MCPToken)
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return "", false
+	}
+	given := strings.TrimSpace(auth[len("Bearer "):])
+	if cfg.Users == nil {
+		return "", cfg.MCPToken != "" && sameSecret(given, cfg.MCPToken)
+	}
+	for _, u := range cfg.Users {
+		if u.MCPToken != "" && sameSecret(given, u.MCPToken) {
+			return u.Name, true
+		}
+	}
+	return "", false
+}
+
+// mcpOn: some token is set, so /mcp answers.
+func mcpOn() bool {
+	if cfg.Users == nil {
+		return cfg.MCPToken != ""
+	}
+	for _, u := range cfg.Users {
+		if u.MCPToken != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // mcpEndpoint: MCP over HTTP, one JSON-RPC message (or a batch) per POST,
 // answered with JSON. GET (a server-sent event stream) and DELETE (ending
 // a session) aren't offered: there are no notifications and no sessions.
 func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
-	if cfg.MCPToken == "" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "MCP is off: set LEAF_MCP_TOKEN in .env and send it " +
-			"as 'Authorization: Bearer <token>'"})
+	if !mcpOn() {
+		msg := "MCP is off: set LEAF_MCP_TOKEN in .env and send it as 'Authorization: Bearer <token>'"
+		if cfg.Users != nil {
+			msg = "MCP is off: set LEAF_USER_<NAME>_MCP_TOKEN in .env and send it as 'Authorization: Bearer <token>'"
+		}
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 		return
 	}
 	// Wrong tokens count against the client like wrong passwords (their own
@@ -210,13 +239,15 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": waitMessage(wait)})
 		return
 	}
-	if !mcpAuthorized(r) {
+	user, ok := mcpAuthorized(r)
+	if !ok {
 		mcpThrottle.failed(key)
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
 	mcpThrottle.succeeded(key)
+	r = withUser(r, user)
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		w.WriteHeader(http.StatusMethodNotAllowed)

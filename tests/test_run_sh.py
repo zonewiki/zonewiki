@@ -229,3 +229,16 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
     assert "-e LEAF_SEMANTIC_SEARCH=on -e LEAF_SEMANTIC_MIN_SCORE=0.3" in run
     assert run.endswith("/app/leaf eval /wiki-data/_eval/retrieval.json -k 5")
+
+
+def test_passwd_runs_leaf_passwd_in_the_app_image(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "passwd"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 1 and "Usage: ./run.sh passwd NAME" in r.stderr
+    r = subprocess.run(["./run.sh", "passwd", "alice"], cwd=repo, env=env, capture_output=True, text=True,
+                       input="pw\npw\n")
+    assert r.returncode == 0, r.stderr
+    (build,) = _engine_calls(log, "build")
+    assert " -f Containerfile " in build
+    (run,) = _engine_calls(log, "run")
+    assert run.startswith("run --rm -i ") and run.endswith("/app/leaf passwd alice")

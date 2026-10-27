@@ -19,6 +19,7 @@ import (
 // sharing mode) and what is looked up once per request.
 type Req struct {
 	r        *http.Request
+	user     string // who is asking (userOf): "" without users
 	sharing  bool
 	homeDone bool
 	home     *DeckHome
@@ -26,7 +27,7 @@ type Req struct {
 }
 
 func newReq(r *http.Request) *Req {
-	return &Req{r: r, sharing: sharingOn(r)}
+	return &Req{r: r, user: userOf(r), sharing: sharingOn(r)}
 }
 
 // pathURL is a path in Leaf from its parts, each percent-encoded ("/" kept), as
