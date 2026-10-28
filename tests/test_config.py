@@ -90,7 +90,12 @@ def test_removing_every_user_keeps_the_login_until_a_restart(client, config):
 
 
 def test_a_changed_password(client, config):
+    """The new password signs in, the old one not, and a session of the
+    old one ends (a stolen cookie with it)."""
+    login(client, "alice", "alice-pw")
+    assert signed_in(client)
     write(config, user("alice", "new-pw", "alice-token"))
+    assert until(lambda: not signed_in(client))
     assert login(client, "alice", "new-pw").status_code == 302
     client.post("/logout", headers=HOST)
     assert login(client, "alice", "alice-pw").status_code == 200

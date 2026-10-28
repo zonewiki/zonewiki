@@ -174,9 +174,33 @@ func TestUserSession(t *testing.T) {
 	if _, ok, _ := signedIn(withCookie(anyone)); ok {
 		t.Error("a password session passes with users")
 	}
+	// A new password ends the sessions of the old one, the same password
+	// set again too (a new salt); the other users' stay.
+	bob := session("bob")
+	settings().Users["alice"].PasswordHash = hashPassword("pw")
+	alice = session("alice")
+	settings().Users["alice"] = &User{Name: "alice", PasswordHash: hashPassword("pw")}
+	if _, ok, _ := signedIn(withCookie(alice)); ok {
+		t.Error("a session of the old password passes")
+	}
+	if _, ok, _ := signedIn(withCookie(bob)); !ok {
+		t.Error("another user's session ended")
+	}
+	alice = session("alice")
 	delete(settings().Users, "alice")
 	if _, ok, _ := signedIn(withCookie(alice)); ok {
 		t.Error("a removed user's session passes")
+	}
+	settings().Users["alice"] = &User{Name: "alice"}
+	if _, ok, _ := signedIn(withCookie(alice)); ok {
+		t.Error("a user removed and added again has their old sessions")
+	}
+	// The wiki's password likewise.
+	settings().Users, settings().PasswordHash = nil, hashPassword("pw")
+	anyone = session("")
+	settings().PasswordHash = hashPassword("new")
+	if _, ok, _ := signedIn(withCookie(anyone)); ok {
+		t.Error("a session of the wiki's old password passes")
 	}
 }
 

@@ -125,7 +125,9 @@ func secretKey(dataDir string) []byte {
 
 // The login session: a cookie signed with the secret key, valid for 30 days
 // and renewed as it is used. It says who signed in: with users, their name;
-// with the wiki's one password, no one in particular ("").
+// with the wiki's one password, no one in particular (""). It carries a
+// stamp of the password it was signed in with (passwordStamp), so a new
+// password ends every session of the old one.
 const (
 	sessionCookie   = "session"
 	sessionLifetime = 30 * 24 * time.Hour
@@ -137,6 +139,19 @@ type session struct {
 	Auth   bool   `json:"auth"`
 	Issued int64  `json:"iat"`
 	User   string `json:"user,omitempty"`
+	Pw     string `json:"pw"`
+}
+
+// passwordStamp: what a session of user ("": the wiki's password) holds of
+// the password: a MAC of its hash, which has a salt of its own, so even
+// the same password set again makes a new one.
+func passwordStamp(user string) string {
+	s := settings()
+	hash := s.PasswordHash
+	if u := s.Users[user]; u != nil {
+		hash = u.PasswordHash
+	}
+	return sign("password:" + hash)[:16]
 }
 
 func sign(payload string) string {
@@ -149,7 +164,8 @@ func sign(payload string) string {
 // belongs to; renew says it is old enough (a day) to be given a fresh one.
 // With users, the session must name one of them, so a user taken out of
 // the settings is signed out at once; without, it must name no one, so
-// switching between a password and users signs everyone out.
+// switching between a password and users signs everyone out; a changed
+// password signs out the sessions of the old one.
 func signedIn(r *http.Request) (user string, ok, renew bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
@@ -165,7 +181,8 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 		return "", false, false
 	}
 	users := settings().Users
-	if users != nil && users[s.User] == nil || users == nil && s.User != "" {
+	if users != nil && users[s.User] == nil || users == nil && s.User != "" ||
+		!hmac.Equal([]byte(s.Pw), []byte(passwordStamp(s.User))) {
 		return "", false, false
 	}
 	age := now().Sub(time.Unix(s.Issued, 0))
@@ -177,7 +194,7 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 // http (localhost, the LAN) it still works. A client faking the header only
 // gets a cookie its own http requests leave out.
 func setSession(w http.ResponseWriter, r *http.Request, user string) {
-	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user})
+	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user, Pw: passwordStamp(user)})
 	payload := base64.RawURLEncoding.EncodeToString(raw)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: payload + "." + sign(payload), Path: "/",
