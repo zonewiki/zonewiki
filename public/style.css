@@ -1475,6 +1475,16 @@ body.editor-page main {
   transition: color .3s;
 }
 .save-dot.unsaved { color: var(--muted); }
+/* "Merged bob's changes", for a few seconds after a save merged (editor.js takeMerged). */
+.merge-note {
+  font-size: .78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.merge-note[hidden] { display: none; }
 
 /* Formatting bar (FORMAT_BAR in server.py, applyFormat in leaf.js): one
    line of quiet buttons above the textarea; on a narrow screen it scrolls

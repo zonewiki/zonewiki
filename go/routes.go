@@ -398,13 +398,21 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		}
 		answer := M{"error": "file_changed"}
 		if s.current != nil {
-			answer["file_hash"] = contentHash(*s.current)
+			answer["file_hash"] = keepBase(*s.current) // Merge by hand saves from it
 		}
 		if ok {
 			answer["by"] = m.by
+			if !m.clean && !s.section {
+				// The lines that clash, with git's markers, for Merge by hand.
+				answer["conflict"] = m.content
+			}
 		}
 		writeJSON(w, http.StatusConflict, answer)
 		return true
+	}
+	if r.PostFormValue("set_aside") == "1" {
+		setAside(w, r, s, force)
+		return
 	}
 	switch {
 	case isForce:
@@ -430,6 +438,10 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if isForce || s.fileHash == "" {
+		// Keep mine: whatever the page holds, but never what was never in git.
+		commitBeforeOverwrite(userOf(r), s.slug, s.path)
+	}
 	commitOthersDraft(userOf(r), s.slug, s.path)
 	if err := s.write(content); err != nil {
 		serverError(w, r, err)
@@ -439,12 +451,15 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	keepBase(content)
 	switch {
 	case merged != nil:
-		// The merged text, for the editor's textarea: the section's, as /edit gives it.
+		// The merged text, for the editor's textarea: the section's, as /edit
+		// gives it; and the save's own, which an editor typed on meanwhile
+		// saves from next.
 		text := content
-		answer := M{"file_hash": newHash, "merged": true, "by": merged.by}
+		answer := M{"file_hash": newHash, "merged": true, "by": merged.by, "sent_hash": merged.sentHash}
 		if s.section {
 			text = strings.TrimRight(runeSlice(content, newStart, newEnd), "\n")
 			answer["start_char"], answer["end_char"] = newStart, newEnd
+			answer["sent_start"], answer["sent_end"] = merged.sentStart, merged.sentEnd
 		}
 		answer["content"] = text
 		writeJSON(w, http.StatusOK, answer)
@@ -455,6 +470,43 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// setAside: Reload theirs after a conflict, the editor's text (a whole
+// page, or a section by index) committed as the user's first, then the
+// page back as it is now, so what was typed is in the page's history, not
+// lost. {set_aside: false}: without git there is no history to keep it in.
+func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int) {
+	if s.current == nil {
+		http.NotFound(w, r)
+		return
+	}
+	theirs, mine := *s.current, s.text
+	if section >= 1 {
+		start, end, ok := sectionCharRange(theirs, section)
+		if !ok {
+			badRequestPage(w)
+			return
+		}
+		mine, _, _, _, _ = spliceSection(&theirs, contentHash(theirs), start, end, s.text)
+	}
+	if !cfg.GitEnabled || mine == theirs {
+		writeJSON(w, http.StatusOK, M{"set_aside": false})
+		return
+	}
+	user := userOf(r)
+	commitBeforeOverwrite(user, s.slug, s.path) // theirs, if never in git
+	if err := writeText(s.path, mine); err != nil {
+		serverError(w, r, err)
+		return
+	}
+	gitCommit(user, "Set aside an edit of "+s.slug, s.path)
+	if err := writeText(s.path, theirs); err != nil {
+		serverError(w, r, err)
+		return
+	}
+	gitCommit(user, "Reload "+s.slug, s.path)
+	writeJSON(w, http.StatusOK, M{"set_aside": true})
 }
 
 // createPage: /new, the New page dialog; private=1 puts the page in the

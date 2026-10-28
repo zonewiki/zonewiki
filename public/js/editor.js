@@ -184,7 +184,24 @@ if (textarea && previewPane) {
       data.append('start_char', sectionStartEl.value);
       data.append('end_char', sectionEndEl.value);
     }
+    // A save onto a page someone changed meanwhile may be merged: this
+    // editor takes the merged text (takeMerged).
+    data.append('merge', '1');
   }
+
+  function setHash(hash, start, end) {
+    if (sectionHashEl && hash) sectionHashEl.value = hash;
+    if (isSectionEdit && start !== undefined) {
+      sectionStartEl.value = start;
+      sectionEndEl.value = end;
+    }
+  }
+
+  // Merge by hand: the textarea holds git's conflict markers; auto-save
+  // waits until none is left, then saves from the file the merge was made with.
+  let handMerge = false;
+  const conflictMarkers = /^(<{7} |={7}$|>{7} )/m;
+  const unresolved = () => handMerge && conflictMarkers.test(textarea.value);
 
   // Saves run one at a time. Each sends the file hash the previous one
   // returned; two in flight at once would both send the older hash, and the
@@ -199,21 +216,43 @@ if (textarea && previewPane) {
   // Take a successful save's answer: the new hash and section range, and the
   // content it wrote (not what the textarea holds by now).
   async function saved(res, content) {
+    const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+    if (json?.merged) return takeMerged(json, content);
     lastSavedContent = content;
     if (textarea.value === content) saveDot.classList.remove('unsaved');
-    if (res.headers.get('content-type')?.includes('json')) {
-      const json = await res.json();
-      if (sectionHashEl && json.file_hash) sectionHashEl.value = json.file_hash;
-      if (isSectionEdit && json.start_char !== undefined) {
-        sectionStartEl.value = json.start_char;
-        sectionEndEl.value = json.end_char;
-      }
+    if (json) setHash(json.file_hash, json.start_char, json.end_char);
+  }
+
+  // A save merged with someone else's change: the merged text goes into
+  // the textarea if it still holds what was sent (only the lines that
+  // differ, one undoable step). Typed on meanwhile: the textarea is left
+  // alone, and the next save goes from the text this one sent, which the
+  // server merges again; it settles at the next pause in typing.
+  function takeMerged(json, content) {
+    if (textarea.value === content) {
+      replaceChangedLines(textarea, json.content);
+      lastSavedContent = json.content;
+      setHash(json.file_hash, json.start_char, json.end_char);
+      saveDot.classList.remove('unsaved');
+    } else {
+      lastSavedContent = content;
+      setHash(json.sent_hash, json.sent_start, json.sent_end);
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(autoSave, 2000);
+    }
+    const note = document.getElementById('merge-note');
+    if (note) {
+      note.textContent = json.by ? `Merged ${json.by}’s changes` : 'Merged changes made meanwhile';
+      note.hidden = false;
+      clearTimeout(note.timer);
+      note.timer = setTimeout(() => { note.hidden = true; }, 5000);
     }
   }
 
   function autoSave() {
     return queueSave(async () => {
-      if (!autoSaveUrl || sectionConflict) return;
+      if (!autoSaveUrl || sectionConflict || unresolved()) return;
+      handMerge = false;
       const content = textarea.value;
       if (content === lastSavedContent) return;
       const data = new FormData();
@@ -224,26 +263,75 @@ if (textarea && previewPane) {
         if (res.ok) {
           await saved(res, content);
         } else if (res.status === 409) {
-          showConflictBanner();
+          showConflictBanner(false, await res.json().catch(() => ({})));
         }
       } catch { /* ignore */ }
     });
   }
 
-  function showConflictBanner(fromDone) {
+  // After Done's conflict: what an auto-save is told (who, and the lines
+  // with markers), for the banner; null if it saved after all (the file
+  // changed back meanwhile): then Done goes again.
+  async function conflictInfo() {
+    const content = textarea.value;
+    const data = new FormData();
+    data.append('content', content);
+    appendSaveFields(data);
+    data.set('merge', '');   // Done couldn't merge: no merge now either
+    try {
+      const res = await queueSave(() => fetch(autoSaveUrl, { method: 'POST', body: data }));
+      if (res.status === 409) return await res.json();
+      if (res.ok) {
+        await saved(res, content);
+        return null;
+      }
+    } catch { /* ignore */ }
+    return {};
+  }
+
+  // A change that clashes with yours: Reload theirs (yours goes into the
+  // page's history first), Keep mine (theirs is in git already), or, for a
+  // whole page, Merge by hand (the lines with git's markers).
+  function showConflictBanner(fromDone, info = {}) {
     if (sectionConflict) return;
     sectionConflict = true;
     clearTimeout(autoSaveTimer);
     const banner = document.createElement('div');
     banner.className = 'conflict-banner';
-    banner.innerHTML = '\u26a0 File was modified on disk while you were editing.'
-      + '<span class="conflict-actions">'
-      + '<button class="btn btn-small" id="conflict-reload">Reload from disk</button>'
-      + '<button class="btn btn-small btn-primary" id="conflict-overwrite">Save my version</button>'
-      + '</span>';
+    const msg = document.createElement('span');
+    msg.textContent = '\u26a0 ' + (info.by ? `${info.by} changed the same lines` : 'This page was changed')
+      + ' while you were editing.';
+    banner.append(msg);
+    const actions = document.createElement('span');
+    actions.className = 'conflict-actions';
+    actions.innerHTML = '<button type="button" class="btn btn-small" id="conflict-reload">Reload theirs</button>'
+      + (info.conflict ? '<button type="button" class="btn btn-small" id="conflict-merge">Merge by hand</button>' : '')
+      + '<button type="button" class="btn btn-small btn-primary" id="conflict-overwrite">Keep mine</button>';
+    banner.append(actions);
     editorForm.parentElement.insertBefore(banner, editorForm);
-    document.getElementById('conflict-reload').addEventListener('click', () => {
+    document.getElementById('conflict-reload').addEventListener('click', async () => {
+      // Yours first into the page's history, then the page as it is now.
+      const data = new FormData();
+      data.append('content', textarea.value);
+      data.append('set_aside', '1');
+      const sectionIdxEl = document.getElementById('section-idx');
+      if (isSectionEdit && sectionIdxEl) data.append('force_section', sectionIdxEl.value);
+      try {
+        const res = await queueSave(() => fetch(autoSaveUrl, { method: 'POST', body: data }));
+        if (!res.ok) return;
+      } catch { return; }
+      formSubmitting = true;   // nothing more to save on the way out
       window.location.reload();
+    });
+    document.getElementById('conflict-merge')?.addEventListener('click', () => {
+      banner.remove();
+      sectionConflict = false;
+      handMerge = true;
+      setHash(info.file_hash);
+      replaceChangedLines(textarea, info.conflict);
+      textarea.setSelectionRange(0, 0);
+      const first = textarea.value.search(conflictMarkers);
+      if (first >= 0) textarea.setSelectionRange(first, first);
     });
     document.getElementById('conflict-overwrite').addEventListener('click', async () => {
       const sectionIdxEl = document.getElementById('section-idx');
@@ -271,6 +359,11 @@ if (textarea && previewPane) {
 
   // Flag form submission so pagehide beacon doesn't race with the POST
   editorForm?.addEventListener('submit', (e) => {
+    if (unresolved() && !confirm('The text still has conflict markers (<<<<<<<, =======, >>>>>>>). Save anyway?')) {
+      e.preventDefault();
+      return;
+    }
+    handMerge = false;
     clearTimeout(autoSaveTimer);
     if (sectionHashEl?.value) {
       // Submit via fetch so we can handle conflicts in-place
@@ -282,7 +375,7 @@ if (textarea && previewPane) {
         .then(res => {
           if (res.redirected && res.url.includes('conflict=1')) {
             formSubmitting = false;
-            showConflictBanner(true);
+            conflictInfo().then(info => info ? showConflictBanner(true, info) : editorForm.requestSubmit());
           } else {
             window.location.href = res.url;
           }
@@ -301,7 +394,7 @@ if (textarea && previewPane) {
 
   // Save file on navigation away if content has changed (no git commit)
   window.addEventListener('pagehide', () => {
-    if (formSubmitting || sectionConflict) return;
+    if (formSubmitting || sectionConflict || unresolved()) return;
     if (!autoSaveUrl || textarea.value === lastSavedContent) return;
     clearTimeout(autoSaveTimer);
     const content = textarea.value;
@@ -312,9 +405,38 @@ if (textarea && previewPane) {
     // answer still arrives and updates the hash, so the next save isn't
     // refused for the change this one made. keepalive outlives the page.
     fetch(autoSaveUrl, { method: 'POST', body: data, keepalive: true })
-      .then(res => { if (res.ok) return saved(res, content); if (res.status === 409) showConflictBanner(); })
+      .then(async res => {
+        if (res.ok) return saved(res, content);
+        if (res.status === 409) showConflictBanner(false, await res.json().catch(() => ({})));
+      })
       .catch(() => {});
   });
+}
+
+// replaceChangedLines puts text into the textarea as one undoable insert
+// over only the lines that differ (the common start and end stay), the
+// cursor and selection kept where they were relative to the text around.
+export function replaceChangedLines(textarea, text) {
+  const old = textarea.value;
+  if (old === text) return;
+  let start = 0;
+  while (start < old.length && start < text.length && old[start] === text[start]) start++;
+  start = old.lastIndexOf('\n', start - 1) + 1;
+  let endOld = old.length, endNew = text.length;
+  while (endOld > start && endNew > start && old[endOld - 1] === text[endNew - 1]) { endOld--; endNew--; }
+  // Out to the end of the line: the rest of it is the same on both sides.
+  const nl = old.indexOf('\n', endOld);
+  const rest = Math.min(nl < 0 ? old.length - endOld : nl - endOld, text.length - endNew);
+  endOld += rest; endNew += rest;
+  const shift = pos => pos <= start ? pos : pos >= endOld ? pos + endNew - endOld : Math.min(pos, endNew);
+  const [a, b, scroll] = [textarea.selectionStart, textarea.selectionEnd, textarea.scrollTop];
+  textarea.focus();
+  textarea.setSelectionRange(start, endOld);
+  const insert = text.slice(start, endNew);
+  if (insert) document.execCommand('insertText', false, insert);
+  else document.execCommand('delete');
+  textarea.setSelectionRange(shift(a), shift(b));
+  textarea.scrollTop = scroll;
 }
 
 export function togglePreview() {

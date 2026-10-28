@@ -66,7 +66,9 @@ editor; a change on disk shows up immediately.
 - An editor with live preview and auto-save, a formatting bar, completion
   for links, pages and emoji (`:tada` → 🎉), snippets (`/date`), list continuation, and editing a
   single section from its heading. Paste or drop files and images to upload
-  them.
+  them. Two people (or you and your assistant) on one page: changes in
+  different lines merge as you type; where you both changed the same lines,
+  you choose (theirs, yours, or merge by hand), and nothing typed is lost.
 - Renaming or moving a page updates every link to it, on other pages and in
   tasks.
 - Every page's version history: what each save changed, any version, and

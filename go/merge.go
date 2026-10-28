@@ -167,6 +167,11 @@ type mergeOutcome struct {
 	clean      bool   // no line changed on both sides
 	start, end int    // a section edit: the section's range in content
 	by         string // whose change it met ("": not known, or no users)
+	// The save's own text as a whole page (kept as a base) and, for a
+	// section, its range there: an editor typed on meanwhile saves from it
+	// next, and that save merges again.
+	sentHash           string
+	sentStart, sentEnd int
 }
 
 // mergeSave merges the editor's save s, made from the text at its hash,
@@ -187,7 +192,7 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 	mine := s.text
 	if s.section {
 		var spliced bool
-		if mine, _, _, _, spliced = spliceSection(&base, s.fileHash, s.start, s.end, s.text); !spliced {
+		if mine, _, m.sentStart, m.sentEnd, spliced = spliceSection(&base, s.fileHash, s.start, s.end, s.text); !spliced {
 			return m, false
 		}
 	}
@@ -205,7 +210,25 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 			return m, false
 		}
 	}
+	if m.clean {
+		m.sentHash = keepBase(mine)
+	}
 	return m, true
+}
+
+// commitBeforeOverwrite: before user's save that overwrites the page at
+// path whatever it holds (Keep mine), what it holds uncommitted is
+// committed first, by whoever wrote it (Leaf if not known), unless it is
+// user's own draft: so an overwrite never loses text that was never in git.
+func commitBeforeOverwrite(user, slug, path string) {
+	if !exists(path) || !isUncommitted(path) {
+		return
+	}
+	author := draftAuthor(path)
+	if settings().Users != nil && author == user {
+		return
+	}
+	gitCommit(author, "Save "+slug, path)
 }
 
 // otherAuthor: who other than user changed path last, as far as Leaf

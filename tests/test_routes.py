@@ -593,7 +593,9 @@ class TestMergeOnSave:
         resp = self.save(client, self.PAGE.replace("Second.", "Second, B."))
         both = self.PAGE.replace("First.", "First, A.").replace("Second.", "Second, B.")
         assert resp.status_code == 200 and page.read_text() == both
-        assert resp.get_json() == {"file_hash": content_hash(both), "merged": True, "by": "", "content": both}
+        mine = self.PAGE.replace("Second.", "Second, B.")
+        assert resp.get_json() == {"file_hash": content_hash(both), "merged": True, "by": "", "content": both,
+                                   "sent_hash": content_hash(mine)}
         # The merged text is a base too: the next save from it is no conflict.
         assert self.save(client, both + "\nMore.\n", content_hash(both)).status_code == 200
 
@@ -636,6 +638,53 @@ class TestMergeOnSave:
         resp = client.post("/api/save/plans", data={**fields, "content": "## Two\n\nSecond, B.\n", "merge": "1"},
                            headers=HOST)
         assert resp.status_code == 409 and "Second, B." not in page.read_text()
+
+    def test_a_conflict_gives_the_lines_with_markers(self, client, page):
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        data = self.save(client, self.PAGE.replace("First.", "First, B.")).get_json()
+        assert "<<<<<<< yours\nFirst, B.\n=======\nFirst, A.\n>>>>>>> theirs\n" in data["conflict"]
+        assert data["file_hash"] == content_hash(page.read_text())
+        # Merge by hand saves from that hash: no conflict.
+        resolved = self.PAGE.replace("First.", "First, A and B.")
+        assert self.save(client, resolved, data["file_hash"]).status_code == 200
+        assert page.read_text() == resolved
+
+    def test_a_section_conflict_has_no_markers(self, client, page):
+        fields = section_fields(client, "plans", 1)
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        resp = client.post("/api/save/plans", data={**fields, "content": "## One\n\nFirst, B.\n", "merge": "1"},
+                           headers=HOST)
+        assert resp.status_code == 409 and "conflict" not in resp.get_json()
+
+    def test_typed_on_meanwhile_saves_from_what_was_sent(self, client, page):
+        self.save(client, self.PAGE.replace("Second.", "Second, B."))
+        sent = self.PAGE.replace("First.", "First, A.")
+        data = self.save(client, sent).get_json()
+        assert data["merged"] and data["sent_hash"] == content_hash(sent)
+        # The editor kept typing: its next save goes from the text it sent, and merges again.
+        more = sent.replace("First, A.", "First, A, more.")
+        data = self.save(client, more, data["sent_hash"]).get_json()
+        assert data["merged"] and page.read_text() == more.replace("Second.", "Second, B.")
+
+    def test_reload_theirs_sets_mine_aside_in_git(self, client, page):
+        theirs = self.PAGE.replace("First.", "First, A.")
+        self.save(client, theirs)
+        resp = client.post("/api/save/plans", data={"content": self.PAGE.replace("First.", "First, B."),
+                                                    "set_aside": "1"}, headers=HOST)
+        assert resp.get_json() == {"set_aside": True} and page.read_text() == theirs
+        log = subprocess.run(["git", "log", "--format=%s", "-3"], cwd=page.parent, capture_output=True,
+                             text=True).stdout.splitlines()
+        assert log == ["Reload plans", "Set aside an edit of plans", "Save plans"]
+        shown = subprocess.run(["git", "show", "HEAD~1:plans.md"], cwd=page.parent, capture_output=True, text=True)
+        assert "First, B." in shown.stdout
+
+    def test_keep_mine_commits_what_was_never_in_git_first(self, client, page):
+        theirs = self.PAGE.replace("First.", "First, edited on disk.")
+        page.write_text(theirs)
+        assert client.post("/api/save/plans", data={"content": self.PAGE.replace("First.", "First, mine.")},
+                           headers=HOST).status_code in (200, 204)
+        shown = subprocess.run(["git", "show", "HEAD:plans.md"], cwd=page.parent, capture_output=True, text=True)
+        assert shown.stdout == theirs and "First, mine." in page.read_text()
 
     def test_done_merges_and_commits(self, client, page):
         self.save(client, self.PAGE.replace("First.", "First, A."))
