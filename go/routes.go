@@ -236,6 +236,9 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		}
 		title = pageTitle(content, slug)
 	}
+	if !isNew {
+		keepBase(content) // what a later save from this editor is merged from
+	}
 	q := r.URL.Query()
 	section, hasSection := intArg(q.Get("section"), q.Has("section"))
 	fileHash, start, end := "", 0, 0
@@ -340,16 +343,24 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 	}
 	content := s.text
 	conflict := pathURL("edit", s.slug) + "?conflict=1"
+	var changed bool
 	if s.section {
-		merged, _, _, _, ok := spliceSection(s.current, s.fileHash, s.start, s.end, content)
-		if !ok {
+		var spliced string
+		if spliced, _, _, _, ok = spliceSection(s.current, s.fileHash, s.start, s.end, content); ok {
+			content = spliced
+		}
+		changed = !ok
+	} else {
+		changed = s.changedSince()
+	}
+	if changed {
+		// Changed since the editor loaded it: merged, if it merges cleanly.
+		m, ok := mergeSave(s, userOf(r))
+		if !ok || !m.clean {
 			http.Redirect(w, r, conflict, http.StatusFound)
 			return
 		}
-		content = merged
-	} else if s.changedSince() {
-		http.Redirect(w, r, conflict, http.StatusFound)
-		return
+		content = m.content
 	}
 	commitOthersDraft(userOf(r), s.slug, s.path)
 	// Unchanged: no write, but still a commit when the file is dirty.
@@ -357,12 +368,16 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	keepBase(content)
 	gitCommit(userOf(r), "Update "+s.slug, s.path)
 	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
 
 // apiSave: the editor's auto-save (no commit): a whole page, a section
-// (guarded by the file's hash), or force_section (spliced by index).
+// (guarded by the file's hash), or force_section (spliced by index). A
+// save onto a file that changed since is merged when the editor takes a
+// merged answer (merge=1: it puts the merged text into its textarea) and
+// the lines don't clash; else 409.
 func apiSave(w http.ResponseWriter, r *http.Request) {
 	s, ok := readEditorSave(w, r)
 	if !ok {
@@ -372,6 +387,25 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	isForce := okF && force >= 1
 	var content, newHash string
 	var newStart, newEnd int
+	var merged *mergeOutcome
+	// conflict: the file changed since; merged if it can be, else 409.
+	conflict := func() bool {
+		m, ok := mergeSave(s, userOf(r))
+		if ok && m.clean && r.PostFormValue("merge") == "1" {
+			merged, content = &m, m.content
+			newHash, newStart, newEnd = contentHash(content), m.start, m.end
+			return false
+		}
+		answer := M{"error": "file_changed"}
+		if s.current != nil {
+			answer["file_hash"] = contentHash(*s.current)
+		}
+		if ok {
+			answer["by"] = m.by
+		}
+		writeJSON(w, http.StatusConflict, answer)
+		return true
+	}
 	switch {
 	case isForce:
 		// Spliced by its index in the file as it is now, without the hash guard.
@@ -386,17 +420,15 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		}
 		content, newHash, newStart, newEnd, _ = spliceSection(s.current, contentHash(*s.current), start, end, s.text)
 	case s.section:
-		if content, newHash, newStart, newEnd, ok = spliceSection(s.current, s.fileHash, s.start, s.end, s.text); !ok {
-			writeJSON(w, http.StatusConflict, M{"error": "file_changed"})
+		if content, newHash, newStart, newEnd, ok = spliceSection(s.current, s.fileHash, s.start, s.end, s.text); !ok && conflict() {
 			return
 		}
 	default:
 		// The whole page: a hash checks for a conflict.
-		if s.changedSince() {
-			writeJSON(w, http.StatusConflict, M{"error": "file_changed", "file_hash": contentHash(*s.current)})
+		content = s.text
+		if s.changedSince() && conflict() {
 			return
 		}
-		content = s.text
 	}
 	commitOthersDraft(userOf(r), s.slug, s.path)
 	if err := s.write(content); err != nil {
@@ -404,7 +436,18 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteDraft(s.path, userOf(r))
+	keepBase(content)
 	switch {
+	case merged != nil:
+		// The merged text, for the editor's textarea: the section's, as /edit gives it.
+		text := content
+		answer := M{"file_hash": newHash, "merged": true, "by": merged.by}
+		if s.section {
+			text = strings.TrimRight(runeSlice(content, newStart, newEnd), "\n")
+			answer["start_char"], answer["end_char"] = newStart, newEnd
+		}
+		answer["content"] = text
+		writeJSON(w, http.StatusOK, answer)
 	case s.section || isForce:
 		writeJSON(w, http.StatusOK, M{"file_hash": newHash, "start_char": newStart, "end_char": newEnd})
 	case s.fileHash != "":

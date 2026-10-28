@@ -252,6 +252,22 @@ class TestDrafts:
         return [(git(wiki, "show", "-s", "--format=%an", sha).strip(), git(wiki, "show", "--format=", sha))
                 for sha in shas]
 
+    def test_a_merge_names_whose_change_it_met(self, client, git_wiki_dir, users):
+        """alice's save from the page as it was meets bob's draft: merged,
+        named, and his draft committed as his first."""
+        (git_wiki_dir / "plans.md").write_text(self.PAGE)
+        login(client, "alice", "alice-pw")
+        client.get("/edit/plans", headers=HOST)
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        client.post("/api/save/plans", data={"content": self.BOBS, "file_hash": content_hash(self.PAGE)}, headers=HOST)
+        client.post("/logout", headers=HOST)
+        login(client, "alice", "alice-pw")
+        resp = client.post("/api/save/plans", data={"content": self.PAGE.replace("The start.", "The begin."),
+                                                    "file_hash": content_hash(self.PAGE), "merge": "1"}, headers=HOST)
+        assert resp.get_json()["by"] == "bob" and "Bob's line." in resp.get_json()["content"]
+        assert authors(git_wiki_dir)[0] == ("bob", "Save plans")
+
     def test_without_users_nothing_changes(self, client, git_wiki_dir):
         (git_wiki_dir / "plans.md").write_text(self.PAGE)
         client.post("/api/save/plans", data={"content": self.BOBS, "file_hash": content_hash(self.PAGE)},

@@ -160,3 +160,90 @@ func mergeText(base, theirs, mine, theirName string) (merged string, clean bool,
 	}
 	return r.Stdout, r.Code == 0, nil
 }
+
+// mergeOutcome: an editor's save merged with the file as it is now.
+type mergeOutcome struct {
+	content    string // the merged file; not clean: with conflict markers
+	clean      bool   // no line changed on both sides
+	start, end int    // a section edit: the section's range in content
+	by         string // whose change it met ("": not known, or no users)
+}
+
+// mergeSave merges the editor's save s, made from the text at its hash,
+// with the file as it is now: a whole page as it is, a section spliced
+// into the text it came from first and merged as a whole page, its new
+// range then the section whose heading line is the one the editor's text
+// starts with. ok false when there is no merge to make: the file gone, the
+// base no longer kept (an old tab, a restart), no git, or (clean) the
+// section's heading not there exactly once.
+func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
+	if s.current == nil || s.fileHash == "" {
+		return m, false
+	}
+	base, kept := baseText(s.fileHash)
+	if !kept {
+		return m, false
+	}
+	mine := s.text
+	if s.section {
+		var spliced bool
+		if mine, _, _, _, spliced = spliceSection(&base, s.fileHash, s.start, s.end, s.text); !spliced {
+			return m, false
+		}
+	}
+	m.by = otherAuthor(s.path, user)
+	label := m.by
+	if label == "" {
+		label = "theirs"
+	}
+	var err error
+	if m.content, m.clean, err = mergeText(base, *s.current, mine, label); err != nil {
+		return m, false
+	}
+	if s.section && m.clean {
+		if m.start, m.end, ok = headedSection(m.content, firstLine(s.text)); !ok {
+			return m, false
+		}
+	}
+	return m, true
+}
+
+// otherAuthor: who other than user changed path last, as far as Leaf
+// knows: the draft's author, else the last commit's ("": none, or Leaf).
+func otherAuthor(path, user string) string {
+	if settings().Users == nil {
+		return ""
+	}
+	if a := draftAuthor(path); a != "" {
+		if a == user {
+			return ""
+		}
+		return a
+	}
+	if log := gitLog(path, 1); len(log) > 0 && log[0].Author != user {
+		return log[0].Author
+	}
+	return ""
+}
+
+func firstLine(text string) string {
+	line, _, _ := strings.Cut(text, "\n")
+	return strings.TrimRight(line, " \t")
+}
+
+// headedSection: the range (characters) of the one section of content
+// whose heading line is heading; ok false if none or several.
+func headedSection(content, heading string) (start, end int, ok bool) {
+	found := 0
+	for i := 1; ; i++ {
+		s, e, valid := sectionCharRange(content, i)
+		if !valid {
+			break
+		}
+		if firstLine(runeSlice(content, s, e)) == heading {
+			start, end = s, e
+			found++
+		}
+	}
+	return start, end, found == 1 && heading != ""
+}

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, backlinks, section_fields, task_backlinks, write_page
+from tests.conftest import HOST, backlinks, content_hash, section_fields, task_backlinks, write_page
 from tests.goserver import binary
 
 
@@ -567,6 +567,87 @@ class TestApiSave:
         write_page(wiki_dir, "unchanged", content)
         resp = client.post("/api/save/unchanged", data={"content": content}, headers=HOST)
         assert resp.status_code in (200, 204)
+
+
+class TestMergeOnSave:
+    """Two editors on one page: a save onto a file that changed since its
+    editor loaded it is merged when the lines don't clash (the editor says
+    it takes a merged answer, merge=1); else 409, as before."""
+
+    PAGE = "# Plans\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
+
+    @pytest.fixture()
+    def page(self, client, git_wiki_dir):
+        write_page(git_wiki_dir, "plans", self.PAGE)
+        client.get("/edit/plans", headers=HOST)   # both editors load it: its text is a base
+        return git_wiki_dir / "plans.md"
+
+    def save(self, client, content, file_hash=None, **fields):
+        return client.post("/api/save/plans", data={"content": content, "merge": "1",
+                                                    "file_hash": file_hash or content_hash(self.PAGE), **fields},
+                           headers=HOST)
+
+    def test_changes_in_different_lines_both_land(self, client, page):
+        first = self.PAGE.replace("First.", "First, A.")
+        assert self.save(client, first).status_code == 200
+        resp = self.save(client, self.PAGE.replace("Second.", "Second, B."))
+        both = self.PAGE.replace("First.", "First, A.").replace("Second.", "Second, B.")
+        assert resp.status_code == 200 and page.read_text() == both
+        assert resp.get_json() == {"file_hash": content_hash(both), "merged": True, "by": "", "content": both}
+        # The merged text is a base too: the next save from it is no conflict.
+        assert self.save(client, both + "\nMore.\n", content_hash(both)).status_code == 200
+
+    def test_the_same_lines_are_a_conflict(self, client, page):
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        resp = self.save(client, self.PAGE.replace("First.", "First, B."))
+        assert resp.status_code == 409 and resp.get_json()["error"] == "file_changed"
+        assert "First, A." in page.read_text()
+
+    @pytest.mark.parametrize("why", ["no merge field", "unknown base", "no git"])
+    def test_no_merge_is_the_conflict_as_before(self, client, page, why, wiki_dir, monkeypatch):
+        if why == "no git":
+            monkeypatch.setattr(settings, "GIT_ENABLED", False)
+            client.get("/edit/plans", headers=HOST)
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        mine = self.PAGE.replace("Second.", "Second, B.")
+        fields = {"merge": ""} if why == "no merge field" else {}
+        hash_ = content_hash(mine + "x") if why == "unknown base" else None
+        assert self.save(client, mine, hash_, **fields).status_code == 409
+
+    def test_a_section_merges_and_gets_its_new_range(self, client, page):
+        fields = section_fields(client, "plans", 2)                  # "## Two", from the page as it was
+        self.save(client, self.PAGE.replace("# Plans\n", "# Plans\n\nIntro.\n"))
+        resp = client.post("/api/save/plans", data={**fields, "content": "## Two\n\nSecond, B.\n", "merge": "1"},
+                           headers=HOST)
+        text = page.read_text()
+        assert resp.status_code == 200 and text == "# Plans\n\nIntro.\n\n## One\n\nFirst.\n\n## Two\n\nSecond, B.\n"
+        data = resp.get_json()
+        assert data["merged"] and data["content"] == "## Two\n\nSecond, B."
+        assert text[data["start_char"]:data["end_char"]].startswith("## Two") and data["file_hash"] == content_hash(text)
+        # The next save from it splices at the new range.
+        client.post("/api/save/plans", data={"file_hash": data["file_hash"], "start_char": data["start_char"],
+                                             "end_char": data["end_char"], "content": "## Two\n\nAgain.\n"},
+                    headers=HOST)
+        assert page.read_text().endswith("## Two\n\nAgain.\n") and "Intro." in page.read_text()
+
+    def test_a_section_whose_heading_changed_is_a_conflict(self, client, page):
+        fields = section_fields(client, "plans", 2)
+        self.save(client, self.PAGE.replace("## Two", "## Zwei"))
+        resp = client.post("/api/save/plans", data={**fields, "content": "## Two\n\nSecond, B.\n", "merge": "1"},
+                           headers=HOST)
+        assert resp.status_code == 409 and "Second, B." not in page.read_text()
+
+    def test_done_merges_and_commits(self, client, page):
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        resp = client.post("/edit/plans", data={"content": self.PAGE.replace("Second.", "Second, B."),
+                                                "file_hash": content_hash(self.PAGE)}, headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/page/plans"
+        assert "First, A." in page.read_text() and "Second, B." in page.read_text()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=page.parent, capture_output=True, text=True)
+        assert status.stdout == ""
+        resp = client.post("/edit/plans", data={"content": self.PAGE.replace("First.", "First, C."),
+                                                "file_hash": content_hash(self.PAGE)}, headers=HOST)
+        assert "conflict=1" in resp.headers["Location"]
 
 
 # ===========================================================================
