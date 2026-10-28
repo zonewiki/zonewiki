@@ -77,6 +77,16 @@ def test_a_removed_user_is_signed_out(client, config):
     assert until(lambda: not signed_in(client))
 
 
+def test_removing_every_user_keeps_the_login_until_a_restart(client, config):
+    """No users and no password would open the wiki, and private/ with it:
+    a running Leaf doesn't take that from a reload."""
+    write(config, "locale = de-AT\n")
+    assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
+    assert "without a login" in client.get("/api/health", headers=HOST).get_json()["error"]
+    assert client.get("/page/index", headers=HOST).status_code == 302
+    assert login(client, "alice", "alice-pw").status_code == 302
+
+
 def test_a_changed_password(client, config):
     write(config, user("alice", "new-pw", "alice-token"))
     assert login(client, "alice", "new-pw").status_code == 302

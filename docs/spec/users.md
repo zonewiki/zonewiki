@@ -56,8 +56,10 @@ The file can be edited by hand, or with the commands; a running Leaf takes each 
 ./run.sh user passwd alice             # a new password
 ./run.sh user token bob                # a new token; the old one stops working at once
 ./run.sh user remove bob               # his private pages and tasks stay on disk
+./run.sh user remove alice --password  # the last user: the wiki's password instead (or --open: no login)
 ./run.sh user list                     # the users, and who has a token
 ./run.sh config set hosts nas.local    # any other key of the table; config unset KEY for its default
+./run.sh config unset password         # no login (a running Leaf takes it only at a restart)
 ./run.sh config passwd                 # without users: the wiki's password
 ./run.sh config token                  # without users: the wiki's MCP token, shown once
 ./run.sh config check                  # what's wrong, or each setting in effect and where it comes from
@@ -65,7 +67,8 @@ The file can be edited by hand, or with the commands; a running Leaf takes each 
 ```
 
 - Without the container it is `leaf user …`, `leaf config …` with `LEAF_DATA` set (`go/commands.go`: `userMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm leaf /app/leaf user add alice`. `run.sh` runs the binary in a one-off container of the app's image (`compose build -q leaf`, its output only on failure, then `compose run --rm --no-deps leaf /app/leaf …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Leaf's user and `config import` sees `.env`; the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
-- They refuse a change Leaf wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others), a value that doesn't check, `config passwd`/`token` with users (each has their own), `config set password`/`mcp-token` (those have their commands).
+- They refuse a change Leaf wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others), a value that doesn't check, `config passwd`/`token` with users (each has their own), `config set password`/`mcp-token` (those have their commands; `config unset` takes them out: no login, `/mcp` off).
+- **Between a password and users**: the first `user add` replaces the wiki's `password` and `mcp-token` (with users each has their own) and says so; the last user goes only with `user remove NAME --password` (asks for the wiki's password, set in the same write) or `--open` (no login), else it is refused: without users private/ is an ordinary folder everyone sees, and without a password the wiki has no login.
 - `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
 - **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name. A user's MCP token is optional: without one they have no MCP access.
 
@@ -73,7 +76,7 @@ The file can be edited by hand, or with the commands; a running Leaf takes each 
 
 The request checks (`checks` in `go/server.go`) call `reloadSettings`, which looks at the file at most once a second (`reloadEvery`: its time, size and whether it is still the same file, as an editor may replace it); a change reads it again. No file watcher, no goroutine. The settings are held behind an atomic pointer (`settings()`, `Settings`); what is fixed for the process stays in `cfg`.
 
-- **A file with an error** on reload: Leaf keeps the settings it has, logs the error with its line, and `GET /api/health` answers 503 with it, so `leaf health` (the container's healthcheck) fails until the file is fixed. A broken edit never locks everyone out or opens the wiki. A file removed while Leaf runs counts the same (taking the users away would open the wiki): Leaf keeps its settings until the file is back, or a restart.
+- **A file with an error** on reload: Leaf keeps the settings it has, logs the error with its line, and `GET /api/health` answers 503 with it, so `leaf health` (the container's healthcheck) fails until the file is fixed. A broken edit never locks everyone out or opens the wiki. A file removed while Leaf runs counts the same (taking the users away would open the wiki): Leaf keeps its settings until the file is back, or a restart. So does a file that takes the login away, no users and no password where there were (by hand, `user remove --open` or `config unset password`): only a restart takes that, on purpose.
 - **What a reload changes**: a new user signs in at once; a removed user is signed out with their next request (the session must name a current user); a changed MCP token takes effect at once, the old one refused. A changed password doesn't end the user's sessions (sessions are signed with the key, not the password). Users ↔ no users signs everyone out, as `signedIn` checks. A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the file is committed (above). Throttles, caches and the search index stay.
 
 ## Signing in

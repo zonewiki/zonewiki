@@ -162,10 +162,22 @@ func TestReloadSettings(t *testing.T) {
 	if settingsError() == "" {
 		t.Fatal("error forgotten")
 	}
+	rewrite(t, path, "locale = fr\n[user alice]\npassword = "+hash+"\n")
+	reloadSettings()
+	if s := settings(); s.Locale != "fr" || s.Users["alice"] == nil || settingsError() != "" {
+		t.Fatalf("fixed: %+v %q", s, settingsError())
+	}
+	// No users and no password: no login, which only a restart takes.
+	before = settings()
 	rewrite(t, path, "locale = fr\n")
 	reloadSettings()
-	if s := settings(); s.Locale != "fr" || s.Users != nil || settingsError() != "" {
-		t.Fatalf("fixed: %+v %q", s, settingsError())
+	if settings() != before || !strings.Contains(settingsError(), "without a login") {
+		t.Fatalf("login off: %q", settingsError())
+	}
+	rewrite(t, path, "password = "+hash+"\n")
+	reloadSettings()
+	if s := settings(); s.Users != nil || s.PasswordHash != hash || settingsError() != "" {
+		t.Fatalf("users to a password: %+v %q", s, settingsError())
 	}
 	// Removed: kept (taking the users away could open the wiki), until it is back.
 	before = settings()
@@ -174,7 +186,7 @@ func TestReloadSettings(t *testing.T) {
 	if settings() != before || !strings.Contains(settingsError(), "was removed") {
 		t.Fatalf("removed: %q", settingsError())
 	}
-	rewrite(t, path, "locale = it\n")
+	rewrite(t, path, "locale = it\npassword = "+hash+"\n")
 	reloadSettings()
 	if settings().Locale != "it" || settingsError() != "" {
 		t.Fatal("back")
@@ -337,13 +349,41 @@ func TestUserCommands(t *testing.T) {
 	}
 	// A change Leaf wouldn't start with is refused, the file left as it was.
 	path := filepath.Join(wiki, ".leaf", "config")
-	before = "password = " + hashPassword("pw") + "\n" + before
-	_ = writeConfig(path, before)
+	_ = writeConfig(path, before+"[user dave]\n")
 	if code, _, errs := run("pw\npw\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {
-		t.Errorf("with the wiki's password: %d %q", code, errs)
+		t.Errorf("with a broken section: %d %q", code, errs)
 	}
-	if read().text() != before {
+	if got := readFile(t, path); got != before+"[user dave]\n" {
 		t.Error("a refused command changed the file")
+	}
+	_ = writeConfig(path, before)
+	// The last user goes only with the wiki's password instead, or with no login.
+	if code, _, errs := run("", "remove", "alice"); code == 0 || !strings.Contains(errs, "last user") ||
+		read().user("alice") == nil {
+		t.Errorf("remove the last: %d %q", code, errs)
+	}
+	if code, out, _ := run("wiki\nwiki\n", "remove", "alice", "--password"); code != 0 ||
+		len(read().users) != 0 || !checkPassword("wiki", read().top["password"].value) ||
+		!strings.Contains(out, "password signs in") {
+		t.Errorf("remove the last, with a password: %d %q", code, out)
+	}
+	// The first user replaces the wiki's password and token.
+	f = read()
+	f.set("", "mcp-token", hashToken("t"))
+	_ = writeConfig(path, f.text())
+	if code, out, _ := run("pw\npw\n", "add", "carol"); code != 0 || read().top["password"].line != 0 ||
+		read().top["mcp-token"].line != 0 || read().user("carol") == nil ||
+		!strings.Contains(out, "password no longer works") || !strings.Contains(out, "MCP token no longer works") {
+		t.Errorf("first user over the wiki's password: %d %q", code, out)
+	}
+	if code, out, _ := run("", "remove", "carol", "--open"); code != 0 || len(read().users) != 0 ||
+		read().top["password"].line != 0 || !strings.Contains(out, "next start") {
+		t.Errorf("remove the last, open: %d %q", code, out)
+	}
+	for _, args := range [][]string{{"remove", "x", "--password", "--open"}, {"add", "x", "--open"}} {
+		if code, _, _ := run("", args...); code != 2 {
+			t.Errorf("%v: %d", args, code)
+		}
 	}
 }
 
@@ -428,6 +468,18 @@ func TestConfigCommands(t *testing.T) {
 		if code, _, errs := run("", c...); code != 1 || errs == "" {
 			t.Errorf("%v: %d", c, code)
 		}
+	}
+	// The password and token are unset like the others (no login, /mcp off).
+	f.set("", "password", hashPassword("pw"))
+	f.set("", "mcp-token", hashToken("t"))
+	_ = writeConfig(filepath.Join(wiki2, ".leaf", "config"), f.text())
+	code, out, errs = run("", "unset", "password")
+	if code2, _, _ := run("", "unset", "mcp-token"); code != 0 || code2 != 0 || !strings.Contains(out, "no login") {
+		t.Errorf("unset password, token: %d %d %q", code, code2, errs)
+	}
+	if f, _ = readConfigFile(filepath.Join(wiki2, ".leaf", "config")); f.top["password"].line != 0 ||
+		f.top["mcp-token"].line != 0 {
+		t.Errorf("unset password, token: %s", f.text())
 	}
 	for _, c := range [][]string{{"bogus"}, {}, {"set", "locale"}, {"unset"}, {"check", "x"}} {
 		if code, _, errs := run("", c...); code != 2 || !strings.Contains(errs, "Usage") {

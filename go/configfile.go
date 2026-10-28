@@ -440,11 +440,17 @@ func reloadSettings() {
 	if err == nil {
 		s, err = loadSettings(f)
 	}
+	old := settings()
+	if err == nil && old.authOn() && !s.authOn() {
+		// The users (or the password) gone: everyone could get in, and
+		// private/ would be an ordinary folder. Only on purpose, a restart.
+		err = fmt.Errorf("%s sets no users and no password now, which leaves the wiki without a login "+
+			"(and private/ open to everyone): Leaf takes that only at its next start", configName)
+	}
 	if err != nil {
 		settingsFailed(err)
 		return
 	}
-	old := settings()
 	current.Store(s)
 	settingsErr.Store(nil)
 	logf("reloaded %s", configName)

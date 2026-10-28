@@ -206,12 +206,12 @@ except `LEAF_DATA`:
 
 The wiki's own settings and its users are in the wiki, in `.leaf/config`,
 committed with it (passwords and MCP tokens only as hashes). Leaf reloads it
-when it changes, so none of them needs a restart. Set them with `run.sh`, or
-edit the file:
+when it changes, so none of them needs a restart (but for taking the login
+away, which Leaf takes only at one). Set them with `run.sh`, or edit the file:
 
 ```bash
 ./run.sh config passwd                # a login: one password …
-./run.sh user add alice               # … or users, each with their own
+./run.sh user add alice               # … or users, each with their own (replaces the password)
 ./run.sh user add bob --mcp-token     # and an MCP token for his assistant
 ./run.sh user passwd alice            # also: user token, user remove, user list
 ./run.sh config set locale de-AT      # any setting below; config unset KEY for its default

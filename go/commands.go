@@ -20,16 +20,18 @@ import (
 )
 
 const userUsage = `Usage: leaf user COMMAND
-  add NAME [--mcp-token]  add a user (asks for the password; --mcp-token makes them a token)
+  add NAME [--mcp-token]  add a user (asks for the password; --mcp-token makes them a token);
+                          the first replaces the wiki's password and MCP token
   passwd NAME             set a user's password (asks for it)
   token NAME              give a user a new MCP token (the old one stops working)
-  remove NAME             remove a user (their private pages and tasks stay)
+  remove NAME             remove a user (their private pages and tasks stay); the last one only
+    [--password|--open]   with the wiki's password instead (asks for it), or with no login
   list                    the users, and whether each has an MCP token`
 
 const configUsage = `Usage: leaf config COMMAND
   check            check the settings and show those in effect
   set KEY VALUE    set one of the wiki's settings (hosts, locale, noshare …)
-  unset KEY        back to its default
+  unset KEY        back to its default (password: no login; mcp-token: /mcp off)
   passwd           set the wiki's password, without users (asks for it)
   token            give the wiki a new MCP token, without users (the old one stops working)
   import           move the wiki's settings from the environment (.env, before 2026-10) into ` + configName
@@ -85,14 +87,18 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return 2
 	}
 	cmd, args := args[0], args[1:]
-	tokenFlag := slices.Contains(args, "--mcp-token")
-	args = slices.DeleteFunc(args, func(a string) bool { return a == "--mcp-token" })
+	flag := func(name string) bool {
+		found := slices.Contains(args, name)
+		args = slices.DeleteFunc(args, func(a string) bool { return a == name })
+		return found
+	}
+	tokenFlag, passwordFlag, openFlag := flag("--mcp-token"), flag("--password"), flag("--open")
 	wantArgs := 1
 	if cmd == "list" {
 		wantArgs = 0
 	}
 	if !slices.Contains([]string{"add", "passwd", "token", "remove", "list"}, cmd) || len(args) != wantArgs ||
-		tokenFlag && cmd != "add" {
+		tokenFlag && cmd != "add" || (passwordFlag || openFlag) && cmd != "remove" || passwordFlag && openFlag {
 		fmt.Fprintln(stderr, userUsage)
 		return 2
 	}
@@ -127,6 +133,15 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			return 1
 		}
 		f.set(name, "password", hashPassword(password))
+		// The first user: the wiki's own password and token give way (with
+		// users each has their own).
+		var replaced []string
+		for _, key := range []string{"password", "mcp-token"} {
+			if _, ok := f.top[key]; ok && cmd == "add" {
+				f.unset("", key)
+				replaced = append(replaced, key)
+			}
+		}
 		var token string
 		if tokenFlag {
 			token = newToken()
@@ -143,6 +158,13 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		if token != "" {
 			fmt.Fprintf(stdout, "%s's MCP token (shown only now): %s\n", name, token)
 		}
+		if slices.Contains(replaced, "password") {
+			fmt.Fprintln(stdout, "The wiki's password no longer works: everyone signs in as a user now.")
+		}
+		if slices.Contains(replaced, "mcp-token") {
+			fmt.Fprintf(stdout, "The wiki's MCP token no longer works: each user has their own "+
+				"(leaf user token %s).\n", name)
+		}
 	case "token":
 		token := newToken()
 		f.set(name, "mcp-token", hashToken(token))
@@ -151,11 +173,34 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		}
 		fmt.Fprintf(stdout, "%s's new MCP token (shown only now; the old one no longer works): %s\n", name, token)
 	case "remove":
+		last := len(f.users) == 1
+		switch {
+		case last && !passwordFlag && !openFlag:
+			return fail("%s is the last user. Without users the wiki has no login and private/ is an "+
+				"ordinary folder everyone sees. Remove them with --password to set the wiki's password "+
+				"instead, or with --open for no login.", name)
+		case !last && (passwordFlag || openFlag):
+			return fail("--password and --open are for the last user; there are others.")
+		}
 		f.removeUser(name)
+		if passwordFlag {
+			password, ok := askPassword(stdin, stderr)
+			if !ok {
+				return 1
+			}
+			f.set("", "password", hashPassword(password))
+		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
 		fmt.Fprintf(stdout, "Removed %s from %s.\n", name, configName)
+		switch {
+		case openFlag:
+			fmt.Fprintln(stdout, "No users and no password now: the wiki has no login, and private/ is an "+
+				"ordinary folder. A running Leaf takes this only at its next start (restart it).")
+		case passwordFlag:
+			fmt.Fprintln(stdout, "No users now: the wiki's password signs in, and private/ is an ordinary folder.")
+		}
 		var kept []string
 		for _, dir := range []string{privateDir + "/" + name, "_assets/" + privateDir + "/" + name,
 			"_deck/users/" + name} {
@@ -163,9 +208,11 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 				kept = append(kept, dir+"/")
 			}
 		}
-		if len(kept) > 0 {
+		if len(kept) > 0 && !last {
 			fmt.Fprintf(stdout, "Their files stay in the wiki, seen by no one: %s. Move or delete them there.\n",
 				strings.Join(kept, ", "))
+		} else if len(kept) > 0 {
+			fmt.Fprintf(stdout, "Their files stay in the wiki: %s.\n", strings.Join(kept, ", "))
 		}
 	}
 	return 0
@@ -205,9 +252,9 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 	case "set", "unset":
 		key := args[1]
 		switch {
-		case key == "password":
+		case key == "password" && args[0] == "set":
 			return fail("the password is set with: leaf config passwd")
-		case key == "mcp-token":
+		case key == "mcp-token" && args[0] == "set":
 			return fail("the MCP token is made with: leaf config token")
 		case !knownKey(key):
 			return fail("%q isn't a setting Leaf knows.", key)
@@ -219,6 +266,10 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
+		}
+		if args[0] == "unset" && key == "password" && len(f.users) == 0 {
+			fmt.Fprintln(stdout, "The wiki has no login now. A running Leaf takes this only at its next "+
+				"start (restart it).")
 		}
 	case "passwd", "token":
 		if len(f.users) > 0 {
