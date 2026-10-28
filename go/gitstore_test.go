@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,5 +76,48 @@ func TestHungGitCountsAsFailed(t *testing.T) {
 	r := runGitFor(50*time.Millisecond, "-c", "alias.hang=!sleep 5", "hang")
 	if r.Code != 124 || !strings.Contains(r.Stderr, "timed out") || time.Since(start) > 3*time.Second {
 		t.Errorf("%+v after %v", r, time.Since(start))
+	}
+}
+
+// gitLogAll fills its limit with the commits see takes, however far back
+// they are: here across several of its (growing) batches.
+func TestGitLogAllFillsTheLimit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	var want []string
+	for i := range 160 {
+		name := fmt.Sprintf("hidden/p%d.md", i)
+		if i%40 == 0 {
+			name = fmt.Sprintf("p%d.md", i)
+			want = append([]string{name}, want...)
+		}
+		writeTestPage(t, name)
+		gitCommit("", "Add "+name, filepath.Join(cfg.Data, name))
+	}
+	see := func(path string) bool { return !strings.HasPrefix(path, "hidden/") }
+	var got []string
+	for _, e := range gitLogAll("", "", 3, see) {
+		got = append(got, e.Files...)
+	}
+	if !reflect.DeepEqual(got, want[:3]) {
+		t.Errorf("%v, want %v", got, want[:3])
+	}
+	if n := len(gitLogAll("", "", 10, see)); n != 5 { // and the initial import (index.md)
+		t.Errorf("all of them: %d", n)
+	}
+}
+
+func writeTestPage(t *testing.T, rel string) {
+	t.Helper()
+	p := filepath.Join(cfg.Data, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(p), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("# P\n"), 0o666); err != nil {
+		t.Fatal(err)
 	}
 }

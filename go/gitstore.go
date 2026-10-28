@@ -156,11 +156,16 @@ func gitCommit(user, message string, paths ...string) {
 // excludeLeafState keeps .leaf/ out of git (the session key, the caches,
 // the query log), but for the settings file, which is the wiki's and is
 // committed (its tokens are only hashes). An older Leaf excluded all of
-// .leaf/ ("/.leaf/", a folder git then never looks into): that line goes.
+// .leaf/ ("/.leaf/", a folder git then never looks into): that line goes,
+// as does one written otherwise ("/.leaf", ".leaf/", without a newline at
+// the end of the file).
 func excludeLeafState(wiki string) {
 	exclude := filepath.Join(wiki, ".git", "info", "exclude")
-	if b, err := os.ReadFile(exclude); err == nil && strings.Contains(string(b), "/.leaf/\n") {
-		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), func(l string) bool { return l == "/.leaf/\n" })
+	wholeFolder := func(l string) bool {
+		return slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf"}, strings.TrimSpace(l))
+	}
+	if b, err := os.ReadFile(exclude); err == nil && slices.ContainsFunc(strings.Split(string(b), "\n"), wholeFolder) {
+		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), wholeFolder)
 		if err := os.WriteFile(exclude, []byte(strings.Join(lines, "")), 0o666); err != nil {
 			logf("could not update %s: %v", exclude, err)
 		}
@@ -346,7 +351,10 @@ type LogEntry struct {
 // gitLogAll: the wiki's commits, newest first, at most limit; since a day
 // (YYYY-MM-DD, from its start), under a folder ("" for either: all). Of
 // each commit only the files see takes (nil: all), and a commit with none
-// of them is left out; git is asked for more until limit are found.
+// of them is left out; git is asked for more until limit are found, twice
+// as many each time (each call walks the history from the start again, so
+// a fixed batch would cost quadratic time on a long history where see
+// takes few commits).
 func gitLogAll(since, under string, limit int, see func(path string) bool) []LogEntry {
 	if !cfg.GitEnabled {
 		return nil
@@ -356,7 +364,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool) []Log
 		batch = max(2*limit, 50)
 	}
 	var entries []LogEntry
-	for skip := 0; len(entries) < limit; skip += batch {
+	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-only",
 			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%an\x1f%s"}
 		if since != "" {
