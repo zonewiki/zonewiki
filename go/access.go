@@ -160,9 +160,11 @@ func visibleSlugs(user string) map[string]bool {
 	return out
 }
 
-// privateNameRE: a page's or file's path in private/ as a commit message
-// names it ("Move private/alice/2026-…_idea into the wiki as ideas/x").
-var privateNameRE = regexp.MustCompile(privateDir + `/[\w./-]*[\w/]`)
+// privateNameRE: a page's or file's path in private/ (an upload's in
+// _assets/private/) as a commit message names it ("Move private/alice/
+// 2026-…_idea into the wiki as ideas/x"), at the start of a path, not
+// inside one ("notprivate/x", "notes/private/x"): group 2, after group 1.
+var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:_assets/)?` + privateDir + `/[\w./-]*[\w/])`)
 
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,
@@ -171,10 +173,17 @@ func hideNames(user, msg string) string {
 	if settings().Users == nil || !strings.Contains(msg, privateDir+"/") {
 		return msg
 	}
-	return privateNameRE.ReplaceAllStringFunc(msg, func(name string) string {
+	var out strings.Builder
+	last := 0
+	for _, m := range privateNameRE.FindAllStringSubmatchIndex(msg, -1) {
+		name := msg[m[4]:m[5]]
+		out.WriteString(msg[last:m[4]])
 		if canSeePath(user, strings.TrimSuffix(name, ".md")) {
-			return name
+			out.WriteString(name)
+		} else {
+			out.WriteString("a private page")
 		}
-		return "a private page"
-	})
+		last = m[5]
+	}
+	return out.String() + msg[last:]
 }

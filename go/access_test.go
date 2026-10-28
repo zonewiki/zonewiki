@@ -132,7 +132,17 @@ func TestHideNames(t *testing.T) {
 			t.Errorf("%s: %q", user, got)
 		}
 	}
-	if got := hideNames("bob", "Rename private/bob/a to private/alice/b."); got != "Rename private/bob/a to a private page." {
-		t.Errorf("%q", got)
+	for msg, want := range map[string]string{
+		"Rename private/bob/a to private/alice/b.": "Rename private/bob/a to a private page.",
+		// Only a path that starts there.
+		"Rename notprivate/x to archive/x":       "Rename notprivate/x to archive/x",
+		"Edit notes/private/alice/x":             "Edit notes/private/alice/x",
+		"Upload _assets/private/alice/photo.png": "Upload a private page",
+		"Move (private/alice/a) to x":            "Move (a private page) to x",
+		"private/alice/a, private/bob/b":         "a private page, private/bob/b",
+	} {
+		if got := hideNames("bob", msg); got != want {
+			t.Errorf("%q: %q", msg, got)
+		}
 	}
 }
