@@ -959,7 +959,59 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 	if err != nil {
 		return err
 	}
-	return writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
+	if err := writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message); err != nil {
+		return err
+	}
+	for _, t := range slices.Concat(active, completed) {
+		if ids[t.ID] {
+			rememberDeleted(t)
+		}
+	}
+	return nil
+}
+
+// The tasks deleted lately, as they were (under deckMu), for a restore
+// (undo of a delete) to be judged by: the snapshot comes from the client,
+// so who worked on the task, which mayMakePrivate goes by, and who wrote
+// its comments are taken from here. In memory: after a restart a restore
+// is of a task Leaf doesn't know.
+var (
+	deletedTasks = map[string]*Task{}
+	deletedOrder []string
+)
+
+const deletedKept = 1000
+
+func rememberDeleted(t *Task) {
+	if deletedTasks[t.ID] == nil {
+		deletedOrder = append(deletedOrder, t.ID)
+	}
+	deletedTasks[t.ID] = t
+	for len(deletedOrder) > deletedKept {
+		delete(deletedTasks, deletedOrder[0])
+		deletedOrder = deletedOrder[1:]
+	}
+}
+
+// restoredTrust: a restore's snapshot t, with users, checked against the
+// task as Leaf deleted it (keepOthersHistory, keepOthersComments, as for
+// an undo's PUT); one Leaf doesn't know keeps only what names user or no
+// one, so an invented or doctored snapshot names no one else.
+func restoredTrust(user string, t *Task) error {
+	if settings().Users == nil {
+		return nil
+	}
+	was := deletedTasks[t.ID]
+	if was == nil {
+		mine := func(by string) bool { return by == "" || by == user }
+		t.History = slices.DeleteFunc(t.History, func(e HistoryEntry) bool { return !mine(e.By) })
+		t.Comments = slices.DeleteFunc(t.Comments, func(c Comment) bool { return !mine(c.By) })
+		return nil
+	}
+	t.History = keepOthersHistory(user, was.History, t.History)
+	comments, err := keepOthersComments(user, was.Comments, t.Comments)
+	t.Comments = comments
+	return err
 }
 
 func idSet(ids []string) map[string]bool {
@@ -1019,6 +1071,9 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		t := sanitizeSnapshot(snap)
 		if t == nil || existing[t.ID] {
 			continue
+		}
+		if err := restoredTrust(user, t); err != nil {
+			return err
 		}
 		if jsonTrue(snap["private"]) && mayMakePrivate(user, t) {
 			t.Owner = user

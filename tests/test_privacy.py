@@ -454,6 +454,34 @@ def test_history_keeps_who_worked_on_a_task(alice, wiki):
     assert alice.put(url, json={"start_date": None, "history": bobs}, headers=HOST).get_json()["history"] == bobs
 
 
+def test_a_restore_keeps_who_worked_on_a_task(alice, wiki):
+    """Undoing a delete brings back what Leaf deleted: a snapshot can't
+    drop bob's traces (and so make his task alice's private one), nor
+    invent words in his name."""
+    sign_in(alice, "bob")
+    bobs = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
+    url = f"/api/deck/{bobs['id']}"
+    bobs = alice.post(f"{url}/comments", json={"text": "His"}, headers=HOST).get_json()
+    sign_in(alice, "alice")
+    assert alice.delete(url, headers=HOST).status_code == 204
+    doctored = {**bobs, "history": [], "private": True,
+                "comments": [{**bobs["comments"][0], "by": "alice", "text": "Hers now"}]}
+    assert alice.post("/api/deck/restore", json={"tasks": [doctored]}, headers=HOST).status_code == 400
+    stripped = {**bobs, "history": [], "comments": [], "private": True}
+    assert alice.post("/api/deck/restore", json={"tasks": [stripped]}, headers=HOST).status_code == 400
+    restored = alice.post("/api/deck/restore", json={"tasks": [{**bobs, "history": [], "private": True}]},
+                          headers=HOST).get_json()[0]
+    assert restored["private"] is False and restored["history"] == bobs["history"]
+    assert [(c["text"], c["by"]) for c in restored["comments"]] == [("His", "bob")]
+    assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
+    # One Leaf never deleted: nothing in it names someone else.
+    invented = {"id": "1e7e1e7e-0000-4000-8000-000000000000", "title": "Invented",
+                "history": [{"at": "2026-01-01T10:00", "event": "created", "by": "bob"}],
+                "comments": [{"id": "0b0b0b0b", "at": "2026-01-01T10:00", "by": "bob", "text": "Forged"}]}
+    made = alice.post("/api/deck/restore", json={"tasks": [invented]}, headers=HOST).get_json()[0]
+    assert made["history"] == [] and made["comments"] == []
+
+
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204
