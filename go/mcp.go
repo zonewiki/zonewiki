@@ -184,8 +184,8 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 	return rpcError(id, -32601, "Method not found: "+method), nil
 }
 
-// mcpAuthorized: the request carries LEAF_MCP_TOKEN as a bearer token, or
-// with users one user's token (LEAF_USER_<NAME>_MCP_TOKEN): the tools act
+// mcpAuthorized: the request carries the wiki's MCP token as a bearer
+// token, or with users one user's token (configfile.go): the tools act
 // as that user. The tools write (pages, tasks), so /mcp is off until a
 // token is set: open, it would let anything that reaches the port change
 // the wiki, password or not.
@@ -195,11 +195,12 @@ func mcpAuthorized(r *http.Request) (user string, ok bool) {
 		return "", false
 	}
 	given := strings.TrimSpace(auth[len("Bearer "):])
-	if cfg.Users == nil {
-		return "", cfg.MCPToken != "" && sameSecret(given, cfg.MCPToken)
+	s := settings()
+	if s.Users == nil {
+		return "", tokenMatches(given, s.MCPToken)
 	}
-	for _, u := range cfg.Users {
-		if u.MCPToken != "" && sameSecret(given, u.MCPToken) {
+	for _, u := range s.Users {
+		if tokenMatches(given, u.MCPToken) {
 			return u.Name, true
 		}
 	}
@@ -208,10 +209,11 @@ func mcpAuthorized(r *http.Request) (user string, ok bool) {
 
 // mcpOn: some token is set, so /mcp answers.
 func mcpOn() bool {
-	if cfg.Users == nil {
-		return cfg.MCPToken != ""
+	s := settings()
+	if s.Users == nil {
+		return s.MCPToken != ""
 	}
-	for _, u := range cfg.Users {
+	for _, u := range s.Users {
 		if u.MCPToken != "" {
 			return true
 		}
@@ -224,9 +226,11 @@ func mcpOn() bool {
 // a session) aren't offered: there are no notifications and no sessions.
 func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if !mcpOn() {
-		msg := "MCP is off: set LEAF_MCP_TOKEN in .env and send it as 'Authorization: Bearer <token>'"
-		if cfg.Users != nil {
-			msg = "MCP is off: set LEAF_USER_<NAME>_MCP_TOKEN in .env and send it as 'Authorization: Bearer <token>'"
+		msg := "MCP is off: make a token with ./run.sh config token and send it as " +
+			"'Authorization: Bearer <token>'"
+		if settings().Users != nil {
+			msg = "MCP is off: give a user a token with ./run.sh user token NAME and send it as " +
+				"'Authorization: Bearer <token>'"
 		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 		return

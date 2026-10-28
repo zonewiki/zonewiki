@@ -218,15 +218,16 @@ func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query str
 // to search or write); the editor has its own toolbar instead. wide: a page
 // view with side columns on big screens.
 func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shell, data M) {
+	s := settings()
 	ctx := M{
 		"title": title, "editor": o.editor, "wide": o.wide,
 		"show_actions": !o.noActions && !o.editor,
 		"module":       "", "deck_new": nil,
 		"sharing":  rq.sharing,
 		"semantic": semanticStatus(), "app_name": appName, "version": version, "build": cfg.Build,
-		"allow_remote": cfg.AllowRemote, "locale": cfg.Locale, "date_format": cfg.DateFormat,
+		"allow_remote": cfg.AllowRemote, "locale": s.Locale, "date_format": s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		"sign_out": cfg.authOn() && isSignedIn(rq.r), "user": rq.user,
+		"sign_out": s.authOn() && isSignedIn(rq.r), "user": rq.user,
 	}
 	if !o.editor {
 		ctx["module"] = currentModule(rq)

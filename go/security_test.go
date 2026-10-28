@@ -96,7 +96,6 @@ func TestHostName(t *testing.T) {
 }
 
 func TestSecretKeyIsMadeOnceAndKept(t *testing.T) {
-	t.Setenv("LEAF_SECRET_KEY", "")
 	wiki := t.TempDir()
 	key := secretKey(wiki)
 	path := filepath.Join(wiki, ".leaf", "secret_key")
@@ -108,14 +107,9 @@ func TestSecretKeyIsMadeOnceAndKept(t *testing.T) {
 	if string(secretKey(wiki)) != string(key) {
 		t.Fatal("a restart doesn't keep it")
 	}
-	t.Setenv("LEAF_SECRET_KEY", "from-env")
-	if string(secretKey(wiki)) != "from-env" {
-		t.Fatal("LEAF_SECRET_KEY not used")
-	}
 }
 
 func TestSecretKeyWithoutAWritableWiki(t *testing.T) {
-	t.Setenv("LEAF_SECRET_KEY", "")
 	wiki := t.TempDir()
 	_ = os.WriteFile(filepath.Join(wiki, ".leaf"), []byte("not a folder"), 0o666)
 	first, second := secretKey(wiki), secretKey(wiki)
@@ -159,7 +153,7 @@ func withCookie(value string) *http.Request {
 }
 
 // A session names its user; it is valid only while that user is in
-// LEAF_USERS, and a user's session is no good without users (nor the other
+// the settings, and a user's session is no good without users (nor the other
 // way round).
 func TestUserSession(t *testing.T) {
 	testWiki(t, nil)
@@ -173,14 +167,14 @@ func TestUserSession(t *testing.T) {
 	if _, ok, _ := signedIn(withCookie(alice)); ok {
 		t.Error("a user's session passes without users")
 	}
-	cfg.Users = map[string]*User{"alice": {Name: "alice"}, "bob": {Name: "bob"}}
+	settings().Users = map[string]*User{"alice": {Name: "alice"}, "bob": {Name: "bob"}}
 	if user, ok, _ := signedIn(withCookie(alice)); !ok || user != "alice" {
 		t.Errorf("alice's session: %q %v", user, ok)
 	}
 	if _, ok, _ := signedIn(withCookie(anyone)); ok {
 		t.Error("a password session passes with users")
 	}
-	delete(cfg.Users, "alice")
+	delete(settings().Users, "alice")
 	if _, ok, _ := signedIn(withCookie(alice)); ok {
 		t.Error("a removed user's session passes")
 	}
@@ -195,37 +189,80 @@ func TestLoadConfig(t *testing.T) {
 		}
 		return func(k string) string { return m[k] }
 	}
-	c, err := loadConfig(env("LEAF_HOSTS", "Wiki.Example.org:443, ,leaf.home.arpa", "LEAF_ALLOW_REMOTE", "yes",
-		"LEAF_NOSHARE", "#People,private, Personal/ ", "LEAF_BASE_URL", " http://x:5000/ "))
+	file := func(text string) {
+		if err := writeConfig(filepath.Join(wiki, ".leaf", "config"), text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file("hosts = Wiki.Example.org:443, ,leaf.home.arpa\nnoshare = #People,private, Personal/ \n" +
+		"base-url = http://x:5000/\n")
+	c, s, err := loadConfig(env("LEAF_ALLOW_REMOTE", "yes"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Hosts) != 2 || !c.Hosts["wiki.example.org"] || !c.AllowRemote || c.BaseURL != "http://x:5000" {
-		t.Fatalf("%+v", c)
+	if len(s.Hosts) != 2 || !s.Hosts["wiki.example.org"] || !c.AllowRemote || s.BaseURL != "http://x:5000" {
+		t.Fatalf("%+v %+v", c, s)
 	}
-	if !c.NoshareTags["people"] || !c.NoshareTags["private"] || len(c.NoshareFolder) != 1 || c.NoshareFolder[0] != "personal/" {
-		t.Fatalf("noshare %v %v", c.NoshareTags, c.NoshareFolder)
+	if !s.NoshareTags["people"] || !s.NoshareTags["private"] || len(s.NoshareFolder) != 1 || s.NoshareFolder[0] != "personal/" {
+		t.Fatalf("noshare %v %v", s.NoshareTags, s.NoshareFolder)
 	}
 	if !isDir(filepath.Join(wiki, "_assets")) {
 		t.Fatal("no _assets/")
 	}
-	if c, _ := loadConfig(env()); !c.NoshareTags["noshare"] {
-		t.Fatal("LEAF_NOSHARE's default")
+	file("")
+	if _, s, _ := loadConfig(env()); !s.NoshareTags["noshare"] {
+		t.Fatal("noshare's default")
 	}
-	for _, bad := range [][]string{{"LEAF_LOCALE", "de_AT"}, {"LEAF_LOCALE", "german"}, {"LEAF_LOCALE", "de-AT;x"},
-		{"LEAF_LOCALE", `"><script>`}, {"LEAF_DATE_FORMAT", "us"}, {"LEAF_DATE_FORMAT", "yyyy-mm-dd"},
-		{"LEAF_DATA", ""}, {"LEAF_DATA", filepath.Join(wiki, "missing")}} {
-		if _, err := loadConfig(env(bad...)); err == nil {
+	for _, bad := range []string{"locale = de_AT", "locale = german", "locale = de-AT;x", `locale = "><script>`,
+		"date-format = us", "date-format = yyyy-mm-dd", "semantic-min-score = high", "semantic-min-score = 2"} {
+		file(bad + "\n")
+		if _, _, err := loadConfig(env()); err == nil {
 			t.Errorf("%v: no error", bad)
 		}
 	}
-	if c, err := loadConfig(env("LEAF_LOCALE", " de-AT ", "LEAF_DATE_FORMAT", "ISO")); err != nil || c.Locale != "de-AT" || c.DateFormat != "iso" {
-		t.Fatalf("%v %+v", err, c)
+	file("")
+	for _, bad := range [][]string{{"LEAF_DATA", ""}, {"LEAF_DATA", filepath.Join(wiki, "missing")}} {
+		if _, _, err := loadConfig(env(bad...)); err == nil {
+			t.Errorf("%v: no error", bad)
+		}
+	}
+	file("locale =  de-AT \ndate-format = ISO\nsemantic-min-score = 0.42\n")
+	if _, s, err := loadConfig(env()); err != nil || s.Locale != "de-AT" || s.DateFormat != "iso" ||
+		*s.SemanticMinScore != 0.42 {
+		t.Fatalf("%v %+v", err, s)
 	}
 	for _, tag := range []string{"en", "zh-Hant-TW", ""} {
-		if c, err := loadConfig(env("LEAF_LOCALE", tag)); err != nil || c.Locale != tag {
-			t.Errorf("LEAF_LOCALE=%s: %v", tag, err)
+		file("locale = " + tag + "\n")
+		if _, s, err := loadConfig(env()); err != nil || s.Locale != tag {
+			t.Errorf("locale = %s: %v", tag, err)
 		}
+	}
+}
+
+// The wiki's settings left in the environment stop Leaf: they would be
+// ignored (a forgotten LEAF_PASSWORD: an open wiki).
+func TestStaleEnv(t *testing.T) {
+	wiki := t.TempDir()
+	for _, c := range []struct{ env, want string }{
+		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Leaf reads the wiki's settings only from .leaf/config now. Move them there with ./run.sh config import"},
+		{"LEAF_USERS", "LEAF_USERS is set"}, {"LEAF_LOCALE", "LEAF_LOCALE is set"},
+		{"LEAF_SEMANTIC_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE is set"},
+		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Leaf no longer reads it"},
+	} {
+		getenv := func(k string) string { return map[string]string{"LEAF_DATA": wiki, c.env: "x"}[k] }
+		if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), c.want) {
+			t.Errorf("%s: %v", c.env, err)
+		}
+	}
+	getenv := func(k string) string {
+		return map[string]string{"LEAF_DATA": wiki, "LEAF_HOSTS": "x", "LEAF_LOCALE": "de"}[k]
+	}
+	if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), "LEAF_HOSTS, LEAF_LOCALE are set") {
+		t.Errorf("two: %v", err)
+	}
+	empty := func(k string) string { return map[string]string{"LEAF_DATA": wiki, "LEAF_LOCALE": ""}[k] }
+	if _, _, err := loadConfig(empty); err != nil {
+		t.Errorf("empty is unset: %v", err)
 	}
 }
 

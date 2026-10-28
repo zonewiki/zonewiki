@@ -74,7 +74,7 @@ func TestShortDate(t *testing.T) {
 			t.Errorf("shortDate(%q) = %q, want %q", c[0], got, c[2])
 		}
 	}
-	cfg.DateFormat = "iso"
+	settings().DateFormat = "iso"
 	if got := shortDate("2026-10-05T09:30", "2026-10-18"); got != `<time class="local-date" datetime="2026-10-05">2026-10-05</time>` {
 		t.Errorf("iso: %q", got)
 	}

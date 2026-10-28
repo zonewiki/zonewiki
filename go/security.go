@@ -29,15 +29,16 @@ var now = time.Now
 
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Leaf with "Host: evil.example". Only localhost, and the
-// names in LEAF_HOSTS (a reverse proxy's public name, any port), get in.
-// LEAF_ALLOW_REMOTE without LEAF_HOSTS turns the check off (LAN access by IP).
+// names in the hosts setting (a reverse proxy's public name, any port), get
+// in. LEAF_ALLOW_REMOTE without hosts turns the check off (LAN access by IP).
 var allowedHosts = map[string]bool{"localhost:5000": true, "127.0.0.1:5000": true}
 
 func hostAllowed(host string) bool {
-	if cfg.AllowRemote && len(cfg.Hosts) == 0 {
+	hosts := settings().Hosts
+	if cfg.AllowRemote && len(hosts) == 0 {
 		return true
 	}
-	return allowedHosts[host] || cfg.Hosts[hostName(host)]
+	return allowedHosts[host] || hosts[hostName(host)]
 }
 
 // Cross-site request forgery: without it, any page open in the browser could
@@ -101,14 +102,11 @@ func isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || strings.ToLower(strings.TrimSpace(proto)) == "https"
 }
 
-// secretKey signs session cookies: LEAF_SECRET_KEY, else one Leaf made once
-// and keeps in .leaf/secret_key in the wiki folder (owner-only, kept out of
-// git), so a restart doesn't sign everyone out. A wiki folder Leaf can't
-// write to gets a new key per start.
+// secretKey signs session cookies: one Leaf made once and keeps in
+// .leaf/secret_key in the wiki folder (owner-only, kept out of git), so a
+// restart doesn't sign everyone out. A wiki folder Leaf can't write to gets
+// a new key per start.
 func secretKey(dataDir string) []byte {
-	if k := os.Getenv("LEAF_SECRET_KEY"); k != "" {
-		return []byte(k)
-	}
 	path := filepath.Join(dataDir, ".leaf", "secret_key")
 	if b, err := os.ReadFile(path); err == nil {
 		if k := strings.TrimSpace(string(b)); len(k) >= 32 {
@@ -127,7 +125,7 @@ func secretKey(dataDir string) []byte {
 
 // The login session: a cookie signed with the secret key, valid for 30 days
 // and renewed as it is used. It says who signed in: with users, their name;
-// with LEAF_PASSWORD, no one in particular ("").
+// with the wiki's one password, no one in particular ("").
 const (
 	sessionCookie   = "session"
 	sessionLifetime = 30 * 24 * time.Hour
@@ -150,7 +148,7 @@ func sign(payload string) string {
 // signedIn: the request carries a valid session cookie, user is who it
 // belongs to; renew says it is old enough (a day) to be given a fresh one.
 // With users, the session must name one of them, so a user taken out of
-// LEAF_USERS is signed out at once; without, it must name no one, so
+// the settings is signed out at once; without, it must name no one, so
 // switching between a password and users signs everyone out.
 func signedIn(r *http.Request) (user string, ok, renew bool) {
 	c, err := r.Cookie(sessionCookie)
@@ -166,7 +164,8 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth {
 		return "", false, false
 	}
-	if cfg.Users != nil && cfg.Users[s.User] == nil || cfg.Users == nil && s.User != "" {
+	users := settings().Users
+	if users != nil && users[s.User] == nil || users == nil && s.User != "" {
 		return "", false, false
 	}
 	age := now().Sub(time.Unix(s.Issued, 0))

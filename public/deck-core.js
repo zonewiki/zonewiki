@@ -228,9 +228,9 @@ function bucketKey(t, today) {
 }
 
 // ── Locale ─────────────────────────────────────────────────────────────────
-// Dates read the way LEAF_LOCALE says (<body data-locale>, a BCP 47 tag like
+// Dates read the way the locale setting says (<body data-locale>, a BCP 47 tag like
 // de-AT); without one, US English with weeks from Monday, as before the
-// setting. LEAF_DATE_FORMAT=iso (<body data-date-format>) writes the dates
+// setting. date-format = iso (<body data-date-format>) writes the dates
 // themselves as YYYY-MM-DD; weekday and month names still follow the locale.
 // Only dates: the UI's words stay English. `dates` below is dateSettings().
 

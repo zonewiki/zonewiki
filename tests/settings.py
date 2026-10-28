@@ -1,8 +1,11 @@
-"""The settings the tests give Leaf, as the server's environment and flags
-(tests/goserver.py). A test patches them here (monkeypatch.setattr(settings,
+"""The settings the tests give Leaf (tests/goserver.py): the deployment's
+as the server's environment and flags, the wiki's in its settings file
+(.leaf/config). A test patches them here (monkeypatch.setattr(settings,
 "LEAF_PASSWORD", "pw")); the server restarts with them before its next
-request. The names are .env's, a few values typed as Leaf parses them
-(LEAF_HOSTS a set of names, LEAF_NOSHARE as tags and folders)."""
+request. The names are those of the variables Leaf read until 2026-10, a
+few values typed as Leaf parses them (LEAF_HOSTS a set of names,
+LEAF_NOSHARE as tags and folders); passwords and tokens plain, goserver.py
+writes their hashes."""
 
 import os
 import shutil
@@ -14,9 +17,12 @@ LEAF_DATA: Path = Path("/nonexistent")   # each test's wiki (conftest's wiki_dir
 LEAF_BUILD = "test"
 LEAF_PASSWORD = ""
 LEAF_MCP_TOKEN = ""
-# Users (LEAF_USERS): name → (password, MCP token or ""); the server gets
-# their hashes (goserver.py).
+# Users: name → (password, MCP token or ""); the settings file gets their
+# hashes (goserver.py).
 LEAF_USERS: dict[str, tuple[str, str]] = {}
+# More of the settings file's text (after the settings above, before the
+# users).
+CONFIG_FILE = ""
 LEAF_BASE_URL = ""
 LEAF_HOST_DATA = ""
 LEAF_QUERY_LOG = False

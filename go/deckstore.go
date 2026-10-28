@@ -56,7 +56,7 @@ func deckOwners(user string) []string {
 
 // everyOwner: the owners of every deck, for what Leaf does over all of
 // them (the yearly archive, a rename's links, the search index).
-func everyOwner() []string { return append([]string{""}, sortedKeys(cfg.Users)...) }
+func everyOwner() []string { return append([]string{""}, sortedKeys(settings().Users)...) }
 
 // eachOwner: the tasks list gives for each of owners, marked as theirs
 // (Task.Owner), in that order.

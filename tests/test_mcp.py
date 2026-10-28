@@ -129,7 +129,7 @@ class TestAuth:
         for headers in ({}, {"Authorization": "Bearer "}, AUTH):
             resp = rpc(client, "ping", headers=headers)
             assert resp.status_code == 403
-            assert "set LEAF_MCP_TOKEN" in resp.get_json()["error"]
+            assert "make a token with ./run.sh config token" in resp.get_json()["error"]
         resp = client.post("/mcp", headers=HOST, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "write_page", "arguments": {"slug": "x", "content": "# X"}}})

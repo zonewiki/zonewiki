@@ -22,7 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users (`LEAF_USERS`): setup, password hashes (`leaf passwd`), signing in, per-user MCP tokens, private pages, private tasks, commit authors |
+| `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `leaf user`/`leaf config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
@@ -53,7 +53,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
-No build step for the browser code (no bundler: the server serves `public/` as it is). No database. Auth is optional (`LEAF_PASSWORD`, or users with `LEAF_USERS`; see Key Constraints).
+No build step for the browser code (no bundler: the server serves `public/` as it is). No database. Auth is optional (a password, or users; see Key Constraints).
 
 ---
 
@@ -66,14 +66,14 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress (none now), deleted when done
+├── docs/plans/             # Working plans for changes in progress (merge on save), deleted when done
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
 ├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for deck-core tests, gitleaks, git, pngquant
-├── run.sh                  # Helper script: build/up/down/logs (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
+├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env.example            # Template for .env: every setting, commented
@@ -83,10 +83,12 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── go/                     # The server: one package (main), a file per area
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health, leaf passwd
-│   ├── config.go           # Settings from the environment (read once into cfg)
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health, leaf user, leaf config
+│   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
+│   ├── configfile.go       # The settings file .leaf/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
+│   ├── commands.go         # leaf user (add, passwd, token, remove, list) and leaf config (check, set, unset, passwd, token, import), which edit the settings file
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
-│   ├── users.go            # Users (LEAF_USERS): settings, password hashes, sign-in, leaf passwd
+│   ├── users.go            # Users: password hashes, sign-in, the password prompt
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
@@ -144,10 +146,11 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh passwd NAME  # a user's password hash for .env (LEAF_USER_<NAME>_PASSWORD)
+./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file (.leaf/config)
+./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
-Leaf is at **http://localhost:5000**. Every setting is in `.env` (gitignored), all prefixed `LEAF_` except `TZ`. The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
+Leaf is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `LEAF_DATA`, `LEAF_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Leaf). The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
@@ -212,11 +215,12 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - Do not use a database. Files are the only storage.
 - Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
-  - `LEAF_PASSWORD` turns on a login gate; the session key is `LEAF_SECRET_KEY` or one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
-  - `LEAF_USERS` instead: a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
+  - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
+  - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, `_deck/users/<user>/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
-  - `/mcp` requires `LEAF_MCP_TOKEN` (with users, a user's own token): without one it is off (403), password or not. Don't make it open again.
-  - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `LEAF_HOSTS`) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `LEAF_HOSTS` skips it.
+  - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
+  - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
+  - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - Every response carries the page policy (`pageCSP`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.

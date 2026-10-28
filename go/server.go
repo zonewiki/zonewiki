@@ -1,7 +1,8 @@
 // Leaf's web server: one process, its request checks and routes.
 // Run: LEAF_DATA=~/leaf leaf [-addr :5000] [-public dir]. Also: leaf eval
 // measures retrieval (eval.go), leaf health asks a running Leaf whether
-// it answers (the container's healthcheck).
+// it answers (the container's healthcheck), leaf user and leaf config edit
+// and check the settings file (commands.go).
 package main
 
 import (
@@ -36,10 +37,15 @@ func main() {
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
-			os.Exit(health("http://localhost:5000/public/manifest.json"))
-		case "passwd":
+			os.Exit(health("http://localhost:5000/api/health"))
+		case "user":
 			restore := echoOff()
-			code := passwdMain(os.Args[2:], os.Stdin, os.Stdout, os.Stderr)
+			code := userMain(os.Args[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+			restore()
+			os.Exit(code)
+		case "config":
+			restore := echoOff()
+			code := configMain(os.Args[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr)
 			restore()
 			os.Exit(code)
 		}
@@ -49,10 +55,12 @@ func main() {
 	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
-	var err error
-	if cfg, err = loadConfig(os.Getenv); err != nil {
+	c, s, err := loadConfig(os.Getenv)
+	if err != nil {
 		fatal(err)
 	}
+	cfg = c
+	startSettings(s)
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}
@@ -62,7 +70,8 @@ func main() {
 	}
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
-	excludeFromGit(cfg.Data, "/.leaf/") // the secret key
+	excludeLeafState(cfg.Data) // the secret key, the caches; not the settings file
+	commitSettings("Change settings")
 	ensureHomePage()
 	initDeck()
 	// The semantic index's worker reads tasks: after the deck is set up.
@@ -103,17 +112,23 @@ func fatal(err error) {
 	os.Exit(1)
 }
 
-// health: whether Leaf answers at url within 5 seconds (0) or not (1), for
-// the container's healthcheck (compose.yaml), which has no curl.
+// health: whether Leaf answers at url within 5 seconds, its settings file
+// taken (0), or not (1), for the container's healthcheck (compose.yaml),
+// which has no curl.
 func health(url string) int {
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Leaf:", err)
 		return 1
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintln(os.Stderr, "Leaf:", resp.Status)
+		var answer struct{ Error string }
+		if json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&answer) == nil && answer.Error != "" {
+			fmt.Fprintln(os.Stderr, "Leaf:", answer.Error)
+		} else {
+			fmt.Fprintln(os.Stderr, "Leaf:", resp.Status)
+		}
 		return 1
 	}
 	return 0
@@ -157,6 +172,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": version, "build": cfg.Build})
 	})
+	mux.HandleFunc("GET /api/health", apiHealth)
 	mux.HandleFunc("POST /api/upload", apiUpload)
 	mux.HandleFunc("GET /public/{path...}", servePublic)
 	mux.HandleFunc("GET /_assets/{path...}", serveUpload)
@@ -167,11 +183,23 @@ func newHandler() http.Handler {
 	return checks(mux)
 }
 
+// apiHealth: Leaf answers, and took its settings file's last change (503
+// with the error if not: Leaf runs on the settings from before), for leaf
+// health.
+func apiHealth(w http.ResponseWriter, r *http.Request) {
+	if msg := settingsError(); msg != "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // checks runs the request checks before every route (Host, Origin, the
 // login gate) and gives every response the page policy.
 func checks(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &policyWriter{ResponseWriter: w}
+		reloadSettings()
 		if !hostAllowed(r.Host) {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -186,7 +214,7 @@ func checks(next http.Handler) http.Handler {
 			http.Error(w, "Cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if cfg.authOn() && !authExempt(r) {
+		if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
 			if !ok {
 				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.Path), http.StatusFound)
@@ -213,10 +241,11 @@ func dotSegments(p string) bool {
 
 // authExempt: what needs no login. /mcp checks its own bearer token (an
 // MCP client can't log in); the browser code and the home-screen app's
-// files may be fetched without the session cookie.
+// files may be fetched without the session cookie, and the healthcheck
+// asks without one.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
-	case p == "/login", p == "/logout", p == "/mcp":
+	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health":
 		return true
 	case strings.HasPrefix(p, "/public/"):
 		return r.Method == "GET" || r.Method == "HEAD"
@@ -266,7 +295,8 @@ func isLocalPath(u string) bool {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	if !cfg.authOn() {
+	s := settings()
+	if !s.authOn() {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -289,21 +319,22 @@ func login(w http.ResponseWriter, r *http.Request) {
 		} else {
 			loginThrottle.failed(key)
 			errorText = "Incorrect password."
-			if cfg.Users != nil {
+			if s.Users != nil {
 				errorText = "Incorrect user name or password."
 			}
 		}
 	}
 	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true}, M{
 		"error": errorText, "next_url": r.URL.Query().Get("next"), "badge_in_form": true,
-		"users": cfg.Users != nil, "username": r.PostFormValue("username")})
+		"users": s.Users != nil, "username": r.PostFormValue("username")})
 }
 
 // checkLogin: the login form's password is right, for the user it names
-// (with users) or LEAF_PASSWORD (without).
+// (with users) or the wiki's password (without).
 func checkLogin(r *http.Request) (user string, ok bool) {
-	if cfg.Users == nil {
-		return "", sameSecret(r.PostFormValue("password"), cfg.Password)
+	s := settings()
+	if s.Users == nil {
+		return "", checkPassword(r.PostFormValue("password"), s.PasswordHash)
 	}
 	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil {
 		return u.Name, true

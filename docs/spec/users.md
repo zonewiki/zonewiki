@@ -4,35 +4,88 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 
 Several people on one wiki: each signs in with their own name and password, their changes are committed in their name, and an assistant connected with their MCP token acts as them. Everything in the wiki is shared and editable by every user, except each user's private folder, `private/<name>/`, and their private deck tasks, which only they see.
 
-Without `LEAF_USERS` none of this applies: one `LEAF_PASSWORD` (or none) and one `LEAF_MCP_TOKEN`, as before, and Leaf commits as itself.
+Users are `[user NAME]` sections of the wiki's settings file, `.leaf/config` (below). Without them none of this applies: one password (or none) and one MCP token, and Leaf commits as itself.
 
-## Setting up users
+## The settings file
 
-In `.env` (`go/users.go`, `loadUsers`):
+The wiki's settings and its users are in `.leaf/config` in the wiki, a small INI read by Leaf's own parser (`go/configfile.go`; no dependency). Leaf reloads it when it changes, so nothing here needs a restart. `.env` holds only the deployment (`docs/spec/deployment.md`).
 
+```ini
+# Leaf's settings and users (docs/spec/users.md). Leaf reloads this file when it changes.
+locale = de-AT
+hosts = wiki.example.org, nas.local
+noshare = #noshare, people/
+
+[user alice]
+password = pbkdf2-sha256:600000:<salt>:<hash>
+mcp-token = sha256:<the token's SHA-256, hex>
+
+[user bob]
+password = pbkdf2-sha256:600000:<salt>:<hash>
 ```
-LEAF_USERS=alice,bob
-LEAF_USER_ALICE_PASSWORD=pbkdf2-sha256:600000:<salt>:<hash>
-LEAF_USER_ALICE_MCP_TOKEN=<a long random token>     # optional
-LEAF_USER_BOB_PASSWORD=pbkdf2-sha256:600000:<salt>:<hash>
+
+| Key | Does | Default |
+|-----|------|---------|
+| `password` | The login gate without users: a hash (`leaf config passwd`) | no login |
+| `mcp-token` | Turns on `/mcp` without users: the token's hash (`leaf config token`) | `/mcp` off |
+| `hosts` | Names Leaf may be reached by besides localhost, comma-separated (the Host check, `docs/spec/security.md`) | localhost only |
+| `base-url` | Leaf's address as the browser knows it, for links handed to AI clients (`docs/spec/mcp.md`) | the address the request came in on |
+| `git-remote` | A remote for the wiki's repository; `origin` is set to it (`setGitRemote`) | none |
+| `noshare` | Pages hidden in sharing mode: `#tags` and `folders/` (`docs/spec/navigation.md`); empty: none | `#noshare` |
+| `locale` | How dates read and the day weeks start on, a BCP 47 tag like `de-AT` (`docs/spec/deck.md`) | US English dates, weeks from Monday |
+| `date-format` | `iso`: dates as `YYYY-MM-DD` | the locale's |
+| `query-log` | `yes`: keep `search_wiki`'s queries in `.leaf/queries.jsonl` (`docs/spec/search.md`) | no |
+| `semantic-min-score` | How similar a passage must be to be a semantic hit, -1 to 1 (`searchFloor`, `docs/spec/search.md`) | the model's floor |
+
+- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password` and `mcp-token` (`configKeys`, `userKeys`). `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
+- **Errors name their line** (`.leaf/config line 3: "pasword" isn't a setting Leaf knows.`), and Leaf won't start on one: a key it doesn't know (a typo shouldn't leave Leaf on a default), a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false), a section other than `[user NAME]`, a user's key outside a section or the wiki's inside one, a key or a section given twice, a line that isn't `key = value`, `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown). Messages never repeat a password or token.
+- **Passwords are kept as hashes**, never in plain text: PBKDF2-SHA256 with a random 16-byte salt and 600,000 iterations (`hashPassword`; Go's own `crypto/pbkdf2`), written `pbkdf2-sha256:<iterations>:<salt>:<hash>` (base64 without padding); checked at sign-in by `checkPassword`.
+- **MCP tokens are kept as hashes** too, `sha256:` and 64 lowercase hex digits (`hashToken`, `isTokenHash`): the commands make a token (32 random bytes, hex), show it once and keep only its hash; Leaf compares the SHA-256 of the token a client sends (`tokenMatches`, constant time). A token is random, so its hash is no use to whoever has the repository. A plain token in the file is an error.
+- **The file is committed**, the rest of `.leaf/` isn't (the session key, caches, the query log): `.git/info/exclude` has `/.leaf/*` and `!/.leaf/config` (`excludeLeafState`, also before a new wiki's first commit; an older Leaf's `/.leaf/` line is replaced). Leaf commits it, as itself, at start and after each reload that took a change, the message naming what changed by name and key only (`commitSettings`, `settingsChange`: `Change settings: add user carol, alice's password, locale`); the commands leave git to Leaf (one process), so their change is committed when a running Leaf reloads it, else at its next start.
+- **Leaf never shows it**, since it holds password hashes: `canSeePath` is false for `.leaf/` for everyone, so history, the uncommitted list, Commit all and the MCP tools leave it (and a commit of nothing else) out, and `safePath` refuses it to every page route and MCP tool. Whoever has the repository or the git remote has the hashes: PBKDF2 at 600,000 rounds is made to withstand that, but a weak password can still be guessed offline.
+- **Writing**: the commands write it owner-only (0600), whole, to a temporary file in `.leaf/` renamed over it (a reload never reads half a file), keeping the comments and order of the lines they don't change (`configFile.set`, `unset`, `removeUser`, `writeConfig`). Leaf logs a warning when others may read it.
+- **Settings left in `.env`**: until 2026-10 these were environment variables (`LEAF_PASSWORD`, `LEAF_MCP_TOKEN`, `LEAF_USERS` with `LEAF_USER_<NAME>_PASSWORD`/`_MCP_TOKEN`, `LEAF_HOSTS`, `LEAF_BASE_URL`, `LEAF_GIT_REMOTE`, `LEAF_NOSHARE`, `LEAF_LOCALE`, `LEAF_DATE_FORMAT`, `LEAF_QUERY_LOG`, `LEAF_SEMANTIC_MIN_SCORE`), and `LEAF_SECRET_KEY` set the session key. Any of them still set stops Leaf at start, naming them (`staleEnv`): ignored, a forgotten `LEAF_PASSWORD` would leave the wiki open. `./run.sh config import` moves them into the file (a plain password and the MCP tokens as their hashes, so the clients keep their tokens; users as sections) and lists the lines to delete from `.env`.
+
+### Commands
+
+The file can be edited by hand, or with the commands; a running Leaf takes each change within a second:
+
+```bash
+./run.sh user add alice                # asks for her password twice
+./run.sh user add bob --mcp-token      # also makes him an MCP token, shown once
+./run.sh user passwd alice             # a new password
+./run.sh user token bob                # a new token; the old one stops working at once
+./run.sh user remove bob               # his private pages and tasks stay on disk
+./run.sh user list                     # the users, and who has a token
+./run.sh config set hosts nas.local    # any other key of the table; config unset KEY for its default
+./run.sh config passwd                 # without users: the wiki's password
+./run.sh config token                  # without users: the wiki's MCP token, shown once
+./run.sh config check                  # what's wrong, or each setting in effect and where it comes from
+./run.sh config import                 # the settings from an older .env into the file
 ```
 
-- **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name. In a setting's name it is upper case with `_` for `-` (`mary-ann` → `LEAF_USER_MARY_ANN_PASSWORD`, `userEnvName`).
-- **Passwords are kept as hashes**, never in plain text: PBKDF2-SHA256 with a random 16-byte salt and 600,000 iterations (`hashPassword`; Go's own `crypto/pbkdf2`, no dependency), written `pbkdf2-sha256:<iterations>:<salt>:<hash>` (base64 without padding). The format has no `$`, which compose would read as a variable in `.env`. Make the line with `./run.sh passwd alice` (or `leaf passwd alice` without the container): it asks for the password twice, with the terminal's echo off (`echoOff`, `stty`; `run.sh` turns it off itself, since the container reads a pipe), and prints `LEAF_USER_ALICE_PASSWORD=…` to paste into `.env`. Changing a password is making a new line; restart Leaf to take it.
-- **MCP tokens** are per user and optional: a user without one has no MCP access. Make one with `openssl rand -hex 32`.
-- **Leaf refuses to start** (`loadConfig` says why) on a bad name, a name given twice, a user without a password or with something that isn't a hash, two users with the same token, and on `LEAF_PASSWORD` or `LEAF_MCP_TOKEN` set together with `LEAF_USERS` (with users each has their own; a shared one would make the user unknown).
-- Adding or removing a user is editing `.env` and restarting. A removed user is signed out at once (their session no longer passes, see below).
+- Without the container it is `leaf user …`, `leaf config …` with `LEAF_DATA` set (`go/commands.go`: `userMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm leaf /app/leaf user add alice`. `run.sh` runs the binary in a one-off container of the app's image (`compose build -q leaf`, its output only on failure, then `compose run --rm --no-deps leaf /app/leaf …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Leaf's user and `config import` sees `.env`; the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
+- They refuse a change Leaf wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others), a value that doesn't check, `config passwd`/`token` with users (each has their own), `config set password`/`mcp-token` (those have their commands).
+- `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
+- **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name. A user's MCP token is optional: without one they have no MCP access.
+
+### Reloading
+
+The request checks (`checks` in `go/server.go`) call `reloadSettings`, which looks at the file at most once a second (`reloadEvery`: its time, size and whether it is still the same file, as an editor may replace it); a change reads it again. No file watcher, no goroutine. The settings are held behind an atomic pointer (`settings()`, `Settings`); what is fixed for the process stays in `cfg`.
+
+- **A file with an error** on reload: Leaf keeps the settings it has, logs the error with its line, and `GET /api/health` answers 503 with it, so `leaf health` (the container's healthcheck) fails until the file is fixed. A broken edit never locks everyone out or opens the wiki. A file removed while Leaf runs counts the same (taking the users away would open the wiki): Leaf keeps its settings until the file is back, or a restart.
+- **What a reload changes**: a new user signs in at once; a removed user is signed out with their next request (the session must name a current user); a changed MCP token takes effect at once, the old one refused. A changed password doesn't end the user's sessions (sessions are signed with the key, not the password). Users ↔ no users signs everyone out, as `signedIn` checks. A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the file is committed (above). Throttles, caches and the search index stay.
 
 ## Signing in
 
-- The login page asks for the user name and the password (`login.html`; the name field only with users). The name is compared in lower case, without surrounding spaces. A wrong name or password says "Incorrect user name or password." (not which one), keeps the name typed, and costs the same time either way: an unknown name is checked against a dummy hash (`authenticate`), so timing doesn't tell which names exist. Wrong tries are throttled per client as with `LEAF_PASSWORD` (`loginThrottle`, see `docs/spec/security.md`); not per user name, which would let anyone lock a user out.
-- **The session names its user** (`session.User` in the signed cookie, `signedIn`). With users, a session must name one of them; without, it must name no one. So removing a user signs them out, and switching between `LEAF_PASSWORD` and `LEAF_USERS` signs everyone out.
+- The login page asks for the user name and the password (`login.html`; the name field only with users). The name is compared in lower case, without surrounding spaces. A wrong name or password says "Incorrect user name or password." (not which one), keeps the name typed, and costs the same time either way: an unknown name is checked against a dummy hash (`authenticate`), so timing doesn't tell which names exist. Wrong tries are throttled per client as with the wiki's one password (`loginThrottle`, see `docs/spec/security.md`); not per user name, which would let anyone lock a user out.
+- **The session names its user** (`session.User` in the signed cookie, `signedIn`). With users, a session must name one of them; without, it must name no one. So removing a user signs them out, and switching between one password and users signs everyone out.
 - **The request knows its user**: the request checks (`checks` in `go/server.go`) put the session's user into the request's context (`withUser`), `userOf(r)` reads it, and `newReq` keeps it as `rq.user`. "" means no users (or no one signed in).
 - The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice").
 
 ## MCP
 
-With users, `/mcp` takes any user's token (`LEAF_USER_<NAME>_MCP_TOKEN`) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
+With users, `/mcp` takes any user's token (`mcp-token` in their section) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
 
 An assistant sees and changes what its user does in the browser, no more (`docs/spec/mcp.md` has the tools):
 
@@ -47,10 +100,10 @@ An assistant sees and changes what its user does in the browser, no more (`docs/
 
 Pages in `private/<name>/` (and its subfolders) are that user's: only they see and change them. Make one with **New page** (Ctrl+N) and its **Private** box (`private=1` on `POST /new` puts the slug in your folder; the box shows only with users), by naming a page there (`private/alice/diary`), or by renaming a page into it. Rename it out of the folder to share it.
 
-- **What "private" means**: hidden inside Leaf, from other users and their assistants. Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a `LEAF_GIT_REMOTE` hold everything. Search's keyword statistics count private pages and tasks too (they don't show, they only weigh words slightly).
+- **What "private" means**: hidden inside Leaf, from other users and their assistants. Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a git remote hold everything. Search's keyword statistics count private pages and tasks too (they don't show, they only weigh words slightly).
 - **The rule lives in one place** (`go/access.go`): `pageOwner(slug)` (the user, and whether the page is private at all), `canSee(user, slug)`, `canWrite(user, slug)` (the same pages: everything shared is editable), `canSeePath(user, rel)` for files as git names them (pages, `_assets/private/<user>/`, `_deck/users/<user>/`). Names compare in lower case. Without users nothing is private, and `private/` is an ordinary folder.
-- **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer in `LEAF_USERS`) is seen by no one; Leaf logs each such entry when it starts (`strayPrivate`), so the admin can move it.
-- **Opening another user's page** (view, editor, history, a version, a diff, the search preview) is a plain 404, the same as for a page that doesn't exist, for every slug in their folder (`refusePage`), so it doesn't tell what exists there. Sharing mode's "Hidden page" stays for pages `LEAF_NOSHARE` hides.
+- **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer there) is seen by no one; Leaf logs each such entry when it starts (`strayPrivate`), so the admin can move it.
+- **Opening another user's page** (view, editor, history, a version, a diff, the search preview) is a plain 404, the same as for a page that doesn't exist, for every slug in their folder (`refusePage`), so it doesn't tell what exists there. Sharing mode's "Hidden page" stays for pages `noshare` hides.
 - **Changing another user's page** is refused the same way, 404 (`canWrite`; `refuseWrite` in the routes): save and auto-save, new page, rename, delete, restore a version, toggle a checkbox, commit one file. Renaming a page *into* another user's folder goes back to the dialog with an error ("that folder is another user's"), as does Move to wiki into one; Append to page and Move to wiki's "Link from" take only pages you may change ("There is no page …"). Renaming a shared page still re-points links on every page, other users' private ones too, in one commit (Rename in `docs/spec/editor.md`).
 - **Scratch notes are private**: with users a new scratch note goes to the top of your folder, `private/<you>/<timestamp>_<name>` (`createScratch`, `privateFolder`); Scratch lists yours and the top-level notes from before users, which stay shared (`listScratch`). Move to wiki and Append to page take a note out of your folder (to the folder you name, the top level by default; to the page). `isScratch` takes a note at the top of a user's folder (not deeper, not in no one's folder, and without users only top-level notes).
 - **Uploads** for a private page are private: the editor sends the page's slug with an upload (`page`, `markdownEditor`'s `page` option), and a file for a page in your own folder goes to `_assets/private/<you>/` (URL `/_assets/private/<you>/<file>`); any other page's uploads go to `_assets/` as before. `GET /_assets/{path...}` serves `_assets/<file>`, and `_assets/private/<user>/<file>` only to that user (404 for anyone else, and for any other subfolder).

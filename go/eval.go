@@ -15,7 +15,7 @@
 // weren't found first in every mode.
 //
 // -new lists the queries search_wiki was asked (the query log, which
-// LEAF_QUERY_LOG=1 turns on) that FILE doesn't have yet, newest first, as
+// query-log in the settings file turns on) that FILE doesn't have yet, newest first, as
 // stubs to paste into FILE: "results" is what the search found then, a hint
 // for "expect", not the answer.
 //
@@ -66,10 +66,12 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	fail := func(err error) int { fmt.Fprintln(stderr, err); return 1 }
-	var err error
-	if cfg, err = loadConfig(os.Getenv); err != nil {
+	c, s, err := loadConfig(os.Getenv)
+	if err != nil {
 		return fail(err)
 	}
+	cfg = c
+	current.Store(s)
 	path := files[0]
 	if *newOnly {
 		log := queryLogPath()
@@ -78,7 +80,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 			return fail(err)
 		}
 		if len(stubs) == 0 {
-			fmt.Fprintln(stderr, "No new queries in the log (LEAF_QUERY_LOG=1 turns it on).")
+			fmt.Fprintln(stderr, "No new queries in the log (query-log = yes in .leaf/config turns it on).")
 			return 0
 		}
 		lines := make([]string, len(stubs))

@@ -6,8 +6,8 @@ written for (get/post/put/delete with headers, data, json, query_string,
 content_type, follow_redirects; set_cookie), and answers with werkzeug's
 TestResponse. The settings a test
 patches in tests/settings.py (a password, LEAF_HOSTS …) go to the server
-as its environment: when they change, the server restarts on the same wiki
-before the next request."""
+as its environment (and settings file, .leaf/config): when they change, the
+server restarts on the same wiki before the next request."""
 
 import base64
 import hashlib
@@ -49,38 +49,71 @@ def binary() -> Path:
 
 
 def _settings() -> dict[str, str]:
-    """The environment that gives the server the settings now."""
-    noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
+    """The environment that gives the server the deployment's settings now
+    (the wiki's are in its settings file: config_text)."""
     env = {
         "LEAF_DATA": str(settings.LEAF_DATA),
         "LEAF_BUILD": settings.LEAF_BUILD,
-        "LEAF_PASSWORD": settings.LEAF_PASSWORD,
-        "LEAF_MCP_TOKEN": settings.LEAF_MCP_TOKEN,
-        "LEAF_BASE_URL": settings.LEAF_BASE_URL,
         "LEAF_HOST_DATA": settings.LEAF_HOST_DATA,
-        "LEAF_QUERY_LOG": "1" if settings.LEAF_QUERY_LOG else "",
-        "LEAF_GIT_REMOTE": settings.LEAF_GIT_REMOTE,
         "LEAF_ALLOW_REMOTE": "1" if settings.LEAF_ALLOW_REMOTE else "",
-        "LEAF_HOSTS": ",".join(sorted(settings.LEAF_HOSTS)),
-        "LEAF_NOSHARE": ",".join(noshare) or ",",
-        "LEAF_LOCALE": settings.LEAF_LOCALE,
-        "LEAF_DATE_FORMAT": settings.LEAF_DATE_FORMAT,
         **settings.ENV,
     }
-    if settings.LEAF_USERS:
-        env["LEAF_USERS"] = ",".join(settings.LEAF_USERS)
-        for name, (password, token) in settings.LEAF_USERS.items():
-            var = "LEAF_USER_" + name.upper().replace("-", "_")
-            env[var + "_PASSWORD"] = password_hash(password)
-            if token:
-                env[var + "_MCP_TOKEN"] = token
-    if os.environ.get("LEAF_SECRET_KEY"):
-        env["LEAF_SECRET_KEY"] = os.environ["LEAF_SECRET_KEY"]
     if not settings.GIT_ENABLED:
         # No git on its PATH: the server finds none.
         env["PATH"] = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
                                       if d and not os.path.exists(os.path.join(d, "git")))
     return env
+
+
+def config_text() -> str:
+    """The settings file the server gets (.leaf/config): the wiki's settings
+    that differ from Leaf's defaults, CONFIG_FILE, then the users; "" when
+    there is nothing to say (the wiki then has no file)."""
+    noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
+    values = {
+        "password": password_hash(settings.LEAF_PASSWORD) if settings.LEAF_PASSWORD else "",
+        "mcp-token": token_hash(settings.LEAF_MCP_TOKEN) if settings.LEAF_MCP_TOKEN else "",
+        "base-url": settings.LEAF_BASE_URL,
+        "query-log": "yes" if settings.LEAF_QUERY_LOG else "",
+        "git-remote": settings.LEAF_GIT_REMOTE,
+        "hosts": ", ".join(sorted(settings.LEAF_HOSTS)),
+        "locale": settings.LEAF_LOCALE,
+        "date-format": settings.LEAF_DATE_FORMAT,
+    }
+    text = "".join(f"{key} = {value}\n" for key, value in values.items() if value)
+    if noshare != ["#noshare"]:
+        text += f"noshare = {', '.join(noshare)}\n"
+    text += settings.CONFIG_FILE
+    for name, (password, token) in settings.LEAF_USERS.items():
+        text += f"\n[user {name}]\npassword = {password_hash(password)}\n"
+        if token:
+            text += f"mcp-token = {token_hash(token)}\n"
+    return text
+
+
+def token_hash(token: str) -> str:
+    """An MCP token as the settings file keeps it (go/configfile.go)."""
+    return "sha256:" + hashlib.sha256(token.encode()).hexdigest()
+
+
+# The settings file each wiki got last (path → text): a file the tests
+# wrote is removed when the settings no longer give one.
+_written: dict[Path, str] = {}
+
+
+def write_config(text: str) -> None:
+    """Gives the wiki the settings file text (none for "", unless a test
+    wrote one there itself)."""
+    path = Path(settings.LEAF_DATA) / ".leaf" / "config"
+    if text:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        path.chmod(0o600)
+        _written[path] = text
+    elif path in _written:
+        if path.exists() and path.read_text(encoding="utf-8") == _written[path]:
+            path.unlink()
+        del _written[path]
 
 
 def password_hash(password: str, iterations: int = 1000) -> str:
@@ -106,8 +139,11 @@ def _flags() -> list[str]:
 class GoServer:
     """One Go server process, on addr (a free port: 127.0.0.1:0)."""
 
-    def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0", flags: list[str] = ()):
+    def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0", flags: list[str] = (),
+                 config: str | None = None):
         self.env, self.flags = env, list(flags)
+        self.config = config_text() if config is None else config
+        write_config(self.config)
         base = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
@@ -140,11 +176,11 @@ class LiveServer:
         self.server: GoServer | None = None
 
     def ensure(self) -> GoServer:
-        env, flags = _settings(), _flags()
-        if self.server and (self.server.env, self.server.flags) != (env, flags):
+        env, flags, config = _settings(), _flags(), config_text()
+        if self.server and (self.server.env, self.server.flags, self.server.config) != (env, flags, config):
             self.stop()
         if not self.server:
-            self.server = GoServer(env, self.log, f"127.0.0.1:{self.port}", flags)
+            self.server = GoServer(env, self.log, f"127.0.0.1:{self.port}", flags, config)
         return self.server
 
     def stop(self) -> None:

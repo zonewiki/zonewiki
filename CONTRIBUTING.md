@@ -17,7 +17,7 @@ Open an issue with the **Bug report** template. It asks for:
   Markdown or a `[[deck …]]` line that shows the problem help most.
 - **The server log** around the error if there was one (`./run.sh logs`).
 
-Leave out passwords, tokens (`LEAF_MCP_TOKEN`) and anything private from your
+Leave out passwords, MCP tokens and anything private from your
 notes. To report a security problem, don't open a public issue: contact the
 maintainer directly.
 

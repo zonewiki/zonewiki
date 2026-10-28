@@ -152,7 +152,7 @@ func TestLinkedFromIsCut(t *testing.T) {
 
 func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 	testWiki(t, map[string]string{"golf": "# Golf\n\nMechaniker, Bremsen.\n"})
-	cfg.QueryLog = true
+	settings().QueryLog = true
 	set(t, &queryLogMax, 10)
 	for _, q := range []string{"git push", "Mechaniker", "Bremsen"} {
 		logQuery(q, "", nil)

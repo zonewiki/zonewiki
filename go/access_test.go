@@ -9,9 +9,9 @@ import (
 
 func withUsers(t *testing.T, names ...string) {
 	t.Helper()
-	cfg.Users = map[string]*User{}
+	settings().Users = map[string]*User{}
 	for _, n := range names {
-		cfg.Users[n] = &User{Name: n}
+		settings().Users[n] = &User{Name: n}
 	}
 }
 
@@ -22,7 +22,8 @@ func TestAccessWithoutUsers(t *testing.T) {
 			t.Errorf("%s: private without users", slug)
 		}
 	}
-	if !canSeePath("", "_deck/users/alice/tasks.json") || !canSeePath("", "_assets/private/alice/a.png") {
+	if !canSeePath("", "_deck/users/alice/tasks.json") || !canSeePath("", "_assets/private/alice/a.png") ||
+		canSeePath("", ".leaf/config") {
 		t.Error("paths")
 	}
 }
@@ -68,7 +69,7 @@ func TestAccessWithUsers(t *testing.T) {
 }
 
 func TestHiddenPageAndSharing(t *testing.T) {
-	testWiki(t, map[string]string{"secret/x": "# X\n"}) // LEAF_NOSHARE=secret/ (testWiki)
+	testWiki(t, map[string]string{"secret/x": "# X\n"}) // noshare secret/ (testWiki)
 	withUsers(t, "alice")
 	alice, aliceSharing := &Req{user: "alice"}, &Req{user: "alice", sharing: true}
 	if hiddenPage(alice, "private/alice/x") || !hiddenPage(&Req{user: "bob"}, "private/alice/x") {

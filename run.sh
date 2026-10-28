@@ -225,27 +225,36 @@ case "${1:-up}" in
     image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
       --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
     in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
-      -e "LEAF_SEMANTIC_SEARCH=$semantic" -e "LEAF_SEMANTIC_MIN_SCORE=$(env_val LEAF_SEMANTIC_MIN_SCORE)" -- \
+      -e "LEAF_SEMANTIC_SEARCH=$semantic" -- \
       /app/leaf eval "/wiki-data/$file" "${@:3}"
     ;;
-  passwd)
-    # A user's password hash for .env (LEAF_USER_<NAME>_PASSWORD, see
-    # docs/spec/users.md): leaf passwd in the app's image, as up builds it.
-    # The container reads a pipe, so the terminal's echo is turned off here.
-    if [[ -z "$2" ]]; then
-      echo "Usage: $0 passwd NAME" >&2
+  user|config)
+    # The settings file's commands (leaf user …, leaf config …; see
+    # docs/spec/users.md), in a one-off container of the app's image, with
+    # .env and the wiki as up gives them, so the file is written as Leaf's
+    # user and import sees .env. A running Leaf takes the change itself.
+    if [[ ! -d "$LEAF_DATA" ]]; then
+      echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
       exit 1
     fi
-    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
-      --build-arg "LEAF_SEMANTIC_SEARCH=$(env_val LEAF_SEMANTIC_SEARCH)")
-    if [[ -t 0 ]]; then
-      stty -echo
-      trap 'stty echo' EXIT
+    if [[ ! -f .env ]]; then
+      echo "No .env: create one (cp .env.example .env, see README)." >&2
+      exit 1
     fi
-    $ENGINE run --rm -i "$image" /app/leaf passwd "$2"
+    # The image as up builds it, its output only when the build fails.
+    log=$(mktemp)
+    if ! compose build -q leaf >"$log" 2>&1; then
+      cat "$log" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    rm -f "$log"
+    tty=()
+    [[ -t 0 ]] || tty=(-T)
+    compose run --rm --no-deps "${tty[@]}" leaf /app/leaf "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|passwd]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|user|config]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Leaf (default)"
     echo "  down   - stop Leaf"
@@ -255,7 +264,9 @@ case "${1:-up}" in
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
-    echo "  passwd NAME - a user's password hash for .env (LEAF_USER_<NAME>_PASSWORD)"
+    echo "  user add|passwd|token|remove NAME, user list - the users in the wiki's settings file"
+    echo "  config check|passwd|token|import - the wiki's settings file: check it, the password and MCP token"
+    echo "                without users, or move the settings from an older .env into it"
     exit 1
     ;;
 esac

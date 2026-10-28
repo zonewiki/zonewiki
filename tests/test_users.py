@@ -1,4 +1,4 @@
-"""Users (LEAF_USERS, docs/spec/users.md): a login per user, the session
+"""Users ([user …] in .leaf/config, docs/spec/users.md): a login per user, the session
 naming its user, per-user MCP tokens, and commits authored by whoever made
 the change."""
 
@@ -100,7 +100,7 @@ class TestMCP:
     def test_off_without_any_token(self, client, monkeypatch):
         monkeypatch.setattr(settings, "LEAF_USERS", {"bob": USERS["bob"]})
         resp = mcp(client, "x")
-        assert resp.status_code == 403 and "LEAF_USER_<NAME>_MCP_TOKEN" in resp.get_json()["error"]
+        assert resp.status_code == 403 and "./run.sh user token NAME" in resp.get_json()["error"]
 
 
 class TestAuthors:

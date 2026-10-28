@@ -412,9 +412,9 @@ func TestSemanticSettings(t *testing.T) {
 	if !strings.HasSuffix(modelDir(env(nil)), "/.cache/leaf/jinaai--jina-embeddings-v2-base-de@3f9eede87572") {
 		t.Errorf("model dir %s", modelDir(env(nil)))
 	}
-	x := semanticFromEnv(env(map[string]string{"LEAF_SEMANTIC_SEARCH": "on", "LEAF_SEMANTIC_MIN_SCORE": "0.42"}))
+	x := semanticFromEnv(env(map[string]string{"LEAF_SEMANTIC_SEARCH": "on"}))
 	if newOnnxEmbedderWorks() {
-		if x == nil || x.minScore != 0.42 || x.relatedMinScore != 0.25 || x.taskMinScore != 0.3 {
+		if x == nil || x.minScore != 0.25 || x.relatedMinScore != 0.25 || x.taskMinScore != 0.3 {
 			t.Errorf("index %+v", x)
 		}
 	} else if x != nil {
@@ -581,5 +581,26 @@ func TestExcludeFromGit(t *testing.T) {
 	excludeFromGit(dir, "/.leaf/")
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
 		t.Errorf("exclude %q", b)
+	}
+	// .leaf/ but the settings file: an older Leaf's line goes.
+	excludeLeafState(dir)
+	excludeLeafState(dir)
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/*\n!/.leaf/config\n" {
+		t.Errorf("exclude %q", b)
+	}
+}
+
+// semantic-min-score in the settings file overrides the model's floor, as
+// it reloads.
+func TestSearchFloor(t *testing.T) {
+	testWiki(t, nil)
+	x := newSemanticIndex(newRecorder(), cachePath(), nil, math.NaN(), math.NaN(), math.NaN(), 0)
+	if x.searchFloor() != 0.4 {
+		t.Errorf("default %v", x.searchFloor())
+	}
+	score := 0.7
+	settings().SemanticMinScore = &score
+	if x.searchFloor() != 0.7 {
+		t.Errorf("set %v", x.searchFloor())
 	}
 }

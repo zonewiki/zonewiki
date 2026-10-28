@@ -8,16 +8,16 @@ REPO = Path(__file__).resolve().parent.parent
 # Set by run.sh or the build, not by the user: .env.example needn't list them.
 INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO", "LEAF_MODEL_DIR"}
 
-# A user's settings (go/users.go) are named after them: the code reads
-# "LEAF_USER_" + name + "_PASSWORD", the example has one user's.
-PER_USER = re.compile(r"^LEAF_USER_[A-Z0-9_]+_(PASSWORD|MCP_TOKEN)$")
+# The wiki's settings, in .env until 2026-10: the code names them only to
+# refuse them there and to import them into the settings file
+# (go/configfile.go's configKeys, go/commands.go).
+FORMER = {"LEAF_USERS", "LEAF_USER_", "LEAF_SECRET_KEY"} | set(re.findall(
+    r'\{"[a-z-]+", "(LEAF_[A-Z0-9_]+)"\}', (REPO / "go" / "configfile.go").read_text()))
 
 
 def _example_keys() -> set[str]:
     text = (REPO / ".env.example").read_text(encoding="utf-8")
-    keys = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", text, re.M))
-    # A user's settings stand for the prefix the code builds them from.
-    return {"LEAF_USER_" if PER_USER.match(k) else k for k in keys}
+    return set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", text, re.M))
 
 
 def _used_keys() -> set[str]:
@@ -26,8 +26,11 @@ def _used_keys() -> set[str]:
                              REPO / "compose.nas.yaml"] if not p.name.endswith("_test.go"))
     # The old names of renamed settings, read only to say so.
     renamed = set(re.findall(r'\{"(LEAF_[A-Z0-9_]+)", "LEAF_', (REPO / "go" / "embed.go").read_text()))
-    used = set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL - renamed
-    return {"LEAF_USER_" if PER_USER.match(k) else k for k in used}
+    return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL - renamed - FORMER
+
+
+def test_former_settings_are_found():
+    assert {"LEAF_PASSWORD", "LEAF_LOCALE", "LEAF_SEMANTIC_MIN_SCORE"} <= FORMER
 
 
 def test_example_has_no_unknown_keys():

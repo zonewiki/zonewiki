@@ -216,7 +216,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     (wiki / "_eval").mkdir(parents=True)
-    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\nLEAF_SEMANTIC_MIN_SCORE=0.3\n")
+    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\n")
     r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No questions at" in r.stderr
     (wiki / "_eval" / "retrieval.json").write_text("[]")
@@ -227,18 +227,24 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     assert "--build-arg LEAF_SEMANTIC_SEARCH=on" in build
     (run,) = _engine_calls(log, "run")
     assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
-    assert "-e LEAF_SEMANTIC_SEARCH=on -e LEAF_SEMANTIC_MIN_SCORE=0.3" in run
+    assert "-e LEAF_SEMANTIC_SEARCH=on " in run
     assert run.endswith("/app/leaf eval /wiki-data/_eval/retrieval.json -k 5")
 
 
-def test_passwd_runs_leaf_passwd_in_the_app_image(sandbox):
+def test_user_and_config_run_leaf_in_a_one_off_container(sandbox, tmp_path):
+    """./run.sh user …/config … run the binary through compose, with .env
+    and the wiki as up has them; -T when stdin isn't a terminal."""
     repo, env, log = sandbox
-    r = subprocess.run(["./run.sh", "passwd"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 1 and "Usage: ./run.sh passwd NAME" in r.stderr
-    r = subprocess.run(["./run.sh", "passwd", "alice"], cwd=repo, env=env, capture_output=True, text=True,
-                       input="pw\npw\n")
-    assert r.returncode == 0, r.stderr
-    (build,) = _engine_calls(log, "build")
-    assert " -f Containerfile " in build
-    (run,) = _engine_calls(log, "run")
-    assert run.startswith("run --rm -i ") and run.endswith("/app/leaf passwd alice")
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    (repo / ".env").write_text(f"LEAF_DATA={wiki}\n")
+    for args in (["user", "add", "alice", "--mcp-token"], ["config", "check"]):
+        r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL)
+        assert r.returncode == 0, r.stderr
+        call = [l for l in _engine_calls(log, "compose") if " run " in l][-1]
+        assert call.endswith("run --rm --no-deps -T leaf /app/leaf " + " ".join(args))
+        assert [l for l in _engine_calls(log, "compose") if " build -q leaf" in l]
+    (repo / ".env").write_text(f"LEAF_DATA={wiki}-missing\n")
+    r = subprocess.run(["./run.sh", "user", "list"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 1 and "No wiki at" in r.stderr

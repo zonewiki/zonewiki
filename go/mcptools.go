@@ -2063,9 +2063,9 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 }
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
-// its answer use LEAF_BASE_URL, else the address the client reached Leaf at.
+// its answer use base-url (the settings file), else the address the client reached Leaf at.
 func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
-	base := cfg.BaseURL
+	base := settings().BaseURL
 	if base == "" {
 		scheme := "http"
 		if r.TLS != nil {

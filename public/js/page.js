@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
 
-// The task chips' dates in LEAF_LOCALE (the server writes them in US English).
+// The task chips' dates in the locale setting (the server writes them in US English).
 localizeDates();
 
 // ── Heading links ─────────────────────────────────────────────────────────────

@@ -74,7 +74,7 @@ func wikiRel(path string) (string, bool) {
 }
 
 // gitSetup makes the wiki a repository (its files as the first commit), or
-// gives an existing one a committer, and points origin at LEAF_GIT_REMOTE.
+// gives an existing one a committer, and points origin at the git-remote setting.
 func gitSetup() {
 	if !cfg.GitEnabled {
 		return
@@ -82,6 +82,8 @@ func gitSetup() {
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
 		runGit("init")
 		setCommitter()
+		// Before the first add: .leaf/ holds the session key.
+		excludeLeafState(cfg.Data)
 		gitignore := filepath.Join(cfg.Data, ".gitignore")
 		if _, err := os.Stat(gitignore); err != nil {
 			_ = os.WriteFile(gitignore, nil, 0o666)
@@ -91,12 +93,19 @@ func gitSetup() {
 	} else if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
 		setCommitter()
 	}
-	if cfg.GitRemote != "" {
-		if runGit("remote", "get-url", "origin").Code == 0 {
-			runGit("remote", "set-url", "origin", cfg.GitRemote)
-		} else {
-			runGit("remote", "add", "origin", cfg.GitRemote)
-		}
+	setGitRemote()
+}
+
+// setGitRemote points origin at git-remote (the settings file): at start, and when the setting changes.
+func setGitRemote() {
+	remote := settings().GitRemote
+	if remote == "" || !cfg.GitEnabled {
+		return
+	}
+	if runGit("remote", "get-url", "origin").Code == 0 {
+		runGit("remote", "set-url", "origin", remote)
+	} else {
+		runGit("remote", "add", "origin", remote)
 	}
 }
 
@@ -110,7 +119,7 @@ func setCommitter() {
 // user's name, or whoever committed by hand; "" for Leaf's own, and without
 // users, so a wiki without them shows no names.
 func commitAuthor(name string) string {
-	if cfg.Users == nil || name == appName {
+	if settings().Users == nil || name == appName {
 		return ""
 	}
 	return name
@@ -139,7 +148,23 @@ func gitCommit(user, message string, paths ...string) {
 	runGit("commit", "-m", message)
 }
 
-// excludeFromGit lists entry (default the .leaf dir: cache, secret key) in
+// excludeLeafState keeps .leaf/ out of git (the session key, the caches,
+// the query log), but for the settings file, which is the wiki's and is
+// committed (its tokens are only hashes). An older Leaf excluded all of
+// .leaf/ ("/.leaf/", a folder git then never looks into): that line goes.
+func excludeLeafState(wiki string) {
+	exclude := filepath.Join(wiki, ".git", "info", "exclude")
+	if b, err := os.ReadFile(exclude); err == nil && strings.Contains(string(b), "/.leaf/\n") {
+		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), func(l string) bool { return l == "/.leaf/\n" })
+		if err := os.WriteFile(exclude, []byte(strings.Join(lines, "")), 0o666); err != nil {
+			logf("could not update %s: %v", exclude, err)
+		}
+	}
+	excludeFromGit(wiki, "/.leaf/*")
+	excludeFromGit(wiki, "!/.leaf/config")
+}
+
+// excludeFromGit lists entry (e.g. /.leaf/*: cache, secret key) in
 // .git/info/exclude, not .gitignore, which would itself show up as an
 // uncommitted change.
 func excludeFromGit(wiki, entry string) {

@@ -530,7 +530,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 	if scratch {
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && isScratch(d.Slug) })
 	}
-	if rq.sharing || cfg.Users != nil {
+	if rq.sharing || settings().Users != nil {
 		tests = append(tests, func(d *SearchDoc) bool { return !hiddenDoc(rq, d) })
 	}
 	var keep func(*SearchDoc) bool
@@ -668,7 +668,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 		return inFolder(slug, under) && (!scratch || isScratch(slug)) && !hiddenPage(rq, slug)
 	}
 	var keep func(*SearchDoc) bool
-	if pagesOnly || rq != nil && cfg.Users != nil {
+	if pagesOnly || rq != nil && settings().Users != nil {
 		keep = func(d *SearchDoc) bool {
 			return d.isTask() && !pagesOnly && !hiddenDoc(rq, d) || !d.isTask() && pageOK(d.Slug)
 		}
@@ -703,7 +703,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 	return firstN(phraseFirst(ranked, q, x, keep), limit)
 }
 
-// search_wiki's queries, one JSON line each (LEAF_QUERY_LOG), for turning
+// search_wiki's queries, one JSON line each (query-log in the settings file), for turning
 // into questions for leaf eval (eval.go). In .leaf/, so never in git.
 // Past queryLogMax bytes the log moves to queries.1.jsonl (the one before
 // is dropped), so it can't grow without end.
@@ -732,7 +732,7 @@ type queryLogEntry struct {
 
 // logQuery appends a search_wiki query and what it found to the query log.
 func logQuery(raw, under string, hits []*SearchDoc) {
-	if !cfg.QueryLog {
+	if !settings().QueryLog {
 		return
 	}
 	targets := make([]string, len(hits))

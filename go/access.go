@@ -21,7 +21,7 @@ const privateDir = "private"
 // user's folder ("private/carol/x", "private/alice" itself): ("", true);
 // elsewhere: ("", false). Without users nothing is private.
 func ownerIn(folder, rel string) (owner string, private bool) {
-	if cfg.Users == nil {
+	if settings().Users == nil {
 		return "", false
 	}
 	rest, found := strings.CutPrefix(strings.ToLower(rel), folder+"/")
@@ -29,7 +29,7 @@ func ownerIn(folder, rel string) (owner string, private bool) {
 		return "", false
 	}
 	name, _, inside := strings.Cut(rest, "/")
-	if !inside || cfg.Users[name] == nil {
+	if !inside || settings().Users[name] == nil {
 		return "", true
 	}
 	return name, true
@@ -94,7 +94,7 @@ func ownPrivate(user, slug string) bool {
 // privateFolder: user's private folder ("private/alice"), "" without
 // users (or for Leaf itself, which has no user).
 func privateFolder(user string) string {
-	if cfg.Users == nil || user == "" {
+	if settings().Users == nil || user == "" {
 		return ""
 	}
 	return privateDir + "/" + user
@@ -103,8 +103,12 @@ func privateFolder(user string) string {
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, an
 // upload in _assets/private/<user>/, a deck file in _deck/users/<user>/,
-// anything else in private/ like a page there.
+// anything else in private/ like a page there. Leaf's own files in .leaf/
+// (the settings file, with its password hashes) no one sees in Leaf.
 func canSeePath(user, rel string) bool {
+	if strings.HasPrefix(rel, ".leaf/") {
+		return false
+	}
 	for _, folder := range []string{"_assets/" + privateDir, "_deck/users", privateDir} {
 		if owner, private := ownerIn(folder, rel); private {
 			return owner != "" && owner == user
@@ -117,7 +121,7 @@ func canSeePath(user, rel string) bool {
 // no one), for a warning at start: a user's folder whose user was removed,
 // or a page put in private/ itself.
 func strayPrivate() []string {
-	if cfg.Users == nil {
+	if settings().Users == nil {
 		return nil
 	}
 	entries, _ := os.ReadDir(filepath.Join(cfg.Data, privateDir))
@@ -126,7 +130,7 @@ func strayPrivate() []string {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		if !e.IsDir() || cfg.Users[strings.ToLower(e.Name())] == nil {
+		if !e.IsDir() || settings().Users[strings.ToLower(e.Name())] == nil {
 			stray = append(stray, privateDir+"/"+e.Name())
 		}
 	}
@@ -161,7 +165,7 @@ var privateNameRE = regexp.MustCompile(privateDir + `/[\w./-]*[\w/]`)
 // as "a private page": a commit that moved a page out of a private folder,
 // or rewrote links in one, is in the shared page's history too.
 func hideNames(user, msg string) string {
-	if cfg.Users == nil || !strings.Contains(msg, privateDir+"/") {
+	if settings().Users == nil || !strings.Contains(msg, privateDir+"/") {
 		return msg
 	}
 	return privateNameRE.ReplaceAllStringFunc(msg, func(name string) string {

@@ -23,10 +23,13 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 
 WIKI = Path(tempfile.mkdtemp(prefix="leaf_screenshots_"))
-# LEAF_HOSTS, not LEAF_ALLOW_REMOTE (which would show its badge): the server listens
-# on a random port, and the Host check compares names only.
-os.environ.update(LEAF_DATA=str(WIKI), LEAF_HOSTS="127.0.0.1")
+# hosts in the settings file, not LEAF_ALLOW_REMOTE (which would show its
+# badge): the server listens on a random port, and the Host check compares
+# names only.
+os.environ.update(LEAF_DATA=str(WIKI))
 os.environ.pop("LEAF_ALLOW_REMOTE", None)
+(WIKI / ".leaf").mkdir()
+(WIKI / ".leaf" / "config").write_text("hosts = 127.0.0.1\n")
 # The commit the screenshots show at the bottom left, without "+dirty".
 os.environ["LEAF_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
@@ -169,7 +172,8 @@ def main():
     from tests.goserver import GoServer
 
     build_wiki()                     # before Leaf starts: its first commit takes them in
-    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("LEAF_")}, WIKI.parent / "leaf.log")
+    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("LEAF_")}, WIKI.parent / "leaf.log",
+                   config="")       # the wiki has its own (above)
     base = f"http://127.0.0.1:{srv.port}"
 
     ids = [post(base, "/api/deck", t)["id"] for t in TASKS]

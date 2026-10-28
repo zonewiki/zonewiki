@@ -13,8 +13,8 @@ import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js
 // Pure task logic lives in deck-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
 
-// How dates read and the week starts: LEAF_LOCALE (empty: US English) and
-// LEAF_DATE_FORMAT=iso (YYYY-MM-DD), see deck-core.js.
+// How dates read and the week starts: the locale setting (empty: US
+// English) and date-format = iso (YYYY-MM-DD), see deck-core.js.
 const DATES = DeckCore.dateSettings(document.body.dataset);
 const LOCALE = DATES.locale;
 

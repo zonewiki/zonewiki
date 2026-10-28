@@ -84,7 +84,7 @@ RUN mkdir -p /opt/onnxruntime /opt/leaf-model \
 FROM ubuntu:26.04
 
 # git: the wiki's history. tzdata: TZ (compose.yaml, from the host or .env)
-# names the user's timezone. ca-certificates: LEAF_GIT_REMOTE over https,
+# names the user's timezone. ca-certificates: a git-remote over https,
 # and fetching the model when it isn't baked in.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

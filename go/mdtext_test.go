@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// testWiki points cfg at a fresh wiki with these pages (slug → text);
+// testWiki points cfg (and settings) at a fresh wiki with these pages (slug → text);
 // pages under secret/ are not for sharing.
 func testWiki(t *testing.T, pages map[string]string) {
 	t.Helper()
@@ -20,16 +20,18 @@ func testWiki(t *testing.T, pages map[string]string) {
 			t.Fatal(err)
 		}
 	}
-	c, err := loadConfig(func(k string) string {
-		return map[string]string{"LEAF_DATA": dir, "LEAF_NOSHARE": "secret/"}[k]
-	})
+	if err := writeConfig(filepath.Join(dir, ".leaf", "config"), "noshare = #noshare, secret/\n"); err != nil {
+		t.Fatal(err)
+	}
+	c, s, err := loadConfig(func(k string) string { return map[string]string{"LEAF_DATA": dir}[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.GitEnabled = false
-	old := cfg
+	old, oldSettings := cfg, settings()
 	cfg = c
-	t.Cleanup(func() { cfg = old })
+	current.Store(s)
+	t.Cleanup(func() { cfg = old; current.Store(oldSettings) })
 }
 
 var sharing = &Req{sharing: true}

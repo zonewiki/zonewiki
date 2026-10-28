@@ -11,7 +11,13 @@
 #   LEAF_DATA=/volume1/docker/leaf/wiki   # absolute; the folder must exist
 #   LEAF_UID=1026                         # the owner of that folder (id -u)
 #   LEAF_GID=100                          # its group (id -g; Synology: users)
-#   LEAF_HOSTS=nas.local                  # names you open Leaf by (or LEAF_ALLOW_REMOTE=1)
+#
+# The wiki's own settings go in its settings file (.leaf/config), through the
+# container; first of all the names you open Leaf by (or LEAF_ALLOW_REMOTE=1
+# in .env), then a login:
+#
+#   docker compose -f compose.nas.yaml run --rm leaf /app/leaf config set hosts nas.local
+#   docker compose -f compose.nas.yaml run --rm leaf /app/leaf user add alice
 #   TZ=Europe/Vienna
 name: leaf
 

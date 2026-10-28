@@ -29,6 +29,7 @@ NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her scratch note
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
 
+
 # alice's private tasks: open (linking to the shared page plans, which
 # refers to it), completed this year, archived.
 TASK_ID = "a11ce000-0000-4000-8000-000000000001"
@@ -685,6 +686,7 @@ def test_every_tool_is_covered():
 EXEMPT = {
     "/mcp",                         # its tools: MCP_READS
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
+    "GET /api/health",              # ok, or the settings file's error
     "POST /api/scratch",            # makes bob's own note
 }
 

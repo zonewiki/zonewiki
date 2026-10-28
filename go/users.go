@@ -1,12 +1,7 @@
 // Users (docs/spec/users.md): several people on one wiki, each signing in
-// with a password of their own and owning a private folder. From .env:
-//
-//	LEAF_USERS=alice,bob
-//	LEAF_USER_ALICE_PASSWORD=pbkdf2-sha256:600000:<salt>:<hash>
-//	LEAF_USER_ALICE_MCP_TOKEN=…
-//
-// Without LEAF_USERS Leaf has no users: one LEAF_PASSWORD (or none) and one
-// LEAF_MCP_TOKEN, everything shared.
+// with a password of their own and owning a private folder: the settings
+// file's [user …] sections (configfile.go). Without them Leaf has no users:
+// one password (or none) and one MCP token, everything shared.
 package main
 
 import (
@@ -26,77 +21,18 @@ import (
 	"strings"
 )
 
-// User: one of LEAF_USERS, with the hash of their password and their MCP
-// token ("": none, /mcp refuses them).
+// User: one of the users, with the hash of their password and their MCP
+// token as kept (its hash, tokenMatches; "": none, /mcp refuses them).
 type User struct {
 	Name, PasswordHash, MCPToken string
 }
 
-// A user's name is a folder name (private/<name>/) and part of a variable's
-// name (LEAF_USER_<NAME>_PASSWORD), so letters, digits and inner hyphens.
+// A user's name is a folder name (private/<name>/), so letters, digits and
+// inner hyphens.
 var userNameRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// userEnvName: the name as it is in a variable's ("mary-ann" → "MARY_ANN").
-func userEnvName(name string) string {
-	return strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-}
-
-// loadUsers reads LEAF_USERS and each user's settings; nil without users.
-func loadUsers(getenv func(string) string) (map[string]*User, error) {
-	spec := strings.TrimSpace(getenv("LEAF_USERS"))
-	if spec == "" {
-		return nil, nil
-	}
-	if getenv("LEAF_PASSWORD") != "" {
-		return nil, errors.New("LEAF_PASSWORD and LEAF_USERS are both set. With users, each signs in with " +
-			"their own password (LEAF_USER_<NAME>_PASSWORD): remove LEAF_PASSWORD.")
-	}
-	if getenv("LEAF_MCP_TOKEN") != "" {
-		return nil, errors.New("LEAF_MCP_TOKEN and LEAF_USERS are both set. With users, each has their own " +
-			"token (LEAF_USER_<NAME>_MCP_TOKEN), so an assistant acts as someone: remove LEAF_MCP_TOKEN.")
-	}
-	users := map[string]*User{}
-	tokens := map[string]string{}
-	envNames := map[string]string{}
-	for _, name := range strings.Split(spec, ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if !userNameRE.MatchString(name) {
-			return nil, fmt.Errorf("LEAF_USERS: %q isn't a user name. Use lowercase letters, digits and hyphens "+
-				"(e.g. alice, mary-ann).", name)
-		}
-		env := userEnvName(name)
-		if other, taken := envNames[env]; taken {
-			return nil, fmt.Errorf("LEAF_USERS: %s is there twice.", other)
-		}
-		envNames[env] = name
-		hash := strings.TrimSpace(getenv("LEAF_USER_" + env + "_PASSWORD"))
-		if hash == "" {
-			return nil, fmt.Errorf("LEAF_USER_%s_PASSWORD isn't set. Make one with: leaf passwd %s", env, name)
-		}
-		if _, _, _, err := parseHash(hash); err != nil {
-			return nil, fmt.Errorf("LEAF_USER_%s_PASSWORD isn't a password hash (%v). Make one with: leaf passwd %s",
-				env, err, name)
-		}
-		token := strings.TrimSpace(getenv("LEAF_USER_" + env + "_MCP_TOKEN"))
-		if other, taken := tokens[token]; taken && token != "" {
-			return nil, fmt.Errorf("LEAF_USER_%s_MCP_TOKEN is %s's too. Give each user a token of their own.",
-				env, other)
-		}
-		tokens[token] = name
-		users[name] = &User{Name: name, PasswordHash: hash, MCPToken: token}
-	}
-	if len(users) == 0 {
-		return nil, nil
-	}
-	return users, nil
-}
-
 // Passwords are kept as PBKDF2-SHA256 hashes, "pbkdf2-sha256:<iterations>:
-// <salt>:<hash>" (base64 without padding): Go's own crypto, no dependency,
-// and no "$", which compose would read as a variable in .env.
+// <salt>:<hash>" (base64 without padding): Go's own crypto, no dependency.
 const (
 	hashScheme     = "pbkdf2-sha256"
 	hashIterations = 600_000 // OWASP's recommendation for PBKDF2-SHA256
@@ -143,7 +79,7 @@ var dummyHash = hashPassword("")
 
 // authenticate: the user name and password belong together; the user, or nil.
 func authenticate(name, password string) *User {
-	u := cfg.Users[strings.ToLower(strings.TrimSpace(name))]
+	u := settings().Users[strings.ToLower(strings.TrimSpace(name))]
 	if u == nil {
 		checkPassword(password, dummyHash)
 		return nil
@@ -154,14 +90,9 @@ func authenticate(name, password string) *User {
 	return u
 }
 
-// passwdMain: "leaf passwd NAME" asks for a password (twice) and prints the
-// line for .env. The password comes from stdin, so it isn't in the shell's
-// history or ps; main turns the terminal's echo off (echoOff).
-func passwdMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) != 1 || !userNameRE.MatchString(args[0]) {
-		fmt.Fprintln(stderr, "Usage: leaf passwd NAME (lowercase letters, digits and hyphens)")
-		return 2
-	}
+// askPassword asks for a new password twice; false (and why, on stderr) if
+// none was given or the two differ.
+func askPassword(stdin io.Reader, stderr io.Writer) (string, bool) {
 	in := bufio.NewReader(stdin)
 	read := func(prompt string) (string, bool) {
 		fmt.Fprint(stderr, prompt)
@@ -175,14 +106,13 @@ func passwdMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	password, ok := read("Password: ")
 	if !ok || password == "" {
 		fmt.Fprintln(stderr, "No password given.")
-		return 1
+		return "", false
 	}
 	if again, ok := read("Again: "); !ok || again != password {
 		fmt.Fprintln(stderr, "The passwords differ.")
-		return 1
+		return "", false
 	}
-	fmt.Fprintf(stdout, "LEAF_USER_%s_PASSWORD=%s\n", userEnvName(args[0]), hashPassword(password))
-	return 0
+	return password, true
 }
 
 // echoOff stops a terminal on stdin from showing what is typed, with stty

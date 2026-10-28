@@ -174,7 +174,7 @@ document.querySelector('.action-search')?.addEventListener('click', openSearchMo
 // backlinks, Related, Links to, linked tasks, the empty search modal's
 // recent pages, the editor's page list before anything is typed, the
 // status counts. And the server leaves out the pages not for sharing
-// (LEAF_NOSHARE). It is a cookie, so the server knows: it renders
+// (noshare in the settings file). It is a cookie, so the server knows: it renders
 // <html class="sharing"> from the first paint, and switching reloads the
 // page, rendered for the new mode.
 const sharingBtn = document.querySelector('.top-sharing');

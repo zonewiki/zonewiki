@@ -200,13 +200,13 @@ var modelFiles = []struct{ name, sha256 string }{
 // renamedSettings: the settings' names until 2026-10; set, they turn
 // nothing on, and the log says what to rename them to.
 var renamedSettings = [][2]string{
-	{"LEAF_EMBEDDINGS", "LEAF_SEMANTIC_SEARCH"}, {"LEAF_EMBED_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE"}}
+	{"LEAF_EMBEDDINGS", "LEAF_SEMANTIC_SEARCH"}}
 
 // Similarity floors per model, (search, related, tasks):
 //   - search: a query↔section similarity below this is not a hit. Vector
 //     search always has a "nearest" page, so without a floor every query,
-//     even gibberish, would fill the results. LEAF_SEMANTIC_MIN_SCORE
-//     overrides it.
+//     even gibberish, would fill the results. semantic-min-score in the
+//     settings file overrides it (searchFloor).
 //   - related: pages less similar than this (page↔page, each page the mean
 //     of its sections) are not listed as related.
 //   - tasks: as search, for deck tasks. Their texts are a few words, and
@@ -939,7 +939,16 @@ type chunkScore struct {
 	score float64
 }
 
-// chunkScores: the sections at least minScore similar to the query (of
+// searchFloor: the similarity a section needs to be a hit: the settings
+// file's semantic-min-score, else the model's floor (minScore).
+func (x *semanticIndex) searchFloor() float64 {
+	if s := settings(); s != nil && s.SemanticMinScore != nil {
+		return *s.SemanticMinScore
+	}
+	return x.minScore
+}
+
+// chunkScores: the sections at least searchFloor similar to the query (of
 // the pages in known, unless nil), in row order.
 func (x *semanticIndex) chunkScores(query string, known map[string]bool) []chunkScore {
 	if !x.ready.Load() || strings.TrimSpace(query) == "" {
@@ -948,7 +957,7 @@ func (x *semanticIndex) chunkScores(query string, known map[string]bool) []chunk
 	rows, scores, _, _ := x.scored(query)
 	var out []chunkScore
 	for i, r := range rows {
-		if scores[i] >= x.minScore && (known == nil || known[r.slug]) {
+		if scores[i] >= x.searchFloor() && (known == nil || known[r.slug]) {
 			out = append(out, chunkScore{r, scores[i]})
 		}
 	}
@@ -1138,17 +1147,9 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 		semLog("LEAF_SEMANTIC_SEARCH is on but %v; using keyword search only", err)
 		return nil
 	}
-	minScore := math.NaN()
-	if s := getenv("LEAF_SEMANTIC_MIN_SCORE"); s != "" {
-		if f, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
-			minScore = f
-		} else {
-			semLog("LEAF_SEMANTIC_MIN_SCORE is not a number; using the default")
-		}
-	}
 	semLog("semantic search on, model %s", emb.Name())
 	return newSemanticIndex(emb, filepath.Join(cfg.Data, ".leaf", "index", "embeddings.json"),
-		semanticTasks, minScore, math.NaN(), math.NaN(), relatedMinChars)
+		semanticTasks, math.NaN(), math.NaN(), math.NaN(), relatedMinChars)
 }
 
 // semanticStatus: how content search works now, for the search dialog:

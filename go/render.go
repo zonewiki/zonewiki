@@ -178,15 +178,15 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 }
 
 // shortDate: "Oct 5" (this year) or "Oct 5, 2025", as the deck's cards show
-// dates, in a <time class="local-date"> the browser rewrites in LEAF_LOCALE
-// (js/util.js localizeDates); "2025-10-05" with LEAF_DATE_FORMAT=iso.
+// dates, in a <time class="local-date"> the browser rewrites in the locale
+// setting (js/util.js localizeDates); "2025-10-05" with date-format = iso.
 func shortDate(iso, day string) string {
 	d, err := time.Parse("2006-01-02", runePrefix(iso, 10))
 	if err != nil {
 		return html.EscapeString(iso)
 	}
 	text := d.Format("Jan 2")
-	if cfg.DateFormat == "iso" {
+	if settings().DateFormat == "iso" {
 		text = d.Format("2006-01-02")
 	} else if runePrefix(iso, 4) != runePrefix(day, 4) {
 		text += d.Format(", 2006")

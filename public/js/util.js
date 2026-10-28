@@ -24,8 +24,8 @@ export const localDate = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // The dates the server writes in US English (<time class="local-date">, the
-// task chips' badges) rewritten in LEAF_LOCALE; without one they stay as they
-// are (with LEAF_DATE_FORMAT=iso the server writes them as ISO already).
+// task chips' badges) rewritten in the locale setting; without one they stay as they
+// are (with date-format = iso the server writes them as ISO already).
 export function localizeDates(root = document) {
   const dates = DeckCore.dateSettings(document.body.dataset);
   if (!dates.locale || dates.iso) return;

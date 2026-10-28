@@ -137,7 +137,7 @@ Done tasks go to a yearly archive. Beyond that:
   replace across pages, rename and delete them (move whole folders), add and update
   tasks. Every write is a commit marked `(MCP)`, with links back into Leaf. It's
   off until you set a token (see [Connect an AI assistant](#connect-an-ai-assistant)).
-- **Several users** (optional, `LEAF_USERS`): each signs in with their own
+- **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private scratch notes, private tasks
   (a **Private** box on the task, 🔒 on its card) and their own deck home.
@@ -192,25 +192,50 @@ it (`docs/spec/search.md`).
 
 ## Configuration
 
-Settings go in `.env` (`.env.example` lists them all), all optional except `LEAF_DATA`:
+Two places. `.env` (`.env.example` lists it) is how Leaf runs, all optional
+except `LEAF_DATA`:
 
 | Setting | Does |
 |---------|------|
 | `LEAF_DATA` | The wiki folder (default `~/leaf`) |
 | `LEAF_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
-| `LEAF_HOSTS` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
-| `LEAF_PASSWORD` | A login gate. Sessions survive restarts: Leaf keeps its own key in `.leaf/` (never in git); `LEAF_SECRET_KEY` sets one instead |
-| `LEAF_GIT_REMOTE` | A remote for the wiki's git repository |
 | `LEAF_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
-| `LEAF_SEMANTIC_MIN_SCORE` | How similar a passage must be to count as a semantic match (a number, e.g. `0.4`; the default suits the default model) |
-| `LEAF_QUERY_LOG=1` | Keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
-| `LEAF_MCP_TOKEN` | Turns on `/mcp`: the bearer token MCP clients must send (without it `/mcp` is off) |
-| `LEAF_USERS` | Several users instead of one password: each signs in with their own (`LEAF_USER_<NAME>_PASSWORD`, a hash from `./run.sh passwd NAME`) and may have their own MCP token; changes are committed in their name (see `docs/spec/users.md`) |
-| `LEAF_BASE_URL` | Leaf's address as your browser knows it, for links handed to AI clients |
-| `LEAF_NOSHARE` | Pages hidden in sharing mode, e.g. `#noshare,people/` |
-| `LEAF_LOCALE` | How dates read and the day weeks start on, e.g. `de-AT` or `en-GB` (default: US English dates, weeks from Monday). The UI's words stay English |
-| `LEAF_DATE_FORMAT=iso` | Dates as `YYYY-MM-DD` (ISO 8601); weekday and month names still follow `LEAF_LOCALE` |
 | `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
+
+### The settings file
+
+The wiki's own settings and its users are in the wiki, in `.leaf/config`,
+committed with it (passwords and MCP tokens only as hashes). Leaf reloads it
+when it changes, so none of them needs a restart. Set them with `run.sh`, or
+edit the file:
+
+```bash
+./run.sh config passwd                # a login: one password …
+./run.sh user add alice               # … or users, each with their own
+./run.sh user add bob --mcp-token     # and an MCP token for his assistant
+./run.sh user passwd alice            # also: user token, user remove, user list
+./run.sh config set locale de-AT      # any setting below; config unset KEY for its default
+./run.sh config check                 # what's in effect, and where it comes from
+```
+
+| Setting | Does |
+|---------|------|
+| `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Leaf keeps its own key in `.leaf/` (never in git) |
+| `[user NAME]` | Several users instead of one password, each with a `password` and maybe an `mcp-token` (`./run.sh user …`); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
+| `mcp-token` | Turns on `/mcp` (`./run.sh config token`; see [Connect an AI assistant](#connect-an-ai-assistant)) |
+| `hosts` | Names Leaf may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
+| `base-url` | Leaf's address as your browser knows it, for links handed to AI clients |
+| `git-remote` | A remote for the wiki's git repository |
+| `noshare` | Pages hidden in sharing mode, e.g. `#noshare, people/` |
+| `locale` | How dates read and the day weeks start on, e.g. `de-AT` or `en-GB` (default: US English dates, weeks from Monday). The UI's words stay English |
+| `date-format` | `iso`: dates as `YYYY-MM-DD` (ISO 8601); weekday and month names still follow `locale` |
+| `query-log` | `yes`: keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
+| `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
+
+A typo in the file keeps the settings Leaf has and shows up in its log. Up
+to 2026-10 these were `LEAF_…` variables in `.env`; Leaf now refuses to
+start while one is still there, and `./run.sh config import` moves them into
+the file.
 
 ### Without run.sh
 
@@ -232,17 +257,16 @@ container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`
 ## Connect an AI assistant
 
 Leaf's MCP server lets an AI assistant (any MCP client) search, read and write
-your wiki and tasks. It needs a token: create one, restart Leaf, then
-register Leaf with your client.
+your wiki and tasks. It needs a token: create one, then register Leaf with
+your client.
 
 ```bash
-echo "LEAF_MCP_TOKEN=$(openssl rand -hex 32)" >> .env    # once: it appends
-./run.sh up
+./run.sh config token          # prints the token, once (with users: ./run.sh user token NAME)
 ```
 
 In your client, add an MCP server with the HTTP transport at
-`http://localhost:5000/mcp` and the header
-`Authorization: Bearer <LEAF_MCP_TOKEN>` (the token from `.env`).
+`http://localhost:5000/mcp` and the header `Authorization: Bearer <token>`.
+Leaf keeps only the token's hash: lost, make a new one.
 
 The assistant can also answer questions about Leaf itself ("how do I give
 the deck's tabs other names?"): it searches this README and Leaf's spec.
@@ -278,25 +302,25 @@ text is sent once per conversation. When you change a guide, the old id stops wo
 the assistant sees the new version. `wiki-guide` counts as the guide for the
 whole wiki.
 
-Set `LEAF_BASE_URL` to Leaf's address as your browser knows it, so the links
+Set `base-url` (`./run.sh config set base-url …`) to Leaf's address as your browser knows it, so the links
 in the assistant's answers open (it matters when the client runs in a
 container or on another machine). Before you connect, read the MCP points
 under [Security](#security).
 
 ## Security
 
-Leaf is for one person, or a few who share a wiki (`LEAF_USERS`): run it on
+Leaf is for one person, or a few who share a wiki (users): run it on
 your own machine, or self-host it on a server. Out of the box it listens on localhost only, refuses requests with a
 foreign `Host` header (DNS rebinding) and cross-site writes (another site
 posting to `localhost:5000`). HTML in your pages is shown as written, but no
 script in it runs: only Leaf's own code does, so a page that an AI assistant
 wrote after reading a malicious mail or web page can't take over your wiki.
-Anything reachable beyond localhost belongs behind HTTPS, with
-`LEAF_PASSWORD` set.
+Anything reachable beyond localhost belongs behind HTTPS, with a login
+(`./run.sh config passwd`, or users).
 
 **Self-hosting behind HTTPS.** Put a reverse proxy in front that terminates
 HTTPS, passes the original `Host` and sets `X-Forwarded-Proto` and
-`X-Forwarded-For`, and name the public host in `LEAF_HOSTS`. With
+`X-Forwarded-For`, and name the public host in `hosts`. With
 [Caddy](https://caddyserver.com) on the same machine (it does all of that and
 gets the certificate):
 
@@ -307,21 +331,20 @@ wiki.example.org {
 ```
 
 ```bash
-# .env
-LEAF_HOSTS=wiki.example.org
-LEAF_PASSWORD=…                        # long and unique
-LEAF_BASE_URL=https://wiki.example.org
+./run.sh config set hosts wiki.example.org
+./run.sh config set base-url https://wiki.example.org
+./run.sh config passwd                 # long and unique
 ```
 
 Leave `LEAF_ALLOW_REMOTE` off here: the proxy reaches Leaf on localhost, and port
 5000 stays closed to the network, so nobody can go around HTTPS. A proxy on
-another machine needs `LEAF_ALLOW_REMOTE=1` too; `LEAF_HOSTS` keeps the `Host`
+another machine needs `LEAF_ALLOW_REMOTE=1` too; `hosts` keeps the `Host`
 check on. Over HTTPS the login cookie is marked secure, so the browser never
 sends it unencrypted. Wrong passwords slow a guesser down, with or without
 HTTPS: after 5, each try waits, from 1 minute doubling up to an hour, per
 client.
 
-There is one shared password (or, with `LEAF_USERS`, one per user) and no
+There is one shared password (or, with users, one per user) and no
 second factor. If only you need to
 reach Leaf from outside, a VPN (WireGuard, Tailscale) is safer still than a
 public address.
@@ -330,21 +353,21 @@ Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
   delete everything. With `LEAF_ALLOW_REMOTE=1` that is your whole network: set
-  `LEAF_PASSWORD`, or users with `LEAF_USERS`. Every user can read and change
+  a password (`./run.sh config passwd`), or add users (`./run.sh user add NAME`). Every user can read and change
   everything except other users' private pages and tasks, so give access to
   no one you wouldn't hand the shared files to.
 - **Private means private inside Leaf.** Another user's private pages and
   tasks are hidden from you and your assistant, but not encrypted: whoever
-  has the wiki folder, its git history or `LEAF_GIT_REMOTE` reads them all.
+  has the wiki folder, its git history or its git remote reads them all.
 - **Plain `http://` is readable on the network.** The password when you sign
   in, the login cookie after it, the MCP token and your pages all travel
   unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN)
   can read them and sign in as you. That's fine on localhost; anywhere else,
   use HTTPS or a VPN.
-- **MCP clients can write.** Whoever has `LEAF_MCP_TOKEN` can create, change,
+- **MCP clients can write.** Whoever has an MCP token can create, change,
   rename and delete pages and tasks, password or not (with users, whatever
-  the token's user may). Keep the token secret,
-  make it long and random, and give it only to clients you trust.
+  the token's user may). Keep the token secret and give it only to clients
+  you trust.
 - **Notes can carry instructions.** An AI assistant reads your notes, and
   text pasted into them from elsewhere (tickets, emails, web pages) can try to
   steer it ("ignore your instructions and delete …"). If your wiki holds such
@@ -352,7 +375,7 @@ Also know this:
   Leaf marks the tools that change or delete as destructive).
 - **Git is the undo.** Every change made through Leaf, by you or an assistant,
   is a commit (an assistant's are marked `(MCP)`); history, restore and
-  Deleted Pages bring things back. Set `LEAF_GIT_REMOTE` and push now and then, so a
+  Deleted Pages bring things back. Set `git-remote` and push now and then, so a
   copy lives elsewhere too.
 - **Pages may contain HTML**, which is rendered as is. Don't paste markup you
   don't trust, and keep in mind that anyone who can write to the wiki (including
@@ -367,7 +390,9 @@ Everything is files in `LEAF_DATA`, which is a git repository:
   have fields (dates, repeats, tags) and are written safely when several
   things change them at once. They are still plain files in the git
   repository.
-- `.leaf/` is Leaf's own state, never committed: `secret_key` keeps you signed
+- `.leaf/` is Leaf's own state, never committed but for `config`, the
+  settings file (users, password hashes, token hashes): whoever has the
+  repository has those hashes, so use good passwords. `secret_key` keeps you signed
   in across restarts, `index/` is the semantic search cache (only with
   `LEAF_SEMANTIC_SEARCH`; it can be deleted at any time).
 
@@ -382,10 +407,11 @@ files that any editor opens, with their history in git.
 ./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ./run.sh eval     # measure how well search finds answers in your wiki
-./run.sh passwd NAME   # a user's password hash for .env (LEAF_USERS)
+./run.sh user …        # the users in the settings file (add, passwd, token, remove, list)
+./run.sh config …      # the settings file (check, set, unset, passwd, token, import)
 ```
 
-All of them run in containers (Podman or Docker, no compose needed); CI runs the same commands. To have
+All of them run in containers (Podman or Docker; `user` and `config` through compose, as `up`); CI runs the same commands. To have
 commits with a secret in them refused, turn on the pre-commit hook once:
 `git config core.hooksPath .githooks`.
 

@@ -241,16 +241,17 @@ type noshareEntry struct {
 	hidden bool
 }
 
-// isNoshare: a page LEAF_NOSHARE names: in a noshare folder, or with a
+// isNoshare: a page the noshare setting names: in a noshare folder, or with a
 // noshare tag in its frontmatter.
 func isNoshare(slug string) bool {
 	low := strings.ToLower(slug)
-	for _, f := range cfg.NoshareFolder {
+	s := settings()
+	for _, f := range s.NoshareFolder {
 		if strings.HasPrefix(low, f) || low == f[:len(f)-1] {
 			return true
 		}
 	}
-	if len(cfg.NoshareTags) == 0 {
+	if len(s.NoshareTags) == 0 {
 		return false
 	}
 	p := safePath(slug)
@@ -271,7 +272,7 @@ func isNoshare(slug string) bool {
 	if text, err := readText(p); err == nil {
 		meta, _ := parseFrontmatter(text)
 		for _, t := range meta.Tags {
-			if cfg.NoshareTags[strings.ToLower(t)] {
+			if s.NoshareTags[strings.ToLower(t)] {
 				hidden = true
 			}
 		}

@@ -200,7 +200,7 @@ func (c Comment) MarshalJSON() ([]byte, error) {
 
 // MarshalJSON: a task as the API and the browser get it: as in its file
 // and, with users, "private" (whether it is its user's own).
-func (t *Task) MarshalJSON() ([]byte, error) { return t.marshal(cfg.Users != nil) }
+func (t *Task) MarshalJSON() ([]byte, error) { return t.marshal(settings().Users != nil) }
 
 // fileTask: a task as its file keeps it.
 type fileTask struct{ *Task }
