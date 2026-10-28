@@ -408,8 +408,21 @@ func readAll(user string) []*Task {
 	return append(readDeck(user), readCompleted(user)...)
 }
 
-// allTasks: every task user sees, archived ones too.
-func allTasks(user string) []*Task { return append(readAll(user), readArchived(deckOwners(user))...) }
+// openTasks: the open tasks user sees, under the lock: a task made private
+// or shared moves between two files, and a read between their writes
+// would miss it.
+func openTasks(user string) []*Task {
+	deckMu.Lock()
+	defer deckMu.Unlock()
+	return readDeck(user)
+}
+
+// allTasks: every task user sees, archived ones too, one snapshot.
+func allTasks(user string) []*Task {
+	deckMu.Lock()
+	defer deckMu.Unlock()
+	return slices.Concat(readDeck(user), readCompleted(user), readArchived(deckOwners(user)))
+}
 
 // everyTask: every task of every owner (Task.Owner says whose), for what
 // keeps all of them and filters by user later (the search index).

@@ -281,7 +281,7 @@ func deckCounts(rq *Req) DeckCounts {
 	}
 	scope, tag := cleanList(params.Get("list")), params.Get("tag")
 	var c DeckCounts
-	for _, t := range readDeck(rq.who()) {
+	for _, t := range openTasks(rq.who()) {
 		if !inScope(t, scope) || !tagParamMatches(t, tag) {
 			continue
 		}
@@ -303,7 +303,7 @@ func deckCounts(rq *Req) DeckCounts {
 
 func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/deck", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, readDeck(userOf(r)))
+		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
 		return nil
 	}))
 	// A hidden deck app, for a page without one that wants its edit modal

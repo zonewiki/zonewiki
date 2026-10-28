@@ -229,6 +229,40 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	}
 }
 
+// A task moving between the shared file and a private one is never missing
+// from a read (GET /api/deck, allTasks): the move writes two files.
+func TestReadsSeeAMovingTask(t *testing.T) {
+	for name, read := range map[string]func(string) []*Task{"openTasks": openTasks, "allTasks": allTasks} {
+		testWiki(t, nil)
+		withUsers(t, "alice")
+		task := newTestTask(t, "alice", "Scarf", false)
+		stop := make(chan struct{})
+		go func() {
+			defer close(stop)
+			for i := range 200 {
+				data := jsonObj{}
+				data.set("private", i%2 == 0)
+				if _, err := updateTask("alice", task.ID, data, ""); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+	reading:
+		for {
+			select {
+			case <-stop:
+				break reading
+			default:
+			}
+			if got := read("alice"); len(got) != 1 {
+				<-stop
+				t.Fatalf("%s: %d tasks while it moves", name, len(got))
+			}
+		}
+	}
+}
+
 // Without users nothing is private: the API refuses it and its JSON is as
 // before (no "private").
 func TestNoPrivateTasksWithoutUsers(t *testing.T) {
