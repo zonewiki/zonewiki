@@ -185,9 +185,15 @@ func newHandler() http.Handler {
 
 // apiHealth: Leaf answers, and took its settings file's last change (503
 // with the error if not: Leaf runs on the settings from before), for leaf
-// health.
+// health. It needs no login, and the error may name users: the error
+// itself only to whoever may read the wiki, everyone else is pointed to
+// the log.
 func apiHealth(w http.ResponseWriter, r *http.Request) {
 	if msg := settingsError(); msg != "" {
+		if _, ok, _ := signedIn(r); settings().authOn() && !ok {
+			msg = configName + " has an error, or a change Leaf doesn't take while it runs: see Leaf's log " +
+				"(./run.sh logs), or run leaf config check"
+		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})
 		return
 	}

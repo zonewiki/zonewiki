@@ -80,9 +80,11 @@ def test_a_removed_user_is_signed_out(client, config):
 def test_removing_every_user_keeps_the_login_until_a_restart(client, config):
     """No users and no password would open the wiki, and private/ with it:
     a running Leaf doesn't take that from a reload."""
+    login(client, "alice", "alice-pw")
     write(config, "locale = de-AT\n")
     assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
     assert "without a login" in client.get("/api/health", headers=HOST).get_json()["error"]
+    client.post("/logout", headers=HOST)
     assert client.get("/page/index", headers=HOST).status_code == 302
     assert login(client, "alice", "alice-pw").status_code == 302
 
@@ -119,6 +121,16 @@ def test_a_broken_file_keeps_the_settings_and_fails_health(client, config):
 
 def test_health_needs_no_login(client, config):
     assert client.get("/api/health", headers=HOST).status_code == 200
+
+
+def test_health_tells_only_who_may_read_the_wiki_what_is_wrong(client, config):
+    """The error may name users: without a session, only that there is one."""
+    write(config, config.read_text() + "[user dave]\n")
+    assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
+    error = client.get("/api/health", headers=HOST).get_json()["error"]
+    assert "dave" not in error and "see Leaf's log" in error
+    login(client, "alice", "alice-pw")
+    assert "dave" in client.get("/api/health", headers=HOST).get_json()["error"]
 
 
 def test_settings_reload_too(client, config):
