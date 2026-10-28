@@ -197,14 +197,16 @@ def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch
     assert ".leaf" not in text and "Change settings" not in text
 
 
-def test_an_older_wikis_exclude_lets_the_file_in(client, git_wiki_dir, monkeypatch):
-    """A wiki an older Leaf set up excluded all of .leaf/."""
+@pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", "")])
+def test_an_older_wikis_exclude_lets_the_file_in(client, git_wiki_dir, monkeypatch, line, kept):
+    """A wiki an older Leaf set up excluded all of .leaf/ (also as written
+    by hand: without the slashes, or a newline at the end)."""
     exclude = git_wiki_dir / ".git" / "info" / "exclude"
     assert "/.leaf/*\n!/.leaf/config\n" in exclude.read_text()
-    exclude.write_text("/.leaf/\n")
+    exclude.write_text(line)
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
-    assert exclude.read_text() == "/.leaf/*\n!/.leaf/config\n"
+    assert exclude.read_text() == kept + "/.leaf/*\n!/.leaf/config\n"
     assert ".leaf/config" in git(git_wiki_dir, "ls-files")
 
 
