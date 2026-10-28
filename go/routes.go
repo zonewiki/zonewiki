@@ -351,6 +351,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, conflict, http.StatusFound)
 		return
 	}
+	commitOthersDraft(userOf(r), s.slug, s.path)
 	// Unchanged: no write, but still a commit when the file is dirty.
 	if err := s.write(content); err != nil {
 		serverError(w, r, err)
@@ -397,10 +398,12 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		}
 		content = s.text
 	}
+	commitOthersDraft(userOf(r), s.slug, s.path)
 	if err := s.write(content); err != nil {
 		serverError(w, r, err)
 		return
 	}
+	noteDraft(s.path, userOf(r))
 	switch {
 	case s.section || isForce:
 		writeJSON(w, http.StatusOK, M{"file_hash": newHash, "start_char": newStart, "end_char": newEnd})
@@ -593,6 +596,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	commitOthersDraft(userOf(r), slug, path)
 	if err := os.Remove(path); err != nil {
 		serverError(w, r, err)
 		return
@@ -681,6 +685,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
+	commitOthersDraft(userOf(r), r.PathValue("slug"), path)
 	content, err := readText(path)
 	if err == nil {
 		err = writeText(path, toggleNthCheckbox(content, idx, true))
@@ -689,6 +694,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
+	noteDraft(path, userOf(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 

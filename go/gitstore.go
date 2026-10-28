@@ -148,9 +148,10 @@ func gitCommit(user, message string, paths ...string) {
 	runGit(args...)
 	if user != "" {
 		runGit("commit", "--author", user+" <"+user+"@leaf>", "-m", message)
-		return
+	} else {
+		runGit("commit", "-m", message)
 	}
-	runGit("commit", "-m", message)
+	forgetDrafts(args[2:]...) // committed: no one's draft now
 }
 
 // excludeLeafState keeps .leaf/ out of git (the session key, the caches,
@@ -209,6 +210,7 @@ var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 // and commits the move (by user) with the pages and deck files whose links
 // changed.
 func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
+	commitOthersDraft(user, slug, oldPath)
 	if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
 		return nil, err
 	}

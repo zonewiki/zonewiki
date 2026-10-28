@@ -218,6 +218,7 @@ func restoreRevision(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	commitOthersDraft(user, slug, path)
 	if err := writeText(path, content); err != nil {
 		serverError(w, r, err)
 		return
@@ -304,7 +305,8 @@ func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 	}
 	committed := []string{}
 	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
-		gitCommit(userOf(r), commitMessage(f.Filepath), filepath.Join(cfg.Data, f.Filepath))
+		path := filepath.Join(cfg.Data, f.Filepath)
+		gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path)
 		committed = append(committed, f.Filepath)
 	}
 	writeJSON(w, http.StatusOK, M{"committed": len(committed), "files": committed})
@@ -333,6 +335,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, M{"error": "File is not uncommitted"})
 		return
 	}
-	gitCommit(userOf(r), commitMessage(fp), filepath.Join(cfg.Data, fp))
+	path := filepath.Join(cfg.Data, fp)
+	gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(fp), path)
 	writeJSON(w, http.StatusOK, M{"success": true})
 }

@@ -8,7 +8,7 @@ from io import BytesIO
 import pytest
 
 from tests import settings
-from tests.conftest import HOST
+from tests.conftest import HOST, content_hash
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "")}
 
@@ -174,3 +174,88 @@ class TestAuthors:
         client.put(f"/api/deck/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
         assert '"by"' not in (git_wiki_dir / "_deck" / "tasks.json").read_text()
         assert "hist-by" not in client.get("/history/index", headers=HOST).data.decode()
+
+
+def git(wiki, *args):
+    return subprocess.run(["git", *args], cwd=wiki, capture_output=True, text=True, check=True,
+                          env=settings.GIT_ENV).stdout
+
+
+class TestDrafts:
+    """Several people on one page: the text someone auto-saved is
+    committed in their name before another's write to the page, so it is
+    in git under its author and not in the other's commit."""
+
+    PAGE = "# Plans\n\nThe start.\n\n- [ ] Item\n"
+    BOBS = "# Plans\n\nThe start.\n\n- [ ] Item\n\nBob's line.\n"
+
+    @pytest.fixture()
+    def bobs_draft(self, client, git_wiki_dir, users):
+        """plans, committed; bob's auto-save on it, not committed; alice signed in."""
+        (git_wiki_dir / "plans.md").write_text(self.PAGE)
+        git(git_wiki_dir, "add", "-A")
+        git(git_wiki_dir, "commit", "-q", "-m", "Plans")
+        login(client, "bob", "bob-pw")
+        assert client.post("/api/save/plans", data={"content": self.BOBS, "file_hash": content_hash(self.PAGE)},
+                           headers=HOST).status_code == 200
+        client.post("/logout", headers=HOST)
+        login(client, "alice", "alice-pw")
+        return git_wiki_dir
+
+    def test_another_users_save_commits_the_draft_first(self, client, bobs_draft):
+        alices = self.BOBS + "\nAlice's line.\n"
+        assert client.post("/api/save/plans", data={"content": alices, "file_hash": content_hash(self.BOBS)},
+                           headers=HOST).status_code == 200
+        assert authors(bobs_draft)[0] == ("bob", "Save plans")
+        assert git(bobs_draft, "show", "HEAD:plans.md") == self.BOBS
+        client.post("/edit/plans", data={"content": alices, "file_hash": content_hash(alices)}, headers=HOST)
+        assert authors(bobs_draft)[:2] == [("alice", "Update plans"), ("bob", "Save plans")]
+        diff = git(bobs_draft, "show", "HEAD", "--format=")
+        assert "+Alice's line." in diff and "+Bob's line." not in diff
+
+    def test_done_by_another_user_doesnt_take_the_draft(self, client, bobs_draft):
+        client.post("/edit/plans", data={"content": self.BOBS, "file_hash": content_hash(self.BOBS)}, headers=HOST)
+        assert authors(bobs_draft)[0] == ("bob", "Save plans")
+        assert git(bobs_draft, "status", "--porcelain") == ""
+
+    def test_ones_own_drafts_stay_uncommitted(self, client, bobs_draft):
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        more = self.BOBS + "More.\n"
+        client.post("/api/save/plans", data={"content": more, "file_hash": content_hash(self.BOBS)}, headers=HOST)
+        assert "Save plans" not in [s for a, s in authors(bobs_draft)]   # no commit per pause in typing
+        client.post("/edit/plans", data={"content": more, "file_hash": content_hash(more)}, headers=HOST)
+        assert authors(bobs_draft)[0] == ("bob", "Update plans")
+
+    @pytest.mark.parametrize("write", ["checkbox", "delete", "rename", "commit-all", "commit-file", "mcp"])
+    def test_other_writes_commit_the_draft_first(self, client, bobs_draft, write):
+        """Bob's line goes into git in a commit of his, never in one of alice's."""
+        if write == "checkbox":
+            client.post("/api/toggle-checkbox/plans", data={"idx": "0"}, headers=HOST)
+        elif write == "delete":
+            client.post("/delete/plans", headers=HOST)
+        elif write == "rename":
+            client.post("/rename/plans", data={"new_name": "plans-2"}, headers=HOST)
+        elif write == "commit-all":
+            client.post("/api/commit-all", headers=HOST)
+        elif write == "commit-file":
+            client.post("/api/commit-file", json={"filepath": "plans.md"}, headers=HOST)
+        else:
+            mcp(client, "alice-token", "edit_page", slug="plans", old_string="The start.", new_string="The begin.")
+        with_line = [author for author, diff in self.commits(bobs_draft) if "+Bob's line." in diff]
+        assert with_line == ["bob"]
+
+    @staticmethod
+    def commits(wiki):
+        """Each commit's author and diff, newest first."""
+        shas = git(wiki, "log", "--format=%H").split()
+        return [(git(wiki, "show", "-s", "--format=%an", sha).strip(), git(wiki, "show", "--format=", sha))
+                for sha in shas]
+
+    def test_without_users_nothing_changes(self, client, git_wiki_dir):
+        (git_wiki_dir / "plans.md").write_text(self.PAGE)
+        client.post("/api/save/plans", data={"content": self.BOBS, "file_hash": content_hash(self.PAGE)},
+                    headers=HOST)
+        client.post("/api/save/plans", data={"content": self.BOBS + "x\n", "file_hash": content_hash(self.BOBS)},
+                    headers=HOST)
+        assert "Save plans" not in [s for a, s in authors(git_wiki_dir)]

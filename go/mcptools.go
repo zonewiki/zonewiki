@@ -355,14 +355,15 @@ func commitMsg(action string, args jsonObj) (string, error) {
 
 // savePending: before a write, commit what the page holds that isn't
 // committed yet (the browser editor auto-saves without committing; or
-// edits on disk), as the user's own "Save <slug>". Else that text would
-// end up in the model's commit, or be lost to an overwrite or a delete.
-// Returns a note for the model: the user may have the page open.
+// edits on disk), as "Save <slug>" by whoever wrote it (commitAuthorOf;
+// unknown: Leaf). Else that text would end up in the model's commit, or
+// be lost to an overwrite or a delete. Returns a note for the model: the
+// user may have the page open.
 func savePending(path, slug string) string {
 	if path == "" || !exists(path) || !isUncommitted(path) {
 		return ""
 	}
-	gitCommit("", "Save "+slug, path)
+	gitCommit(commitAuthorOf(path, ""), "Save "+slug, path)
 	return "\nNote: " + slug + " had changes that weren't committed yet (the user may be editing it " +
 		"in the browser); they were committed first, as \"Save " + slug + "\", and kept."
 }
@@ -374,18 +375,28 @@ func savePendingPages(paths []string, what string) string {
 	for _, f := range gitUncommittedFiles() {
 		pending[filepath.Join(cfg.Data, f.Filepath)] = true
 	}
-	var save []string
+	// One commit per author, in the order they first come.
+	var authors []string
+	byAuthor := map[string][]string{}
+	save := 0
 	for _, p := range paths {
 		if pending[p] {
-			save = append(save, p)
+			a := commitAuthorOf(p, "")
+			if byAuthor[a] == nil {
+				authors = append(authors, a)
+			}
+			byAuthor[a] = append(byAuthor[a], p)
+			save++
 		}
 	}
-	if len(save) == 0 {
+	if save == 0 {
 		return ""
 	}
-	gitCommit("", "Save "+what, save...)
+	for _, a := range authors {
+		gitCommit(a, "Save "+what, byAuthor[a]...)
+	}
 	return fmt.Sprintf("\nNote: %d of the pages had changes that weren't committed yet (the user may be "+
-		"editing them in the browser); they were committed first, as \"Save %s\", and kept.", len(save), what)
+		"editing them in the browser); they were committed first, as \"Save %s\", and kept.", save, what)
 }
 
 // ── Guides ──────────────────────────────────────────────────────────────────

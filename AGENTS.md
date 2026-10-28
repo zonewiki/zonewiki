@@ -99,6 +99,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
+│   ├── merge.go            # Several editors on one page: who wrote a page's uncommitted draft (commitOthersDraft)
 │   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
 │   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in _deck/users/<user>/), lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
