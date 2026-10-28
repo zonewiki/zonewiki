@@ -68,6 +68,7 @@ type configFile struct {
 	lines []string
 	top   map[string]configValue // key → value, outside every section
 	users []configUser           // the [user …] sections, in order
+	read  string                 // the text as read (a command's check that no one changed it since)
 }
 
 type configValue struct {
@@ -116,8 +117,10 @@ func isComment(line string) bool {
 // a user's, a key given twice: an error naming its line, as a typo
 // shouldn't leave Leaf on a default.
 func parseConfig(text string) (*configFile, error) {
+	read := text
 	text = strings.TrimPrefix(strings.ReplaceAll(text, "\r\n", "\n"), "\ufeff")
-	f := &configFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n"), top: map[string]configValue{}}
+	f := &configFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n"), top: map[string]configValue{},
+		read: read}
 	if text == "" {
 		f.lines = nil
 	}
@@ -676,6 +679,9 @@ func writeConfig(path, text string) error {
 	defer os.Remove(tmp.Name())
 	if err = tmp.Chmod(0o600); err == nil {
 		_, err = tmp.WriteString(text)
+	}
+	if err == nil {
+		err = tmp.Sync() // on disk before it replaces the file
 	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr

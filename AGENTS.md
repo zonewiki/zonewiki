@@ -86,7 +86,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health, leaf user, leaf config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .leaf/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
-│   ├── commands.go         # leaf user (add, passwd, token, remove, list) and leaf config (check, set, unset, passwd, token, import), which edit the settings file
+│   ├── commands.go         # leaf user (add, passwd, token, remove, list) and leaf config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)

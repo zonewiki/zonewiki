@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -73,6 +74,23 @@ func saveConfig(f *configFile) error {
 	}
 	if err != nil {
 		return fmt.Errorf("not changed: %w", err)
+	}
+	// One command at a time, and only onto the file it read: another's
+	// change in between (a command, an editor) isn't overwritten.
+	if err := os.MkdirAll(filepath.Dir(configPath()), 0o777); err != nil {
+		return err
+	}
+	unlock, err := lockFile(configPath() + ".lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	b, err := os.ReadFile(configPath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if string(b) != f.read {
+		return fmt.Errorf("not changed: %s changed while this command ran. Run it again.", configName)
 	}
 	return writeConfig(configPath(), f.text())
 }
@@ -260,7 +278,11 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("%q isn't a setting Leaf knows.", key)
 		}
 		if args[0] == "set" {
-			f.set("", key, strings.Join(args[2:], " "))
+			value := strings.Join(args[2:], " ")
+			if strings.ContainsAny(value, "\r\n") {
+				return fail("a value is one line.")
+			}
+			f.set("", key, value)
 		} else {
 			f.unset("", key)
 		}

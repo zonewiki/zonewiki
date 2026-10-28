@@ -495,7 +495,7 @@ func TestConfigCommands(t *testing.T) {
 		t.Errorf("unset: %s", f.text())
 	}
 	for _, c := range [][]string{{"set", "locale", "de_AT"}, {"set", "pasword", "x"}, {"set", "password", "x"},
-		{"set", "mcp-token", "x"}} {
+		{"set", "mcp-token", "x"}, {"set", "base-url", "http://x\n[user eve]\npassword = x"}} {
 		if code, _, errs := run("", c...); code != 1 || errs == "" {
 			t.Errorf("%v: %d", c, code)
 		}
@@ -516,6 +516,20 @@ func TestConfigCommands(t *testing.T) {
 		if code, _, errs := run("", c...); code != 2 || !strings.Contains(errs, "Usage") {
 			t.Errorf("usage %v", c)
 		}
+	}
+	// A command writes only onto the file it read.
+	env["LEAF_DATA"] = wiki2
+	f, err := openConfig(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.set("", "locale", "fr")
+	rewrite(t, filepath.Join(wiki2, ".leaf", "config"), "locale = it\n")
+	if err := saveConfig(f); err == nil || !strings.Contains(err.Error(), "changed while this command ran") {
+		t.Errorf("changed meanwhile: %v", err)
+	}
+	if f, _ = readConfigFile(filepath.Join(wiki2, ".leaf", "config")); f.top["locale"].value != "it" {
+		t.Errorf("overwritten: %s", f.text())
 	}
 	_ = os.WriteFile(filepath.Join(wiki2, ".leaf", "config"), []byte("x\n"), 0o600)
 	if code, _, errs := run("", "check"); code != 1 || !strings.Contains(errs, "line 1") {
