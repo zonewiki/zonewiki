@@ -2433,14 +2433,17 @@ def _day(offset: int) -> str:
 
 
 def _pick(page, d: str):
-    """Click date `d` in the open date picker, paging forward if needed."""
+    """Click date `d` in the open date picker, paging toward it if needed
+    (the picker opens on the month of the date it holds, which may be after
+    `d`: near a month's end, a deadline in the next month)."""
     picker = page.locator(".deck-datepicker")
     for _ in range(3):
         cell = picker.locator(f".dp-day[data-date='{d}']")
         if cell.count():
             cell.click()
             return
-        picker.locator(".dp-nav[data-nav='1']").click()
+        shown = picker.locator(".dp-day[data-date]").first.get_attribute("data-date")
+        picker.locator(f".dp-nav[data-nav='{-1 if d < shown else 1}']").click()
     raise AssertionError(f"{d} not in the picker")
 
 
