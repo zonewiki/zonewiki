@@ -766,7 +766,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	}
 	// An undo sends the old history back with the old fields.
 	if data.has("history") {
-		t.History = cleanHistory(data["history"])
+		t.History = keepOthersHistory(user, t.History, cleanHistory(data["history"]))
 	}
 	msg := "Update deck task"
 	switch {
@@ -852,6 +852,33 @@ func keepOthersComments(user string, have, given []Comment) ([]Comment, error) {
 		}
 	}
 	return out, nil
+}
+
+// keepOthersHistory: a task's history as a request sends it whole (an
+// undo), checked against the one it has, with users: the request may only
+// leave out entries, its user's own or no one's (an undo takes out what
+// the change it undoes added); what someone else did stays, and an entry
+// the task doesn't have is dropped, so no one wipes or forges who worked
+// on a task, which mayMakePrivate goes by. Without users there is no one
+// to name.
+func keepOthersHistory(user string, have, given []HistoryEntry) []HistoryEntry {
+	if settings().Users == nil {
+		return given
+	}
+	sent := map[HistoryEntry]int{}
+	for _, e := range given {
+		sent[e]++
+	}
+	out := []HistoryEntry{}
+	for _, e := range have {
+		if sent[e] > 0 {
+			sent[e]--
+		} else if e.By == "" || e.By == user {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned
@@ -1221,7 +1248,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if change.has("history") {
-			t.History = cleanHistory(change["history"])
+			t.History = keepOthersHistory(userOf(r), t.History, cleanHistory(change["history"]))
 		}
 		updated = append(updated, t)
 	}

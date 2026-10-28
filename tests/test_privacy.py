@@ -428,6 +428,32 @@ def test_comments_are_their_authors_to_change(alice, wiki):
                         headers=HOST).status_code == 200
 
 
+def test_history_keeps_who_worked_on_a_task(alice, wiki):
+    """A whole history sent back (an undo) can't drop what bob did, nor add
+    an entry in his name, so alice can't clear the way to making his task
+    private; her own undo still takes her own entries out."""
+    sign_in(alice, "bob")
+    task = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
+    url = f"/api/deck/{task['id']}"
+    alice.put(url, json={"due_date": "2026-03-01"}, headers=HOST)
+    sign_in(alice, "alice")
+
+    def history():
+        return next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == task["id"])["history"]
+    bobs = history()
+    assert bobs and {e["by"] for e in bobs} == {"bob"}
+    forged = {"at": "2026-01-01T10:00", "event": "due", "by": "carol", "from": None, "to": "2026-01-02"}
+    for sent in ([], [{**e, "by": "alice"} for e in bobs], [*bobs, forged]):
+        assert alice.put(url, json={"history": sent}, headers=HOST).get_json()["history"] == bobs
+    alice.post("/api/deck/batch-update", json={"tasks": [{"id": task["id"], "history": []}]}, headers=HOST)
+    assert history() == bobs
+    assert alice.put(url, json={"private": True}, headers=HOST).status_code == 400
+    # Her own undo: the old history back drops her change's entry.
+    alice.put(url, json={"start_date": "2026-02-01"}, headers=HOST)
+    assert [e["by"] for e in history()] == [e["by"] for e in bobs] + ["alice"]
+    assert alice.put(url, json={"start_date": None, "history": bobs}, headers=HOST).get_json()["history"] == bobs
+
+
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     snap = next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == TASK_ID)
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204
