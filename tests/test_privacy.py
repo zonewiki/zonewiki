@@ -25,6 +25,7 @@ REPO = Path(__file__).resolve().parent.parent
 SECRET = "quokkaflute"
 QUERY = "zebracorn"
 DIARY = "private/alice/diary"
+SNEAK = "private/bob/../alice/diary"   # the diary, by way of bob's own folder
 NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her scratch note
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
@@ -462,6 +463,9 @@ def mcp(client, tool, token="bob-token", **args):
 MCP_READS = [
     ("read_page", {"slug": DIARY}),
     ("read_page", {"slug": "plans"}),                            # links to the diary
+    ("read_page", {"slug": SNEAK}),
+    ("history", {"slug": SNEAK}),
+    ("read_guides", {"slug": SNEAK}),
     ("search_wiki", {"query": QUERY}),
     ("search_wiki", {"query": QUERY, "under": "private"}),
     ("search_wiki", {"query": QUERY, "scratch": True}),
@@ -563,6 +567,8 @@ WRITES = [
     ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "", "name": "x", "link_from": DIARY}}),
     ("POST /append/{slug...}", "POST", f"/append/{NOTE}", {"data": {"page": "plans", "heading": "Stolen"}}),
     ("POST /append/{slug...}", "POST", "/append/{bobs}", {"data": {"page": DIARY, "heading": "Bob's"}}),
+    ("POST /append/{slug...}", "POST", "/append/{bobs}", {"data": {"page": SNEAK, "heading": "Bob's"}}),
+    ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "", "name": "x", "link_from": SNEAK}}),
     ("POST /api/toggle-checkbox/{slug...}", "POST", f"/api/toggle-checkbox/{DIARY}", {"data": {"idx": "0"}}),
     ("POST /api/commit-file", "POST", "/api/commit-file", {"json": {"filepath": "private/alice/draft.md"}}),
     ("POST /api/commit-all", "POST", "/api/commit-all", {}),
@@ -630,6 +636,11 @@ MCP_WRITES = [
     ("write_page", {"slug": DIARY, "content": "# Bob was here\n", "overwrite": True}),
     ("write_page", {"slug": "private/alice/bobs", "content": "# Bob was here\n"}),
     ("edit_page", {"slug": DIARY, "old_string": QUERY, "new_string": "bob"}),
+    ("edit_page", {"slug": SNEAK, "old_string": QUERY, "new_string": "bob"}),
+    ("append_to_page", {"slug": SNEAK, "content": "Bob was here"}),
+    ("delete_page", {"slug": SNEAK}),
+    ("rename_page", {"slug": SNEAK, "new_slug": "stolen"}),
+    ("file_scratch_note", {"slug": "{bobs}", "page": SNEAK}),
     ("append_to_page", {"slug": DIARY, "content": "Bob was here"}),
     ("replace_in_pages", {"find": QUERY, "replace": "bob", "dry_run": False}),
     ("rename_page", {"slug": DIARY, "new_slug": "stolen"}),
@@ -662,6 +673,18 @@ def test_bobs_assistant_changes_nothing_of_alices(client, wiki, tool, args):
     for commit in git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split():
         assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
     assert SECRET not in text
+
+
+def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
+    """private/bob/../alice/… is judged as it is opened, alice's: what bob
+    writes by such a name lands in his own folder, if anywhere."""
+    def hers():
+        return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in (wiki / "private/alice").rglob("*")}
+    before = hers()
+    mcp(bob, "write_page", slug=SNEAK, content="# Bob was here\n", overwrite=True)
+    note = bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"]
+    bob.post(f"/promote/{note}", data={"folder": "private/bob/../alice", "name": "x"}, headers=HOST)
+    assert hers() == before
 
 
 def test_moving_the_private_folder_is_refused(client, wiki):

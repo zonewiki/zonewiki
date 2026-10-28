@@ -8,6 +8,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,17 +20,19 @@ const privateDir = "private"
 // ownerIn: a path inside a user's folder below folder (slash-separated,
 // relative; "private/alice/x"): (that user, true); below folder but in no
 // user's folder ("private/carol/x", "private/alice" itself): ("", true);
-// elsewhere: ("", false). Without users nothing is private.
+// elsewhere: ("", false). Without users nothing is private. rel is judged
+// as safePath opens it, cleaned: "private/bob/../alice/x" is alice's.
 func ownerIn(folder, rel string) (owner string, private bool) {
-	if settings().Users == nil {
+	users := settings().Users
+	if users == nil {
 		return "", false
 	}
-	rest, found := strings.CutPrefix(strings.ToLower(rel), folder+"/")
+	rest, found := strings.CutPrefix(strings.ToLower(path.Clean(rel)), folder+"/")
 	if !found {
 		return "", false
 	}
 	name, _, inside := strings.Cut(rest, "/")
-	if !inside || settings().Users[name] == nil {
+	if !inside || users[name] == nil {
 		return "", true
 	}
 	return name, true

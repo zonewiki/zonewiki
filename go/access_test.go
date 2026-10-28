@@ -45,6 +45,12 @@ func TestAccessWithUsers(t *testing.T) {
 		{"private/alice", "", true, false, false}, // a page beside the folders: no one's
 		{"private/carol/x", "", true, false, false},
 		{"private/mary-ann/x", "mary-ann", true, false, false},
+		// Judged as safePath opens them, cleaned.
+		{"private/bob/../alice/diary", "alice", true, true, false},
+		{"private/alice/../bob/x", "", true, false, false},
+		{"private/alice/./diary", "alice", true, true, false},
+		{"notes/../private/alice/x", "alice", true, true, false},
+		{"private/alice/../../index", "", false, true, true},
 	} {
 		if o, p := pageOwner(c.slug); o != c.owner || p != c.private {
 			t.Errorf("pageOwner(%s) = %q %v", c.slug, o, p)
