@@ -91,8 +91,9 @@ LEAF_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
 
 Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$LEAF_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
-- `$LEAF_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically)
-- `$LEAF_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/deck.md`)
+- `$LEAF_DATA/private/<user>/` — with `LEAF_USERS`, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
+- `$LEAF_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a private page's in `_assets/private/<user>/`
+- `$LEAF_DATA/_deck/` — the deck's tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/deck.md`); each user's private tasks in `_deck/users/<user>/`
 - `$LEAF_DATA/.leaf/` — Leaf's own state, not in git: `secret_key` (session key) and `index/` (the semantic search cache, rebuildable)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.

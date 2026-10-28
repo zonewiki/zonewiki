@@ -4,9 +4,8 @@ through his MCP token, must not see a word of them anywhere, nor change
 them.
 
 Every route Leaf registers is either probed here or listed as exempt
-(test_every_route_is_covered), so a new route gets checked too. Probes for
-what a later phase of docs/plans/multi-user.md closes are marked xfail with
-that phase, strictly: once it passes, the mark must go."""
+(test_every_route_is_covered), and every MCP tool
+(test_every_tool_is_covered), so a new one gets checked too."""
 
 import json
 import re
@@ -99,10 +98,6 @@ def fill(path, wiki):
     """A probe's path with the diary's commit ({sha}) and the commit that
     still had the deleted page ({old})."""
     return path.replace("{sha}", sha(wiki)).replace("{old}", git(wiki, "rev-parse", "HEAD~1"))
-
-
-def later(phase, why=""):
-    return pytest.mark.xfail(strict=True, reason=f"phase {phase} of docs/plans/multi-user.md {why}".strip())
 
 
 # ── Reads ────────────────────────────────────────────────────────────────────

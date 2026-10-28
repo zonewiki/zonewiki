@@ -66,7 +66,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress (multi-user.md), deleted when done
+├── docs/plans/             # Working plans for changes in progress (none now), deleted when done
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)

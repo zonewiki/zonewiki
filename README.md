@@ -35,10 +35,11 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   notes, and manage tasks. Its edits land as git commits marked `(MCP)` that
   you can review, diff or undo.
 
-Leaf is for one person's notes and tasks on a server you run. It is
-deliberately a single process with no plugins, no graph view and no real-time
-collaboration, so it isn't a team product or a plugin platform. That keeps it
-small and readable.
+Leaf is for one person's notes and tasks on a server you run, or a few
+people's (a household, a small group) who share one wiki, each with their own
+login and private pages and tasks. It is deliberately a single process with no
+plugins, no graph view and no real-time collaboration, so it isn't a team
+product or a plugin platform. That keeps it small and readable.
 
 ## How Leaf is organised
 
@@ -136,6 +137,11 @@ Done tasks go to a yearly archive. Beyond that:
   replace across pages, rename and delete them (move whole folders), add and update
   tasks. Every write is a commit marked `(MCP)`, with links back into Leaf. It's
   off until you set a token (see [Connect an AI assistant](#connect-an-ai-assistant)).
+- **Several users** (optional, `LEAF_USERS`): each signs in with their own
+  name and password, their changes are committed in their name, and each has
+  a private folder (`private/<name>/`), private scratch notes, private tasks
+  (a **Private** box on the task, 🔒 on its card) and their own deck home.
+  Everything else is shared. See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,
   backlinks and counts, and pages you've marked as not for sharing.
@@ -325,14 +331,19 @@ Also know this:
 - **No login by default.** Anyone who can reach the port can read, change and
   delete everything. With `LEAF_ALLOW_REMOTE=1` that is your whole network: set
   `LEAF_PASSWORD`, or users with `LEAF_USERS`. Every user can read and change
-  everything, so give access to no one you wouldn't hand the files to.
+  everything except other users' private pages and tasks, so give access to
+  no one you wouldn't hand the shared files to.
+- **Private means private inside Leaf.** Another user's private pages and
+  tasks are hidden from you and your assistant, but not encrypted: whoever
+  has the wiki folder, its git history or `LEAF_GIT_REMOTE` reads them all.
 - **Plain `http://` is readable on the network.** The password when you sign
   in, the login cookie after it, the MCP token and your pages all travel
   unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN)
   can read them and sign in as you. That's fine on localhost; anywhere else,
   use HTTPS or a VPN.
 - **MCP clients can write.** Whoever has `LEAF_MCP_TOKEN` can create, change,
-  rename and delete pages and tasks, password or not. Keep the token secret,
+  rename and delete pages and tasks, password or not (with users, whatever
+  the token's user may). Keep the token secret,
   make it long and random, and give it only to clients you trust.
 - **Notes can carry instructions.** An AI assistant reads your notes, and
   text pasted into them from elsewhere (tickets, emails, web pages) can try to
