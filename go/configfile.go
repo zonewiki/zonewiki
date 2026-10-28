@@ -412,10 +412,21 @@ func settingsError() string {
 }
 
 func reloadSettings() {
+	// The git work after the lock: the other requests wait only for the
+	// look at the file, not for a commit.
+	if old, s := takeSettings(); s != nil {
+		applySettings(old, s)
+		commitSettings(settingsChange(old, s))
+	}
+}
+
+// takeSettings: a changed file's settings, now in effect, and those they
+// replace; nil if the file is as it was or has an error.
+func takeSettings() (old, s *Settings) {
 	reloadMu.Lock()
 	defer reloadMu.Unlock()
 	if time.Since(lastLook) < reloadEvery {
-		return
+		return nil, nil
 	}
 	lastLook = time.Now()
 	path := configPath()
@@ -425,22 +436,21 @@ func reloadSettings() {
 	}
 	if st == nil && lastStat == nil || st != nil && lastStat != nil && os.SameFile(st, lastStat) &&
 		st.ModTime().Equal(lastStat.ModTime()) && st.Size() == lastStat.Size() {
-		return
+		return nil, nil
 	}
 	if st == nil {
 		// Gone (or between an editor's delete and write): keep what Leaf
 		// has, as taking it away could open the wiki.
 		lastStat = nil
 		settingsFailed(fmt.Errorf("%s was removed: Leaf keeps the settings it had until it is back, or a restart", configName))
-		return
+		return nil, nil
 	}
 	lastStat = st
 	f, err := readConfigFile(path)
-	var s *Settings
 	if err == nil {
 		s, err = loadSettings(f)
 	}
-	old := settings()
+	old = settings()
 	if err == nil && old.authOn() && !s.authOn() {
 		// The users (or the password) gone: everyone could get in, and
 		// private/ would be an ordinary folder. Only on purpose, a restart.
@@ -449,14 +459,13 @@ func reloadSettings() {
 	}
 	if err != nil {
 		settingsFailed(err)
-		return
+		return nil, nil
 	}
 	current.Store(s)
 	settingsErr.Store(nil)
 	logf("reloaded %s", configName)
 	warnReadable(path)
-	applySettings(old, s)
-	commitSettings(settingsChange(old, s))
+	return old, s
 }
 
 // commitSettings commits the settings file, if it is there and changed:

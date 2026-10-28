@@ -125,13 +125,18 @@ func commitAuthor(name string) string {
 	return name
 }
 
+var commitMu sync.Mutex
+
 // gitCommit stages paths (in the wiki) and commits them together, by user
 // (the author; "": Leaf itself, or a wiki without users). The committer is
-// always Leaf.
+// always Leaf. One at a time (commitMu): another's add between this add
+// and its commit would go into this commit, in this user's name.
 func gitCommit(user, message string, paths ...string) {
 	if !cfg.GitEnabled {
 		return
 	}
+	commitMu.Lock()
+	defer commitMu.Unlock()
 	args := []string{"add", "--"}
 	for _, p := range paths {
 		rel, ok := wikiRel(p)

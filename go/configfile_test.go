@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -197,6 +198,36 @@ func TestReloadSettings(t *testing.T) {
 	reloadSettings()
 	if settings().Locale != "it" {
 		t.Error("looked again too soon")
+	}
+}
+
+// A reload's commit waits for the other commits (commitMu), and the other
+// requests don't wait for it: reloadMu is free while it runs.
+func TestReloadCommitsOutsideItsLock(t *testing.T) {
+	path := configWiki(t, "locale = de\n")
+	cfg.GitEnabled = true
+	commitMu.Lock()
+	rewrite(t, path, "locale = fr\n")
+	done := make(chan bool)
+	go func() { reloadSettings(); close(done) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for settings().Locale != "fr" && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !reloadMu.TryLock() {
+		t.Error("reloadMu held while the reload commits")
+	} else {
+		reloadMu.Unlock()
+	}
+	select {
+	case <-done:
+		t.Error("committed past commitMu")
+	case <-time.After(50 * time.Millisecond):
+	}
+	commitMu.Unlock()
+	<-done
+	if settings().Locale != "fr" {
+		t.Error("not taken")
 	}
 }
 
