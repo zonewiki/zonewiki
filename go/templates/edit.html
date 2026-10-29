@@ -6,6 +6,14 @@
 <div class="editor-wrap">
   <div class="editor-pane">
     {{.breadcrumb_html}}
+    {{- /* A new page from a link on a private page would be shared: say so,
+        and offer it as a private page (js/editor.js). */}}
+    {{- if .private_offer}}
+    <div class="shared-new-banner" id="shared-new-banner" role="note" data-private-slug="{{.private_offer}}">
+      <span>🌐 This new page is shared: everyone who uses the wiki will see it.</span>
+      <span class="conflict-actions"><button type="button" class="btn btn-small btn-primary" id="shared-new-private">Make it private instead</button><button type="button" class="btn btn-small" id="shared-new-keep">Keep shared</button></span>
+    </div>
+    {{- end}}
     <div class="editor-toolbar">
       <span class="slug-label" title="{{.slug}}">{{.slug}}</span>
       <span id="save-dot" class="save-dot">●</span>

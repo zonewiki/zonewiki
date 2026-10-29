@@ -17,7 +17,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |
-| POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview) |
+| POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview); `?page=` the page being edited (your own private page: its links to new shared pages are marked) |
 | POST   | `/api/render-notes`   | Deck task notes and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Notes in `docs/spec/deck.md`) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |

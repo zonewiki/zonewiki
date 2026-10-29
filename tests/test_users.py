@@ -116,7 +116,7 @@ class TestPrivateHome:
         home = git_wiki_dir / "private/alice/index.md"
         assert home.read_text().startswith("# Private\n") and "## Links" in home.read_text()
         assert authors(git_wiki_dir)[0] == ("alice", "Create private/alice/index")
-        assert "Only you see these pages." in client.get("/page/private/alice/index", headers=HOST).data.decode()
+        assert "hidden from the other users of this wiki." in client.get("/page/private/alice/index", headers=HOST).data.decode()
         home.write_text("# Mine\n\n[[plans]]\n")
         client.get("/private", headers=HOST)
         assert home.read_text() == "# Mine\n\n[[plans]]\n"   # a later visit leaves it alone
@@ -286,6 +286,79 @@ class TestModuleMenu:
             assert ('class="module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes" '
                     'title="Private home and Scratch notes" aria-current="page"' in crumb) == current, url
             assert ('aria-current="page"' in bar.split("module-menu-btn", 1)[1].split(">", 1)[0]) == current, url
+
+
+class TestSharedNewPage:
+    """A link on a private page to a page that doesn't exist would make a shared
+    page: the link is marked, and the editor it opens warns and offers the
+    page as a private one."""
+
+    @pytest.fixture()
+    def alice(self, client, git_wiki_dir, users):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/diary.md").write_text(
+            "# Diary\n\n[[Garden]] [[garden#beds|Beds]] [[Plans]] [[private/alice/later]] [[private/bob/x]]\n")
+        (git_wiki_dir / "plans.md").write_text("# Plans\n\n[[Garden]]\n")
+        login(client, "alice", "alice-pw")
+        return client
+
+    def view(self, client, slug):
+        return client.get(f"/page/{slug}", headers=HOST).data.decode()
+
+    def test_a_link_to_a_new_shared_page_is_marked(self, alice):
+        body = self.view(alice, "private/alice/diary")
+        assert ('<a href="/page/garden?from=private" class="wikilink wikilink-missing wikilink-shared-new" '
+                'title="Creates a shared page">Garden</a>') in body
+        assert '<a href="/page/garden?from=private#beds" class="wikilink wikilink-missing wikilink-shared-new"' in body
+        # an existing page, a new private page, another user's: nothing to warn of
+        assert '<a href="/page/plans" class="wikilink">Plans</a>' in body
+        assert 'href="/page/private/alice/later" class="wikilink wikilink-missing">' in body
+        assert body.count("wikilink-shared-new") == 2
+
+    def test_a_shared_page_marks_nothing(self, alice):
+        assert "wikilink-shared-new" not in self.view(alice, "plans") and "from=private" not in self.view(alice, "plans")
+
+    def test_without_users_nothing_is_marked(self, client, wiki_dir):
+        (wiki_dir / "private/alice").mkdir(parents=True)
+        (wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n[[Garden]]\n")
+        assert "wikilink-shared-new" not in self.view(client, "private/alice/diary")
+
+    def test_the_preview_marks_by_the_page_it_is_for(self, alice):
+        def preview(query):
+            return alice.post(f"/api/preview{query}", data="[[Garden]]", headers=HOST).data.decode()
+        assert "wikilink-shared-new" in preview("?page=private/alice/diary")
+        assert "wikilink-shared-new" not in preview("")
+        assert "wikilink-shared-new" not in preview("?page=plans")
+        assert "wikilink-shared-new" not in preview("?page=private/bob/x")   # not hers
+
+    def test_the_missing_page_opens_its_editor_with_the_hint(self, alice):
+        resp = alice.get("/page/garden?from=private", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/edit/garden?from=private"
+        assert alice.get("/page/garden", headers=HOST).headers["Location"] == "/edit/garden"
+        assert alice.get("/page/garden?from=nonsense", headers=HOST).headers["Location"] == "/edit/garden"
+
+    def test_the_editor_warns_and_offers_a_private_page(self, alice, git_wiki_dir):
+        body = alice.get("/edit/garden?from=private", headers=HOST).data.decode()
+        assert 'id="shared-new-banner"' in body and 'data-private-slug="private/alice/garden"' in body
+        assert "This new page is shared" in body
+        for url in ("/edit/garden", "/edit/garden?from=other", "/edit/plans?from=private",   # no hint; a page that exists
+                    "/edit/private/alice/garden?from=private"):                               # private already
+            assert "shared-new-banner" not in alice.get(url, headers=HOST).data.decode(), url
+        (git_wiki_dir / "private/alice/garden.md").write_text("# Mine\n")
+        assert "shared-new-banner" not in alice.get("/edit/garden?from=private", headers=HOST).data.decode()
+
+    def test_the_editor_does_not_warn_without_users(self, client, wiki_dir):
+        assert "shared-new-banner" not in client.get("/edit/garden?from=private", headers=HOST).data.decode()
+
+    def test_the_offer_is_a_rename_of_the_saved_page(self, alice, git_wiki_dir):
+        """What the banner's button does: auto-save, then the ordinary rename."""
+        alice.post("/api/save/garden", data={"content": "# Garden\n\nbeds\n"}, headers=HOST)
+        resp = alice.post("/rename/garden", data={"new_name": "private/alice/garden"}, headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/garden"
+        assert not (git_wiki_dir / "garden.md").exists()
+        assert (git_wiki_dir / "private/alice/garden.md").read_text() == "# Garden\n\nbeds\n"
+        # a page never saved: the rename says 404, and the button only moves the editor
+        assert alice.post("/rename/nothing", data={"new_name": "private/alice/nothing"}, headers=HOST).status_code == 404
 
 
 class TestAuthors:

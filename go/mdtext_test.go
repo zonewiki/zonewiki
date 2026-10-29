@@ -52,7 +52,7 @@ func TestWikilinks(t *testing.T) {
 		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it&#39;s</a>`,
 	}
 	for in, want := range cases {
-		if got := processWikilinks(sharing, in, slugs); got != want {
+		if got := processWikilinks(sharing, in, slugs, ""); got != want {
 			t.Errorf("%s:\n got %s\nwant %s", in, got, want)
 		}
 	}
@@ -64,7 +64,7 @@ func prepare(text string) (string, []deckEmbed, []string) {
 	text, stash := maskCode(text)
 	text, embeds := processDeckEmbeds(nil, text, false)
 	text, refs := maskTaskRefs(text)
-	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}), stash), embeds, refs
+	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, ""), stash), embeds, refs
 }
 
 // Code is masked: [[…]] in it stays as written.

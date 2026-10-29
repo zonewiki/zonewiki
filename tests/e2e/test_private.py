@@ -192,3 +192,65 @@ def test_a_shared_page_gets_no_offer(alice, wiki):
     alice.keyboard.press("Control+End")
     alice.keyboard.type("[[brandnew")
     expect(alice.locator(".wikilink-ac-item")).to_have_count(0)
+
+
+# ── A link from a private page to a new shared page ──────────────────────────
+
+@pytest.fixture()
+def diary(alice, wiki):
+    wiki.write("private/alice/diary", "# Diary\n\nSee [[Garden]].\n")
+    wiki.git("add", "-A")
+    wiki.git("commit", "-qm", "seed")
+    alice.goto("/page/private/alice/diary")
+    return alice
+
+
+def test_the_link_is_marked_and_opens_a_warning_editor(diary):
+    link = diary.locator("a.wikilink-shared-new")
+    expect(link).to_have_attribute("title", "Creates a shared page")
+    assert "\U0001F310" in link.evaluate("el => getComputedStyle(el, '::after').content")
+    link.click()
+    diary.wait_for_url("**/edit/garden?from=private")
+    banner = diary.locator("#shared-new-banner")
+    expect(banner).to_contain_text("This new page is shared")
+    # Keep shared: the banner goes, the page stays shared.
+    banner.get_by_role("button", name="Keep shared").click()
+    expect(banner).to_have_count(0)
+    diary.keyboard.press("Control+End")
+    diary.keyboard.type("beds")
+    expect(diary.locator("#save-dot")).not_to_have_class("save-dot unsaved", timeout=5000)
+
+
+def test_make_it_private_instead_moves_what_is_typed(diary, wiki):
+    diary.locator("a.wikilink-shared-new").click()
+    diary.wait_for_url("**/edit/garden?from=private")
+    diary.keyboard.press("Control+End")
+    diary.keyboard.type("beds and paths")
+    diary.get_by_role("button", name="Make it private instead").click()
+    diary.wait_for_url("**/edit/private/alice/garden")
+    expect(diary.locator("#editor-textarea")).to_have_value(re.compile(r"beds and paths"))
+    expect(diary.locator("#shared-new-banner")).to_have_count(0)
+    # Nothing shared was left behind, nor ever committed.
+    diary.wait_for_timeout(500)   # a save on the way out would have made it by now
+    assert not (wiki.root / "garden.md").exists()
+    assert (wiki.root / "private/alice/garden.md").read_text().endswith("beds and paths")
+    assert wiki.git("log", "--all", "--format=%s", "--", "garden.md").strip() == ""
+    # The rename re-points the diary's link: it now goes to the private page.
+    assert "[[private/alice/garden]]" in wiki.read("private/alice/diary")
+
+
+def test_make_it_private_instead_before_typing_only_moves_the_editor(diary, wiki):
+    diary.locator("a.wikilink-shared-new").click()
+    diary.get_by_role("button", name="Make it private instead").click()
+    diary.wait_for_url("**/edit/private/alice/garden")
+    expect(diary.locator("#editor-textarea")).to_have_value(re.compile(r"^# Garden"))
+    diary.wait_for_timeout(500)
+    assert not (wiki.root / "garden.md").exists()
+
+
+def test_the_editors_preview_marks_the_link_too(alice, wiki):
+    wiki.write("private/alice/diary", "# Diary\n\n")
+    alice.goto("/edit/private/alice/diary")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("See [[Garden]]")
+    expect(alice.locator("#editor-preview a.wikilink-shared-new")).to_have_count(1)

@@ -816,6 +816,22 @@ main {
   .conflict-banner { background: #451a03; color: #fbbf24; border-color: #b45309; }
 }
 
+/* A new page from a link on a private page: shared unless made private. */
+.shared-new-banner {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .6rem 1rem;
+  margin-bottom: .5rem;
+  font-size: .85rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+/* A link on a private page to a page that doesn't exist yet and would be shared. */
+.wikilink-shared-new::after { content: "\1F310"; font-size: .7em; opacity: .6; margin-left: .2em; }
+
 /* ── Modals ──────────────────────────────────────────────────────────────────── */
 
 /* Shared dialog chrome; per-modal rules set width and vertical position. */

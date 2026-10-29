@@ -18,8 +18,11 @@ import (
 // processWikilinks: [[Page]], [[Page|Label]], [[Page#Section]],
 // [[#Section]] as links; to a missing page with class wikilink-missing, to
 // a page hidden in sharing mode as its label only. slugs: the wiki's pages
-// (nil: listed now).
-func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
+// (nil: listed now). from: the user's own private page the text is on ("" for
+// any other): a link from it to a missing page that would be shared is marked
+// (wikilink-shared-new) and carries ?from=private, so the editor it opens
+// warns that the new page is shared and offers it as a private one.
+func processWikilinks(rq *Req, text string, slugs map[string]bool, from string) string {
 	if slugs == nil {
 		slugs = slugSet()
 	}
@@ -44,11 +47,15 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
 			// Sharing mode: the words stay (they are this page's), the link goes.
 			return `<span class="wikilink-hidden">` + label + `</span>`
 		}
-		css := "wikilink"
+		css, query, title := "wikilink", "", ""
 		if !slugs[slug] {
 			css += " wikilink-missing"
+			if _, private := pageOwner(slug); from != "" && !private {
+				css += " wikilink-shared-new"
+				query, title = "?from=private", ` title="Creates a shared page"`
+			}
 		}
-		return `<a href="` + pathURL("page", slug) + anchor + `" class="` + css + `">` + label + `</a>`
+		return `<a href="` + pathURL("page", slug) + query + anchor + `" class="` + css + `"` + title + `>` + label + `</a>`
 	})
 }
 
@@ -56,7 +63,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool) string {
 // ### heading its ✎, SectionTasks (findTaskBacklinks) a heading tasks link
 // to its ☑ N chip; PreferLists are lists a task chip links into.
 type RenderOpts struct {
-	Page               string // the page rendered, "" none (a preview): its deck embeds make private tasks in the user's own folder
+	Page               string // the page rendered, "" none: its deck embeds make private tasks in the user's own folder, its links to new pages are marked if shared (a preview gets it as ?page=)
 	HideTags, HideTldr bool
 	PreferLists        []string
 	EditSlug           string
@@ -75,7 +82,11 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, stash := maskCode(text)
 	text, embeds := processDeckEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
-	text = unmaskCode(processWikilinks(rq, text, nil), stash)
+	from := ""
+	if ownPrivate(rq.who(), o.Page) {
+		from = o.Page
+	}
+	text = unmaskCode(processWikilinks(rq, text, nil, from), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq)}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)
@@ -103,7 +114,7 @@ func renderNotes(rq *Req, texts []string, inline bool) []string {
 	for i, text := range texts {
 		text, stash := maskCode(text)
 		text, refs := maskTaskRefs(text)
-		text = unmaskCode(processWikilinks(rq, text, slugs), stash)
+		text = unmaskCode(processWikilinks(rq, text, slugs, ""), stash)
 		result := markdown(text, &Env{Host: requestHost(rq)}, inline)
 		out[i] = headingIDAttrRE.ReplaceAllString(injectTaskRefs(rq, result, refs, nil), "$1")
 	}
@@ -370,7 +381,7 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	slugs := slugSet()
 	var items strings.Builder
 	for _, s := range sources {
-		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs), &Env{Host: requestHost(rq)}, true) + "</li>")
+		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs, ""), &Env{Host: requestHost(rq)}, true) + "</li>")
 	}
 	return `<section class="page-sources"><h2 id="` + hid + `">Sources</h2><ul>` + items.String() + `</ul></section>`
 }

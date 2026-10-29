@@ -125,7 +125,11 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 				"date": date, "breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "")})
 			return
 		}
-		http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
+		to := pathURL("edit", slug)
+		if r.URL.Query().Get("from") == "private" {
+			to += "?from=private" // the link was on a private page (processWikilinks)
+		}
+		http.Redirect(w, r, to, http.StatusFound)
 		return
 	}
 	content, err := readText(path)
@@ -276,6 +280,11 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	if !isNew && !hasSection {
 		fileHash = contentHash(content)
 	}
+	// A new page from a link on a private page: shared, unless made private.
+	privateOffer := ""
+	if isNew && !hasSection {
+		privateOffer = sharedNewOffer(rq.user, slug, q.Get("from") == "private")
+	}
 	extra := crumb{"Edit", ""}
 	if hasSection {
 		extra = crumb{"§ " + strconv.Itoa(section), ""}
@@ -286,6 +295,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// The file's hash for conflict detection, whole page or section.
 		"file_hash": fileHash, "can_rename": editable && !isProtected(slug), "can_delete": editable && !isProtected(slug),
 		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"), "left_draft": left,
+		"private_offer":   privateOffer,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
 		"deck_html":       htmlOf(buildDeckEmbed(rq.user, DeckParams{}, 0, true, ownPrivate(rq.user, slug)))})
@@ -888,7 +898,14 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.WriteString(w, renderMd(newReq(r), string(body), RenderOpts{PreferLists: lists}))
+	// ?page=: the page being edited, for what depends on where the text is
+	// (its own private folder); only the user's own pages count.
+	rq := newReq(r)
+	page := r.URL.Query().Get("page")
+	if !ownPrivate(rq.who(), page) {
+		page = ""
+	}
+	_, _ = io.WriteString(w, renderMd(rq, string(body), RenderOpts{Page: page, PreferLists: lists}))
 }
 
 // apiRenderNotes: deck task notes and comments as HTML, as pages render:

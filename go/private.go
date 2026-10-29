@@ -11,7 +11,7 @@ import (
 )
 
 // privateHomeText is what a new private home holds.
-const privateHomeText = "# Private\n\nOnly you see these pages.\n\n## Links\n\n"
+const privateHomeText = "# Private\n\nPages in your private folder are hidden from the other users of this wiki.\n\n## Links\n\n"
 
 // privateHomeSlug: user's private home ("private/alice/index"), "" without users.
 func privateHomeSlug(user string) string {
@@ -79,4 +79,23 @@ func privacyMove(user, slug string) (target string, toPrivate, ok bool) {
 		return rest, false, rest != slug && rest != ""
 	}
 	return folder + "/" + slug, true, true
+}
+
+// sharedNewOffer: a new page opened from a link on one of the user's private
+// pages (?from=private) that would be shared: the private slug it can be
+// made as instead, "" when there is nothing to offer (not from a private
+// page, no users, the page is private already, or that private page exists).
+func sharedNewOffer(user, slug string, fromPrivate bool) string {
+	folder := privateFolder(user)
+	if folder == "" || !fromPrivate {
+		return ""
+	}
+	if _, private := pageOwner(slug); private {
+		return ""
+	}
+	target := folder + "/" + slug
+	if p := safePath(target); p == "" || exists(p) {
+		return ""
+	}
+	return target
 }
