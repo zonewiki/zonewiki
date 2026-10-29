@@ -1847,6 +1847,33 @@ def test_adding_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
     wait_for_field(page, "Scarf", "private", True)
 
 
+def test_c_t_with_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
+    # The shared deck home is list=task, and alice declares task in her
+    # folder too: c t starts with #task, so Private is ticked, and the note
+    # says the shared page declares it as well. (The tag a new task starts
+    # with once didn't count: only one added in the modal did.)
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("team", "# Team\n\n[[deck list=task home=1]]\n")
+    wiki.write("private/alice/mine", "# Mine\n\n[[deck list=task]]\n")
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal.locator(".tag-chip")).to_contain_text("task")
+    private = modal.locator("input[id^=task-edit-private]")
+    note = modal.locator("[id^=task-edit-private-note]")
+    expect(private).to_be_checked()
+    expect(note).to_have_text(
+        "#task is your private list (a shared page declares it too: others won't see this task)")
+    modal.locator("[id^=task-edit-title]").fill("Call the bank")
+    modal.locator("button[type=submit]").click()
+    expect(modal).to_be_hidden()
+    task = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Call the bank")
+    assert task["private"] is True
+
+
 def test_private_box_is_off_on_someone_elses_task(page, wiki, monkeypatch):
     # bob made it: alice can't take it from him.
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})

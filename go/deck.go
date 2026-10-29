@@ -205,6 +205,13 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 	lists := deckLists(user)
 	names = sortedKeys(lists)
 	privateNames := sortedKeys(privateLists(lists, user))
+	// Of those, the ones a shared page declares too (the modal's note says so).
+	shared, sharedToo := deckLists(""), []string{}
+	for _, n := range privateNames {
+		if _, ok := shared[n]; ok {
+			sharedToo = append(sharedToo, n)
+		}
+	}
 	homes := map[string]string{}
 	for _, n := range names {
 		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
@@ -227,6 +234,7 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
 		"private_folder": privateFolder(user), "private_lists_json": jsonText(privateNames),
+		"private_shared_json": jsonText(sharedToo),
 		"lists_json": listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {

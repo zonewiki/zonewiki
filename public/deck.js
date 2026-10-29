@@ -149,6 +149,10 @@ const privateNote = document.getElementById('task-edit-private-note' + sfx);
 // on an existing task the note only suggests it.
 let privateLists = new Set();
 try { privateLists = new Set(JSON.parse(appEl?.dataset.privateLists || '[]')); } catch (_) {}
+// Those of them a shared page declares too: others see that list without
+// the user's tasks in it, so the note says so.
+let sharedToo = new Set();
+try { sharedToo = new Set(JSON.parse(appEl?.dataset.privateShared || '[]')); } catch (_) {}
 let privateBase = null;   // as the modal opened: {checked, isNew, tags (lower case)}
 let privateTouched = false;
 const me = appEl?.dataset.privateFolder?.split('/')[1] || '';
@@ -3153,12 +3157,14 @@ function syncQuickPreview() {
   quickPreview.textContent = quickText(q);
 }
 
-// Tags of the user's private lists the modal added (in Tags, or as #tag in
-// a new task's title), lower case.
+// Tags of the user's private lists on the task (in Tags, or as #tag in a
+// new task's title), lower case: for a new task all of them, those it
+// starts with too (a home's or an embed's tags); for an existing one only
+// those the modal added.
 function addedPrivateLists() {
   const q = !batchTitles && quickParse();
   return [...editTags(), ...(q ? q.tags : [])].map(t => t.toLowerCase())
-    .filter(t => privateLists.has(t) && !privateBase.tags.has(t));
+    .filter(t => privateLists.has(t) && (privateBase.isNew || !privateBase.tags.has(t)));
 }
 // A private list's tag makes a new task private (unless the box was
 // clicked; taking the tag away again undoes that) and only suggests it for
@@ -3170,8 +3176,9 @@ function syncAutoPrivate() {
   const show = added.length > 0 && !privateBase.checked && !privateCb.disabled;
   privateNote.hidden = !show;
   if (show) {
-    privateNote.textContent = privateCb.checked ? `#${added[0]} is your private list`
-      : `#${added[0]} is your private list: tick Private to keep this task to yourself`;
+    const list = `#${added[0]} is your private list` +
+      (sharedToo.has(added[0]) ? ' (a shared page declares it too: others won\'t see this task)' : '');
+    privateNote.textContent = privateCb.checked ? list : `${list}: tick Private to keep this task to yourself`;
   }
 }
 privateCb?.addEventListener('change', () => { privateTouched = true; syncAutoPrivate(); });
