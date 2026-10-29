@@ -7,6 +7,7 @@ Every route Leaf registers is either probed here or listed as exempt
 (test_every_route_is_covered), and every MCP tool
 (test_every_tool_is_covered), so a new one gets checked too."""
 
+import datetime
 import json
 import re
 import subprocess
@@ -83,6 +84,10 @@ def wiki(git_wiki_dir, monkeypatch):
     git(w, "rm", "-q", "private/alice/old.md")
     git(w, "commit", "-q", "-m", "Delete private/alice/old")
     (w / "private/alice/draft.md").write_text(f"# Draft {SECRET}\n\n{QUERY} {SECRET}\n")
+    # Changes she left on the shared page in conflict (the editor's save on leaving).
+    (w / ".leaf/drafts/alice").mkdir(parents=True)
+    (w / ".leaf/drafts/alice/plans.json").write_text(json.dumps(
+        {"content": f"# Plans {SECRET}\n", "base": "# Plans\n", "at": datetime.datetime.now().isoformat() + "Z"}))
     return w
 
 
@@ -166,6 +171,11 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
     assert "2001" not in body or "2001" in str(kwargs), "the year of alice's archive"
     if path.startswith(f"/page/{DIARY}") or "/private/alice/" in path:
         assert resp.status_code == 404
+
+
+def test_alice_is_offered_the_changes_she_left(alice, wiki):
+    body = alice.get("/edit/plans", headers=HOST).get_data(as_text=True)
+    assert 'id="left-draft"' in body and SECRET in body
 
 
 def test_alice_sees_her_own(client, wiki):

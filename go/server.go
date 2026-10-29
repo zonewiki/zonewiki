@@ -73,6 +73,7 @@ func main() {
 	excludeLeafState(cfg.Data) // the secret key, the caches; not the settings file
 	commitSettings("Change settings")
 	ensureHomePage()
+	cleanLeftDrafts()
 	initDeck()
 	// The semantic index's worker reads tasks: after the deck is set up.
 	if *semanticTest != "" {

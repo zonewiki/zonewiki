@@ -37,6 +37,14 @@
     </div>
     {{- end}}
     {{- with .paste}}{{template "paste_hint" .}}{{end}}
+    {{- with .left_draft}}
+    {{- /* Changes the user left here in conflict (merge.go leftDraft):
+        editor.js offers the conflict banner's choices for them. */}}
+    <div id="left-draft" hidden data-at="{{.at}}">
+      <textarea id="left-draft-content" tabindex="-1">{{.content}}</textarea>
+      {{- with .conflict}}<textarea id="left-draft-conflict" tabindex="-1">{{.}}</textarea>{{end}}
+    </div>
+    {{- end}}
     {{template "format_bar" (dict)}}
     <form id="editor-form" method="post" action="{{url "edit" .slug}}">
       {{- /* The file's hash, for conflict detection (whole page and section edits). */}}

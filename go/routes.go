@@ -241,6 +241,22 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	section, hasSection := intArg(q.Get("section"), q.Has("section"))
+	// Changes the user left here in conflict: offered on the whole page.
+	var left M
+	if d, ok := draftLeft(rq.user, path); ok && !isNew && d.Content == content {
+		dropDraft(rq.user, path) // the page holds it now: nothing to offer
+	} else if ok && !isNew {
+		if hasSection {
+			http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
+			return
+		}
+		left = M{"content": d.Content, "at": d.At.Format("2006-01-02 15:04")}
+		if d.Base != "" {
+			if merged, _, err := mergeText(d.Base, content, d.Content, "theirs"); err == nil {
+				left["conflict"] = merged
+			}
+		}
+	}
 	fileHash, start, end := "", 0, 0
 	if hasSection && !isNew {
 		if s, e, ok := sectionCharRange(content, section); ok {
@@ -266,7 +282,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		"has_section": hasSection, "section": section, "start_char": start, "end_char": end,
 		// The file's hash for conflict detection, whole page or section.
 		"file_hash": fileHash, "can_rename": editable && !isProtected(slug), "can_delete": editable && !isProtected(slug),
-		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"),
+		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"), "left_draft": left,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
 		"deck_html":       htmlOf(buildDeckEmbed(rq.user, DeckParams{}, 0, true, ownPrivate(rq.user, slug)))})
@@ -369,6 +385,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	keepBase(content)
+	dropDraft(userOf(r), s.path)
 	gitCommit(userOf(r), "Update "+s.slug, s.path)
 	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
@@ -406,6 +423,9 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 				// The lines that clash, with git's markers, for Merge by hand.
 				answer["conflict"] = m.content
 			}
+		}
+		if r.PostFormValue("leaving") == "1" {
+			keepLeftDraft(r, s)
 		}
 		writeJSON(w, http.StatusConflict, answer)
 		return true
@@ -448,6 +468,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteDraft(s.path, userOf(r))
+	dropDraft(userOf(r), s.path)
 	keepBase(content)
 	switch {
 	case merged != nil:
@@ -506,7 +527,32 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 		return
 	}
 	gitCommit(user, "Reload "+s.slug, s.path)
+	dropDraft(user, s.path)
 	writeJSON(w, http.StatusOK, M{"set_aside": true})
+}
+
+// keepLeftDraft: the editor's save on leaving the page (leaving=1) was
+// refused: its text, as a whole page, is kept for its user (leaveDraft).
+// A section goes into the text it came from, or, that not kept, into the
+// page as it is now at its index (section_idx).
+func keepLeftDraft(r *http.Request, s *editorSave) {
+	base, _ := baseText(s.fileHash)
+	whole := s.text
+	if s.section {
+		var ok bool
+		switch idx, hasIdx := formInt(r, "section_idx"); {
+		case base != "":
+			whole, _, _, _, ok = spliceSection(&base, s.fileHash, s.start, s.end, s.text)
+		case hasIdx && s.current != nil:
+			if start, end, valid := sectionCharRange(*s.current, idx); valid {
+				whole, _, _, _, ok = spliceSection(s.current, contentHash(*s.current), start, end, s.text)
+			}
+		}
+		if !ok {
+			return
+		}
+	}
+	leaveDraft(userOf(r), s.path, whole, base)
 }
 
 // createPage: /new, the New page dialog; private=1 puts the page in the

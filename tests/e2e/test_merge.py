@@ -148,3 +148,28 @@ def test_done_on_a_clash_shows_the_banner_with_its_choices(editors):
     expect(banner).to_contain_text("bob changed the same lines")
     expect(banner.get_by_role("button", name="Merge by hand")).to_be_visible()
     assert "/edit/plans" in alice.url
+
+
+def test_changes_left_in_conflict_come_back_on_the_next_visit(editors, wiki):
+    """alice leaves the page before her clashing change is saved: it is kept
+    for her (not in the page), and her next visit offers the choices."""
+    alice, bob = editors
+    type_after(bob, " By Bob.", "First.")
+    saved(bob)
+    type_after(alice, " By Alice.", "First.")
+    alice.goto("/page/index")                  # before her auto-save: the save on leaving
+    kept = wiki.root / ".leaf/drafts/alice/plans.json"
+    for _ in range(50):
+        if kept.exists():
+            break
+        alice.wait_for_timeout(100)
+    assert kept.exists() and "By Alice" not in wiki.read("plans")
+    alice.goto("/edit/plans")
+    banner = alice.locator(".conflict-banner")
+    expect(banner).to_contain_text("You left changes here")
+    expect(banner.get_by_role("button", name="Merge by hand")).to_be_visible()
+    banner.get_by_role("button", name="Keep mine").click()
+    expect(banner).to_have_count(0)
+    assert wiki.read("plans") == PAGE.replace("First.", "First. By Alice.")
+    assert not kept.exists()
+    assert "First. By Bob." in wiki.git("show", "HEAD:plans.md")     # his, in git

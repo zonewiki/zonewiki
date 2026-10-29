@@ -189,6 +189,14 @@ if (textarea && previewPane) {
     data.append('merge', '1');
   }
 
+  // The save on leaving the page: refused, its text is kept for this user
+  // and offered on the next visit (the server's leftDraft).
+  function appendLeavingFields(data) {
+    data.append('leaving', '1');
+    const sectionIdxEl = document.getElementById('section-idx');
+    if (isSectionEdit && sectionIdxEl) data.append('section_idx', sectionIdxEl.value);
+  }
+
   function setHash(hash, start, end) {
     if (sectionHashEl && hash) sectionHashEl.value = hash;
     if (isSectionEdit && start !== undefined) {
@@ -292,6 +300,8 @@ if (textarea && previewPane) {
   // A change that clashes with yours: Reload theirs (yours goes into the
   // page's history first), Keep mine (theirs is in git already), or, for a
   // whole page, Merge by hand (the lines with git's markers).
+  // info.left: changes the user left here in conflict (the save on leaving
+  // the page was refused), offered with the same choices, for the whole page.
   function showConflictBanner(fromDone, info = {}) {
     if (sectionConflict) return;
     sectionConflict = true;
@@ -299,8 +309,9 @@ if (textarea && previewPane) {
     const banner = document.createElement('div');
     banner.className = 'conflict-banner';
     const msg = document.createElement('span');
-    msg.textContent = '\u26a0 ' + (info.by ? `${info.by} changed the same lines` : 'This page was changed')
-      + ' while you were editing.';
+    msg.textContent = '\u26a0 ' + (info.left
+      ? `You left changes here (${info.left.at}) that clash with a change made since.`
+      : (info.by ? `${info.by} changed the same lines` : 'This page was changed') + ' while you were editing.');
     banner.append(msg);
     const actions = document.createElement('span');
     actions.className = 'conflict-actions';
@@ -312,7 +323,7 @@ if (textarea && previewPane) {
     document.getElementById('conflict-reload').addEventListener('click', async () => {
       // Yours first into the page's history, then the page as it is now.
       const data = new FormData();
-      data.append('content', textarea.value);
+      data.append('content', info.left ? info.left.content : textarea.value);
       data.append('set_aside', '1');
       const sectionIdxEl = document.getElementById('section-idx');
       if (isSectionEdit && sectionIdxEl) data.append('force_section', sectionIdxEl.value);
@@ -334,6 +345,7 @@ if (textarea && previewPane) {
       if (first >= 0) textarea.setSelectionRange(first, first);
     });
     document.getElementById('conflict-overwrite').addEventListener('click', async () => {
+      if (info.left) replaceChangedLines(textarea, info.left.content);
       const sectionIdxEl = document.getElementById('section-idx');
       const data = new FormData();
       data.append('content', textarea.value);
@@ -386,6 +398,14 @@ if (textarea && previewPane) {
     }
   });
 
+  const leftDraft = document.getElementById('left-draft');
+  if (leftDraft) {
+    showConflictBanner(false, {
+      left: { content: document.getElementById('left-draft-content').value, at: leftDraft.dataset.at },
+      conflict: document.getElementById('left-draft-conflict')?.value,
+    });
+  }
+
   textarea.addEventListener('input', () => {
     saveDot.classList.add('unsaved');
     clearTimeout(autoSaveTimer);
@@ -401,6 +421,7 @@ if (textarea && previewPane) {
     const data = new FormData();
     data.append('content', content);
     appendSaveFields(data);
+    appendLeavingFields(data);
     // Not a beacon: if the page comes back from the back/forward cache, this
     // answer still arrives and updates the hash, so the next save isn't
     // refused for the change this one made. keepalive outlives the page.

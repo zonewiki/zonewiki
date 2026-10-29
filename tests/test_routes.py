@@ -686,6 +686,38 @@ class TestMergeOnSave:
         shown = subprocess.run(["git", "show", "HEAD:plans.md"], cwd=page.parent, capture_output=True, text=True)
         assert shown.stdout == theirs and "First, mine." in page.read_text()
 
+    def test_leaving_in_conflict_keeps_the_text_for_the_next_visit(self, client, page, git_wiki_dir):
+        """The save on leaving the page (leaving=1) clashes: its text is kept
+        for the user, not in the page or git, and offered when they come back."""
+        self.save(client, self.PAGE.replace("First.", "First, A."))
+        mine = self.PAGE.replace("First.", "First, B.")
+        assert self.save(client, mine, leaving="1").status_code == 409
+        kept = git_wiki_dir / ".leaf/drafts/_/plans.json"
+        assert json.loads(kept.read_text())["content"] == mine and "First, B." not in page.read_text()
+        body = client.get("/edit/plans", headers=HOST).get_data(as_text=True)
+        assert 'id="left-draft"' in body and "First, B." in body and "&lt;&lt;&lt;&lt;&lt;&lt;&lt; yours" in body
+        # A section editor sends you to the whole page for it.
+        resp = client.get("/edit/plans?section=1", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/edit/plans"
+        # Saving the page is choosing: it goes.
+        client.post("/api/save/plans", data={"content": mine}, headers=HOST)
+        assert not kept.exists() and 'id="left-draft"' not in client.get("/edit/plans", headers=HOST).get_data(as_text=True)
+
+    def test_a_left_section_is_kept_as_a_whole_page(self, client, page, git_wiki_dir):
+        fields = section_fields(client, "plans", 2)
+        self.save(client, self.PAGE.replace("Second.", "Second, A."))
+        client.post("/api/save/plans", data={**fields, "content": "## Two\n\nSecond, B.\n", "merge": "1",
+                                             "leaving": "1", "section_idx": "2"}, headers=HOST)
+        kept = json.loads((git_wiki_dir / ".leaf/drafts/_/plans.json").read_text())
+        assert kept["content"] == self.PAGE.replace("Second.", "Second, B.") and kept["base"] == self.PAGE
+
+    def test_left_drafts_go_after_30_days(self, client, page, git_wiki_dir):
+        kept = git_wiki_dir / ".leaf/drafts/_/plans.json"
+        kept.parent.mkdir(parents=True)
+        kept.write_text(json.dumps({"content": "Old.\n", "base": "", "at": "2026-01-01T10:00:00Z"}))
+        assert 'id="left-draft"' not in client.get("/edit/plans", headers=HOST).get_data(as_text=True)
+        assert not kept.exists()
+
     def test_done_merges_and_commits(self, client, page):
         self.save(client, self.PAGE.replace("First.", "First, A."))
         resp = client.post("/edit/plans", data={"content": self.PAGE.replace("Second.", "Second, B."),

@@ -5,12 +5,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // drafts: a page's file, as git names it (wikiRel) → the user whose save
@@ -269,4 +271,72 @@ func headedSection(content, heading string) (start, end int, ok bool) {
 		}
 	}
 	return start, end, found == 1 && heading != ""
+}
+
+// Leaving a page in conflict: the editor's save on pagehide can't show a
+// banner, and writing over the other's change would lose it. So its text
+// is kept for its user, in .leaf/drafts/<user>/<slug>.json (not a page,
+// not in git; "_" without users), with the text it started from, and the
+// user's next /edit of the page offers the banner's choices. A save of the
+// page by the user takes it away; after leftDraftDays it goes on its own.
+type leftDraft struct {
+	Content string    `json:"content"` // the whole page as the user left it
+	Base    string    `json:"base"`    // the text the editor started from ("": not known)
+	At      time.Time `json:"at"`
+}
+
+const leftDraftDays = 30
+
+func leftDraftsDir() string { return filepath.Join(cfg.Data, ".leaf", "drafts") }
+
+// leftDraftPath: the file of user's draft of the page at path.
+func leftDraftPath(user, path string) string {
+	if user == "" {
+		user = "_"
+	}
+	rel, _ := wikiRel(path)
+	return filepath.Join(leftDraftsDir(), user, filepath.FromSlash(strings.TrimSuffix(rel, ".md")+".json"))
+}
+
+func leaveDraft(user, path, content, base string) {
+	p := leftDraftPath(user, path)
+	b, _ := json.Marshal(leftDraft{Content: content, Base: base, At: time.Now()})
+	err := os.MkdirAll(filepath.Dir(p), 0o700)
+	if err == nil {
+		err = os.WriteFile(p, b, 0o600)
+	}
+	if err != nil {
+		logf("could not keep the draft left in %s: %v", p, err)
+	}
+}
+
+// draftLeft: user's draft of the page at path, if there is one (and not
+// too old: then it goes).
+func draftLeft(user, path string) (*leftDraft, bool) {
+	p := leftDraftPath(user, path)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, false
+	}
+	var d leftDraft
+	if json.Unmarshal(b, &d) != nil || time.Since(d.At) > leftDraftDays*24*time.Hour {
+		os.Remove(p)
+		return nil, false
+	}
+	return &d, true
+}
+
+// dropDraft: user saved the page at path; a draft they left is done.
+func dropDraft(user, path string) { os.Remove(leftDraftPath(user, path)) }
+
+// cleanLeftDrafts takes out the drafts older than leftDraftDays (at start).
+func cleanLeftDrafts() {
+	_ = filepath.WalkDir(leftDraftsDir(), func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, err := d.Info(); err == nil && time.Since(info.ModTime()) > leftDraftDays*24*time.Hour {
+				os.Remove(p)
+			}
+		}
+		return nil
+	})
 }
