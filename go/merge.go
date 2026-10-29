@@ -67,6 +67,27 @@ func commitOthersDraft(user, slug, path string) {
 	}
 }
 
+// commitOthersDrafts: commitOthersDraft for every page, before a write
+// that may change many (a rename re-pointing links, a folder move, an
+// append): each other user's draft committed in their name first.
+func commitOthersDrafts(user string) {
+	if settings().Users == nil {
+		return
+	}
+	draftsMu.Lock()
+	var rels []string
+	for rel, author := range drafts {
+		if author != user {
+			rels = append(rels, rel)
+		}
+	}
+	draftsMu.Unlock()
+	slices.Sort(rels)
+	for _, rel := range rels {
+		commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel)))
+	}
+}
+
 // commitAuthorOf: whom a commit of path's uncommitted text names: who
 // wrote it if Leaf knows, else fallback.
 func commitAuthorOf(path, fallback string) string {
@@ -76,48 +97,67 @@ func commitAuthorOf(path, fallback string) string {
 	return fallback
 }
 
-// bases: the texts behind recent file hashes (contentHash), the ones the
-// editor was given (/edit) and every one a save wrote, so a save that
-// sends an older hash can be merged from the text it started from. In
-// memory, the most recent baseCount, at most baseBytes in all; a hash not
-// here (an old tab, a restart) can't be merged.
+// Bases: the texts behind recent file hashes (contentHash), so a save that
+// sends an older hash can be merged from the text it started from. Two
+// lists, so a busy page's auto-saves don't push out the text an idle
+// editor started from: the texts handed out (/edit, read_page, a
+// conflict's answer) and the texts saves wrote. Each in memory, the most
+// recent baseCount, at most baseBytes; a hash in neither (an old tab, a
+// restart) can't be merged.
+type baseList struct {
+	mu    sync.Mutex
+	texts map[string]string
+	order []string // oldest first
+	size  int
+}
+
 var (
-	basesMu   sync.Mutex
-	bases     = map[string]string{}
-	baseOrder []string // oldest first
-	baseSize  int
-	baseCount = 200
-	baseBytes = 20 << 20
+	givenBases   = &baseList{texts: map[string]string{}}
+	writtenBases = &baseList{texts: map[string]string{}}
+	baseCount    = 200
+	baseBytes    = 20 << 20
 )
 
-// keepBase: text as a base for later merges; returns its hash.
-func keepBase(text string) string {
+// keep: text as a base for later merges; returns its hash.
+func (l *baseList) keep(text string) string {
 	hash := contentHash(text)
-	basesMu.Lock()
-	defer basesMu.Unlock()
-	if _, ok := bases[hash]; ok {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, ok := l.texts[hash]; ok {
 		// The most recent again.
-		baseOrder = append(slices.DeleteFunc(baseOrder, func(h string) bool { return h == hash }), hash)
+		l.order = append(slices.DeleteFunc(l.order, func(h string) bool { return h == hash }), hash)
 		return hash
 	}
-	bases[hash] = text
-	baseOrder = append(baseOrder, hash)
-	baseSize += len(text)
-	for len(baseOrder) > baseCount || baseSize > baseBytes && len(baseOrder) > 1 {
-		old := baseOrder[0]
-		baseOrder = baseOrder[1:]
-		baseSize -= len(bases[old])
-		delete(bases, old)
+	l.texts[hash] = text
+	l.order = append(l.order, hash)
+	l.size += len(text)
+	for len(l.order) > baseCount || l.size > baseBytes && len(l.order) > 1 {
+		old := l.order[0]
+		l.order = l.order[1:]
+		l.size -= len(l.texts[old])
+		delete(l.texts, old)
 	}
 	return hash
 }
 
+func (l *baseList) get(hash string) (string, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	text, ok := l.texts[hash]
+	return text, ok
+}
+
+// keepBase: a text a save wrote; keepGivenBase: one handed to an editor
+// or an assistant. Both return its hash.
+func keepBase(text string) string      { return writtenBases.keep(text) }
+func keepGivenBase(text string) string { return givenBases.keep(text) }
+
 // baseText: the text behind hash, if Leaf still has it.
 func baseText(hash string) (string, bool) {
-	basesMu.Lock()
-	defer basesMu.Unlock()
-	text, ok := bases[hash]
-	return text, ok
+	if text, ok := givenBases.get(hash); ok {
+		return text, true
+	}
+	return writtenBases.get(hash)
 }
 
 var errNoMerge = errors.New("no merge without git")
@@ -156,8 +196,9 @@ func mergeText(base, theirs, mine, theirName string) (merged string, clean bool,
 		}
 	}
 	r := runGit("merge-file", "-p", "-L", "yours", "-L", "base", "-L", theirName, "--", files[0], files[1], files[2])
-	// The exit code is the number of conflicts; negative (255) an error.
-	if r.Code < 0 || r.Code > 127 || r.Code == 124 && r.Stdout == "" {
+	// The exit code is the number of conflicts, whose markers the text then
+	// has; anything else (255, a timeout, a git that didn't start) an error.
+	if r.Code != 0 && (r.Code > 127 || !strings.Contains(r.Stdout, "<<<<<<< ")) {
 		return "", false, errors.New("git merge-file: " + strings.TrimSpace(r.Stderr))
 	}
 	return r.Stdout, r.Code == 0, nil

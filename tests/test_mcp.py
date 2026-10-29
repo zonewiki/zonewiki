@@ -1433,7 +1433,7 @@ class TestOpenInTheEditor:
     def draft(self, client, git_wiki_dir):
         call(client, "write_page", slug="p", content="# P\n\nline one")
         resp = client.post("/api/save/p", data={"content": "# P\n\nline one\nMY DRAFT\n"}, headers=HOST)
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         return git_wiki_dir
 
     def log(self, wiki):

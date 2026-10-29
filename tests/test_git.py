@@ -115,7 +115,7 @@ class TestWritesCommit:
     def test_autosave_does_not_commit(self, client, wiki_dir):
         before = head_sha(wiki_dir)
         resp = client.post("/api/save/index", data={"content": "# Home\n\nchanged\n"}, headers=HOST)
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         assert head_sha(wiki_dir) == before
         assert not is_clean(wiki_dir)
 

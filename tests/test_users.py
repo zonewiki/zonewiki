@@ -252,6 +252,22 @@ class TestDrafts:
         return [(git(wiki, "show", "-s", "--format=%an", sha).strip(), git(wiki, "show", "--format=", sha))
                 for sha in shas]
 
+    @pytest.mark.parametrize("write", ["rename a page it links to", "append a note to it"])
+    def test_writes_that_change_it_on_the_way_commit_the_draft_first(self, client, bobs_draft, write):
+        """A rename re-points links on bob's page, an append adds to it:
+        his draft goes into git in his name first, not in alice's commit."""
+        (bobs_draft / "golf.md").write_text("# Golf\n")
+        git(bobs_draft, "add", "golf.md")
+        git(bobs_draft, "commit", "-q", "-m", "Golf")
+        (bobs_draft / "plans.md").write_text(self.BOBS + "\nSee [[golf]].\n")   # still bob's draft
+        if write.startswith("rename"):
+            client.post("/rename/golf", data={"new_name": "golfing"}, headers=HOST)
+        else:
+            note = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+            client.post(f"/append/{note}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
+        with_line = [author for author, diff in self.commits(bobs_draft) if "+Bob's line." in diff]
+        assert with_line == ["bob"]
+
     def test_a_merge_names_whose_change_it_met(self, client, git_wiki_dir, users):
         """alice's save from the page as it was meets bob's draft: merged,
         named, and his draft committed as his first."""

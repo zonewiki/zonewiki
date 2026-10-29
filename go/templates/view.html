@@ -20,9 +20,9 @@
   </div>
 </header>
 {{.meta_row_html}}
-{{- /* The file's hash and a key per checkbox line: a tick from this view
-    finds its item even after the page changed (apiToggleCheckbox). */}}
-<article class="page-content" data-file-hash="{{.file_hash}}" data-task-keys="{{.task_keys}}">
+{{- /* A key per checkbox line: a tick from this view finds its item even
+    after the page changed (apiToggleCheckbox). */}}
+<article class="page-content" data-task-keys="{{.task_keys}}">
   {{.article_html}}
 </article>
 <div class="page-foot">{{template "link_sections" (dict "sections" .link_sections)}}</div>

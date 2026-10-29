@@ -89,30 +89,18 @@ document.addEventListener('change', e => {
 
 // Toggles are chained, so an undo can never overtake the toggle it reverts
 // (the server flips whatever state the file has when the request arrives).
-// Each sends the file's hash as this view knows it and its line's key: on
-// a page changed since, the server finds the item by its line ('changed':
-// not there once). Its answer is the file's new hash.
+// Each sends its line's key, as this view has it: on a page changed
+// since, the server finds the item by its line ('changed': not there once).
 let checkboxQueue = Promise.resolve();
 function toggleCheckboxOnServer(idx) {
   const slug = window.location.pathname.replace(/^\/page\//, '');
-  const article = document.querySelector('article.page-content[data-file-hash]');
+  const keys = document.querySelector('article.page-content[data-task-keys]')?.dataset.taskKeys.split(',');
+  const data = new FormData();
+  data.append('idx', idx);
+  if (keys?.[idx]) data.append('key', keys[idx]);
   checkboxQueue = checkboxQueue
-    .then(() => {
-      const data = new FormData();
-      data.append('idx', idx);
-      if (article) {
-        data.append('file_hash', article.dataset.fileHash);
-        data.append('key', article.dataset.taskKeys.split(',')[idx] || '');
-      }
-      return fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data });
-    })
-    .then(async r => {
-      if (r.status === 409) return 'changed';
-      if (!r.ok) return 'failed';
-      const json = await r.json().catch(() => ({}));
-      if (article && json.file_hash) article.dataset.fileHash = json.file_hash;
-      return 'ok';
-    }, () => 'failed');
+    .then(() => fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data }))
+    .then(r => r.status === 409 ? 'changed' : r.ok ? 'ok' : 'failed', () => 'failed');
   return checkboxQueue;
 }
 

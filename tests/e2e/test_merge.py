@@ -136,6 +136,12 @@ def test_keep_mine_overwrites_with_theirs_in_git(clash, wiki):
     assert wiki.read("plans") == PAGE.replace("First.", "First. By Alice.")
     assert wiki.git("log", "-1", "--format=%an %s").strip() == "bob Save plans"
     assert "First. By Bob." in wiki.git("show", "HEAD:plans.md")
+    # Her editor saves on from what Keep mine wrote: no merge, no banner.
+    type_after(alice, " Again.", "By Alice.")
+    saved(alice)
+    expect(alice.locator("#merge-note")).to_be_hidden()
+    expect(alice.locator(".conflict-banner")).to_have_count(0)
+    assert wiki.read("plans") == PAGE.replace("First.", "First. By Alice. Again.")
 
 
 def test_done_on_a_clash_shows_the_banner_with_its_choices(editors):
@@ -173,3 +179,63 @@ def test_changes_left_in_conflict_come_back_on_the_next_visit(editors, wiki):
     assert wiki.read("plans") == PAGE.replace("First.", "First. By Alice.")
     assert not kept.exists()
     assert "First. By Bob." in wiki.git("show", "HEAD:plans.md")     # his, in git
+
+
+def wait_for(pg, path):
+    for _ in range(50):
+        if path.exists():
+            return True
+        pg.wait_for_timeout(100)
+    return False
+
+
+@pytest.mark.parametrize("state", ["the banner up", "markers left"])
+def test_leaving_in_a_conflict_keeps_the_text(clash, wiki, state):
+    """Leaving the page with the banner up, or in a merge by hand not done:
+    nothing is written, but the text comes back on the next visit."""
+    alice, _, banner = clash
+    if state == "markers left":
+        banner.get_by_role("button", name="Merge by hand").click()
+    alice.goto("/page/index")
+    assert wait_for(alice, wiki.root / ".leaf/drafts/alice/plans.json")
+    assert "By Alice" not in wiki.read("plans")
+    alice.goto("/edit/plans")
+    expect(alice.locator(".conflict-banner")).to_contain_text("You left changes here")
+
+
+def test_a_merge_under_a_dialog_still_reaches_the_textarea(editors, wiki):
+    """The merged answer comes while the search dialog is open (the textarea
+    can't take focus): the textarea still gets the merged text, and the
+    dialog's field none of it."""
+    alice, bob = editors
+    type_after(bob, " By Bob.", "Second.")
+    saved(bob)
+    type_after(alice, " By Alice.", "First.")
+    alice.keyboard.press("Control+p")
+    search = alice.get_by_placeholder("Search pages…")
+    expect(search).to_be_visible()
+    saved(alice)
+    assert search.input_value() == ""
+    want = PAGE.replace("First.", "First. By Alice.").replace("Second.", "Second. By Bob.")
+    expect(alice.locator("#editor-textarea")).to_have_value(want)
+    assert wiki.read("plans") == want
+
+
+@pytest.mark.parametrize("old,new", [
+    ("\nfoo", "bar\nfoo"),          # a change at the very start, the text starting with a line break
+    ("a\nb\nc", "a\nB\nc"),
+    ("a\nb", "a"),
+    ("", "x\n"),
+])
+def test_replace_changed_lines(page, wiki, old, new):
+    wiki.write("plans", PAGE)
+    page.goto("/edit/plans")
+    got = page.evaluate("""async ([old, text]) => {
+        const { replaceChangedLines } = await import('/public/js/editor.js');
+        const t = document.createElement('textarea');
+        document.body.append(t);
+        t.value = old;
+        replaceChangedLines(t, text);
+        return t.value;
+    }""", [old, new])
+    assert got == new

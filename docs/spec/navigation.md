@@ -67,7 +67,6 @@ Defined in the `keydown` listener in `js/shortcuts.js`. Bare-key shortcuts are s
 | Shortcut | Context | Action |
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
-| **Ctrl/⌘+N** | anywhere | Open new-page modal |
 | **g** then **h/s/d/t** | anywhere | Navigate: Home / Scratch / Deck (every task) / your deck (the deck's home) |
 | **c** then **s/t** | anywhere | Create: scratch note / task in your deck (tagged as it tags new tasks) |
 | **F2** | editor | Toggle preview pane |

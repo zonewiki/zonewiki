@@ -2,7 +2,7 @@
 editor, saving it into the page, conflicts, auto-save's anchors. How pages
 split into sections and the splicing have Go tests (go/sections_test.go)."""
 
-from tests.conftest import HOST, content_hash, section_fields, write_page
+from tests.conftest import HOST, content_hash, content_hash, section_fields, write_page
 
 
 # ===========================================================================
@@ -175,10 +175,12 @@ class TestApiSaveSection:
         assert "edit 2" in saved
         assert "body b" in saved  # B must not be lost!
 
-    def test_full_save_returns_204(self, client, wiki_dir):
+    def test_full_save_without_a_hash_answers_the_new_one(self, client, wiki_dir):
+        # The editor's next save then goes from what this one wrote (a new
+        # page's first save, Keep mine).
         write_page(wiki_dir, "full", "old\n")
         resp = client.post("/api/save/full", data={"content": "new\n"}, headers=HOST)
-        assert resp.status_code == 204
+        assert resp.status_code == 200 and resp.get_json() == {"file_hash": content_hash("new\n")}
 
     def test_hash_mismatch_returns_409(self, client, wiki_dir):
         original = "pre\n\n## A\n\nbody\n"
@@ -412,7 +414,7 @@ class TestForceSectionSave:
             "content": "replaced\n",
             "force_section": "0",
         }, headers=HOST)
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         assert page.read_text(encoding="utf-8") == "replaced\n"
 
     def test_force_section_after_conflict_then_autosave_continues(self, client, wiki_dir):
@@ -522,7 +524,7 @@ class TestFullFileConflict:
         """No file_hash (a page new in the editor) → plain write, no conflict check."""
         page = write_page(wiki_dir, "ffc6", "old\n")
         resp = client.post("/api/save/ffc6", data={"content": "new\n"}, headers=HOST)
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         assert page.read_text(encoding="utf-8") == "new\n"
 
 

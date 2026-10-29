@@ -190,7 +190,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			EditSlug: slug, SectionTasks: tasks}))
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted,
-		"file_hash": contentHash(content), "task_keys": strings.Join(taskLineKeys(content), ","),
+		"task_keys":       strings.Join(taskLineKeys(content), ","),
 		"breadcrumb_html": bc, "delete_dialog_html": buildDeleteDialog(slug, title),
 		"rail_toc_html": railTocItems(string(article)), "meta_row_html": metaRow, "article_html": article,
 		"link_sections": sections, "outlinks": outlinks(rq, slug, path), "menu": menu})
@@ -238,7 +238,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		title = pageTitle(content, slug)
 	}
 	if !isNew {
-		keepBase(content) // what a later save from this editor is merged from
+		keepGivenBase(content) // what a later save from this editor is merged from
 	}
 	q := r.URL.Query()
 	section, hasSection := intArg(q.Get("section"), q.Has("section"))
@@ -416,7 +416,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		}
 		answer := M{"error": "file_changed"}
 		if s.current != nil {
-			answer["file_hash"] = keepBase(*s.current) // Merge by hand saves from it
+			answer["file_hash"] = keepGivenBase(*s.current) // Merge by hand saves from it
 		}
 		if ok {
 			answer["by"] = m.by
@@ -433,6 +433,13 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PostFormValue("set_aside") == "1" {
 		setAside(w, r, s, force)
+		return
+	}
+	if r.PostFormValue("keep_left") == "1" {
+		// Leaving the page with the banner up or markers left: kept for the
+		// next visit, the page left as it is.
+		keepLeftDraft(r, s)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	switch {
@@ -459,7 +466,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if isForce || s.fileHash == "" {
+	if isForce || r.PostFormValue("overwrite") == "1" {
 		// Keep mine: whatever the page holds, but never what was never in git.
 		commitBeforeOverwrite(userOf(r), s.slug, s.path)
 	}
@@ -487,10 +494,10 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, answer)
 	case s.section || isForce:
 		writeJSON(w, http.StatusOK, M{"file_hash": newHash, "start_char": newStart, "end_char": newEnd})
-	case s.fileHash != "":
-		writeJSON(w, http.StatusOK, M{"file_hash": contentHash(content)})
 	default:
-		w.WriteHeader(http.StatusNoContent)
+		// Also for a save without a hash (a new page's first, Keep mine):
+		// the editor's next save then goes from what this one wrote.
+		writeJSON(w, http.StatusOK, M{"file_hash": contentHash(content)})
 	}
 }
 
@@ -556,8 +563,9 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 	leaveDraft(userOf(r), s.path, whole, base)
 }
 
-// createPage: /new, the New page dialog; private=1 puts the page in the
-// user's private folder.
+// createPage: /new, the form for a new page's name (pages are made from
+// links to them; this is its form without JavaScript); private=1 puts
+// the page in the user's private folder.
 func createPage(w http.ResponseWriter, r *http.Request) {
 	raw := r.PostFormValue("slug")
 	slug := toSlug(raw)
@@ -832,17 +840,22 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	// From a page view of another version of the page (file_hash): the
-	// item is the one whose line the view had (key), if it is there once.
-	if hash := r.PostFormValue("file_hash"); hash != "" && hash != contentHash(content) {
-		idx = -1
-		for i, k := range taskLineKeys(content) {
-			if k == r.PostFormValue("key") {
-				if idx >= 0 {
-					idx = -1
-					break
+	// The item is the one whose line the page view had (key): at idx, or,
+	// the page changed since the view loaded, wherever it is now, if it is
+	// there once. Checked on every tick: a view that ticked an item found
+	// elsewhere still counts its items as it did.
+	if key := r.PostFormValue("key"); key != "" {
+		keys := taskLineKeys(content)
+		if idx >= len(keys) || keys[idx] != key {
+			idx = -1
+			for i, k := range keys {
+				if k == key {
+					if idx >= 0 {
+						idx = -1
+						break
+					}
+					idx = i
 				}
-				idx = i
 			}
 		}
 		if idx < 0 {

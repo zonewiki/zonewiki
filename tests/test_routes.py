@@ -681,8 +681,8 @@ class TestMergeOnSave:
     def test_keep_mine_commits_what_was_never_in_git_first(self, client, page):
         theirs = self.PAGE.replace("First.", "First, edited on disk.")
         page.write_text(theirs)
-        assert client.post("/api/save/plans", data={"content": self.PAGE.replace("First.", "First, mine.")},
-                           headers=HOST).status_code in (200, 204)
+        assert client.post("/api/save/plans", data={"content": self.PAGE.replace("First.", "First, mine."),
+                                                    "overwrite": "1"}, headers=HOST).status_code == 200
         shown = subprocess.run(["git", "show", "HEAD:plans.md"], cwd=page.parent, capture_output=True, text=True)
         assert shown.stdout == theirs and "First, mine." in page.read_text()
 
@@ -717,6 +717,19 @@ class TestMergeOnSave:
         kept.write_text(json.dumps({"content": "Old.\n", "base": "", "at": "2026-01-01T10:00:00Z"}))
         assert 'id="left-draft"' not in client.get("/edit/plans", headers=HOST).get_data(as_text=True)
         assert not kept.exists()
+
+    def test_a_new_pages_auto_saves_commit_nothing(self, client, git_wiki_dir):
+        """Its first save has no hash to send; the answer gives one, and no
+        save of it commits (only Keep mine's overwrite=1 commits first)."""
+        log = lambda: subprocess.run(["git", "log", "--format=%s"], cwd=git_wiki_dir, capture_output=True,
+                                     text=True).stdout
+        before = log()
+        data = client.post("/api/save/fresh", data={"content": "# Fresh\n\nOne.\n"}, headers=HOST).get_json()
+        assert data == {"file_hash": content_hash("# Fresh\n\nOne.\n")}
+        client.post("/api/save/fresh", data={"content": "# Fresh\n\nOne. Two.\n", "file_hash": data["file_hash"]},
+                    headers=HOST)
+        client.post("/api/save/fresh", data={"content": "# Fresh\n\nOne. Two. Three.\n"}, headers=HOST)
+        assert log() == before and (git_wiki_dir / "fresh.md").read_text().endswith("Three.\n")
 
     def test_done_merges_and_commits(self, client, page):
         self.save(client, self.PAGE.replace("First.", "First, A."))
@@ -1331,34 +1344,49 @@ class TestApiToggleCheckbox:
 
     @staticmethod
     def view(client, slug):
-        """The page view's file hash and checkbox keys, as its article has them."""
+        """The page view's checkbox keys, as its article has them."""
         body = client.get(f"/page/{slug}", headers=HOST).get_data(as_text=True)
-        m = re.search(r'<article class="page-content" data-file-hash="([^"]*)" data-task-keys="([^"]*)"', body)
-        return m[1], m[2].split(",")
+        return re.search(r'<article class="page-content" data-task-keys="([^"]*)"', body)[1].split(",")
+
+    def test_ticks_after_one_found_elsewhere_go_by_their_own_lines(self, client, wiki_dir):
+        """The view had [A, B]; Z came in above. Ticking A finds it below Z;
+        ticking B then, and undoing A, go to B and A, not by their places."""
+        path = write_page(wiki_dir, "moved", "# CB\n\n- [ ] A\n- [ ] B\n")
+        keys = self.view(client, "moved")
+        path.write_text("# CB\n\n- [ ] Z\n- [ ] A\n- [ ] B\n")
+        tick = lambda idx: client.post("/api/toggle-checkbox/moved", data={"idx": str(idx), "key": keys[idx]},
+                                       headers=HOST).status_code
+        assert tick(0) == 200 and tick(1) == 200
+        text = path.read_text()
+        assert "- [ ] Z" in text and re.search(r"- \[x\] A", text) and re.search(r"- \[x\] B", text)
+        assert tick(0) == 200                        # undo A
+        text = path.read_text()
+        assert "- [ ] Z" in text and "- [ ] A\n" in text and re.search(r"- \[x\] B", text)
 
     def test_a_tick_from_an_older_view_finds_its_item(self, client, wiki_dir):
         """Someone added an item above since the view loaded: the tick goes to
         the item the view showed, by its line, not by its place."""
         path = write_page(wiki_dir, "moved", "# CB\n\n- [ ] Call Sam\n- [ ] Buy milk\n")
-        file_hash, keys = self.view(client, "moved")
+        keys = self.view(client, "moved")
         path.write_text("# CB\n\n- [ ] New one\n- [ ] Call Sam\n- [ ] Buy milk\n")
-        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "1", "file_hash": file_hash, "key": keys[1]},
+        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "1", "key": keys[1]},
                            headers=HOST)
         assert resp.status_code == 200
         text = path.read_text()
         assert "- [ ] New one" in text and "- [ ] Call Sam" in text and re.search(r"- \[x\] Buy milk", text)
-        # Undo from the same view (its hash older still): the same item, ticked or not.
-        client.post("/api/toggle-checkbox/moved", data={"idx": "1", "file_hash": file_hash, "key": keys[1]},
+        # Undo from the same view: the same item, by its line again.
+        client.post("/api/toggle-checkbox/moved", data={"idx": "1", "key": keys[1]},
                     headers=HOST)
         assert "- [ ] Buy milk" in path.read_text() and "<!--d:" not in path.read_text()
 
     @pytest.mark.parametrize("change", ["gone", "twice"])
     def test_a_tick_whose_line_isnt_there_once_is_refused(self, client, wiki_dir, change):
         path = write_page(wiki_dir, "moved", "# CB\n\n- [ ] Call Sam\n")
-        file_hash, keys = self.view(client, "moved")
-        after = "# CB\n\n- [ ] Call Sam today\n" if change == "gone" else "# CB\n\n- [ ] Call Sam\n- [ ] Call Sam\n"
+        keys = self.view(client, "moved")
+        after = ("# CB\n\n- [ ] Call Sam today\n" if change == "gone"
+                 else "# CB\n\n- [ ] New\n- [ ] Call Sam\n- [ ] Call Sam\n")
         path.write_text(after)
-        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "0", "file_hash": file_hash, "key": keys[0]},
+        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "0", "key": keys[0]},
                            headers=HOST)
         assert resp.status_code == 409 and path.read_text() == after
 

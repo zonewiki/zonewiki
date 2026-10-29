@@ -84,3 +84,23 @@ func TestBases(t *testing.T) {
 		t.Error("an unknown hash")
 	}
 }
+
+// A busy page's saves don't push out the text an editor was given.
+func TestGivenBasesOutlastSaves(t *testing.T) {
+	given := keepGivenBase("the text an idle editor started from")
+	for i := range 2 * baseCount {
+		keepBase(strings.Repeat("x", i))
+	}
+	if _, ok := baseText(given); !ok {
+		t.Error("given base pushed out by saves")
+	}
+}
+
+// A git that doesn't start is an error, not a conflict with no text.
+func TestMergeTextWithoutAGitThatRuns(t *testing.T) {
+	mergeWiki(t)
+	t.Setenv("PATH", t.TempDir())
+	if _, _, err := mergeText("a\n", "b\n", "c\n", "bob"); err == nil {
+		t.Error("no error")
+	}
+}

@@ -349,6 +349,7 @@ if (textarea && previewPane) {
       const sectionIdxEl = document.getElementById('section-idx');
       const data = new FormData();
       data.append('content', textarea.value);
+      data.append('overwrite', '1');   // what the page holds and was never in git is committed first
       if (isSectionEdit && sectionIdxEl) {
         // Section edit: force-splice into current file by section index
         data.append('force_section', sectionIdxEl.value);
@@ -414,14 +415,22 @@ if (textarea && previewPane) {
 
   // Save file on navigation away if content has changed (no git commit)
   window.addEventListener('pagehide', () => {
-    if (formSubmitting || sectionConflict || unresolved()) return;
-    if (!autoSaveUrl || textarea.value === lastSavedContent) return;
+    if (formSubmitting || !autoSaveUrl) return;
+    // The banner up, or markers left: nothing is written, but the text is
+    // kept for the next visit (keep_left), as for a save refused on leaving.
+    const inConflict = sectionConflict || unresolved();
+    if (!inConflict && textarea.value === lastSavedContent) return;
     clearTimeout(autoSaveTimer);
     const content = textarea.value;
     const data = new FormData();
     data.append('content', content);
     appendSaveFields(data);
     appendLeavingFields(data);
+    if (inConflict) {
+      data.append('keep_left', '1');
+      fetch(autoSaveUrl, { method: 'POST', body: data, keepalive: true }).catch(() => {});
+      return;
+    }
     // Not a beacon: if the page comes back from the back/forward cache, this
     // answer still arrives and updates the hash, so the next save isn't
     // refused for the change this one made. keepalive outlives the page.
@@ -442,7 +451,7 @@ export function replaceChangedLines(textarea, text) {
   if (old === text) return;
   let start = 0;
   while (start < old.length && start < text.length && old[start] === text[start]) start++;
-  start = old.lastIndexOf('\n', start - 1) + 1;
+  start = start ? old.lastIndexOf('\n', start - 1) + 1 : 0;   // lastIndexOf(…, -1) would look at 0
   let endOld = old.length, endNew = text.length;
   while (endOld > start && endNew > start && old[endOld - 1] === text[endNew - 1]) { endOld--; endNew--; }
   // Out to the end of the line: the rest of it is the same on both sides.
@@ -452,10 +461,17 @@ export function replaceChangedLines(textarea, text) {
   const shift = pos => pos <= start ? pos : pos >= endOld ? pos + endNew - endOld : Math.min(pos, endNew);
   const [a, b, scroll] = [textarea.selectionStart, textarea.selectionEnd, textarea.scrollTop];
   textarea.focus();
-  textarea.setSelectionRange(start, endOld);
-  const insert = text.slice(start, endNew);
-  if (insert) document.execCommand('insertText', false, insert);
-  else document.execCommand('delete');
+  // Typed in (undoable) only where the textarea has the focus: under a
+  // dialog it can't, and the insert would go into the dialog's field. Else,
+  // or if it didn't take, set whole, so it never holds other text than the
+  // editor's hash says.
+  if (document.activeElement === textarea) {
+    textarea.setSelectionRange(start, endOld);
+    const insert = text.slice(start, endNew);
+    if (insert) document.execCommand('insertText', false, insert);
+    else document.execCommand('delete');
+  }
+  if (textarea.value !== text) textarea.value = text;
   textarea.setSelectionRange(shift(a), shift(b));
   textarea.scrollTop = scroll;
 }

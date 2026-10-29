@@ -130,6 +130,7 @@ func appendScratch(user, slug, target, heading, suffix string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	commitOthersDrafts(user) // the page's, and those whose links to the note follow
 	// [ ] | would break the wikilinks that now point at the section.
 	heading = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(heading, ""))
 	targetPath := ""

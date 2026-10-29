@@ -210,7 +210,7 @@ var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 // and commits the move (by user) with the pages and deck files whose links
 // changed.
 func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
-	commitOthersDraft(user, slug, oldPath)
+	commitOthersDrafts(user) // the page's, and those of the pages whose links follow
 	if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
 		return nil, err
 	}
@@ -228,6 +228,7 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 // caller checks that no target exists. Other files in the folder (images…)
 // stay; folders left empty go.
 func moveFolder(user, folder, newFolder, message string) ([][2]string, []string, error) {
+	commitOthersDrafts(user)
 	var moves [][2]string
 	var touched []string
 	moved := map[string]string{}
