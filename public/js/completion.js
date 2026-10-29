@@ -4,10 +4,12 @@ import { toSlug } from './util.js';
 // ── Link completion ───────────────────────────────────────────────────────────
 // In a text field, `[[` offers pages, `[[task:` open deck tasks (with
 // `tasks: true`, the editor) and `[text](` pages as /page/ links. One
-// implementation for the editor and the deck's task fields (deck.js). On a
-// page in a private folder (`page`, its slug, or a function giving it) `[[`
-// also offers a new page in that folder: wikilinks are absolute, so the
-// private page is named in full, `[[private/alice/idea|Idea]]`.
+// implementation for the editor and the deck's task fields (deck.js). `page`
+// (its slug, or a function giving it; '' for text that is on no page, such as
+// a shared task's; null: unknown) says where the text is. On a page in a private folder `[[` also offers a new
+// page in that folder: wikilinks are absolute, so the private page is named
+// in full, `[[private/alice/idea|Idea]]`. On a shared page private pages
+// aren't offered at all: others couldn't follow a link to one.
 
 let wikiPages = null;   // page slugs, fetched once when first needed
 
@@ -130,7 +132,7 @@ function getCaretCoords(el) {
 // `:name` (two letters or more, after a space or at the start) offers
 // emoji, and a whole `:name:` turns into its emoji: the file holds the
 // character itself, not the shortcode.
-export function linkAutocomplete(ta, { tasks = false, page = '' } = {}) {
+export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
   loadWikiPages();
   let el = null, index = 0, mode = 'wikilink';
 
@@ -146,6 +148,12 @@ export function linkAutocomplete(ta, { tasks = false, page = '' } = {}) {
     const e = before.match(/(?:^|[\s([{"'*_~>])(:([a-z0-9_+-]{2,}))$/i);
     if (e && !inCode(before)) return ['emoji', e[2]];
     return [null];
+  }
+
+  // Page slugs to offer: not private ones where the text is shared.
+  function offered() {
+    const slug = typeof page === 'function' ? page() : page;
+    return slug !== null && !slug.startsWith('private/') ? wikiPages.filter(p => !p.startsWith('private/')) : wikiPages;
   }
 
   // The folder of the private page being edited ("private/alice"), or ''.
@@ -179,7 +187,7 @@ export function linkAutocomplete(ta, { tasks = false, page = '' } = {}) {
     const matches = kind === 'task' ? taskAcMatches(q, () => update(true))
       : kind === 'emoji' ? emojiMatches(q, () => update(true))
       : (found => kind === 'wikilink' ? newPrivate(q, found) : found)(
-          wikiPages.filter(p => p.includes(q.toLowerCase())).slice(0, 8));
+          offered().filter(p => p.includes(q.toLowerCase())).slice(0, 8));
     if (matches.length) show(matches); else hide();
   }
 

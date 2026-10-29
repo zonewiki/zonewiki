@@ -64,21 +64,22 @@ func privateRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 }
 
-// privacyMove: where Make private / Make shared would move slug for user: a
-// shared page into their folder (toPrivate), their own private page out of
-// it (the same path without the folder). ok false: not offered (no users,
-// another user's page, a home page, a scratch note, which Move to wiki takes
-// out of the folder).
-func privacyMove(user, slug string) (target string, toPrivate, ok bool) {
+// sharedMove: where Make shared would move slug for user: their own private
+// page out of their folder (the same path without it). ok false: not offered
+// (no users, not their own private page, a private home, a scratch note,
+// which Move to wiki takes out of the folder). There is no Make private for
+// a shared page: others have seen it, and its links on shared pages would
+// have to go; a new page is made private from the start (sharedNewOffer).
+func sharedMove(user, slug string) (target string, ok bool) {
 	folder := privateFolder(user)
 	if folder == "" || isProtected(slug) || isScratch(slug) || !canWrite(user, slug) {
-		return "", false, false
+		return "", false
 	}
-	if _, private := pageOwner(slug); private {
-		rest := strings.TrimPrefix(slug, folder+"/")
-		return rest, false, rest != slug && rest != ""
+	if _, private := pageOwner(slug); !private {
+		return "", false
 	}
-	return folder + "/" + slug, true, true
+	rest := strings.TrimPrefix(slug, folder+"/")
+	return rest, rest != slug && rest != ""
 }
 
 // sharedNewOffer: a new page opened from a link on one of the user's private

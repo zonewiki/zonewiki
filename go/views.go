@@ -422,8 +422,8 @@ func buildDeleteDialog(slug, title string) template.HTML {
 func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError string) M {
 	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "scratch": isScratch(slug),
 		"renamable": !isProtected(slug), "rename_error": renameError}
-	if target, toPrivate, ok := privacyMove(rq.who(), slug); ok {
-		m["privacy_target"], m["privacy_to_private"] = target, toPrivate
+	if target, ok := sharedMove(rq.who(), slug); ok {
+		m["shared_target"] = target
 	}
 	if isScratch(slug) {
 		var wiki []PageRef

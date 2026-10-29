@@ -346,7 +346,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	testWiki(t, map[string]string{"old": "# Old\n"})
 	withUsers(t, "alice", "bob")
 	mine := newTestTask(t, "alice", "See [[old]]", true)
-	changed, err := renamePageRefs(func(s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
+	changed, err := renamePageRefs(func(_, s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
 	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, deckFile("alice")), "[[new]]") {
 		t.Errorf("rename: %v %v", changed, err)
 	}

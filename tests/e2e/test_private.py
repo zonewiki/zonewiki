@@ -106,36 +106,36 @@ def test_the_phone_has_the_menu_as_a_tab_and_a_bottom_sheet(new_page, wiki, monk
     expect(bar.locator(".module-menu-btn")).to_have_attribute("aria-current", "page")
 
 
-# ── Make private / Make shared ───────────────────────────────────────────────
+# ── Make shared ──────────────────────────────────────────────────────────────
 
-def test_make_private_and_make_shared_from_the_page_menu(alice, wiki):
-    wiki.write("plans", "# Plans\n\nSee [[ideas]].\n")
-    wiki.write("ideas", "# Ideas\n\nOne.\n")
+def test_make_shared_from_the_page_menu(alice, wiki):
+    wiki.write("plans", "# Plans\n\nSee [[private/alice/ideas]].\n")
+    wiki.write("private/alice/ideas", "# Ideas\n\nOne.\n")
+    wiki.write("private/alice/diary", "# Diary\n\nSee [[private/alice/ideas]].\n")
     wiki.git("add", "-A")
     wiki.git("commit", "-qm", "seed")
-    alice.goto("/page/ideas")
-    expect(alice.locator("h1 .lock")).to_have_count(0)
+    alice.goto("/page/ideas")   # a shared page: no move offered, no lock
+    alice.goto("/page/plans")
     alice.locator(".page-menu-btn").first.click()
-    alice.get_by_role("menuitem", name="Make private…").click()
+    expect(alice.get_by_role("menuitem", name="Make shared…")).to_have_count(0)
+    alice.goto("/page/private/alice/ideas")
+    expect(alice.locator("h1 .lock")).to_be_visible()
+    alice.locator(".page-menu-btn").first.click()
+    expect(alice.get_by_role("menuitem", name="Make private…")).to_have_count(0)
+    alice.get_by_role("menuitem", name="Make shared…").click()
     dialog = alice.locator("#page-privacy-dialog")
     expect(dialog).to_be_visible()
-    expect(dialog).to_contain_text("private/alice/ideas")
+    expect(dialog).to_contain_text("ideas")
     dialog.get_by_role("button", name="Cancel").click()
     expect(dialog).to_be_hidden()
-    assert (wiki.root / "ideas.md").exists()
-    alice.locator(".page-menu-btn").first.click()
-    alice.get_by_role("menuitem", name="Make private…").click()
-    dialog.get_by_role("button", name="Make private").click()
-    alice.wait_for_url("**/page/private/alice/ideas")
-    expect(alice.locator("h1 .lock")).to_be_visible()
-    assert "[[private/alice/ideas]]" in wiki.read("plans")
-    # And back.
+    assert (wiki.root / "private/alice/ideas.md").exists()
     alice.locator(".page-menu-btn").first.click()
     alice.get_by_role("menuitem", name="Make shared…").click()
     dialog.get_by_role("button", name="Make shared").click()
     alice.wait_for_url("**/page/ideas")
     expect(alice.locator("h1 .lock")).to_have_count(0)
-    assert "[[ideas]]" in wiki.read("plans")
+    # The links to it follow, on her private pages and on the shared one.
+    assert "[[ideas]]" in wiki.read("plans") and "[[ideas]]" in wiki.read("private/alice/diary")
 
 
 def test_the_page_list_and_search_mark_private_pages(alice, wiki):
@@ -254,3 +254,57 @@ def test_the_editors_preview_marks_the_link_too(alice, wiki):
     alice.keyboard.press("Control+End")
     alice.keyboard.type("See [[Garden]]")
     expect(alice.locator("#editor-preview a.wikilink-shared-new")).to_have_count(1)
+
+
+# ── Private pages are not offered where the text is shared ───────────────────
+
+def test_completion_lists_private_pages_only_on_private_pages(alice, wiki):
+    wiki.write("secretplans", "# Shared\n")
+    wiki.write("private/alice/secretdiary", "# Diary\n\n")
+    wiki.write("notes", "# Notes\n\n")
+    items = alice.locator(".wikilink-ac-item")
+    alice.goto("/edit/notes")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[secret")
+    expect(items).to_have_text(["secretplans"])
+    alice.goto("/edit/private/alice/secretdiary")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[secret")
+    expect(items).to_have_text([re.compile("^New private page: secret"), "private/alice/secretdiary", "secretplans"])
+
+
+def test_a_typed_link_from_a_shared_page_to_a_private_one_is_marked(alice, wiki):
+    wiki.write("private/alice/diary", "# Diary\n")
+    wiki.write("notes", "# Notes\n\n")
+    alice.goto("/edit/notes")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[private/alice/diary]]")
+    link = alice.locator("#editor-preview a.wikilink-private")
+    expect(link).to_have_attribute("title", "Links to a private page: others see plain text")
+
+
+# ── Private pages are not offered where the text is shared ───────────────────
+
+def test_completion_lists_private_pages_only_on_private_pages(alice, wiki):
+    wiki.write("secretplans", "# Shared\n")
+    wiki.write("private/alice/secretdiary", "# Diary\n\n")
+    wiki.write("notes", "# Notes\n\n")
+    items = alice.locator(".wikilink-ac-item")
+    alice.goto("/edit/notes")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[secret")
+    expect(items).to_have_text(["secretplans"])
+    alice.goto("/edit/private/alice/secretdiary")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[secret")
+    expect(items).to_have_text([re.compile("^New private page: secret"), "private/alice/secretdiary", "secretplans"])
+
+
+def test_a_typed_link_from_a_shared_page_to_a_private_one_is_marked(alice, wiki):
+    wiki.write("private/alice/diary", "# Diary\n")
+    wiki.write("notes", "# Notes\n\n")
+    alice.goto("/edit/notes")
+    alice.keyboard.press("Control+End")
+    alice.keyboard.type("[[private/alice/diary]]")
+    link = alice.locator("#editor-preview a.wikilink-private")
+    expect(link).to_have_attribute("title", "Links to a private page: others see plain text")

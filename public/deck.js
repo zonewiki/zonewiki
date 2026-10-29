@@ -2645,7 +2645,8 @@ function plainTitle(text) {
 const titleInput = document.getElementById('task-edit-title' + sfx);
 const descTextarea = document.getElementById('task-edit-desc' + sfx);
 if (titleInput) {
-  linkAutocomplete(titleInput);
+  // A private task's title may link private pages, a shared one's not.
+  linkAutocomplete(titleInput, { page: () => privateCb?.checked ? 'private/task' : '' });
   // Pasting a URL asks for its name, as in the notes and the editor
   // (pasteUrlAsLink): [name](url), shown as a link on the card.
   titleInput.addEventListener('paste', e => pasteUrlAsLink(titleInput, e));

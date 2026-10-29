@@ -162,9 +162,9 @@ class TestPrivateHome:
         assert not (wiki_dir / "private/alice/index.md").exists()
 
 
-class TestMakePrivate:
-    """Make private / Make shared (the page menu): a rename into or out of the
-    user's private folder, with a 🔒 on private pages."""
+class TestMakeShared:
+    """Make shared (the page menu: a rename out of the user's private folder), a
+    🔒 on private pages, and what a rename into the folder does to the links."""
 
     PLANS = "# Plans\n\nSee [[ideas]].\n"
 
@@ -180,18 +180,16 @@ class TestMakePrivate:
     def view(self, client, slug):
         return client.get(f"/page/{slug}", headers=HOST).data.decode()
 
-    def test_a_shared_page_offers_make_private(self, alice):
+    def test_a_shared_page_offers_no_move_and_has_no_lock(self, alice):
         body = self.view(alice, "ideas")
-        assert "Make private…" in body and "Make shared…" not in body
-        assert 'name="new_name" value="private/alice/ideas"' in body
-        assert 'class="lock"' not in body
+        assert "Make private" not in body and "Make shared" not in body and 'class="lock"' not in body
 
     def test_a_private_page_offers_make_shared_and_has_a_lock(self, alice, git_wiki_dir):
         (git_wiki_dir / "private/alice").mkdir(parents=True)
         (git_wiki_dir / "private/alice/notes/deep.md").parent.mkdir()
         (git_wiki_dir / "private/alice/notes/deep.md").write_text("# Deep\n")
         body = self.view(alice, "private/alice/notes/deep")
-        assert "Make shared…" in body and "Make private…" not in body
+        assert "Make shared…" in body and "Make private" not in body
         assert 'name="new_name" value="notes/deep"' in body
         assert '<h1>Deep <span class="lock"' in body
 
@@ -200,29 +198,50 @@ class TestMakePrivate:
         note = alice.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for slug in ("index", "private/alice/index", note):
             body = self.view(alice, slug)
-            assert "Make private…" not in body and "Make shared…" not in body, slug
+            assert "Make shared" not in body, slug
         monkeypatch.setattr(settings, "LEAF_USERS", {})
-        assert "Make private…" not in self.view(client, "ideas")
+        assert "Make shared" not in self.view(client, "private/alice/index")
 
-    def test_make_private_moves_the_page_and_its_links(self, alice, git_wiki_dir):
+    def test_renaming_a_page_into_the_folder_unlinks_the_shared_pages(self, alice, git_wiki_dir):
         resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
         assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/ideas"
         assert not (git_wiki_dir / "ideas.md").exists() and (git_wiki_dir / "private/alice/ideas.md").exists()
-        assert (git_wiki_dir / "plans.md").read_text() == "# Plans\n\nSee [[private/alice/ideas]].\n"
+        # A shared page can't link to a private one: its link is plain text now.
+        assert (git_wiki_dir / "plans.md").read_text() == "# Plans\n\nSee ideas.\n"
         assert authors(git_wiki_dir)[0] == ("alice", "Rename ideas to private/alice/ideas")
-        # bob sees neither the page nor the link
         alice.post("/logout", headers=HOST)
         login(alice, "bob", "bob-pw")
         assert alice.get("/page/private/alice/ideas", headers=HOST).status_code == 404
-        # ... and the link on the shared page is plain words for bob
-        assert 'href="/page/private/alice/ideas"' not in self.view(alice, "plans")
+        assert "private/alice" not in self.view(alice, "plans")
 
-    def test_make_shared_brings_it_back(self, alice, git_wiki_dir):
+    def test_every_kind_of_link_to_it_follows_or_goes(self, alice, git_wiki_dir):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/bob").mkdir(parents=True)
+        links = "[[ideas]] [[ideas|Our ideas]] [[ideas#beds]] [[ideas#beds|Beds]] [x](/page/ideas) [`[[ideas]]`]\n"
+        (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n" + links)
+        (git_wiki_dir / "private/bob/b.md").write_text("# B\n\n[[ideas]]\n")
+        (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links + "`[[ideas]]`\n")
+        mine = alice.post("/api/deck", json={"title": "Think about [[ideas]]", "private": True}).get_json()["id"]
+        shared = alice.post("/api/deck", json={"title": "Plan [[ideas]]"}).get_json()["id"]
+        alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
+        # Her private page: the links follow.
+        assert (git_wiki_dir / "private/alice/diary.md").read_text() == (
+            "# Diary\n\n[[private/alice/ideas]] [[private/alice/ideas|Our ideas]] [[private/alice/ideas#beds]] "
+            "[[private/alice/ideas#beds|Beds]] [x](/page/private/alice/ideas) [`[[ideas]]`]\n")
+        # A shared page, and bob's private one: plain text; code is left alone.
+        assert (git_wiki_dir / "plans.md").read_text() == (
+            "# Plans\n\nideas Our ideas ideas › beds Beds x [`[[ideas]]`]\n`[[ideas]]`\n")
+        assert (git_wiki_dir / "private/bob/b.md").read_text() == "# B\n\nideas\n"
+        # Tasks: her private task follows, the shared one is plain text.
+        titles = {t["id"]: t["title"] for t in alice.get("/api/deck", headers=HOST).get_json()}
+        assert titles[mine] == "Think about [[private/alice/ideas]]" and titles[shared] == "Plan ideas"
+
+    def test_making_it_shared_again_does_not_bring_the_links_back(self, alice, git_wiki_dir):
         alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
         resp = alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "ideas"}, headers=HOST)
         assert resp.headers["Location"] == "/page/ideas"
         assert (git_wiki_dir / "ideas.md").exists() and not (git_wiki_dir / "private/alice/ideas.md").exists()
-        assert "[[ideas]]" in (git_wiki_dir / "plans.md").read_text()
+        assert "[[" not in (git_wiki_dir / "plans.md").read_text()
 
     def test_a_name_taken_comes_back_with_the_error(self, alice, git_wiki_dir):
         (git_wiki_dir / "private/alice").mkdir(parents=True)
@@ -359,6 +378,96 @@ class TestSharedNewPage:
         assert (git_wiki_dir / "private/alice/garden.md").read_text() == "# Garden\n\nbeds\n"
         # a page never saved: the rename says 404, and the button only moves the editor
         assert alice.post("/rename/nothing", data={"new_name": "private/alice/nothing"}, headers=HOST).status_code == 404
+
+
+class TestLinkToPrivateFromShared:
+    """A shared page linking to the user's private page: marked for the author
+    (others see plain text), so it is noticed."""
+
+    @pytest.fixture()
+    def alice(self, client, git_wiki_dir, users):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n[[private/alice/other]] [[plans]]\n")
+        (git_wiki_dir / "private/alice/other.md").write_text("# Other\n")
+        (git_wiki_dir / "plans.md").write_text("# Plans\n\n[[private/alice/diary]] [[index]]\n")
+        login(client, "alice", "alice-pw")
+        return client
+
+    def view(self, client, slug):
+        return client.get(f"/page/{slug}", headers=HOST).data.decode()
+
+    def test_the_author_sees_the_mark(self, alice):
+        body = self.view(alice, "plans")
+        assert ('<a href="/page/private/alice/diary" class="wikilink wikilink-private" '
+                'title="Links to a private page: others see plain text">private/alice/diary</a>') in body
+        assert body.count("wikilink-private") == 1   # [[index]] is a shared page
+
+    def test_private_pages_link_privately_without_a_mark(self, alice):
+        assert "wikilink-private" not in self.view(alice, "private/alice/diary")
+
+    def test_others_see_plain_text_and_no_mark(self, alice):
+        alice.post("/logout", headers=HOST)
+        login(alice, "bob", "bob-pw")
+        body = self.view(alice, "plans")
+        assert "wikilink-private" not in body and 'href="/page/private/alice/diary"' not in body
+
+    def test_the_preview_marks_by_the_page_it_is_for(self, alice):
+        def preview(query):
+            return alice.post(f"/api/preview{query}", data="[[private/alice/diary]]", headers=HOST).data.decode()
+        assert "wikilink-private" in preview("?page=plans")
+        assert "wikilink-private" not in preview("?page=private/alice/other")
+        assert "wikilink-private" not in preview("")
+
+    def test_without_users_nothing_is_marked(self, client, wiki_dir):
+        (wiki_dir / "private/alice").mkdir(parents=True)
+        (wiki_dir / "private/alice/diary.md").write_text("# Diary\n")
+        (wiki_dir / "plans.md").write_text("# Plans\n\n[[private/alice/diary]]\n")
+        assert "wikilink-private" not in client.get("/page/plans", headers=HOST).data.decode()
+
+
+class TestLinkToPrivateFromShared:
+    """A shared page linking to the user's private page: marked for the author
+    (others see plain text), so it is noticed."""
+
+    @pytest.fixture()
+    def alice(self, client, git_wiki_dir, users):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n[[private/alice/other]] [[plans]]\n")
+        (git_wiki_dir / "private/alice/other.md").write_text("# Other\n")
+        (git_wiki_dir / "plans.md").write_text("# Plans\n\n[[private/alice/diary]] [[index]]\n")
+        login(client, "alice", "alice-pw")
+        return client
+
+    def view(self, client, slug):
+        return client.get(f"/page/{slug}", headers=HOST).data.decode()
+
+    def test_the_author_sees_the_mark(self, alice):
+        body = self.view(alice, "plans")
+        assert ('<a href="/page/private/alice/diary" class="wikilink wikilink-private" '
+                'title="Links to a private page: others see plain text">private/alice/diary</a>') in body
+        assert body.count("wikilink-private") == 1   # [[index]] is a shared page
+
+    def test_private_pages_link_privately_without_a_mark(self, alice):
+        assert "wikilink-private" not in self.view(alice, "private/alice/diary")
+
+    def test_others_see_plain_text_and_no_mark(self, alice):
+        alice.post("/logout", headers=HOST)
+        login(alice, "bob", "bob-pw")
+        body = self.view(alice, "plans")
+        assert "wikilink-private" not in body and 'href="/page/private/alice/diary"' not in body
+
+    def test_the_preview_marks_by_the_page_it_is_for(self, alice):
+        def preview(query):
+            return alice.post(f"/api/preview{query}", data="[[private/alice/diary]]", headers=HOST).data.decode()
+        assert "wikilink-private" in preview("?page=plans")
+        assert "wikilink-private" not in preview("?page=private/alice/other")
+        assert "wikilink-private" not in preview("")
+
+    def test_without_users_nothing_is_marked(self, client, wiki_dir):
+        (wiki_dir / "private/alice").mkdir(parents=True)
+        (wiki_dir / "private/alice/diary.md").write_text("# Diary\n")
+        (wiki_dir / "plans.md").write_text("# Plans\n\n[[private/alice/diary]]\n")
+        assert "wikilink-private" not in client.get("/page/plans", headers=HOST).data.decode()
 
 
 class TestAuthors:

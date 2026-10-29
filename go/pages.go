@@ -834,10 +834,65 @@ func updateReferences(oldSlug, newSlug, section string) []string {
 			}
 		}
 	}
-	changed, _ := renamePageRefs(func(text string) string {
+	changed, _ := renamePageRefs(func(_, text string) string {
 		return rewritePageLinks(text, oldSlug, newSlug, "", section)
 	})
 	return append(modified, changed...)
+}
+
+// unlinkPageLinks turns the links to oldSlug in text into plain text: a
+// wikilink into its label (or the page as written, "Page › Section" with a
+// section), a markdown link into its text. source is the folder relative
+// links are read from. Code is left alone.
+func unlinkPageLinks(text, oldSlug, source string) string {
+	text, stash := maskCode(text)
+	text = wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
+		l := parseWikilink(m)
+		if page := strings.TrimSpace(l.page); page == "" || page != oldSlug && toSlug(l.page) != oldSlug {
+			return m
+		}
+		switch {
+		case l.hasLabel:
+			return l.label
+		case l.hasSection:
+			return strings.TrimSpace(l.page) + " › " + strings.TrimSpace(l.section)
+		}
+		return strings.TrimSpace(l.page)
+	})
+	text = replaceMdLinks(text, func(m mdLinkMatch) string {
+		target := ""
+		if strings.HasPrefix(m.href, "/page/") {
+			target = m.href[len("/page/"):]
+		} else {
+			target, _ = linkTarget(m.href, source)
+		}
+		if target != oldSlug || target == "" {
+			return text[m.start:m.end]
+		}
+		return m.prefix[1 : len(m.prefix)-2] // [label]( → label
+	})
+	return unmaskCode(text, stash)
+}
+
+// splitMoves: of the pages in moves (old → new slug), those a page or task
+// of linker (the user whose private page or tasks it is, "" if shared) keeps
+// linking to, re-pointed (follow), and those it must not (unlink): a shared
+// page made private is linked on only by its new owner's own pages and
+// tasks, anyone else's would link to a page they can't see, and show where
+// it is. Without users nothing is private, so everything follows.
+func splitMoves(moves map[string]string, linker string) (follow map[string]string, unlink []string) {
+	follow = map[string]string{}
+	for _, o := range sortedKeys(moves) {
+		n := moves[o]
+		_, wasPrivate := pageOwner(o)
+		owner, nowPrivate := pageOwner(n)
+		if !wasPrivate && nowPrivate && (owner == "" || owner != linker) {
+			unlink = append(unlink, o)
+		} else {
+			follow[o] = n
+		}
+	}
+	return follow, unlink
 }
 
 // rebaseLinks re-points the links in text, written by page source, for a
@@ -908,18 +963,32 @@ func rewriteMovedLinks(moves map[string]string) []string {
 		if err != nil {
 			continue
 		}
-		if n := rebaseLinks(content, source, p.Slug, moves); n != content {
+		// Links that mustn't follow a page made private go first, read as the
+		// page wrote them; then the rest follow (and re-base, if p moved).
+		linker, _ := pageOwner(p.Slug)
+		follow, unlink := splitMoves(moves, linker)
+		n := content
+		for _, o := range unlink {
+			n = unlinkPageLinks(n, o, source)
+		}
+		if n = rebaseLinks(n, source, p.Slug, follow); n != content {
 			if writeText(p.Path, n) == nil {
 				add(p.Path)
 			}
 		}
 	}
-	for _, o := range sortedKeys(moves) {
-		n := moves[o]
-		changed, _ := renamePageRefs(func(text string) string { return rewritePageLinks(text, o, n, "", "") })
-		for _, c := range changed {
-			add(c)
+	changed, _ := renamePageRefs(func(owner, text string) string {
+		follow, unlink := splitMoves(moves, owner)
+		for _, o := range unlink {
+			text = unlinkPageLinks(text, o, "")
 		}
+		for _, o := range sortedKeys(follow) {
+			text = rewritePageLinks(text, o, follow[o], "", "")
+		}
+		return text
+	})
+	for _, c := range changed {
+		add(c)
 	}
 	return modified
 }

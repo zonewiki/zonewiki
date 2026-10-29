@@ -877,16 +877,22 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 }
 
 // renamePageRefs follows a page rename in the deck: links in task titles
-// and descriptions rewritten (by rewrite), every owner's tasks. Writes the
-// files that changed, doesn't commit: returns them for the rename's commit.
-func renamePageRefs(rewrite func(string) string) ([]string, error) {
+// and descriptions rewritten (by rewrite, given the tasks' owner: "" the
+// shared ones), every owner's tasks. Writes the files that changed, doesn't
+// commit: returns them for the rename's commit.
+func renamePageRefs(rewrite func(owner, text string) string) ([]string, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	var paths, changed []string
+	type file struct{ path, owner string }
+	var paths []file
+	var changed []string
 	for _, o := range everyOwner() {
-		paths = append(append(paths, deckFile(o), completedPath(o)), archiveGlob(o)...)
+		for _, p := range append([]string{deckFile(o), completedPath(o)}, archiveGlob(o)...) {
+			paths = append(paths, file{p, o})
+		}
 	}
-	for _, p := range paths {
+	for _, f := range paths {
+		p := f.path
 		tasks, err := readListStrict(p)
 		if err != nil {
 			return changed, err
@@ -895,7 +901,7 @@ func renamePageRefs(rewrite func(string) string) ([]string, error) {
 		for _, t := range tasks {
 			for _, field := range []*string{&t.Title, &t.Description} {
 				if *field != "" {
-					if n := rewrite(*field); n != *field {
+					if n := rewrite(f.owner, *field); n != *field {
 						*field = n
 						dirty = true
 					}

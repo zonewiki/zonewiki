@@ -899,10 +899,10 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// ?page=: the page being edited, for what depends on where the text is
-	// (its own private folder); only the user's own pages count.
+	// (a private folder, or shared); only pages the user may see count.
 	rq := newReq(r)
 	page := r.URL.Query().Get("page")
-	if !ownPrivate(rq.who(), page) {
+	if safePath(page) == "" || !canSee(rq.who(), page) {
 		page = ""
 	}
 	_, _ = io.WriteString(w, renderMd(rq, string(body), RenderOpts{Page: page, PreferLists: lists}))
