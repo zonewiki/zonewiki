@@ -83,22 +83,6 @@ scratchForm?.addEventListener('submit', async e => {
   } catch (_) {}
 });
 
-// ── New-page modal ─────────────────────────────────────────────────────────────
-
-const newPageModal  = document.getElementById('new-page-modal');
-const newPageInput  = document.getElementById('new-page-input');
-const newPageCancel = document.getElementById('new-page-cancel');
-
-newPageCancel?.addEventListener('click', () => newPageModal.close());
-closeOnBackdropClick(newPageModal);
-
-export function openNewPage() {
-  if (!newPageModal) return;
-  newPageInput.value = '';
-  newPageModal.showModal();
-  newPageInput.focus();
-}
-
 // ── Action bar ───────────────────────────────────────────────────────────────
 // The phone's actions, as the desktop's top actions: a new scratch note, a
 // new task and Search (Ctrl+P). In the deck the new task comes from its own

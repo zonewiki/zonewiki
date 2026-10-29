@@ -1,5 +1,5 @@
 {{- /* Every view's page: head, the dialogs the client code opens (search, new
-    note, new page, shortcuts, paste link, upload conflict), the status
+    note, shortcuts, paste link, upload conflict), the status
     badges, the top actions (desktop) and the action bar (phones). Views
     define the body block (views.go, page). */ -}}
 {{define "layout" -}}
@@ -65,19 +65,6 @@
       <div class="scratch-actions">
         <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
         <button type="button" class="btn" id="scratch-cancel">Cancel</button>
-      </div>
-    </form>
-  </dialog>
-  <dialog id="new-page-modal" class="scratch-modal">
-    <p class="scratch-label">New page</p>
-    <form method="post" action="/new" id="new-page-form">
-      <input type="text" id="new-page-input" name="slug" placeholder="Page name…" autocomplete="off" spellcheck="false" required>
-      {{- with .user}}
-      <label class="promote-check"><input type="checkbox" name="private" value="1" id="new-page-private"> Private: in private/{{.}}/, only you see it</label>
-      {{- end}}
-      <div class="scratch-actions">
-        <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="new-page-cancel">Cancel</button>
       </div>
     </form>
   </dialog>

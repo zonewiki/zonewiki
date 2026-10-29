@@ -11,7 +11,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | GET    | `/deck`               | The built-in deck page (`deckPage()`): the full main deck (every open task, list tasks included), independent of the wiki's pages. `?list=<name>` shows that separate list instead, with the params of the page that declares it (keep, labels, limit, …) and a line linking to that page; `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the deck" goes here (the Deck module links without a deck home, search results, Linked tasks, `g d`). |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
-| GET    | `/new`                | Editor for a new page (slug entered by user)    |
+| GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |

@@ -1,5 +1,5 @@
 import { closeOnBackdropClick, keyPrefix } from './util.js';
-import { deckHomeHref, openHomeTask, openNewPage, openScratch, toggleSharing } from './actions.js';
+import { deckHomeHref, openHomeTask, openScratch, toggleSharing } from './actions.js';
 import { openSearchModal } from './search.js';
 import { togglePreview } from './editor.js';
 import { foldAll } from './fold.js';
@@ -44,13 +44,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     openSearchModal();
-    return;
-  }
-
-  // Ctrl/Cmd+N — new page
-  if (e.key === 'n' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-    e.preventDefault();
-    openNewPage();
     return;
   }
 
