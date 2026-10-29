@@ -83,8 +83,8 @@ func sharedMove(user, slug string) (target string, ok bool) {
 }
 
 // sharedNewOffer: a new page opened from a link on one of the user's private
-// pages (?from=private) that would be shared: the private slug it can be
-// made as instead, "" when there is nothing to offer (not from a private
+// pages (?from=private) that would be shared: the private slug a link could
+// name instead (the editor's note says so), "" when there is nothing to offer (not from a private
 // page, no users, the page is private already, or that private page exists).
 func sharedNewOffer(user, slug string, fromPrivate bool) string {
 	folder := privateFolder(user)

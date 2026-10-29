@@ -278,35 +278,9 @@ if (textarea && previewPane) {
   }
 
   // A new page from a link on a private page opens as a shared one: the
-  // banner says so. Keep shared dismisses it. Make it private instead moves
-  // what is typed to private/<you>/<name>: save it (an auto-save), rename
-  // the page (the ordinary rename, so a page that was never saved, 404,
-  // has nothing to move) and open the private page's editor. Nothing is
-  // saved on the way out, which would make the shared page again.
+  // banner says so, and Keep shared dismisses it.
   const sharedBanner = document.getElementById('shared-new-banner');
-  if (sharedBanner) {
-    document.getElementById('shared-new-keep').addEventListener('click', () => sharedBanner.remove());
-    document.getElementById('shared-new-private').addEventListener('click', async () => {
-      const target = sharedBanner.dataset.privateSlug;
-      const url = slug => slug.split('/').map(encodeURIComponent).join('/');
-      clearTimeout(autoSaveTimer);
-      formSubmitting = true;
-      try {
-        await autoSave();
-        if (textarea.value !== lastSavedContent) throw new Error('not saved');
-        const res = await fetch(`/rename/${url(pageSlug)}`, {
-          method: 'POST',
-          body: new URLSearchParams({ new_name: target }),
-        });
-        // 404: the page was never saved (nothing typed): only the editor moves.
-        if (res.status !== 404 && (!res.ok || res.url.includes('rename_error='))) throw new Error('not renamed');
-        window.location.href = `/edit/${url(target)}`;
-      } catch {
-        formSubmitting = false;
-        showToast('Could not make it private: the page stays shared');
-      }
-    });
-  }
+  sharedBanner?.querySelector('#shared-new-keep').addEventListener('click', () => sharedBanner.remove());
 
   // After Done's conflict: what an auto-save is told (who, and the lines
   // with markers), for the banner; null if it saved after all (the file

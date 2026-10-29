@@ -312,8 +312,8 @@ class TestModuleMenu:
 
 class TestSharedNewPage:
     """A link on a private page to a page that doesn't exist would make a shared
-    page: the link is marked, and the editor it opens warns and offers the
-    page as a private one."""
+    page: the link is marked, and the editor it opens warns and says how to make
+    it private."""
 
     @pytest.fixture()
     def alice(self, client, git_wiki_dir, users):
@@ -359,9 +359,9 @@ class TestSharedNewPage:
         assert alice.get("/page/garden", headers=HOST).headers["Location"] == "/edit/garden"
         assert alice.get("/page/garden?from=nonsense", headers=HOST).headers["Location"] == "/edit/garden"
 
-    def test_the_editor_warns_and_offers_a_private_page(self, alice, git_wiki_dir):
+    def test_the_editor_warns_and_names_the_private_page(self, alice, git_wiki_dir):
         body = alice.get("/edit/garden?from=private", headers=HOST).data.decode()
-        assert 'id="shared-new-banner"' in body and 'data-private-slug="private/alice/garden"' in body
+        assert 'id="shared-new-banner"' in body and "<code>private/alice/garden</code>" in body
         assert "This new page is shared" in body
         for url in ("/edit/garden", "/edit/garden?from=other", "/edit/plans?from=private",   # no hint; a page that exists
                     "/edit/private/alice/garden?from=private"):                               # private already
