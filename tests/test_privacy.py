@@ -224,16 +224,17 @@ def scratch_titles(client):
 
 
 def test_scratch_notes_are_private(alice, wiki):
-    (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: stays shared
+    (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: a shared page, in no one's Scratch
     slug = alice.post("/api/scratch", data={"title": "Mine"}, headers=HOST).get_json()["slug"]
     assert re.fullmatch(r"private/alice/\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_mine", slug)
     assert (wiki / f"{slug}.md").exists()
     notes = scratch_titles(alice)
-    assert slug in notes and NOTE in notes and "2026-01-01_10-00-00_shared" in notes
+    assert slug in notes and NOTE in notes and "2026-01-01_10-00-00_shared" not in notes
+    assert 'aria-label="Private">🔒</span></h1>' in alice.get("/page/_scratch", headers=HOST).data.decode()
     sign_in(alice, "bob")
     bob = alice
-    notes = scratch_titles(bob)
-    assert "2026-01-01_10-00-00_shared" in notes and not any("alice" in n for n in notes)
+    assert scratch_titles(bob) == []
+    assert alice.get("/page/2026-01-01_10-00-00_shared", headers=HOST).status_code == 200   # still a page
 
 
 def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):

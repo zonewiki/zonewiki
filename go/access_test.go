@@ -117,6 +117,18 @@ func TestScratchNotesInPrivateFolders(t *testing.T) {
 	}
 }
 
+func TestInScratch(t *testing.T) {
+	testWiki(t, nil)
+	old, mine, theirs := "2026-10-27_12-00-00_idea", "private/alice/2026-10-27_12-00-00_idea", "private/carol/2026-10-27_12-00-00_idea"
+	if !inScratch("", old) || inScratch("", "notes") {
+		t.Error("without users: the top-level notes")
+	}
+	withUsers(t, "alice")
+	if !inScratch("alice", mine) || inScratch("alice", old) || inScratch("alice", theirs) || !inScratch("", old) {
+		t.Error("with users: only the user's own; Leaf itself sees all")
+	}
+}
+
 func TestHideNames(t *testing.T) {
 	testWiki(t, nil)
 	msg := "Promote private/alice/2026-10-27_12-00-00_idea to idea (MCP)"

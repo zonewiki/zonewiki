@@ -94,6 +94,16 @@ func ownPrivate(user, slug string) bool {
 	return owner != "" && owner == user
 }
 
+// inScratch: slug is a note in user's Scratch: any scratch note without
+// users or for Leaf itself (user ""), with users only one in their own folder
+// (a note from before users, at the top level, is a page like any other).
+func inScratch(user, slug string) bool {
+	if !isScratch(slug) {
+		return false
+	}
+	return privateFolder(user) == "" || ownPrivate(user, slug)
+}
+
 // privateFolder: user's private folder ("private/alice"), "" without
 // users (or for Leaf itself, which has no user).
 func privateFolder(user string) string {

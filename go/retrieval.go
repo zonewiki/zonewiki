@@ -532,7 +532,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && !linked[d.Slug] })
 	}
 	if scratch {
-		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && isScratch(d.Slug) })
+		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && inScratch(rq.user, d.Slug) })
 	}
 	if rq.sharing || settings().Users != nil {
 		tests = append(tests, func(d *SearchDoc) bool { return !hiddenDoc(rq, d) })
@@ -669,7 +669,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 	x := chunkIndex()
 	pagesOnly := under != "" || scratch
 	pageOK := func(slug string) bool {
-		return inFolder(slug, under) && (!scratch || isScratch(slug)) && !hiddenPage(rq, slug)
+		return inFolder(slug, under) && (!scratch || inScratch(rq.who(), slug)) && !hiddenPage(rq, slug)
 	}
 	var keep func(*SearchDoc) bool
 	if pagesOnly || rq != nil && settings().Users != nil {

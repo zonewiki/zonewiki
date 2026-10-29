@@ -194,12 +194,12 @@ type ScratchNote struct {
 }
 
 // listScratch: every scratch note, newest first (in sharing mode without
-// those not for sharing): the wiki's top level, and with users the top of
-// the user's private folder.
+// those not for sharing): the wiki's top level, or with users only the top
+// of the user's private folder (inScratch).
 func listScratch(rq *Req) []ScratchNote {
 	folders := []string{""}
 	if own := privateFolder(rq.user); own != "" {
-		folders = append(folders, own)
+		folders = []string{own}
 	}
 	var notes []ScratchNote
 	for _, folder := range folders {
@@ -215,7 +215,7 @@ func listScratch(rq *Req) []ScratchNote {
 			}
 			slug := prefix + strings.TrimSuffix(name, ".md")
 			m := scratchRE.FindStringSubmatch(slug)
-			if m == nil || !isScratch(slug) || hiddenPage(rq, slug) {
+			if m == nil || !inScratch(rq.user, slug) || hiddenPage(rq, slug) {
 				continue
 			}
 			ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], time.Local)

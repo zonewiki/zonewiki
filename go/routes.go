@@ -77,7 +77,7 @@ func quote(s string) string { return pathURL(s)[1:] }
 func scratchPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	page(w, rq, http.StatusOK, "scratch.html", "Scratch", shell{}, M{"notes": listScratch(rq),
-		"q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Scratch", "", "")})
+		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Scratch", "", "")})
 }
 
 var (

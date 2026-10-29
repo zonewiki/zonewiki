@@ -1565,7 +1565,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	var rows []row
 	for _, p := range visiblePages(user) {
-		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyScratch && !isScratch(p.Slug) {
+		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyScratch && !inScratch(user, p.Slug) {
 			continue
 		}
 		st, err := os.Stat(p.Path)
