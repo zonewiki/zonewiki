@@ -1802,7 +1802,7 @@ def test_private_checkbox_in_modal(page, wiki, monkeypatch):
     page.locator("#task-edit-form button[type=submit]").click()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_be_visible()
     wait_for_field(page, "Gift for Bob", "private", True)
-    assert "Gift for Bob" in (wiki.root / "_deck/users/alice/tasks.json").read_text()
+    assert "Gift for Bob" in (wiki.root / "private/alice/_deck/tasks.json").read_text()
 
     page.keyboard.press("Enter")   # the new task is selected: edit it
     expect(private).to_be_checked()

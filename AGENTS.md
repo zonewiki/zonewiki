@@ -102,7 +102,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
-│   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in _deck/users/<user>/), lock, recurrence, history, comments, backlinks, search docs
+│   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in private/<user>/_deck/), lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A deck task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): deck requests, MCP messages and arguments, task files
@@ -219,7 +219,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Private pages and tasks** (`private/<user>/`, `_deck/users/<user>/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_deck/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `hosts` skips it.

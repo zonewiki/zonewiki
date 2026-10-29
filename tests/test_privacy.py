@@ -71,7 +71,7 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
     # Her deck: her own home and a list of hers, and her tasks.
     (w / "private/alice/deck.md").write_text(f"# My deck {SECRET}\n\n[[deck home=1 list=secretlist]]\n")
-    deck = w / "_deck" / "users" / "alice"
+    deck = w / "private/alice/_deck"
     deck.mkdir(parents=True)
     this_year = __import__("datetime").date.today().year
     (deck / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
@@ -354,13 +354,13 @@ def test_no_private_box_without_users(client, wiki_dir):
 def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     task = alice.post("/api/deck", json={"title": "Gift", "private": True}, headers=HOST).get_json()
     assert task["private"] is True
-    mine, shared = wiki / "_deck/users/alice/tasks.json", wiki / "_deck/tasks.json"
+    mine, shared = wiki / "private/alice/_deck/tasks.json", wiki / "_deck/tasks.json"
     assert task["id"] in mine.read_text() and task["id"] not in shared.read_text()
     assert alice.put(f"/api/deck/{task['id']}", json={"private": False}, headers=HOST).get_json()["private"] is False
     assert task["id"] in shared.read_text() and task["id"] not in mine.read_text()
     # One commit, both files, in her name.
     assert git(wiki, "show", "--name-only", "--format=%an", "HEAD").split() == [
-        "alice", "_deck/tasks.json", "_deck/users/alice/tasks.json"]
+        "alice", "_deck/tasks.json", "private/alice/_deck/tasks.json"]
     sign_in(alice, "bob")
     assert task["id"] in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
 
@@ -498,7 +498,7 @@ def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     assert alice.delete(f"/api/deck/{TASK_ID}", headers=HOST).status_code == 204
     restored = alice.post("/api/deck/restore", json={"tasks": [snap]}, headers=HOST).get_json()
     assert [t["private"] for t in restored] == [True]
-    assert TASK_ID in (wiki / "_deck/users/alice/tasks.json").read_text()
+    assert TASK_ID in (wiki / "private/alice/_deck/tasks.json").read_text()
 
 
 def test_alices_assistant_makes_private_tasks(client, wiki):
@@ -672,8 +672,9 @@ def _alices_files(wiki):
     """alice's private files, and whether a shared deck file holds one of
     her task ids (a restore of a snapshot with her id)."""
     files = {p.relative_to(wiki).as_posix(): p.read_bytes()
-             for folder in ("private", "_assets/private", "_deck/users/alice")
-             for p in (wiki / folder).rglob("*") if p.is_file()}
+             for folder in ("private", "_assets/private")
+             for p in (wiki / folder).rglob("*") if p.is_file()
+             and "private/bob/" not in p.relative_to(wiki).as_posix() + "/"}   # bob's own, bob may change
     shared = "".join(p.read_text() for p in (wiki / "_deck").glob("*.json"))
     files["shared deck has her ids"] = str(TASK_ID in shared or DONE_ID in shared)
     return files
@@ -744,7 +745,7 @@ def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
     """private/bob/../alice/… is judged as it is opened, alice's: what bob
     writes by such a name lands in his own folder, if anywhere."""
     def hers():
-        return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in (wiki / "private/alice").rglob("*")}
+        return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in (wiki / "private/alice").rglob("*") if p.is_file()}
     before = hers()
     mcp(bob, "write_page", slug=SNEAK, content="# Bob was here\n", overwrite=True)
     note = bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"]

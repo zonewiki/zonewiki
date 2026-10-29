@@ -1729,7 +1729,7 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 // fileLabel: a changed file as the model knows it, a page by its slug, the
 // deck's files as tasks.
 func fileLabel(fp string) string {
-	if strings.HasPrefix(fp, "_deck/") {
+	if strings.HasPrefix(fp, "_deck/") || strings.Contains(fp, "/_deck/") {
 		return "deck tasks"
 	}
 	return strings.TrimSuffix(fp, ".md")

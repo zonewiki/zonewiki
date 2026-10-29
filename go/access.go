@@ -115,14 +115,14 @@ func privateFolder(user string) string {
 
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, an
-// upload in _assets/private/<user>/, a deck file in _deck/users/<user>/,
-// anything else in private/ like a page there. Leaf's own files in .leaf/
+// upload in _assets/private/<user>/, anything else in private/ (a user's
+// deck in private/<user>/_deck/ too) like a page there. Leaf's own files in .leaf/
 // (the settings file, with its password hashes) no one sees in Leaf.
 func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, ".leaf/") {
 		return false
 	}
-	for _, folder := range []string{"_assets/" + privateDir, "_deck/users", privateDir} {
+	for _, folder := range []string{"_assets/" + privateDir, privateDir} {
 		if owner, private := ownerIn(folder, rel); private {
 			return owner != "" && owner == user
 		}
