@@ -775,6 +775,7 @@ EXEMPT = {
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
     "GET /api/health",              # ok, or the settings file's error
     "POST /api/scratch",            # makes bob's own note
+    "GET /private",                 # redirects to the caller's own private home (test_users.py)
 }
 
 

@@ -13,6 +13,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
+| GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only scratch notes (the Scratch page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no deck embeds) |

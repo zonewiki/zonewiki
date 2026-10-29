@@ -957,6 +957,10 @@ main {
   white-space: nowrap;
 }
 
+/* A private page's lock: beside its title, in the page lists */
+.lock { font-size: .75em; opacity: .75; font-weight: normal; }
+.page-item-right .lock { margin-right: .35rem; }
+
 /* ── Breadcrumb ─────────────────────────────────────────────────────────────── */
 
 .breadcrumb {
@@ -996,8 +1000,10 @@ main {
     padding: .1rem .65rem; border-radius: 999px;
     transition: background .15s, color .15s;
   }
-  body:not(.editor-page) .module-switch .module-link:hover { background: var(--btn-bg); color: var(--fg); }
-  body:not(.editor-page) .module-switch .module-link[aria-current] {
+  body:not(.editor-page) .module-switch .module-link:hover,
+  body:not(.editor-page) .module-switch .module-menu-btn:hover { background: var(--btn-bg); color: var(--fg); }
+  body:not(.editor-page) .module-switch .module-link[aria-current],
+  body:not(.editor-page) .module-switch .module-menu-btn[aria-current] {
     background: var(--btn-bg); color: var(--fg); font-weight: 600;
   }
   body:not(.editor-page) .module-switch + .breadcrumb-sep,
@@ -1008,8 +1014,23 @@ main {
     background: var(--border); opacity: 1; font-size: 0;
   }
 }
+/* The ☰ button (with users): a member of the switcher's pill, opening the menu
+   of Private home and Scratch notes (js/chrome.js). */
+.module-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: .1rem .5rem; border: none; border-radius: 999px; background: none;
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.module-switch .module-menu-btn svg { width: 1rem; height: 1rem; }
+.module-menu-btn:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 1px; }
+.module-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.module-menu-backdrop[hidden], .module-menu[hidden] { display: none !important; }
+.module-menu .menu-icon { margin-right: .5rem; }
+.module-menu a[aria-current] { font-weight: 600; }
 /* The editor keeps its focus: the logo only, as the way home. */
 .editor-page .module-link:not([data-module="wiki"]),
+.editor-page .module-menu-btn,
 .editor-page .module-label { display: none; }
 .breadcrumb-sep { opacity: .5; }
 /* The navigation trail holds up to 6 pages. It stays on one line, and the
@@ -1883,18 +1904,19 @@ body.editor-page main {
   .action-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
   /* The Deck tab's counts stand right of its icon, due above Focus, centred
      on the icon (which sits .45rem above the tab's centre, the label below
-     it), so they never cover it. They reach past the tab's edge into extra
-     room before the divider; the tabs keep one width, so the icons stay
+     it), so they never cover it. They may reach a little past the tab's edge,
+     clear of the next tab's icon; the tabs keep one width, so the icons stay
      evenly spaced. */
   .action-buttons .module-counts {
     position: absolute; top: calc(50% - .45rem); left: calc(50% + .9rem); transform: translateY(-50%);
     flex-direction: column; align-items: flex-start; margin: 0; gap: .1rem; pointer-events: none;
   }
-  .action-buttons .action-module:has(.module-counts > :not([hidden])) + .action-sep { margin-left: 1.1rem; }
   .action-buttons :is(.module-due, .module-focus) {
     min-width: .9rem; height: .85rem; padding: 0 .2rem; font-size: .6rem;
   }
-  .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label { display: none; }
+  .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
+  .breadcrumb .module-menu-btn { display: none; }
+  .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
   body:has(.action-buttons) .raw-toast { bottom: calc(4.75rem + env(safe-area-inset-bottom)); }

@@ -64,7 +64,7 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     b = bar.bounding_box()
     assert b["x"] == 0 and b["width"] == 390 and abs(b["y"] + b["height"] - 844) < 1
     items = bar.locator(".action-module, button")
-    expect(items).to_have_text(["Wiki", "Scratch", "Deck", "Note", "Task", "Search"])
+    expect(items).to_have_text(["Wiki", "Deck", "Scratch", "Note", "Task", "Search"])
     boxes = [i.bounding_box() for i in items.all()]
     assert all(x["width"] >= 44 and x["height"] >= 44 for x in boxes)
     assert all(abs(x["y"] - boxes[0]["y"]) < 1 for x in boxes)   # one row
@@ -140,8 +140,8 @@ def test_task_creates_a_task_in_the_deck(new_page, wiki):
 
 def test_deck_tab_counts_stand_beside_the_icon(new_page, wiki):
     # Regression: two two-digit counts hung past the narrow Deck tab, over
-    # the divider; moved in, they covered the icon. They stand right of the
-    # icon, due above Focus, inside the tab, clear of the label.
+    # its neighbour; moved in, they covered the icon. They stand right of the
+    # icon, due above Focus, clear of the label and of the next tab's icon.
     phone = new_page(**{**TOUCH_PHONE, "viewport": {"width": 320, "height": 640}})
     for i in range(12):
         phone.request.post("/api/deck", data={
@@ -152,16 +152,15 @@ def test_deck_tab_counts_stand_beside_the_icon(new_page, wiki):
     deck = bar.locator(".action-module[data-module=deck]")
     tab, icon = deck.bounding_box(), deck.locator("svg").bounding_box()
     label = deck.locator(".action-label").bounding_box()
-    sep = bar.locator(".action-sep").first.bounding_box()
+    nxt = bar.locator(".action-module[data-module=deck] ~ .action-module svg").first.bounding_box()
     due, focus = bar.locator(".module-due").bounding_box(), bar.locator(".module-focus").bounding_box()
     assert due["y"] + due["height"] <= focus["y"]                       # due on top
     for b in (due, focus):
         assert b["x"] >= icon["x"] + icon["width"], (b, icon)            # beside the icon
-        assert b["x"] + b["width"] < sep["x"], (b, sep)                  # clear of the divider
+        assert b["x"] + b["width"] < nxt["x"], (b, nxt)                  # clear of the next tab's icon
         assert not _overlap(b, label), (b, label)
-    # The icons stay evenly spaced: the counts take room before the divider,
-    # not a wider Deck tab.
-    xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "scratch", "deck")]
+    # The icons stay evenly spaced: the counts take no room from a wider Deck tab.
+    xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "deck", "scratch")]
     centres = [x["x"] + x["width"] / 2 for x in xs]
     assert abs((centres[1] - centres[0]) - (centres[2] - centres[1])) < 1, centres
 
@@ -407,13 +406,14 @@ def test_g_t_goes_to_the_home_deck(page, wiki):
 
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
-# The breadcrumb starts with the modules: Wiki (with the logo), Scratch, Deck.
+# The breadcrumb starts with the modules: Wiki (with the logo), Deck, Scratch
+# (with users the ☰ menu in Scratch's place).
 
 def test_desktop_breadcrumb_switches_modules(page, wiki):
     wiki.write("garden", "# Garden\n\nBeds.\n")
     page.goto("/page/garden")
     switch = page.locator(".breadcrumb .module-switch .module-link")
-    expect(switch.locator(".module-label")).to_have_text(["Wiki", "Scratch", "Deck"])
+    expect(switch.locator(".module-label")).to_have_text(["Wiki", "Deck", "Scratch"])
     expect(switch.nth(0)).to_have_attribute("aria-current", "page")
     # One line with the page title after it.
     boxes = [m.bounding_box() for m in switch.all()]

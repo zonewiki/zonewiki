@@ -84,10 +84,12 @@ document.addEventListener('keydown', e => {
   }
 
   // g-prefix navigation: gh=home, gs=scratch, gd=deck (every task),
-  // gt=the deck's home (your own deck; /deck without one)
+  // gt=the deck's home (your own deck; /deck without one), gp=your private
+  // home (with users: the ☰ menu has it)
   if (keyPrefix.key === 'g') {
     resetPrefix();
     const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: deckHomeHref() };
+    if (document.querySelector('.module-menu-btn')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }

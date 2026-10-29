@@ -60,8 +60,8 @@ func pathURL(parts ...string) string {
 	return b.String()
 }
 
-// isProtected: the home page, never renamed or deleted.
-func isProtected(slug string) bool { return slug == "index" }
+// isProtected: the home page and a user's private home, never renamed or deleted.
+func isProtected(slug string) bool { return slug == "index" || isPrivateHome(slug) }
 
 // safePath is the page's file when it is inside the wiki and not in a
 // folder iterPages skips (_assets, _deck, .leaf, .git …: no pages there,

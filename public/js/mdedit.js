@@ -21,7 +21,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
                                           onEnter = null, formats = {}, tabIndents = true,
                                           page = '' } = {}) {
   // Page and task completion; its keys (↑/↓, Enter, Tab) come first.
-  const linkAc = linkAutocomplete(textarea, { tasks: true });
+  const linkAc = linkAutocomplete(textarea, { tasks: true, page });
 
   textarea.addEventListener('keydown', e => {
     if (e.defaultPrevented || e.isComposing) return;   // handled by the completion

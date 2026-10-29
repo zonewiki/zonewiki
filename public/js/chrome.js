@@ -19,10 +19,12 @@
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Scratch, /deck and the deck's home page (where the Deck link goes).
+  // Scratch, /deck, the deck's home page (where the Deck link goes) and
+  // your private home (in the ☰ menu).
   const deckHref = bc.querySelector('.module-link[data-module="deck"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
-    .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && (p.url || '').split('?')[0] !== deckHref)
+    .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
+      && (p.url || '').split('?')[0] !== deckHref)
                             .slice(-maxPrev);
   if (!intermediates.length) return;
 
@@ -181,8 +183,9 @@
 
 // ── Modules ─────────────────────────────────────────────────────────────────
 // The module switcher (breadcrumb) and the phone's bottom bar link to the
-// three modules; the server marks the current one (aria-current). The Deck
-// links carry the counts of tasks due and in Focus.
+// modules; the server marks the current one (aria-current). The Deck
+// links carry the counts of tasks due and in Focus. With users the third is
+// a ☰ button (below).
 
 // The server renders the counts into the page (no change of width after it
 // has painted); refreshDueBadge keeps them current: every minute, when the
@@ -223,3 +226,60 @@ if (deckLinks.length) {
   // A page restored from the back/forward cache shows old counts.
   window.addEventListener('pageshow', e => { if (e.persisted) refreshDueBadge(); });
 }
+
+// ── The ☰ menu ───────────────────────────────────────────────────────────────
+// With users the switcher's third place is ☰ (also the tab bar's): a click
+// menu with Private home and Scratch notes. One menu (.module-menu, rendered
+// hidden) for both buttons: a popover under the pressed one, a bottom sheet
+// on phones (the page menu's styles). ↑/↓ move, Esc closes and returns focus.
+(function () {
+  const menu = document.querySelector('.module-menu');
+  const backdrop = document.querySelector('.module-menu-backdrop');
+  const buttons = document.querySelectorAll('.module-menu-btn');
+  if (!menu || !backdrop || !buttons.length) return;
+  let opener = null;
+  const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+
+  function close(refocus) {
+    if (menu.hidden) return;
+    menu.hidden = backdrop.hidden = true;
+    document.removeEventListener('keydown', onKey, true);
+    opener?.setAttribute('aria-expanded', 'false');
+    if (refocus) opener?.focus();
+    opener = null;
+  }
+  function open(btn) {
+    opener = btn;
+    menu.hidden = backdrop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    // Under the button, flipped up if it doesn't fit below (the tab bar's).
+    const r = btn.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    const top = r.bottom + 4 + m.height > window.innerHeight ? r.top - 4 - m.height : r.bottom + 4;
+    menu.style.top = `${Math.max(4, top)}px`;
+    menu.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - m.width - 4))}px`;
+    document.addEventListener('keydown', onKey, true);
+    items()[0]?.focus({ preventScroll: true });
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+    else if (e.key === 'Tab') close(false);
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); e.stopPropagation();
+      const list = items(), i = list.indexOf(document.activeElement);
+      list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
+    }
+  }
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const again = opener === btn;
+      close(false);
+      if (!again) open(btn);
+    });
+    // ↓ on the button opens it too.
+    btn.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' && menu.hidden) { e.preventDefault(); open(btn); }
+    });
+  });
+  backdrop.addEventListener('click', () => close(false));
+  menu.addEventListener('click', () => close(false));
+}());

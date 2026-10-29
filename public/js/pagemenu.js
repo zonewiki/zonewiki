@@ -91,6 +91,7 @@ function promotedSlug(folder, name, date) {
     close(false);
     if (item.dataset.action === 'delete') document.getElementById('page-delete-dialog')?.showModal();
     else if (item.dataset.action === 'rename') openRename();
+    else if (item.dataset.action === 'privacy') document.getElementById('page-privacy-dialog')?.showModal();
     else if (item.dataset.action === 'promote') openPromote();
     else if (item.dataset.action === 'append') openAppend();
   });
@@ -164,6 +165,13 @@ function promotedSlug(folder, name, date) {
     const url = new URL(location.href);
     url.searchParams.delete(param);
     history.replaceState(null, '', url);
+  }
+
+  // Make private / Make shared: the confirmation (a rename into or out of the folder).
+  const privacy = document.getElementById('page-privacy-dialog');
+  if (privacy) {
+    document.getElementById('page-privacy-cancel').addEventListener('click', () => privacy.close());
+    closeOnBackdropClick(privacy);
   }
 
   const rename = document.getElementById('page-rename-dialog');

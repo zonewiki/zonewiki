@@ -7,16 +7,33 @@
 {{- end}}
 
 {{- /* The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
-    then Scratch and Deck. Phones and the editor show the logo only
-    (style.css). The trail code in js/chrome.js keeps it as the first crumb. */}}
+    then Deck and Scratch (with users the ☰ button instead, which opens the
+    menu below). Phones and the editor show the logo only (style.css). The
+    trail code in js/chrome.js keeps it as the first crumb. */}}
 {{define "module_switch" -}}
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
 {{- range .links -}}
+{{- if .menu -}}
+<button type="button" class="module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes" title="Private home and Scratch notes"{{if .current}} aria-current="page"{{end}}>{{template "icon_menu"}}</button>
+{{- else -}}
 <a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}
 {{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_leaf"}}{{else}}>{{end -}}
 <span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
+{{- end -}}
 </nav>
+{{- end}}
+
+{{- /* The ☰ menu (with users): Private home and Scratch notes. One element
+    for both ☰ buttons, the switcher's and the tab bar's, that js/chrome.js
+    opens under whichever was pressed (a bottom sheet on phones). Outside the
+    tab bar's nav: its touch handling picks a tab by position. */}}
+{{define "module_menu" -}}
+<div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Private home and Scratch notes" hidden>
+{{- range .items -}}
+<a role="menuitem" href="{{.href}}" data-menu="{{.key}}"{{if .current}} aria-current="page"{{end}}>{{if .icon}}<span class="menu-icon" aria-hidden="true">{{.icon}}</span>{{end}}{{.label}}</a>
+{{- end -}}
+</div>
 {{- end}}
 
 {{- /* The phone's bottom tab bar in three groups, each set apart by a
@@ -25,7 +42,11 @@
 {{define "action_bar" -}}
 <nav class="action-buttons" aria-label="{{.app_name}}">
 {{- range .module_links -}}
+{{- if .menu -}}
+<button type="button" class="action-module module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes"{{if .current}} aria-current="page"{{end}}>{{template "icon_menu"}}<span class="action-label">{{.label}}</span></button>
+{{- else -}}
 <a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+{{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-scratch" aria-label="New scratch note" title="New scratch note (c s)">{{template "icon_new_note"}}<span class="action-label" aria-hidden="true">Note</span></button>
@@ -33,4 +54,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
+{{- range .module_links}}{{if .menu}}{{template "module_menu" .}}{{end}}{{end}}
 {{- end}}

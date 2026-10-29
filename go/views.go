@@ -101,10 +101,12 @@ func diffLines(diff string) []diffLine {
 	return lines
 }
 
-// Leaf's three modules: the wiki, the scratch notes and the deck. Every
-// view names the one it belongs to (<body data-module>); the matching links
-// are aria-current, and js/actions.js makes "New" create that module's kind.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"scratch", "Scratch", "/page/_scratch"}, {"deck", "Deck", "/deck"}}
+// Leaf's modules: the wiki, the deck and the scratch notes (with users, the
+// third is the ☰ menu of Private home and Scratch notes). Every view names
+// the one it belongs to (<body data-module>: also "private" for a page in
+// your private folder); the matching links are aria-current, and
+// js/actions.js makes "New" create that module's kind.
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Deck", "/deck"}, {"scratch", "Scratch", "/page/_scratch"}}
 
 // deckCountsTitle: the Deck links' tooltip, "Deck: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js deckCountsTitle builds the same).
@@ -135,12 +137,20 @@ func (rq *Req) deckCounts() DeckCounts {
 	return *rq.counts
 }
 
-// moduleLinks: the three module links (where each goes, whether it is the
-// current view's, the Deck's counts).
+// moduleLinks: the module links (where each goes, whether it is the current
+// view's, the Deck's counts). With users the third is the ☰ menu ("menu"):
+// Private home and Scratch notes, current for either's views.
 func moduleLinks(rq *Req) []M {
 	current := currentModule(rq)
 	var out []M
 	for _, m := range modules {
+		if m[0] == "scratch" && privateFolder(rq.who()) != "" {
+			out = append(out, M{"key": "menu", "label": "More", "menu": true,
+				"current": current == "scratch" || current == "private", "items": []M{
+					{"key": "private", "label": "Private home", "icon": "🔒", "href": "/private", "current": current == "private"},
+					{"key": "scratch", "label": "Scratch notes", "icon": "", "href": m[2], "current": current == "scratch"}}})
+			continue
+		}
 		href := m[2]
 		// The Deck goes to the deck's home page when a page declares one.
 		if m[0] == "deck" {
@@ -160,7 +170,8 @@ func moduleLinks(rq *Req) []M {
 var moduleViewRE = regexp.MustCompile(`^/(?:page|history)/(.+)$`)
 
 // currentModule: the module the request's view belongs to: "deck",
-// "scratch", "wiki", or "" for views of none (search results, login).
+// "scratch", "private" (a page in your own private folder), "wiki", or ""
+// for views of none (search results, login).
 func currentModule(rq *Req) string {
 	if rq == nil || rq.r == nil {
 		return ""
@@ -178,6 +189,9 @@ func currentModule(rq *Req) string {
 	}
 	if strings.HasPrefix(p, "/page/") && m != nil && m[1] == rq.deckHomeSlug() {
 		return "deck"
+	}
+	if m != nil && ownPrivate(rq.who(), m[1]) {
+		return "private"
 	}
 	return "wiki"
 }
@@ -408,6 +422,9 @@ func buildDeleteDialog(slug, title string) template.HTML {
 func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError string) M {
 	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "scratch": isScratch(slug),
 		"renamable": !isProtected(slug), "rename_error": renameError}
+	if target, toPrivate, ok := privacyMove(rq.who(), slug); ok {
+		m["privacy_target"], m["privacy_to_private"] = target, toPrivate
+	}
 	if isScratch(slug) {
 		var wiki []PageRef
 		for _, p := range iterPages() {

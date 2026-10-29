@@ -8,7 +8,7 @@
 {{template "rail_toc" .rail_toc_html}}
 <div class="page-col">
 <header class="page-header">
-  <h1>{{.title}}</h1>
+  <h1>{{.title}}{{if .private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}</h1>
   <div class="page-header-actions">
   {{- if .from_uncommitted}}
     {{template "commit_form" (dict "filepath" (print .slug ".md") "title" .title "on_success" "/uncommitted")}}

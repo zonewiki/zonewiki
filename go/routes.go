@@ -15,6 +15,7 @@ import (
 )
 
 func pageRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /private", privateRoute)
 	mux.HandleFunc("GET /page/_scratch", scratchPage)
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
@@ -189,7 +190,8 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionTasks: tasks}))
 	}
-	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted,
+	_, private := pageOwner(slug)
+	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted, "private": private,
 		"task_keys":       strings.Join(taskLineKeys(content), ","),
 		"breadcrumb_html": bc, "delete_dialog_html": buildDeleteDialog(slug, title),
 		"rail_toc_html": railTocItems(string(article)), "meta_row_html": metaRow, "article_html": article,
@@ -775,7 +777,8 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug],
+		_, private := pageOwner(p.Slug) // not hidden above: the user's own
+		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug], "private": private,
 			"mtime": st.ModTime().Unix(), "created": fmtDate(changeTime(st)), "edited": fmtDate(st.ModTime())})
 	}
 	sort.SliceStable(pages, func(i, j int) bool {

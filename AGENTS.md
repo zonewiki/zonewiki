@@ -90,6 +90,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
+│   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes

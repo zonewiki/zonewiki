@@ -53,12 +53,18 @@
 <button type="button" role="menuitem" id="present-btn" hidden>Present<kbd class="menu-key">p</kbd></button>
 {{- if .git}}<a role="menuitem" href="{{url "history" .slug}}">History</a>{{end}}
 {{- if .scratch}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
+{{- if .privacy_target}}<button type="button" role="menuitem" data-action="privacy">{{if .privacy_to_private}}Make private…{{else}}Make shared…{{end}}</button>{{end -}}
 {{- if .renamable}}<button type="button" role="menuitem" data-action="rename">Rename…</button><button type="button" role="menuitem" data-action="delete" class="danger">Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>{{end -}}
 </div>
 {{- if .scratch}}
 <datalist id="wiki-pages">{{range .wiki_pages}}<option value="{{.Slug}}">{{.Title}}</option>{{end}}</datalist>
 {{- template "promote_dialog" .}}
 {{- template "append_dialog" .}}
+{{- end}}
+{{- if .privacy_target}}
+<dialog id="page-privacy-dialog" class="scratch-modal"><p class="scratch-label">{{if .privacy_to_private}}Make private{{else}}Make shared{{end}}</p>
+<p class="modal-desc">{{if .privacy_to_private}}“{{.title}}” moves into your private folder, to <code>{{.privacy_target}}</code>. Only you will see it. Links to it follow, but on shared pages others see them as plain text naming its new path. The versions from when it was shared stay in the wiki’s history, and private pages are not encrypted.{{else}}“{{.title}}” moves out of your private folder, to <code>{{.privacy_target}}</code>. Everyone who uses this wiki will see and be able to change it. Links to it follow.{{end}}</p>
+<form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="new_name" value="{{.privacy_target}}"><div class="scratch-actions"><button type="submit" class="btn btn-primary">{{if .privacy_to_private}}Make private{{else}}Make shared{{end}}</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .renamable}}
 <dialog id="page-rename-dialog" class="scratch-modal"{{if .rename_error}} data-open{{end}}><p class="scratch-label">Rename page</p><form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{.slug}}" aria-label="New name for “{{.title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .rename_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>

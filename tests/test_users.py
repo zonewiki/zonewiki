@@ -2,6 +2,7 @@
 naming its user, per-user MCP tokens, and commits authored by whoever made
 the change."""
 
+import re
 import subprocess
 from io import BytesIO
 
@@ -101,6 +102,190 @@ class TestMCP:
         monkeypatch.setattr(settings, "LEAF_USERS", {"bob": USERS["bob"]})
         resp = mcp(client, "x")
         assert resp.status_code == 403 and "./run.sh user token NAME" in resp.get_json()["error"]
+
+
+class TestPrivateHome:
+    """/private opens the signed-in user's private home, private/<user>/index
+    (docs/spec/users.md, Private pages): made on the first visit, never
+    renamed or deleted."""
+
+    def test_opens_your_own_home_and_makes_it_once(self, client, git_wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        resp = client.get("/private", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/index"
+        home = git_wiki_dir / "private/alice/index.md"
+        assert home.read_text().startswith("# Private\n") and "## Links" in home.read_text()
+        assert authors(git_wiki_dir)[0] == ("alice", "Create private/alice/index")
+        assert "Only you see these pages." in client.get("/page/private/alice/index", headers=HOST).data.decode()
+        home.write_text("# Mine\n\n[[plans]]\n")
+        client.get("/private", headers=HOST)
+        assert home.read_text() == "# Mine\n\n[[plans]]\n"   # a later visit leaves it alone
+
+    def test_each_user_gets_their_own(self, client, git_wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        client.get("/private", headers=HOST)
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        resp = client.get("/private", headers=HOST)
+        assert resp.headers["Location"] == "/page/private/bob/index"
+        assert (git_wiki_dir / "private/bob/index.md").exists()
+
+    def test_needs_a_login(self, client, users):
+        resp = client.get("/private", headers=HOST)
+        assert resp.status_code == 302 and "/login" in resp.headers["Location"]
+
+    def test_there_is_no_private_home_without_users(self, client, wiki_dir):
+        assert client.get("/private", headers=HOST).status_code == 404
+        assert not (wiki_dir / "private").exists()
+
+    def test_it_is_never_renamed_or_deleted(self, client, wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        client.get("/private", headers=HOST)
+        home = wiki_dir / "private/alice/index.md"
+        assert client.post("/delete/private/alice/index", headers=HOST).status_code == 400
+        assert client.post("/rename/private/alice/index", data={"new_name": "private/alice/start"},
+                           headers=HOST).status_code == 400
+        for tool, args in [("delete_page", {"slug": "private/alice/index"}),
+                           ("rename_page", {"slug": "private/alice/index", "new_slug": "private/alice/start"})]:
+            body = mcp(client, "alice-token", tool, **args).get_json()
+            assert "can't be" in str(body), tool
+        assert home.exists() and not (wiki_dir / "private/alice/start.md").exists()
+        # Another page in the folder is an ordinary private page.
+        write = wiki_dir / "private/alice/diary.md"
+        write.write_text("# Diary\n")
+        assert client.post("/delete/private/alice/diary", headers=HOST).status_code in (200, 302)
+
+    def test_without_users_private_index_is_an_ordinary_page(self, client, wiki_dir):
+        (wiki_dir / "private/alice").mkdir(parents=True)
+        (wiki_dir / "private/alice/index.md").write_text("# Index\n")
+        assert client.post("/delete/private/alice/index", headers=HOST).status_code in (200, 302)
+        assert not (wiki_dir / "private/alice/index.md").exists()
+
+
+class TestMakePrivate:
+    """Make private / Make shared (the page menu): a rename into or out of the
+    user's private folder, with a 🔒 on private pages."""
+
+    PLANS = "# Plans\n\nSee [[ideas]].\n"
+
+    @pytest.fixture()
+    def alice(self, client, git_wiki_dir, users):
+        (git_wiki_dir / "plans.md").write_text(self.PLANS)
+        (git_wiki_dir / "ideas.md").write_text("# Ideas\n\nA shared idea.\n")
+        subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        subprocess.run(["git", "commit", "-qm", "Pages"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        login(client, "alice", "alice-pw")
+        return client
+
+    def view(self, client, slug):
+        return client.get(f"/page/{slug}", headers=HOST).data.decode()
+
+    def test_a_shared_page_offers_make_private(self, alice):
+        body = self.view(alice, "ideas")
+        assert "Make private…" in body and "Make shared…" not in body
+        assert 'name="new_name" value="private/alice/ideas"' in body
+        assert 'class="lock"' not in body
+
+    def test_a_private_page_offers_make_shared_and_has_a_lock(self, alice, git_wiki_dir):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/notes/deep.md").parent.mkdir()
+        (git_wiki_dir / "private/alice/notes/deep.md").write_text("# Deep\n")
+        body = self.view(alice, "private/alice/notes/deep")
+        assert "Make shared…" in body and "Make private…" not in body
+        assert 'name="new_name" value="notes/deep"' in body
+        assert '<h1>Deep <span class="lock"' in body
+
+    def test_not_offered_for_homes_scratch_notes_or_without_users(self, alice, client, wiki_dir, monkeypatch):
+        alice.get("/private", headers=HOST)
+        note = alice.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        for slug in ("index", "private/alice/index", note):
+            body = self.view(alice, slug)
+            assert "Make private…" not in body and "Make shared…" not in body, slug
+        monkeypatch.setattr(settings, "LEAF_USERS", {})
+        assert "Make private…" not in self.view(client, "ideas")
+
+    def test_make_private_moves_the_page_and_its_links(self, alice, git_wiki_dir):
+        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/ideas"
+        assert not (git_wiki_dir / "ideas.md").exists() and (git_wiki_dir / "private/alice/ideas.md").exists()
+        assert (git_wiki_dir / "plans.md").read_text() == "# Plans\n\nSee [[private/alice/ideas]].\n"
+        assert authors(git_wiki_dir)[0] == ("alice", "Rename ideas to private/alice/ideas")
+        # bob sees neither the page nor the link
+        alice.post("/logout", headers=HOST)
+        login(alice, "bob", "bob-pw")
+        assert alice.get("/page/private/alice/ideas", headers=HOST).status_code == 404
+        # ... and the link on the shared page is plain words for bob
+        assert 'href="/page/private/alice/ideas"' not in self.view(alice, "plans")
+
+    def test_make_shared_brings_it_back(self, alice, git_wiki_dir):
+        alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
+        resp = alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "ideas"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/ideas"
+        assert (git_wiki_dir / "ideas.md").exists() and not (git_wiki_dir / "private/alice/ideas.md").exists()
+        assert "[[ideas]]" in (git_wiki_dir / "plans.md").read_text()
+
+    def test_a_name_taken_comes_back_with_the_error(self, alice, git_wiki_dir):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/ideas.md").write_text("# Mine\n")
+        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
+        assert "rename_error=" in resp.headers["Location"] and (git_wiki_dir / "ideas.md").exists()
+
+    def test_page_lists_and_search_mark_private_pages(self, alice, git_wiki_dir):
+        (git_wiki_dir / "private/alice").mkdir(parents=True)
+        (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\nzebracorn\n")
+        (git_wiki_dir / "ideas.md").write_text("# Ideas\n\nzebracorn\n")
+        pages = {p["slug"]: p for p in alice.get("/api/pages-list", headers=HOST).get_json()}
+        assert pages["private/alice/diary"]["private"] is True and pages["ideas"]["private"] is False
+        hits = {r["slug"]: r for r in alice.get("/api/search?q=zebracorn", headers=HOST).get_json()}
+        assert hits["private/alice/diary"]["meta"].startswith("🔒 ") and "🔒" not in hits["ideas"]["meta"]
+
+
+class TestModuleMenu:
+    """With users the switcher's third place is the ☰ menu (Private home,
+    Scratch notes); without them it is the Scratch pill."""
+
+    @staticmethod
+    def parts(body):
+        crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
+        bar = body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
+        return crumb, bar
+
+    def test_the_menu_replaces_the_scratch_pill(self, client, users):
+        login(client, "alice", "alice-pw")
+        body = client.get("/page/index", headers=HOST).data.decode()
+        crumb, bar = self.parts(body)
+        assert 'class="module-menu-btn"' in crumb and 'data-module="scratch"' not in crumb
+        assert crumb.index('data-module="deck"') < crumb.index('class="module-menu-btn"')
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "More", "Note", "Task", "Search"]
+        assert bar.index('module-menu-btn') < bar.index('class="action-sep"')
+        # One menu for both buttons, outside the tab bar (its touch handling picks a tab by position).
+        assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar.replace("module-menu-btn", "")
+        menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'href="([^"]+)"', menu) == ["/private", "/page/_scratch"]
+        assert 'aria-haspopup="menu" aria-expanded="false"' in crumb
+
+    def test_without_users_scratch_stays_a_pill_in_the_third_place(self, client, wiki_dir):
+        body = client.get("/page/index", headers=HOST).data.decode()
+        crumb, bar = self.parts(body)
+        assert "module-menu" not in body
+        assert crumb.index('data-module="deck"') < crumb.index('data-module="scratch"')
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Deck", "Scratch"]
+
+    def test_the_menu_is_current_in_private_and_scratch_views(self, client, git_wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        client.get("/private", headers=HOST)
+        (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n")
+        note = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        (git_wiki_dir / "plans.md").write_text("# Plans\n")
+        for url, module, current in [("/page/private/alice/index", "private", True), ("/page/private/alice/diary", "private", True),
+                                     ("/page/_scratch", "scratch", True), (f"/page/{note}", "scratch", True),
+                                     ("/page/plans", "wiki", False), ("/deck", "deck", False)]:
+            body = client.get(url, headers=HOST).data.decode()
+            assert f'<body data-module="{module}"' in body, url
+            crumb, bar = self.parts(body)
+            assert ('class="module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes" '
+                    'title="Private home and Scratch notes" aria-current="page"' in crumb) == current, url
+            assert ('aria-current="page"' in bar.split("module-menu-btn", 1)[1].split(">", 1)[0]) == current, url
 
 
 class TestAuthors:

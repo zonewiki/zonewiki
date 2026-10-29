@@ -494,10 +494,14 @@ func resultMeta(d *SearchDoc, names map[string]DeckHome) string {
 		return where + " · " + status
 	}
 	edited := "edited " + fmtDate(d.Mtime)
-	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {
-		return d.Slug[:i] + " · " + edited
+	lock := ""
+	if _, private := pageOwner(d.Slug); private {
+		lock = "🔒 " // a user's own private page: no result shows another's
 	}
-	return edited
+	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {
+		return lock + d.Slug[:i] + " · " + edited
+	}
+	return lock + edited
 }
 
 const (

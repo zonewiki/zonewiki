@@ -86,7 +86,7 @@ class TestViewPage:
         for url in ("/page/my-page", "/deck", "/page/_scratch"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
-            assert crumb.index('href="/"') < crumb.index('href="/page/_scratch"') < crumb.index('href="/deck"'), url
+            assert crumb.index('href="/"') < crumb.index('href="/deck"') < crumb.index('href="/page/_scratch"'), url
             assert '<span class="module-label">Wiki</span>' in crumb
 
     @staticmethod
@@ -128,7 +128,7 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         bar = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split(
             '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Scratch", "Deck", "Note", "Task", "Search"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "Scratch", "Note", "Task", "Search"]
         # Navigation, a divider, then the actions.
         assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
 

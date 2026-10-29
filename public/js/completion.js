@@ -1,9 +1,13 @@
 import { sharingOn } from './actions.js';
+import { toSlug } from './util.js';
 
 // ── Link completion ───────────────────────────────────────────────────────────
 // In a text field, `[[` offers pages, `[[task:` open deck tasks (with
 // `tasks: true`, the editor) and `[text](` pages as /page/ links. One
-// implementation for the editor and the deck's task fields (deck.js).
+// implementation for the editor and the deck's task fields (deck.js). On a
+// page in a private folder (`page`, its slug, or a function giving it) `[[`
+// also offers a new page in that folder: wikilinks are absolute, so the
+// private page is named in full, `[[private/alice/idea|Idea]]`.
 
 let wikiPages = null;   // page slugs, fetched once when first needed
 
@@ -126,7 +130,7 @@ function getCaretCoords(el) {
 // `:name` (two letters or more, after a space or at the start) offers
 // emoji, and a whole `:name:` turns into its emoji: the file holds the
 // character itself, not the shortcode.
-export function linkAutocomplete(ta, { tasks = false } = {}) {
+export function linkAutocomplete(ta, { tasks = false, page = '' } = {}) {
   loadWikiPages();
   let el = null, index = 0, mode = 'wikilink';
 
@@ -144,6 +148,27 @@ export function linkAutocomplete(ta, { tasks = false } = {}) {
     return [null];
   }
 
+  // The folder of the private page being edited ("private/alice"), or ''.
+  function privateFolder() {
+    const slug = typeof page === 'function' ? page() : page;
+    const m = /^private\/[^/]+(?=\/)/.exec(slug || '');
+    return m ? m[0] : '';
+  }
+
+  // `[[idea` on a private page: a new page in its folder. It comes first (so
+  // Enter makes it), unless what is typed names a page exactly: then that
+  // page stays first and the offer follows. Left out for a name that exists
+  // in the folder.
+  function newPrivate(q, found) {
+    const folder = privateFolder(), name = q.trim();
+    if (!folder || !name || /[|#]/.test(name) || /^private\//i.test(name)) return found;
+    const slug = `${folder}/${toSlug(name)}`;
+    if (slug === `${folder}/` || wikiPages.includes(slug)) return found;
+    const offer = { value: `${slug}|${name}`, label: `New private page: ${name}`, meta: slug };
+    const exact = toSlug(name);
+    return found.includes(exact) ? [exact, offer, ...found.filter(p => p !== exact)] : [offer, ...found];
+  }
+
   function update(onlyIfFocused = false) {
     if (onlyIfFocused && document.activeElement !== ta) return;
     if (completeShortcode()) return;
@@ -153,7 +178,8 @@ export function linkAutocomplete(ta, { tasks = false } = {}) {
     mode = kind;
     const matches = kind === 'task' ? taskAcMatches(q, () => update(true))
       : kind === 'emoji' ? emojiMatches(q, () => update(true))
-      : wikiPages.filter(p => p.includes(q.toLowerCase())).slice(0, 8);
+      : (found => kind === 'wikilink' ? newPrivate(q, found) : found)(
+          wikiPages.filter(p => p.includes(q.toLowerCase())).slice(0, 8));
     if (matches.length) show(matches); else hide();
   }
 
