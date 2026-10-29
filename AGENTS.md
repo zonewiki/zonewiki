@@ -66,7 +66,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress (merge on save), deleted when done
+├── docs/plans/             # Working plans for changes in progress, deleted when done (none now)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
@@ -99,7 +99,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
-│   ├── merge.go            # Several editors on one page: who wrote a page's uncommitted draft (commitOthersDraft)
+│   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
 │   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in _deck/users/<user>/), lock, recurrence, history, comments, backlinks, search docs
 │   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
