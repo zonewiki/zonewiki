@@ -429,6 +429,22 @@ func taskItemLines(lines []string, frontmatter bool) []taskLine {
 	return found
 }
 
+// taskLineKeys: a key per task-list item of a page, in rendered order:
+// its line without the checkbox's mark and the tick's stamps, hashed
+// short. A tick from a page view loaded before the page changed finds its
+// item by it (apiToggleCheckbox), also once it has been ticked.
+func taskLineKeys(content string) []string {
+	lines := splitLines(content)
+	var keys []string
+	for _, it := range taskItemLines(lines, true) {
+		body := strings.TrimRight(lines[it.index], "\n")
+		body = body[:it.start] + " " + body[it.end:]
+		body = taskDoneOnlyRE.ReplaceAllString(taskMetaSrcRE.ReplaceAllString(body, ""), "")
+		keys = append(keys, contentHash(strings.TrimSpace(body))[:8])
+	}
+	return keys
+}
+
 // toggleNthCheckbox ticks or unticks the Nth checkbox (0-based, in rendered
 // order), recording when it was done. A deck task's notes have no
 // frontmatter (frontmatter false): a leading --- block there is text.

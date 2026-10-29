@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -183,6 +184,22 @@ func TestSectionsCountCharacters(t *testing.T) {
 }
 
 // The Nth checkbox is the Nth task line, frontmatter and code aside.
+// A checkbox line's key stays when it is ticked and unticked (stamps and
+// all), and differs from another line's.
+func TestTaskLineKeys(t *testing.T) {
+	text := "---\n- [ ] not one\n---\n- [ ] a\n```\n- [ ] code\n```\n> - [x] b <!--t:2026-01-01T10:00:00 d:2026-01-02T10:00:00-->\n- [ ] c\n"
+	keys := taskLineKeys(text)
+	if len(keys) != 3 || keys[0] == keys[1] || keys[1] == keys[2] || len(keys[0]) != 8 {
+		t.Fatalf("%v", keys)
+	}
+	for i := range keys {
+		ticked := taskLineKeys(toggleNthCheckbox(text, i, true))
+		if !slices.Equal(ticked, keys) {
+			t.Errorf("toggling %d: %v, was %v", i, ticked, keys)
+		}
+	}
+}
+
 func TestToggleNthCheckbox(t *testing.T) {
 	text := "---\n- [ ] not one\n---\n- [ ] a\n```\n- [ ] code\n```\n> - [x] b <!--t:2026-01-01T10:00:00 d:2026-01-02T10:00:00-->\n- [ ]\n"
 	got := toggleNthCheckbox(text, 1, true)

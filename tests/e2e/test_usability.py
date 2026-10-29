@@ -317,6 +317,24 @@ def test_quick_undo_never_overtakes_the_toggle(page, wiki):
     assert "- [ ] Call the plumber" in wiki.read("todo")
 
 
+def test_a_tick_on_a_page_changed_since_finds_its_item(page, wiki):
+    # Someone added an item above after the page was loaded: the tick goes to
+    # the one clicked, by its line; one no longer there once says so.
+    wiki.write("todo", "# Todo\n\n- [ ] Call the plumber\n- [ ] Buy milk\n")
+    page.goto("/page/todo")
+    wiki.write("todo", "# Todo\n\n- [ ] New one\n- [ ] Call the plumber\n- [ ] Buy milk\n")
+    page.locator(".task-list-item-checkbox").nth(1).check()
+    wait_until(page, lambda: "- [x] Buy milk" in wiki.read("todo"))
+    assert "- [ ] New one" in wiki.read("todo")
+    wiki.write("todo", "# Todo\n\n- [ ] Call the plumber today\n")
+    page.locator(".task-list-item-checkbox").nth(0).check()
+    toast = page.locator(".task-undo-toast", has_text="The page changed")
+    expect(toast).to_be_visible()
+    expect(page.locator(".task-list-item-checkbox").nth(0)).not_to_be_checked()
+    toast.get_by_role("button", name="Reload").click()
+    expect(page.locator(".task-list-item")).to_have_text(["Call the plumber today"])
+
+
 # ── Tag completion: the best match is preselected everywhere ─────────────────
 
 def seed_tags(page, wiki):

@@ -190,6 +190,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			EditSlug: slug, SectionTasks: tasks}))
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted,
+		"file_hash": contentHash(content), "task_keys": strings.Join(taskLineKeys(content), ","),
 		"breadcrumb_html": bc, "delete_dialog_html": buildDeleteDialog(slug, title),
 		"rail_toc_html": railTocItems(string(article)), "meta_row_html": metaRow, "article_html": article,
 		"link_sections": sections, "outlinks": outlinks(rq, slug, path), "menu": menu})
@@ -826,17 +827,37 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	commitOthersDraft(userOf(r), r.PathValue("slug"), path)
 	content, err := readText(path)
-	if err == nil {
-		err = writeText(path, toggleNthCheckbox(content, idx, true))
-	}
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
+	// From a page view of another version of the page (file_hash): the
+	// item is the one whose line the view had (key), if it is there once.
+	if hash := r.PostFormValue("file_hash"); hash != "" && hash != contentHash(content) {
+		idx = -1
+		for i, k := range taskLineKeys(content) {
+			if k == r.PostFormValue("key") {
+				if idx >= 0 {
+					idx = -1
+					break
+				}
+				idx = i
+			}
+		}
+		if idx < 0 {
+			writeJSON(w, http.StatusConflict, M{"error": "page_changed"})
+			return
+		}
+	}
+	commitOthersDraft(userOf(r), r.PathValue("slug"), path)
+	toggled := toggleNthCheckbox(content, idx, true)
+	if err := writeText(path, toggled); err != nil {
+		serverError(w, r, err)
+		return
+	}
 	noteDraft(path, userOf(r))
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, M{"file_hash": contentHash(toggled)})
 }
 
 // apiPreview renders posted markdown (the editor's live preview); ?lists=

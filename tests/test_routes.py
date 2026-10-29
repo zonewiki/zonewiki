@@ -1310,8 +1310,8 @@ class TestApiToggleCheckbox:
     def test_toggles_unchecked_to_checked(self, client, wiki_dir):
         path = write_page(wiki_dir, "checkbox-page", "# CB\n\n- [ ] task one\n- [ ] task two\n")
         resp = client.post("/api/toggle-checkbox/checkbox-page", data={"idx": "0"}, headers=HOST)
-        assert resp.status_code == 204
         text = path.read_text(encoding="utf-8")
+        assert resp.status_code == 200 and resp.get_json() == {"file_hash": content_hash(text)}
         assert "- [x] task one" in text
         assert "- [ ] task two" in text
 
@@ -1328,6 +1328,39 @@ class TestApiToggleCheckbox:
         write_page(wiki_dir, "bad-idx", "# CB\n\n- [ ] task\n")
         resp = client.post("/api/toggle-checkbox/bad-idx", data={"idx": "-1"}, headers=HOST)
         assert resp.status_code == 400
+
+    @staticmethod
+    def view(client, slug):
+        """The page view's file hash and checkbox keys, as its article has them."""
+        body = client.get(f"/page/{slug}", headers=HOST).get_data(as_text=True)
+        m = re.search(r'<article class="page-content" data-file-hash="([^"]*)" data-task-keys="([^"]*)"', body)
+        return m[1], m[2].split(",")
+
+    def test_a_tick_from_an_older_view_finds_its_item(self, client, wiki_dir):
+        """Someone added an item above since the view loaded: the tick goes to
+        the item the view showed, by its line, not by its place."""
+        path = write_page(wiki_dir, "moved", "# CB\n\n- [ ] Call Sam\n- [ ] Buy milk\n")
+        file_hash, keys = self.view(client, "moved")
+        path.write_text("# CB\n\n- [ ] New one\n- [ ] Call Sam\n- [ ] Buy milk\n")
+        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "1", "file_hash": file_hash, "key": keys[1]},
+                           headers=HOST)
+        assert resp.status_code == 200
+        text = path.read_text()
+        assert "- [ ] New one" in text and "- [ ] Call Sam" in text and re.search(r"- \[x\] Buy milk", text)
+        # Undo from the same view (its hash older still): the same item, ticked or not.
+        client.post("/api/toggle-checkbox/moved", data={"idx": "1", "file_hash": file_hash, "key": keys[1]},
+                    headers=HOST)
+        assert "- [ ] Buy milk" in path.read_text() and "<!--d:" not in path.read_text()
+
+    @pytest.mark.parametrize("change", ["gone", "twice"])
+    def test_a_tick_whose_line_isnt_there_once_is_refused(self, client, wiki_dir, change):
+        path = write_page(wiki_dir, "moved", "# CB\n\n- [ ] Call Sam\n")
+        file_hash, keys = self.view(client, "moved")
+        after = "# CB\n\n- [ ] Call Sam today\n" if change == "gone" else "# CB\n\n- [ ] Call Sam\n- [ ] Call Sam\n"
+        path.write_text(after)
+        resp = client.post("/api/toggle-checkbox/moved", data={"idx": "0", "file_hash": file_hash, "key": keys[0]},
+                           headers=HOST)
+        assert resp.status_code == 409 and path.read_text() == after
 
     @pytest.mark.parametrize("idx", ["abc", "", "1.5"])
     def test_returns_400_for_non_integer_idx(self, client, wiki_dir, idx):

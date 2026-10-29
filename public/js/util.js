@@ -190,7 +190,7 @@ export async function copyText(text) {
 
 // A short message at the bottom with an optional Undo; one at a time.
 let toastEl = null;
-export function showToast(msg, undo) {
+export function showToast(msg, undo, label = 'Undo') {
   toastEl?.remove();
   const el = document.createElement('div');
   el.className = 'raw-toast task-undo-toast';
@@ -200,7 +200,7 @@ export function showToast(msg, undo) {
   if (undo) {
     const btn = document.createElement('button');
     btn.className = 'btn task-undo-btn';
-    btn.textContent = 'Undo';
+    btn.textContent = label;
     btn.addEventListener('click', () => { el.remove(); undo(); });
     el.appendChild(btn);
   }

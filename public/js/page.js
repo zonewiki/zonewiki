@@ -68,8 +68,14 @@ document.addEventListener('change', e => {
     // Page view: persist the toggle, with an undo toast — a mis-tap on a
     // phone otherwise edits the file silently. Undo is a second toggle.
     const cb = e.target;
-    const post = () => toggleCheckboxOnServer(idx).then(ok => {
-      if (!ok) { cb.checked = !cb.checked; showToast('Could not save the checkbox'); }
+    const post = () => toggleCheckboxOnServer(idx).then(status => {
+      if (status === 'ok') return;
+      cb.checked = !cb.checked;
+      if (status === 'changed') {
+        showToast('The page changed: reload to tick this', () => window.location.reload(), 'Reload');
+      } else {
+        showToast('Could not save the checkbox');
+      }
     });
     post();
     const text = (cb.closest('li')?.textContent || '').trim().split('\n')[0];
@@ -83,14 +89,30 @@ document.addEventListener('change', e => {
 
 // Toggles are chained, so an undo can never overtake the toggle it reverts
 // (the server flips whatever state the file has when the request arrives).
+// Each sends the file's hash as this view knows it and its line's key: on
+// a page changed since, the server finds the item by its line ('changed':
+// not there once). Its answer is the file's new hash.
 let checkboxQueue = Promise.resolve();
 function toggleCheckboxOnServer(idx) {
   const slug = window.location.pathname.replace(/^\/page\//, '');
-  const data = new FormData();
-  data.append('idx', idx);
+  const article = document.querySelector('article.page-content[data-file-hash]');
   checkboxQueue = checkboxQueue
-    .then(() => fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data }))
-    .then(r => r.ok, () => false);
+    .then(() => {
+      const data = new FormData();
+      data.append('idx', idx);
+      if (article) {
+        data.append('file_hash', article.dataset.fileHash);
+        data.append('key', article.dataset.taskKeys.split(',')[idx] || '');
+      }
+      return fetch(`/api/toggle-checkbox/${slug}`, { method: 'POST', body: data });
+    })
+    .then(async r => {
+      if (r.status === 409) return 'changed';
+      if (!r.ok) return 'failed';
+      const json = await r.json().catch(() => ({}));
+      if (article && json.file_hash) article.dataset.fileHash = json.file_hash;
+      return 'ok';
+    }, () => 'failed');
   return checkboxQueue;
 }
 
