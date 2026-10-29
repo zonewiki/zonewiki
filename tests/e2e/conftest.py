@@ -105,6 +105,23 @@ def open_tab(page, view: str):
         page.locator(f"#tasks-tabs [data-view='{view}']").click()
 
 
+def pick_date(picker, d: str, tap: bool = False):
+    """Click (or tap) date `d` (YYYY-MM-DD) in the deck's date picker, once it
+    is open, paging toward it as needed: the picker opens on the month of the
+    date it holds, which near a month's end may be after `d` or before it."""
+    from playwright.sync_api import expect
+    expect(picker).to_be_visible()
+    for _ in range(13):
+        cell = picker.locator(f".dp-day[data-date='{d}']")
+        if cell.count():
+            cell.tap() if tap else cell.click()
+            return
+        shown = picker.locator(".dp-day[data-date]").first.get_attribute("data-date")
+        nav = picker.locator(f".dp-nav[data-nav='{-1 if d < shown else 1}']")
+        nav.tap() if tap else nav.click()
+    raise AssertionError(f"{d} not in the picker")
+
+
 # ── Browser ───────────────────────────────────────────────────────────────────
 
 

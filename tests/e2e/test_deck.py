@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import open_tab, real_density
+from conftest import open_tab, pick_date, real_density
 from tests import settings
 
 
@@ -2433,18 +2433,8 @@ def _day(offset: int) -> str:
 
 
 def _pick(page, d: str):
-    """Click date `d` in the open date picker, paging toward it if needed
-    (the picker opens on the month of the date it holds, which may be after
-    `d`: near a month's end, a deadline in the next month)."""
-    picker = page.locator(".deck-datepicker")
-    for _ in range(3):
-        cell = picker.locator(f".dp-day[data-date='{d}']")
-        if cell.count():
-            cell.click()
-            return
-        shown = picker.locator(".dp-day[data-date]").first.get_attribute("data-date")
-        picker.locator(f".dp-nav[data-nav='{-1 if d < shown else 1}']").click()
-    raise AssertionError(f"{d} not in the picker")
+    """Click date `d` in the open date picker (conftest.pick_date)."""
+    pick_date(page.locator(".deck-datepicker"), d)
 
 
 def test_modal_warns_when_start_is_after_due_and_offers_a_fix(page, wiki):

@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, open_tab
+from conftest import TOUCH_PHONE, open_tab, pick_date
 
 
 def day(offset: int) -> str:
@@ -14,12 +14,8 @@ def day(offset: int) -> str:
 
 
 def pick_day(picker, d: str):
-    """Tap date `d` in an open date picker. The picker opens on the current
-    month, so near a month's end the target is a page further (tests picking
-    today + N used to fail on a month's last days)."""
-    if d[:7] != day(0)[:7]:
-        picker.locator(".dp-nav[data-nav='1']").tap()
-    picker.locator(f".dp-day[data-date='{d}']").tap()
+    """Tap date `d` in an open date picker (conftest.pick_date)."""
+    pick_date(picker, d, tap=True)
 
 
 def tasks_by_title(page) -> dict:
