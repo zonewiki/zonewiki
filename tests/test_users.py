@@ -266,27 +266,31 @@ class TestModuleMenu:
     @staticmethod
     def parts(body):
         crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
+        top = body.split('<div class="top-actions">', 1)[1].split("</div>", 1)[0] if '<div class="top-actions">' in body else ""
         bar = body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
-        return crumb, bar
+        return crumb, bar, top
 
     def test_the_menu_replaces_the_scratch_pill(self, client, users):
         login(client, "alice", "alice-pw")
         body = client.get("/page/index", headers=HOST).data.decode()
-        crumb, bar = self.parts(body)
-        assert 'class="module-menu-btn"' in crumb and 'data-module="scratch"' not in crumb
-        assert crumb.index('data-module="deck"') < crumb.index('class="module-menu-btn"')
+        crumb, bar, top = self.parts(body)
+        # Desktop: the user button after Search, not in the switcher; Scratch is not a pill.
+        assert "module-menu-btn" not in crumb and 'data-module="scratch"' not in crumb
+        assert top.index("top-search") < top.index('class="top-user module-menu-btn"')
+        assert '>A</span></button>' in top and 'title="alice"' in top
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "More", "Note", "Task", "Search"]
         assert bar.index('module-menu-btn') < bar.index('class="action-sep"')
         # One menu for both buttons, outside the tab bar (its touch handling picks a tab by position).
         assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar.replace("module-menu-btn", "")
-        menu = body.split('class="module-menu page-menu"', 1)[1].split("</div>", 1)[0]
+        menu = body.split('class="module-menu page-menu"', 1)[1].split("</div></div>", 1)[0]
         assert re.findall(r'href="([^"]+)"', menu) == ["/private", "/page/_scratch"]
-        assert 'aria-haspopup="menu" aria-expanded="false"' in crumb
+        assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
+        assert 'aria-haspopup="menu" aria-expanded="false"' in top
 
     def test_without_users_scratch_stays_a_pill_in_the_third_place(self, client, wiki_dir):
         body = client.get("/page/index", headers=HOST).data.decode()
-        crumb, bar = self.parts(body)
-        assert "module-menu" not in body
+        crumb, bar, top = self.parts(body)
+        assert "module-menu" not in body and "top-user" not in top
         assert crumb.index('data-module="deck"') < crumb.index('data-module="scratch"')
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Deck", "Scratch"]
 
@@ -301,9 +305,8 @@ class TestModuleMenu:
                                      ("/page/plans", "wiki", False), ("/deck", "deck", False)]:
             body = client.get(url, headers=HOST).data.decode()
             assert f'<body data-module="{module}"' in body, url
-            crumb, bar = self.parts(body)
-            assert ('class="module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes" '
-                    'title="Private home and Scratch notes" aria-current="page"' in crumb) == current, url
+            crumb, bar, top = self.parts(body)
+            assert ('title="alice" aria-current="page"' in top) == current, url
             assert ('aria-current="page"' in bar.split("module-menu-btn", 1)[1].split(">", 1)[0]) == current, url
 
 

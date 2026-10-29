@@ -1867,6 +1867,9 @@ def test_c_t_with_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
     expect(private).to_be_checked()
     expect(note).to_have_text(
         "#task is your private list (a shared page declares it too: others won't see this task)")
+    private.uncheck()                                   # others would see it: the note must not say they won't
+    expect(note).to_have_text("#task is your private list: tick Private to keep this task to yourself")
+    private.check()
     modal.locator("[id^=task-edit-title]").fill("Call the bank")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()

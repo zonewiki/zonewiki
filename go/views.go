@@ -38,6 +38,11 @@ var funcs = template.FuncMap{
 	// &#43;, which reads the same but isn't the text a test looks for.
 	"text":       func(s string) template.HTML { return template.HTML(html.EscapeString(s)) },
 	"runePrefix": runePrefix,
+	// initial: a name's first letter, upper case (the user button's face).
+	"initial": func(s string) string {
+		r, _ := utf8.DecodeRuneInString(s)
+		return strings.ToUpper(string(r))
+	},
 	"lowerFirst": func(s string) string {
 		r, n := utf8.DecodeRuneInString(s)
 		return strings.ToLower(string(r)) + s[n:]
@@ -147,7 +152,7 @@ func moduleLinks(rq *Req) []M {
 		if m[0] == "scratch" && privateFolder(rq.who()) != "" {
 			out = append(out, M{"key": "menu", "label": "More", "menu": true,
 				"current": current == "scratch" || current == "private", "items": []M{
-					{"key": "private", "label": "Private home", "icon": "🔒", "href": "/private", "current": current == "private"},
+					{"key": "private", "label": "Private home", "href": "/private", "current": current == "private"},
 					{"key": "scratch", "label": "Scratch notes", "icon": "", "href": m[2], "current": current == "scratch"}}})
 			continue
 		}

@@ -7,14 +7,15 @@
 {{- end}}
 
 {{- /* The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
-    then Deck and Scratch (with users the ☰ button instead, which opens the
-    menu below). Phones and the editor show the logo only (style.css). The
+    then Deck and Scratch (with users no Scratch: it is in the user menu
+    below, opened by the user button at the top right, and by the tab bar's
+    ☰ on phones). Phones and the editor show the logo only (style.css). The
     trail code in js/chrome.js keeps it as the first crumb. */}}
 {{define "module_switch" -}}
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
 {{- range .links -}}
 {{- if .menu -}}
-<button type="button" class="module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes" title="Private home and Scratch notes"{{if .current}} aria-current="page"{{end}}>{{template "icon_menu"}}</button>
+{{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
 <a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}
 {{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_leaf"}}{{else}}>{{end -}}
@@ -24,15 +25,19 @@
 </nav>
 {{- end}}
 
-{{- /* The ☰ menu (with users): Private home and Scratch notes. One element
-    for both ☰ buttons, the switcher's and the tab bar's, that js/chrome.js
-    opens under whichever was pressed (a bottom sheet on phones). Outside the
-    tab bar's nav: its touch handling picks a tab by position. */}}
+{{- /* The user menu (with users): Private home, Scratch notes and, on
+    desktop, who is signed in and Sign out (phones have Sign out in the page's
+    top row). One element for both buttons, the top right's user button and the
+    tab bar's ☰, that js/chrome.js opens under whichever was pressed (a bottom
+    sheet on phones). Outside the tab bar's nav: its touch handling picks a
+    tab by position. */}}
 {{define "module_menu" -}}
 <div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Private home and Scratch notes" hidden>
-{{- range .items -}}
+{{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
+{{- range .link.items -}}
 <a role="menuitem" href="{{.href}}" data-menu="{{.key}}"{{if .current}} aria-current="page"{{end}}>{{if .icon}}<span class="menu-icon" aria-hidden="true">{{.icon}}</span>{{end}}{{.label}}</a>
 {{- end -}}
+{{- if .sign_out}}<form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>
 {{- end}}
 
@@ -54,5 +59,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .module_links}}{{if .menu}}{{template "module_menu" .}}{{end}}{{end}}
+{{- range .module_links}}{{if .menu}}{{template "module_menu" (dict "link" . "user" $.user "sign_out" $.sign_out)}}{{end}}{{end}}
 {{- end}}

@@ -149,6 +149,13 @@ main { --top-actions-w: 17.25rem; }
 }
 .top-actions button:hover { color: var(--fg); background: var(--btn-bg); }
 .top-actions button:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+/* With users: the user button, a round initial, after the pill (2.25rem and a gap). */
+main:has(> .top-actions .top-user) { --top-actions-w: 19.75rem; }
+.top-actions .top-user {
+  margin-left: .35rem; border-radius: 50%; border-color: var(--border);
+  font: inherit; font-size: .85rem; font-weight: 600; color: var(--fg);
+}
+.top-actions .top-user[aria-current], .top-actions .top-user[aria-expanded="true"] { background: var(--btn-bg); }
 main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: calc(var(--top-actions-w) + 1.25rem); }
 
 /* ── Sharing mode ─────────────────────────────────────────────────────────── */
@@ -1044,6 +1051,11 @@ main {
 .module-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
 .module-menu-backdrop[hidden], .module-menu[hidden] { display: none !important; }
 .module-menu .menu-icon { margin-right: .5rem; }
+/* Who is signed in and Sign out: desktop only (a phone has them in the page's top row). */
+.module-menu .menu-who { padding: .35rem .8rem .45rem; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: .2rem; }
+.module-menu .menu-who strong { color: var(--fg); }
+.module-menu .menu-signout { margin: .2rem 0 0; padding-top: .2rem; border-top: 1px solid var(--border); }
+.module-menu .menu-signout button { width: 100%; }
 .module-menu a[aria-current] { font-weight: 600; }
 /* The editor keeps its focus: the logo only, as the way home. */
 .editor-page .module-link:not([data-module="wiki"]),
@@ -1347,6 +1359,8 @@ kbd {
 
 /* Who is signed in (with users), beside Sign out. */
 .signout-user { color: var(--muted); font-size: .85rem; }
+/* With users, desktop has the name and Sign out in the user menu instead. */
+@media (min-width: 641px) { .signout-form.signout-user-menu { display: none; } }
 
 .top-badges {
   position: fixed;
@@ -1933,6 +1947,7 @@ body.editor-page main {
   }
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-menu-btn { display: none; }
+  .module-menu :is(.menu-who, .menu-signout) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }

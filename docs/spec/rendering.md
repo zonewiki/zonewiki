@@ -33,7 +33,7 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 |---|---|
 | `js/util.js` | Small shared helpers: `he`, `localDate`, `toSlug`, `wikilinkHref`, `pasteUrlAsLink`, `continueList`, `showToast`, `putTask`, … |
 | `js/completion.js` | `linkAutocomplete`: `[[`, `[[task:` and `[text](` completion (editor and the deck's task fields) |
-| `js/chrome.js` | Around the page: navigation trail, backlinks chip, side columns, the Deck links' counts (`refreshDueBadge`), the ☰ menu (with users) |
+| `js/chrome.js` | Around the page: navigation trail, backlinks chip, side columns, the Deck links' counts (`refreshDueBadge`), the user menu (with users) |
 | `js/git.js` | Uncommitted badge, Commit buttons, forms that confirm first (`data-confirm`) |
 | `js/search.js` | Search modal and its preview, the Scratch filter, highlights on a page opened from search |
 | `js/actions.js` | New scratch note / page / task (`openHomeTask`, loading a hidden deck when the page has none), action bar, sharing mode |

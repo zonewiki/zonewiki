@@ -3177,9 +3177,9 @@ function syncAutoPrivate() {
   const show = added.length > 0 && !privateBase.checked && !privateCb.disabled;
   privateNote.hidden = !show;
   if (show) {
-    const list = `#${added[0]} is your private list` +
-      (sharedToo.has(added[0]) ? ' (a shared page declares it too: others won\'t see this task)' : '');
-    privateNote.textContent = privateCb.checked ? list : `${list}: tick Private to keep this task to yourself`;
+    const list = `#${added[0]} is your private list`;
+    privateNote.textContent = !privateCb.checked ? `${list}: tick Private to keep this task to yourself`
+      : sharedToo.has(added[0]) ? `${list} (a shared page declares it too: others won't see this task)` : list;
   }
 }
 privateCb?.addEventListener('change', () => { privateTouched = true; syncAutoPrivate(); });
