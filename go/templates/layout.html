@@ -25,6 +25,8 @@
   {{- if .module}} data-module="{{.module}}"{{end}}
   {{- /* How dates read and the week starts (LEAF_LOCALE, LEAF_DATE_FORMAT;
       deck-core.js). */}}
+  {{- /* With users, private/ holds their private pages (js/completion.js). */}}
+  {{- if .users}} data-users="1"{{end}}
   {{- if .locale}} data-locale="{{.locale}}"{{end}}
   {{- if .date_format}} data-date-format="{{.date_format}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the

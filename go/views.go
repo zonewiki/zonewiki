@@ -40,6 +40,9 @@ var funcs = template.FuncMap{
 	"runePrefix": runePrefix,
 	// initial: a name's first letter, upper case (the user button's face).
 	"initial": func(s string) string {
+		if s == "" {
+			return ""
+		}
 		r, _ := utf8.DecodeRuneInString(s)
 		return strings.ToUpper(string(r))
 	},
@@ -246,7 +249,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		"semantic": semanticStatus(), "app_name": appName, "version": version, "build": cfg.Build,
 		"allow_remote": cfg.AllowRemote, "locale": s.Locale, "date_format": s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		"sign_out": s.authOn() && isSignedIn(rq.r), "user": rq.user,
+		"sign_out": s.authOn() && isSignedIn(rq.r), "user": rq.user, "users": s.Users != nil,
 	}
 	if !o.editor {
 		ctx["module"] = currentModule(rq)

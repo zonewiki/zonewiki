@@ -150,14 +150,19 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
     return [null];
   }
 
+  // With users (<body data-users>) private/ holds the users' private pages;
+  // without, it is an ordinary folder.
+  const users = () => document.body.dataset.users === '1';
+
   // Page slugs to offer: not private ones where the text is shared.
   function offered() {
     const slug = typeof page === 'function' ? page() : page;
-    return slug !== null && !slug.startsWith('private/') ? wikiPages.filter(p => !p.startsWith('private/')) : wikiPages;
+    return users() && slug !== null && !slug.startsWith('private/') ? wikiPages.filter(p => !p.startsWith('private/')) : wikiPages;
   }
 
   // The folder of the private page being edited ("private/alice"), or ''.
   function privateFolder() {
+    if (!users()) return '';
     const slug = typeof page === 'function' ? page() : page;
     const m = /^private\/[^/]+(?=\/)/.exec(slug || '');
     return m ? m[0] : '';

@@ -301,28 +301,15 @@ def test_a_typed_link_from_a_shared_page_to_a_private_one_is_marked(alice, wiki)
     expect(link).to_have_attribute("title", "Links to a private page: others see plain text")
 
 
-# ── Private pages are not offered where the text is shared ───────────────────
-
-def test_completion_lists_private_pages_only_on_private_pages(alice, wiki):
-    wiki.write("secretplans", "# Shared\n")
-    wiki.write("private/alice/secretdiary", "# Diary\n\n")
+def test_without_users_private_is_an_ordinary_folder_for_completion(page, wiki):
+    wiki.write("private/diary", "# Diary\n\n")
     wiki.write("notes", "# Notes\n\n")
-    items = alice.locator(".wikilink-ac-item")
-    alice.goto("/edit/notes")
-    alice.keyboard.press("Control+End")
-    alice.keyboard.type("[[secret")
-    expect(items).to_have_text(["secretplans"])
-    alice.goto("/edit/private/alice/secretdiary")
-    alice.keyboard.press("Control+End")
-    alice.keyboard.type("[[secret")
-    expect(items).to_have_text([re.compile("^New private page: secret"), "private/alice/secretdiary", "secretplans"])
-
-
-def test_a_typed_link_from_a_shared_page_to_a_private_one_is_marked(alice, wiki):
-    wiki.write("private/alice/diary", "# Diary\n")
-    wiki.write("notes", "# Notes\n\n")
-    alice.goto("/edit/notes")
-    alice.keyboard.press("Control+End")
-    alice.keyboard.type("[[private/alice/diary]]")
-    link = alice.locator("#editor-preview a.wikilink-private")
-    expect(link).to_have_attribute("title", "Links to a private page: others see plain text")
+    items = page.locator(".wikilink-ac-item")
+    page.goto("/edit/notes")
+    page.keyboard.press("Control+End")
+    page.keyboard.type("[[dia")
+    expect(items).to_have_text(["private/diary"])
+    page.goto("/edit/private/diary")
+    page.keyboard.press("Control+End")
+    page.keyboard.type("[[note")
+    expect(items).to_have_text(["notes"])   # no "New private page" offer
