@@ -60,6 +60,13 @@ func writePage(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	content = trimNewlines(content) + "\n"
+	merged := ""
+	if baseHash, _ := as[string](args["base_hash"]); existing != "" && baseHash != "" && baseHash != contentHash(old) {
+		if content, err = mergeWrite(slug, path, old, content, baseHash, user); err != nil {
+			return "", err
+		}
+		merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
+	}
 	action := "Create "
 	if existing != "" {
 		action = "Update "
@@ -74,7 +81,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	gitCommit(user, msg, path)
 	out := "Created page " + slug + ".\n" + pageInfo(slug, base)
 	if existing != "" {
-		out = "Replaced page " + slug + ".\n" + pageInfo(slug, base)
+		out = "Replaced page " + slug + "." + merged + "\n" + pageInfo(slug, base)
 	} else {
 		similar := similarPages(slug, pageTitle(content, slug), user)
 		named := map[string]bool{}

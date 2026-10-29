@@ -297,7 +297,7 @@
  {
   "name": "write_page",
   "title": "Create a page",
-  "description": "Create a wiki page with the given markdown (start it with '# Title'). Fails if the page exists, unless overwrite is true, which replaces all of it; to change part of a page use edit_page or append_to_page. Tells you about pages with similar names and wikilinks that lead nowhere. With scratch, a scratch note instead: a quick note in the Scratch module, for when the user wants something jotted down rather than filed in the wiki.",
+  "description": "Create a wiki page with the given markdown (start it with '# Title'). Fails if the page exists, unless overwrite, which replaces all of it; for part of a page, use edit_page or append_to_page. Names pages with similar names and wikilinks that lead nowhere. With scratch, a scratch note instead: a quick note in the Scratch module, for when the user wants something jotted down rather than filed in the wiki.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -312,7 +312,11 @@
     "overwrite": {
      "type": "boolean",
      "default": false,
-     "description": "Replace an existing page's whole text."
+     "description": "Replace the page's whole text."
+    },
+    "base_hash": {
+     "type": "string",
+     "description": "read_page's hash: merges a change made since."
     },
     "scratch": {
      "type": "boolean",

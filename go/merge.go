@@ -340,3 +340,50 @@ func cleanLeftDrafts() {
 		return nil
 	})
 }
+
+// mergeWrite: write_page's content for a page that changed since the
+// model read it (base_hash, from read_page), merged as the editor's saves
+// are; an error the model sees when the lines clash (with them) or there
+// is nothing to merge from.
+func mergeWrite(slug, path, current, content, baseHash, user string) (string, error) {
+	again := " Read it again with read_page and write from that, or change the lines you mean with edit_page."
+	base, kept := baseText(baseHash)
+	if !kept {
+		return "", toolErr("Nothing written: " + slug + " changed since you read it (hash " + baseHash +
+			"), and Leaf no longer has that version to merge from." + again)
+	}
+	label := otherAuthor(path, user)
+	if label == "" {
+		label = "theirs"
+	}
+	merged, clean, err := mergeText(base, current, content, label)
+	if err != nil {
+		return "", toolErr("Nothing written: " + slug + " changed since you read it, and Leaf can't merge (" +
+			err.Error() + ")." + again)
+	}
+	if !clean {
+		return "", toolErr("Nothing written: " + slug + " changed since you read it, in lines you changed too. " +
+			"Where they clash (yours, then the page's now):\n\n" + conflictBlocks(merged) + "\n" + again)
+	}
+	return merged, nil
+}
+
+// conflictBlocks: the conflict markers' blocks of a merged text, nothing
+// around them, separated by "…".
+func conflictBlocks(text string) string {
+	var blocks []string
+	var block []string
+	for _, line := range strings.SplitAfter(text, "\n") {
+		switch {
+		case strings.HasPrefix(line, "<<<<<<< "):
+			block = []string{line}
+		case block != nil:
+			block = append(block, line)
+			if strings.HasPrefix(line, ">>>>>>> ") {
+				blocks = append(blocks, strings.Join(block, ""))
+				block = nil
+			}
+		}
+	}
+	return strings.Join(blocks, "…\n")
+}

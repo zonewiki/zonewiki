@@ -1509,7 +1509,8 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	head := "slug: " + slug + "\n" + pageInfo(slug, base) + "\n"
+	// The whole page's hash, whatever part is read: write_page's base_hash.
+	head := "slug: " + slug + "\n" + pageInfo(slug, base) + "\nhash: " + keepBase(content) + "\n"
 	heading, err := strArg(args, "heading", false)
 	if err != nil {
 		return "", err

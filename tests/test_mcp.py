@@ -499,8 +499,9 @@ class TestReadPage:
     def test_slug_forms(self, client, pages, slug):
         text, err = call(client, "read_page", slug=slug)
         assert not err
+        golf = (pages / "golf.md").read_text()
         assert text.startswith("slug: golf\nurl: http://localhost:5000/page/golf\n"
-                               f"file: {pages.resolve()}/golf.md\n\n# Golf\n")
+                               f"file: {pages.resolve()}/golf.md\nhash: {content_hash(golf)}\n\n# Golf\n")
 
     def test_page_name_with_spaces(self, client, pages):
         assert call(client, "read_page", slug="Git Remote")[0].startswith("slug: git-remote")
@@ -961,6 +962,49 @@ class TestWritePage:
         text, err = call(client, "write_page", slug="golf", content="# Golf\n\nnew", overwrite=True)
         assert not err and text.startswith("Replaced page golf.")
         assert (pages / "golf.md").read_text() == "# Golf\n\nnew\n"
+
+    PLANS = "# Plans\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
+
+    def read_hash(self, client, wiki_dir):
+        write_page(wiki_dir, "plans", self.PLANS)
+        text, _ = call(client, "read_page", slug="plans")
+        found = re.search(r"^hash: (\w+)$", text, re.M)
+        assert found and found[1] == content_hash(self.PLANS)
+        return found[1]
+
+    def test_overwrite_from_an_older_read_merges(self, client, git_wiki_dir):
+        """The page changed since read_page (the user edited another line):
+        the overwrite with base_hash keeps that change."""
+        hash_ = self.read_hash(client, git_wiki_dir)
+        (git_wiki_dir / "plans.md").write_text(self.PLANS.replace("Second.", "Second, by the user."))
+        text, err = call(client, "write_page", slug="plans", overwrite=True, base_hash=hash_,
+                         content=self.PLANS.replace("First.", "First, by the model."))
+        assert not err and "were merged" in text
+        assert (git_wiki_dir / "plans.md").read_text() == \
+            self.PLANS.replace("First.", "First, by the model.").replace("Second.", "Second, by the user.")
+
+    def test_overwrite_clashing_with_a_change_writes_nothing(self, client, git_wiki_dir):
+        hash_ = self.read_hash(client, git_wiki_dir)
+        theirs = self.PLANS.replace("First.", "First, by the user.")
+        (git_wiki_dir / "plans.md").write_text(theirs)
+        text, err = call(client, "write_page", slug="plans", overwrite=True, base_hash=hash_,
+                         content=self.PLANS.replace("First.", "First, by the model."))
+        assert err and "Nothing written" in text
+        assert "<<<<<<< yours\nFirst, by the model.\n=======\nFirst, by the user.\n>>>>>>> theirs" in text
+        assert "## Two" not in text                    # only where they clash
+        assert (git_wiki_dir / "plans.md").read_text() == theirs
+
+    def test_overwrite_from_a_version_leaf_doesnt_have_writes_nothing(self, client, git_wiki_dir):
+        self.read_hash(client, git_wiki_dir)
+        text, err = call(client, "write_page", slug="plans", overwrite=True, base_hash="0123456789abcdef",
+                         content="# Plans\n\nNew.\n")
+        assert err and "no longer has that version" in text
+        assert (git_wiki_dir / "plans.md").read_text() == self.PLANS
+
+    def test_overwrite_with_the_current_hash_just_writes(self, client, git_wiki_dir):
+        hash_ = self.read_hash(client, git_wiki_dir)
+        text, err = call(client, "write_page", slug="plans", overwrite=True, base_hash=hash_, content="# Plans\n\nNew.")
+        assert not err and "merged" not in text and (git_wiki_dir / "plans.md").read_text() == "# Plans\n\nNew.\n"
 
     def test_names_pages_with_similar_names(self, client, pages):
         text, err = call(client, "write_page", slug="notes/git-remotes", content="# Git Remotes\n")
