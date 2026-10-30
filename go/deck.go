@@ -961,8 +961,9 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 
 // The tasks deleted lately, as they were (under deckMu), for a restore
 // (undo of a delete) to be judged by: the snapshot comes from the client,
-// so who worked on the task and who wrote its comments are taken from here. In memory: after a restart a restore
-// is of a task Leaf doesn't know.
+// so who worked on the task, who wrote its comments and whether it was
+// private are taken from here. In memory: after a restart a restore is of a
+// task Leaf doesn't know.
 var (
 	deletedTasks = map[string]*Task{}
 	deletedOrder []string

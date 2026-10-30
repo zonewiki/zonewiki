@@ -871,6 +871,17 @@ func splitMoves(moves map[string]string, linker string) (follow map[string]strin
 	return follow, unlink
 }
 
+// makesPrivate: moves takes a shared page into a private folder.
+func makesPrivate(moves map[string]string) bool {
+	for o, n := range moves {
+		_, wasPrivate := pageOwner(o)
+		if _, nowPrivate := pageOwner(n); !wasPrivate && nowPrivate {
+			return true
+		}
+	}
+	return false
+}
+
 // unlinkedBy: what a rename of moves (old → new slug) would turn from links
 // into plain text (splitMoves), as user may see it: their own and the shared
 // pages ("slug") and tasks (task “title”) that link to a page made private.
@@ -878,6 +889,9 @@ func splitMoves(moves map[string]string, linker string) (follow map[string]strin
 // see them and they aren't listed.
 func unlinkedBy(user string, moves map[string]string) []string {
 	var out []string
+	if !makesPrivate(moves) { // the usual rename: nothing to read
+		return nil
+	}
 	for _, p := range iterPages() {
 		if !canSee(user, p.Slug) {
 			continue

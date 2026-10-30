@@ -143,9 +143,10 @@ func visibleSlugs(user string) map[string]bool {
 	return out
 }
 
-// privateNameRE: a page's or file's path in private/ as a commit message names it ("Move private/alice/
-// 2026-…_idea into the wiki as ideas/x"), at the start of a path, not
-// inside one ("notprivate/x", "notes/private/x"): group 2, after group 1.
+// privateNameRE: a page's or file's path in private/ as a commit message
+// names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
+// the start of a path, not inside one ("notprivate/x", "notes/private/x"):
+// group 2, after group 1.
 var privateNameRE = regexp.MustCompile(`(^|[^\w./-])(` + privateDir + `/[\w./-]*[\w/])`)
 
 // hideNames: a commit message for user, the paths in it user may not see

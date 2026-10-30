@@ -158,3 +158,23 @@ func TestHideNames(t *testing.T) {
 		}
 	}
 }
+
+// Only a shared page taken into a private folder asks about links.
+func TestMakesPrivate(t *testing.T) {
+	testWiki(t, map[string]string{})
+	withUsers(t, "alice", "bob")
+	for _, c := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"ideas", "private/alice/ideas", true},
+		{"ideas", "notes/ideas", false},
+		{"private/alice/x", "private/alice/y", false},
+		{"private/alice/x", "shared/x", false},
+		{"ideas", "private/carol/ideas", true}, // no one's: hidden from everyone
+	} {
+		if got := makesPrivate(map[string]string{c.from: c.to}); got != c.want {
+			t.Errorf("%s → %s: %v", c.from, c.to, got)
+		}
+	}
+}
