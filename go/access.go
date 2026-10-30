@@ -89,18 +89,16 @@ func privateFolder(user string) string {
 }
 
 // canSeePath: user may see the file rel (relative to the wiki, slash-
-// separated), as git names it in the history: a page by its slug, an
-// upload in _assets/private/<user>/, anything else in private/ (a user's
-// deck in private/<user>/_deck/ too) like a page there. Leaf's own files in .leaf/
-// (the settings file, with its password hashes) no one sees in Leaf.
+// separated), as git names it in the history: a page by its slug, anything
+// else in private/ (a user's uploads and deck in private/<user>/_assets/
+// and _deck/ too) like a page there. Leaf's own files in .leaf/ (the
+// settings file, with its password hashes) no one sees in Leaf.
 func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, ".leaf/") {
 		return false
 	}
-	for _, folder := range []string{"_assets/" + privateDir, privateDir} {
-		if owner, private := ownerIn(folder, rel); private {
-			return owner != "" && owner == user
-		}
+	if owner, private := ownerIn(privateDir, rel); private {
+		return owner != "" && owner == user
 	}
 	return true
 }
@@ -145,11 +143,10 @@ func visibleSlugs(user string) map[string]bool {
 	return out
 }
 
-// privateNameRE: a page's or file's path in private/ (an upload's in
-// _assets/private/) as a commit message names it ("Move private/alice/
+// privateNameRE: a page's or file's path in private/ as a commit message names it ("Move private/alice/
 // 2026-…_idea into the wiki as ideas/x"), at the start of a path, not
 // inside one ("notprivate/x", "notes/private/x"): group 2, after group 1.
-var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:_assets/)?` + privateDir + `/[\w./-]*[\w/])`)
+var privateNameRE = regexp.MustCompile(`(^|[^\w./-])(` + privateDir + `/[\w./-]*[\w/])`)
 
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,

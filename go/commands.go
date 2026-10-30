@@ -220,10 +220,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			fmt.Fprintln(stdout, "No users now: the wiki's password signs in, and private/ is an ordinary folder.")
 		}
 		var kept []string
-		for _, dir := range []string{privateDir + "/" + name, "_assets/" + privateDir + "/" + name} {
-			if isDir(filepath.Join(cfg.Data, filepath.FromSlash(dir))) {
-				kept = append(kept, dir+"/")
-			}
+		if dir := privateDir + "/" + name; isDir(filepath.Join(cfg.Data, dir)) {
+			kept = append(kept, dir+"/")
 		}
 		if len(kept) > 0 && !last {
 			fmt.Fprintf(stdout, "Their files stay in the wiki, seen by no one: %s. Move or delete them there.\n",

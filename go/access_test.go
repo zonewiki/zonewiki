@@ -22,7 +22,7 @@ func TestAccessWithoutUsers(t *testing.T) {
 			t.Errorf("%s: private without users", slug)
 		}
 	}
-	if !canSeePath("", "private/alice/_deck/tasks.json") || !canSeePath("", "_assets/private/alice/a.png") ||
+	if !canSeePath("", "private/alice/_deck/tasks.json") || !canSeePath("", "private/alice/_assets/a.png") ||
 		canSeePath("", ".leaf/config") {
 		t.Error("paths")
 	}
@@ -64,8 +64,8 @@ func TestAccessWithUsers(t *testing.T) {
 	}
 	for path, want := range map[string]bool{
 		"index.md": true, "private/alice/diary.md": true, "private/bob/x.md": false, "private/alice/img.png": true,
-		"_assets/a.png": true, "_assets/private/alice/a.png": true, "_assets/private/mary-ann/a.png": false,
-		"_assets/private/a.png": false, "_deck/tasks.json": true, "private/alice/_deck/tasks.json": true,
+		"_assets/a.png": true, "private/alice/_assets/a.png": true, "private/mary-ann/_assets/a.png": false,
+		"private/_assets/a.png": false, "_deck/tasks.json": true, "private/alice/_deck/tasks.json": true,
 		"private/mary-ann/_deck/tasks.json": false, "_deck/users.json": true,
 	} {
 		if canSeePath("alice", path) != want {
@@ -149,7 +149,7 @@ func TestHideNames(t *testing.T) {
 		// Only a path that starts there.
 		"Rename notprivate/x to archive/x":       "Rename notprivate/x to archive/x",
 		"Edit notes/private/alice/x":             "Edit notes/private/alice/x",
-		"Upload _assets/private/alice/photo.png": "Upload a private page",
+		"Upload private/alice/_assets/photo.png": "Upload a private page",
 		"Move (private/alice/a) to x":            "Move (a private page) to x",
 		"private/alice/a, private/bob/b":         "a private page, private/bob/b",
 	} {

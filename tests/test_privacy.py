@@ -62,12 +62,12 @@ def wiki(git_wiki_dir, monkeypatch):
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     w = git_wiki_dir
     (w / "private" / "alice").mkdir(parents=True)
-    (w / "_assets" / "private" / "alice").mkdir(parents=True)
+    (w / "private/alice/_assets").mkdir(parents=True)
     (w / f"{DIARY}.md").write_text(
         f"---\ntags: [{QUERY}-{SECRET}]\n---\n# Diary {SECRET}\n\n{QUERY} {SECRET} with [[plans]].\n\n- [ ] Call\n")
     (w / "private/alice/old.md").write_text(f"# Old {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
-    (w / "_assets/private/alice/photo.png").write_bytes(SECRET.encode())
+    (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
     # Her deck: her own home and a list of hers, and her tasks.
     (w / "private/alice/deck.md").write_text(f"# My deck {SECRET}\n\n[[deck home=1 list=secretlist]]\n")
@@ -257,11 +257,11 @@ def upload(client, page="", name="pic.png", **extra):
 def test_an_upload_for_a_private_page_is_private(alice, wiki):
     resp = upload(alice, DIARY)
     assert resp.get_json()["url"] == "/_assets/private/alice/pic.png"
-    assert (wiki / "_assets/private/alice/pic.png").read_bytes() == b"\x89PNG"
+    assert (wiki / "private/alice/_assets/pic.png").read_bytes() == b"\x89PNG"
     assert upload(alice, DIARY).status_code == 409                      # the same name there again
     assert upload(alice, "plans").get_json()["url"] == "/_assets/pic.png"   # a shared page's: shared
     assert alice.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 200
-    assert "Upload private/alice/pic.png" in git(wiki, "log", "--format=%s")
+    assert "Upload private/alice/_assets/pic.png" in git(wiki, "log", "--format=%s")
     sign_in(alice, "bob")
     bob = alice
     assert bob.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 404
@@ -272,8 +272,8 @@ def test_an_upload_for_a_private_page_is_private(alice, wiki):
 def test_assets_in_other_folders_are_not_served(alice, wiki):
     (wiki / "_assets/sub").mkdir()
     (wiki / "_assets/sub/a.png").write_bytes(b"x")
-    (wiki / "_assets/private/alice/deeper").mkdir()
-    (wiki / "_assets/private/alice/deeper/a.png").write_bytes(b"x")
+    (wiki / "private/alice/_assets/deeper").mkdir(parents=True)
+    (wiki / "private/alice/_assets/deeper/a.png").write_bytes(b"x")
     for path in ("/_assets/sub/a.png", "/_assets/private/alice/deeper/a.png", "/_assets/private/alice/"):
         assert alice.get(path, headers=HOST).status_code == 404, path
 
@@ -654,7 +654,7 @@ def _alices_files(wiki):
     """alice's private files, and whether a shared deck file holds one of
     her task ids (a restore of a snapshot with her id)."""
     files = {p.relative_to(wiki).as_posix(): p.read_bytes()
-             for folder in ("private", "_assets/private")
+             for folder in ("private",)
              for p in (wiki / folder).rglob("*") if p.is_file()
              and "private/bob/" not in p.relative_to(wiki).as_posix() + "/"}   # bob's own, bob may change
     shared = "".join(p.read_text() for p in (wiki / "_deck").glob("*.json"))

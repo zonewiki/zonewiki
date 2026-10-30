@@ -196,7 +196,7 @@ def test_attach_to_a_private_page_keeps_the_file_private(page, wiki, monkeypatch
         {"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
     expect(page.locator("#editor-textarea")).to_have_value(
         "# Fmt\n\n[notes.txt](/_assets/private/alice/notes.txt)")
-    assert (wiki.root / "_assets/private/alice/notes.txt").read_bytes() == b"hello"
+    assert (wiki.root / "private/alice/_assets/notes.txt").read_bytes() == b"hello"
 
 
 def test_phone_bar_is_finger_sized_and_scrolls_sideways(new_page, wiki):

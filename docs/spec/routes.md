@@ -23,7 +23,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
 | GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `leaf health`; the error itself only with a session (or without a login), else a pointer to the log, as it may name users |
-| POST   | `/api/upload`         | Upload a file; returns `{ url }` for insertion into markdown; `page`: the page it is for (a private page's go to `_assets/private/<user>/`) |
+| POST   | `/api/upload`         | Upload a file; returns `{ url }` for insertion into markdown; `page`: the page it is for (a private page's are kept in `private/<user>/_assets/`) |
 | GET    | `/_assets/<path>`     | An upload: `<file>`, or `private/<user>/<file>` for that user only |
 | POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
 | POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param) in a page; returns 204. |
