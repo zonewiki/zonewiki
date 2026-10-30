@@ -248,7 +248,7 @@ func rankOf(results []*SearchDoc, expect []string) int {
 // (typos, renames): such a question could never be found.
 func unknownTargets(questions []question) []string {
 	sections, slugs, tasks := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	for _, d := range chunkIndex().docs {
+	for _, d := range chunkIndex(nil).docs {
 		if d.isTask() {
 			tasks[d.TaskID] = true
 		} else {

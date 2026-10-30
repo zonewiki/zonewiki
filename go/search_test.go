@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -358,5 +359,45 @@ func TestDateFilters(t *testing.T) {
 		if ok(c.query, c.day) != c.want {
 			t.Errorf("%q on %q: want %v", c.query, c.day, c.want)
 		}
+	}
+}
+
+func sameHits(t *testing.T, what string, got, want []Hit) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("%s: %v, want %v", what, got, want)
+		return
+	}
+	for i := range want {
+		if got[i].Doc != want[i].Doc || math.Abs(got[i].Score-want[i].Score) > 1e-12 {
+			t.Errorf("%s: hit %d is %v, want %v", what, i, got[i], want[i])
+		}
+	}
+}
+
+// An index with extra documents searches exactly as one built over all of
+// them: the extra documents count in the idf and the average length.
+func TestWithExtraIsAsIfBuiltOverAll(t *testing.T) {
+	shared := [][]string{{"apple", "pie"}, {"apple", "tart", "cream"}, {"berry", "pie", "pie"}, {"plain"}}
+	extra := [][]string{{"apple", "apple", "quokkaflute"}, {"pie"}, {"berry", "berry", "tart", "tart", "pie", "pie", "x"}}
+	base := NewIndex(shared)
+	before := base.Search("apple pie", 10)
+	over := base.WithExtra(extra)
+	whole := NewIndex(append(append([][]string{}, shared...), extra...))
+
+	for _, q := range []string{"apple pie", "pie", "berry tart", "quokkaflute", "quokkaf", "quokkaflutte", "appl", "nothing", "plain"} {
+		sameHits(t, q, over.Search(q, 20), whole.Search(q, 20))
+	}
+	// The index the others search never learned of them.
+	sameHits(t, "base after", base.Search("apple pie", 10), before)
+	if hits := base.Search("quokkaflute", 10); hits != nil {
+		t.Errorf("the base index found %v", hits)
+	}
+}
+
+func TestWithExtraOnAnEmptyIndex(t *testing.T) {
+	over := NewIndex(nil).WithExtra([][]string{{"quokkaflute", "song"}})
+	if hits := over.Search("quokkaflute", 5); len(hits) != 1 || hits[0].Doc != 0 || math.IsNaN(hits[0].Score) || math.IsInf(hits[0].Score, 0) {
+		t.Errorf("hits %v", hits)
 	}
 }

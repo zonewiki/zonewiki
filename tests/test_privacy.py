@@ -765,3 +765,11 @@ def test_link_warnings_dont_tell_which_private_pages_exist(client, wiki):
         assert "private/alice" not in out.split("\n---\n")[-1].replace(DIARY, "")
         assert "private/bob/nope" in out and "nope-shared" in out
     assert "alice" not in mcp(client, "edit_page", slug="probe", old="nope-shared", new="private/alice/zzz")
+
+
+def test_search_statistics_ignore_private_pages(client, wiki):
+    """Fuzzy matching only runs for a word no page has. If alice's pages counted,
+    bob's typo "quokkaflutte" would stop finding his page the moment her
+    "quokkaflute" exists, which tells him her pages have that word."""
+    (wiki / "bobs.md").write_text("# Bobs\n\nquokkaflutte is how he spells it\n")
+    assert "bobs" in mcp(client, "search_wiki", query=SECRET)

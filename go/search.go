@@ -11,6 +11,7 @@ import (
 	"html"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -318,10 +319,23 @@ type posting struct{ doc, tf int }
 // Index is search.SearchIndex over documents' tokens.
 type Index struct {
 	n        int
+	total    int // tokens in all documents
 	avgdl    float64
 	lens     []int
 	postings map[string][]posting
 	idf      map[string]float64
+	vocab    []string
+	over     *overlay // more documents, scored on this index's statistics
+}
+
+// overlay: documents added to an Index without touching it (WithExtra): they
+// are numbered after the index's. The statistics of a search with them are
+// the two together's (document count and frequencies, average length), as if
+// one index held all; the Index itself, which others search, never learns
+// of them.
+type overlay struct {
+	lens     []int
+	postings map[string][]posting
 	vocab    []string
 }
 
@@ -344,6 +358,7 @@ func NewIndex(tokens [][]string) *Index {
 			ix.postings[t] = append(ix.postings[t], posting{i, tf[t]})
 		}
 	}
+	ix.total = total
 	if ix.n > 0 {
 		ix.avgdl = float64(total) / float64(ix.n)
 	}
@@ -355,9 +370,79 @@ func NewIndex(tokens [][]string) *Index {
 	return ix
 }
 
+// WithExtra: ix with more documents, numbered after its own, searched as if
+// one index were built over all of them: the same scores, the extra documents
+// weighing in the idf and the average length. ix is not changed; what it
+// shares with the result is only read.
+func (ix *Index) WithExtra(tokens [][]string) *Index {
+	if len(tokens) == 0 {
+		return ix
+	}
+	o := &overlay{postings: map[string][]posting{}}
+	total := 0
+	for i, toks := range tokens {
+		tf, order := map[string]int{}, []string{}
+		for _, t := range toks {
+			if tf[t] == 0 {
+				order = append(order, t)
+			}
+			tf[t]++
+		}
+		o.lens = append(o.lens, len(toks))
+		total += len(toks)
+		for _, t := range order {
+			o.postings[t] = append(o.postings[t], posting{ix.n + i, tf[t]})
+		}
+	}
+	for t := range o.postings {
+		o.vocab = append(o.vocab, t)
+	}
+	sort.Strings(o.vocab)
+	cp := *ix
+	cp.over = o
+	cp.avgdl = float64(ix.total+total) / float64(ix.n+len(tokens))
+	return &cp
+}
+
+// idfOf: a term's weight, from the document frequency over every document
+// the index holds, an overlay's too.
+func (ix *Index) idfOf(t string) float64 {
+	if ix.over == nil {
+		return ix.idf[t]
+	}
+	n, df := ix.n+len(ix.over.lens), len(ix.postings[t])+len(ix.over.postings[t])
+	return math.Log(1 + (float64(n)-float64(df)+0.5)/(float64(df)+0.5))
+}
+
+func (ix *Index) hasTerm(t string) bool {
+	if _, ok := ix.idf[t]; ok {
+		return true
+	}
+	if ix.over != nil {
+		_, ok := ix.over.postings[t]
+		return ok
+	}
+	return false
+}
+
+func (ix *Index) docLen(doc int) int {
+	if doc < ix.n {
+		return ix.lens[doc]
+	}
+	return ix.over.lens[doc-ix.n]
+}
+
 type weighted struct {
 	term   string
 	weight float64
+}
+
+// vocabs: the sorted vocabularies to look terms up in.
+func (ix *Index) vocabs() [][]string {
+	if ix.over == nil {
+		return [][]string{ix.vocab}
+	}
+	return [][]string{ix.vocab, ix.over.vocab}
 }
 
 // expand: query tokens as (term, weight): exact 1.0, prefix 0.8, and when
@@ -378,20 +463,26 @@ func (ix *Index) expand(qTokens []string) []weighted {
 	}
 	for _, t := range qTokens {
 		matched := false
-		if _, ok := ix.idf[t]; ok {
+		if ix.hasTerm(t) {
 			bump(t, 1.0)
 			matched = true
 		}
 		if runeLen(t) >= 3 {
-			for i := sort.SearchStrings(ix.vocab, t); i < len(ix.vocab) && strings.HasPrefix(ix.vocab[i], t); i++ {
-				if ix.vocab[i] != t {
-					bump(ix.vocab[i], prefixWeight)
-					matched = true
+			for _, vocab := range ix.vocabs() {
+				for i := sort.SearchStrings(vocab, t); i < len(vocab) && strings.HasPrefix(vocab[i], t); i++ {
+					if vocab[i] != t {
+						bump(vocab[i], prefixWeight)
+						matched = true
+					}
 				}
 			}
 		}
 		if !matched && runeLen(t) >= 4 {
-			for _, c := range closeMatches(t, ix.vocab, 3, 0.8) {
+			all := ix.vocab
+			if ix.over != nil {
+				all = slices.Concat(ix.vocab, ix.over.vocab)
+			}
+			for _, c := range closeMatches(t, all, 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
 		}
@@ -410,16 +501,22 @@ func (ix *Index) Search(query string, limit int) []Hit {
 	for _, w := range queryWords(query) {
 		qTokens = append(qTokens, stem(w))
 	}
-	if len(qTokens) == 0 || ix.n == 0 {
+	if len(qTokens) == 0 || ix.n == 0 && ix.over == nil {
 		return nil
 	}
 	scores := map[int]float64{}
 	for _, tw := range ix.expand(qTokens) {
-		idf := ix.idf[tw.term]
-		for _, p := range ix.postings[tw.term] {
-			f := float64(p.tf)
-			denom := f + bm25K1*(1-bm25B+bm25B*float64(ix.lens[p.doc])/ix.avgdl)
-			scores[p.doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
+		idf := ix.idfOf(tw.term)
+		score := func(postings []posting) {
+			for _, p := range postings {
+				f := float64(p.tf)
+				denom := f + bm25K1*(1-bm25B+bm25B*float64(ix.docLen(p.doc))/ix.avgdl)
+				scores[p.doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
+			}
+		}
+		score(ix.postings[tw.term])
+		if ix.over != nil {
+			score(ix.over.postings[tw.term])
 		}
 	}
 	var hits []Hit

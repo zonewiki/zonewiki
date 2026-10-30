@@ -259,27 +259,103 @@ func (x *docIndex) search(text string, limit int) []*SearchDoc {
 	return out
 }
 
-// indexCache keeps the BM25 index over the current docs until one changes.
-// The doc caches hand back the same docs until their file changes, so the
-// docs' pointers are the key.
+// indexCache keeps the BM25 indexes over the current docs until one changes:
+// one over the shared docs, and for a user with private docs of their own the
+// same index with those added (Index.WithExtra), scored on the shared
+// statistics. So another user's private pages take no part in the ranking
+// (document frequencies, lengths and the vocabulary fuzzy matching draws on
+// would otherwise show through), and the cost of a user's own private pages is
+// theirs alone. The doc caches hand back the same docs until their file
+// changes, so the docs' pointers are the key.
 type indexCache struct {
-	mu    sync.Mutex
-	index *docIndex
+	mu      sync.Mutex
+	all     []*SearchDoc
+	shared  []*SearchDoc
+	private []*SearchDoc
+	base    *docIndex
+	views   map[string]*indexView
 }
 
-func (c *indexCache) get(docs []*SearchDoc) *docIndex {
+// indexView: base plus own, the private docs of one viewer.
+type indexView struct {
+	base *docIndex
+	own  []*SearchDoc
+	idx  *docIndex
+}
+
+// docShared: d is in no private folder or deck (always, without users).
+func docShared(d *SearchDoc) bool {
+	if d.isTask() {
+		return d.Task.Owner == ""
+	}
+	_, private := pageOwner(d.Slug)
+	return !private
+}
+
+// get: the index rq searches (nil: Leaf itself, over everything).
+func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.index == nil || !slices.Equal(c.index.docs, docs) {
-		c.index = newDocIndex(docs)
+	if c.base == nil || !slices.Equal(c.all, docs) {
+		c.all = slices.Clone(docs)
+		var shared, private []*SearchDoc
+		for _, d := range docs {
+			if docShared(d) {
+				shared = append(shared, d)
+			} else {
+				private = append(private, d)
+			}
+		}
+		if c.base == nil || !slices.Equal(c.shared, shared) {
+			c.shared, c.base = shared, newDocIndex(shared)
+		}
+		c.private = private
 	}
-	return c.index
+	var own []*SearchDoc
+	user := ""
+	if rq != nil {
+		user = rq.user
+	}
+	for _, d := range c.private {
+		if rq == nil || docVisible(user, d) {
+			own = append(own, d)
+		}
+	}
+	if len(own) == 0 {
+		return c.base
+	}
+	key := "user:" + user
+	if rq == nil {
+		key = "leaf"
+	}
+	if v := c.views[key]; v != nil && v.base == c.base && slices.Equal(v.own, own) {
+		return v.idx
+	}
+	tokens := make([][]string, len(own))
+	for i, d := range own {
+		tokens[i] = d.Tokens
+	}
+	if c.views == nil {
+		c.views = map[string]*indexView{}
+	}
+	idx := &docIndex{slices.Concat(c.base.docs, own), c.base.ix.WithExtra(tokens)}
+	c.views[key] = &indexView{c.base, own, idx}
+	return idx
+}
+
+// docVisible: user may see the search doc d (a page's, or a task's).
+func docVisible(user string, d *SearchDoc) bool {
+	if d.isTask() {
+		return canSeeTask(user, d.Task)
+	}
+	return canSee(user, d.Slug)
 }
 
 var searchIndexCache, chunkIndexCache indexCache
 
-func searchIndex() *docIndex {
-	return searchIndexCache.get(append(pageSearchDocs(), taskSearchDocs()...))
+// searchIndex: the index rq searches (nil: Leaf itself, over everything).
+func searchIndex(rq *Req) *docIndex {
+	return searchIndexCache.get(rq, append(pageSearchDocs(), taskSearchDocs()...))
 }
 
 // semanticText: a page as (title, body) for embedding and the section
@@ -414,9 +490,9 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 // meaning, its most similar section. A page matched only by its title gets
 // none (every section would match equally), so its link opens the top of
 // the page.
-func bestSections(q *Query, slugs map[string]bool) map[string]*SearchDoc {
+func bestSections(rq *Req, q *Query, slugs map[string]bool) map[string]*SearchDoc {
 	text := q.RankingText()
-	x := chunkIndex()
+	x := chunkIndex(rq)
 	var ranked []*SearchDoc
 	for _, d := range x.search(text, len(x.docs)) {
 		if !d.isTask() && slugs[d.Slug] {
@@ -548,14 +624,14 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 			return true
 		}
 	}
-	docs := rankedDocs(q, searchIndex(), keep, limit)
+	docs := rankedDocs(q, searchIndex(rq), keep, limit)
 	slugs := map[string]bool{}
 	for _, d := range docs {
 		if !d.isTask() {
 			slugs[d.Slug] = true
 		}
 	}
-	sections := bestSections(q, slugs)
+	sections := bestSections(rq, q, slugs)
 	names := deckLists(rq.user)
 	for _, d := range docs {
 		var section *SearchDoc
@@ -640,12 +716,12 @@ func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 // chunkIndex: BM25 over page sections and deck tasks (a task is one
 // result, like a section), as the browser search ranks pages and tasks
 // together.
-func chunkIndex() *docIndex {
+func chunkIndex(rq *Req) *docIndex {
 	var docs []*SearchDoc
 	for _, chunks := range perPage(&chunkDocCache, pageChunks, "", nil) {
 		docs = append(docs, chunks...)
 	}
-	return chunkIndexCache.get(append(docs, taskSearchDocs()...))
+	return chunkIndexCache.get(rq, append(docs, taskSearchDocs()...))
 }
 
 // inFolder: slug is the page folder or below it (case ignored).
@@ -666,7 +742,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 	if strings.TrimSpace(q.RankingText()) == "" {
 		return nil
 	}
-	x := chunkIndex()
+	x := chunkIndex(rq)
 	pagesOnly := under != "" || scratch
 	pageOK := func(slug string) bool {
 		return inFolder(slug, under) && (!scratch || inScratch(rq.who(), slug)) && !hiddenPage(rq, slug)
