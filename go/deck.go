@@ -204,14 +204,6 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 	}
 	lists := deckLists(user)
 	names = sortedKeys(lists)
-	privateNames := sortedKeys(privateLists(lists, user))
-	// Of those, the ones a shared page declares too (the modal's note says so).
-	shared, sharedToo := deckLists(""), []string{}
-	for _, n := range privateNames {
-		if _, ok := shared[n]; ok {
-			sharedToo = append(sharedToo, n)
-		}
-	}
 	homes := map[string]string{}
 	for _, n := range names {
 		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
@@ -233,8 +225,7 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 		"keep": keep, "home": isTrue(params.Get("home")),
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
-		"private_folder": privateFolder(user), "private_lists_json": jsonText(privateNames),
-		"private_shared_json": jsonText(sharedToo),
+		"private_folder": privateFolder(user),
 		"lists_json": listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {
@@ -482,10 +473,6 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
-	// Unless the request says, a new task in one of the user's private lists is private.
-	if !data.has("private") && hasPrivateList(user, t.Tags) {
-		t.Owner = user
-	}
 	logEvent(t, user, "created", "", "")
 	active, err := readDeckStrict(user)
 	if err != nil {
@@ -497,8 +484,6 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 // applyTaskFields applies the field changes in data (not completion).
 func applyTaskFields(user string, t *Task, data jsonObj) error {
 	oldDue := t.DueDate
-	// As the task was: comments the same request rewrites don't count.
-	mayPrivate := mayMakePrivate(user, t)
 	if data.has("title") {
 		s, err := asStr(data["title"], "title")
 		if err != nil {
@@ -572,11 +557,8 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if err != nil {
 			return err
 		}
-		switch {
-		case private && privateFolder(user) == "":
+		if private && privateFolder(user) == "" {
 			return badRequest("Only a signed-in user's tasks can be private")
-		case private && !mayPrivate:
-			return badRequest("Only its creator can make this task private, and only while no one else has worked on it")
 		}
 		t.Owner = ""
 		if private {
@@ -867,8 +849,7 @@ func keepOthersComments(user string, have, given []Comment) ([]Comment, error) {
 // leave out entries, its user's own or no one's (an undo takes out what
 // the change it undoes added); what someone else did stays, and an entry
 // the task doesn't have is dropped, so no one wipes or forges who worked
-// on a task, which mayMakePrivate goes by. Without users there is no one
-// to name.
+// on a task. Without users there is no one to name.
 func keepOthersHistory(user string, have, given []HistoryEntry) []HistoryEntry {
 	if settings().Users == nil {
 		return given
@@ -980,8 +961,7 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 
 // The tasks deleted lately, as they were (under deckMu), for a restore
 // (undo of a delete) to be judged by: the snapshot comes from the client,
-// so who worked on the task, which mayMakePrivate goes by, and who wrote
-// its comments are taken from here. In memory: after a restart a restore
+// so who worked on the task and who wrote its comments are taken from here. In memory: after a restart a restore
 // is of a task Leaf doesn't know.
 var (
 	deletedTasks = map[string]*Task{}
@@ -1083,7 +1063,12 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if err := restoredTrust(user, t); err != nil {
 			return err
 		}
-		if jsonTrue(snap["private"]) && mayMakePrivate(user, t) {
+		// Private as Leaf deleted it; a task it doesn't know, as the snapshot says.
+		private := jsonTrue(snap["private"])
+		if was := deletedTasks[t.ID]; was != nil {
+			private = was.Owner != ""
+		}
+		if private && privateFolder(user) != "" {
 			t.Owner = user
 		}
 		existing[t.ID] = true

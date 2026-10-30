@@ -1813,45 +1813,35 @@ def test_private_checkbox_in_modal(page, wiki, monkeypatch):
     assert "Gift for Bob" in (wiki.root / "_deck/tasks.json").read_text()
 
 
-def test_adding_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
-    # gifts is declared in alice's folder: its tag ticks Private (with a
-    # note), taking it away unticks it; a click on the box wins.
+def test_a_private_lists_tag_does_not_tick_private(page, wiki, monkeypatch):
+    # gifts is declared in alice's folder, but tags don't decide where a
+    # task is kept: the box is as the deck opened it, and only the box moves.
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("private/alice/gifts", "# Gifts\n\n[[deck list=gifts]]\n")
     page.request.post("/api/deck", data={"title": "Scarf", "private": False})
     page.goto("/deck?view=open")
     page.locator("#task-add-btn").click()
-    private, note = page.locator("#task-edit-private"), page.locator("#task-edit-private-note")
+    private = page.locator("#task-edit-private")
     expect(private).not_to_be_checked()
     page.locator("#task-edit-title").fill("Book #gifts")
-    expect(private).to_be_checked()
-    expect(note).to_have_text("#gifts is your private list")
-    page.locator("#task-edit-title").fill("Book")
-    expect(private).not_to_be_checked()
-    expect(note).to_be_hidden()
     page.locator("#task-edit-tags").fill("gifts ")
-    expect(private).to_be_checked()
-    private.uncheck()                                   # the user's choice stays
+    expect(private).not_to_be_checked()
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Book", "private", False)
 
-    # An existing shared task: only a suggestion; the box decides.
     open_edit(page, "Scarf")
-    expect(private).not_to_be_checked()
     page.locator("#task-edit-tags").fill("gifts ")
-    expect(note).to_contain_text("tick Private")
     expect(private).not_to_be_checked()
     private.check()
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Scarf", "private", True)
 
 
-def test_c_t_with_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
+def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
     # The shared deck home is list=task, and alice declares task in her
-    # folder too: c t starts with #task, so Private is ticked, and the note
-    # says the shared page declares it as well. (The tag a new task starts
-    # with once didn't count: only one added in the modal did.)
+    # folder too: c t starts with #task, but the deck home is a shared page
+    # (location, not the tag), so Private is not ticked.
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("team", "# Team\n\n[[deck list=task home=1]]\n")
@@ -1862,34 +1852,30 @@ def test_c_t_with_a_private_lists_tag_ticks_private(page, wiki, monkeypatch):
     page.keyboard.press("t")
     modal = page.locator(".task-edit-modal[open]")
     expect(modal.locator(".tag-chip")).to_contain_text("task")
-    private = modal.locator("input[id^=task-edit-private]")
-    note = modal.locator("[id^=task-edit-private-note]")
-    expect(private).to_be_checked()
-    expect(note).to_have_text(
-        "#task is your private list (a shared page declares it too: others won't see this task)")
-    private.uncheck()                                   # others would see it: the note must not say they won't
-    expect(note).to_have_text("#task is your private list: tick Private to keep this task to yourself")
-    private.check()
+    expect(modal.locator("input[id^=task-edit-private]")).not_to_be_checked()
     modal.locator("[id^=task-edit-title]").fill("Call the bank")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()
     task = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Call the bank")
-    assert task["private"] is True
+    assert task["private"] is False
 
 
-def test_private_box_is_off_on_someone_elses_task(page, wiki, monkeypatch):
-    # bob made it: alice can't take it from him.
+def test_private_box_says_what_moving_a_task_does(page, wiki, monkeypatch):
+    # bob made it: alice may still take it into her deck, and the modal
+    # says that he then stops seeing it (and the reverse).
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     page.request.post("/api/deck", data={"title": "Bob's errand"})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    page.request.post("/api/deck", data={"title": "Mine"})
     page.goto("/deck?view=open")
-    modal = open_edit(page, "Bob's errand")
-    expect(page.locator("#task-edit-private")).to_be_disabled()
-    modal.locator("#task-edit-cancel").click()
-    open_edit(page, "Mine")
-    expect(page.locator("#task-edit-private")).to_be_enabled()
+    open_edit(page, "Bob's errand")
+    private, note = page.locator("#task-edit-private"), page.locator("#task-edit-private-note")
+    expect(private).to_be_enabled()
+    expect(note).to_be_hidden()
+    private.check()
+    expect(note).to_have_text("Everyone else stops seeing this task, and its comments.")
+    private.uncheck()
+    expect(note).to_be_hidden()
 
 
 def test_only_your_own_comments_can_be_edited(page, wiki, monkeypatch):

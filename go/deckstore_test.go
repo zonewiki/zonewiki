@@ -305,9 +305,9 @@ func TestDeckHomeAndListsPerUser(t *testing.T) {
 }
 
 // Your own declaration of a list is its home for you, whatever the names
-// A–Z; a task given one of your private lists' tags is private, unless
-// the request says otherwise.
-func TestPrivateLists(t *testing.T) {
+// A–Z. A task's tags never decide where it is kept: a new task is private
+// only when the request says so.
+func TestDeckListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
 		"deck/gifts":          "# Gifts\n\n[[deck list=gifts]]\n",
 		"private/alice/gifts": "# My gifts\n\n[[deck list=gifts]]\n",
@@ -319,24 +319,14 @@ func TestPrivateLists(t *testing.T) {
 	if lists["gifts"].Slug != "private/alice/gifts" || lists["diary"].Slug != "private/alice/diary" {
 		t.Errorf("alice's homes %+v", lists)
 	}
-	if got := sortedKeys(privateLists(lists, "alice")); !reflect.DeepEqual(got, []string{"diary", "gifts"}) {
-		t.Errorf("private lists %v", got)
-	}
-	if deckLists("bob")["gifts"].Slug != "deck/gifts" || len(privateLists(deckLists("bob"), "bob")) != 0 {
+	if deckLists("bob")["gifts"].Slug != "deck/gifts" {
 		t.Error("bob's lists")
 	}
-	if task := newTestTask(t, "alice", "Scarf", false, "tags", "Gifts"); task.Owner != "alice" {
-		t.Error("a task in her private list is shared")
+	if task := newTestTask(t, "alice", "Scarf", false, "tags", "Gifts"); task.Owner != "" {
+		t.Error("a tag made a task private")
 	}
-	data := jsonObj{}
-	data.set("title", "Cake")
-	data.set("tags", "gifts")
-	data.set("private", false)
-	if task, _ := createTask("alice", data, "c"); task.Owner != "" {
-		t.Error("private: false ignored")
-	}
-	if task := newTestTask(t, "bob", "Book", false, "tags", "gifts"); task.Owner != "" {
-		t.Error("bob's task in the shared list is private")
+	if task := newTestTask(t, "alice", "Cake", true, "tags", "gifts"); task.Owner != "alice" {
+		t.Error("private: true ignored")
 	}
 }
 
@@ -411,27 +401,22 @@ func TestPrivateDecksMoveIntoUsersFolders(t *testing.T) {
 	}
 }
 
-// Only a task no one else has worked on may become someone's private one.
-func TestMayMakePrivate(t *testing.T) {
-	testWiki(t, nil)
+// Any user can move a shared task into their own deck (the modal says
+// that everyone else then stops seeing it); a signed-out Leaf has none.
+func TestAnyUserMakesATaskPrivate(t *testing.T) {
+	testWiki(t, map[string]string{})
 	withUsers(t, "alice", "bob")
-	for _, c := range []struct {
-		task *Task
-		want bool
-	}{
-		{&Task{}, true}, // from before users
-		{&Task{History: []HistoryEntry{{Event: "created", By: "alice"}}}, true},
-		{&Task{History: []HistoryEntry{{Event: "created", By: "bob"}}}, false},
-		{&Task{History: []HistoryEntry{{Event: "created", By: "alice"}}, Comments: []Comment{{By: "bob"}}}, false},
-		{&Task{History: []HistoryEntry{{Event: "created"}, {Event: "done", By: "bob"}}}, false},
-		{&Task{Owner: "alice"}, true},
-	} {
-		if got := mayMakePrivate("alice", c.task); got != c.want {
-			t.Errorf("%+v: %v", c.task, got)
-		}
+	task := newTestTask(t, "bob", "Errand", false)
+	data := jsonObj{}
+	data.set("private", true)
+	if _, err := updateTask("alice", task.ID, data, ""); err != nil {
+		t.Fatal(err)
 	}
-	if mayMakePrivate("", &Task{}) {
-		t.Error("Leaf has no private tasks")
+	if got := titles(readDeck("alice")); !reflect.DeepEqual(got, []string{"Errand"}) {
+		t.Errorf("alice sees %v", got)
+	}
+	if got := titles(readDeck("bob")); len(got) != 0 {
+		t.Errorf("bob still sees %v", got)
 	}
 }
 

@@ -58,31 +58,6 @@ func canWrite(user, slug string) bool { return canSee(user, slug) }
 // of their own private ones.
 func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
 
-// mayMakePrivate: user may make the task t their own private one: it is
-// already, or it is shared and no one else has worked on it (every history
-// event and comment that names someone names user; one that names no one,
-// from before users or by Leaf, counts as anyone's). Making a task private
-// takes it from everyone else, so not one someone else made or commented on.
-func mayMakePrivate(user string, t *Task) bool {
-	if privateFolder(user) == "" {
-		return false
-	}
-	if t.Owner != "" {
-		return t.Owner == user
-	}
-	for _, e := range t.History {
-		if e.By != "" && e.By != user {
-			return false
-		}
-	}
-	for _, c := range t.Comments {
-		if c.By != "" && c.By != user {
-			return false
-		}
-	}
-	return true
-}
-
 // ownComment: user may edit or delete the comment c: their own, or one
 // that names no one (from before users, or without users: everyone's).
 func ownComment(user string, c Comment) bool { return c.By == "" || c.By == user }

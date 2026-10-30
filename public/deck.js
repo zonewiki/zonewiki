@@ -144,27 +144,8 @@ const keepCb = document.getElementById('task-edit-keep' + sfx);
 // With users only: the task is the user's alone.
 const privateCb = document.getElementById('task-edit-private' + sfx);
 const privateNote = document.getElementById('task-edit-private-note' + sfx);
-// The user's private lists (declared in their private folder): a new task
-// given one's tag is ticked Private, with a note, until the box is clicked;
-// on an existing task the note only suggests it.
-let privateLists = new Set();
-try { privateLists = new Set(JSON.parse(appEl?.dataset.privateLists || '[]')); } catch (_) {}
-// Those of them a shared page declares too: others see that list without
-// the user's tasks in it, so the note says so.
-let sharedToo = new Set();
-try { sharedToo = new Set(JSON.parse(appEl?.dataset.privateShared || '[]')); } catch (_) {}
-let privateBase = null;   // as the modal opened: {checked, isNew, tags (lower case)}
-let privateTouched = false;
 const me = appEl?.dataset.privateFolder?.split('/')[1] || '';
-const privateLabel = privateCb?.closest('label');
-const privateTitle = privateLabel?.title;
-// As the server's mayMakePrivate: a shared task only while no one else has
-// worked on it (every history event and comment naming someone names you).
-function mayMakePrivate(task) {
-  if (!task || task.private) return true;
-  const others = x => x.by && x.by !== me;
-  return !(task.history || []).some(others) && !(task.comments || []).some(others);
-}
+let privateWas = false;   // as the modal opened: was the task private
 const deleteModal = document.getElementById('task-delete-modal' + sfx);
 const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
 const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
@@ -3053,10 +3034,9 @@ function chipsOnSeparators(input, chips) {
   });
 }
 const editChips = editTagsInput && chipField(editTagsInput, {
-  label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()), onChange: () => syncAutoPrivate() });
+  label: t => '#' + t, listWord: t => listSet.has(t.toLowerCase()) });
 if (editTagsInput) {
   chipsOnSeparators(editTagsInput, editChips);
-  editTagsInput.addEventListener('input', () => syncAutoPrivate());
   // Enter with no suggestion open (the dropdown takes it first when one
   // is): a typed tag becomes a chip rather than saving the task.
   editTagsInput.addEventListener('keydown', e => {
@@ -3152,37 +3132,22 @@ function setBatch(titles) {
 
 function syncQuickPreview() {
   const q = !batchTitles && quickParse();
-  syncAutoPrivate();
   quickPreview.hidden = !q;
   if (!q) return;
   quickPreview.textContent = quickText(q);
 }
 
-// Tags of the user's private lists on the task (in Tags, or as #tag in a
-// new task's title), lower case: for a new task all of them, those it
-// starts with too (a home's or an embed's tags); for an existing one only
-// those the modal added.
-function addedPrivateLists() {
-  const q = !batchTitles && quickParse();
-  return [...editTags(), ...(q ? q.tags : [])].map(t => t.toLowerCase())
-    .filter(t => privateLists.has(t) && (privateBase.isNew || !privateBase.tags.has(t)));
+// Moving a task between the shared deck and your private one is the
+// Private box; the note says what the box, changed from how the modal
+// opened it, does.
+function syncPrivateNote() {
+  if (!privateCb) return;
+  const move = privateWas !== privateCb.checked;
+  privateNote.hidden = !move;
+  if (move) privateNote.textContent = privateCb.checked
+    ? 'Everyone else stops seeing this task, and its comments.' : 'Everyone who uses the wiki will see and change this task.';
 }
-// A private list's tag makes a new task private (unless the box was
-// clicked; taking the tag away again undoes that) and only suggests it for
-// an existing one: its privacy changes only by the box.
-function syncAutoPrivate() {
-  if (!privateCb || !privateBase) return;
-  const added = addedPrivateLists();
-  if (privateBase.isNew && !privateTouched) privateCb.checked = privateBase.checked || added.length > 0;
-  const show = added.length > 0 && !privateBase.checked && !privateCb.disabled;
-  privateNote.hidden = !show;
-  if (show) {
-    const list = `#${added[0]} is your private list`;
-    privateNote.textContent = !privateCb.checked ? `${list}: tick Private to keep this task to yourself`
-      : sharedToo.has(added[0]) ? `${list} (a shared page declares it too: others won't see this task)` : list;
-  }
-}
-privateCb?.addEventListener('change', () => { privateTouched = true; syncAutoPrivate(); });
+privateCb?.addEventListener('change', syncPrivateNote);
 titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
@@ -3354,12 +3319,8 @@ function openEditModal(taskId, opts) {
   keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : initKeep;
   if (privateCb) {
     privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
-    privateCb.disabled = !mayMakePrivate(task);
-    privateLabel.title = privateCb.disabled
-      ? 'Only its creator can make this task private, and only while no one else has worked on it' : privateTitle;
-    privateBase = { checked: privateCb.checked, isNew: !task, tags: new Set(startTags.map(t => t.toLowerCase())) };
-    privateTouched = false;
-    syncAutoPrivate();
+    privateWas = privateCb.checked;
+    privateNote.hidden = true;
   }
   const recType = task?.recurrence?.type || '';
   recTypeSelect.value = recType;
@@ -3520,10 +3481,8 @@ form.addEventListener('submit', async e => {
     const today = todayStr(), made = [];
     for (const title of titles) {
       const q = parseQuickAdd(title, today);
-      // A line's #tag of a private list makes that one private, as in the title.
-      const own = privateCb && !privateTouched && q.tags.some(t => privateLists.has(t.toLowerCase()));
       const task = await createTask({
-        ...data, title: q.title, ...(own ? { private: true } : {}),
+        ...data, title: q.title,
         start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
         tags: [...new Set([...data.tags, ...q.tags])],
       });

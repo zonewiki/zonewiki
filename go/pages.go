@@ -543,32 +543,6 @@ func deckLists(user string) map[string]DeckHome {
 	return out
 }
 
-// privateLists: user's private lists, those whose home (deckLists) is in
-// their private folder; a task given one's tag becomes private.
-func privateLists(lists map[string]DeckHome, user string) map[string]bool {
-	out := map[string]bool{}
-	for name, home := range lists {
-		if ownPrivate(user, home.Slug) {
-			out[name] = true
-		}
-	}
-	return out
-}
-
-// hasPrivateList: one of tags names one of user's private lists.
-func hasPrivateList(user string, tags []string) bool {
-	if privateFolder(user) == "" {
-		return false
-	}
-	private := privateLists(deckLists(user), user)
-	for _, t := range tags {
-		if private[strings.ToLower(t)] {
-			return true
-		}
-	}
-	return false
-}
-
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page
 // declares as a list (names: deckLists), or "".
 func taskList(t *Task, names map[string]DeckHome) string {

@@ -365,49 +365,33 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     assert task["id"] in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
 
 
-def test_a_task_in_her_private_list_is_private(alice, wiki):
-    """secretlist is declared in her folder: a new task with its tag is
-    private unless the request says otherwise; bulk tag changes no task's
-    privacy."""
-    assert 'data-private-lists="[&#34;secretlist&#34;]"' in alice.get("/deck", headers=HOST).data.decode()
-    assert alice.post("/api/deck", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()["private"]
-    shared = alice.post("/api/deck", json={"title": "B", "tags": ["secretlist"], "private": False}, headers=HOST)
-    assert shared.get_json()["private"] is False
+def test_a_tag_does_not_make_a_task_private(alice, wiki):
+    """secretlist is declared in her folder, but where a task is kept is
+    not decided by its tags: it is private only when the request says so."""
+    assert "data-private-lists" not in alice.get("/deck", headers=HOST).data.decode()
+    assert alice.post("/api/deck", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()["private"] is False
+    own = alice.post("/api/deck", json={"title": "B", "tags": ["secretlist"], "private": True}, headers=HOST)
+    assert own.get_json()["private"] is True
     c = alice.post("/api/deck", json={"title": "C", "private": False}, headers=HOST).get_json()
     tagged = alice.post("/api/deck/batch-tag", json={"ids": [c["id"]], "add": ["secretlist"]}, headers=HOST)
     assert tagged.get_json()[0]["private"] is False
-    sign_in(alice, "bob")
-    bob = alice
-    assert "data-private-lists=\"[]\"" in bob.get("/deck", headers=HOST).data.decode()
-    assert bob.post("/api/deck", json={"title": "D", "tags": ["secretlist"]}, headers=HOST).get_json()["private"] is False
 
 
-def test_only_its_creator_makes_a_task_private(alice, wiki):
-    """Making a task private takes it from everyone else: only a task no
-    one else has worked on. One from before users (no one named) is anyone's."""
+def test_anyone_can_move_a_shared_task_into_their_own_deck(alice, wiki):
+    """Making a task private takes it from everyone else (the modal says
+    so); there is no rule about who worked on it, but it never reaches
+    another user's deck: bob's private task stays bob's."""
     sign_in(alice, "bob")
     bobs = alice.post("/api/deck", json={"title": "Bob's"}, headers=HOST).get_json()
     sign_in(alice, "alice")
-    resp = alice.put(f"/api/deck/{bobs['id']}", json={"private": True}, headers=HOST)
-    assert resp.status_code == 400 and "creator" in resp.get_json()["error"]
-    # Not by wiping his traces in the same request, nor in a batch, nor by the assistant.
-    resp = alice.put(f"/api/deck/{bobs['id']}", json={"private": True, "comments": []}, headers=HOST)
-    assert resp.status_code == 400
-    alice.post("/api/deck/batch-update", json={"tasks": [{"id": bobs["id"], "private": True}]}, headers=HOST)
-    assert "creator" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], private=True)
-    assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
-    # Hers, until bob comments on it.
-    mine = alice.post("/api/deck", json={"title": "Mine", "private": False}, headers=HOST).get_json()
-    assert alice.put(f"/api/deck/{mine['id']}", json={"private": True}, headers=HOST).get_json()["private"]
-    alice.put(f"/api/deck/{mine['id']}", json={"private": False}, headers=HOST)
+    moved = alice.put(f"/api/deck/{bobs['id']}", json={"private": True}, headers=HOST)
+    assert moved.get_json()["private"] is True
+    assert bobs["id"] in (wiki / "private/alice/_deck/tasks.json").read_text()
+    assert bobs["id"] not in (wiki / "_deck/tasks.json").read_text()
     sign_in(alice, "bob")
-    alice.post(f"/api/deck/{mine['id']}/comments", json={"text": "Me too"}, headers=HOST)
-    sign_in(alice, "alice")
-    assert alice.put(f"/api/deck/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
-    # From before users: no one is named.
-    (wiki / "_deck/tasks.json").write_text(json.dumps([{"id": "0ld00000-0000-4000-8000-000000000000", "title": "Old"}]))
-    assert alice.put("/api/deck/0ld00000-0000-4000-8000-000000000000", json={"private": True},
-                     headers=HOST).get_json()["private"]
+    assert bobs["id"] not in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
+    # And it is bob's to take no further: alice's task is no task to him.
+    assert alice.put(f"/api/deck/{bobs['id']}", json={"private": False}, headers=HOST).status_code == 404
 
 
 def test_comments_are_their_authors_to_change(alice, wiki):
@@ -441,8 +425,7 @@ def test_comments_are_their_authors_to_change(alice, wiki):
 
 def test_history_keeps_who_worked_on_a_task(alice, wiki):
     """A whole history sent back (an undo) can't drop what bob did, nor add
-    an entry in his name, so alice can't clear the way to making his task
-    private; her own undo still takes her own entries out."""
+    an entry in his name; her own undo still takes her own entries out."""
     sign_in(alice, "bob")
     task = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
     url = f"/api/deck/{task['id']}"
@@ -458,7 +441,6 @@ def test_history_keeps_who_worked_on_a_task(alice, wiki):
         assert alice.put(url, json={"history": sent}, headers=HOST).get_json()["history"] == bobs
     alice.post("/api/deck/batch-update", json={"tasks": [{"id": task["id"], "history": []}]}, headers=HOST)
     assert history() == bobs
-    assert alice.put(url, json={"private": True}, headers=HOST).status_code == 400
     # Her own undo: the old history back drops her change's entry.
     alice.put(url, json={"start_date": "2026-02-01"}, headers=HOST)
     assert [e["by"] for e in history()] == [e["by"] for e in bobs] + ["alice"]
@@ -467,8 +449,8 @@ def test_history_keeps_who_worked_on_a_task(alice, wiki):
 
 def test_a_restore_keeps_who_worked_on_a_task(alice, wiki):
     """Undoing a delete brings back what Leaf deleted: a snapshot can't
-    drop bob's traces (and so make his task alice's private one), nor
-    invent words in his name."""
+    drop bob's traces, nor invent words in his name, nor make a shared task
+    private (it comes back as it was)."""
     sign_in(alice, "bob")
     bobs = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
     url = f"/api/deck/{bobs['id']}"
