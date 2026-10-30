@@ -496,7 +496,43 @@ type Hit struct {
 }
 
 // Search: the best `limit` documents for the query, by BM25.
-func (ix *Index) Search(query string, limit int) []Hit {
+func (ix *Index) Search(query string, limit int) []Hit { return ix.SearchWhere(query, limit, nil) }
+
+// hitBefore: a ranks ahead of b: the higher score, else the earlier document.
+func hitBefore(a, b Hit) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	return a.Doc < b.Doc
+}
+
+// topHits: the best limit hits, in order. For a few, one pass keeping a
+// short sorted list instead of sorting every hit.
+func topHits(hits []Hit, limit int) []Hit {
+	if limit >= len(hits) || limit > 64 {
+		sort.Slice(hits, func(x, y int) bool { return hitBefore(hits[x], hits[y]) })
+		return hits[:min(limit, len(hits))]
+	}
+	top := make([]Hit, 0, limit)
+	for _, h := range hits {
+		if len(top) == limit && !hitBefore(h, top[limit-1]) {
+			continue
+		}
+		i := sort.Search(len(top), func(i int) bool { return hitBefore(h, top[i]) })
+		if len(top) < limit {
+			top = append(top, Hit{})
+		}
+		copy(top[i+1:], top[i:])
+		top[i] = h
+	}
+	return top
+}
+
+// SearchWhere: Search among the documents accept is true for (nil: all). A
+// document is asked once, and one that is refused is not scored: the same
+// hits and scores as filtering Search's list, without ranking and sorting
+// what would be thrown away.
+func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool) []Hit {
 	var qTokens []string
 	for _, w := range queryWords(query) {
 		qTokens = append(qTokens, stem(w))
@@ -504,11 +540,26 @@ func (ix *Index) Search(query string, limit int) []Hit {
 	if len(qTokens) == 0 || ix.n == 0 && ix.over == nil {
 		return nil
 	}
+	var asked []int8 // per document: 0 not asked yet, 1 accepted, 2 refused
+	if accept != nil {
+		asked = make([]int8, ix.n+len(ix.over.lensOrNil()))
+	}
 	scores := map[int]float64{}
 	for _, tw := range ix.expand(qTokens) {
 		idf := ix.idfOf(tw.term)
 		score := func(postings []posting) {
 			for _, p := range postings {
+				if accept != nil {
+					if asked[p.doc] == 0 {
+						asked[p.doc] = 2
+						if accept(p.doc) {
+							asked[p.doc] = 1
+						}
+					}
+					if asked[p.doc] == 2 {
+						continue
+					}
+				}
 				f := float64(p.tf)
 				denom := f + bm25K1*(1-bm25B+bm25B*float64(ix.docLen(p.doc))/ix.avgdl)
 				scores[p.doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
@@ -519,19 +570,23 @@ func (ix *Index) Search(query string, limit int) []Hit {
 			score(ix.over.postings[tw.term])
 		}
 	}
-	var hits []Hit
+	hits := make([]Hit, 0, len(scores))
 	for i, s := range scores {
 		if s > 0 {
 			hits = append(hits, Hit{i, s})
 		}
 	}
-	sort.Slice(hits, func(x, y int) bool {
-		if hits[x].Score != hits[y].Score {
-			return hits[x].Score > hits[y].Score
-		}
-		return hits[x].Doc < hits[y].Doc
-	})
-	return hits[:min(limit, len(hits))]
+	if len(hits) == 0 {
+		return nil
+	}
+	return topHits(hits, limit)
+}
+
+func (o *overlay) lensOrNil() []int {
+	if o == nil {
+		return nil
+	}
+	return o.lens
 }
 
 // ---- matched words, excerpts ----

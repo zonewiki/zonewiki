@@ -251,7 +251,16 @@ func newDocIndex(docs []*SearchDoc) *docIndex {
 
 // search: the best `limit` docs for the query text.
 func (x *docIndex) search(text string, limit int) []*SearchDoc {
-	hits := x.ix.Search(text, limit)
+	return x.searchWhere(text, limit, nil)
+}
+
+// searchWhere: search among the docs accept is true for (nil: all).
+func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) bool) []*SearchDoc {
+	var ok func(int) bool
+	if accept != nil {
+		ok = func(i int) bool { return accept(x.docs[i]) }
+	}
+	hits := x.ix.SearchWhere(text, limit, ok)
 	out := make([]*SearchDoc, len(hits))
 	for i, h := range hits {
 		out[i] = x.docs[h.Doc]
@@ -409,11 +418,11 @@ func phraseFirst(ranked []*SearchDoc, q *Query, x *docIndex, keep func(*SearchDo
 	}
 	var hits []*SearchDoc
 	first := map[*SearchDoc]bool{}
-	for _, d := range x.search(q.RankingText(), len(x.docs)) {
-		if passes(q, d, keep) && d.hasPhrase(phrase) {
-			hits = append(hits, d)
-			first[d] = true
-		}
+	for _, d := range x.searchWhere(q.RankingText(), len(x.docs), func(d *SearchDoc) bool {
+		return passes(q, d, keep) && d.hasPhrase(phrase)
+	}) {
+		hits = append(hits, d)
+		first[d] = true
 	}
 	if hits == nil {
 		return ranked
@@ -433,13 +442,7 @@ func bm25(x *docIndex, q *Query, depth int, keep func(*SearchDoc) bool) []*Searc
 	if !q.HasFilters() && keep == nil {
 		return x.search(text, depth)
 	}
-	var out []*SearchDoc
-	for _, d := range x.search(text, len(x.docs)) {
-		if passes(q, d, keep) {
-			out = append(out, d)
-		}
-	}
-	return out[:min(depth, len(out))]
+	return x.searchWhere(text, depth, func(d *SearchDoc) bool { return passes(q, d, keep) })
 }
 
 func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(docs))] }
@@ -505,12 +508,7 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 func bestSections(rq *Req, q *Query, slugs map[string]bool) map[string]*SearchDoc {
 	text := q.RankingText()
 	x := chunkIndex(rq)
-	var ranked []*SearchDoc
-	for _, d := range x.search(text, len(x.docs)) {
-		if !d.isTask() && slugs[d.Slug] {
-			ranked = append(ranked, d)
-		}
-	}
+	ranked := x.searchWhere(text, len(x.docs), func(d *SearchDoc) bool { return !d.isTask() && slugs[d.Slug] })
 	best := map[string]*SearchDoc{}
 	if phrase := q.Phrase(); phrase != "" {
 		for _, d := range ranked {

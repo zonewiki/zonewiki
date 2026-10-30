@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strings"
@@ -425,5 +427,34 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 	settings().Users = nil
 	if got := c.get(bob, docs); len(got.docs) != 2 {
 		t.Errorf("after the users were removed everything is shared again: %d docs", len(got.docs))
+	}
+}
+
+// SearchWhere is Search with the refused documents taken out of the list:
+// the same hits, scores and order. And a short limit gives the head of the
+// full ordering.
+func TestSearchWhereIsSearchFiltered(t *testing.T) {
+	r := rand.New(rand.NewSource(3))
+	toks := make([][]string, 300)
+	for i := range toks {
+		for j := 0; j < 5+r.Intn(40); j++ {
+			toks[i] = append(toks[i], fmt.Sprintf("w%d", r.Intn(25)))
+		}
+	}
+	ix := NewIndex(toks[:200]).WithExtra(toks[200:])
+	even := func(d int) bool { return d%2 == 0 }
+	for _, q := range []string{"w1", "w1 w2 w3", "w9 w24", "w1x", "w"} {
+		var want []Hit
+		for _, h := range ix.Search(q, 1000) {
+			if even(h.Doc) {
+				want = append(want, h)
+			}
+		}
+		sameHits(t, q+" filtered", ix.SearchWhere(q, 1000, even), want)
+		all := ix.Search(q, 1000)
+		for _, limit := range []int{1, 7, 30, 64, 65, 1000} {
+			sameHits(t, fmt.Sprintf("%s top %d", q, limit), ix.Search(q, limit), all[:min(limit, len(all))])
+			sameHits(t, fmt.Sprintf("%s filtered top %d", q, limit), ix.SearchWhere(q, limit, even), want[:min(limit, len(want))])
+		}
 	}
 }

@@ -1,13 +1,17 @@
 package main
 
-import "sort"
+import (
+	"sort"
+	"unicode/utf8"
+)
 
 // closeMatches is difflib.get_close_matches(word, possibilities, n, cutoff):
 // the possibilities whose SequenceMatcher ratio against word is at least
 // cutoff, best first, at most n. Equal scores order the larger string
-// first, as Python's nlargest over (score, string) does. (Python also
-// checks real_quick_ratio and quick_ratio first; they are upper bounds of
-// ratio, so they only save time.)
+// first, as Python's nlargest over (score, string) does. Like Python, it
+// skips the full ratio for a possibility whose real_quick_ratio or
+// quick_ratio, upper bounds of it, are below the cutoff: the same matches,
+// found without the expensive part for nearly all of a large vocabulary.
 func closeMatches(word string, possibilities []string, n int, cutoff float64) []string {
 	type scored struct {
 		score float64
@@ -15,9 +19,31 @@ func closeMatches(word string, possibilities []string, n int, cutoff float64) []
 	}
 	b := []rune(word)
 	b2j := buildB2J(b)
+	bcount := map[rune]int{}
+	for _, r := range b {
+		bcount[r]++
+	}
+	used := map[rune]int{}
 	var result []scored
 	for _, x := range possibilities {
-		if r := ratio([]rune(x), b, b2j); r >= cutoff {
+		if la := utf8.RuneCountInString(x); la+len(b) > 0 && 2.0*float64(min(la, len(b)))/float64(la+len(b)) < cutoff {
+			continue // real_quick_ratio
+		}
+		a := []rune(x)
+		if len(a)+len(b) > 0 { // quick_ratio: the letters they share, counted
+			matches := 0
+			for _, r := range a {
+				if used[r] < bcount[r] {
+					matches++
+				}
+				used[r]++
+			}
+			clear(used)
+			if 2.0*float64(matches)/float64(len(a)+len(b)) < cutoff {
+				continue
+			}
+		}
+		if r := ratio(a, b, b2j); r >= cutoff {
 			result = append(result, scored{r, x})
 		}
 	}
