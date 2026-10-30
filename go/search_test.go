@@ -650,3 +650,27 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 		t.Errorf("the test should use both ways: %d rebuilds, %d rounds with a corrected base", rebuilds, corrected)
 	}
 }
+
+// Users with nothing private of their own are searched with one and the same
+// index, also while it has changes: how many users there are costs nothing.
+func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob", "carol")
+	docs := []*SearchDoc{
+		{Slug: "p1", Tokens: []string{"apple"}}, {Slug: "p2", Tokens: []string{"pear"}},
+		{Slug: "private/alice/a", Tokens: []string{"fig"}},
+	}
+	var c indexCache
+	c.get(&Req{user: "bob"}, docs)
+	docs[1] = &SearchDoc{Slug: "p2", Tokens: []string{"pear", "plum"}} // an edit: the base now has changes
+	bob, carol, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs), c.get(&Req{user: "alice"}, docs)
+	if len(c.dead)+len(c.delta) == 0 {
+		t.Fatal("the base should have changes")
+	}
+	if bob != carol {
+		t.Error("bob and carol have nothing private and should share an index")
+	}
+	if alice == bob || len(alice.docs) != 3 || len(bob.docs) != 2 {
+		t.Errorf("alice has a private page: her index is her own (%d docs), bob's has %d", len(alice.docs), len(bob.docs))
+	}
+}

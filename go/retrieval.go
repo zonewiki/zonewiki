@@ -382,6 +382,8 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	viewKey := "user:" + user
 	if rq == nil {
 		viewKey = "leaf"
+	} else if len(own) == 0 {
+		viewKey = "shared" // the same for everyone with nothing private of their own
 	}
 	if v := c.views[viewKey]; v != nil && v.base == c.base && v.gen == c.sharedGen && slices.Equal(v.own, own) {
 		return v.idx
