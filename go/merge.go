@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,11 +88,25 @@ func commitOthersDrafts(user string) {
 		commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel)))
 	}
 	// What Leaf didn't see saved (written on disk, or before a restart) has no
-	// known author, but in a private folder the folder says whose it is.
-	for _, f := range gitUncommittedFiles() {
+	// known author, but in a private folder the folder says whose it is: one
+	// commit per owner.
+	byOwner := map[string][]string{}
+	for _, f := range gitUncommittedFiles(privateDir) {
 		if owner, private := ownerIn(privateDir, f.Filepath); private && owner != "" && owner != user {
-			gitCommit(owner, commitMessage(f.Filepath), filepath.Join(cfg.Data, filepath.FromSlash(f.Filepath)))
+			byOwner[owner] = append(byOwner[owner], f.Filepath)
 		}
+	}
+	for _, owner := range sortedKeys(byOwner) {
+		files := byOwner[owner]
+		msg := commitMessage(files[0])
+		if len(files) > 1 {
+			msg = fmt.Sprintf("Save %d files in private/%s", len(files), owner)
+		}
+		paths := make([]string, len(files))
+		for i, fp := range files {
+			paths[i] = filepath.Join(cfg.Data, filepath.FromSlash(fp))
+		}
+		gitCommit(owner, msg, paths...)
 	}
 }
 

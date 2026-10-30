@@ -567,12 +567,16 @@ type UncommittedFile struct {
 }
 
 // gitUncommittedFiles: -z, so paths come unquoted (a name with a space or
-// an umlaut).
-func gitUncommittedFiles() []UncommittedFile {
+// an umlaut). Only under the given paths (relative to the wiki), if any.
+func gitUncommittedFiles(under ...string) []UncommittedFile {
 	if !cfg.GitEnabled {
 		return nil
 	}
-	r := runGit("status", "--porcelain", "-z", "--untracked-files=all")
+	args := []string{"status", "--porcelain", "-z", "--untracked-files=all"}
+	if len(under) > 0 {
+		args = append(append(args, "--"), under...)
+	}
+	r := runGit(args...)
 	fields := strings.Split(r.Stdout, "\x00")
 	var files []UncommittedFile
 	for i := 0; i < len(fields); i++ {

@@ -807,7 +807,8 @@ def test_a_rename_leaves_her_saved_draft_to_her(client, wiki):
     log, stat = _rename_as_bob(client, wiki)
     assert log[0][0] == "bob" and "Rename" in log[0][1]
     assert not any("has not committed" in l for l in _added(wiki))
-    assert ("alice", f"Save {DIARY}") in log
+    assert any(a == "alice" and s.startswith("Save ") for a, s in log)   # her files, in her name
+    assert "has not committed" in git(wiki, "show", f"HEAD~1:{DIARY}.md")
     assert "[[plans-2]]" in (wiki / f"{DIARY}.md").read_text()
 
 
@@ -818,4 +819,15 @@ def test_a_rename_leaves_a_draft_leaf_doesnt_know_to_its_owner(bob, wiki):
     log, stat = _rename_as_bob(bob, wiki)
     assert log[0][0] == "bob"
     assert not any("has not committed" in l for l in _added(wiki))
-    assert ("alice", f"Save {DIARY}") in log
+    assert any(a == "alice" and s.startswith("Save ") for a, s in log)   # her files, in her name
+    assert "has not committed" in git(wiki, "show", f"HEAD~1:{DIARY}.md")
+
+
+def test_many_unsaved_private_files_are_one_commit_of_theirs(bob, wiki):
+    for i in range(5):
+        (wiki / f"private/alice/wip-{i}.md").write_text(f"# Wip {i}\n\n[[plans]]\n")
+    before = len(_authors(wiki))
+    log, stat = _rename_as_bob(bob, wiki)
+    assert [a for a, s in log[:2]] == ["bob", "alice"] and len(log) == before + 2
+    assert log[1][1].startswith("Save ") and "files in private/alice" in log[1][1]
+    assert git(wiki, "status", "--porcelain", "--", "private/alice/wip-0.md") == ""
