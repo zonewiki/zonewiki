@@ -40,35 +40,6 @@ func deckDir(owner string) string {
 	return filepath.Join(cfg.Data, privateDir, owner, deckDirName)
 }
 
-// migratePrivateDecks moves the private decks of an older Leaf
-// (_deck/users/<user>/) into the users' folders (private/<user>/_deck/),
-// in one commit by Leaf. A deck whose new place is there already stays,
-// with a warning.
-func migratePrivateDecks() {
-	old := filepath.Join(cfg.Data, deckDirName, "users")
-	entries, _ := os.ReadDir(old)
-	var paths []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		from, to := filepath.Join(old, e.Name()), filepath.Join(cfg.Data, privateDir, strings.ToLower(e.Name()), deckDirName)
-		if isDir(to) {
-			logf("%s: the deck of %s is in %s too; left where it is.", from, e.Name(), to)
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(to), 0o777); err != nil || os.Rename(from, to) != nil {
-			logf("could not move %s to %s", from, to)
-			continue
-		}
-		paths = append(paths, from, to)
-	}
-	_ = os.Remove(old) // empty now
-	if len(paths) > 0 {
-		gitCommit("", "Move the private decks into the users' folders", paths...)
-	}
-}
-
 func deckFile(owner string) string      { return filepath.Join(deckDir(owner), "tasks.json") }
 func completedPath(owner string) string { return filepath.Join(deckDir(owner), "completed.json") }
 func archivePath(owner, year string) string {
@@ -106,10 +77,7 @@ func eachOwner(owners []string, list func(owner string) []*Task) []*Task {
 var errDeckCorrupt = errors.New("deck storage temporarily unavailable, please retry")
 
 // initDeck files completed tasks of earlier years into their archives.
-func initDeck() {
-	migratePrivateDecks()
-	archiveOldCompleted()
-}
+func initDeck() { archiveOldCompleted() }
 
 // timestamp is the current time as tasks store it (created_at, completed_at).
 func timestamp() string { return now().Format("2006-01-02T15:04:05") }

@@ -367,40 +367,6 @@ func TestEveryUsersFiles(t *testing.T) {
 	}
 }
 
-// An older Leaf kept a user's private deck in _deck/users/<user>/: it moves
-// into the user's folder, where it is private like their pages.
-func TestPrivateDecksMoveIntoUsersFolders(t *testing.T) {
-	testWiki(t, map[string]string{})
-	withUsers(t, "alice", "bob")
-	old := filepath.Join(cfg.Data, "_deck/users")
-	for name, text := range map[string]string{"alice": "[]\n", "bob": "[]\n"} {
-		if err := os.MkdirAll(filepath.Join(old, name), 0o777); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(old, name, "tasks.json"), []byte(text), 0o666); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// bob's new place is there already: his old deck is left alone.
-	if err := os.MkdirAll(filepath.Join(cfg.Data, "private/bob/_deck"), 0o777); err != nil {
-		t.Fatal(err)
-	}
-	migratePrivateDecks()
-	if _, err := os.Stat(filepath.Join(cfg.Data, "private/alice/_deck/tasks.json")); err != nil {
-		t.Errorf("alice's deck did not move: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(old, "alice")); err == nil {
-		t.Error("alice's old deck is still there")
-	}
-	if _, err := os.Stat(filepath.Join(old, "bob/tasks.json")); err != nil {
-		t.Errorf("bob's old deck should stay: %v", err)
-	}
-	migratePrivateDecks() // again: nothing to do, no harm
-	if !canSeePath("alice", "private/alice/_deck/tasks.json") || canSeePath("bob", "private/alice/_deck/tasks.json") {
-		t.Error("a deck in a user's folder is that user's")
-	}
-}
-
 // Any user can move a shared task into their own deck (the modal says
 // that everyone else then stops seeing it); a signed-out Leaf has none.
 func TestAnyUserMakesATaskPrivate(t *testing.T) {
