@@ -401,3 +401,29 @@ func TestWithExtraOnAnEmptyIndex(t *testing.T) {
 		t.Errorf("hits %v", hits)
 	}
 }
+
+// Adding users changes which documents are private without a document
+// changing: the cache must not keep the split it made before.
+func TestIndexCacheFollowsTheUsers(t *testing.T) {
+	testWiki(t, nil)
+	docs := []*SearchDoc{
+		{Slug: "plans", Tokens: []string{"plans", "quokkaflute"}},
+		{Slug: "private/alice/diary", Tokens: []string{"diary", "secretword"}},
+	}
+	var c indexCache
+	bob := &Req{user: "bob"}
+	if got := c.get(bob, docs); len(got.docs) != 2 {
+		t.Fatalf("without users everything is shared: %d docs", len(got.docs))
+	}
+	withUsers(t, "alice", "bob")
+	if got := c.get(bob, docs); len(got.docs) != 1 || got.docs[0].Slug != "plans" || got.ix.Search("secretword", 5) != nil {
+		t.Errorf("after users were added bob's index holds %d docs, and finds secretword: %v", len(got.docs), got.ix.Search("secretword", 5))
+	}
+	if got := c.get(&Req{user: "alice"}, docs); len(got.docs) != 2 || len(got.ix.Search("secretword", 5)) != 1 {
+		t.Errorf("alice's own page is missing from her index")
+	}
+	settings().Users = nil
+	if got := c.get(bob, docs); len(got.docs) != 2 {
+		t.Errorf("after the users were removed everything is shared again: %d docs", len(got.docs))
+	}
+}

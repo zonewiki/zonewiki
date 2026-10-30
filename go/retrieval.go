@@ -269,6 +269,7 @@ func (x *docIndex) search(text string, limit int) []*SearchDoc {
 // changes, so the docs' pointers are the key.
 type indexCache struct {
 	mu      sync.Mutex
+	users   string // who the docs were split for (usersKey)
 	all     []*SearchDoc
 	shared  []*SearchDoc
 	private []*SearchDoc
@@ -292,12 +293,23 @@ func docShared(d *SearchDoc) bool {
 	return !private
 }
 
+// usersKey: which users there are; what is private depends on it (nothing is
+// without users), so a settings reload that adds or removes one splits the
+// docs again though none changed.
+func usersKey() string {
+	users := settings().Users
+	if users == nil {
+		return ""
+	}
+	return "users:" + strings.Join(sortedKeys(users), ",")
+}
+
 // get: the index rq searches (nil: Leaf itself, over everything).
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.base == nil || !slices.Equal(c.all, docs) {
-		c.all = slices.Clone(docs)
+	if key := usersKey(); c.base == nil || key != c.users || !slices.Equal(c.all, docs) {
+		c.users, c.all = key, slices.Clone(docs)
 		var shared, private []*SearchDoc
 		for _, d := range docs {
 			if docShared(d) {

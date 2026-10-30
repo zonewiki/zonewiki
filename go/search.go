@@ -325,7 +325,7 @@ type Index struct {
 	postings map[string][]posting
 	idf      map[string]float64
 	vocab    []string
-	over     *overlay // more documents, scored on this index's statistics
+	over     *overlay // more documents, searched along with this index's (WithExtra)
 }
 
 // overlay: documents added to an Index without touching it (WithExtra): they
