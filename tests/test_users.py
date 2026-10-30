@@ -202,17 +202,22 @@ class TestMakeShared:
         monkeypatch.setattr(settings, "LEAF_USERS", {})
         assert "Make shared" not in self.view(client, "private/alice/index")
 
-    def test_renaming_a_page_into_the_folder_unlinks_the_shared_pages(self, alice, git_wiki_dir):
-        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas", "unlink": "1"}, headers=HOST)
-        assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/ideas"
-        assert not (git_wiki_dir / "ideas.md").exists() and (git_wiki_dir / "private/alice/ideas.md").exists()
-        # A shared page can't link to a private one: its link is plain text now.
-        assert (git_wiki_dir / "plans.md").read_text() == "# Plans\n\nSee ideas.\n"
-        assert authors(git_wiki_dir)[0] == ("alice", "Rename ideas to private/alice/ideas")
-        alice.post("/logout", headers=HOST)
-        login(alice, "bob", "bob-pw")
-        assert alice.get("/page/private/alice/ideas", headers=HOST).status_code == 404
-        assert "private/alice" not in self.view(alice, "plans")
+    def test_a_shared_page_cannot_be_renamed_into_the_folder(self, alice, git_wiki_dir):
+        """Others have seen it, and link to it: shared stays shared. Nothing changes."""
+        before = (git_wiki_dir / "plans.md").read_text()
+        head = authors(git_wiki_dir)[0]
+        for url, back in (("/rename/ideas", "/edit/ideas"), ("/rename/ideas", "/page/ideas")):
+            data = {"new_name": "private/alice/ideas"}
+            if back == "/page/ideas":
+                data["from"] = "page"
+            resp = alice.post(url, data=data, headers=HOST)
+            loc = resp.headers["Location"]
+            assert resp.status_code == 302 and loc.startswith(back + "?rename_name=private/alice/ideas&rename_error=")
+            assert "stays+shared" in loc or "stays%20shared" in loc
+        assert (git_wiki_dir / "ideas.md").exists() and not (git_wiki_dir / "private/alice/ideas.md").exists()
+        assert (git_wiki_dir / "plans.md").read_text() == before and authors(git_wiki_dir)[0] == head
+        body = alice.get("/page/ideas?rename_error=x&rename_name=private/alice/ideas", headers=HOST).get_data(as_text=True)
+        assert 'name="unlink"' not in body
 
     def test_making_it_shared_takes_its_private_images_along(self, alice, git_wiki_dir):
         """Others can't open /private/alice/_assets/…: the page gets copies in
@@ -242,75 +247,27 @@ class TestMakeShared:
                                cwd=git_wiki_dir, capture_output=True, text=True, check=True).stdout
         assert "_assets/b-2.png" in shown and "_assets/a.png" in shown and "trip.md" in shown
 
-    def test_it_asks_before_unlinking_and_changes_nothing_until_told(self, alice, git_wiki_dir):
-        mine = alice.post("/api/deck", json={"title": "Plan [[ideas]]"}).get_json()["id"]
-        before = (git_wiki_dir / "plans.md").read_text()
-        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
-        loc = resp.headers["Location"]
-        assert loc.startswith("/page/ideas?rename_unlink=1&rename_name=private/alice/ideas&rename_error=")
-        assert "plans" in loc and "task" in loc          # the page and the task that would lose the link
-        assert (git_wiki_dir / "ideas.md").exists() and (git_wiki_dir / "plans.md").read_text() == before
-        # The dialog comes back with the name typed and the box to tick.
-        body = alice.get(loc, headers=HOST).get_data(as_text=True)
-        assert 'value="private/alice/ideas"' in body and 'name="unlink"' in body
-        assert 'name="unlink"' not in alice.get("/page/ideas", headers=HOST).get_data(as_text=True)
-        # The editor's rename bar asks the same way.
-        resp = alice.post("/rename/ideas", data={"new_name": "private/alice/ideas"}, headers=HOST)
-        assert resp.headers["Location"].startswith("/edit/ideas?rename_unlink=1")
-        assert 'name="unlink"' in alice.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-        alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas", "unlink": "1"}, headers=HOST)
-        assert (git_wiki_dir / "private/alice/ideas.md").exists()
-        assert next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == mine)["title"] == "Plan ideas"
-
-    def test_no_question_when_no_shared_page_links_to_it(self, alice, git_wiki_dir):
-        (git_wiki_dir / "lonely.md").write_text("# Lonely\n")
-        resp = alice.post("/rename/lonely", data={"from": "page", "new_name": "private/alice/lonely"}, headers=HOST)
-        assert resp.headers["Location"] == "/page/private/alice/lonely"
-
-    def test_other_users_private_links_are_not_named(self, alice, git_wiki_dir):
-        """bob's private page links to it too, but alice can't see his page: it
-        is not in what she is asked about."""
-        (git_wiki_dir / "private/bob").mkdir(parents=True)
-        (git_wiki_dir / "private/bob/b.md").write_text("# B\n\n[[solo]]\n")
-        (git_wiki_dir / "solo.md").write_text("# Solo\n")
-        resp = alice.post("/rename/solo", data={"from": "page", "new_name": "private/alice/solo"}, headers=HOST)
-        assert resp.headers["Location"] == "/page/private/alice/solo"
-        assert "bob" not in resp.headers["Location"]
-
-    def test_every_kind_of_link_to_it_follows_or_goes(self, alice, git_wiki_dir):
+    def test_making_it_shared_re_points_every_link(self, alice, git_wiki_dir):
+        """Her own pages and tasks, and the shared page that linked to her private
+        one (marked 🔒 for her, plain text for the others), now reach it."""
         (git_wiki_dir / "private/alice").mkdir(parents=True)
-        (git_wiki_dir / "private/bob").mkdir(parents=True)
-        links = "[[ideas]] [[ideas|Our ideas]] [[ideas#beds]] [[ideas#beds|Beds]] [x](/page/ideas) [`[[ideas]]`]\n"
+        (git_wiki_dir / "private/alice/ideas.md").write_text("# Ideas\n")
+        links = "[[private/alice/ideas]] [[private/alice/ideas|Our ideas]] [x](/page/private/alice/ideas) `[[private/alice/ideas]]`\n"
         (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n" + links)
-        (git_wiki_dir / "private/bob/b.md").write_text("# B\n\n[[ideas]]\n")
-        (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links + "`[[ideas]]`\n")
-        mine = alice.post("/api/deck", json={"title": "Think about [[ideas]]", "private": True}).get_json()["id"]
-        shared = alice.post("/api/deck", json={"title": "Plan [[ideas]]"}).get_json()["id"]
-        alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas", "unlink": "1"}, headers=HOST)
-        # Her private page: the links follow.
-        assert (git_wiki_dir / "private/alice/diary.md").read_text() == (
-            "# Diary\n\n[[private/alice/ideas]] [[private/alice/ideas|Our ideas]] [[private/alice/ideas#beds]] "
-            "[[private/alice/ideas#beds|Beds]] [x](/page/private/alice/ideas) [`[[ideas]]`]\n")
-        # A shared page, and bob's private one: plain text; code is left alone.
-        assert (git_wiki_dir / "plans.md").read_text() == (
-            "# Plans\n\nideas Our ideas ideas › beds Beds x [`[[ideas]]`]\n`[[ideas]]`\n")
-        assert (git_wiki_dir / "private/bob/b.md").read_text() == "# B\n\nideas\n"
-        # Tasks: her private task follows, the shared one is plain text.
+        (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links)
+        mine = alice.post("/api/deck", json={"title": "Think about [[private/alice/ideas]]", "private": True}).get_json()["id"]
+        alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "shared-ideas"}, headers=HOST)
+        want = "# {}\n\n[[shared-ideas]] [[shared-ideas|Our ideas]] [x](/page/shared-ideas) `[[private/alice/ideas]]`\n"
+        assert (git_wiki_dir / "private/alice/diary.md").read_text() == want.format("Diary")
+        assert (git_wiki_dir / "plans.md").read_text() == want.format("Plans")
         titles = {t["id"]: t["title"] for t in alice.get("/api/deck", headers=HOST).get_json()}
-        assert titles[mine] == "Think about [[private/alice/ideas]]" and titles[shared] == "Plan ideas"
-
-    def test_making_it_shared_again_does_not_bring_the_links_back(self, alice, git_wiki_dir):
-        alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas", "unlink": "1"}, headers=HOST)
-        resp = alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "ideas"}, headers=HOST)
-        assert resp.headers["Location"] == "/page/ideas"
-        assert (git_wiki_dir / "ideas.md").exists() and not (git_wiki_dir / "private/alice/ideas.md").exists()
-        assert "[[" not in (git_wiki_dir / "plans.md").read_text()
+        assert titles[mine] == "Think about [[shared-ideas]]"
 
     def test_a_name_taken_comes_back_with_the_error(self, alice, git_wiki_dir):
         (git_wiki_dir / "private/alice").mkdir(parents=True)
         (git_wiki_dir / "private/alice/ideas.md").write_text("# Mine\n")
-        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas", "unlink": "1"}, headers=HOST)
-        assert "rename_error=" in resp.headers["Location"] and (git_wiki_dir / "ideas.md").exists()
+        resp = alice.post("/rename/ideas", data={"from": "page", "new_name": "private/alice/ideas"}, headers=HOST)
+        assert "rename_error=A+page+named" in resp.headers["Location"] and (git_wiki_dir / "ideas.md").exists()
 
     def test_page_lists_and_search_mark_private_pages(self, alice, git_wiki_dir):
         (git_wiki_dir / "private/alice").mkdir(parents=True)
@@ -435,15 +392,12 @@ class TestSharedNewPage:
     def test_the_editor_does_not_warn_without_users(self, client, wiki_dir):
         assert "shared-new-banner" not in client.get("/edit/garden?from=private", headers=HOST).data.decode()
 
-    def test_the_offer_is_a_rename_of_the_saved_page(self, alice, git_wiki_dir):
-        """What the banner's button does: auto-save, then the ordinary rename."""
+    def test_a_saved_shared_page_cannot_be_made_private(self, alice, git_wiki_dir):
+        """There is no button for it: once saved, the page is shared for good."""
         alice.post("/api/save/garden", data={"content": "# Garden\n\nbeds\n"}, headers=HOST)
-        resp = alice.post("/rename/garden", data={"new_name": "private/alice/garden", "unlink": "1"}, headers=HOST)
-        assert resp.status_code == 302 and resp.headers["Location"] == "/page/private/alice/garden"
-        assert not (git_wiki_dir / "garden.md").exists()
-        assert (git_wiki_dir / "private/alice/garden.md").read_text() == "# Garden\n\nbeds\n"
-        # a page never saved: the rename says 404, and the button only moves the editor
-        assert alice.post("/rename/nothing", data={"new_name": "private/alice/nothing"}, headers=HOST).status_code == 404
+        resp = alice.post("/rename/garden", data={"new_name": "private/alice/garden"}, headers=HOST)
+        assert "rename_error=" in resp.headers["Location"]
+        assert (git_wiki_dir / "garden.md").exists() and not (git_wiki_dir / "private/alice/garden.md").exists()
 
 
 class TestLinkToPrivateFromShared:

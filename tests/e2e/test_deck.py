@@ -1815,7 +1815,8 @@ def test_private_checkbox_in_modal(page, wiki, monkeypatch):
 
 def test_a_private_lists_tag_does_not_tick_private(page, wiki, monkeypatch):
     # gifts is declared in alice's folder, but tags don't decide where a
-    # task is kept: the box is as the deck opened it, and only the box moves.
+    # task is kept: the box is as the deck opened it, and a shared task
+    # keeps it disabled (shared stays shared).
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("private/alice/gifts", "# Gifts\n\n[[deck list=gifts]]\n")
@@ -1833,9 +1834,9 @@ def test_a_private_lists_tag_does_not_tick_private(page, wiki, monkeypatch):
     open_edit(page, "Scarf")
     page.locator("#task-edit-tags").fill("gifts ")
     expect(private).not_to_be_checked()
-    private.check()
+    expect(private).to_be_disabled()
     page.locator("#task-edit-form button[type=submit]").click()
-    wait_for_field(page, "Scarf", "private", True)
+    wait_for_field(page, "Scarf", "private", False)
 
 
 def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
@@ -1860,21 +1861,25 @@ def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
     assert task["private"] is False
 
 
-def test_private_box_says_what_moving_a_task_does(page, wiki, monkeypatch):
-    # bob made it: alice may still take it into her deck, and the modal
-    # says that he then stops seeing it (and the reverse).
+def test_private_box_of_a_shared_task_is_disabled(page, wiki, monkeypatch):
+    # bob made it: it is shared for good. Alice's own private task can be
+    # shared, and the modal says what that does.
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
-    page.request.post("/api/deck", data={"title": "Bob's errand"})
+    page.request.post("/api/deck", data={"title": "Bob's errand", "private": False})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.request.post("/api/deck", data={"title": "Alice's errand", "private": True})
     page.goto("/deck?view=open")
     open_edit(page, "Bob's errand")
     private, note = page.locator("#task-edit-private"), page.locator("#task-edit-private-note")
+    expect(private).to_be_disabled()
+    page.keyboard.press("Escape")
+    open_edit(page, "Alice's errand")
     expect(private).to_be_enabled()
     expect(note).to_be_hidden()
-    private.check()
-    expect(note).to_have_text("Everyone else stops seeing this task, and its comments.")
     private.uncheck()
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task.")
+    private.check()
     expect(note).to_be_hidden()
 
 

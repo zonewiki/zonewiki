@@ -189,7 +189,7 @@ function promotedSlug(folder, name, date) {
     if (rename.hasAttribute('data-open')) {
       openRename();
       const url = new URL(location.href);
-      for (const name of ['rename_error', 'rename_name', 'rename_unlink']) url.searchParams.delete(name);
+      for (const name of ['rename_error', 'rename_name']) url.searchParams.delete(name);
       history.replaceState(null, '', url);
     }
   }

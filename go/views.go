@@ -427,10 +427,10 @@ func buildDeleteDialog(slug, title string) template.HTML {
 }
 
 // pageMenu: what the page view's ⋯ menu and its dialogs need.
-func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string, renameUnlink bool) M {
+func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string) M {
 	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "scratch": isScratch(slug),
 		"renamable": !isProtected(slug), "rename_error": renameError,
-		"rename_name": renameName, "rename_unlink": renameUnlink}
+		"rename_name": renameName}
 	if target, ok := sharedMove(rq.who(), slug); ok {
 		m["shared_target"] = target
 	}

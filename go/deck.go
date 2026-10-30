@@ -469,7 +469,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	deckMu.Lock()
 	defer deckMu.Unlock()
 	t := newTask()
-	if err := applyTaskFields(user, t, data); err != nil {
+	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
@@ -481,8 +481,9 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	return t, writeDeckLocked(user, append(active, t), message)
 }
 
-// applyTaskFields applies the field changes in data (not completion).
-func applyTaskFields(user string, t *Task, data jsonObj) error {
+// applyTaskFields applies the field changes in data (not completion); fresh:
+// t is a task being created, the only time it may start private.
+func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 	oldDue := t.DueDate
 	if data.has("title") {
 		s, err := asStr(data["title"], "title")
@@ -548,7 +549,7 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		}
 		t.Keep = keep
 	}
-	if data.has("private") { // moves it into the user's own files, or out to the shared ones
+	if data.has("private") { // a new task starts private, or a private one is shared; a shared one stays shared
 		private, err := asBool(data["private"], "private")
 		if err != nil {
 			return err
@@ -556,13 +557,16 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if private && privateFolder(user) == "" {
 			return badRequest("Only a signed-in user's tasks can be private")
 		}
+		if private && t.Owner == "" && !fresh {
+			return badRequest("A shared task stays shared: others have seen it. Make a new private task and copy the text")
+		}
 		was := t.Owner
 		t.Owner = ""
 		if private {
 			t.Owner = user
 		}
-		if t.Owner != was {
-			logEvent(t, user, map[bool]string{true: "private", false: "shared"}[private], "", "")
+		if t.Owner != was && !private {
+			logEvent(t, user, "shared", "", "")
 		}
 	}
 	if data.has("last_done") {
@@ -706,7 +710,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := applyTaskFields(user, t, data); err != nil {
+	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
 	didSkip := skip && t.isOpen()
@@ -1171,7 +1175,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if t == nil {
 			continue
 		}
-		if err := applyTaskFields(userOf(r), t, change); err != nil {
+		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
 			return err
 		}
 		if change.has("history") {

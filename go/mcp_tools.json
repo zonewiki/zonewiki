@@ -849,7 +849,7 @@
     },
     "private": {
      "type": "boolean",
-     "description": "With users: true private (the user's alone), false shared."
+     "description": "With users: false shares a private task; a shared one can't go private."
     },
     "add_tags": {
      "type": "array",

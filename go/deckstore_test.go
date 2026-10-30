@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -186,18 +187,13 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	}
 }
 
-// Private toggled moves the task between the files; completing files it in
-// its user's completed.json, and the next occurrence of a series stays
-// private.
+// Completing a private task files it in its user's completed.json, and the
+// next occurrence of a series stays private; unticking Private moves it to
+// the shared files.
 func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
-	task := newTestTask(t, "alice", "Water plants", false, "due_date", isoDay(today()), "rec_type", "weekly")
-	data := jsonObj{}
-	data.set("private", true)
-	if _, err := updateTask("alice", task.ID, data, ""); err != nil {
-		t.Fatal(err)
-	}
+	task := newTestTask(t, "alice", "Water plants", true, "due_date", isoDay(today()), "rec_type", "weekly")
 	if titles(readDeck("bob")); len(readDeck("bob")) != 0 || len(readDeck("alice")) != 1 {
 		t.Fatalf("after private: bob %v, alice %v", titles(readDeck("bob")), titles(readDeck("alice")))
 	}
@@ -229,20 +225,24 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	}
 }
 
-// A task moving between the shared file and a private one is never missing
+// A task moving from a private file to the shared one is never missing
 // from a read (GET /api/deck, allTasks): the move writes two files.
 func TestReadsSeeAMovingTask(t *testing.T) {
+	const n = 100
 	for name, read := range map[string]func(string) []*Task{"openTasks": openTasks, "allTasks": allTasks} {
 		testWiki(t, nil)
 		withUsers(t, "alice")
-		task := newTestTask(t, "alice", "Scarf", false)
+		var ids []string
+		for i := range n {
+			ids = append(ids, newTestTask(t, "alice", "Scarf "+strconv.Itoa(i), true).ID)
+		}
 		stop := make(chan struct{})
 		go func() {
 			defer close(stop)
-			for i := range 200 {
+			for _, id := range ids {
 				data := jsonObj{}
-				data.set("private", i%2 == 0)
-				if _, err := updateTask("alice", task.ID, data, ""); err != nil {
+				data.set("private", false)
+				if _, err := updateTask("alice", id, data, ""); err != nil {
 					t.Error(err)
 					return
 				}
@@ -255,9 +255,9 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 				break reading
 			default:
 			}
-			if got := read("alice"); len(got) != 1 {
+			if got := read("alice"); len(got) != n {
 				<-stop
-				t.Fatalf("%s: %d tasks while it moves", name, len(got))
+				t.Fatalf("%s: %d tasks while they move", name, len(got))
 			}
 		}
 	}
@@ -367,21 +367,29 @@ func TestEveryUsersFiles(t *testing.T) {
 	}
 }
 
-// Any user can move a shared task into their own deck (the modal says
-// that everyone else then stops seeing it); a signed-out Leaf has none.
-func TestAnyUserMakesATaskPrivate(t *testing.T) {
+// A shared task stays shared, whoever asks; a private one can be shared.
+func TestASharedTaskStaysShared(t *testing.T) {
 	testWiki(t, map[string]string{})
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "bob", "Errand", false)
 	data := jsonObj{}
 	data.set("private", true)
-	if _, err := updateTask("alice", task.ID, data, ""); err != nil {
+	if _, err := updateTask("alice", task.ID, data, ""); err == nil {
+		t.Fatal("alice made bob's shared task private")
+	}
+	if got := titles(readDeck("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(readDeck("alice")) != 1 {
+		t.Errorf("bob sees %v", got)
+	}
+	mine := newTestTask(t, "alice", "Mine", true)
+	data.set("private", false)
+	if _, err := updateTask("alice", mine.ID, data, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := titles(readDeck("alice")); !reflect.DeepEqual(got, []string{"Errand"}) {
-		t.Errorf("alice sees %v", got)
+	if len(readDeck("bob")) != 2 {
+		t.Errorf("bob sees %v", titles(readDeck("bob")))
 	}
-	if got := titles(readDeck("bob")); len(got) != 0 {
-		t.Errorf("bob still sees %v", got)
+	data.set("private", true)
+	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {
+		t.Error("shared again, then private")
 	}
 }

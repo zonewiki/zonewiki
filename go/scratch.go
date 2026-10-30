@@ -113,11 +113,9 @@ func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) 
 	if exists(newPath) {
 		return "", refuse("A page named “" + newSlug + "” already exists")
 	}
-	// A shared note (one from before users) taken into a private folder: the
-	// links to it would become plain text, which a rename asks about.
-	if links := unlinkedBy(user, map[string]string{slug: newSlug}); len(links) > 0 {
-		return "", refuse("“" + slug + "” is shared and “" + newSlug + "” would be private, so links to it would turn into plain text. " +
-			unlinkNote(links) + " Rename it instead, which asks first.")
+	// A shared note (one from before users) can't be taken into a private folder.
+	if msg := refuseMakingPrivate(map[string]string{slug: newSlug}); msg != "" {
+		return "", refuse(msg)
 	}
 	if _, err := movePage(user, oldPath, newPath, slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
 		return "", err

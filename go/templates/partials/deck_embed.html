@@ -119,7 +119,7 @@
     </label>
     {{- /* With users: a private task is the user's alone (private/<user>/_deck/). */}}
     {{- if .can_private}}
-    <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search">
+    <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared.">
       <input type="checkbox" id="task-edit-private{{.sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>
       <span class="field-hint task-private-note" id="task-edit-private-note{{.sfx}}" hidden></span>
     </label>

@@ -1066,7 +1066,6 @@ function editSnapshot(t) {
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
     last_done: t.last_done || null, sort_order: t.sort_order ?? null,
     recurrence: rec ?? null, history: t.history || [],
-    ...(privateCb ? { private: !!t.private } : {}),
   };
 }
 
@@ -3136,15 +3135,13 @@ function syncQuickPreview() {
   quickPreview.textContent = quickText(q);
 }
 
-// Moving a task between the shared deck and your private one is the
-// Private box; the note says what the box, changed from how the modal
-// opened it, does.
+// A private task is shared by unticking the Private box (the note says what
+// that does); a shared task stays shared, so its box is disabled.
 function syncPrivateNote() {
   if (!privateCb) return;
-  const move = privateWas !== privateCb.checked;
-  privateNote.hidden = !move;
-  if (move) privateNote.textContent = privateCb.checked
-    ? 'Everyone else stops seeing this task, and its comments.' : 'Everyone who uses the wiki will see and change this task.';
+  const share = privateWas && !privateCb.checked;
+  privateNote.hidden = !share;
+  if (share) privateNote.textContent = 'Everyone who uses the wiki will see and change this task.';
 }
 privateCb?.addEventListener('change', syncPrivateNote);
 titleInput.addEventListener('input', syncQuickPreview);
@@ -3318,6 +3315,7 @@ function openEditModal(taskId, opts) {
   if (privateCb) {
     privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : initPrivate;
     privateWas = privateCb.checked;
+    privateCb.disabled = !!task && !task.private;   // shared stays shared
     privateNote.hidden = true;
   }
   const recType = task?.recurrence?.type || '';

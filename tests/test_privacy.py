@@ -245,15 +245,15 @@ def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):
     assert (wiki / "ideas/idea.md").exists() and not (wiki / f"{NOTE}.md").exists()
 
 
-def test_moving_an_old_shared_note_into_private_asks_about_its_links(alice, wiki):
+def test_an_old_shared_note_cannot_be_moved_into_private(alice, wiki):
     """A scratch note from before users is a shared page: Move to wiki into
-    private/alice would turn the links to it into plain text, so it is refused
-    (the rename asks first) and nothing moves."""
+    private/alice would make a shared page private, so it is refused and
+    nothing moves."""
     note = "2026-01-01_10-00-00_old"
     (wiki / f"{note}.md").write_text("# Old\n")
     (wiki / "log.md").write_text(f"# Log\n\nSee [[{note}]].\n")
     resp = alice.post(f"/promote/{note}", data={"folder": "private/alice", "name": "old"}, headers=HOST)
-    assert "promote_error=" in resp.headers["Location"] and "log" in unquote(resp.headers["Location"])
+    assert "promote_error=" in resp.headers["Location"] and "stays shared" in unquote(resp.headers["Location"])
     assert (wiki / f"{note}.md").exists() and f"[[{note}]]" in (wiki / "log.md").read_text()
     # Into a shared folder it goes, links following.
     alice.post(f"/promote/{note}", data={"folder": "notes", "name": "old"}, headers=HOST)
@@ -396,21 +396,23 @@ def test_a_tag_does_not_make_a_task_private(alice, wiki):
     assert tagged.get_json()[0]["private"] is False
 
 
-def test_anyone_can_move_a_shared_task_into_their_own_deck(alice, wiki):
-    """Making a task private takes it from everyone else (the modal says
-    so); there is no rule about who worked on it, but it never reaches
-    another user's deck: bob's private task stays bob's."""
+def test_a_shared_task_cannot_be_made_private(alice, wiki):
+    """Others have seen it: shared stays shared, by every route and tool.
+    A private task, though, can be shared (and not back)."""
     sign_in(alice, "bob")
     bobs = alice.post("/api/deck", json={"title": "Bob's"}, headers=HOST).get_json()
     sign_in(alice, "alice")
-    moved = alice.put(f"/api/deck/{bobs['id']}", json={"private": True}, headers=HOST)
-    assert moved.get_json()["private"] is True
-    assert bobs["id"] in (wiki / "private/alice/_deck/tasks.json").read_text()
-    assert bobs["id"] not in (wiki / "_deck/tasks.json").read_text()
-    sign_in(alice, "bob")
-    assert bobs["id"] not in [t["id"] for t in alice.get("/api/deck", headers=HOST).get_json()]
-    # And it is bob's to take no further: alice's task is no task to him.
-    assert alice.put(f"/api/deck/{bobs['id']}", json={"private": False}, headers=HOST).status_code == 404
+    for resp in (alice.put(f"/api/deck/{bobs['id']}", json={"private": True}, headers=HOST),
+                 alice.post("/api/deck/batch-update", json={"tasks": [{"id": bobs["id"], "private": True}]}, headers=HOST)):
+        assert resp.status_code == 400 and "stays shared" in resp.get_json()["error"]
+    assert "stays shared" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], private=True)
+    assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
+    assert not (wiki / "private/alice/_deck/tasks.json").exists() or bobs["id"] not in (wiki / "private/alice/_deck/tasks.json").read_text()
+    # Her own private task goes the other way; unchanged (false on a shared one) is no error.
+    mine = alice.post("/api/deck", json={"title": "Mine", "private": True}, headers=HOST).get_json()
+    assert alice.put(f"/api/deck/{bobs['id']}", json={"private": False}, headers=HOST).status_code == 200
+    assert alice.put(f"/api/deck/{mine['id']}", json={"private": False}, headers=HOST).get_json()["private"] is False
+    assert alice.put(f"/api/deck/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
 
 
 def test_comments_are_everyones_to_change(alice, wiki):
@@ -427,11 +429,10 @@ def test_comments_are_everyones_to_change(alice, wiki):
     assert alice.delete(f"{url}/{his['id']}", headers=HOST).get_json()["comments"] == []
 
 
-def test_moving_a_task_is_in_its_history(alice, wiki):
-    """Private and shared are events in the task's History, by who moved it."""
-    task = alice.post("/api/deck", json={"title": "Gift", "private": False}, headers=HOST).get_json()
+def test_sharing_a_task_is_in_its_history(alice, wiki):
+    """Making a private task shared is an event in its History, by who did it."""
+    task = alice.post("/api/deck", json={"title": "Own", "private": True}, headers=HOST).get_json()
     url = f"/api/deck/{task['id']}"
-    assert alice.put(url, json={"private": True}, headers=HOST).get_json()["history"][-1]["event"] == "private"
     last = alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]
     assert (last["event"], last["by"]) == ("shared", "alice")
     # Unchanged is no event, and a new private task has none to start with.
@@ -700,24 +701,20 @@ def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
     assert hers() == before
 
 
-def test_an_assistant_does_not_unlink_by_renaming_into_private(alice, wiki):
-    """A shared page links to `toy`: renaming it into alice's folder would turn
-    that link into plain text, so the assistant is told, and nothing moves;
-    the user does it in the browser, which asks."""
+def test_an_assistant_cannot_make_a_shared_page_private(alice, wiki):
+    """A shared page stays shared: renaming it, or a folder of shared pages,
+    into alice's folder is refused and nothing moves, linked or not."""
     (wiki / "toy.md").write_text("# Toy\n")
     (wiki / "games.md").write_text("# Games\n\nSee [[toy]].\n")
     out = mcp(alice, "rename_page", token="alice-token", slug="toy", new_slug="private/alice/toy")
-    assert "Not renamed" in out and "games" in out and "in Leaf, which asks first" in out
+    assert "Not renamed" in out and "stays shared" in out
     assert (wiki / "toy.md").exists() and "[[toy]]" in (wiki / "games.md").read_text()
-    # A folder, too: nothing moves.
     (wiki / "stuff").mkdir()
     (wiki / "stuff/a.md").write_text("# A\n")
-    (wiki / "games.md").write_text("# Games\n\nSee [[stuff/a]].\n")
     out = mcp(alice, "rename_page", token="alice-token", slug="stuff/", new_slug="private/alice/stuff")
-    assert "Nothing was moved" in out and "games" in out and (wiki / "stuff/a.md").exists()
-    # Without a link to it, the rename goes through.
-    (wiki / "games.md").write_text("# Games\n")
-    assert "Renamed page toy" in mcp(alice, "rename_page", token="alice-token", slug="toy", new_slug="private/alice/toy")
+    assert "Nothing was moved" in out and "stays shared" in out and (wiki / "stuff/a.md").exists()
+    # Her own private page may go out, and back within her folder.
+    assert "Renamed page" in mcp(alice, "rename_page", token="alice-token", slug=DIARY, new_slug="private/alice/journal")
 
 
 def test_moving_the_private_folder_is_refused(client, wiki):
