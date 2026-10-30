@@ -214,6 +214,34 @@ class TestMakeShared:
         assert alice.get("/page/private/alice/ideas", headers=HOST).status_code == 404
         assert "private/alice" not in self.view(alice, "plans")
 
+    def test_making_it_shared_takes_its_private_images_along(self, alice, git_wiki_dir):
+        """Others can't open /private/alice/_assets/…: the page gets copies in
+        _assets/ (a taken name gets a number), her own files stay."""
+        mine = git_wiki_dir / "private/alice/_assets"
+        mine.mkdir(parents=True)
+        (mine / "a.png").write_bytes(b"A")
+        (mine / "b.png").write_bytes(b"B")
+        (git_wiki_dir / "_assets").mkdir(exist_ok=True)
+        (git_wiki_dir / "_assets/b.png").write_bytes(b"other b")        # a different file by that name
+        (git_wiki_dir / "private/alice/trip.md").write_text(
+            "# Trip\n\n![a](/private/alice/_assets/a.png) ![b](/private/alice/_assets/b.png)\n"
+            "`/private/alice/_assets/a.png`\n")
+        (git_wiki_dir / "private/alice/other.md").write_text("# Other\n\n![a](/private/alice/_assets/a.png)\n")
+        subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        subprocess.run(["git", "commit", "-qm", "Her pages"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
+        resp = alice.post("/rename/private/alice/trip", data={"from": "page", "new_name": "trip"}, headers=HOST)
+        assert resp.headers["Location"] == "/page/trip"
+        assert (git_wiki_dir / "trip.md").read_text() == (
+            "# Trip\n\n![a](/_assets/a.png) ![b](/_assets/b-2.png)\n`/private/alice/_assets/a.png`\n")
+        assert (git_wiki_dir / "_assets/a.png").read_bytes() == b"A"
+        assert (git_wiki_dir / "_assets/b-2.png").read_bytes() == b"B"
+        assert (git_wiki_dir / "_assets/b.png").read_bytes() == b"other b"
+        assert (mine / "a.png").exists() and "/private/alice/_assets/a.png" in (git_wiki_dir / "private/alice/other.md").read_text()
+        # One commit, with the copies.
+        shown = subprocess.run(["git", "log", "-1", "--grep=Rename private/alice/trip", "--name-only", "--format="],
+                               cwd=git_wiki_dir, capture_output=True, text=True, check=True).stdout
+        assert "_assets/b-2.png" in shown and "_assets/a.png" in shown and "trip.md" in shown
+
     def test_it_asks_before_unlinking_and_changes_nothing_until_told(self, alice, git_wiki_dir):
         mine = alice.post("/api/deck", json={"title": "Plan [[ideas]]"}).get_json()["id"]
         before = (git_wiki_dir / "plans.md").read_text()

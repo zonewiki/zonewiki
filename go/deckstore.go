@@ -728,7 +728,7 @@ func daysBetween(a, b time.Time) int {
 // sends the old history back with the old fields, so an undone change
 // leaves no trace.
 var historyEvents = map[string]bool{"created": true, "start": true, "due": true, "done": true,
-	"reopened": true, "wontdo": true, "skipped": true, "repeat": true}
+	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true}
 
 var datedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 

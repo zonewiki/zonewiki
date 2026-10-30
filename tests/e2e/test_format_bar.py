@@ -195,7 +195,7 @@ def test_attach_to_a_private_page_keeps_the_file_private(page, wiki, monkeypatch
     page.locator("#fmt-attach-input").set_input_files(
         {"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
     expect(page.locator("#editor-textarea")).to_have_value(
-        "# Fmt\n\n[notes.txt](/_assets/private/alice/notes.txt)")
+        "# Fmt\n\n[notes.txt](/private/alice/_assets/notes.txt)")
     assert (wiki.root / "private/alice/_assets/notes.txt").read_bytes() == b"hello"
 
 

@@ -177,6 +177,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("POST /api/upload", apiUpload)
 	mux.HandleFunc("GET /public/{path...}", servePublic)
 	mux.HandleFunc("GET /_assets/{path...}", serveUpload)
+	mux.HandleFunc("GET /private/{user}/_assets/{file}", servePrivateUpload)
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)
@@ -396,7 +397,8 @@ const svgCSP = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-in
 
 // uploadDir: where owner's uploads are kept: _assets/ for the shared ones
 // (owner ""), private/<owner>/_assets/ for a user's private ones, in their
-// folder like their pages. Their URL is /_assets/private/<owner>/<file>.
+// folder like their pages. Their URLs follow the folders: /_assets/<file>
+// and /private/<owner>/_assets/<file>.
 func uploadDir(owner string) string {
 	if owner == "" {
 		return cfg.Uploads
@@ -409,22 +411,33 @@ func uploadURL(owner, file string) string {
 	if owner == "" {
 		return "/_assets/" + file
 	}
-	return "/_assets/" + privateDir + "/" + owner + "/" + file
+	return "/" + privateDir + "/" + owner + "/_assets/" + file
 }
 
-// serveUpload: an upload, shared or (with users) in a user's private
-// uploads (uploadDir), which only that user sees.
+// serveUpload: a shared upload, a file straight in _assets/.
 func serveUpload(w http.ResponseWriter, r *http.Request) {
-	filename, dir := r.PathValue("path"), cfg.Uploads
+	filename := r.PathValue("path")
 	if strings.Contains(filename, "/") {
-		owner, _ := ownerIn(privateDir, filename)
-		rest, ok := strings.CutPrefix(filename, privateDir+"/"+owner+"/")
-		if owner == "" || owner != userOf(r) || !ok || strings.Contains(rest, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		filename, dir = rest, uploadDir(owner)
+		http.NotFound(w, r)
+		return
 	}
+	serveUploadFile(w, r, cfg.Uploads, filename)
+}
+
+// servePrivateUpload: a user's private upload, to that user only (404 for
+// anyone else, as for a file that isn't there).
+func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
+	owner := r.PathValue("user")
+	if owner == "" || owner != userOf(r) || settings().Users[owner] == nil {
+		http.NotFound(w, r)
+		return
+	}
+	serveUploadFile(w, r, uploadDir(owner), r.PathValue("file"))
+}
+
+// serveUploadFile: filename in dir, inline only when the browser treats it
+// as passive content.
+func serveUploadFile(w http.ResponseWriter, r *http.Request, dir, filename string) {
 	mimeType := mediaType(filename)
 	inline := strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") ||
 		strings.HasPrefix(mimeType, "video/") || mimeType == "application/pdf" || mimeType == "text/plain"

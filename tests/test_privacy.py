@@ -13,6 +13,7 @@ import re
 import subprocess
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -134,6 +135,7 @@ READS = [
     ("GET /api/uncommitted", "GET", "/api/uncommitted", {}),
     ("GET /new", "GET", "/new", {}),
     ("GET /_assets/{path...}", "GET", "/_assets/private/alice/photo.png", {}),
+    ("GET /private/{user}/_assets/{file}", "GET", "/private/alice/_assets/photo.png", {}),
     ("GET /deck", "GET", "/deck", {}),
     ("GET /api/deck", "GET", "/api/deck", {}),
     ("GET /api/deck/completed", "GET", "/api/deck/completed", {}),
@@ -243,6 +245,21 @@ def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):
     assert (wiki / "ideas/idea.md").exists() and not (wiki / f"{NOTE}.md").exists()
 
 
+def test_moving_an_old_shared_note_into_private_asks_about_its_links(alice, wiki):
+    """A scratch note from before users is a shared page: Move to wiki into
+    private/alice would turn the links to it into plain text, so it is refused
+    (the rename asks first) and nothing moves."""
+    note = "2026-01-01_10-00-00_old"
+    (wiki / f"{note}.md").write_text("# Old\n")
+    (wiki / "log.md").write_text(f"# Log\n\nSee [[{note}]].\n")
+    resp = alice.post(f"/promote/{note}", data={"folder": "private/alice", "name": "old"}, headers=HOST)
+    assert "promote_error=" in resp.headers["Location"] and "log" in unquote(resp.headers["Location"])
+    assert (wiki / f"{note}.md").exists() and f"[[{note}]]" in (wiki / "log.md").read_text()
+    # Into a shared folder it goes, links following.
+    alice.post(f"/promote/{note}", data={"folder": "notes", "name": "old"}, headers=HOST)
+    assert (wiki / "notes/old.md").exists() and "[[notes/old]]" in (wiki / "log.md").read_text()
+
+
 def test_append_moves_a_private_note_out(alice, wiki):
     resp = alice.post(f"/append/{NOTE}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
     assert resp.headers["Location"] == "/page/plans#idea"
@@ -256,15 +273,15 @@ def upload(client, page="", name="pic.png", **extra):
 
 def test_an_upload_for_a_private_page_is_private(alice, wiki):
     resp = upload(alice, DIARY)
-    assert resp.get_json()["url"] == "/_assets/private/alice/pic.png"
+    assert resp.get_json()["url"] == "/private/alice/_assets/pic.png"
     assert (wiki / "private/alice/_assets/pic.png").read_bytes() == b"\x89PNG"
     assert upload(alice, DIARY).status_code == 409                      # the same name there again
     assert upload(alice, "plans").get_json()["url"] == "/_assets/pic.png"   # a shared page's: shared
-    assert alice.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 200
+    assert alice.get("/private/alice/_assets/pic.png", headers=HOST).status_code == 200
     assert "Upload private/alice/_assets/pic.png" in git(wiki, "log", "--format=%s")
     sign_in(alice, "bob")
     bob = alice
-    assert bob.get("/_assets/private/alice/pic.png", headers=HOST).status_code == 404
+    assert bob.get("/private/alice/_assets/pic.png", headers=HOST).status_code == 404
     assert bob.get("/_assets/pic.png", headers=HOST).status_code == 200
     assert upload(bob, DIARY, "b.png").get_json()["url"] == "/_assets/b.png"   # not into alice's folder
 
@@ -274,7 +291,9 @@ def test_assets_in_other_folders_are_not_served(alice, wiki):
     (wiki / "_assets/sub/a.png").write_bytes(b"x")
     (wiki / "private/alice/_assets/deeper").mkdir(parents=True)
     (wiki / "private/alice/_assets/deeper/a.png").write_bytes(b"x")
-    for path in ("/_assets/sub/a.png", "/_assets/private/alice/deeper/a.png", "/_assets/private/alice/"):
+    (wiki / "private/alice/_assets/a.png").write_bytes(b"x")
+    for path in ("/_assets/sub/a.png", "/_assets/private/alice/a.png", "/private/alice/_assets/deeper/a.png",
+                 "/private/alice/_assets/"):
         assert alice.get(path, headers=HOST).status_code == 404, path
 
 
@@ -423,48 +442,37 @@ def test_comments_are_their_authors_to_change(alice, wiki):
                         headers=HOST).status_code == 200
 
 
-def test_history_keeps_who_worked_on_a_task(alice, wiki):
-    """A whole history sent back (an undo) can't drop what bob did, nor add
-    an entry in his name; her own undo still takes her own entries out."""
-    sign_in(alice, "bob")
-    task = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
+def test_moving_a_task_is_in_its_history(alice, wiki):
+    """Private and shared are events in the task's History, by who moved it."""
+    task = alice.post("/api/deck", json={"title": "Gift", "private": False}, headers=HOST).get_json()
     url = f"/api/deck/{task['id']}"
-    alice.put(url, json={"due_date": "2026-03-01"}, headers=HOST)
-    sign_in(alice, "alice")
-
-    def history():
-        return next(t for t in alice.get("/api/deck", headers=HOST).get_json() if t["id"] == task["id"])["history"]
-    bobs = history()
-    assert bobs and {e["by"] for e in bobs} == {"bob"}
-    forged = {"at": "2026-01-01T10:00", "event": "due", "by": "carol", "from": None, "to": "2026-01-02"}
-    for sent in ([], [{**e, "by": "alice"} for e in bobs], [*bobs, forged]):
-        assert alice.put(url, json={"history": sent}, headers=HOST).get_json()["history"] == bobs
-    alice.post("/api/deck/batch-update", json={"tasks": [{"id": task["id"], "history": []}]}, headers=HOST)
-    assert history() == bobs
-    # Her own undo: the old history back drops her change's entry.
-    alice.put(url, json={"start_date": "2026-02-01"}, headers=HOST)
-    assert [e["by"] for e in history()] == [e["by"] for e in bobs] + ["alice"]
-    assert alice.put(url, json={"start_date": None, "history": bobs}, headers=HOST).get_json()["history"] == bobs
+    assert alice.put(url, json={"private": True}, headers=HOST).get_json()["history"][-1]["event"] == "private"
+    last = alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]
+    assert (last["event"], last["by"]) == ("shared", "alice")
+    # Unchanged is no event, and a new private task has none to start with.
+    assert alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]["event"] == "shared"
+    new = alice.post("/api/deck", json={"title": "New", "private": True}, headers=HOST).get_json()
+    assert [e["event"] for e in new["history"]] == ["created"]
 
 
 def test_a_restore_keeps_who_worked_on_a_task(alice, wiki):
     """Undoing a delete brings back what Leaf deleted: a snapshot can't
-    drop bob's traces, nor invent words in his name, nor make a shared task
-    private (it comes back as it was)."""
+    drop bob's comments, nor invent words in his name, nor make a shared
+    task private (it comes back as it was)."""
     sign_in(alice, "bob")
     bobs = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
     url = f"/api/deck/{bobs['id']}"
     bobs = alice.post(f"{url}/comments", json={"text": "His"}, headers=HOST).get_json()
     sign_in(alice, "alice")
     assert alice.delete(url, headers=HOST).status_code == 204
-    doctored = {**bobs, "history": [], "private": True,
+    doctored = {**bobs, "private": True,
                 "comments": [{**bobs["comments"][0], "by": "alice", "text": "Hers now"}]}
     assert alice.post("/api/deck/restore", json={"tasks": [doctored]}, headers=HOST).status_code == 400
-    stripped = {**bobs, "history": [], "comments": [], "private": True}
+    stripped = {**bobs, "comments": [], "private": True}
     assert alice.post("/api/deck/restore", json={"tasks": [stripped]}, headers=HOST).status_code == 400
-    restored = alice.post("/api/deck/restore", json={"tasks": [{**bobs, "history": [], "private": True}]},
+    restored = alice.post("/api/deck/restore", json={"tasks": [{**bobs, "private": True}]},
                           headers=HOST).get_json()[0]
-    assert restored["private"] is False and restored["history"] == bobs["history"]
+    assert restored["private"] is False
     assert [(c["text"], c["by"]) for c in restored["comments"]] == [("His", "bob")]
     assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
     # One Leaf never deleted: nothing in it names someone else.
@@ -472,7 +480,7 @@ def test_a_restore_keeps_who_worked_on_a_task(alice, wiki):
                 "history": [{"at": "2026-01-01T10:00", "event": "created", "by": "bob"}],
                 "comments": [{"id": "0b0b0b0b", "at": "2026-01-01T10:00", "by": "bob", "text": "Forged"}]}
     made = alice.post("/api/deck/restore", json={"tasks": [invented]}, headers=HOST).get_json()[0]
-    assert made["history"] == [] and made["comments"] == []
+    assert made["comments"] == []
 
 
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):

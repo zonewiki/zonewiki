@@ -218,7 +218,8 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 		return nil, err
 	}
 	changed := rewriteMovedLinks(map[string]string{slug: newSlug})
-	gitCommit(user, message, append([]string{oldPath, newPath}, changed...)...)
+	files := append([]string{oldPath, newPath}, shareUploads(slug, newSlug, newPath)...)
+	gitCommit(user, message, append(files, changed...)...)
 	return changed, nil
 }
 
@@ -251,6 +252,9 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 	// All the files are in place before any link is rewritten, so each
 	// page's links are re-based from where it moved to.
 	changed := rewriteMovedLinks(moved)
+	for _, m := range moves {
+		touched = append(touched, shareUploads(m[0], m[1], filepath.Join(cfg.Data, filepath.FromSlash(m[1]+".md")))...)
+	}
 	var dirs []string
 	_ = filepath.WalkDir(filepath.Join(cfg.Data, filepath.FromSlash(folder)), func(p string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() {

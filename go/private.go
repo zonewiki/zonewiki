@@ -4,9 +4,12 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -99,4 +102,62 @@ func sharedNewOffer(user, slug string, fromPrivate bool) string {
 		return ""
 	}
 	return target
+}
+
+// ownUploadRE: a link to a user's private upload (uploadURL), in a page's
+// text: group 1 the owner, group 2 the file.
+var ownUploadRE = regexp.MustCompile(`/` + privateDir + `/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
+
+// shareUploads: oldSlug moved to newSlug (newPath). A page taken out of a
+// user's private folder takes the private uploads it shows with it, since
+// the others can't open them: each is copied to _assets/ (the user's other
+// pages keep theirs) and the page points at the copy. A name taken by a
+// different file there gets a number. Returns the files written, for the
+// move's commit.
+func shareUploads(oldSlug, newSlug, newPath string) []string {
+	owner, _ := pageOwner(oldSlug)
+	if newOwner, _ := pageOwner(newSlug); owner == "" || newOwner == owner {
+		return nil
+	}
+	text, err := readText(newPath)
+	if err != nil {
+		return nil
+	}
+	var written []string
+	masked, stash := maskCode(text)
+	masked = ownUploadRE.ReplaceAllStringFunc(masked, func(m string) string {
+		sub := ownUploadRE.FindStringSubmatch(m)
+		if sub[1] != owner {
+			return m
+		}
+		src := filepath.Join(uploadDir(owner), sub[2])
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return m
+		}
+		name, ext := sub[2], ""
+		if i := strings.LastIndex(name, "."); i > 0 {
+			name, ext = name[:i], name[i:]
+		}
+		dest := filepath.Join(uploadDir(""), sub[2])
+		for n := 2; ; n++ {
+			if have, err := os.ReadFile(dest); err != nil || bytes.Equal(have, data) {
+				break
+			}
+			dest = filepath.Join(uploadDir(""), name+"-"+strconv.Itoa(n)+ext)
+		}
+		if !exists(dest) {
+			if os.MkdirAll(filepath.Dir(dest), 0o777) != nil || os.WriteFile(dest, data, 0o666) != nil {
+				return m
+			}
+			written = append(written, dest)
+		}
+		return uploadURL("", filepath.Base(dest))
+	})
+	if len(written) > 0 || masked != text {
+		if n := unmaskCode(masked, stash); n != text && writeText(newPath, n) == nil {
+			written = append(written, newPath)
+		}
+	}
+	return written
 }

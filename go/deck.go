@@ -560,9 +560,13 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if private && privateFolder(user) == "" {
 			return badRequest("Only a signed-in user's tasks can be private")
 		}
+		was := t.Owner
 		t.Owner = ""
 		if private {
 			t.Owner = user
+		}
+		if t.Owner != was {
+			logEvent(t, user, map[bool]string{true: "private", false: "shared"}[private], "", "")
 		}
 	}
 	if data.has("last_done") {
@@ -756,7 +760,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	}
 	// An undo sends the old history back with the old fields.
 	if data.has("history") {
-		t.History = keepOthersHistory(user, t.History, cleanHistory(data["history"]))
+		t.History = cleanHistory(data["history"])
 	}
 	msg := "Update deck task"
 	switch {
@@ -842,32 +846,6 @@ func keepOthersComments(user string, have, given []Comment) ([]Comment, error) {
 		}
 	}
 	return out, nil
-}
-
-// keepOthersHistory: a task's history as a request sends it whole (an
-// undo), checked against the one it has, with users: the request may only
-// leave out entries, its user's own or no one's (an undo takes out what
-// the change it undoes added); what someone else did stays, and an entry
-// the task doesn't have is dropped, so no one wipes or forges who worked
-// on a task. Without users there is no one to name.
-func keepOthersHistory(user string, have, given []HistoryEntry) []HistoryEntry {
-	if settings().Users == nil {
-		return given
-	}
-	sent := map[HistoryEntry]int{}
-	for _, e := range given {
-		sent[e]++
-	}
-	out := []HistoryEntry{}
-	for _, e := range have {
-		if sent[e] > 0 {
-			sent[e]--
-		} else if e.By == "" || e.By == user {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned
@@ -961,7 +939,7 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 
 // The tasks deleted lately, as they were (under deckMu), for a restore
 // (undo of a delete) to be judged by: the snapshot comes from the client,
-// so who worked on the task, who wrote its comments and whether it was
+// so who wrote its comments and whether it was
 // private are taken from here. In memory: after a restart a restore is of a
 // task Leaf doesn't know.
 var (
@@ -982,22 +960,19 @@ func rememberDeleted(t *Task) {
 	}
 }
 
-// restoredTrust: a restore's snapshot t, with users, checked against the
-// task as Leaf deleted it (keepOthersHistory, keepOthersComments, as for
-// an undo's PUT); one Leaf doesn't know keeps only what names user or no
-// one, so an invented or doctored snapshot names no one else.
+// restoredTrust: a restore's snapshot t, with users, has its comments checked
+// against the task as Leaf deleted it (keepOthersComments, as for an undo's
+// PUT); one Leaf doesn't know keeps only the comments that name user or no
+// one, so an invented or doctored snapshot writes in no one else's name.
 func restoredTrust(user string, t *Task) error {
 	if settings().Users == nil {
 		return nil
 	}
 	was := deletedTasks[t.ID]
 	if was == nil {
-		mine := func(by string) bool { return by == "" || by == user }
-		t.History = slices.DeleteFunc(t.History, func(e HistoryEntry) bool { return !mine(e.By) })
-		t.Comments = slices.DeleteFunc(t.Comments, func(c Comment) bool { return !mine(c.By) })
+		t.Comments = slices.DeleteFunc(t.Comments, func(c Comment) bool { return c.By != "" && c.By != user })
 		return nil
 	}
-	t.History = keepOthersHistory(user, was.History, t.History)
 	comments, err := keepOthersComments(user, was.Comments, t.Comments)
 	t.Comments = comments
 	return err
@@ -1297,7 +1272,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if change.has("history") {
-			t.History = keepOthersHistory(userOf(r), t.History, cleanHistory(change["history"]))
+			t.History = cleanHistory(change["history"])
 		}
 		updated = append(updated, t)
 	}
