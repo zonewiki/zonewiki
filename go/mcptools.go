@@ -226,7 +226,7 @@ func newSlug(raw, user string) (string, error) {
 // page: the [[wikilinks]] (as rendering decides it: the name as a slug,
 // else slugified) and the markdown links (mdLinkMisses). Each link as
 // written → the name or slug it was meant for, to suggest a near match.
-func missingLinks(content string, slugs map[string]bool, slug string) map[string]string {
+func missingLinks(content string, slugs map[string]bool, slug, user string) map[string]string {
 	masked, _ := maskCode(content)
 	masked = taskRefRE.ReplaceAllString(deckRE.ReplaceAllString(masked, ""), "")
 	missing := map[string]string{}
@@ -239,14 +239,21 @@ func missingLinks(content string, slugs map[string]bool, slug string) map[string
 	for k, v := range mdLinkMisses(content, slug, slugs) {
 		missing[k] = v
 	}
+	// A link into a private folder that isn't user's is never reported, whether
+	// or not the page is there: "no such page" would tell which ones exist.
+	for k, v := range missing {
+		if !canSee(user, toSlug(v)) {
+			delete(missing, k)
+		}
+	}
 	return missing
 }
 
 // newMissing: the links of missingLinks in new that old didn't have, A–Z.
-func newMissing(slug, old, new string, slugs map[string]bool) []string {
-	before := missingLinks(old, slugs, slug)
+func newMissing(slug, old, new, user string, slugs map[string]bool) []string {
+	before := missingLinks(old, slugs, slug, user)
 	var added []string
-	for k := range missingLinks(new, slugs, slug) {
+	for k := range missingLinks(new, slugs, slug, user) {
 		if _, ok := before[k]; !ok {
 			added = append(added, k)
 		}
@@ -257,8 +264,8 @@ func newMissing(slug, old, new string, slugs map[string]bool) []string {
 
 // linkWarning: a note on the links a write added that lead nowhere, so the
 // model can fix a typo or create the page.
-func linkWarning(slug, old, new string) string {
-	added := newMissing(slug, old, new, slugSet())
+func linkWarning(slug, old, new, user string) string {
+	added := newMissing(slug, old, new, user, slugSet())
 	if len(added) == 0 {
 		return ""
 	}
@@ -1477,7 +1484,7 @@ func mcpPageLinks(slug, content, user string) string {
 		shown += fmt.Sprintf(", … and %d more", len(linking)-backlinksShown)
 	}
 	out := fmt.Sprintf("\n\n---\nLinked from (%d): %s", len(linking), shown)
-	if missing := missingLinks(content, slugSet(), slug); len(missing) > 0 {
+	if missing := missingLinks(content, slugSet(), slug, user); len(missing) > 0 {
 		out += "\nBroken links (no such page): " + strings.Join(sortedKeys(missing), ", ")
 	}
 	if semantic != nil {
@@ -1639,7 +1646,7 @@ func checkLinks(args jsonObj, base, user string) (string, error) {
 		if err != nil {
 			continue
 		}
-		missing := missingLinks(content, slugs, p.Slug)
+		missing := missingLinks(content, slugs, p.Slug, user)
 		if len(missing) == 0 {
 			continue
 		}

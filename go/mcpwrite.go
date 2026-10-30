@@ -95,7 +95,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 		}
 		out += closeInContent(slug, content, named, user)
 	}
-	return out + pending + linkWarning(slug, old, content) + guideNote(slug, user), nil
+	return out + pending + linkWarning(slug, old, content, user) + guideNote(slug, user), nil
 }
 
 // writeScratch: write_page with scratch, a new scratch note, named by slug
@@ -139,7 +139,7 @@ func writeScratch(args jsonObj, content, base, user string) (string, error) {
 		return "", err
 	}
 	return "Created scratch note " + slug + " (in Scratch, not yet in the wiki; file_scratch_note " +
-		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content), nil
+		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
 
 // scratchErr: a scratch note's refusal as a tool error.
@@ -322,7 +322,7 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 		done = fmt.Sprintf("applied %d edits, %s", len(edits), what)
 	}
 	return "Edited page " + slug + ": " + done + ".\n" + pageInfo(slug, base) + pending +
-		linkWarning(slug, content, text) + guideNote(slug, user), nil
+		linkWarning(slug, content, text, user) + guideNote(slug, user), nil
 }
 
 // appendAt: content with addition at the end of the section under heading;
@@ -382,7 +382,7 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 	}
 	gitCommit(user, msg, path)
 	return "Appended to page " + slug + where + ".\n" + pageInfo(slug, base) + pending +
-		linkWarning(slug, content, text) + guideNote(slug, user), nil
+		linkWarning(slug, content, text, user) + guideNote(slug, user), nil
 }
 
 // folderArg: the folder rename_page's slug names, if it names one: a
@@ -621,7 +621,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 		what = "Restored"
 	}
 	return what + " " + slug + " as of version " + runePrefix(sha, 7) + " (" + entries[i].Time + ").\n" +
-		pageInfo(slug, base) + pending + linkWarning(slug, old, content) + guideNote(slug, user), nil
+		pageInfo(slug, base) + pending + linkWarning(slug, old, content, user) + guideNote(slug, user), nil
 }
 
 // ── replace_in_pages ────────────────────────────────────────────────────────
@@ -969,7 +969,7 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 	all := slugSet()
 	brokenSet := map[string]bool{}
 	for _, h := range hits {
-		for _, l := range newMissing(h.slug, h.old, h.new, all) {
+		for _, l := range newMissing(h.slug, h.old, h.new, user, all) {
 			brokenSet[l] = true
 		}
 	}

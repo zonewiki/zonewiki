@@ -751,3 +751,17 @@ def test_every_route_is_covered():
     covered = {r[0] for r in READS} | {w[0] for w in WRITES} | EXEMPT
     assert routes - covered == set(), "routes neither probed nor exempt"
     assert covered - routes == set(), "probes of routes that don't exist"
+
+
+def test_link_warnings_dont_tell_which_private_pages_exist(client, wiki):
+    """A link into alice's folder is never reported broken, whether or not the page is
+    there (else "no such page" would tell bob which exist); his own folder still is."""
+    links = f"[[{DIARY}]] [[private/alice/nonexistent]] [[private/bob/nope]] [[nope-shared]]"
+    for out in (
+        mcp(client, "write_page", slug="probe", content=f"# Probe\n\n{links}\n"),
+        mcp(client, "read_page", slug="probe"),
+        mcp(client, "check_links"),
+    ):
+        assert "private/alice" not in out.split("\n---\n")[-1].replace(DIARY, "")
+        assert "private/bob/nope" in out and "nope-shared" in out
+    assert "alice" not in mcp(client, "edit_page", slug="probe", old="nope-shared", new="private/alice/zzz")
