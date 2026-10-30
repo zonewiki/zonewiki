@@ -855,7 +855,9 @@ func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M {
 	files := map[string]string{}
 	known := map[string]bool{}
 	for _, p := range iterPages() {
-		files[p.Slug], known[p.Slug] = p.Path, true
+		if !hiddenPage(rq, p.Slug) { // before the top five, so they are five the user may see
+			files[p.Slug], known[p.Slug] = p.Path, true
+		}
 	}
 	_, exclude := pageMeta(path, slug)
 	exclude = maps.Clone(exclude)
@@ -864,10 +866,8 @@ func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M {
 	}
 	var related []PageRef
 	for _, r := range semantic.related(slug, known, exclude, 5) {
-		if !hiddenPage(rq, r.ID) {
-			title, _ := pageMeta(files[r.ID], r.ID)
-			related = append(related, PageRef{Slug: r.ID, Title: title})
-		}
+		title, _ := pageMeta(files[r.ID], r.ID)
+		related = append(related, PageRef{Slug: r.ID, Title: title})
 	}
 	if related == nil {
 		return nil

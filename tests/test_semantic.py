@@ -172,3 +172,19 @@ class TestRelated:
         semantic.sync()
         monkeypatch.setattr(settings, "SEMANTIC", None)
         assert _related(client, "golf") is None
+
+
+class TestRelatedWithUsers:
+    def test_fills_the_five_with_pages_the_user_may_see(self, client, semantic, wiki_dir, monkeypatch):
+        """Alice's private pages are closer to golf than the shared one, and more than five:
+        bob still gets the shared page, since only what he may see is ranked."""
+        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
+        for i in range(6):
+            write_page(wiki_dir, f"private/alice/brakes-{i}", "# Brakes\n\nBremsen beim Mechaniker, Werkstatt Termin.\n")
+        write_page(wiki_dir, "brakes", "# Brakes\n\nBremsen beim Mechaniker. Rent and savings.\n")
+        semantic.sync()
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        assert _related(client, "golf") == ["brakes"]
+        client.post("/logout", headers=HOST)
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert len(_related(client, "golf")) == 5
