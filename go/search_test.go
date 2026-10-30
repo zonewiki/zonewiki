@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -456,5 +457,196 @@ func TestSearchWhereIsSearchFiltered(t *testing.T) {
 			sameHits(t, fmt.Sprintf("%s top %d", q, limit), ix.Search(q, limit), all[:min(limit, len(all))])
 			sameHits(t, fmt.Sprintf("%s filtered top %d", q, limit), ix.SearchWhere(q, limit, even), want[:min(limit, len(want))])
 		}
+	}
+}
+
+type labelled struct {
+	label string
+	hit   Hit
+}
+
+// An index with documents left out and others added, ordered as given,
+// searches exactly as one built over the documents left in that order: the
+// same hits, scores and order (ties too), for words, prefixes and typos.
+func TestWithChangesIsAsIfBuiltOverWhatIsLeft(t *testing.T) {
+	r := rand.New(rand.NewSource(11))
+	words := strings.Fields("apple apples applet banana bananas cherry cherries date fig grape grapes kiwi lemon lime mango melon nectar orange papaya peach pear plum quince raisin")
+	doc := func() []string {
+		out := make([]string, 3+r.Intn(25))
+		for i := range out {
+			out[i] = words[r.Intn(len(words))]
+		}
+		return out
+	}
+	queries := []string{"apple", "banana cherry", "grap", "app", "aple", "bananna", "chery", "pech", "zzzz", "kiwi lemon lime", "fig", "quinc raisn", "nectar orange papaya"}
+	for round := 0; round < 80; round++ {
+		nb := 10 + r.Intn(60)
+		base := make([][]string, nb)
+		for i := range base {
+			base[i] = doc()
+			if i > 0 && r.Intn(5) == 0 {
+				base[i] = base[i-1] // equal scores: the order has to decide
+			}
+		}
+		dead := map[int][]string{}
+		for i := range base {
+			if r.Intn(4) == 0 {
+				dead[i] = base[i]
+			}
+		}
+		if round%10 == 0 { // every document holding a term dead
+			for i := range base {
+				dead[i] = base[i]
+			}
+		}
+		extra := make([][]string, r.Intn(15))
+		for j := range extra {
+			extra[j] = doc()
+		}
+		type ent struct {
+			id     int
+			tokens []string
+			label  string
+		}
+		var live []ent
+		for i := range base {
+			if _, d := dead[i]; !d {
+				live = append(live, ent{i, base[i], fmt.Sprintf("b%d", i)})
+			}
+		}
+		for j := range extra {
+			live = append(live, ent{nb + j, extra[j], fmt.Sprintf("e%d", j)})
+		}
+		r.Shuffle(len(live), func(a, b int) { live[a], live[b] = live[b], live[a] })
+		pos := make([]int32, nb+len(extra))
+		labelOf := map[int]string{}
+		freshTokens := make([][]string, len(live))
+		for k, e := range live {
+			pos[e.id] = int32(k)
+			labelOf[e.id] = e.label
+			freshTokens[k] = e.tokens
+		}
+		got, whole := NewIndex(base).With(dead, extra, pos), NewIndex(freshTokens)
+		for _, q := range queries {
+			for _, limit := range []int{3, 1000} {
+				var a, b []labelled
+				for _, h := range got.Search(q, limit) {
+					a = append(a, labelled{labelOf[h.Doc], h})
+				}
+				for _, h := range whole.Search(q, limit) {
+					b = append(b, labelled{live[h.Doc].label, h})
+				}
+				if len(a) != len(b) {
+					t.Fatalf("round %d %q top %d: %d hits, want %d", round, q, limit, len(a), len(b))
+				}
+				for i := range a {
+					if a[i].label != b[i].label || a[i].hit.Score != b[i].hit.Score {
+						t.Fatalf("round %d %q top %d, hit %d: %s %v, want %s %v", round, q, limit, i, a[i].label, a[i].hit.Score, b[i].label, b[i].hit.Score)
+					}
+				}
+			}
+		}
+	}
+}
+
+// Edits, deletions and new pages and tasks, round after round: every
+// viewer's index answers as one built afresh over what they may see, in the
+// same order, whether the cache kept its base and corrected it or built it
+// again.
+func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	r := rand.New(rand.NewSource(5))
+	words := strings.Fields("apple apples applet banana bananas cherry cherries date fig grape grapes kiwi lemon lime mango melon nectar orange papaya peach pear plum quince raisin")
+	tokens := func() []string {
+		out := make([]string, 3+r.Intn(25))
+		for i := range out {
+			out[i] = words[r.Intn(len(words))]
+		}
+		return out
+	}
+	serial := 0
+	newDoc := func() *SearchDoc {
+		serial++
+		switch r.Intn(6) {
+		case 0:
+			return &SearchDoc{Slug: fmt.Sprintf("private/alice/a%d", serial), Tokens: tokens()}
+		case 1:
+			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: tokens()}
+		case 2:
+			owner := []string{"", "alice", "bob"}[r.Intn(3)]
+			return &SearchDoc{Slug: deckDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: tokens()}
+		}
+		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: tokens()}
+	}
+	label := func(d *SearchDoc) string { return d.Slug + "/" + d.TaskID }
+	edited := func(d *SearchDoc) *SearchDoc { // the doc as a changed file would give it: new
+		return &SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: tokens()}
+	}
+	var docs []*SearchDoc
+	for i := 0; i < 240; i++ {
+		docs = append(docs, newDoc())
+		if i > 0 && r.Intn(6) == 0 { // the same words: equal scores, the order decides
+			docs[i].Tokens = docs[i-1].Tokens
+		}
+	}
+	queries := []string{"apple", "banana cherry", "grap", "aple", "bananna", "pech", "zzzz", "kiwi lemon lime", "nectar orange papaya"}
+	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "leaf": nil}
+	var c indexCache
+	rebuilds, corrected := 0, 0
+	var lastBase *docIndex
+	for round := 0; round < 60; round++ {
+		if round > 0 {
+			for k := r.Intn(8); k >= 0; k-- { // a few edits, deletions, additions
+				switch i := r.Intn(len(docs)); r.Intn(3) {
+				case 0:
+					docs[i] = edited(docs[i])
+				case 1:
+					docs = slices.Delete(docs, i, i+1)
+				default:
+					docs = slices.Insert(docs, i, newDoc())
+				}
+			}
+			if round%20 == 0 { // many at once: more than the base is kept for
+				for i := range docs[:len(docs)/3] {
+					docs[i] = edited(docs[i])
+				}
+			}
+		}
+		for name, rq := range viewers {
+			got := c.get(rq, docs)
+			var visible []*SearchDoc
+			for _, d := range docs {
+				if rq == nil || docVisible(rq.user, d) {
+					visible = append(visible, d)
+				}
+			}
+			want := newDocIndex(visible)
+			for _, q := range queries {
+				for _, limit := range []int{4, 1000} {
+					a, b := got.search(q, limit), want.search(q, limit)
+					if len(a) != len(b) {
+						t.Fatalf("round %d %s %q top %d: %d hits, want %d", round, name, q, limit, len(a), len(b))
+					}
+					for i := range a {
+						if a[i] != b[i] {
+							t.Fatalf("round %d %s %q top %d, hit %d: %s, want %s", round, name, q, limit, i, label(a[i]), label(b[i]))
+						}
+					}
+				}
+			}
+			if !slices.Equal(got.docs, visible) {
+				t.Fatalf("round %d %s: the docs differ from what the viewer may see", round, name)
+			}
+		}
+		if c.base != lastBase {
+			rebuilds++
+		} else if len(c.dead)+len(c.delta) > 0 {
+			corrected++
+		}
+		lastBase = c.base
+	}
+	if rebuilds < 3 || corrected < 10 {
+		t.Errorf("the test should use both ways: %d rebuilds, %d rounds with a corrected base", rebuilds, corrected)
 	}
 }

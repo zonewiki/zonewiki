@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -195,6 +196,7 @@ var taskDocs struct {
 	mu   sync.Mutex
 	key  string
 	docs []*SearchDoc
+	byID map[string]*SearchDoc
 	done bool
 }
 
@@ -209,7 +211,16 @@ func taskSearchDocs() []*SearchDoc {
 		return taskDocs.docs
 	}
 	docs := []*SearchDoc{}
+	previous := taskDocs.byID
+	taskDocs.byID = map[string]*SearchDoc{}
 	for _, t := range everyTask() {
+		// A task that didn't change keeps its doc, so the index can tell
+		// what did (the pointers are what it compares).
+		if old := previous[t.ID]; old != nil && reflect.DeepEqual(old.Task, t) {
+			taskDocs.byID[t.ID] = old
+			docs = append(docs, old)
+			continue
+		}
 		title := t.Title
 		var comments, tags, lowTags []string
 		for _, c := range t.Comments {
@@ -229,6 +240,7 @@ func taskSearchDocs() []*SearchDoc {
 		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
 		}
+		taskDocs.byID[t.ID] = d
 		docs = append(docs, d)
 	}
 	taskDocs.key, taskDocs.docs, taskDocs.done = key, docs, true
@@ -237,7 +249,8 @@ func taskSearchDocs() []*SearchDoc {
 
 // docIndex is BM25 over docs.
 type docIndex struct {
-	docs []*SearchDoc
+	docs []*SearchDoc // the docs it is over, in order
+	byID []*SearchDoc // by the number the index gives them (docs, but for an index with changes)
 	ix   *Index
 }
 
@@ -246,7 +259,7 @@ func newDocIndex(docs []*SearchDoc) *docIndex {
 	for i, d := range docs {
 		tokens[i] = d.Tokens
 	}
-	return &docIndex{docs, NewIndex(tokens)}
+	return &docIndex{docs, docs, NewIndex(tokens)}
 }
 
 // search: the best `limit` docs for the query text.
@@ -258,40 +271,57 @@ func (x *docIndex) search(text string, limit int) []*SearchDoc {
 func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) bool) []*SearchDoc {
 	var ok func(int) bool
 	if accept != nil {
-		ok = func(i int) bool { return accept(x.docs[i]) }
+		ok = func(i int) bool { return accept(x.byID[i]) }
 	}
 	hits := x.ix.SearchWhere(text, limit, ok)
 	out := make([]*SearchDoc, len(hits))
 	for i, h := range hits {
-		out[i] = x.docs[h.Doc]
+		out[i] = x.byID[h.Doc]
 	}
 	return out
 }
 
-// indexCache keeps the BM25 indexes over the current docs until one changes:
-// one over the shared docs, and for a user with private docs of their own the
-// same index with those added (Index.WithExtra), scored on the shared
-// statistics. So another user's private pages take no part in the ranking
-// (document frequencies, lengths and the vocabulary fuzzy matching draws on
-// would otherwise show through), and the cost of a user's own private pages is
-// theirs alone. The doc caches hand back the same docs until their file
-// changes, so the docs' pointers are the key.
+// indexCache keeps the BM25 indexes over the current docs.
+//
+// With users, what is private is in no one's index but its owner's: an index
+// is made from the shared docs, and a user's own private docs are added to it
+// for them (Index.With), so another user's words, counts and lengths take no
+// part in the ranking (document frequencies, lengths and the vocabulary
+// typo matching draws on would otherwise show through).
+//
+// A change to a page or task doesn't build the index again: it keeps the one
+// made at the last rebuild (base), leaves out the docs that are gone from it
+// (dead) and adds the new ones (delta), searched with the statistics of what
+// is left, exactly as an index built over that would. Only when the changes
+// pass a few percent of the docs (maxChanges) is it built again.
+//
+// The doc caches hand back the same docs until their file changes, so the
+// docs' pointers are the key.
 type indexCache struct {
-	mu      sync.Mutex
-	users   string // who the docs were split for (usersKey)
-	all     []*SearchDoc
-	shared  []*SearchDoc
-	private []*SearchDoc
-	base    *docIndex
-	views   map[string]*indexView
+	mu        sync.Mutex
+	users     string // who the docs were split for (usersKey)
+	all       []*SearchDoc
+	shared    []*SearchDoc // the shared docs now
+	private   []*SearchDoc
+	sharedGen int       // counts the changes to shared
+	base      *docIndex // over the shared docs as they were at the last rebuild
+	baseID    map[*SearchDoc]int
+	dead      []int        // base docs no longer shared docs, by number
+	delta     []*SearchDoc // shared docs that are not in base, in order
+	views     map[string]*indexView
 }
 
-// indexView: base plus own, the private docs of one viewer.
+// indexView: the index of one viewer, with their own private docs.
 type indexView struct {
 	base *docIndex
+	gen  int
 	own  []*SearchDoc
 	idx  *docIndex
 }
+
+// maxChanges: how many docs may differ from the base before it is built
+// again; more only slow every search down, fewer rebuild too often.
+func maxChanges(n int) int { return max(32, n/50) }
 
 // docShared: d is in no private folder or deck (always, without users).
 func docShared(d *SearchDoc) bool {
@@ -317,7 +347,9 @@ func usersKey() string {
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if key := usersKey(); c.base == nil || key != c.users || !slices.Equal(c.all, docs) {
+	key := usersKey()
+	usersChanged := c.base == nil || key != c.users
+	if usersChanged || !slices.Equal(c.all, docs) {
 		c.users, c.all = key, slices.Clone(docs)
 		var shared, private []*SearchDoc
 		for _, d := range docs {
@@ -327,10 +359,12 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 				private = append(private, d)
 			}
 		}
-		if c.base == nil || !slices.Equal(c.shared, shared) {
-			c.shared, c.base = shared, newDocIndex(shared)
-		}
 		c.private = private
+		if usersChanged || !slices.Equal(c.shared, shared) {
+			c.shared = shared
+			c.sharedGen++
+			c.update(usersChanged)
+		}
 	}
 	var own []*SearchDoc
 	user := ""
@@ -342,26 +376,87 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 			own = append(own, d)
 		}
 	}
-	if len(own) == 0 {
+	if len(own) == 0 && len(c.dead) == 0 && len(c.delta) == 0 {
 		return c.base
 	}
-	key := "user:" + user
+	viewKey := "user:" + user
 	if rq == nil {
-		key = "leaf"
+		viewKey = "leaf"
 	}
-	if v := c.views[key]; v != nil && v.base == c.base && slices.Equal(v.own, own) {
+	if v := c.views[viewKey]; v != nil && v.base == c.base && v.gen == c.sharedGen && slices.Equal(v.own, own) {
 		return v.idx
-	}
-	tokens := make([][]string, len(own))
-	for i, d := range own {
-		tokens[i] = d.Tokens
 	}
 	if c.views == nil {
 		c.views = map[string]*indexView{}
 	}
-	idx := &docIndex{slices.Concat(c.base.docs, own), c.base.ix.WithExtra(tokens)}
-	c.views[key] = &indexView{c.base, own, idx}
+	idx := c.view(own)
+	c.views[viewKey] = &indexView{c.base, c.sharedGen, own, idx}
 	return idx
+}
+
+// update: the shared docs are c.shared now. Finds what differs from the base,
+// or builds it again (rebuild, or when that is more than maxChanges).
+func (c *indexCache) update(rebuild bool) {
+	if !rebuild {
+		inShared := make(map[*SearchDoc]bool, len(c.shared))
+		for _, d := range c.shared {
+			inShared[d] = true
+		}
+		var dead []int
+		for id, d := range c.base.docs {
+			if !inShared[d] {
+				dead = append(dead, id)
+			}
+		}
+		var delta []*SearchDoc
+		for _, d := range c.shared {
+			if _, ok := c.baseID[d]; !ok {
+				delta = append(delta, d)
+			}
+		}
+		if len(dead)+len(delta) <= maxChanges(len(c.base.docs)) {
+			c.dead, c.delta = dead, delta
+			return
+		}
+	}
+	c.base = newDocIndex(c.shared)
+	c.baseID = make(map[*SearchDoc]int, len(c.shared))
+	for id, d := range c.shared {
+		c.baseID[d] = id
+	}
+	c.dead, c.delta = nil, nil
+}
+
+// view: the index of a viewer whose private docs are own: the base without
+// its dead docs, with the delta and own docs added, the docs in the order
+// they come in (c.all), as a fresh index over them would have them.
+func (c *indexCache) view(own []*SearchDoc) *docIndex {
+	n := len(c.base.byID)
+	extra := slices.Concat(c.delta, own)
+	extraID := make(map[*SearchDoc]int, len(extra))
+	tokens := make([][]string, len(extra))
+	for i, d := range extra {
+		extraID[d] = n + i
+		tokens[i] = d.Tokens
+	}
+	dead := make(map[int][]string, len(c.dead))
+	for _, id := range c.dead {
+		dead[id] = c.base.byID[id].Tokens
+	}
+	pos := make([]int32, n+len(extra))
+	live := make([]*SearchDoc, 0, n-len(dead)+len(extra))
+	for _, d := range c.all {
+		id, ok := c.baseID[d]
+		if !ok {
+			id, ok = extraID[d]
+		}
+		if !ok {
+			continue // another user's
+		}
+		pos[id] = int32(len(live))
+		live = append(live, d)
+	}
+	return &docIndex{live, slices.Concat(c.base.byID, extra), c.base.ix.With(dead, tokens, pos)}
 }
 
 // docVisible: user may see the search doc d (a page's, or a task's).

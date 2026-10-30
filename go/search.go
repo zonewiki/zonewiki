@@ -11,7 +11,6 @@ import (
 	"html"
 	"math"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -325,18 +324,28 @@ type Index struct {
 	postings map[string][]posting
 	idf      map[string]float64
 	vocab    []string
-	over     *overlay // more documents, searched along with this index's (WithExtra)
+	over     *overlay // changes to the documents, searched along with them (With)
 }
 
-// overlay: documents added to an Index without touching it (WithExtra): they
-// are numbered after the index's. The statistics of a search with them are
-// the two together's (document count and frequencies, average length), as if
-// one index held all; the Index itself, which others search, never learns
-// of them.
+// overlay: changes to an Index's documents that leave it as it is (With):
+// some of its documents left out, others added after them (numbered from
+// ix.n). A search with them uses the statistics of the documents that are
+// left, as if one index were built over those alone; the Index itself, which
+// others search, never learns of them.
 type overlay struct {
-	lens     []int
-	postings map[string][]posting
-	vocab    []string
+	lens     []int                // the added documents'
+	postings map[string][]posting // what they hold
+	vocab    []string             // their terms, sorted
+	newVocab []string             // those the Index doesn't have
+	dead     []bool               // the Index's documents left out (nil: none)
+	deadDF   map[string]int       // for each term, how many of those hold it
+	gone     map[string]bool      // terms of the Index no document left holds
+	n, total int                  // the documents left, their tokens
+	avgdl    float64
+	pos      []int32 // each document's place in the order ties go by (nil: its number)
+
+	fuzzyOnce sync.Once
+	fuzzy     []string // the terms typo matching looks through
 }
 
 func NewIndex(tokens [][]string) *Index {
@@ -370,17 +379,22 @@ func NewIndex(tokens [][]string) *Index {
 	return ix
 }
 
-// WithExtra: ix with more documents, numbered after its own, searched as if
-// one index were built over all of them: the same scores, the extra documents
-// weighing in the idf and the average length. ix is not changed; what it
-// shares with the result is only read.
-func (ix *Index) WithExtra(tokens [][]string) *Index {
-	if len(tokens) == 0 {
+// WithExtra: ix with more documents, numbered after its own.
+func (ix *Index) WithExtra(tokens [][]string) *Index { return ix.With(nil, tokens, nil) }
+
+// With: ix without the documents dead names (number → its tokens) and with
+// the extra ones, numbered from ix.n, searched as if one index were built
+// over the documents left: the same scores, the same hits. pos is each
+// document's place among them (by number, the extra ones after ix's), which
+// equal scores are ordered by; nil: the number. ix is not changed; what the
+// result shares with it is only read.
+func (ix *Index) With(dead map[int][]string, extra [][]string, pos []int32) *Index {
+	if len(dead) == 0 && len(extra) == 0 && pos == nil {
 		return ix
 	}
-	o := &overlay{postings: map[string][]posting{}}
-	total := 0
-	for i, toks := range tokens {
+	o := &overlay{postings: map[string][]posting{}, pos: pos}
+	o.n, o.total = ix.n+len(extra)-len(dead), ix.total
+	for i, toks := range extra {
 		tf, order := map[string]int{}, []string{}
 		for _, t := range toks {
 			if tf[t] == 0 {
@@ -389,40 +403,71 @@ func (ix *Index) WithExtra(tokens [][]string) *Index {
 			tf[t]++
 		}
 		o.lens = append(o.lens, len(toks))
-		total += len(toks)
+		o.total += len(toks)
 		for _, t := range order {
 			o.postings[t] = append(o.postings[t], posting{ix.n + i, tf[t]})
 		}
 	}
+	if len(dead) > 0 {
+		o.dead, o.deadDF, o.gone = make([]bool, ix.n), map[string]int{}, map[string]bool{}
+		for id, toks := range dead {
+			o.dead[id] = true
+			o.total -= len(toks)
+			seen := map[string]bool{}
+			for _, t := range toks {
+				if !seen[t] {
+					seen[t] = true
+					o.deadDF[t]++
+				}
+			}
+		}
+		for t, n := range o.deadDF {
+			if n == len(ix.postings[t]) {
+				o.gone[t] = true
+			}
+		}
+	}
 	for t := range o.postings {
 		o.vocab = append(o.vocab, t)
+		if _, ok := ix.idf[t]; !ok || o.gone[t] { // not in ix's terms to look through
+			o.newVocab = append(o.newVocab, t)
+		}
 	}
 	sort.Strings(o.vocab)
+	sort.Strings(o.newVocab)
+	if o.n > 0 {
+		o.avgdl = float64(o.total) / float64(o.n)
+	}
 	cp := *ix
 	cp.over = o
-	cp.avgdl = float64(ix.total+total) / float64(ix.n+len(tokens))
+	cp.avgdl = o.avgdl
 	return &cp
 }
 
-// idfOf: a term's weight, from the document frequency over every document
-// the index holds, an overlay's too.
+// df: how many documents hold the term.
+func (ix *Index) df(t string) int {
+	if ix.over == nil {
+		return len(ix.postings[t])
+	}
+	return len(ix.postings[t]) - ix.over.deadDF[t] + len(ix.over.postings[t])
+}
+
+// idfOf: a term's weight, from its document frequency among the documents
+// the search is over.
 func (ix *Index) idfOf(t string) float64 {
 	if ix.over == nil {
 		return ix.idf[t]
 	}
-	n, df := ix.n+len(ix.over.lens), len(ix.postings[t])+len(ix.over.postings[t])
+	n, df := ix.over.n, ix.df(t)
 	return math.Log(1 + (float64(n)-float64(df)+0.5)/(float64(df)+0.5))
 }
 
 func (ix *Index) hasTerm(t string) bool {
-	if _, ok := ix.idf[t]; ok {
-		return true
-	}
-	if ix.over != nil {
-		_, ok := ix.over.postings[t]
+	if ix.over == nil {
+		_, ok := ix.idf[t]
 		return ok
 	}
-	return false
+	return ix.df(t) > 0
 }
 
 func (ix *Index) docLen(doc int) int {
@@ -430,6 +475,18 @@ func (ix *Index) docLen(doc int) int {
 		return ix.lens[doc]
 	}
 	return ix.over.lens[doc-ix.n]
+}
+
+// before: a ranks ahead of b: the higher score, else the document that comes
+// first (its place in the order, for an index with changes, else its number).
+func (ix *Index) before(a, b Hit) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if ix.over != nil && ix.over.pos != nil {
+		return ix.over.pos[a.Doc] < ix.over.pos[b.Doc]
+	}
+	return a.Doc < b.Doc
 }
 
 type weighted struct {
@@ -443,6 +500,24 @@ func (ix *Index) vocabs() [][]string {
 		return [][]string{ix.vocab}
 	}
 	return [][]string{ix.vocab, ix.over.vocab}
+}
+
+// fuzzyVocab: every term a document left holds, each once, for typo matching.
+func (ix *Index) fuzzyVocab() []string {
+	o := ix.over
+	if o == nil {
+		return ix.vocab
+	}
+	o.fuzzyOnce.Do(func() {
+		o.fuzzy = make([]string, 0, len(ix.vocab)+len(o.newVocab))
+		for _, t := range ix.vocab {
+			if !o.gone[t] {
+				o.fuzzy = append(o.fuzzy, t)
+			}
+		}
+		o.fuzzy = append(o.fuzzy, o.newVocab...)
+	})
+	return o.fuzzy
 }
 
 // expand: query tokens as (term, weight): exact 1.0, prefix 0.8, and when
@@ -470,7 +545,7 @@ func (ix *Index) expand(qTokens []string) []weighted {
 		if runeLen(t) >= 3 {
 			for _, vocab := range ix.vocabs() {
 				for i := sort.SearchStrings(vocab, t); i < len(vocab) && strings.HasPrefix(vocab[i], t); i++ {
-					if vocab[i] != t {
+					if vocab[i] != t && ix.hasTerm(vocab[i]) {
 						bump(vocab[i], prefixWeight)
 						matched = true
 					}
@@ -478,11 +553,7 @@ func (ix *Index) expand(qTokens []string) []weighted {
 			}
 		}
 		if !matched && runeLen(t) >= 4 {
-			all := ix.vocab
-			if ix.over != nil {
-				all = slices.Concat(ix.vocab, ix.over.vocab)
-			}
-			for _, c := range closeMatches(t, all, 3, 0.8) {
+			for _, c := range closeMatches(t, ix.fuzzyVocab(), 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
 		}
@@ -498,27 +569,19 @@ type Hit struct {
 // Search: the best `limit` documents for the query, by BM25.
 func (ix *Index) Search(query string, limit int) []Hit { return ix.SearchWhere(query, limit, nil) }
 
-// hitBefore: a ranks ahead of b: the higher score, else the earlier document.
-func hitBefore(a, b Hit) bool {
-	if a.Score != b.Score {
-		return a.Score > b.Score
-	}
-	return a.Doc < b.Doc
-}
-
 // topHits: the best limit hits, in order. For a few, one pass keeping a
 // short sorted list instead of sorting every hit.
-func topHits(hits []Hit, limit int) []Hit {
+func (ix *Index) topHits(hits []Hit, limit int) []Hit {
 	if limit >= len(hits) || limit > 64 {
-		sort.Slice(hits, func(x, y int) bool { return hitBefore(hits[x], hits[y]) })
+		sort.Slice(hits, func(x, y int) bool { return ix.before(hits[x], hits[y]) })
 		return hits[:min(limit, len(hits))]
 	}
 	top := make([]Hit, 0, limit)
 	for _, h := range hits {
-		if len(top) == limit && !hitBefore(h, top[limit-1]) {
+		if len(top) == limit && !ix.before(h, top[limit-1]) {
 			continue
 		}
-		i := sort.Search(len(top), func(i int) bool { return hitBefore(h, top[i]) })
+		i := sort.Search(len(top), func(i int) bool { return ix.before(h, top[i]) })
 		if len(top) < limit {
 			top = append(top, Hit{})
 		}
@@ -537,18 +600,21 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	for _, w := range queryWords(query) {
 		qTokens = append(qTokens, stem(w))
 	}
-	if len(qTokens) == 0 || ix.n == 0 && ix.over == nil {
+	if len(qTokens) == 0 || ix.docCount() == 0 {
 		return nil
 	}
 	var asked []int8 // per document: 0 not asked yet, 1 accepted, 2 refused
 	if accept != nil {
-		asked = make([]int8, ix.n+len(ix.over.lensOrNil()))
+		asked = make([]int8, ix.n+ix.over.addedCount())
 	}
 	scores := map[int]float64{}
 	for _, tw := range ix.expand(qTokens) {
 		idf := ix.idfOf(tw.term)
 		score := func(postings []posting) {
 			for _, p := range postings {
+				if ix.over != nil && p.doc < ix.n && ix.over.dead != nil && ix.over.dead[p.doc] {
+					continue
+				}
 				if accept != nil {
 					if asked[p.doc] == 0 {
 						asked[p.doc] = 2
@@ -579,14 +645,23 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	if len(hits) == 0 {
 		return nil
 	}
-	return topHits(hits, limit)
+	return ix.topHits(hits, limit)
 }
 
-func (o *overlay) lensOrNil() []int {
+// addedCount: how many documents the overlay adds (o may be nil).
+func (o *overlay) addedCount() int {
 	if o == nil {
-		return nil
+		return 0
 	}
-	return o.lens
+	return len(o.lens)
+}
+
+// docCount: how many documents a search is over.
+func (ix *Index) docCount() int {
+	if ix.over != nil {
+		return ix.over.n
+	}
+	return ix.n
 }
 
 // ---- matched words, excerpts ----
