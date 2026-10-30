@@ -86,6 +86,13 @@ func commitOthersDrafts(user string) {
 	for _, rel := range rels {
 		commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel)))
 	}
+	// What Leaf didn't see saved (written on disk, or before a restart) has no
+	// known author, but in a private folder the folder says whose it is.
+	for _, f := range gitUncommittedFiles() {
+		if owner, private := ownerIn(privateDir, f.Filepath); private && owner != "" && owner != user {
+			gitCommit(owner, commitMessage(f.Filepath), filepath.Join(cfg.Data, filepath.FromSlash(f.Filepath)))
+		}
+	}
 }
 
 // commitAuthorOf: whom a commit of path's uncommitted text names: who

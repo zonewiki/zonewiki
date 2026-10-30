@@ -18,7 +18,7 @@ from urllib.parse import unquote
 import pytest
 
 from tests import settings
-from tests.conftest import HOST
+from tests.conftest import HOST, content_hash
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -773,3 +773,49 @@ def test_search_statistics_ignore_private_pages(client, wiki):
     "quokkaflute" exists, which tells him her pages have that word."""
     (wiki / "bobs.md").write_text("# Bobs\n\nquokkaflutte is how he spells it\n")
     assert "bobs" in mcp(client, "search_wiki", query=SECRET)
+
+
+# ── A shared rename rewrites links on private pages: not her draft too ─────────
+
+def _authors(wiki):
+    out = git(wiki, "log", "--format=%an|%s").splitlines()
+    return [tuple(line.split("|", 1)) for line in out]
+
+
+def _added(wiki):
+    """The lines the newest commit adds."""
+    return [l for l in git(wiki, "show", "HEAD", "--format=").splitlines() if l.startswith("+") and not l.startswith("+++")]
+
+
+def _rename_as_bob(bob, wiki):
+    assert bob.post("/rename/plans", data={"new_name": "plans-2"}, headers=HOST).status_code in (200, 302)
+    return _authors(wiki), git(wiki, "show", "HEAD", "--format=", "--stat")
+
+
+DRAFT = f"# Diary {SECRET}\n\n{QUERY} {SECRET} with [[plans]].\n\nA line alice wrote and has not committed.\n"
+
+
+def test_a_rename_leaves_her_saved_draft_to_her(client, wiki):
+    """Alice auto-saved her private page, which links to plans; bob renames plans.
+    Her text goes into git as hers, not into bob's rename."""
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    base = (wiki / f"{DIARY}.md").read_text()
+    assert client.post(f"/api/save/{DIARY}", data={"content": DRAFT, "file_hash": content_hash(base)},
+                       headers=HOST).status_code == 200
+    client.post("/logout", headers=HOST)
+    client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+    log, stat = _rename_as_bob(client, wiki)
+    assert log[0][0] == "bob" and "Rename" in log[0][1]
+    assert not any("has not committed" in l for l in _added(wiki))
+    assert ("alice", f"Save {DIARY}") in log
+    assert "[[plans-2]]" in (wiki / f"{DIARY}.md").read_text()
+
+
+def test_a_rename_leaves_a_draft_leaf_doesnt_know_to_its_owner(bob, wiki):
+    """The same for text on disk that Leaf never saw (written by hand, or before a
+    restart): in a private folder the owner is known from the path."""
+    (wiki / f"{DIARY}.md").write_text(DRAFT)
+    log, stat = _rename_as_bob(bob, wiki)
+    assert log[0][0] == "bob"
+    assert not any("has not committed" in l for l in _added(wiki))
+    assert ("alice", f"Save {DIARY}") in log
