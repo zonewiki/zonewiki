@@ -1878,7 +1878,7 @@ def test_private_box_says_what_moving_a_task_does(page, wiki, monkeypatch):
     expect(note).to_be_hidden()
 
 
-def test_only_your_own_comments_can_be_edited(page, wiki, monkeypatch):
+def test_every_comment_can_be_edited(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     task = page.request.post("/api/deck", data={"title": "Errand"}).json()
@@ -1889,7 +1889,7 @@ def test_only_your_own_comments_can_be_edited(page, wiki, monkeypatch):
     open_edit(page, "Errand")
     items = page.locator("#task-edit-comment-list li")
     expect(items.filter(has_text="From Alice").locator("[data-comment-action]")).to_have_count(2)
-    expect(items.filter(has_text="From Bob").locator("[data-comment-action]")).to_have_count(0)
+    expect(items.filter(has_text="From Bob").locator("[data-comment-action]")).to_have_count(2)
 
 
 def test_no_private_checkbox_without_users(page, wiki):

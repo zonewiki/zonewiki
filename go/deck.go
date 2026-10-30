@@ -518,11 +518,7 @@ func applyTaskFields(user string, t *Task, data jsonObj) error {
 		if _, ok := as[[]json.RawMessage](data["comments"]); !ok {
 			return badRequest("comments must be a list")
 		}
-		cs, err := keepOthersComments(user, cleanCommentList(t.Comments), cleanComments(data["comments"]))
-		if err != nil {
-			return err
-		}
-		t.Comments = cs
+		t.Comments = cleanComments(data["comments"])
 	}
 	if data.has("due_date") {
 		d, err := validateDate(data["due_date"])
@@ -815,39 +811,6 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	return t, writeBothLocked(user, active, completed, message)
 }
 
-var errOthersComment = badRequest("That comment is someone else's: only its author can change or delete it")
-
-// keepOthersComments: a task's comments as a request sends the whole list
-// (an undo), checked against those it has: a comment someone else wrote
-// must stay as it is, and every comment keeps the author it has (a new
-// one is user's), so no one changes, deletes or forges another's words.
-func keepOthersComments(user string, have, given []Comment) ([]Comment, error) {
-	old := map[string]Comment{}
-	for _, c := range have {
-		old[c.ID] = c
-	}
-	seen := map[string]bool{}
-	out := []Comment{}
-	for _, c := range given {
-		if o, ok := old[c.ID]; ok {
-			if !ownComment(user, o) && (c.Text != o.Text || c.At != o.At) {
-				return nil, errOthersComment
-			}
-			c.By = o.By
-		} else {
-			c.By = user
-		}
-		seen[c.ID] = true
-		out = append(out, c)
-	}
-	for _, o := range have {
-		if !seen[o.ID] && !ownComment(user, o) {
-			return nil, errOthersComment
-		}
-	}
-	return out, nil
-}
-
 // taskComment: the index of a task's comment by id (its comments cleaned
 // first).
 func taskComment(t *Task, cid string) (int, error) {
@@ -882,9 +845,6 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if !ownComment(userOf(r), t.Comments[i]) {
-		return errOthersComment
-	}
 	t.Comments[i].Text = text
 	if err := writeBothLocked(userOf(r), active, completed, "Edit deck task comment"); err != nil {
 		return err
@@ -903,9 +863,6 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	i, err := taskComment(t, r.PathValue("cid"))
 	if err != nil {
 		return err
-	}
-	if !ownComment(userOf(r), t.Comments[i]) {
-		return errOthersComment
 	}
 	t.Comments = slices.Delete(t.Comments, i, i+1)
 	if err := writeBothLocked(userOf(r), active, completed, "Delete deck task comment"); err != nil {
@@ -929,53 +886,7 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 	if err := writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message); err != nil {
 		return err
 	}
-	for _, t := range slices.Concat(active, completed) {
-		if ids[t.ID] {
-			rememberDeleted(t)
-		}
-	}
 	return nil
-}
-
-// The tasks deleted lately, as they were (under deckMu), for a restore
-// (undo of a delete) to be judged by: the snapshot comes from the client,
-// so who wrote its comments and whether it was
-// private are taken from here. In memory: after a restart a restore is of a
-// task Leaf doesn't know.
-var (
-	deletedTasks = map[string]*Task{}
-	deletedOrder []string
-)
-
-const deletedKept = 1000
-
-func rememberDeleted(t *Task) {
-	if deletedTasks[t.ID] == nil {
-		deletedOrder = append(deletedOrder, t.ID)
-	}
-	deletedTasks[t.ID] = t
-	for len(deletedOrder) > deletedKept {
-		delete(deletedTasks, deletedOrder[0])
-		deletedOrder = deletedOrder[1:]
-	}
-}
-
-// restoredTrust: a restore's snapshot t, with users, has its comments checked
-// against the task as Leaf deleted it (keepOthersComments, as for an undo's
-// PUT); one Leaf doesn't know keeps only the comments that name user or no
-// one, so an invented or doctored snapshot writes in no one else's name.
-func restoredTrust(user string, t *Task) error {
-	if settings().Users == nil {
-		return nil
-	}
-	was := deletedTasks[t.ID]
-	if was == nil {
-		t.Comments = slices.DeleteFunc(t.Comments, func(c Comment) bool { return c.By != "" && c.By != user })
-		return nil
-	}
-	comments, err := keepOthersComments(user, was.Comments, t.Comments)
-	t.Comments = comments
-	return err
 }
 
 func idSet(ids []string) map[string]bool {
@@ -1036,15 +947,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
-		if err := restoredTrust(user, t); err != nil {
-			return err
-		}
-		// Private as Leaf deleted it; a task it doesn't know, as the snapshot says.
-		private := jsonTrue(snap["private"])
-		if was := deletedTasks[t.ID]; was != nil {
-			private = was.Owner != ""
-		}
-		if private && privateFolder(user) != "" {
+		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
 			t.Owner = user
 		}
 		existing[t.ID] = true

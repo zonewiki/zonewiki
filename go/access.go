@@ -58,10 +58,6 @@ func canWrite(user, slug string) bool { return canSee(user, slug) }
 // of their own private ones.
 func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
 
-// ownComment: user may edit or delete the comment c: their own, or one
-// that names no one (from before users, or without users: everyone's).
-func ownComment(user string, c Comment) bool { return c.By == "" || c.By == user }
-
 // ownPrivate: slug is a page in user's own private folder (where a new
 // task defaults to private).
 func ownPrivate(user, slug string) bool {

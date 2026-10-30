@@ -385,31 +385,3 @@ func TestAnyUserMakesATaskPrivate(t *testing.T) {
 		t.Errorf("bob still sees %v", got)
 	}
 }
-
-// A whole comment list (an undo) keeps others' comments as they are and
-// every comment's author.
-func TestKeepOthersComments(t *testing.T) {
-	have := []Comment{{ID: "a", At: "t", By: "alice", Text: "A"}, {ID: "b", At: "t", By: "bob", Text: "B"},
-		{ID: "c", At: "t", Text: "old"}}
-	for _, c := range []struct {
-		given []Comment
-		ok    bool
-	}{
-		{[]Comment{have[0], have[1], have[2]}, true},
-		{[]Comment{{ID: "a", At: "t", Text: "A2"}, have[1]}, true},             // her own edited, the old one gone
-		{[]Comment{have[0], {ID: "b", At: "t", By: "bob", Text: "B2"}}, false}, // his edited
-		{[]Comment{have[0], have[2]}, false},                                   // his gone
-	} {
-		out, err := keepOthersComments("alice", have, c.given)
-		if (err == nil) != c.ok {
-			t.Errorf("%+v: %v", c.given, err)
-		}
-		if err == nil && out[0].By != "alice" {
-			t.Errorf("author %q", out[0].By)
-		}
-	}
-	out, _ := keepOthersComments("alice", have, append(have, Comment{ID: "d", At: "t", By: "bob", Text: "forged"}))
-	if out[3].By != "alice" {
-		t.Errorf("a new comment in bob's name: %q", out[3].By)
-	}
-}

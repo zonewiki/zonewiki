@@ -413,33 +413,18 @@ def test_anyone_can_move_a_shared_task_into_their_own_deck(alice, wiki):
     assert alice.put(f"/api/deck/{bobs['id']}", json={"private": False}, headers=HOST).status_code == 404
 
 
-def test_comments_are_their_authors_to_change(alice, wiki):
-    """alice may edit and delete her own comments and those of no one (from
-    before users), not bob's: not by their routes, nor by sending the whole
-    list (an undo), nor in a batch; nor write one in his name."""
+def test_comments_are_everyones_to_change(alice, wiki):
+    """A shared task is everyone's, its comments too: alice may edit and
+    delete bob's, and an edit keeps the author."""
     task = alice.post("/api/deck", json={"title": "Shared", "private": False}, headers=HOST).get_json()
     url = f"/api/deck/{task['id']}/comments"
-    hers = alice.post(url, json={"text": "Hers"}, headers=HOST).get_json()["comments"][-1]
     sign_in(alice, "bob")
     his = alice.post(url, json={"text": "His"}, headers=HOST).get_json()["comments"][-1]
     sign_in(alice, "alice")
     assert his["by"] == "bob"
-    for resp in (alice.put(f"{url}/{his['id']}", json={"text": "Changed"}, headers=HOST),
-                 alice.delete(f"{url}/{his['id']}", headers=HOST),
-                 alice.put(f"/api/deck/{task['id']}", json={"comments": [hers]}, headers=HOST),
-                 alice.put(f"/api/deck/{task['id']}", json={"comments": [hers, {**his, "text": "Changed"}]}, headers=HOST),
-                 alice.post("/api/deck/batch-update", json={"tasks": [{"id": task["id"], "comments": []}]}, headers=HOST)):
-        assert resp.status_code == 400 and "someone else's" in resp.get_json()["error"]
-    assert alice.put(f"{url}/{hers['id']}", json={"text": "Hers, edited"}, headers=HOST).status_code == 200
-    forged = {"id": "f0f0f0f0", "at": "2026-01-01T10:00", "by": "bob", "text": "Forged"}
-    after = alice.put(f"/api/deck/{task['id']}", json={"comments": [his, forged]}, headers=HOST).get_json()
-    assert [(c["text"], c["by"]) for c in after["comments"]] == [("His", "bob"), ("Forged", "alice")]
-    assert alice.delete(f"{url}/f0f0f0f0", headers=HOST).status_code == 200
-    # From before users: no one's, so anyone's.
-    (wiki / "_deck/tasks.json").write_text(json.dumps([{"id": "0ld00000-0000-4000-8000-000000000000", "title": "Old",
-        "comments": [{"id": "0c0c0c0c", "at": "2025-01-01T10:00", "text": "Old"}]}]))
-    assert alice.delete("/api/deck/0ld00000-0000-4000-8000-000000000000/comments/0c0c0c0c",
-                        headers=HOST).status_code == 200
+    edited = alice.put(f"{url}/{his['id']}", json={"text": "Changed"}, headers=HOST).get_json()
+    assert [(c["text"], c["by"]) for c in edited["comments"]] == [("Changed", "bob")]
+    assert alice.delete(f"{url}/{his['id']}", headers=HOST).get_json()["comments"] == []
 
 
 def test_moving_a_task_is_in_its_history(alice, wiki):
@@ -453,34 +438,6 @@ def test_moving_a_task_is_in_its_history(alice, wiki):
     assert alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]["event"] == "shared"
     new = alice.post("/api/deck", json={"title": "New", "private": True}, headers=HOST).get_json()
     assert [e["event"] for e in new["history"]] == ["created"]
-
-
-def test_a_restore_keeps_who_worked_on_a_task(alice, wiki):
-    """Undoing a delete brings back what Leaf deleted: a snapshot can't
-    drop bob's comments, nor invent words in his name, nor make a shared
-    task private (it comes back as it was)."""
-    sign_in(alice, "bob")
-    bobs = alice.post("/api/deck", json={"title": "Bob's", "private": False}, headers=HOST).get_json()
-    url = f"/api/deck/{bobs['id']}"
-    bobs = alice.post(f"{url}/comments", json={"text": "His"}, headers=HOST).get_json()
-    sign_in(alice, "alice")
-    assert alice.delete(url, headers=HOST).status_code == 204
-    doctored = {**bobs, "private": True,
-                "comments": [{**bobs["comments"][0], "by": "alice", "text": "Hers now"}]}
-    assert alice.post("/api/deck/restore", json={"tasks": [doctored]}, headers=HOST).status_code == 400
-    stripped = {**bobs, "comments": [], "private": True}
-    assert alice.post("/api/deck/restore", json={"tasks": [stripped]}, headers=HOST).status_code == 400
-    restored = alice.post("/api/deck/restore", json={"tasks": [{**bobs, "private": True}]},
-                          headers=HOST).get_json()[0]
-    assert restored["private"] is False
-    assert [(c["text"], c["by"]) for c in restored["comments"]] == [("His", "bob")]
-    assert bobs["id"] in (wiki / "_deck/tasks.json").read_text()
-    # One Leaf never deleted: nothing in it names someone else.
-    invented = {"id": "1e7e1e7e-0000-4000-8000-000000000000", "title": "Invented",
-                "history": [{"at": "2026-01-01T10:00", "event": "created", "by": "bob"}],
-                "comments": [{"id": "0b0b0b0b", "at": "2026-01-01T10:00", "by": "bob", "text": "Forged"}]}
-    made = alice.post("/api/deck/restore", json={"tasks": [invented]}, headers=HOST).get_json()[0]
-    assert made["comments"] == []
 
 
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
