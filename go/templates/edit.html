@@ -37,10 +37,11 @@
     <div class="rename-bar{{if not .rename_error}} hidden{{end}}" id="rename-bar">
       <form method="post" action="{{url "rename" .slug}}" class="rename-form">
         <label>New name</label>
-        <input type="text" name="new_name" id="rename-input" value="{{.slug}}" autocomplete="off">
+        <input type="text" name="new_name" id="rename-input" value="{{or .rename_name .slug}}" autocomplete="off">
         <button type="submit" class="btn btn-primary">Rename</button>
         <button type="button" class="btn" id="rename-cancel">Cancel</button>
         {{template "error" (dict "message" .rename_error "tag" "span")}}
+        {{- if .rename_unlink}}<label class="rename-unlink"><input type="checkbox" name="unlink" value="1"> Make it private anyway: those links become plain text</label>{{end}}
       </form>
     </div>
     {{- end}}

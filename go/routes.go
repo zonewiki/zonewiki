@@ -186,7 +186,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 		bc = buildBreadcrumb(rq, slug, title, chip, qs)
 		q := r.URL.Query()
-		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"))
+		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"), q.Get("rename_unlink") == "1")
 		changed, commit := lastChanged(slug, path, title)
 		meta, _ := parseFrontmatter(content)
 		metaRow = macro("meta_row", M{"tags_html": htmlOf(renderTagsPillsHTML(meta.Tags)), "tldr": meta.Tldr,
@@ -295,6 +295,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// The file's hash for conflict detection, whole page or section.
 		"file_hash": fileHash, "can_rename": editable && !isProtected(slug), "can_delete": editable && !isProtected(slug),
 		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"), "left_draft": left,
+		"rename_name": q.Get("rename_name"), "rename_unlink": q.Get("rename_unlink") == "1",
 		"private_offer":   privateOffer,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
@@ -640,6 +641,12 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	}
 	if exists(newPath) {
 		http.Redirect(w, r, back+"?rename_error=A+page+named+%22"+newSlug+"%22+already+exists", http.StatusFound)
+		return
+	}
+	// Into your private folder, the links to it on shared pages and tasks
+	// become plain text: asked about first, and the box ticked to go on.
+	if links := unlinkedBy(userOf(r), map[string]string{slug: newSlug}); len(links) > 0 && r.PostFormValue("unlink") != "1" {
+		http.Redirect(w, r, back+"?rename_unlink=1&rename_name="+quote(newSlug)+"&rename_error="+quote(unlinkNote(links)), http.StatusFound)
 		return
 	}
 	if _, err := movePage(userOf(r), oldPath, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug); err != nil {

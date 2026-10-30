@@ -735,6 +735,26 @@ def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
     assert hers() == before
 
 
+def test_an_assistant_does_not_unlink_by_renaming_into_private(alice, wiki):
+    """A shared page links to `toy`: renaming it into alice's folder would turn
+    that link into plain text, so the assistant is told, and nothing moves;
+    the user does it in the browser, which asks."""
+    (wiki / "toy.md").write_text("# Toy\n")
+    (wiki / "games.md").write_text("# Games\n\nSee [[toy]].\n")
+    out = mcp(alice, "rename_page", token="alice-token", slug="toy", new_slug="private/alice/toy")
+    assert "Not renamed" in out and "games" in out and "in Leaf, which asks first" in out
+    assert (wiki / "toy.md").exists() and "[[toy]]" in (wiki / "games.md").read_text()
+    # A folder, too: nothing moves.
+    (wiki / "stuff").mkdir()
+    (wiki / "stuff/a.md").write_text("# A\n")
+    (wiki / "games.md").write_text("# Games\n\nSee [[stuff/a]].\n")
+    out = mcp(alice, "rename_page", token="alice-token", slug="stuff/", new_slug="private/alice/stuff")
+    assert "Nothing was moved" in out and "games" in out and (wiki / "stuff/a.md").exists()
+    # Without a link to it, the rename goes through.
+    (wiki / "games.md").write_text("# Games\n")
+    assert "Renamed page toy" in mcp(alice, "rename_page", token="alice-token", slug="toy", new_slug="private/alice/toy")
+
+
 def test_moving_the_private_folder_is_refused(client, wiki):
     """With a note of bob's in private/, private/ is a folder he sees, but
     it holds alice's too: nothing moves."""

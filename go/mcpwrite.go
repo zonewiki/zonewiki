@@ -442,6 +442,16 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}, user); err != nil {
 		return "", err
 	}
+	moved := map[string]string{}
+	for _, p := range sortedPages() {
+		if strings.HasPrefix(p.Slug, folder+"/") {
+			moved[p.Slug] = newFolder + p.Slug[len(folder):]
+		}
+	}
+	if links := unlinkedBy(user, moved); len(links) > 0 {
+		return "", toolErr("Nothing was moved: the pages would be private, and links to them would turn into plain text. " +
+			unlinkNote(links) + " The user can move the pages one by one in Leaf, which asks first.")
+	}
 	msg, err := commitMsg("Move "+folder+"/ to "+newFolder+"/", args)
 	if err != nil {
 		return "", err
@@ -497,6 +507,10 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	}
 	if err := checkGuides(args, []string{slug, newS}, user); err != nil {
 		return "", err
+	}
+	if links := unlinkedBy(user, map[string]string{slug: newS}); len(links) > 0 {
+		return "", toolErr("Not renamed: " + newS + " is private, and links to " + slug + " would turn into plain text. " +
+			unlinkNote(links) + " The user can do this rename in Leaf, which asks first.")
 	}
 	msg, err := commitMsg("Rename "+slug+" to "+newS, args)
 	if err != nil {

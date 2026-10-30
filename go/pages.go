@@ -4,11 +4,13 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -867,6 +869,59 @@ func splitMoves(moves map[string]string, linker string) (follow map[string]strin
 		}
 	}
 	return follow, unlink
+}
+
+// unlinkedBy: what a rename of moves (old → new slug) would turn from links
+// into plain text (splitMoves), as user may see it: their own and the shared
+// pages ("slug") and tasks (task “title”) that link to a page made private.
+// Other users' private pages and tasks lose their links too, but user can't
+// see them and they aren't listed.
+func unlinkedBy(user string, moves map[string]string) []string {
+	var out []string
+	for _, p := range iterPages() {
+		if !canSee(user, p.Slug) {
+			continue
+		}
+		linker := p.Slug
+		if n, ok := moves[p.Slug]; ok { // it moves too: it links from where it will be
+			linker = n
+		}
+		owner, _ := pageOwner(linker)
+		if _, unlink := splitMoves(moves, owner); len(unlink) > 0 {
+			content, err := readText(p.Path)
+			if err != nil {
+				continue
+			}
+			targets := pageLinkTargets(content, p.Slug)
+			if slices.ContainsFunc(unlink, func(o string) bool { return targets[o] }) {
+				out = append(out, p.Slug)
+			}
+		}
+	}
+	for _, t := range everyTask() {
+		if !canSeeTask(user, t) {
+			continue
+		}
+		if _, unlink := splitMoves(moves, t.Owner); len(unlink) > 0 {
+			targets := pageLinkTargets(t.Title+"\n"+t.Description, "")
+			if slices.ContainsFunc(unlink, func(o string) bool { return targets[o] }) {
+				out = append(out, "task “"+runePrefix(t.Title, 40)+"”")
+			}
+		}
+	}
+	return out
+}
+
+// unlinkNote: the message of a rename that would unlink links (unlinkedBy
+// gave them), the first few named.
+func unlinkNote(links []string) string {
+	shown := links[:min(len(links), 5)]
+	more := ""
+	if len(links) > len(shown) {
+		more = fmt.Sprintf(" and %d more", len(links)-len(shown))
+	}
+	return "These link to it, and would show plain text instead once it is private: " +
+		strings.Join(shown, ", ") + more + "."
 }
 
 // rebaseLinks re-points the links in text, written by page source, for a

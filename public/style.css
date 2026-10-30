@@ -3212,3 +3212,12 @@ mark.search-hl.current {
   /* The bottom corners hold the New note/Search buttons and Sign out. */
   .search-hl-bar { top: .5rem; bottom: auto; width: calc(100% - 1rem); max-width: none; }
 }
+
+.rename-unlink {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin: .5rem 0 0;
+  font-size: .85rem;
+}
+.rename-form .rename-unlink { margin: 0; white-space: normal; }

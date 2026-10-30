@@ -874,3 +874,26 @@ def test_heading_links_copy_page_and_section_urls(page, wiki):
     assert page.evaluate("navigator.clipboard.readText()") == base
     # The rail's "On this page" and the title text are unchanged.
     expect(page.locator(".page-header h1")).to_have_text("Linked")
+
+
+def test_rename_into_private_asks_before_unlinking(page, wiki, monkeypatch):
+    # A shared page links to ideas: making it private turns that link into
+    # plain text, so the dialog says which pages and asks to tick a box.
+    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("ideas", "# Ideas\n")
+    wiki.write("plans", "# Plans\n\nSee [[ideas]].\n")
+    page.goto("/page/ideas")
+    page.locator(".page-header-actions").get_by_role("button", name="More actions").click()
+    page.get_by_role("menuitem", name="Rename…").click()
+    dialog = page.locator("#page-rename-dialog")
+    dialog.locator("#page-rename-input").fill("private/alice/ideas")
+    dialog.get_by_role("button", name="Rename").click()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("plans")
+    expect(dialog.locator("#page-rename-input")).to_have_value("private/alice/ideas")
+    assert "rename_" not in page.url and (wiki.root / "ideas.md").exists()
+    dialog.get_by_label("Make it private anyway").check()
+    dialog.get_by_role("button", name="Rename").click()
+    page.wait_for_url("**/page/private/alice/ideas")
+    assert (wiki.root / "plans.md").read_text() == "# Plans\n\nSee ideas.\n"
