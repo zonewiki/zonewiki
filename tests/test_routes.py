@@ -165,13 +165,13 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             assert '<html lang="en">' in client.get(url, headers=HOST).get_data(as_text=True), url
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             assert '<html lang="en" class="sharing">' in client.get(url, headers=HOST).get_data(as_text=True), url
 
     def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
         # c t and the New task button tag a task as the Tasks home does:
-        # leaf.js reads the tags (and keep) from <body>, on every view.
+        # zonewiki.js reads the tags (and keep) from <body>, on every view.
         write_page(wiki_dir, "my-page", "# My Page\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
         assert "data-tasks-tags" not in body and "data-tasks-keep" not in body   # no home: no tags
@@ -1713,7 +1713,7 @@ class TestProduction:
         # say) must not run a script: script-src 'self' without
         # 'unsafe-inline' blocks <script>, onerror= and javascript: links.
         write_page(wiki_dir, "evil", "# Evil\n\n<script>window.x=1</script><img src=x onerror=alert(1)>\n")
-        for path in ("/page/evil", "/edit/evil", "/tasks", "/api/tasks", "/login", "/public/leaf.js"):
+        for path in ("/page/evil", "/edit/evil", "/tasks", "/api/tasks", "/login", "/public/zonewiki.js"):
             resp = client.get(path, headers=HOST)
             csp = resp.headers["Content-Security-Policy"]
             assert csp == client.get("/page/index", headers=HOST).headers["Content-Security-Policy"], path
@@ -2147,7 +2147,7 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="leaf-version">Zone {v} · abc1234 2026-09-26 12:00</p>' in body
+        assert f'<p class="zone-version">Zone {v} · abc1234 2026-09-26 12:00</p>' in body
         assert f'<meta name="generator" content="Zone {v}">' in body
         assert client.get("/api/version", headers=HOST).get_json() == {
             "version": v, "build": "abc1234 2026-09-26 12:00"}
@@ -2156,7 +2156,7 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="leaf-version">Zone {v}</p>' in body
+        assert f'<p class="zone-version">Zone {v}</p>' in body
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
@@ -2246,7 +2246,7 @@ class TestNoshare:
 
     def test_pages_hidden_in_sharing_mode(self, client, wiki_dir):
         self._wiki(wiki_dir)
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         for url in ("/page/bob", "/page/personal/diary", "/edit/bob", "/history/bob"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert "Hidden page" in body and "Secret" not in body, url
@@ -2255,7 +2255,7 @@ class TestNoshare:
 
     def test_left_out_of_search_and_lists(self, client, wiki_dir):
         self._wiki(wiki_dir)
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         slugs = {r["slug"] for r in client.get("/api/search?q=garden", headers=HOST).get_json()}
         assert slugs == {"garden", "home2"}
         assert "Secret" not in client.get("/search?q=secret", headers=HOST).get_data(as_text=True)
@@ -2265,7 +2265,7 @@ class TestNoshare:
 
     def test_links_to_them_become_plain_text(self, client, wiki_dir):
         self._wiki(wiki_dir)
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         body = client.get("/page/home2", headers=HOST).get_data(as_text=True)
         assert '<span class="wikilink-hidden">Bob</span>' in body
         assert '<span class="wikilink-hidden">my diary</span>' in body
@@ -2276,7 +2276,7 @@ class TestNoshare:
     def test_quicknotes_too(self, client, wiki_dir):
         write_page(wiki_dir, "2026-10-01_09-00-00_salary", "---\ntags: noshare\n---\n# Salary talk\n")
         write_page(wiki_dir, "2026-10-01_10-00-00_lunch", "# Lunch\n")
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         body = client.get("/notes", headers=HOST).get_data(as_text=True)
         assert "Lunch" in body and "Salary" not in body
 

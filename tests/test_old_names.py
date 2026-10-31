@@ -140,6 +140,12 @@ class TestOldNotesNames:
             assert [h["slug"] for h in hits] == [self.NOTE], param
 
 
+class TestOldCookie:
+    def test_sharing_mode_from_the_leaf_sharing_cookie(self, client):
+        client.set_cookie("leaf-sharing", "1")
+        assert 'class="sharing"' in client.get("/page/index", headers=HOST).get_data(as_text=True)
+
+
 class TestOldMcpNames:
     @pytest.fixture(autouse=True)
     def _token(self, monkeypatch):

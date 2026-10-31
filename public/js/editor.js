@@ -589,7 +589,7 @@ function wikilinkAtCursor() {
 // ── Delete confirmation ───────────────────────────────────────────────────────
 
 function getPrevPageUrl() {
-  const KEY = 'leafHistory';
+  const KEY = 'zoneHistory';
   const hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
   const currentSlug = document.querySelector('.breadcrumb[data-slug]')?.dataset.slug;
   for (let i = hist.length - 1; i >= 0; i--) {

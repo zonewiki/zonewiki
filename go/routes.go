@@ -981,7 +981,7 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	results := doSearch(newReq(r), q, args.Get("unlinked") == "1", max(1, min(limit, most)), quicknote)
 	// The search dialog's indicator (js/search.js) follows it: indexing → on.
-	w.Header().Set("X-Leaf-Semantic", semanticStatus())
+	w.Header().Set("X-Zone-Semantic", semanticStatus())
 	writeJSON(w, http.StatusOK, results)
 }
 

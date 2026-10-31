@@ -159,7 +159,7 @@ main:has(> .top-actions .top-user) { --top-actions-w: 19.75rem; }
 main:has(> .top-actions) > .breadcrumb { min-height: 2.25rem; padding-right: calc(var(--top-actions-w) + 1.25rem); }
 
 /* ── Sharing mode ─────────────────────────────────────────────────────────── */
-/* For sharing the screen (leaf.js toggleSharing, html.sharing): the page
+/* For sharing the screen (zonewiki.js toggleSharing, html.sharing): the page
    on screen stays as it is, everything that shows other pages around it
    goes. A thin bar across the top and the highlighted eye say it is on. */
 html.sharing body::before {
@@ -178,7 +178,7 @@ html.sharing :is(
 ) { display: none !important; }
 
 /* The Tasks links' counts (server.py _task_counts_html, kept current by
-   leaf.js): tasks due today or overdue (orange) and tasks in Focus (muted),
+   zonewiki.js): tasks due today or overdue (orange) and tasks in Focus (muted),
    each hidden at zero. */
 .module-counts { display: inline-flex; gap: .2rem; margin-left: .3rem; }
 .module-counts:not(:has(> :not([hidden]))) { display: none; }
@@ -287,7 +287,7 @@ main {
     max-height: calc(100vh - 3rem); overflow-y: auto; padding-top: .25rem;
   }
   /* A column taller than the window scrolls; a fade marks the edge with
-     more (leaf.js sets the classes). */
+     more (zonewiki.js sets the classes). */
   .rail.rail-more-below { mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent); }
   .rail.rail-more-above { mask-image: linear-gradient(to top, #000 calc(100% - 2.5rem), transparent); }
   .rail.rail-more-above.rail-more-below {
@@ -620,7 +620,7 @@ main {
 .page-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .875rem; }
 .page-content th, .page-content td { padding: .45rem .75rem; border: 1px solid var(--border); text-align: left; }
 .page-content th { background: var(--code-bg); font-weight: 600; }
-/* Sortable tables (leaf.js): the arrow shows the sort; a faint ↕ on hover
+/* Sortable tables (zonewiki.js): the arrow shows the sort; a faint ↕ on hover
    says the header can be clicked. */
 .sortable-table thead th { cursor: pointer; user-select: none; }
 .sortable-table thead th::after { content: ''; margin-left: .35em; font-size: .8em; color: var(--muted); }
@@ -871,7 +871,7 @@ main {
   margin: 12vh auto auto;
 }
 
-/* The preview pane (showModalPreview in leaf.js): wide screens only, the
+/* The preview pane (showModalPreview in zonewiki.js): wide screens only, the
    modal then wider, results on the left, the highlighted one on the right. */
 .search-preview { display: none; }
 @media (min-width: 1100px) {
@@ -1134,7 +1134,7 @@ main {
 .bl-tooltip > a:only-child  { border-radius: .35rem; }
 .bl-tooltip > a:hover { background: var(--border); }
 /* Hover opens the list only where hover exists: on touch, :hover sticks after
-   a tap and would fight the tap toggle (.bl-open, set by leaf.js). */
+   a tap and would fight the tap toggle (.bl-open, set by zonewiki.js). */
 @media (hover: hover) {
   .breadcrumb-right:hover .bl-count { opacity: 1; }
   .breadcrumb-right:hover .bl-tooltip { display: block; }
@@ -1315,7 +1315,7 @@ body.editor-page .leaf-build { display: none; }   /* the editor fills the screen
 @media (max-width: 1139px) { .leaf-build { display: none; } }
 @media print { .leaf-build { display: none; } }
 
-.leaf-version { margin: 0; font-size: .75rem; opacity: .6; text-align: center; font-family: "JetBrains Mono", "Fira Code", monospace; }
+.zone-version { margin: 0; font-size: .75rem; opacity: .6; text-align: center; font-family: "JetBrains Mono", "Fira Code", monospace; }
 kbd {
   display: inline-block;
   padding: .1rem .4rem;
@@ -1339,7 +1339,7 @@ kbd {
 }
 .notes-list li:last-child { border-bottom: none; }
 .note-date { font-size: .8rem; color: var(--muted); white-space: nowrap; }
-/* The Notes page's filter (initNotesFilter in leaf.js). */
+/* The Notes page's filter (initNotesFilter in zonewiki.js). */
 .notes-filter { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
 .notes-filter input {
   flex: 1; min-width: 0; padding: .4rem .65rem;
@@ -1553,7 +1553,7 @@ body.editor-page main {
 }
 .merge-note[hidden] { display: none; }
 
-/* Formatting bar (FORMAT_BAR in server.py, applyFormat in leaf.js): one
+/* Formatting bar (FORMAT_BAR in server.py, applyFormat in zonewiki.js): one
    line of quiet buttons above the textarea; on a narrow screen it scrolls
    sideways instead of wrapping. */
 .format-bar {
@@ -1990,7 +1990,7 @@ body.editor-page main {
   .signout-form { position: static; margin-left: auto; }
   .top-actions { display: none; }
   main:has(> .top-actions) > .breadcrumb { min-height: 0; padding-right: 0; }
-  /* A showing badge (leaf.js sets inline-flex) already spaces the page from
+  /* A showing badge (zonewiki.js sets inline-flex) already spaces the page from
      the top edge, so main's own top padding shrinks. */
   body:has(.top-badges > [style*="inline-flex"]) main { padding-top: .5rem; }
 

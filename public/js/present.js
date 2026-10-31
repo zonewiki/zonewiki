@@ -79,7 +79,7 @@ import { openLightbox } from './page.js';
     if (presEditBtn) presEditBtn.href = editHref;
 
     // Persist slide position so F5/session-restore reopens the presentation
-    localStorage.setItem('leaf_pres', JSON.stringify({ slug, slide: n }));
+    localStorage.setItem('zone_pres', JSON.stringify({ slug, slide: n }));
   }
 
   function openPresentation(startAt) {
@@ -99,7 +99,7 @@ import { openLightbox } from './page.js';
       <a class="pres-edit-btn" title="Edit section" href="#">✎</a>`;
 
     overlay.querySelector('.pres-edit-btn').addEventListener('click', () => {
-      sessionStorage.setItem('leaf_pres_slide', String(currentSlide));
+      sessionStorage.setItem('zone_pres_slide', String(currentSlide));
     });
 
     // Block wheel events from reaching the page behind; navigate slides on scroll
@@ -128,8 +128,8 @@ import { openLightbox } from './page.js';
   function closePresentation() {
     if (overlay) { overlay.remove(); overlay = null; }
     document.removeEventListener('keydown', onPresentKey);
-    sessionStorage.removeItem('leaf_pres_slide');
-    localStorage.removeItem('leaf_pres');
+    sessionStorage.removeItem('zone_pres_slide');
+    localStorage.removeItem('zone_pres');
   }
 
   function onPresentKey(e) {
@@ -161,8 +161,8 @@ import { openLightbox } from './page.js';
 
   // Auto-reopen presentation after F5 or after returning from section edit
   const _currentSlug = window.location.pathname.replace(/^\/page\//, '');
-  const _presState = localStorage.getItem('leaf_pres');
-  const _returnSlide = sessionStorage.getItem('leaf_pres_slide');
+  const _presState = localStorage.getItem('zone_pres');
+  const _returnSlide = sessionStorage.getItem('zone_pres_slide');
 
   if (_presState) {
     try {
@@ -170,11 +170,11 @@ import { openLightbox } from './page.js';
       if (slug === _currentSlug) {
         requestAnimationFrame(() => openPresentation(slide));
       } else {
-        localStorage.removeItem('leaf_pres');
+        localStorage.removeItem('zone_pres');
       }
-    } catch (_) { localStorage.removeItem('leaf_pres'); }
+    } catch (_) { localStorage.removeItem('zone_pres'); }
   } else if (_returnSlide !== null) {
-    sessionStorage.removeItem('leaf_pres_slide');
+    sessionStorage.removeItem('zone_pres_slide');
     requestAnimationFrame(() => openPresentation(parseInt(_returnSlide, 10)));
   }
 }());

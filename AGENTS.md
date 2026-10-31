@@ -121,11 +121,11 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
 └── public/                 # The browser code, served as it is
     ├── style.css           # All styling
-    ├── leaf.js             # The entry ES module every page loads; imports the modules below
+    ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, editor, page, fold, present (see Client code in `docs/spec/rendering.md`)
+    │                       #   shortcuts, mdedit, editor, page, fold, present, oldnames (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
-    ├── tasks.js            # The task app, an ES module leaf.js imports; initTaskApps() starts each .tasks-app
+    ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app
     ├── favicon.svg         # Browser tab icon
     ├── icon.svg            # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
     ├── manifest.json       # Web app manifest (Add to home screen)

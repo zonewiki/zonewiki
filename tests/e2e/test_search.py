@@ -452,7 +452,7 @@ def test_the_dialog_says_whether_search_goes_by_meaning(page, wiki):
 
     def as_if_indexed(route):
         resp = route.fetch()
-        route.fulfill(response=resp, headers={**resp.headers, "x-leaf-semantic": "on"})
+        route.fulfill(response=resp, headers={**resp.headers, "x-zone-semantic": "on"})
     page.route("**/api/search*", as_if_indexed)
     page.locator("#modal-filter").fill("tomatoes")
     expect(mode).to_have_text("Keywords + meaning")

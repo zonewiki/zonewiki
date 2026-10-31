@@ -3,6 +3,7 @@
 // in ES modules under js/, imported here; no build step, the browser loads
 // them as they are. Each module wires up what it finds on the page.
 
+import './js/oldnames.js';    // browser storage from before the renames, under its new keys
 import './js/chrome.js';      // navigation trail, backlinks chip, side columns, module counts
 import './js/git.js';         // uncommitted changes badge, Commit buttons
 import './js/search.js';      // search modal and preview, Notes filter, search highlights

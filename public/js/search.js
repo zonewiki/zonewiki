@@ -144,7 +144,7 @@ async function showModalPreview(item) {
 modalFilter?.addEventListener('input', applyModalControls);
 // With an empty query the list is a quick switcher, so it opens on the most
 // recently edited pages. A sort picked from the dropdown is remembered.
-const MODAL_SORT_KEY = 'leaf-search-sort';
+const MODAL_SORT_KEY = 'zone-search-sort';
 try {
   const saved = localStorage.getItem(MODAL_SORT_KEY);
   if (modalSort && saved && [...modalSort.options].some(o => o.value === saved)) modalSort.value = saved;
@@ -344,7 +344,7 @@ async function fetchModalContentMatches(q) {
     // One more than shown: if it comes back, there are more for /search.
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${unlinked}&limit=${MODAL_RESULTS + 1}`);
     if (seq !== modalCMSeq) return;  // stale response — discard
-    showSearchMode(res.headers.get('X-Leaf-Semantic'));
+    showSearchMode(res.headers.get('X-Zone-Semantic'));
     const results = await res.json();
     if (!results.length) { modalCM.innerHTML = ''; modalCM.classList.add('hidden'); return; }
     const more = results.length > MODAL_RESULTS

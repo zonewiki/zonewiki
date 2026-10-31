@@ -296,7 +296,7 @@ def test_date_snippets_use_local_time(new_page, wiki):
 
 def test_task_notes_complete_page_links(page, wiki):
     # A task's notes and title complete [[ and [text]( like the editor
-    # (one implementation, linkAutocomplete in leaf.js).
+    # (one implementation, linkAutocomplete in zonewiki.js).
     wiki.write("todo", "# Todo\n\n[[tasks:]]\n")
     wiki.write("target-page", "# Target\n")
     wiki.write("tangent", "# Tangent\n")

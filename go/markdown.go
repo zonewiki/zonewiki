@@ -50,11 +50,11 @@ func markdown(src string, env *Env, inline bool) string {
 				util.Prioritized(alertTransformer{}, 100),
 				util.Prioritized(taskTransformer{}, 200),
 			),
-			parser.WithASTTransformers(util.Prioritized(&leafTransformer{env: env}, 1000)),
+			parser.WithASTTransformers(util.Prioritized(&zoneTransformer{env: env}, 1000)),
 		),
 		goldmark.WithRendererOptions(
 			html.WithUnsafe(), html.WithXHTML(),
-			renderer.WithNodeRenderers(util.Prioritized(&leafRenderer{env: env}, 100)),
+			renderer.WithNodeRenderers(util.Prioritized(&zoneRenderer{env: env}, 100)),
 		),
 	}
 	if inline {
@@ -101,7 +101,7 @@ func (alertTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parse
 	if !alertTypes[kind] {
 		return
 	}
-	bq.SetAttributeString("leaf-alert", kind)
+	bq.SetAttributeString("zone-alert", kind)
 	rest := text.NewSegments()
 	for i := 1; i < p.Lines().Len(); i++ {
 		rest.Append(p.Lines().At(i))
@@ -131,11 +131,11 @@ func (taskTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parser
 		return
 	}
 	// On the item: a tight list swaps the paragraph for a new TextBlock.
-	li.SetAttributeString("leaf-task", v[1] != ' ')
+	li.SetAttributeString("zone-task", v[1] != ' ')
 	p.Lines().Set(0, first.WithStart(first.Start+3))
 }
 
-var kindCheckbox = ast.NewNodeKind("LeafCheckbox")
+var kindCheckbox = ast.NewNodeKind("ZoneCheckbox")
 
 type checkbox struct {
 	ast.BaseInline
@@ -145,12 +145,12 @@ type checkbox struct {
 func (n *checkbox) Kind() ast.NodeKind         { return kindCheckbox }
 func (n *checkbox) Dump(src []byte, level int) { ast.DumpHelper(n, src, level, nil, nil) }
 
-// leafTransformer, after parsing: checkboxes, heading ids, images, links.
-type leafTransformer struct{ env *Env }
+// zoneTransformer, after parsing: checkboxes, heading ids, images, links.
+type zoneTransformer struct{ env *Env }
 
 var imgWidthRE = regexp.MustCompile(`\|(\d+)$`)
 
-func (t *leafTransformer) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
+func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
 	src := reader.Source()
 	slugs := map[string]bool{}
 	var unsafe []ast.Node
@@ -172,7 +172,7 @@ func (t *leafTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 		}
 		switch n := n.(type) {
 		case *ast.ListItem:
-			if checked, ok := n.AttributeString("leaf-task"); ok {
+			if checked, ok := n.AttributeString("zone-task"); ok {
 				n.RemoveAttributes()
 				n.SetAttributeString("class", "task-list-item")
 				p := n.FirstChild()
@@ -229,7 +229,7 @@ func unsafeLink(href []byte) bool {
 // external: an http(s) link to another site opens in a new tab; one to the
 // host the request came in on (Zone itself) does not. Not url.Parse: it
 // refuses some URLs a browser follows (a ` in the host, say).
-func (t *leafTransformer) external(n ast.Node, href []byte) {
+func (t *zoneTransformer) external(n ast.Node, href []byte) {
 	scheme, rest, _ := strings.Cut(string(href), ":")
 	if !strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https") {
 		return
@@ -286,14 +286,14 @@ func uniqueSlug(slug string, seen map[string]bool) string {
 	return u
 }
 
-// leafRenderer: headings (✎, ☑ N), callouts, checkboxes; goldmark's
+// zoneRenderer: headings (✎, ☑ N), callouts, checkboxes; goldmark's
 // renderers do the rest.
-type leafRenderer struct {
+type zoneRenderer struct {
 	env      *Env
 	sections int
 }
 
-func (r *leafRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+func (r *zoneRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindHeading, r.heading)
 	reg.Register(ast.KindBlockquote, r.blockquote)
 	reg.Register(kindCheckbox, r.checkbox)
@@ -308,7 +308,7 @@ func attr(n ast.Node, name string) string {
 // heading: a ## or ### heading on the page view sits in a section header
 // with the ✎ that edits the section (numbered as mdtext.split_sections
 // counts them), after its ☑ N chip when tasks link to it.
-func (r *leafRenderer) heading(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+func (r *zoneRenderer) heading(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Heading)
 	tag := fmt.Sprintf("h%d", n.Level)
 	sectioned := n.Level == 2 || n.Level == 3
@@ -334,8 +334,8 @@ func (r *leafRenderer) heading(w util.BufWriter, src []byte, node ast.Node, ente
 	return ast.WalkContinue, nil
 }
 
-func (r *leafRenderer) blockquote(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	kind := attr(node, "leaf-alert")
+func (r *zoneRenderer) blockquote(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	kind := attr(node, "zone-alert")
 	switch {
 	case kind != "" && entering:
 		fmt.Fprintf(w, "<div class=\"markdown-alert markdown-alert-%s\">\n<p class=\"markdown-alert-title\">%s</p>\n",
@@ -350,7 +350,7 @@ func (r *leafRenderer) blockquote(w util.BufWriter, src []byte, node ast.Node, e
 	return ast.WalkContinue, nil
 }
 
-func (r *leafRenderer) checkbox(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+func (r *zoneRenderer) checkbox(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
 		checked := ""
 		if node.(*checkbox).Checked {

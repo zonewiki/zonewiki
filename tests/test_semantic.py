@@ -39,12 +39,12 @@ def _search(client, q):
 
 class TestSemanticStatus:
     """The search dialog's indicator: the page renders the state, every
-    /api/search says it in X-Leaf-Semantic."""
+    /api/search says it in X-Zone-Semantic."""
 
     def _states(self, client):
         page = client.get("/page/index", headers=HOST).get_data(as_text=True)
         rendered = re.search(r'id="search-mode" class="search-mode" data-state="(\w+)"', page).group(1)
-        return rendered, client.get("/api/search", query_string={"q": "golf"}, headers=HOST).headers["X-Leaf-Semantic"]
+        return rendered, client.get("/api/search", query_string={"q": "golf"}, headers=HOST).headers["X-Zone-Semantic"]
 
     def test_off_without_a_semantic_index(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "SEMANTIC", None)

@@ -830,7 +830,7 @@ class TestTasksPage:
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
         assert "task-add-btn" in body
-        assert '<script type="module" src="/public/leaf.js"></script>' in body   # it loads tasks.js
+        assert '<script type="module" src="/public/zonewiki.js"></script>' in body   # it loads tasks.js
 
 
 # ── Dates ────────────────────────────────────────────────────────────────────
@@ -1634,12 +1634,12 @@ class TestLimitParam:
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[tasks: limit=lots]]")
 
     def test_tasks_code_comes_with_leaf_js(self, client, wiki_dir):
-        # The embed carries no script of its own: leaf.js, an ES module on
+        # The embed carries no script of its own: zonewiki.js, an ES module on
         # every page, imports tasks.js, which imports tasks-core.js.
         (wiki_dir / "board.md").write_text("# Board\n\n[[tasks:]]\n[[tasks:]]\n", encoding="utf-8")
         html_out = client.get("/page/board").get_data(as_text=True)
-        assert html_out.count("<script") == 2   # highlight.js and leaf.js
-        assert '<script type="module" src="/public/leaf.js"></script>' in html_out
+        assert html_out.count("<script") == 2   # highlight.js and zonewiki.js
+        assert '<script type="module" src="/public/zonewiki.js"></script>' in html_out
 
 
 # ── The files' format ─────────────────────────────────────────────────────────

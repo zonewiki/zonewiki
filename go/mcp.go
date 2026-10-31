@@ -153,7 +153,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 		if v, _ := as[string](params["protocolVersion"]); slices.Contains(protocolVersions, v) {
 			res.ProtocolVersion = v
 		}
-		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "leaf", "Zone wiki", version
+		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "zonewiki", "Zone wiki", version
 		res.Instructions = instructionsWithGuide()
 		return rpcResult(id, res), nil
 	case "ping":

@@ -171,7 +171,8 @@ function syncSharingButton() {
 }
 export function toggleSharing() {
   const on = !sharingOn();
-  document.cookie = `leaf-sharing=${on ? '1' : '0'}; path=/; SameSite=Lax; max-age=${on ? 31536000 : 0}`;
+  document.cookie = `zone-sharing=${on ? '1' : '0'}; path=/; SameSite=Lax; max-age=${on ? 31536000 : 0}`;
+  document.cookie = 'leaf-sharing=; path=/; max-age=0';   // its name before Leaf was called Zone
   location.reload();
 }
 sharingBtn?.addEventListener('click', toggleSharing);

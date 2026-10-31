@@ -156,7 +156,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
         const get = Storage.prototype.getItem;
         Storage.prototype.getItem = function (key) {
           const value = get.call(this, key);
-          return value === null && String(key).startsWith('leaf-deck-compact:') ? '0' : value;
+          return value === null && String(key).startsWith('zone-tasks-compact:') ? '0' : value;
         };
       }
     """)

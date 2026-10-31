@@ -93,7 +93,7 @@ class TestEndpoint:
         resp = rpc(client, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                           "clientInfo": {"name": "t", "version": "0"}})
         assert resp.status_code == 200
-        assert resp.get_json()["result"]["serverInfo"]["name"] == "leaf"
+        assert resp.get_json()["result"]["serverInfo"]["name"] == "zonewiki"
 
     def test_notification_is_202(self, client):
         resp = client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"},

@@ -1,5 +1,5 @@
 // ── Zone Task App ────────────────────────────────────────────────────────────
-// An ES module; leaf.js imports it on every page. initTaskApps() starts each
+// An ES module; zonewiki.js imports it on every page. initTaskApps() starts each
 // task app (.tasks-app) on the page, and one added later (the hidden tasks
 // that a new task from any page loads, actions.js).
 
@@ -581,25 +581,11 @@ const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? '
 const initKeep = appEl?.dataset.initKeep === '1';
 // An embed on a page in the user's private folder: new tasks are private.
 const initPrivate = appEl?.dataset.initPrivate === '1';
-// The built-in page was /deck before Deck was called Tasks: what this browser
-// remembers for it (keyed by path, below) carries over to /tasks, once.
-if (location.pathname === '/tasks') {
-  try {
-    for (const k of Object.keys(localStorage)) {
-      const m = k.match(/^(leaf-deck-\w+:)\/deck(\|.*)$/);
-      if (m && localStorage.getItem(m[1] + '/tasks' + m[2]) === null) {
-        localStorage.setItem(m[1] + '/tasks' + m[2], localStorage.getItem(k));
-      }
-      if (m) localStorage.removeItem(k);
-    }
-  } catch (_) { /* no storage: nothing remembered */ }
-}
-
 // Compact: one line per task (title, then tags, markers and dates; notes
 // hidden; selecting or a tap expands a task). The default on every tab;
 // the density button and v switch it, remembered per task list and tab in this
 // browser.
-const densityKey = view => 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
+const densityKey = view => 'zone-tasks-compact:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId, view].join('|');
 function compactFor(view) {
   try {
@@ -613,7 +599,7 @@ function compactFor(view) {
 // (`foldId`: a day by its distance from today, so "Tomorrow" stays folded
 // as the days go by). A filter shows every section, and a task that has to
 // be seen (a ?task= link, a new task, the due list) unfolds its own.
-const foldKey = () => 'leaf-deck-folded:' + [location.pathname, appEl?.dataset.initList || '',
+const foldKey = () => 'zone-tasks-folded:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId].join('|');
 function loadFolded() {
   try { return new Set(JSON.parse(localStorage.getItem(foldKey()) || '[]')); } catch (_) { return new Set(); }
@@ -648,7 +634,7 @@ function unfoldFor(id) {
 // remembered per task list in this browser.
 const SORT_MODES = ['manual', 'due', 'created'];
 const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
-const sortKey = () => 'leaf-deck-sort:' + [location.pathname, appEl?.dataset.initList || '',
+const sortKey = () => 'zone-tasks-sort:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId].join('|');
 let sortModes = {};   // view → 'due' | 'created'; missing: manual
 try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
@@ -682,7 +668,7 @@ sortSel?.addEventListener('change', () => setSort(sortSel.value));
 // switch (d) toggles; the choice is remembered per task list in this browser,
 // and the Open tab opens it.
 const isOpenTab = view => view === 'open' || view === 'plan';
-const groupKey = () => 'leaf-deck-group:' + [location.pathname, appEl?.dataset.initList || '',
+const groupKey = () => 'zone-tasks-group:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId].join('|');
 function openGroup() {
   try { return localStorage.getItem(groupKey()) === 'list' ? 'open' : 'plan'; } catch (_) { return 'plan'; }
@@ -844,7 +830,7 @@ let completedYears = [];   // years Completed can show (/api/tasks/completed-yea
 // Remember the active tab per page + embed instance for the current tab only
 // (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
 // in a new tab / next day starts empty so the embed's configured filter loads.
-const tabStorageKey = `leaf-deck-tab:${location.pathname}#${instanceId}`;
+const tabStorageKey = `zone-tasks-tab:${location.pathname}#${instanceId}`;
 function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
 function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 

@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="/public/vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/public/style.css">
   <script src="/public/vendor/highlight/highlight.min.js" defer></script>
-  <script type="module" src="/public/leaf.js"></script>
+  <script type="module" src="/public/zonewiki.js"></script>
 </head>
 <body
   {{- if .editor}} class="editor-page"{{end}}
@@ -51,7 +51,7 @@
         <input type="checkbox" id="modal-unlinked"> Unlinked only
       </label>
       {{- /* Whether content matches are found by meaning too; js/search.js
-          words it and keeps it current from /api/search's X-Leaf-Semantic. */}}
+          words it and keeps it current from /api/search's X-Zone-Semantic. */}}
       <span id="search-mode" class="search-mode" data-state="{{.semantic}}"></span>
     </div>
     <div class="modal-results">

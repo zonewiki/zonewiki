@@ -14,7 +14,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ### Autolinks and callouts
 
 - **Bare URLs become links** (goldmark's linkify, with `urlRE`, which needs no dot in the host, so `http://localhost:5000/…` and `http://nas:5000` are links): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link. Code spans, fenced code and existing links are untouched. It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
-- **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`leafTransformer.external`, on the parsed document, so autolinks too); `tasks.js` does the same for links in task titles and notes (`extAttrs`). Zone's own links, `mailto:` and a full URL to Zone itself stay in the tab.
+- **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`zoneTransformer.external`, on the parsed document, so autolinks too); `tasks.js` does the same for links in task titles and notes (`extAttrs`). Zone's own links, `mailto:` and a full URL to Zone itself stay in the tab.
 - **Callouts** (GitHub/Obsidian syntax, `alertTransformer`): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css` (GitHub colours, a `--alert` variable per kind, dark variants). Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 
 ### Sortable tables
@@ -27,7 +27,7 @@ Every view is a Go `html/template` in `go/templates` (embedded in the binary) th
 
 ### Client code
 
-No build step and no bundler: the browser loads ES modules as they are. Every page loads `public/leaf.js` (`<script type="module">` in `layout.html`), which imports the modules in `public/js/` and `tasks.js`; each module wires up what it finds on the page. They share code by `import`, not through `window`:
+No build step and no bundler: the browser loads ES modules as they are. Every page loads `public/zonewiki.js` (`<script type="module">` in `layout.html`), which imports the modules in `public/js/` and `tasks.js`; each module wires up what it finds on the page. They share code by `import`, not through `window`:
 
 | Module | Does |
 |---|---|
@@ -44,11 +44,12 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 | `js/page.js` | Page view: checkboxes, `[[task:…]]` chips, sortable tables, syntax highlighting, lightbox |
 | `js/fold.js` | Folding a page view's sections (`foldAll`, `revealElement`) |
 | `js/present.js` | Presentation mode |
+| `js/oldnames.js` | Imported first: moves what the browser kept under the names from before the renames (`leaf-deck-*`, also under the path `/deck`, `leaf_pres`, `leaf-search-sort`, `leafHistory`) to the new keys (`zone-tasks-*` under `/tasks`, `zone_pres` …), once |
 | `tasks.js`, `tasks-core.js` | The task app (exports `initTaskApps`, `openTasksEdit`) and its pure logic (`TasksCore`, also run by the Node tests) |
 
 ### Section headings and HTML post-processing
 
-Zone's additions to goldmark's output work on the parsed document, not by regexes over the HTML (`go/markdown.go`): the `heading` render function wraps each `##`/`###` in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view; numbered as `splitSections` counts sections), and adds the `☑ N` chip from `SectionTasks`; `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `toggleNthCheckbox`) into chips; `leafTransformer` handles image widths and `img-block` paragraphs; `taskTransformer` gives exactly the lines `toggleNthCheckbox` counts a checkbox.
+Zone's additions to goldmark's output work on the parsed document, not by regexes over the HTML (`go/markdown.go`): the `heading` render function wraps each `##`/`###` in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view; numbered as `splitSections` counts sections), and adds the `☑ N` chip from `SectionTasks`; `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `toggleNthCheckbox`) into chips; `zoneTransformer` handles image widths and `img-block` paragraphs; `taskTransformer` gives exactly the lines `toggleNthCheckbox` counts a checkbox.
 
 ### Page header
 
@@ -95,7 +96,7 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 
 ### Image sizing
 
-- `![alt|300](url)` sets the display width to 300px: `leafTransformer` takes `|300` off the alt text and gives the image `style="max-width:100%;width:300px"`.
+- `![alt|300](url)` sets the display width to 300px: `zoneTransformer` takes `|300` off the alt text and gives the image `style="max-width:100%;width:300px"`.
 - Works for any integer pixel width. `max-width:100%` ensures the image never overflows on narrow screens.
 
 ### Frontmatter

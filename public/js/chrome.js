@@ -12,7 +12,7 @@
   const ready = () => bc.classList.add('trail-ready');
 
   // MRU list: visiting a page already in the list moves it to the end
-  const KEY = 'leafHistory';
+  const KEY = 'zoneHistory';
   let hist = JSON.parse(sessionStorage.getItem(KEY) || '[]');
   hist = hist.filter(p => p.slug !== slug);
   hist.push({ slug, title, url: window.location.pathname + window.location.search });

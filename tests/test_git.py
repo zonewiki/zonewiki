@@ -416,7 +416,7 @@ class TestDiff:
         save(client, "secret", "---\ntags: noshare\n---\n# Secret\n\nnew words\n")
         client.post("/api/save/secret", data={"content": "---\ntags: noshare\n---\n# Secret\n\nunsaved words\n"},
                     headers=HOST)
-        client.set_cookie("leaf-sharing", "1")
+        client.set_cookie("zone-sharing", "1")
         for url in (f"/diff/secret/{head_sha(wiki_dir)}", "/diff-uncommitted/secret"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert "Hidden page" in body and "words" not in body, url
