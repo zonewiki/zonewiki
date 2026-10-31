@@ -470,17 +470,17 @@ class TestBaseUrl:
 
 class TestHostFile:
     def test_wiki_path_without_host_data(self, client, pages, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "")
+        monkeypatch.setattr(settings, "ZONE_HOST_DATA", "")
         first = call(client, "search_wiki", query="git push")[0].split("\n\n---\n\n")[0]
         assert f"#pushing\nfile: {pages.resolve()}/git-remote.md\n\nRun git push" in first
 
     def test_host_data_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "/home/me/leaf")
+        monkeypatch.setattr(settings, "ZONE_HOST_DATA", "/home/me/leaf")
         assert "\nfile: /home/me/leaf/git-remote.md\n" in call(client, "search_wiki", query="git push")[0]
         assert "\nfile: /home/me/leaf/golf.md\n" in call(client, "read_page", slug="golf")[0]
 
     def test_subfolder_and_odd_names_kept(self, client, pages, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_HOST_DATA", "/home/me/leaf")
+        monkeypatch.setattr(settings, "ZONE_HOST_DATA", "/home/me/leaf")
         write_page(pages, "notes/My Notes", "# My Notes\n\n## Part\n\nZebrafish facts.\n")
         assert "\nfile: /home/me/leaf/notes/My Notes.md\n" in \
             call(client, "search_wiki", query="zebrafish")[0]

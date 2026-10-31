@@ -11,8 +11,8 @@
 //	password = pbkdf2-sha256:600000:<salt>:<hash>
 //	mcp-token = sha256:<the token's hash>
 //
-// The environment (.env) holds only what the deployment needs (LEAF_DATA,
-// LEAF_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
+// The environment (.env) holds only what the deployment needs (ZONE_DATA,
+// ZONE_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
 // Zone, pointing to zonewiki config import. The file is in .leaf/, out of
 // safePath's reach; it is committed (the rest of .leaf/ isn't), so its MCP
 // tokens are kept only as hashes, passwords as PBKDF2 hashes.

@@ -92,11 +92,11 @@ jobs:
           context: .
           file: Containerfile
           platforms: linux/${{ matrix.arch }}
-          # Semantic search is in the image; LEAF_SEMANTIC_SEARCH=on in
+          # Semantic search is in the image; ZONE_SEMANTIC_SEARCH=on in
           # .env turns it on, as with ./run.sh.
           build-args: |
-            LEAF_BUILD=${{ steps.meta.outputs.build }}
-            LEAF_SEMANTIC_SEARCH=on
+            ZONE_BUILD=${{ steps.meta.outputs.build }}
+            ZONE_SEMANTIC_SEARCH=on
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Zone: wiki, notes and tasks for you, your small team, and your AI agents (plain Markdown files, self-hosted)

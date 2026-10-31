@@ -29,7 +29,7 @@ jobs:
     # history). So CI keeps no package lists or commands of its own. Like
     # the image job, the builds run on the host's engine through the socket,
     # so layers come from its cache unless the dependencies changed.
-    # LEAF_COPY_REPO: the checkout lives in this job container, not on the
+    # ZONE_COPY_REPO: the checkout lives in this job container, not on the
     # host, so run.sh copies it into the container instead of mounting it.
     strategy:
       fail-fast: false
@@ -50,7 +50,7 @@ jobs:
           fetch-depth: ${{ matrix.check == 'leaks' && '0' || '1' }}
       - name: ./run.sh ${{ matrix.check }}
         env:
-          LEAF_COPY_REPO: 1
+          ZONE_COPY_REPO: 1
         run: ./run.sh ${{ matrix.check }}
 
   image:
@@ -102,8 +102,8 @@ jobs:
           for t in ${{ steps.meta.outputs.tags }}; do tag_args+=(-t "$t"); done
           # docker, unlike podman, doesn't fall back to Containerfile.
           docker build -f Containerfile \
-            --build-arg "LEAF_BUILD=${{ steps.meta.outputs.build }}" \
-            --build-arg LEAF_SEMANTIC_SEARCH=on \
+            --build-arg "ZONE_BUILD=${{ steps.meta.outputs.build }}" \
+            --build-arg ZONE_SEMANTIC_SEARCH=on \
             "${tag_args[@]}" .
       - name: Push
         run: |

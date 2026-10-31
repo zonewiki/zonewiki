@@ -30,7 +30,7 @@ var now = time.Now
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
 // names in the hosts setting (a reverse proxy's public name, any port), get
-// in. LEAF_ALLOW_REMOTE without hosts turns the check off (LAN access by IP).
+// in. ZONE_ALLOW_REMOTE without hosts turns the check off (LAN access by IP).
 var allowedHosts = map[string]bool{"localhost:5000": true, "127.0.0.1:5000": true}
 
 func hostAllowed(host string) bool {

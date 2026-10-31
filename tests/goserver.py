@@ -34,16 +34,16 @@ _binary: Path | None = None
 def binary() -> Path:
     """The server, built once per test run: by the first process (pytest's,
     or with xdist its controller, before the workers start), which hands its
-    path on in LEAF_TEST_BINARY."""
+    path on in ZONE_TEST_BINARY."""
     global _binary
     if _binary is None:
-        if os.environ.get("LEAF_TEST_BINARY"):
-            _binary = Path(os.environ["LEAF_TEST_BINARY"])
+        if os.environ.get("ZONE_TEST_BINARY"):
+            _binary = Path(os.environ["ZONE_TEST_BINARY"])
         else:
             out = Path(tempfile.mkdtemp(prefix="zonewiki_go_")) / "zonewiki"
             go = shutil.which("go") or "go"
             subprocess.run([go, "build", "-o", str(out), "."], cwd=REPO / "go", check=True)
-            os.environ["LEAF_TEST_BINARY"] = str(out)
+            os.environ["ZONE_TEST_BINARY"] = str(out)
             _binary = out
     return _binary
 
@@ -52,10 +52,10 @@ def _settings() -> dict[str, str]:
     """The environment that gives the server the deployment's settings now
     (the wiki's are in its settings file: config_text)."""
     env = {
-        "LEAF_DATA": str(settings.LEAF_DATA),
-        "LEAF_BUILD": settings.LEAF_BUILD,
-        "LEAF_HOST_DATA": settings.LEAF_HOST_DATA,
-        "LEAF_ALLOW_REMOTE": "1" if settings.LEAF_ALLOW_REMOTE else "",
+        "ZONE_DATA": str(settings.ZONE_DATA),
+        "ZONE_BUILD": settings.ZONE_BUILD,
+        "ZONE_HOST_DATA": settings.ZONE_HOST_DATA,
+        "ZONE_ALLOW_REMOTE": "1" if settings.ZONE_ALLOW_REMOTE else "",
         **settings.ENV,
     }
     if not settings.GIT_ENABLED:
@@ -104,7 +104,7 @@ _written: dict[Path, str] = {}
 def write_config(text: str) -> None:
     """Gives the wiki the settings file text (none for "", unless a test
     wrote one there itself)."""
-    path = Path(settings.LEAF_DATA) / ".leaf" / "config"
+    path = Path(settings.ZONE_DATA) / ".leaf" / "config"
     if text:
         path.parent.mkdir(exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -144,7 +144,7 @@ class GoServer:
         self.env, self.flags = env, list(flags)
         self.config = config_text() if config is None else config
         write_config(self.config)
-        base = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
+        base = {k: v for k, v in os.environ.items() if not k.startswith(("LEAF_", "ZONE_"))}
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(

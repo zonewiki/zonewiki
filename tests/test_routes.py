@@ -1511,11 +1511,11 @@ class TestAuth:
         assert "signout-form" in auth_client.get("/page/index", headers=HOST).data.decode()
 
     def test_login_page_shows_remote_badge_in_its_form(self, auth_client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", True)
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", True)
         body = auth_client.get("/login", headers=HOST).data.decode()
         assert body.count('class="remote-badge"') == 1
         assert re.search(r'<h2>Sign in to Zone<span class="remote-badge"[^>]*>🌐</span></h2>', body)
-        monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", False)
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
         assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
 
     def test_unauthenticated_redirects_to_login(self, auth_client):
@@ -1669,28 +1669,28 @@ class TestSpecialPages:
 class TestHostHeader:
 
     def test_bad_host_returns_400(self, client):
-        old_allow_remote = settings.LEAF_ALLOW_REMOTE
-        settings.LEAF_ALLOW_REMOTE = False
+        old_allow_remote = settings.ZONE_ALLOW_REMOTE
+        settings.ZONE_ALLOW_REMOTE = False
         try:
             resp = client.get("/page/index", headers={"Host": "evil.com"})
             assert resp.status_code == 400
         finally:
-            settings.LEAF_ALLOW_REMOTE = old_allow_remote
+            settings.ZONE_ALLOW_REMOTE = old_allow_remote
 
     def test_allow_remote_skips_check(self, client):
-        old = settings.LEAF_ALLOW_REMOTE
-        settings.LEAF_ALLOW_REMOTE = True
+        old = settings.ZONE_ALLOW_REMOTE
+        settings.ZONE_ALLOW_REMOTE = True
         try:
             resp = client.get("/page/index", headers={"Host": "any.host.example"})
             assert resp.status_code != 400
         finally:
-            settings.LEAF_ALLOW_REMOTE = old
+            settings.ZONE_ALLOW_REMOTE = old
 
 
     def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
         monkeypatch.setattr(settings, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
-        for allow_remote in (False, True):   # set, the check stays on even with LEAF_ALLOW_REMOTE
-            monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", allow_remote)
+        for allow_remote in (False, True):   # set, the check stays on even with ZONE_ALLOW_REMOTE
+            monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", allow_remote)
             for host in ("wiki.example.org", "Wiki.Example.org:8443", "localhost:5000", "[::1]:5000"):
                 assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
             for host in ("evil.example", "wiki.example.org.evil.example", "192.168.1.5:5000"):
@@ -2145,7 +2145,7 @@ class TestCrossSiteWrites:
 class TestVersion:
     def test_shown_in_shortcuts_modal_and_api(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
-        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<p class="zone-version">Zone {v} · abc1234 2026-09-26 12:00</p>' in body
         assert f'<meta name="generator" content="Zone {v}">' in body
@@ -2154,35 +2154,35 @@ class TestVersion:
 
     def test_unknown_build_shows_version_only(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
-        monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<p class="zone-version">Zone {v}</p>' in body
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
-        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00")
         for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
                     f'Zone {v} · abc1234</div>') in body, path
-        monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f">Zone {v} · abc1234+dirty</div>" in body
-        monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<div class="leaf-build">Zone {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_BUILD", "<b>")
+        monkeypatch.setattr(settings, "ZONE_BUILD", "<b>")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "· &lt;b&gt;</p>" in body
 
     @staticmethod
     def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
-        """Start Zone with LEAF_DATA=wiki (None: unset) until it listens."""
+        """Start Zone with ZONE_DATA=wiki (None: unset) until it listens."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         if wiki is not None:
-            env["LEAF_DATA"] = str(wiki)
+            env["ZONE_DATA"] = str(wiki)
         proc = subprocess.Popen([str(binary()), "-addr", "127.0.0.1:0"], env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out = proc.stdout.readline()
@@ -2197,10 +2197,10 @@ class TestVersion:
         # No default wiki (there was src/data, a folder in the checkout).
         r = self._start(wiki)
         assert r.returncode != 0
-        assert "LEAF_DATA isn't set" in r.stderr
+        assert "ZONE_DATA isn't set" in r.stderr
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
-        # Zone never makes the wiki itself, so a mistyped LEAF_DATA can't
+        # Zone never makes the wiki itself, so a mistyped ZONE_DATA can't
         # start an empty wiki somewhere else.
         r = self._start(tmp_path / "nowhere")
         assert r.returncode != 0

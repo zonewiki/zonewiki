@@ -23,15 +23,15 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 
 WIKI = Path(tempfile.mkdtemp(prefix="leaf_screenshots_"))
-# hosts in the settings file, not LEAF_ALLOW_REMOTE (which would show its
+# hosts in the settings file, not ZONE_ALLOW_REMOTE (which would show its
 # badge): the server listens on a random port, and the Host check compares
 # names only.
-os.environ.update(LEAF_DATA=str(WIKI))
-os.environ.pop("LEAF_ALLOW_REMOTE", None)
+os.environ.update(ZONE_DATA=str(WIKI))
+os.environ.pop("ZONE_ALLOW_REMOTE", None)
 (WIKI / ".leaf").mkdir()
 (WIKI / ".leaf" / "config").write_text("hosts = 127.0.0.1\n")
 # The commit the screenshots show at the bottom left, without "+dirty".
-os.environ["LEAF_BUILD"] = subprocess.run(
+os.environ["ZONE_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
     capture_output=True, text=True).stdout.strip() or "unknown"
 sys.path.insert(0, str(ROOT))

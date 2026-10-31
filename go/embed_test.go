@@ -395,24 +395,41 @@ func TestSemanticSettings(t *testing.T) {
 			t.Errorf("%q: %q %v", v, m, err)
 		}
 	}
-	if _, err := parseSemanticSpec("bogus:x"); err == nil || err.Error() != "LEAF_SEMANTIC_SEARCH: expected on or off, got \"bogus:x\"" {
+	if _, err := parseSemanticSpec("bogus:x"); err == nil || err.Error() != "ZONE_SEMANTIC_SEARCH: expected on or off, got \"bogus:x\"" {
 		t.Errorf("bogus: %v", err)
 	}
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	if semanticFromEnv(env(nil)) != nil || semanticFromEnv(env(map[string]string{"LEAF_SEMANTIC_SEARCH": "bogus"})) != nil {
+	if semanticFromEnv(env(nil)) != nil || semanticFromEnv(env(map[string]string{"ZONE_SEMANTIC_SEARCH": "bogus"})) != nil {
 		t.Error("on without being asked")
 	}
 	// The old names turn nothing on.
 	if semanticFromEnv(env(map[string]string{"LEAF_EMBEDDINGS": "fastembed"})) != nil {
 		t.Error("an old name turned it on")
 	}
-	if modelDir(env(map[string]string{"LEAF_MODEL_DIR": "/opt/zonewiki-model"})) != "/opt/zonewiki-model" {
-		t.Error("LEAF_MODEL_DIR ignored")
+	if modelDir(env(map[string]string{"ZONE_MODEL_DIR": "/opt/zonewiki-model"})) != "/opt/zonewiki-model" {
+		t.Error("ZONE_MODEL_DIR ignored")
 	}
-	if !strings.HasSuffix(modelDir(env(nil)), "/.cache/leaf/jinaai--jina-embeddings-v2-base-de@3f9eede87572") {
-		t.Errorf("model dir %s", modelDir(env(nil)))
+	// The cache: ~/.cache/zonewiki, or ~/.cache/leaf while the model is only there.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	rev := "jinaai--jina-embeddings-v2-base-de@3f9eede87572"
+	fill := func(dir string) {
+		for _, f := range modelFiles {
+			_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, f.name)), 0o777)
+			_ = os.WriteFile(filepath.Join(dir, f.name), nil, 0o666)
+		}
 	}
-	x := semanticFromEnv(env(map[string]string{"LEAF_SEMANTIC_SEARCH": "on"}))
+	for _, step := range []struct{ fill, want string }{
+		{"", ".cache/zonewiki/" + rev}, {".cache/leaf/" + rev, ".cache/leaf/" + rev}, {".cache/zonewiki/" + rev, ".cache/zonewiki/" + rev},
+	} {
+		if step.fill != "" {
+			fill(filepath.Join(home, step.fill))
+		}
+		if got := modelDir(env(nil)); got != filepath.Join(home, step.want) {
+			t.Errorf("model dir %s, want ~/%s", got, step.want)
+		}
+	}
+	x := semanticFromEnv(env(map[string]string{"ZONE_SEMANTIC_SEARCH": "on"}))
 	if newOnnxEmbedderWorks() {
 		if x == nil || x.minScore != 0.25 || x.relatedMinScore != 0.25 || x.taskMinScore != 0.3 {
 			t.Errorf("index %+v", x)

@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 # Build and run Zone with compose (compose.yaml), and run its tests. This
 # script works out what compose can't: the build string from git, the port's
-# bind address from LEAF_ALLOW_REMOTE, the host's timezone, and the wiki path.
+# bind address from ZONE_ALLOW_REMOTE, the host's timezone, and the wiki path.
 set -e
 
 cd "$(dirname "$0")"
 
-# Read an optional KEY from .env (empty when unset).
+# Read an optional KEY from .env (empty when unset). A ZONE_ key that isn't
+# there is read by its name from before Leaf was called Zone, LEAF_…, for
+# one release, with a note to rename it.
 env_val() {
-  grep "^$1=" .env 2>/dev/null | cut -d= -f2-
+  local v old
+  v=$(grep "^$1=" .env 2>/dev/null | cut -d= -f2-)
+  if [[ -z "$v" && "$1" == ZONE_* ]]; then
+    old="LEAF_${1#ZONE_}"
+    v=$(grep "^$old=" .env 2>/dev/null | cut -d= -f2-)
+    [[ -z "$v" ]] || echo "Note: $old in .env is the name from before Leaf was called Zone: call it $1." >&2
+  fi
+  printf '%s\n' "$v"
 }
 
 # Podman if it's there, else Docker; each with its compose.
@@ -29,46 +38,50 @@ compose() {
   $ENGINE compose "${COMPOSE_FILES[@]}" "$@"
 }
 
-# The wiki folder from .env, default ~/leaf, with ~ expanded (compose would
-# hand LEAF_HOST_DATA a literal ~).
-LEAF_DATA=$(env_val LEAF_DATA)
-LEAF_DATA="${LEAF_DATA:-~/leaf}"
-case "$LEAF_DATA" in
-  "~") LEAF_DATA="$HOME" ;;
-  "~/"*) LEAF_DATA="$HOME/${LEAF_DATA:2}" ;;
+# The wiki folder from .env, default ~/zonewiki (~/leaf, the default before
+# Leaf was called Zone, while only that one exists), with ~ expanded
+# (compose would hand ZONE_HOST_DATA a literal ~).
+ZONE_DATA=$(env_val ZONE_DATA)
+if [[ -z "$ZONE_DATA" ]]; then
+  ZONE_DATA="~/zonewiki"
+  [[ -d "$HOME/zonewiki" || ! -d "$HOME/leaf" ]] || ZONE_DATA="~/leaf"
+fi
+case "$ZONE_DATA" in
+  "~") ZONE_DATA="$HOME" ;;
+  "~/"*) ZONE_DATA="$HOME/${ZONE_DATA:2}" ;;
 esac
-export LEAF_DATA
+export ZONE_DATA
 
-# The port's bind address from LEAF_ALLOW_REMOTE: 1 → all interfaces (LAN),
+# The port's bind address from ZONE_ALLOW_REMOTE: 1 → all interfaces (LAN),
 # unset/empty → loopback only (localhost only, more secure). Lowercased with
 # tr, not ${,,}: macOS ships bash 3.2, which this script must run on.
-LEAF_ALLOW_REMOTE=$(env_val LEAF_ALLOW_REMOTE | tr '[:upper:]' '[:lower:]')
-case "$LEAF_ALLOW_REMOTE" in
-  1|true|yes) export LEAF_BIND="0.0.0.0" ;;
-  *) export LEAF_BIND="127.0.0.1" ;;
+ZONE_ALLOW_REMOTE=$(env_val ZONE_ALLOW_REMOTE | tr '[:upper:]' '[:lower:]')
+case "$ZONE_ALLOW_REMOTE" in
+  1|true|yes) export ZONE_BIND="0.0.0.0" ;;
+  *) export ZONE_BIND="127.0.0.1" ;;
 esac
 
 # The user Zone runs as (compose.yaml), so the files it writes are the host
 # user's: your own IDs. Rootless podman maps them into the container as they
 # are (keep-id, compose.podman.yaml). Rootless docker can't: there the
 # container's root is you, and any other UID would be a subordinate one.
-export LEAF_UID="$(id -u)" LEAF_GID="$(id -g)"
+export ZONE_UID="$(id -u)" ZONE_GID="$(id -g)"
 COMPOSE_FILES=(-f compose.yaml)
 if [[ $ENGINE == podman && "$(id -u)" -ne 0 ]]; then
   COMPOSE_FILES+=(-f compose.podman.yaml)
 elif [[ $ENGINE == docker && "$(id -u)" -ne 0 ]] &&
      docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless; then
-  export LEAF_UID=0 LEAF_GID=0
+  export ZONE_UID=0 ZONE_GID=0
 fi
 
 # The build Zone's image comes from ("<hash> <commit date>", "+dirty" with
 # uncommitted source changes), shown next to Zone's version; same format as
 # a local go build's (go/config.go sourceBuild).
-LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
-if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)" ]]; then
-  LEAF_BUILD="$LEAF_BUILD +dirty"
+ZONE_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
+if [[ -n "$ZONE_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)" ]]; then
+  ZONE_BUILD="$ZONE_BUILD +dirty"
 fi
-export LEAF_BUILD="${LEAF_BUILD:-unknown}"
+export ZONE_BUILD="${ZONE_BUILD:-unknown}"
 
 # The user's timezone, so "today" (due badge, tasks dates, note names,
 # "Last changed") is their day instead of UTC: TZ in .env (e.g. Europe/Berlin),
@@ -85,7 +98,7 @@ export TZ="${TZ:-UTC}"
 
 # Run a command in an image with the repo at /repo: in_image IMAGE [OPTION…]
 # -- COMMAND…, the options going to the engine. The repo is bind-mounted, or
-# with LEAF_COPY_REPO=1 (CI) copied in: there the engine is the host's while
+# with ZONE_COPY_REPO=1 (CI) copied in: there the engine is the host's while
 # the checkout lives in the job container, so a mount would name a host path.
 # Copied, nothing the command writes comes back; --rm has the engine remove
 # the container even when this script is killed (a cancelled CI job), the
@@ -95,7 +108,7 @@ in_image() {
   shift
   while [[ $1 != -- ]]; do opts+=("$1"); shift; done
   shift
-  if [[ -n "$LEAF_COPY_REPO" ]]; then
+  if [[ -n "$ZONE_COPY_REPO" ]]; then
     local c
     c=$($ENGINE create --rm "${opts[@]}" -w /repo "$image" "$@")
     trap "$ENGINE rm -f $c >/dev/null" EXIT
@@ -133,8 +146,8 @@ case "${1:-up}" in
     ;;
   up)
     # The wiki must exist: Zone doesn't make one where a typo in .env points.
-    if [[ ! -d "$LEAF_DATA" ]]; then
-      echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
+    if [[ ! -d "$ZONE_DATA" ]]; then
+      echo "No wiki at $ZONE_DATA. Create the folder, or set ZONE_DATA in .env to your wiki." >&2
       exit 1
     fi
     if [[ ! -f .env ]]; then
@@ -152,7 +165,7 @@ case "${1:-up}" in
     fi
     compose up -d --build
     echo "Zone running at http://localhost:5000"
-    echo "Zone data: $LEAF_DATA"
+    echo "Zone data: $ZONE_DATA"
     ;;
   down)
     compose down
@@ -217,18 +230,18 @@ case "${1:-up}" in
   eval)
     # Retrieval quality on your wiki (zonewiki eval, go/eval.go): the questions
     # are a file in the wiki (default _eval/retrieval.json), the wiki is
-    # mounted read-only. The image is the app's with LEAF_SEMANTIC_SEARCH's model
+    # mounted read-only. The image is the app's with ZONE_SEMANTIC_SEARCH's model
     # baked in, as up builds it, so it compares keyword and hybrid ranking.
     file="${2:-_eval/retrieval.json}"
-    if [[ ! -f "$LEAF_DATA/$file" ]]; then
-      echo "No questions at $LEAF_DATA/$file (format: go/eval.go)." >&2
+    if [[ ! -f "$ZONE_DATA/$file" ]]; then
+      echo "No questions at $ZONE_DATA/$file (format: go/eval.go)." >&2
       exit 1
     fi
-    semantic=$(env_val LEAF_SEMANTIC_SEARCH)
-    image=$(build_image zonewiki -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
-      --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
-    in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
-      -e "LEAF_SEMANTIC_SEARCH=$semantic" -- \
+    semantic=$(env_val ZONE_SEMANTIC_SEARCH)
+    image=$(build_image zonewiki -f Containerfile --build-arg "ZONE_BUILD=$ZONE_BUILD" \
+      --build-arg "ZONE_SEMANTIC_SEARCH=$semantic")
+    in_image "$image" -v "$ZONE_DATA:/wiki-data:ro,z" -e ZONE_DATA=/wiki-data \
+      -e "ZONE_SEMANTIC_SEARCH=$semantic" -- \
       /app/zonewiki eval "/wiki-data/$file" "${@:3}"
     ;;
   user|config)
@@ -236,8 +249,8 @@ case "${1:-up}" in
     # docs/spec/users.md), in a one-off container of the app's image, with
     # .env and the wiki as up gives them, so the file is written as Zone's
     # user and import sees .env. A running Zone takes the change itself.
-    if [[ ! -d "$LEAF_DATA" ]]; then
-      echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
+    if [[ ! -d "$ZONE_DATA" ]]; then
+      echo "No wiki at $ZONE_DATA. Create the folder, or set ZONE_DATA in .env to your wiki." >&2
       exit 1
     fi
     if [[ ! -f .env ]]; then

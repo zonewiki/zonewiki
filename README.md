@@ -168,16 +168,16 @@ You need either **Docker** with Compose, or **Podman** with `podman-compose`.
 Windows in WSL2, which Docker Desktop and Podman use there anyway.
 
 ```bash
-git clone <this repository> leaf && cd leaf
-mkdir -p ~/leaf                       # your wiki folder (Zone won't create it)
-cp .env.example .env                  # then edit it: LEAF_DATA is your wiki folder
+git clone <this repository> zonewiki && cd zonewiki
+mkdir -p ~/zonewiki                   # your wiki folder (Zone won't create it)
+cp .env.example .env                  # then edit it: ZONE_DATA is your wiki folder
 ./run.sh up                           # build and start
 ```
 
 Open <http://localhost:5000>. `./run.sh down` stops Zone, `./run.sh logs`
 follows its log. To update: `git pull && ./run.sh up`.
 
-To point Zone at an existing folder of Markdown notes, set `LEAF_DATA` to
+To point Zone at an existing folder of Markdown notes, set `ZONE_DATA` to
 it; Zone makes it a git repository (if it isn't one) and adds a home page.
 
 **On a NAS or server** (Synology, QNAP, a Raspberry Pi, …), you don't need
@@ -188,32 +188,37 @@ the repository: `compose.nas.yaml` runs the prebuilt image
 or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md). Running
 it as Leaf (`ghcr.io/gklingler/leaf`)? That image is updated for one more
 release; to switch, stop the old one (`docker compose down` with the old
-file), then start the new `compose.nas.yaml` with the same `.env`.
+file), rename the `LEAF_…` variables in `.env` to `ZONE_…`, then start the
+new `compose.nas.yaml`.
 
 Without a container, you need Go 1.27 or newer, a C compiler (for semantic
 search; `CGO_ENABLED=0` builds without it) and git:
 
 ```bash
 (cd go && go build -o zonewiki .)
-LEAF_DATA=~/leaf go/zonewiki
+ZONE_DATA=~/zonewiki go/zonewiki
 ```
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then
-`$env:LEAF_DATA="$HOME\leaf"; go\zonewiki.exe` starts Zone. For semantic search
+`$env:ZONE_DATA="$HOME\leaf"; go\zonewiki.exe` starts Zone. For semantic search
 outside the container, onnxruntime's library must be where the loader finds
 it (`docs/spec/search.md`).
 
 ## Configuration
 
 Two places. `.env` (`.env.example` lists it) is how Zone runs, all optional
-except `LEAF_DATA`:
+except `ZONE_DATA`:
 
 | Setting | Does |
 |---------|------|
-| `LEAF_DATA` | The wiki folder (default `~/leaf`) |
-| `LEAF_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
-| `LEAF_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
+| `ZONE_DATA` | The wiki folder (default `~/zonewiki`) |
+| `ZONE_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
+| `ZONE_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
 | `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
+
+Coming from Leaf: its names (`LEAF_DATA` …) still work for one release, and
+Zone's log says what to rename each one to. A wiki in `~/leaf` stays the
+default while there is no `~/zonewiki`.
 
 ### The settings file
 
@@ -254,14 +259,14 @@ the file.
 
 `run.sh` fills in what `compose.yaml` can't work out itself: the commit the
 image is built from, your timezone, your user ID, and the network address
-from `LEAF_ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
+from `ZONE_ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
 `.env`:
 
 | Setting | Does |
 |---------|------|
-| `LEAF_DATA` | As an absolute path (no `~`) |
-| `LEAF_BIND=0.0.0.0` | Together with `LEAF_ALLOW_REMOTE=1`, for network access |
-| `LEAF_UID`, `LEAF_GID` | Your user and group ID (`id -u`, `id -g`), if they aren't 1000 |
+| `ZONE_DATA` | As an absolute path (no `~`) |
+| `ZONE_BIND=0.0.0.0` | Together with `ZONE_ALLOW_REMOTE=1`, for network access |
+| `ZONE_UID`, `ZONE_GID` | Your user and group ID (`id -u`, `id -g`), if they aren't 1000 |
 | `TZ` | Your timezone; otherwise UTC |
 
 With rootless Podman, add the file that keeps your user ID inside the
@@ -349,9 +354,9 @@ wiki.example.org {
 ./run.sh config passwd                 # long and unique
 ```
 
-Leave `LEAF_ALLOW_REMOTE` off here: the proxy reaches Zone on localhost, and port
+Leave `ZONE_ALLOW_REMOTE` off here: the proxy reaches Zone on localhost, and port
 5000 stays closed to the network, so nobody can go around HTTPS. A proxy on
-another machine needs `LEAF_ALLOW_REMOTE=1` too; `hosts` keeps the `Host`
+another machine needs `ZONE_ALLOW_REMOTE=1` too; `hosts` keeps the `Host`
 check on. Over HTTPS the login cookie is marked secure, so the browser never
 sends it unencrypted. Wrong passwords slow a guesser down, with or without
 HTTPS: after 5, each try waits, from 1 minute doubling up to an hour, per
@@ -365,7 +370,7 @@ public address.
 Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
-  delete everything. With `LEAF_ALLOW_REMOTE=1` that is your whole network: set
+  delete everything. With `ZONE_ALLOW_REMOTE=1` that is your whole network: set
   a password (`./run.sh config passwd`), or add users (`./run.sh user add NAME`). Every user can read and change
   everything except other users' private pages and tasks, so give access to
   no one you wouldn't hand the shared files to.
@@ -396,7 +401,7 @@ Also know this:
 
 ## Your data
 
-Everything is files in `LEAF_DATA`, which is a git repository:
+Everything is files in `ZONE_DATA`, which is a git repository:
 
 - Pages are `.md` files, in folders if you like.
 - Uploads are in `_assets/`. Tasks are in `_tasks/` as JSON, not Markdown: they
@@ -407,7 +412,7 @@ Everything is files in `LEAF_DATA`, which is a git repository:
   settings file (users, password hashes, token hashes): whoever has the
   repository has those hashes, so use good passwords. `secret_key` keeps you signed
   in across restarts, `index/` is the semantic search cache (only with
-  `LEAF_SEMANTIC_SEARCH`; it can be deleted at any time).
+  `ZONE_SEMANTIC_SEARCH`; it can be deleted at any time).
 
 Nothing is locked in: if you stop using Zone, your pages are plain Markdown
 files that any editor opens, with their history in git.

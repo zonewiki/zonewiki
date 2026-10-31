@@ -305,7 +305,7 @@ func TestWriteConfig(t *testing.T) {
 
 func TestUserCommands(t *testing.T) {
 	wiki := t.TempDir()
-	env := map[string]string{"LEAF_DATA": wiki}
+	env := map[string]string{"ZONE_DATA": wiki}
 	getenv := func(k string) string { return env[k] }
 	run := func(input string, args ...string) (int, string, string) {
 		t.Helper()
@@ -422,9 +422,9 @@ func TestConfigCommands(t *testing.T) {
 	wiki := t.TempDir()
 	hash := hashPassword("pw")
 	// The settings as the environment held them before 2026-10.
-	env := map[string]string{"LEAF_DATA": wiki, "LEAF_LOCALE": "de-AT", "LEAF_HOSTS": "nas.local",
+	env := map[string]string{"ZONE_DATA": wiki, "LEAF_LOCALE": "de-AT", "LEAF_HOSTS": "nas.local",
 		"LEAF_USERS": "alice,mary-ann", "LEAF_USER_ALICE_PASSWORD": hash, "LEAF_USER_ALICE_MCP_TOKEN": "s3cret-tok",
-		"LEAF_USER_MARY_ANN_PASSWORD": hash, "LEAF_ALLOW_REMOTE": "1", "LEAF_SECRET_KEY": "k"}
+		"LEAF_USER_MARY_ANN_PASSWORD": hash, "ZONE_ALLOW_REMOTE": "1", "LEAF_SECRET_KEY": "k"}
 	getenv := func(k string) string { return env[k] }
 	run := func(input string, args ...string) (int, string, string) {
 		var out, errs bytes.Buffer
@@ -436,7 +436,7 @@ func TestConfigCommands(t *testing.T) {
 	}
 	code, out, errs := run("", "import")
 	if code != 0 || !strings.Contains(out, "  LEAF_USER_ALICE_MCP_TOKEN\n") || !strings.Contains(out, "  LEAF_LOCALE\n") ||
-		!strings.Contains(out, "  LEAF_SECRET_KEY (no longer used") || strings.Contains(out, "LEAF_ALLOW_REMOTE") {
+		!strings.Contains(out, "  LEAF_SECRET_KEY (no longer used") || strings.Contains(out, "ZONE_ALLOW_REMOTE") {
 		t.Fatalf("import: %d %q %q", code, out, errs)
 	}
 	f, _ := readConfigFile(filepath.Join(wiki, ".leaf", "config"))
@@ -445,7 +445,7 @@ func TestConfigCommands(t *testing.T) {
 		f.user("mary-ann").values["password"].value != hash {
 		t.Fatalf("%s", f.text())
 	}
-	env = map[string]string{"LEAF_DATA": wiki, "LEAF_ALLOW_REMOTE": "1"}
+	env = map[string]string{"ZONE_DATA": wiki, "ZONE_ALLOW_REMOTE": "1"}
 	code, out, _ = run("", "check")
 	if code != 0 || !strings.Contains(out, "locale             de-AT  [line ") ||
 		!strings.Contains(out, "users              alice (MCP token), mary-ann") ||
@@ -460,7 +460,7 @@ func TestConfigCommands(t *testing.T) {
 	}
 	// Without users: the wiki's password and token; a plain LEAF_PASSWORD goes in as its hash.
 	wiki2 := t.TempDir()
-	env = map[string]string{"LEAF_DATA": wiki2, "LEAF_PASSWORD": "secret", "LEAF_MCP_TOKEN": "tok"}
+	env = map[string]string{"ZONE_DATA": wiki2, "LEAF_PASSWORD": "secret", "LEAF_MCP_TOKEN": "tok"}
 	if code, _, errs := run("", "import"); code != 0 {
 		t.Fatal(errs)
 	}
@@ -468,7 +468,7 @@ func TestConfigCommands(t *testing.T) {
 	if !checkPassword("secret", f.top["password"].value) || f.top["mcp-token"].value != hashToken("tok") {
 		t.Errorf("%s", f.text())
 	}
-	env = map[string]string{"LEAF_DATA": wiki2}
+	env = map[string]string{"ZONE_DATA": wiki2}
 	if code, out, errs := run("new\nnew\n", "passwd"); code != 0 || !strings.Contains(out, "Changed the wiki's password") {
 		t.Fatal(errs)
 	}
@@ -518,7 +518,7 @@ func TestConfigCommands(t *testing.T) {
 		}
 	}
 	// A command writes only onto the file it read.
-	env["LEAF_DATA"] = wiki2
+	env["ZONE_DATA"] = wiki2
 	f, err := openConfig(getenv)
 	if err != nil {
 		t.Fatal(err)

@@ -13,8 +13,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-LEAF_DATA: Path = Path("/nonexistent")   # each test's wiki (conftest's wiki_dir)
-LEAF_BUILD = "test"
+ZONE_DATA: Path = Path("/nonexistent")   # each test's wiki (conftest's wiki_dir)
+ZONE_BUILD = "test"
 LEAF_PASSWORD = ""
 LEAF_MCP_TOKEN = ""
 # Users: name → (password, MCP token or ""); the settings file gets their
@@ -24,11 +24,11 @@ LEAF_USERS: dict[str, tuple[str, str]] = {}
 # users).
 CONFIG_FILE = ""
 LEAF_BASE_URL = ""
-LEAF_HOST_DATA = ""
+ZONE_HOST_DATA = ""
 LEAF_QUERY_LOG = False
 LEAF_GIT_REMOTE = ""
 # No Host check against the test client's (a test of the check turns it on).
-LEAF_ALLOW_REMOTE = True
+ZONE_ALLOW_REMOTE = True
 LEAF_HOSTS: frozenset[str] = frozenset()
 NOSHARE_TAGS: frozenset[str] = frozenset({"noshare"})
 NOSHARE_FOLDERS: tuple[str, ...] = ()
@@ -40,7 +40,7 @@ GIT_ENABLED = shutil.which("git") is not None
 DOCS: Path | None = REPO
 # The semantic index, a tests.semantic.FakeIndex; None: semantic search off.
 SEMANTIC = None
-# Extra environment (LEAF_SEMANTIC_SEARCH …).
+# Extra environment (ZONE_SEMANTIC_SEARCH …).
 ENV: dict[str, str] = {}
 
 # The environment of the tests' own git calls: as Zone's, no detached

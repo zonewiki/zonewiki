@@ -14,7 +14,7 @@ import (
 // The answers of the Python Zone (until 2026-10) on every string in Zone's
 // tests then and some edge cases, recorded before it was removed: the text
 // functions still give them. A deliberate change to one of them changes its
-// cases here too: LEAF_GOLDEN_UPDATE=1 go test -run TestGolden writes what
+// cases here too: ZONE_GOLDEN_UPDATE=1 go test -run TestGolden writes what
 // they give now (check the mismatches it logs first).
 func TestGolden(t *testing.T) {
 	f, err := os.Open("testdata/golden.json.gz")
@@ -38,7 +38,7 @@ func TestGolden(t *testing.T) {
 	clock(t, at)
 	day, _ := time.ParseInLocation("2006-01-02", golden.Today, time.Local)
 
-	update := os.Getenv("LEAF_GOLDEN_UPDATE") == "1"
+	update := os.Getenv("ZONE_GOLDEN_UPDATE") == "1"
 	failures := map[string]int{}
 	var c map[string]json.RawMessage
 	check := func(name, text string, got any, raw json.RawMessage) {

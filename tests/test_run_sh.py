@@ -110,7 +110,7 @@ def test_leaks_without_an_index_passes_none(sandbox):
 
 def test_copy_mode_creates_a_self_removing_container(sandbox):
     repo, env, log = sandbox
-    env["LEAF_COPY_REPO"] = "1"
+    env["ZONE_COPY_REPO"] = "1"
     r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env=env,
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -219,7 +219,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     (wiki / "_eval").mkdir(parents=True)
-    (repo / ".env").write_text(f"LEAF_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\n")
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\n")
     r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No questions at" in r.stderr
     (wiki / "_eval" / "retrieval.json").write_text("[]")
@@ -227,10 +227,10 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
                        cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     (build,) = _engine_calls(log, "build")
-    assert "--build-arg LEAF_SEMANTIC_SEARCH=on" in build
+    assert "--build-arg ZONE_SEMANTIC_SEARCH=on" in build
     (run,) = _engine_calls(log, "run")
-    assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
-    assert "-e LEAF_SEMANTIC_SEARCH=on " in run
+    assert f"-v {wiki}:/wiki-data:ro,z -e ZONE_DATA=/wiki-data" in run
+    assert "-e ZONE_SEMANTIC_SEARCH=on " in run
     assert run.endswith("/app/zonewiki eval /wiki-data/_eval/retrieval.json -k 5")
 
 
@@ -240,7 +240,7 @@ def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     wiki.mkdir()
-    (repo / ".env").write_text(f"LEAF_DATA={wiki}\n")
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
     for args in (["user", "add", "alice", "--mcp-token"], ["config", "check"]):
         r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL)
@@ -248,7 +248,7 @@ def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
         call = [l for l in _engine_calls(log, "compose") if " run " in l][-1]
         assert call.endswith("run --rm --no-deps -T zonewiki /app/zonewiki " + " ".join(args))
         assert [l for l in _engine_calls(log, "compose") if " build -q zonewiki" in l]
-    (repo / ".env").write_text(f"LEAF_DATA={wiki}-missing\n")
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}-missing\n")
     r = subprocess.run(["./run.sh", "user", "list"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No wiki at" in r.stderr
 
@@ -262,7 +262,7 @@ def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
 def test_up_removes_the_container_from_before_the_rename(sandbox, tmp_path, labels, removed):
     repo, env, log = sandbox
     (tmp_path / "wiki").mkdir()
-    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\n")
+    (repo / ".env").write_text(f"ZONE_DATA={tmp_path / 'wiki'}\n")
     env["FAKE_LEAF_LABELS"] = labels
     r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -274,7 +274,30 @@ def test_up_removes_the_container_from_before_the_rename(sandbox, tmp_path, labe
 def test_up_without_an_old_container_removes_nothing(sandbox, tmp_path):
     repo, env, log = sandbox
     (tmp_path / "wiki").mkdir()
-    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\n")
+    (repo / ".env").write_text(f"ZONE_DATA={tmp_path / 'wiki'}\n")
     r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "rm -f leaf" not in log.read_text().splitlines()
+
+
+def test_up_reads_the_old_variable_names_from_env(sandbox, tmp_path):
+    repo, env, log = sandbox
+    (tmp_path / "wiki").mkdir()
+    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\nLEAF_ALLOW_REMOTE=1\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert f"Zone data: {tmp_path / 'wiki'}" in r.stdout
+    assert "Note: LEAF_DATA in .env is the name from before Leaf was called Zone: call it ZONE_DATA." in r.stderr
+    assert "Note: LEAF_ALLOW_REMOTE in .env" in r.stderr
+
+
+def test_the_default_wiki_is_zonewiki_or_leaf_while_only_that_exists(sandbox, tmp_path):
+    repo, env, log = sandbox
+    env["HOME"] = str(tmp_path / "home")
+    (tmp_path / "home" / "leaf").mkdir(parents=True)
+    (repo / ".env").write_text("TZ=UTC\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'leaf'}" in r.stdout, r.stderr
+    (tmp_path / "home" / "zonewiki").mkdir()
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'zonewiki'}" in r.stdout, r.stderr

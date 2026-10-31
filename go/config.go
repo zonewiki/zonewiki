@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,34 @@ const appName = "Zone"
 // Zone's version (semver), bumped by hand when a change is worth a number.
 const version = "1.1.0"
 
+// environ: the environment Zone reads its deployment settings from, with
+// the names from before Leaf was called Zone (zoneEnv).
+var environ = zoneEnv(os.Getenv, logf)
+
+// zoneEnv: getenv, where a ZONE_ variable that isn't set is read by its old
+// name, LEAF_…, for one release; warn says once what to call it.
+func zoneEnv(getenv func(string) string, warn func(format string, args ...any)) func(string) string {
+	var mu sync.Mutex
+	warned := map[string]bool{}
+	return func(name string) string {
+		v := getenv(name)
+		rest, ok := strings.CutPrefix(name, "ZONE_")
+		if v != "" || !ok {
+			return v
+		}
+		old := "LEAF_" + rest
+		if v = getenv(old); v != "" {
+			mu.Lock()
+			if !warned[old] {
+				warned[old] = true
+				warn("%s is the name from before Leaf was called Zone: call it %s in .env (the old name still works, for now)", old, name)
+			}
+			mu.Unlock()
+		}
+		return v
+	}
+}
+
 // Config: what is fixed for the process, from the environment. What the
 // wiki's settings file can set, and Zone reloads, is Settings
 // (configfile.go).
@@ -26,7 +55,7 @@ type Config struct {
 	Build       string
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
-	Data        string // the wiki (LEAF_DATA)
+	Data        string // the wiki (ZONE_DATA)
 	Uploads     string // Data/_assets
 	GitEnabled  bool
 }
@@ -98,21 +127,21 @@ func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 // loadWiki: the settings fixed for the process (Config), the wiki first.
 func loadWiki(getenv func(string) string) (*Config, error) {
 	c := &Config{
-		Build:       getenv("LEAF_BUILD"),
-		HostData:    strings.TrimRight(strings.TrimSpace(getenv("LEAF_HOST_DATA")), "/"),
-		AllowRemote: truthy(getenv("LEAF_ALLOW_REMOTE")),
+		Build:       getenv("ZONE_BUILD"),
+		HostData:    strings.TrimRight(strings.TrimSpace(getenv("ZONE_HOST_DATA")), "/"),
+		AllowRemote: truthy(getenv("ZONE_ALLOW_REMOTE")),
 	}
 	if c.Build == "" {
 		c.Build = sourceBuild()
 	}
 	// Required, no default, and it must exist: Zone doesn't make a wiki
-	// where a mistyped LEAF_DATA points.
-	c.Data = getenv("LEAF_DATA")
+	// where a mistyped ZONE_DATA points.
+	c.Data = getenv("ZONE_DATA")
 	if c.Data == "" {
-		return nil, fmt.Errorf("LEAF_DATA isn't set. Set it to your wiki's folder, e.g. LEAF_DATA=~/leaf leaf")
+		return nil, fmt.Errorf("ZONE_DATA isn't set. Set it to your wiki's folder, e.g. ZONE_DATA=~/zonewiki zonewiki")
 	}
 	if st, err := os.Stat(c.Data); err != nil || !st.IsDir() {
-		return nil, fmt.Errorf("no wiki at %s. Create the folder, or set LEAF_DATA to your wiki.", c.Data)
+		return nil, fmt.Errorf("no wiki at %s. Create the folder, or set ZONE_DATA to your wiki.", c.Data)
 	}
 	c.Data, _ = filepath.Abs(c.Data)
 	if real, err := filepath.EvalSymlinks(c.Data); err == nil {
@@ -128,7 +157,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 // sourceBuild is the build Zone runs from, as "<short hash> <commit date>"
 // ("+dirty" when built with uncommitted changes), from what go build
 // recorded. The container image is built without .git, so run.sh passes
-// the same string in LEAF_BUILD instead. Shown next to the version.
+// the same string in ZONE_BUILD instead. Shown next to the version.
 func sourceBuild() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {

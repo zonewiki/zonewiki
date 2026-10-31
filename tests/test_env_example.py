@@ -6,7 +6,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 # Set by run.sh or the build, not by the user: .env.example needn't list them.
-INTERNAL = {"LEAF_BUILD", "LEAF_HOST_DATA", "LEAF_COPY_REPO", "LEAF_MODEL_DIR"}
+INTERNAL = {"ZONE_BUILD", "ZONE_HOST_DATA", "ZONE_COPY_REPO", "ZONE_MODEL_DIR"}
 
 # The wiki's settings, in .env until 2026-10: the code names them only to
 # refuse them there and to import them into the settings file
@@ -25,8 +25,14 @@ def _used_keys() -> set[str]:
                    for p in [*(REPO / "go").glob("*.go"), REPO / "run.sh", REPO / "compose.yaml",
                              REPO / "compose.nas.yaml"] if not p.name.endswith("_test.go"))
     # The old names of renamed settings, read only to say so.
-    renamed = set(re.findall(r'\{"(LEAF_[A-Z0-9_]+)", "LEAF_', (REPO / "go" / "embed.go").read_text()))
-    return set(re.findall(r"\bLEAF_[A-Z0-9_]+", text)) - INTERNAL - renamed - FORMER
+    renamed = set(re.findall(r'\{"(LEAF_[A-Z0-9_]+)", "ZONE_', (REPO / "go" / "embed.go").read_text()))
+    return set(re.findall(r"\bZONE_[A-Z0-9_]+", text)) - INTERNAL - renamed - FORMER
+
+
+def test_example_uses_only_the_new_names():
+    """LEAF_… still works for one release (zoneEnv, run.sh's env_val), but
+    .env.example names only ZONE_… (and TZ)."""
+    assert {k for k in _example_keys() if not k.startswith("ZONE_")} == {"TZ"}
 
 
 def test_former_settings_are_found():

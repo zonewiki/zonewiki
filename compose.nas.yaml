@@ -8,12 +8,12 @@
 # .env needs at least (see .env.example and "On a NAS or server" in
 # docs/spec/deployment.md):
 #
-#   LEAF_DATA=/volume1/docker/leaf/wiki   # absolute; the folder must exist
-#   LEAF_UID=1026                         # the owner of that folder (id -u)
-#   LEAF_GID=100                          # its group (id -g; Synology: users)
+#   ZONE_DATA=/volume1/docker/zonewiki/wiki # absolute; the folder must exist
+#   ZONE_UID=1026                         # the owner of that folder (id -u)
+#   ZONE_GID=100                          # its group (id -g; Synology: users)
 #
 # The wiki's own settings go in its settings file (.leaf/config), through the
-# container; first of all the names you open Zone by (or LEAF_ALLOW_REMOTE=1
+# container; first of all the names you open Zone by (or ZONE_ALLOW_REMOTE=1
 # in .env), then a login:
 #
 #   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local
@@ -27,22 +27,22 @@ services:
     container_name: zonewiki
     # Not root: Zone writes the wiki as the folder's owner. No defaults: a
     # wrong guess would show up later as files Zone can't write.
-    user: "${LEAF_UID:?set LEAF_UID in .env (id -u of the wiki folder's owner)}:${LEAF_GID:?set LEAF_GID in .env (id -g)}"
+    user: "${ZONE_UID:?set ZONE_UID in .env (id -u of the wiki folder's owner)}:${ZONE_GID:?set ZONE_GID in .env (id -g)}"
     # A minimal init as PID 1 reaps orphaned processes.
     init: true
     restart: unless-stopped
     env_file: .env
     environment:
-      LEAF_DATA: /wiki-data
+      ZONE_DATA: /wiki-data
       # The wiki's folder on the host, for the MCP tools' file: lines.
-      LEAF_HOST_DATA: ${LEAF_DATA}
+      ZONE_HOST_DATA: ${ZONE_DATA}
       TZ: ${TZ:-UTC}
     ports:
       # On the LAN. Not 5000 on the host: Synology's DSM uses it.
-      - "${LEAF_PORT:-5080}:5000"
+      - "${ZONE_PORT:-5080}:5000"
     volumes:
       - type: bind
-        source: ${LEAF_DATA:?set LEAF_DATA in .env (the wiki folder, absolute path)}
+        source: ${ZONE_DATA:?set ZONE_DATA in .env (the wiki folder, absolute path)}
         target: /wiki-data
         bind:
           # A mistyped path must not start an empty wiki somewhere else.

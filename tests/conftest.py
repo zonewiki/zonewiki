@@ -26,7 +26,7 @@ def pytest_configure(config):
 @pytest.fixture()
 def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server points at."""
-    monkeypatch.setattr(settings, "LEAF_DATA", tmp_path)
+    monkeypatch.setattr(settings, "ZONE_DATA", tmp_path)
     (tmp_path / "_assets").mkdir()
     (tmp_path / "_tasks").mkdir()   # tests write tasks files directly
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")

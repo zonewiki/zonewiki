@@ -2,15 +2,18 @@
 so /deck, /api/deck and the _deck/ folder (moved at start-up) go on working;
 Scratch is called Notes, so /page/_scratch, /api/scratch, ?scratch=1 and
 MCP's file_scratch_note and scratch arguments do too; Leaf is called Zone,
-so MCP's leaf_help does too. The old [[deck …]] syntax: test_tasks_embed.py."""
+so MCP's leaf_help and the LEAF_… environment variables do too (run.sh's
+side: test_run_sh.py). The old [[deck …]] syntax: test_tasks_embed.py."""
 
 import json
 import subprocess
+import urllib.request
 
 import pytest
 
 from tests import settings
 from tests.conftest import HOST, create_task, write_page
+from tests.goserver import GoServer, _flags, _settings
 from tests.test_mcp import TOKEN, call, rpc
 
 
@@ -169,3 +172,22 @@ class TestOldMcpNames:
         assert "zone_help" in names and "leaf_help" not in names
         new, old = (call(client, tool, query="tab labels") for tool in ("zone_help", "leaf_help"))
         assert old == new and not new[1]
+
+
+# ── LEAF_… environment variables ────────────────────────────────────────────────
+
+def test_zone_starts_from_the_old_variable_names_and_says_to_rename_them(wiki_dir, tmp_path):
+    write_page(wiki_dir, "old-env", "# Old env\n")
+    env = {k.replace("ZONE_", "LEAF_", 1) if k in ("ZONE_DATA", "ZONE_BUILD") else k: v
+           for k, v in _settings().items()}
+    assert "ZONE_DATA" not in env and env["LEAF_DATA"] == str(wiki_dir)
+    log = tmp_path / "server.log"
+    server = GoServer(env, log, flags=_flags())
+    try:
+        req = urllib.request.Request(f"http://{server.host}:{server.port}/page/old-env", headers=HOST)
+        assert "Old env" in urllib.request.urlopen(req).read().decode()
+    finally:
+        server.stop()
+    text = log.read_text()
+    assert "LEAF_DATA is the name from before Leaf was called Zone: call it ZONE_DATA in .env" in text
+    assert text.count("LEAF_DATA is the name") == 1

@@ -1,5 +1,5 @@
 // Zone's web server: one process, its request checks and routes.
-// Run: LEAF_DATA=~/leaf zonewiki [-addr :5000] [-public dir]. Also: zonewiki eval
+// Run: ZONE_DATA=~/zonewiki zonewiki [-addr :5000] [-public dir]. Also: zonewiki eval
 // measures retrieval (eval.go), zonewiki health asks a running Zone whether
 // it answers (the container's healthcheck), zonewiki user and zonewiki config edit
 // and check the settings file (commands.go).
@@ -40,12 +40,12 @@ func main() {
 			os.Exit(health("http://localhost:5000/api/health"))
 		case "user":
 			restore := echoOff()
-			code := userMain(os.Args[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+			code := userMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
 			restore()
 			os.Exit(code)
 		case "config":
 			restore := echoOff()
-			code := configMain(os.Args[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+			code := configMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
 			restore()
 			os.Exit(code)
 		}
@@ -55,7 +55,7 @@ func main() {
 	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for zone_help (default: found from -public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
-	c, s, err := loadConfig(os.Getenv)
+	c, s, err := loadConfig(environ)
 	if err != nil {
 		fatal(err)
 	}
@@ -81,13 +81,13 @@ func main() {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {
 			fatal(fmt.Errorf("-semantic-test: %w", err))
 		}
-	} else if semantic = semanticFromEnv(os.Getenv); semantic != nil {
+	} else if semantic = semanticFromEnv(environ); semantic != nil {
 		semantic.start()
 	}
 
 	// All interfaces by default, so the container's network bridge can
 	// forward connections; exposure is the port mapping's (compose.yaml:
-	// LEAF_BIND, 127.0.0.1 = localhost only), the Host check the
+	// ZONE_BIND, 127.0.0.1 = localhost only), the Host check the
 	// DNS-rebinding defence.
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {

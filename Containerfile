@@ -1,5 +1,5 @@
 # Zone's image: the server (one Go binary), the browser code it serves, and
-# with LEAF_SEMANTIC_SEARCH=on the model and onnxruntime that run semantic
+# with ZONE_SEMANTIC_SEARCH=on the model and onnxruntime that run semantic
 # search. Three stages, so a change to the code rebuilds neither the model
 # layer nor the toolchain's.
 
@@ -38,7 +38,7 @@ COPY go/ ./
 RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 
 # ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
-# With LEAF_SEMANTIC_SEARCH=on in .env, compose.yaml passes it here and both
+# With ZONE_SEMANTIC_SEARCH=on in .env, compose.yaml passes it here and both
 # are baked into the image, so the first search doesn't wait for a download
 # and Zone works offline. Without it, the folders stay empty. Pinned and
 # checked against their SHA-256: onnxruntime's GitHub release (the sums of
@@ -46,7 +46,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 # same names and sums; tests/test_image.py checks they agree).
 FROM ubuntu:26.04 AS semantic
 ARG TARGETARCH=amd64
-ARG LEAF_SEMANTIC_SEARCH=
+ARG ZONE_SEMANTIC_SEARCH=
 ARG ORT_VERSION=1.31.0
 ARG ORT_SHA256_X64=cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57
 ARG ORT_SHA256_AARCH64=c5b8b3cca31f3d643a3b313b8f42e2d0f16a4fcefd02cda343d97bd5306afaab
@@ -55,10 +55,10 @@ ARG MODEL_REVISION=3f9eede875721714945b6a99a3198299243cf2be
 ARG MODEL_ONNX_SHA256=51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0
 ARG MODEL_VOCAB_SHA256=376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7
 RUN mkdir -p /opt/onnxruntime /opt/zonewiki-model \
- && case "$(echo "$LEAF_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
+ && case "$(echo "$ZONE_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
       ""|0|off|false|no) exit 0 ;; \
       1|on|true|yes) ;; \
-      *) echo "LEAF_SEMANTIC_SEARCH: expected on or off, got '$LEAF_SEMANTIC_SEARCH'" >&2; exit 1 ;; \
+      *) echo "ZONE_SEMANTIC_SEARCH: expected on or off, got '$ZONE_SEMANTIC_SEARCH'" >&2; exit 1 ;; \
     esac \
  && case "$TARGETARCH" in \
       amd64) arch=x64 sum=$ORT_SHA256_X64 ;; \
@@ -95,7 +95,7 @@ RUN apt-get update && \
 COPY --from=semantic /opt/onnxruntime/ /usr/local/lib/
 COPY --from=semantic /opt/zonewiki-model/ /opt/zonewiki-model/
 RUN ldconfig
-ENV LEAF_MODEL_DIR=/opt/zonewiki-model
+ENV ZONE_MODEL_DIR=/opt/zonewiki-model
 
 WORKDIR /app
 COPY public/ public/
@@ -109,8 +109,8 @@ RUN ln -s zonewiki leaf
 
 # The build ("<hash> <commit date>") shown next to Zone's version, passed in by
 # run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
-ARG LEAF_BUILD=unknown
-ENV LEAF_BUILD=$LEAF_BUILD
+ARG ZONE_BUILD=unknown
+ENV ZONE_BUILD=$ZONE_BUILD
 
 # compose.yaml runs Zone as the host user's UID (any UID, maybe without an
 # account here): git gets a HOME it can use.

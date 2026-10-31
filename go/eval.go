@@ -2,7 +2,7 @@
 // question, measured on a wiki and a list of questions with their answers.
 //
 //	./run.sh eval [FILE]               in the app image, with the semantic model
-//	LEAF_DATA=~/leaf zonewiki eval FILE    keywords only, unless LEAF_SEMANTIC_SEARCH is on
+//	ZONE_DATA=~/zonewiki zonewiki eval FILE    keywords only, unless ZONE_SEMANTIC_SEARCH is on
 //
 // FILE is JSON, a list of {"q": "question", "expect": [target, …]}. A target
 // is a page ("people/alex"), a section ("people/alex#current-projects", the
@@ -11,7 +11,7 @@
 // targets, a page matching any of its sections. A question with no targets
 // yet is skipped (counted in the report): paste -new's stubs, fill them in
 // over time. The report gives hit@1, hit@3, hit@k and MRR, by keywords
-// alone and, with LEAF_SEMANTIC_SEARCH, hybrid, then the questions that
+// alone and, with ZONE_SEMANTIC_SEARCH, hybrid, then the questions that
 // weren't found first in every mode.
 //
 // -new lists the queries search_wiki was asked (the query log, which
@@ -66,7 +66,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	fail := func(err error) int { fmt.Fprintln(stderr, err); return 1 }
-	c, s, err := loadConfig(os.Getenv)
+	c, s, err := loadConfig(environ)
 	if err != nil {
 		return fail(err)
 	}
@@ -312,10 +312,10 @@ func evalSummary(ranks []int, k int) [][2]string {
 }
 
 // evalSemanticIndex: the wiki's semantic index, brought up to date in a
-// temporary cache; nil without LEAF_SEMANTIC_SEARCH or its model (the log
+// temporary cache; nil without ZONE_SEMANTIC_SEARCH or its model (the log
 // says why).
 func evalSemanticIndex() *semanticIndex {
-	x := semanticFromEnv(os.Getenv)
+	x := semanticFromEnv(environ)
 	if x == nil {
 		return nil
 	}

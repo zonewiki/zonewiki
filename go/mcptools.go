@@ -180,7 +180,7 @@ func slugInput(raw string) string {
 }
 
 // hostFile: a page's file as the host sees it, so a client on the host can
-// open or edit it: the host's wiki folder (LEAF_HOST_DATA) plus the slug,
+// open or edit it: the host's wiki folder (ZONE_HOST_DATA) plus the slug,
 // which is the file's path relative to the wiki.
 func hostFile(slug string) string {
 	root := cfg.HostData

@@ -207,7 +207,7 @@ func TestUserSession(t *testing.T) {
 func TestLoadConfig(t *testing.T) {
 	wiki := t.TempDir()
 	env := func(kv ...string) func(string) string {
-		m := map[string]string{"LEAF_DATA": wiki}
+		m := map[string]string{"ZONE_DATA": wiki}
 		for i := 0; i < len(kv); i += 2 {
 			m[kv[i]] = kv[i+1]
 		}
@@ -220,7 +220,7 @@ func TestLoadConfig(t *testing.T) {
 	}
 	file("hosts = Wiki.Example.org:443, ,leaf.home.arpa\nnoshare = #People,private, Personal/ \n" +
 		"base-url = http://x:5000/\n")
-	c, s, err := loadConfig(env("LEAF_ALLOW_REMOTE", "yes"))
+	c, s, err := loadConfig(env("ZONE_ALLOW_REMOTE", "yes"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestLoadConfig(t *testing.T) {
 		}
 	}
 	file("")
-	for _, bad := range [][]string{{"LEAF_DATA", ""}, {"LEAF_DATA", filepath.Join(wiki, "missing")}} {
+	for _, bad := range [][]string{{"ZONE_DATA", ""}, {"ZONE_DATA", filepath.Join(wiki, "missing")}} {
 		if _, _, err := loadConfig(env(bad...)); err == nil {
 			t.Errorf("%v: no error", bad)
 		}
@@ -273,18 +273,18 @@ func TestStaleEnv(t *testing.T) {
 		{"LEAF_SEMANTIC_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE is set"},
 		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it"},
 	} {
-		getenv := func(k string) string { return map[string]string{"LEAF_DATA": wiki, c.env: "x"}[k] }
+		getenv := func(k string) string { return map[string]string{"ZONE_DATA": wiki, c.env: "x"}[k] }
 		if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), c.want) {
 			t.Errorf("%s: %v", c.env, err)
 		}
 	}
 	getenv := func(k string) string {
-		return map[string]string{"LEAF_DATA": wiki, "LEAF_HOSTS": "x", "LEAF_LOCALE": "de"}[k]
+		return map[string]string{"ZONE_DATA": wiki, "LEAF_HOSTS": "x", "LEAF_LOCALE": "de"}[k]
 	}
 	if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), "LEAF_HOSTS, LEAF_LOCALE are set") {
 		t.Errorf("two: %v", err)
 	}
-	empty := func(k string) string { return map[string]string{"LEAF_DATA": wiki, "LEAF_LOCALE": ""}[k] }
+	empty := func(k string) string { return map[string]string{"ZONE_DATA": wiki, "LEAF_LOCALE": ""}[k] }
 	if _, _, err := loadConfig(empty); err != nil {
 		t.Errorf("empty is unset: %v", err)
 	}

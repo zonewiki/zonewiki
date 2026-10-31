@@ -1,5 +1,5 @@
 // Semantic search: embeddings of page sections, searched by
-// meaning. Opt-in via LEAF_SEMANTIC_SEARCH (semanticFromEnv). Each page is
+// meaning. Opt-in via ZONE_SEMANTIC_SEARCH (semanticFromEnv). Each page is
 // cut into sections (chunkSections), each section turned into a vector by
 // an embedding model (embed_onnx.go), and a query is compared against every
 // vector (cosine similarity, brute force). That is plenty fast at wiki
@@ -200,7 +200,7 @@ var modelFiles = []struct{ name, sha256 string }{
 // renamedSettings: the settings' names until 2026-10; set, they turn
 // nothing on, and the log says what to rename them to.
 var renamedSettings = [][2]string{
-	{"LEAF_EMBEDDINGS", "LEAF_SEMANTIC_SEARCH"}}
+	{"LEAF_EMBEDDINGS", "ZONE_SEMANTIC_SEARCH"}}
 
 // Similarity floors per model, (search, related, tasks):
 //   - search: a query↔section similarity below this is not a hit. Vector
@@ -253,7 +253,7 @@ func semLog(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "[semantic] "+format+"\n", args...)
 }
 
-// parseSemanticSpec: the model LEAF_SEMANTIC_SEARCH turns on, defaultModel
+// parseSemanticSpec: the model ZONE_SEMANTIC_SEARCH turns on, defaultModel
 // for on (1, true, yes), "" for off (0, false, no, empty); anything else is
 // an error.
 func parseSemanticSpec(value string) (string, error) {
@@ -263,18 +263,24 @@ func parseSemanticSpec(value string) (string, error) {
 	case "1", "on", "true", "yes":
 		return defaultModel, nil
 	}
-	return "", fmt.Errorf("LEAF_SEMANTIC_SEARCH: expected on or off, got %s", strconv.Quote(value))
+	return "", fmt.Errorf("ZONE_SEMANTIC_SEARCH: expected on or off, got %s", strconv.Quote(value))
 }
 
-// modelDir: where the model's files are, LEAF_MODEL_DIR (the image's
-// /opt/zonewiki-model), else a cache folder in the home directory, per revision.
+// modelDir: where the model's files are, ZONE_MODEL_DIR (the image's
+// /opt/zonewiki-model), else a cache folder in the home directory, per
+// revision: ~/.cache/zonewiki, or ~/.cache/leaf, where it was downloaded
+// before Leaf was called Zone, while the model is only there.
 func modelDir(getenv func(string) string) string {
-	if d := getenv("LEAF_MODEL_DIR"); d != "" {
+	if d := getenv("ZONE_MODEL_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "leaf",
-		strings.ReplaceAll(defaultModel, "/", "--")+"@"+modelRevision[:12])
+	rev := strings.ReplaceAll(defaultModel, "/", "--") + "@" + modelRevision[:12]
+	dir := filepath.Join(home, ".cache", "zonewiki", rev)
+	if old := filepath.Join(home, ".cache", "leaf", rev); !modelPresent(dir) && modelPresent(old) {
+		return old
+	}
+	return dir
 }
 
 func modelPresent(folder string) bool {
@@ -1106,7 +1112,7 @@ func (x *semanticIndex) nearest(me []float32, pages map[string]*semPage, pageVec
 
 // ── Setting it up ───────────────────────────────────────────────────────────
 
-// semantic is the index LEAF_SEMANTIC_SEARCH turns on, nil when it is off:
+// semantic is the index ZONE_SEMANTIC_SEARCH turns on, nil when it is off:
 // then search is by keywords only and pages have no Related section.
 var semantic *semanticIndex
 
@@ -1121,20 +1127,20 @@ func semanticTasks() []semTask {
 	return out
 }
 
-// semanticFromEnv: the index LEAF_SEMANTIC_SEARCH asks for, its worker not
+// semanticFromEnv: the index ZONE_SEMANTIC_SEARCH asks for, its worker not
 // started, or nil (keywords only). A bad setting, one by its old name, or a
 // build without the model's runtime is logged, not fatal.
 func semanticFromEnv(getenv func(string) string) *semanticIndex {
 	for _, r := range renamedSettings {
 		if getenv(r[0]) != "" {
 			extra := ""
-			if r[1] == "LEAF_SEMANTIC_SEARCH" {
+			if r[1] == "ZONE_SEMANTIC_SEARCH" {
 				extra = " (on or off)"
 			}
 			semLog("%s was renamed to %s (ignored): set %s in .env instead%s", r[0], r[1], r[1], extra)
 		}
 	}
-	model, err := parseSemanticSpec(getenv("LEAF_SEMANTIC_SEARCH"))
+	model, err := parseSemanticSpec(getenv("ZONE_SEMANTIC_SEARCH"))
 	if err != nil {
 		semLog("%v", err)
 		return nil
@@ -1144,7 +1150,7 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 	}
 	emb, err := newOnnxEmbedder(modelDir(getenv))
 	if err != nil {
-		semLog("LEAF_SEMANTIC_SEARCH is on but %v; using keyword search only", err)
+		semLog("ZONE_SEMANTIC_SEARCH is on but %v; using keyword search only", err)
 		return nil
 	}
 	semLog("semantic search on, model %s", emb.Name())
@@ -1154,7 +1160,7 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 
 // semanticStatus: how content search works now, for the search dialog:
 // "on" (by keywords and meaning), "indexing" (the wiki isn't embedded
-// yet), "failed" (the model fails) or "off" (LEAF_SEMANTIC_SEARCH off).
+// yet), "failed" (the model fails) or "off" (ZONE_SEMANTIC_SEARCH off).
 // The last three search by keywords only.
 func semanticStatus() string {
 	switch {

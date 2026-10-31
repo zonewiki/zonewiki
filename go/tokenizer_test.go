@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// The model's tokenizer.json is not in the repo: LEAF_MODEL_DIR names the
+// The model's tokenizer.json is not in the repo: ZONE_MODEL_DIR names the
 // folder it was downloaded to (embed.go). The ids are Hugging Face's.
 func loadTok(t *testing.T) *Tokenizer {
-	dir := os.Getenv("LEAF_MODEL_DIR")
+	dir := os.Getenv("ZONE_MODEL_DIR")
 	if dir == "" {
-		t.Skip("LEAF_MODEL_DIR not set")
+		t.Skip("ZONE_MODEL_DIR not set")
 	}
 	tok, err := LoadTokenizer(dir+"/tokenizer.json", maxTokens)
 	if err != nil {

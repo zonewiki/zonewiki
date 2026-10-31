@@ -122,8 +122,8 @@ func TestEvalNeverWritesTheWikisCache(t *testing.T) {
 
 func TestEvalCommand(t *testing.T) {
 	evalWiki(t)
-	t.Setenv("LEAF_DATA", cfg.Data)
-	t.Setenv("LEAF_SEMANTIC_SEARCH", "")
+	t.Setenv("ZONE_DATA", cfg.Data)
+	t.Setenv("ZONE_SEMANTIC_SEARCH", "")
 	f := filepath.Join(t.TempDir(), "q.json")
 	_ = os.WriteFile(f, []byte(`[{"q": "Mechaniker", "expect": "golf"}, {"q": "push", "expect": "nope"}, {"q": "open"}]`), 0o666)
 	var out, errOut bytes.Buffer
