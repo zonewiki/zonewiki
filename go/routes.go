@@ -407,7 +407,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		content = m.content
 	}
 	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, true); err != nil {
-		serverError(w, r, err)
+		pageFailed(w, r, err)
 		return
 	}
 	keepBase(content)
@@ -495,7 +495,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		keepPending(s.path, s.slug)
 	}
 	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, false); err != nil {
-		serverError(w, r, err)
+		pageFailed(w, r, err)
 		return
 	}
 	dropDraft(userOf(r), s.path)
@@ -846,7 +846,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	}
 	toggled := toggleNthCheckbox(content, idx, true)
 	if err := writeDraft(userOf(r), r.PathValue("slug"), path, &content, toggled, false); err != nil {
-		serverError(w, r, err)
+		pageFailed(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, M{"file_hash": contentHash(toggled)})

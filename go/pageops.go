@@ -152,6 +152,9 @@ func createPageOp(user, slug, content, suffix string) error {
 // Either continues the writer's text, so only another user's draft there
 // is committed first (commitOthersDraft), not the writer's own.
 func writeDraft(user, slug, path string, current *string, text string, commit bool) error {
+	if !canWrite(user, slug) || safePath(slug) != path {
+		return refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+	}
 	commitOthersDraft(user, slug, path)
 	if current == nil || *current != text {
 		if err := writeText(path, text); err != nil {
