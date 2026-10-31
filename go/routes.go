@@ -774,21 +774,10 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 
 func deletePage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
-	if isProtected(slug) {
-		badRequestPage(w)
+	if _, err := deletePageOp(userOf(r), slug, ""); err != nil {
+		pageFailed(w, r, err)
 		return
 	}
-	path := safePath(slug)
-	if path == "" || !exists(path) || !canWrite(userOf(r), slug) {
-		http.NotFound(w, r)
-		return
-	}
-	keepPending(path, slug)
-	if err := os.Remove(path); err != nil {
-		serverError(w, r, err)
-		return
-	}
-	gitCommit(userOf(r), "Delete "+slug, path)
 	next := r.PostFormValue("next")
 	if !isLocalPath(next) || strings.Contains(next, "/page/"+slug) || strings.Contains(next, "/edit/"+slug) {
 		next = "/page/index"

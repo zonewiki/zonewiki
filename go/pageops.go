@@ -10,7 +10,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // refusal: why an operation refused, for the route's answer.
@@ -40,6 +43,51 @@ func refusalOf(err error) (*pageError, bool) {
 	var pe *pageError
 	ok := errors.As(err, &pe)
 	return pe, ok
+}
+
+// pageFailed answers a route whose operation failed: a refusal as its
+// status, anything else as a 500.
+func pageFailed(w http.ResponseWriter, r *http.Request, err error) {
+	pe, ok := refusalOf(err)
+	switch {
+	case !ok:
+		serverError(w, r, err)
+	case pe.kind == refusedNotFound:
+		http.NotFound(w, r)
+	default:
+		badRequestPage(w)
+	}
+}
+
+// writablePage: the file of an existing page user may change; refused as
+// missing otherwise, as a page user may not see is.
+func writablePage(user, slug string) (string, error) {
+	p := ""
+	if canWrite(user, slug) {
+		p = safePath(slug)
+	}
+	if p == "" || !exists(p) {
+		return "", refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+	}
+	return p, nil
+}
+
+// deletePageOp deletes the page, what it held uncommitted committed first
+// (keepPending: Deleted Pages brings back its last text). kept: it did.
+func deletePageOp(user, slug, suffix string) (kept bool, err error) {
+	path, err := writablePage(user, slug)
+	if err != nil {
+		return false, err
+	}
+	if isProtected(slug) {
+		return false, refuseAs(refusedProtected, slug+" is the home page; it can't be deleted")
+	}
+	kept = keepPending(path, slug)
+	if err := os.Remove(path); err != nil {
+		return kept, err
+	}
+	gitCommit(user, "Delete "+slug+suffix, path)
+	return kept, nil
 }
 
 // keepPending: before a write that replaces or removes the page at path,

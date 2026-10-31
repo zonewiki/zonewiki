@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"regexp"
 	"regexp/syntax"
 	"strconv"
@@ -527,17 +526,17 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 }
 
 func deletePageTool(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug", user)
+	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
-	if isProtected(slug) {
+	if isProtected(slug) { // before the guides: they'd be asked for in vain
 		return "", toolErr(slug + " is the home page; it can't be deleted")
 	}
 	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
-	msg, err := commitMsg("Delete "+slug, args)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
@@ -547,11 +546,11 @@ func deletePageTool(args jsonObj, base, user string) (string, error) {
 			linking = append(linking, b)
 		}
 	}
-	pending := pendingNote(slug, keepPending(path, slug))
-	if err := os.Remove(path); err != nil {
+	kept, err := refused(deletePageOp(user, slug, suffix))
+	if err != nil {
 		return "", err
 	}
-	gitCommit(user, msg, path)
+	pending := pendingNote(slug, kept)
 	out := "Deleted page " + slug + "."
 	if cfg.GitEnabled {
 		out += " It can be restored from Deleted Pages (git history)."
