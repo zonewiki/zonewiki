@@ -174,13 +174,14 @@ case "${1:-up}" in
     compose logs -f
     ;;
   test)
-    # The server's own checks (go vet, go test), then the unit/API tests
+    # The server's own checks (gofmt, go vet, go test), then the unit/API tests
     # against it, in the tools image (Containerfile.tools), one worker per
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
     # path the whole suite runs but the browser and tasks-core tests (e2e).
     image=$(build_image zonewiki-tools -f Containerfile.tools)
     in_image "$image" -- sh -c \
-      '(cd go && go vet ./... && go test ./...) || exit 1
+      '(cd go && f=$(gofmt -l .) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
+         go vet ./... && go test ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"
        python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
@@ -275,7 +276,7 @@ case "${1:-up}" in
     echo "  up     - build and start Zone (default)"
     echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
-    echo "  test   - go vet, go test and the unit/API tests in the tools image (extra args go to pytest)"
+    echo "  test   - gofmt, go vet, go test and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"

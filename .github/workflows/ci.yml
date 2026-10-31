@@ -33,7 +33,7 @@ env:
 jobs:
   checks:
     # Through run.sh, as on your machine, in the image Containerfile.tools
-    # builds: test (go vet, go test, the API tests), e2e (browser and
+    # builds: test (gofmt, go vet, go test, the API tests), e2e (browser and
     # tasks-core tests) and leaks (gitleaks over the whole history).
     # The runners have podman, which run.sh prefers.
     strategy:

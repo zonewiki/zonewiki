@@ -24,7 +24,7 @@ concurrency:
 jobs:
   checks:
     # The checks run through run.sh, as on your machine, in the image
-    # Containerfile.tools builds: test (go vet, go test, the API tests), e2e
+    # Containerfile.tools builds: test (gofmt, go vet, go test, the API tests), e2e
     # (browser and tasks-core tests) and leaks (gitleaks over the whole
     # history). So CI keeps no package lists or commands of its own. Like
     # the image job, the builds run on the host's engine through the socket,

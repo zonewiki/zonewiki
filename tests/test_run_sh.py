@@ -166,7 +166,7 @@ def test_test_checks_the_server_then_runs_pytest_against_it(sandbox):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     (run,) = [l for l in log.read_text().split("\nrun ") if "go test" in l]
-    assert "go vet ./..." in run and "--ignore=tests/e2e" in run
+    assert "gofmt -l ." in run and "go vet ./..." in run and "--ignore=tests/e2e" in run
     assert run.rstrip().endswith("tests/test_routes.py -k Auth")
 
 

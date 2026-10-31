@@ -34,7 +34,7 @@ How the suite is set up and what each module covers. The rules (run it, add test
 
 `tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`), in a scratch git repo holding copies of both, so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2), copy mode creates the container with `--rm`, a build's output stays hidden unless it fails (then nothing runs) and a first build says so, `test` runs go vet and go test before pytest, `test` and `e2e` run pytest in parallel (pytest-xdist), `eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only, and the hook scans the temporary index of `commit -a` and `commit <path>`, refuses a leak (exit 3) and only warns when the scan fails. The hook tests skip when a local gitleaks is on PATH.
 
-To run the suite without a local Go or venv: `./run.sh test` (go vet, go test, then pytest, inside the tools image with the repo mounted).
+To run the suite without a local Go or venv: `./run.sh test` (gofmt, go vet, go test, then pytest, inside the tools image with the repo mounted).
 
 Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail). An `-n` in the extra args overrides it (`-n 0`: one process). Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
 

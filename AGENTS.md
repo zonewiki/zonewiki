@@ -145,7 +145,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ```bash
 ./run.sh            # build the image and start Zone (default: "up"), via compose
 ./run.sh build|up|down|logs
-./run.sh test       # go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
+./run.sh test       # gofmt + go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
@@ -186,7 +186,7 @@ ZONE_DATA=~/zonewiki go/zonewiki eval FILE       # measure retrieval
 **Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix). A feature or fix is not complete until it has test coverage.
 
 ```bash
-./run.sh test                         # go vet, go test, then the unit/API tests (pytest over HTTP), in the tools image
+./run.sh test                         # gofmt, go vet, go test, then the unit/API tests (pytest over HTTP), in the tools image
 ./run.sh test tests/test_mcp.py -n 0  # one module, in one process
 ./run.sh e2e                          # browser tests (Playwright) and tasks-core.js under Node
 (cd go && go test ./...)              # the server's own tests, with a local Go
