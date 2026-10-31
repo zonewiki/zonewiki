@@ -1016,19 +1016,24 @@ main {
 }
 .breadcrumb .module-link { display: inline-flex; align-items: center; gap: .4rem; }
 @media (min-width: 641px) {
-  body:not(.editor-page) .module-switch {
-    gap: 0; padding: 2px;
+  body:not(.editor-page) .module-group {
+    display: inline-flex; align-items: center; padding: 2px;
     border: 1px solid var(--border); border-radius: 999px;
   }
+  /* The lock at the start of Private · Scratch: only you see these. */
+  .module-lock { display: inline-flex; align-items: center; padding: 0 .1rem 0 .5rem; color: var(--muted); }
   body:not(.editor-page) .module-switch .module-link {
-    padding: .1rem .65rem; border-radius: 999px;
+    /* More room below than above: lowercase text sits low in its line box. */
+    padding: .06rem .65rem .16rem; border-radius: 999px;
     transition: background .15s, color .15s;
   }
+  /* The padding above lifts the label; the counts stay where they were. */
+  body:not(.editor-page) .module-switch .module-counts { position: relative; top: .05rem; }
   body:not(.editor-page) .module-switch .module-link:hover,
   body:not(.editor-page) .module-switch .module-menu-btn:hover { background: var(--btn-bg); color: var(--fg); }
   body:not(.editor-page) .module-switch .module-link[aria-current],
   body:not(.editor-page) .module-switch .module-menu-btn[aria-current] {
-    background: var(--btn-bg); color: var(--fg); font-weight: 600;
+    background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); color: var(--fg); font-weight: 600;
   }
   body:not(.editor-page) .module-switch + .breadcrumb-sep,
   /* Sharing mode hides the trail: the separator before the page is then
@@ -1038,8 +1043,8 @@ main {
     background: var(--border); opacity: 1; font-size: 0;
   }
 }
-/* The ☰ button (with users): a member of the switcher's pill, opening the menu
-   of Private home and Scratch notes (js/chrome.js). */
+/* The user button (with users): opens the menu of who is signed in and Sign
+   out (js/chrome.js). */
 .module-menu-btn {
   display: inline-flex; align-items: center; justify-content: center;
   padding: .1rem .5rem; border: none; border-radius: 999px; background: none;
@@ -1059,9 +1064,17 @@ main {
 .module-menu a[aria-current] { font-weight: 600; }
 /* The editor keeps its focus: the logo only, as the way home. */
 .editor-page .module-link:not([data-module="wiki"]),
+.editor-page .module-group + .module-group,
 .editor-page .module-menu-btn,
 .editor-page .module-label { display: none; }
 .breadcrumb-sep { opacity: .5; }
+/* The trail is added by js/chrome.js after the page is drawn: until then the
+   crumbs after the switcher stay invisible (they keep their room), so they
+   don't jump when it is inserted. Shown after a second should the script fail. */
+.breadcrumb[data-slug]:not(.trail-ready) > :not(.breadcrumb-home, .breadcrumb-right) {
+  visibility: hidden; animation: trail-show 0s 1s forwards;
+}
+@keyframes trail-show { to { visibility: visible; } }
 /* The navigation trail holds up to 6 pages. It stays on one line, and the
    page titles shrink with an ellipsis instead of pushing the page wider than
    a phone (which also pushed the full-screen deck modal's buttons off-screen). */
@@ -1945,7 +1958,15 @@ body.editor-page main {
   .action-buttons :is(.module-due, .module-focus) {
     min-width: .9rem; height: .85rem; padding: 0 .2rem; font-size: .6rem;
   }
+  /* Scratch is private with users: a small lock at its icon's top right
+     (Private's icon is a lock itself). */
+  .action-lock {
+    position: absolute; top: calc(50% - 1.3rem); left: calc(50% + .3rem);
+    display: flex; padding: 1px; border-radius: 50%; background: var(--nav-bg); pointer-events: none;
+  }
+  .action-lock svg { width: .7rem; height: .7rem; }
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
+  .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
   .module-menu :is(.menu-who, .menu-signout) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }

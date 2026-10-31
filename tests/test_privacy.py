@@ -222,7 +222,8 @@ def alice(client, wiki):
 
 
 def scratch_titles(client):
-    return re.findall(r'<a href="/page/([^"]+)"', client.get("/page/_scratch", headers=HOST).data.decode())
+    links = re.findall(r'<a href="/page/([^"]+)"', client.get("/page/_scratch", headers=HOST).data.decode())
+    return [s for s in links if s != "_scratch"]   # the Scratch pill and tab
 
 
 def test_scratch_notes_are_private(alice, wiki):

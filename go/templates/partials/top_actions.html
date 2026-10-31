@@ -12,7 +12,7 @@
   <button type="button" class="top-task" aria-label="Add a task to your deck" title="Add a task to your deck (c t)">{{template "icon_new_task"}}</button>
   <button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="top-search-label" aria-hidden="true">Search</span><kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>
   {{- range .module_links}}{{if .menu}}
-  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.user}}: Private home, Scratch notes" title="{{$.user}}"{{if .current}} aria-current="page"{{end}}><span aria-hidden="true">{{initial $.user}}</span></button>
+  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.user}}: account menu" title="{{$.user}}"><span aria-hidden="true">{{initial $.user}}</span></button>
   {{- end}}{{end}}
 </div>
 {{- end}}

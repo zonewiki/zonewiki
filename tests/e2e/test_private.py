@@ -1,5 +1,5 @@
-"""Private pages in the browser (docs/spec/users.md): the ☰ menu (Private home,
-Scratch notes), Make private / Make shared in the page menu, and `[[`
+"""Private pages in the browser (docs/spec/users.md): the Private and Scratch
+pills, the user menu (Sign out), Make private / Make shared in the page menu, and `[[`
 completion offering a new page in your private folder."""
 
 import re
@@ -19,7 +19,7 @@ def alice(page, wiki, monkeypatch):
     return page
 
 
-# ── The ☰ menu ───────────────────────────────────────────────────────────────
+# ── The user menu ───────────────────────────────────────────────────────────────
 
 def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     alice.goto("/page/index")
@@ -30,7 +30,7 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Private home", "Scratch notes", "Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
@@ -54,23 +54,27 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     btn.focus()
     alice.keyboard.press("ArrowDown")
     expect(menu).to_be_visible()
-    alice.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem").nth(1)).to_be_focused()
-    alice.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem").nth(2)).to_be_focused()
-    alice.keyboard.press("ArrowDown")   # wraps
+    expect(menu.get_by_role("menuitem").first).to_be_focused()
+    alice.keyboard.press("ArrowDown")   # wraps: Sign out is the only item
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     alice.mouse.click(5, 400)
     expect(menu).to_be_hidden()
 
 
-def test_private_home_is_reached_from_the_menu_and_the_menu_marks_it(alice):
+def test_private_and_scratch_are_pills_in_a_group_of_their_own(alice):
     alice.goto("/page/index")
+    groups = alice.locator(".breadcrumb .module-group")
+    expect(groups).to_have_count(2)
+    expect(groups.nth(0).locator(".module-label")).to_have_text(["Wiki", "Deck"])
+    expect(groups.nth(1).locator(".module-label")).to_have_text(["Private", "Scratch"])
+    expect(groups.nth(1).locator(".module-lock")).to_be_visible()
+    expect(groups.nth(0).locator(".module-lock")).to_have_count(0)
+    g0, g1 = groups.nth(0).bounding_box(), groups.nth(1).bounding_box()
+    assert g0["x"] + g0["width"] < g1["x"] and abs(g0["y"] - g1["y"]) < 1   # two pills in a row
     expect(alice.locator(".top-user")).not_to_have_attribute("aria-current", "page")
-    alice.locator(".top-user").click()
-    alice.get_by_role("menuitem", name="Private home").click()
+    alice.get_by_role("link", name="Private").click()
     alice.wait_for_url("**/page/private/alice/index")
-    expect(alice.locator(".top-user")).to_have_attribute("aria-current", "page")
+    expect(alice.locator(".breadcrumb .module-link[data-module=private]")).to_have_attribute("aria-current", "page")
     expect(alice.locator("h1")).to_contain_text("Private")
     expect(alice.locator("h1 .lock")).to_be_visible()
     # The home is a module's own page: not a stop in the navigation trail.
@@ -78,12 +82,11 @@ def test_private_home_is_reached_from_the_menu_and_the_menu_marks_it(alice):
     expect(alice.locator(".breadcrumb > a")).to_have_count(0)
 
 
-def test_scratch_notes_from_the_menu_and_g_p_goes_home(alice):
+def test_scratch_pill_and_g_p_goes_home(alice):
     alice.goto("/page/index")
-    alice.locator(".top-user").click()
-    alice.get_by_role("menuitem", name="Scratch notes").click()
+    alice.get_by_role("link", name="Scratch").click()
     alice.wait_for_url("**/page/_scratch")
-    expect(alice.locator(".top-user")).to_have_attribute("aria-current", "page")
+    expect(alice.locator(".breadcrumb .module-link[data-module=scratch]")).to_have_attribute("aria-current", "page")
     alice.keyboard.press("g")
     alice.keyboard.press("p")
     alice.wait_for_url("**/page/private/alice/index")
@@ -92,7 +95,6 @@ def test_scratch_notes_from_the_menu_and_g_p_goes_home(alice):
 def test_sign_out_is_in_the_menu_on_desktop(alice):
     alice.goto("/page/index")
     expect(alice.locator(".signout-form")).to_be_hidden()
-    expect(alice.locator(".breadcrumb .module-menu-btn")).to_have_count(0)
     alice.locator(".top-user").click()
     alice.get_by_role("menuitem", name="Sign out").click()
     alice.wait_for_url("**/login**")
@@ -104,24 +106,27 @@ def test_without_users_there_is_no_menu(page, wiki):
     expect(page.locator(".breadcrumb .module-link[data-module=scratch]")).to_be_visible()
 
 
-def test_the_phone_has_the_menu_as_a_tab_and_a_bottom_sheet(new_page, wiki, monkeypatch):
+def test_the_phone_has_private_and_scratch_tabs(new_page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1")})
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"username": "alice", "password": "pw"})
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
-    expect(bar.locator(".action-module, button")).to_have_text(["Wiki", "Deck", "More", "Note", "Task", "Search"])
+    items = bar.locator(".action-module, button")
+    expect(items).to_have_text(["Wiki", "Deck", "Private", "Scratch", "Note", "Task", "Search"])
+    assert all(i.bounding_box()["width"] >= 40 for i in items.all())
+    # Scratch's icon carries a small lock, inside its tab and clear of the label.
+    tab, lock = bar.locator("[data-module=scratch]"), bar.locator(".action-lock")
+    expect(lock).to_have_count(1)
+    expect(lock).to_be_visible()
+    t, l, lab = tab.bounding_box(), lock.bounding_box(), tab.locator(".action-label").bounding_box()
+    assert t["x"] <= l["x"] and l["x"] + l["width"] <= t["x"] + t["width"] and l["y"] + l["height"] <= lab["y"]
     # The user button is for desktops; the name and Sign out stay in the top row.
     expect(phone.locator(".top-user")).to_be_hidden()
     expect(phone.get_by_role("button", name="Sign out")).to_be_visible()
-    menu = phone.locator(".module-menu")
-    bar.locator(".module-menu-btn").tap()
-    expect(menu).to_be_visible()
-    m, b = menu.bounding_box(), bar.bounding_box()
-    assert m["x"] == 0 and m["width"] == 390 and m["y"] + m["height"] <= 844   # a sheet across the bottom
-    menu.get_by_role("menuitem", name="Private home").tap()
+    bar.get_by_role("link", name="Private").tap()
     phone.wait_for_url("**/page/private/alice/index")
-    expect(bar.locator(".module-menu-btn")).to_have_attribute("aria-current", "page")
+    expect(bar.locator(".module-link[data-module=private]")).to_have_attribute("aria-current", "page")
 
 
 # ── Make shared ──────────────────────────────────────────────────────────────

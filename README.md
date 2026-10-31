@@ -44,9 +44,9 @@ product or a plugin platform. That keeps it small and readable.
 ## How Leaf is organised
 
 Leaf has three modules: the **Wiki** for your notes, the **Deck** for your
-tasks, and **Scratch** for quick capture (with several users, a ☰ menu in
-its place holds Scratch and your **Private home**, the start page of your
-own private pages). You switch between them in the top
+tasks, and **Scratch** for quick capture (with several users, **Private**
+joins Scratch in a group of its own: your private home, the start page of
+your own private pages). You switch between them in the top
 left corner (on a phone, in the tab bar at the bottom), and **New** creates
 whatever the module you're in holds: a page, a scratch note, a task. Search,
 history, keyboard shortcuts and AI access work across all three.

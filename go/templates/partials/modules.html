@@ -7,36 +7,34 @@
 {{- end}}
 
 {{- /* The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
-    then Deck and Scratch (with users no Scratch: it is in the user menu
-    below, opened by the user button at the top right, and by the tab bar's
-    ☰ on phones). Phones and the editor show the logo only (style.css). The
-    trail code in js/chrome.js keeps it as the first crumb. */}}
+    then Deck and Scratch; with users Wiki and Deck, then Private and Scratch,
+    each group a pill of its own (.module-group). Phones and the editor show
+    the logo only (style.css). The trail code in js/chrome.js keeps it as the
+    first crumb. */}}
 {{define "module_switch" -}}
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
+{{- $open := -1 -}}
 {{- range .links -}}
 {{- if .menu -}}
 {{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
+{{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{if eq .group 1}}<span class="module-lock" role="img" aria-label="Only you see Private and Scratch" title="Only you see Private and Scratch">{{template "icon_lock"}}</span>{{end}}{{$open = .group}}{{end -}}
 <a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}
 {{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_leaf"}}{{else}}>{{end -}}
 <span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
+{{- if ge $open 0}}</span>{{end -}}
 </nav>
 {{- end}}
 
-{{- /* The user menu (with users): Private home, Scratch notes and, on
-    desktop, who is signed in and Sign out (phones have Sign out in the page's
-    top row). One element for both buttons, the top right's user button and the
-    tab bar's ☰, that js/chrome.js opens under whichever was pressed (a bottom
-    sheet on phones). Outside the tab bar's nav: its touch handling picks a
-    tab by position. */}}
+{{- /* The user menu (with users, desktop): who is signed in and Sign out
+    (phones have Sign out in the page's top row), opened by the top right's
+    user button (js/chrome.js). Outside the tab bar's nav: its touch handling
+    picks a tab by position. */}}
 {{define "module_menu" -}}
-<div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Private home and Scratch notes" hidden>
+<div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Account" hidden>
 {{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
-{{- range .link.items -}}
-<a role="menuitem" href="{{.href}}" data-menu="{{.key}}"{{if .current}} aria-current="page"{{end}}>{{if .icon}}<span class="menu-icon" aria-hidden="true">{{.icon}}</span>{{end}}{{.label}}</a>
-{{- end -}}
 {{- if .sign_out}}<form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>
 {{- end}}
@@ -46,11 +44,13 @@
     Hidden on desktop, which has the switcher and the top actions. */}}
 {{define "action_bar" -}}
 <nav class="action-buttons" aria-label="{{.app_name}}">
+{{- $group := 0 -}}
 {{- range .module_links -}}
 {{- if .menu -}}
-<button type="button" class="action-module module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Private home and Scratch notes"{{if .current}} aria-current="page"{{end}}>{{template "icon_menu"}}<span class="action-label">{{.label}}</span></button>
+{{- /* the user button is the desktop's (top_actions) */ -}}
 {{- else -}}
-<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+{{- if ne .group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .group}}{{end -}}
+<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "scratch") (eq .group 1)}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>

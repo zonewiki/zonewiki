@@ -109,12 +109,13 @@ func diffLines(diff string) []diffLine {
 	return lines
 }
 
-// Leaf's modules: the wiki, the deck and the scratch notes (with users, the
-// third is the ☰ menu of Private home and Scratch notes). Every view names
-// the one it belongs to (<body data-module>: also "private" for a page in
-// your private folder); the matching links are aria-current, and
-// js/actions.js makes "New" create that module's kind.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Deck", "/deck"}, {"scratch", "Scratch", "/page/_scratch"}}
+// Leaf's modules: the wiki, the deck, with users your Private home, and the
+// scratch notes. Every view names the one it belongs to (<body data-module>:
+// "private" for a page in your private folder); the matching links are
+// aria-current, and js/actions.js makes "New" create that module's kind.
+// With users the switcher has two groups (the third field, 0 and 1): Wiki and
+// Deck, then Private and Scratch; without users one.
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Deck", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Scratch", "/page/_scratch"}}
 
 // deckCountsTitle: the Deck links' tooltip, "Deck: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js deckCountsTitle builds the same).
@@ -146,18 +147,20 @@ func (rq *Req) deckCounts() DeckCounts {
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
-// view's, the Deck's counts). With users the third is the ☰ menu ("menu"):
-// Private home and Scratch notes, current for either's views.
+// view's, the Deck's counts, the group it is shown in). With users Private
+// comes before Scratch in a group of its own and the list ends with the user
+// menu ("menu": who is signed in, Sign out; the desktop's user button).
 func moduleLinks(rq *Req) []M {
 	current := currentModule(rq)
+	users := privateFolder(rq.who()) != ""
 	var out []M
 	for _, m := range modules {
-		if m[0] == "scratch" && privateFolder(rq.who()) != "" {
-			out = append(out, M{"key": "menu", "label": "More", "menu": true,
-				"current": current == "scratch" || current == "private", "items": []M{
-					{"key": "private", "label": "Private home", "href": "/private", "current": current == "private"},
-					{"key": "scratch", "label": "Scratch notes", "icon": "", "href": m[2], "current": current == "scratch"}}})
+		if m[0] == "private" && !users {
 			continue
+		}
+		group := 0
+		if users && (m[0] == "private" || m[0] == "scratch") {
+			group = 1
 		}
 		href := m[2]
 		// The Deck goes to the deck's home page when a page declares one.
@@ -166,11 +169,14 @@ func moduleLinks(rq *Req) []M {
 				href = pathURL("page", home)
 			}
 		}
-		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil}
+		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group}
 		if m[0] == "deck" {
 			link["counts"] = rq.deckCounts()
 		}
 		out = append(out, link)
+	}
+	if users {
+		out = append(out, M{"key": "menu", "label": "Account", "menu": true})
 	}
 	return out
 }

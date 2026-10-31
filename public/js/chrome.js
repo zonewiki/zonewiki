@@ -6,6 +6,10 @@
   const slug  = bc.dataset.slug;
   const title = bc.dataset.title;
   if (!slug) return;
+  // The server draws the breadcrumb without the trail (it is in sessionStorage);
+  // style.css keeps the crumbs after the switcher hidden until this is done, so
+  // adding the trail doesn't make them jump.
+  const ready = () => bc.classList.add('trail-ready');
 
   // MRU list: visiting a page already in the list moves it to the end
   const KEY = 'leafHistory';
@@ -20,16 +24,14 @@
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
   // Scratch, /deck, the deck's home page (where the Deck link goes) and
-  // your private home (in the ☰ menu).
+  // your private home (the Private pill).
   const deckHref = bc.querySelector('.module-link[data-module="deck"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
     .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
       && (p.url || '').split('?')[0] !== deckHref)
                             .slice(-maxPrev);
-  if (!intermediates.length) return;
-
   const homeEl = bc.querySelector('.breadcrumb-home');
-  if (!homeEl) return;
+  if (!intermediates.length || !homeEl) return ready();
   const rightEl = bc.querySelector('.breadcrumb-right');
 
   const mkSep = () => {
@@ -81,6 +83,7 @@
   });
   bc.appendChild(clr);
   if (rightEl) bc.appendChild(rightEl);
+  ready();
 }());
 
 // ── Backlinks chip ───────────────────────────────────────────────────────────
@@ -184,8 +187,7 @@
 // ── Modules ─────────────────────────────────────────────────────────────────
 // The module switcher (breadcrumb) and the phone's bottom bar link to the
 // modules; the server marks the current one (aria-current). The Deck
-// links carry the counts of tasks due and in Focus. With users the third is
-// a ☰ button (below).
+// links carry the counts of tasks due and in Focus.
 
 // The server renders the counts into the page (no change of width after it
 // has painted); refreshDueBadge keeps them current: every minute, when the
@@ -227,11 +229,10 @@ if (deckLinks.length) {
   window.addEventListener('pageshow', e => { if (e.persisted) refreshDueBadge(); });
 }
 
-// ── The ☰ menu ───────────────────────────────────────────────────────────────
-// With users the switcher's third place is ☰ (also the tab bar's): a click
-// menu with Private home and Scratch notes. One menu (.module-menu, rendered
-// hidden) for both buttons: a popover under the pressed one, a bottom sheet
-// on phones (the page menu's styles). ↑/↓ move, Esc closes and returns focus.
+// ── The user menu ────────────────────────────────────────────────────────────
+// With users the user button at the top right opens a menu (who is signed in,
+// Sign out). One menu (.module-menu, rendered hidden): a popover under the
+// pressed button. ↑/↓ move, Esc closes and returns focus.
 (function () {
   const menu = document.querySelector('.module-menu');
   const backdrop = document.querySelector('.module-menu-backdrop');

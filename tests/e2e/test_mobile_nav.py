@@ -407,7 +407,7 @@ def test_g_t_goes_to_the_home_deck(page, wiki):
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
 # The breadcrumb starts with the modules: Wiki (with the logo), Deck, Scratch
-# (with users the ☰ menu in Scratch's place).
+# (with users two pills: Wiki · Deck and Private · Scratch).
 
 def test_desktop_breadcrumb_switches_modules(page, wiki):
     wiki.write("garden", "# Garden\n\nBeds.\n")
@@ -435,7 +435,7 @@ def test_desktop_switcher_is_set_apart_from_the_trail(page, wiki):
     wiki.write("garden", "# Garden\n")
     page.goto("/page/garden")
     switch = page.locator(".breadcrumb .module-switch")
-    assert switch.evaluate("el => getComputedStyle(el).borderTopWidth") == "1px"
+    assert switch.locator(".module-group").evaluate("el => getComputedStyle(el).borderTopWidth") == "1px"
     current = switch.locator(".module-link[aria-current]")
     assert current.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
     divider = page.locator(".breadcrumb .module-switch + .breadcrumb-sep")
@@ -611,3 +611,23 @@ def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     assert s["y"] + s["height"] <= a["y"], (s, a)
     assert s["x"] + s["width"] <= 390 and s["y"] < 100
     assert not _overlap(s, phone.locator(".breadcrumb").bounding_box())
+
+
+def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
+    # Regression: the trail comes from sessionStorage and js/chrome.js inserts it
+    # after the first paint, so the page's title crumb jumped right on every
+    # page change. Until the script has run, the crumbs after the switcher are
+    # invisible (they keep their room); the script marks the breadcrumb ready.
+    wiki.write("garden", "# Garden\n")
+    wiki.write("beds", "# Beds\n")
+    page.goto("/page/garden")
+    page.goto("/page/beds")
+    title = page.locator(".breadcrumb > span", has_text="Beds")
+    expect(page.locator(".breadcrumb")).to_have_class(re.compile(r"\btrail-ready\b"))
+    expect(title).to_be_visible()
+    expect(page.locator(".breadcrumb .trail-link")).to_have_text(["Garden"])
+    page.route("**/public/leaf.js", lambda route: route.abort())
+    page.goto("/page/beds")
+    expect(page.locator(".breadcrumb")).not_to_have_class(re.compile(r"\btrail-ready\b"))
+    assert title.evaluate("el => getComputedStyle(el).visibility") == "hidden"
+    expect(title).to_be_visible(timeout=3000)   # the fallback shows it after a second

@@ -280,8 +280,9 @@ class TestMakeShared:
 
 
 class TestModuleMenu:
-    """With users the switcher's third place is the ☰ menu (Private home,
-    Scratch notes); without them it is the Scratch pill."""
+    """With users the switcher has two pills, Wiki · Deck and Private · Scratch,
+    and a user menu (who, Sign out) behind the user button; without them one
+    pill with Scratch third."""
 
     @staticmethod
     def parts(body):
@@ -290,44 +291,60 @@ class TestModuleMenu:
         bar = body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         return crumb, bar, top
 
-    def test_the_menu_replaces_the_scratch_pill(self, client, users):
+    def test_private_and_scratch_are_a_group_of_their_own(self, client, users):
         login(client, "alice", "alice-pw")
         body = client.get("/page/index", headers=HOST).data.decode()
         crumb, bar, top = self.parts(body)
-        # Desktop: the user button after Search, not in the switcher; Scratch is not a pill.
-        assert "module-menu-btn" not in crumb and 'data-module="scratch"' not in crumb
+        groups = re.findall(r'<span class="module-group">(.*?)</span>(?=<span class="module-group">|</nav>|$)', crumb + "</nav>", re.S)
+        assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "deck"], ["private", "scratch"]]
+        assert 'href="/private"' in groups[1] and 'href="/page/_scratch"' in groups[1]
+        # A lock opens the second pill: only you see Private and Scratch.
+        assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Scratch"' in groups[1]
+        assert "module-lock" not in groups[0]
+        # The phone's bar: the four modules with a divider between the groups, then the actions.
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "Private", "Scratch", "Note", "Task", "Search"]
+        assert bar.count('class="action-sep"') == 3
+        # Scratch's tab carries a lock (Private's icon is one); no other tab does.
+        assert bar.count('class="action-lock"') == 1
+        assert bar.index('data-module="scratch"') < bar.index('class="action-lock"') < bar.index('class="action-label"', bar.index('data-module="scratch"'))
+        assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('data-module="private"')
+        assert "module-menu-btn" not in bar and "module-menu-btn" not in crumb
+        # Desktop: the user button after Search opens the menu: who and Sign out only.
         assert top.index("top-search") < top.index('class="top-user module-menu-btn"')
-        assert '>A</span></button>' in top and 'title="alice"' in top
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "More", "Note", "Task", "Search"]
-        assert bar.index('module-menu-btn') < bar.index('class="action-sep"')
-        # One menu for both buttons, outside the tab bar (its touch handling picks a tab by position).
-        assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar.replace("module-menu-btn", "")
+        assert '>A</span></button>' in top and 'title="alice"' in top and 'aria-haspopup="menu" aria-expanded="false"' in top
+        assert body.count('class="module-menu page-menu"') == 1 and 'module-menu' not in bar
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div></div>", 1)[0]
-        assert re.findall(r'href="([^"]+)"', menu) == ["/private", "/page/_scratch"]
+        assert 'href=' not in menu
         assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
-        assert 'aria-haspopup="menu" aria-expanded="false"' in top
+
+    def test_an_empty_scratch_says_it_is_private(self, client, users):
+        login(client, "alice", "alice-pw")
+        assert "only you see them" in client.get("/page/_scratch", headers=HOST).data.decode()
 
     def test_without_users_scratch_stays_a_pill_in_the_third_place(self, client, wiki_dir):
         body = client.get("/page/index", headers=HOST).data.decode()
         crumb, bar, top = self.parts(body)
         assert "module-menu" not in body and "top-user" not in top
+        assert crumb.count('class="module-group"') == 1 and 'data-module="private"' not in crumb and "module-lock" not in crumb
+        assert "action-lock" not in body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         assert crumb.index('data-module="deck"') < crumb.index('data-module="scratch"')
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Deck", "Scratch"]
 
-    def test_the_menu_is_current_in_private_and_scratch_views(self, client, git_wiki_dir, users):
+    def test_the_pills_are_current_in_private_and_scratch_views(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
         client.get("/private", headers=HOST)
         (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n")
         note = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         (git_wiki_dir / "plans.md").write_text("# Plans\n")
-        for url, module, current in [("/page/private/alice/index", "private", True), ("/page/private/alice/diary", "private", True),
-                                     ("/page/_scratch", "scratch", True), (f"/page/{note}", "scratch", True),
-                                     ("/page/plans", "wiki", False), ("/deck", "deck", False)]:
+        for url, module in [("/page/private/alice/index", "private"), ("/page/private/alice/diary", "private"),
+                            ("/page/_scratch", "scratch"), (f"/page/{note}", "scratch"),
+                            ("/page/plans", "wiki"), ("/deck", "deck")]:
             body = client.get(url, headers=HOST).data.decode()
             assert f'<body data-module="{module}"' in body, url
             crumb, bar, top = self.parts(body)
-            assert ('title="alice" aria-current="page"' in top) == current, url
-            assert ('aria-current="page"' in bar.split("module-menu-btn", 1)[1].split(">", 1)[0]) == current, url
+            for part in (crumb, bar):
+                current = re.findall(r'data-module="(\w+)"[^>]*aria-current="page"', part)
+                assert current == [module], (url, current)
 
 
 class TestSharedNewPage:
