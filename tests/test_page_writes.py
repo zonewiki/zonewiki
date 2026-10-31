@@ -95,8 +95,7 @@ class TestTextNotInGit:
     """A page's uncommitted text (an auto-save left, an edit on disk) is
     committed before a write replaces or removes it: it stays in history."""
 
-    def test_delete(self, client, wiki, door, request):
-        until_step(request, door, 1)
+    def test_delete(self, client, wiki, door):
         commit(wiki, "p", "# P\n\nCommitted.\n")
         write_page(wiki, "p", "# P\n\nOnly on disk.\n")
         assert delete(client, door, "p")
@@ -104,8 +103,7 @@ class TestTextNotInGit:
         assert in_history(wiki, "Only on disk.")
         assert git(wiki, "status", "--porcelain") == ""
 
-    def test_restore(self, client, wiki, door, request):
-        until_step(request, door, 1)
+    def test_restore(self, client, wiki, door):
         v1 = commit(wiki, "p", "# P\n\nv1\n")
         commit(wiki, "p", "# P\n\nv2\n")
         write_page(wiki, "p", "# P\n\nOnly on disk.\n")

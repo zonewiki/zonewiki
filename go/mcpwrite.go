@@ -54,7 +54,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	path := safePath(slug)
 	pending, old := "", ""
 	if existing != "" {
-		pending = savePending(path, slug)
+		pending = pendingNote(slug, keepPending(path, slug))
 		if old, err = readText(path); err != nil {
 			return "", err
 		}
@@ -134,7 +134,7 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 	if name == "" {
 		name = title
 	}
-	slug, err := quicknoteErr(createQuicknote(user, name, &content, suffix))
+	slug, err := refused(createQuicknote(user, name, &content, suffix))
 	if err != nil {
 		return "", err
 	}
@@ -142,13 +142,13 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
 
-// quicknoteErr: a note's refusal as a tool error.
-func quicknoteErr(s string, err error) (string, error) {
-	var se *quicknoteError
-	if errors.As(err, &se) {
-		return "", toolErr(se.msg)
+// refused: an operation's refusal as a tool error.
+func refused[T any](v T, err error) (T, error) {
+	if pe, ok := refusalOf(err); ok {
+		var zero T
+		return zero, toolErr(pe.msg)
 	}
-	return s, err
+	return v, err
 }
 
 // fileNote: the note's Move to wiki (name, folder,
@@ -197,8 +197,8 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
 		}
-		pending := savePending(path, slug) + savePending(safePath(target), target)
-		anchor, err := quicknoteErr(appendQuicknote(user, slug, target, heading, suffix))
+		pending := pendingNote(slug, keepPending(path, slug)) + pendingNote(target, keepPending(safePath(target), target))
+		anchor, err := refused(appendQuicknote(user, slug, target, heading, suffix))
 		if err != nil {
 			return "", err
 		}
@@ -223,8 +223,8 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 			return "", err
 		}
 	}
-	pending := savePending(path, slug)
-	moved, err := quicknoteErr(moveQuicknote(user, slug, folder, name, keepDate, suffix))
+	pending := pendingNote(slug, keepPending(path, slug))
+	moved, err := refused(moveQuicknote(user, slug, folder, name, keepDate, suffix))
 	if err != nil {
 		return "", err
 	}
@@ -286,7 +286,7 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 			return "", toolErr("give either old_string/new_string or edits, not both")
 		}
 	}
-	pending := savePending(path, slug)
+	pending := pendingNote(slug, keepPending(path, slug))
 	content, err := readText(path)
 	if err != nil {
 		return "", err
@@ -358,7 +358,7 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
-	pending := savePending(path, slug)
+	pending := pendingNote(slug, keepPending(path, slug))
 	content, err := readText(path)
 	if err != nil {
 		return "", err
@@ -455,7 +455,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err != nil {
 		return "", err
 	}
-	pending := savePendingPages(paths, folder+"/")
+	pending := pendingPagesNote(keepPendingPages(paths, folder+"/"), folder+"/")
 	moves, changed, err := moveFolder(user, folder, newFolder, msg)
 	if err != nil {
 		return "", err
@@ -514,7 +514,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pending := savePending(path, slug)
+	pending := pendingNote(slug, keepPending(path, slug))
 	changed, err := movePage(user, path, newPath, slug, newS, msg)
 	if err != nil {
 		return "", err
@@ -547,7 +547,7 @@ func deletePageTool(args jsonObj, base, user string) (string, error) {
 			linking = append(linking, b)
 		}
 	}
-	pending := savePending(path, slug)
+	pending := pendingNote(slug, keepPending(path, slug))
 	if err := os.Remove(path); err != nil {
 		return "", err
 	}
@@ -596,7 +596,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 			"pick the version before it.")
 	}
 	existed := exists(path)
-	pending, old := savePending(path, slug), ""
+	pending, old := pendingNote(slug, keepPending(path, slug)), ""
 	if existed {
 		if old, err = readText(path); err != nil {
 			return "", err
@@ -959,7 +959,8 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pending := savePendingPages(paths, fmt.Sprintf("%d pages", len(hits)))
+	what := fmt.Sprintf("%d pages", len(hits))
+	pending := pendingPagesNote(keepPendingPages(paths, what), what)
 	for _, h := range hits {
 		if err := writeText(h.path, h.new); err != nil {
 			return "", err

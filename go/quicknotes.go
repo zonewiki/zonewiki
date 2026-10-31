@@ -13,13 +13,6 @@ import (
 	"time"
 )
 
-// quicknoteError: a move or append refused, with a message for the user.
-type quicknoteError struct{ msg string }
-
-func (e *quicknoteError) Error() string { return e.msg }
-
-func refuse(msg string) error { return &quicknoteError{msg} }
-
 // noteDate: the day a note was created (YYYY-MM-DD).
 func noteDate(slug string) string {
 	m := quicknoteRE.FindStringSubmatch(slug)

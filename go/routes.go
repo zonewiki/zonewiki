@@ -502,7 +502,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if isForce || r.PostFormValue("overwrite") == "1" {
 		// Keep mine: whatever the page holds, but never what was never in git.
-		commitBeforeOverwrite(userOf(r), s.slug, s.path)
+		keepPending(s.path, s.slug)
 	}
 	commitOthersDraft(userOf(r), s.slug, s.path)
 	if err := s.write(content); err != nil {
@@ -558,7 +558,7 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 		return
 	}
 	user := userOf(r)
-	commitBeforeOverwrite(user, s.slug, s.path) // theirs, if never in git
+	keepPending(s.path, s.slug) // theirs, if never in git
 	if err := writeText(s.path, mine); err != nil {
 		serverError(w, r, err)
 		return
@@ -696,9 +696,8 @@ func quicknoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 // quicknoteFailed answers a failed move or append: a refusal goes back to
 // the page's dialog (back, the message appended), anything else is a 500.
 func quicknoteFailed(w http.ResponseWriter, r *http.Request, back string, err error) {
-	var se *quicknoteError
-	if errors.As(err, &se) {
-		http.Redirect(w, r, back+quote(se.msg), http.StatusFound)
+	if pe, ok := refusalOf(err); ok {
+		http.Redirect(w, r, back+quote(pe.msg), http.StatusFound)
 		return
 	}
 	serverError(w, r, err)
@@ -784,7 +783,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	commitOthersDraft(userOf(r), slug, path)
+	keepPending(path, slug)
 	if err := os.Remove(path); err != nil {
 		serverError(w, r, err)
 		return

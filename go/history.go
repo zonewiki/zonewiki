@@ -218,7 +218,7 @@ func restoreRevision(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	commitOthersDraft(user, slug, path)
+	keepPending(path, slug)
 	if err := writeText(path, content); err != nil {
 		serverError(w, r, err)
 		return
