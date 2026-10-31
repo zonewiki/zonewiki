@@ -56,12 +56,6 @@ def mcp(client, tool, token=TOKEN, **args):
     return result["content"][0]["text"], result["isError"]
 
 
-def until_step(request, door, step):
-    """The browser's route still does it its own way (docs/plans/operations-layer.md)."""
-    if door == "browser":
-        request.applymarker(pytest.mark.xfail(strict=True, reason=f"the route, until step {step}"))
-
-
 # Each write through a door: True when it was done, False when refused.
 
 def delete(client, door, slug, token=TOKEN):
@@ -111,9 +105,8 @@ class TestTextNotInGit:
         assert (wiki / "p.md").read_text() == "# P\n\nv1\n"
         assert in_history(wiki, "Only on disk.")
 
-    def test_rename_commits_it_apart(self, client, wiki, door, request):
+    def test_rename_commits_it_apart(self, client, wiki, door):
         """The rename's own commit only moves the page."""
-        until_step(request, door, 4)
         commit(wiki, "p", "# P\n\nCommitted.\n")
         write_page(wiki, "p", "# P\n\nOnly on disk.\n")
         assert rename(client, door, "p", "q")

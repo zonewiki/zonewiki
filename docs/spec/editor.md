@@ -50,7 +50,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - On submit, POSTs to `POST /rename/<slug>` with field `new_name` (human-readable name accepted, converted to slug server-side).
 - Server renames the file (`<old>.md` → `<new>.md`), re-points every link to it (see Links below; a shared page can't be renamed into a private folder: it is refused, `docs/spec/users.md`), then redirects to `/page/<new-slug>`.
 - Renaming `index` is forbidden — the server returns 400 if the old slug is `index`.
-- If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_error=…` (to the editor, which shows the rename bar with the error, or with `from=page` to the page view, whose rename dialog reopens with it). An unchanged name goes back the same way.
+- If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_name=…&rename_error=…` (to the editor, which shows the rename bar with the error and the name typed, or with `from=page` to the page view, whose rename dialog reopens with them); so does a name in a folder Zone skips (`_…`, `.…`) or another user's private folder. An unchanged or empty name goes back without an error. The browser and the MCP tool `rename_page` refuse alike (`renamePageOp` in `go/pageops.go`), and text the page held that wasn't committed yet is committed first (`Save <slug>`), so the rename's commit only moves the page.
 - Validate new slug with `safePath()` before renaming.
 
 **Links** — when a page is renamed, every link to it is re-pointed (`rewritePageLinks()` via `updateReferences()`), so nothing that backlinks count is left broken:

@@ -846,7 +846,7 @@ class TestRenamePage:
         write_page(wiki_dir, "page-a", "# A\n")
         write_page(wiki_dir, "page-b", "# B\n")
         resp = client.post("/rename/page-a", data={"new_name": "page-b", "from": "page"}, headers=HOST)
-        assert resp.headers["Location"].startswith("/page/page-a?rename_error=")
+        assert resp.headers["Location"].startswith("/page/page-a?") and "rename_error=" in resp.headers["Location"]
         body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
         assert '<dialog id="page-rename-dialog" class="modal" data-open>' in body
         assert 'A page named "page-b" already exists' in html.unescape(body)

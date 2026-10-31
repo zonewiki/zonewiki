@@ -414,52 +414,19 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err != nil {
 		return "", err
 	}
-	switch {
-	case newFolder == folder:
-		return "", toolErr("The folder is already called " + folder)
-	case strings.HasPrefix(newFolder, folder+"/"):
-		return "", toolErr(folder + "/ can't move into a folder inside itself")
-	case safePath(newFolder+"/page") == "":
-		return "", toolErr(strconv.Quote(newFolder) + ": pages can't go in folders starting with '_' or '.'")
-	}
-	var paths, taken []string
-	for _, p := range sortedPages() {
-		if strings.HasPrefix(p.Slug, folder+"/") {
-			paths = append(paths, p.Path)
-			n := newFolder + p.Slug[len(folder):]
-			if !canWrite(user, p.Slug) || !canWrite(user, n) {
-				// private/ itself, say: it holds other users' folders.
-				return "", toolErr("Nothing was moved: " + folder + "/ holds pages that aren't yours to move, " +
-					"or they would land in a private folder not yours. Move the pages one by one.")
-			}
-			if np := safePath(n); np != "" && exists(np) {
-				taken = append(taken, n)
-			}
-		}
-	}
-	if len(taken) > 0 {
-		return "", toolErr("These pages already exist, so nothing was moved: " + strings.Join(taken, ", "))
+	if _, err := checkFolderMove(user, folder, newFolder); err != nil {
+		return "", toolRefusal(err)
 	}
 	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}, user); err != nil {
 		return "", err
 	}
-	moved := map[string]string{}
-	for _, p := range sortedPages() {
-		if strings.HasPrefix(p.Slug, folder+"/") {
-			moved[p.Slug] = newFolder + p.Slug[len(folder):]
-		}
-	}
-	if msg := refuseMakingPrivate(moved); msg != "" {
-		return "", toolErr("Nothing was moved: " + msg)
-	}
-	msg, err := commitMsg("Move "+folder+"/ to "+newFolder+"/", args)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	pending := pendingPagesNote(keepPendingPages(paths, folder+"/"), folder+"/")
-	moves, changed, err := moveFolder(user, folder, newFolder, msg)
+	moves, changed, kept, err := moveFolderOp(user, folder, newFolder, suffix)
 	if err != nil {
-		return "", err
+		return "", toolRefusal(err)
 	}
 	head := fmt.Sprintf("Moved folder %s/ to %s/: %d pages.", folder, newFolder, len(moves))
 	if len(changed) > 0 {
@@ -472,7 +439,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if len(moves) > movesShown {
 		out = append(out, fmt.Sprintf("… and %d more", len(moves)-movesShown))
 	}
-	return strings.Join(out, "\n") + pending, nil
+	return strings.Join(out, "\n") + pendingPagesNote(kept, folder+"/"), nil
 }
 
 func renamePageTool(args jsonObj, base, user string) (string, error) {
@@ -483,12 +450,9 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if folder := folderArg(raw, user); folder != "" {
 		return renameFolder(folder, args, base, user)
 	}
-	slug, path, err := existingPage(args, "slug", user)
+	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
-	}
-	if isProtected(slug) {
-		return "", toolErr(slug + " is the home page; it can't be renamed")
 	}
 	rawNew, err := strArg(args, "new_slug", true)
 	if err != nil {
@@ -498,33 +462,28 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if newS == slug {
-		return "", toolErr("The page is already called " + slug)
-	}
-	newPath := safePath(newS)
-	if exists(newPath) {
-		return "", toolErr("A page " + strconv.Quote(newS) + " already exists")
+	if _, _, err := checkRename(user, slug, newS); err != nil {
+		if pe, ok := refusalOf(err); ok {
+			return "", toolErr("Not renamed: " + pe.msg)
+		}
+		return "", err
 	}
 	if err := checkGuides(args, []string{slug, newS}, user); err != nil {
 		return "", err
 	}
-	if msg := refuseMakingPrivate(map[string]string{slug: newS}); msg != "" {
-		return "", toolErr("Not renamed: " + msg)
-	}
-	msg, err := commitMsg("Rename "+slug+" to "+newS, args)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	pending := pendingNote(slug, keepPending(path, slug))
-	changed, err := movePage(user, path, newPath, slug, newS, msg)
+	changed, kept, err := renamePageOp(user, slug, newS, suffix)
 	if err != nil {
-		return "", err
+		return "", toolRefusal(err)
 	}
 	refs := ""
 	if len(changed) > 0 {
 		refs = fmt.Sprintf(" Links to it were updated in %d files.", len(changed))
 	}
-	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pending, nil
+	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pendingNote(slug, kept), nil
 }
 
 func deletePageTool(args jsonObj, base, user string) (string, error) {

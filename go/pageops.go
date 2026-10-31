@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // refusal: why an operation refused, for the route's answer.
@@ -122,6 +123,110 @@ func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err 
 	}
 	gitCommit(user, "Restore "+slug+" to "+short+suffix, path)
 	return old, kept, nil
+}
+
+// checkRename: why user can't rename slug to newSlug, if not; else the
+// files of both. The MCP tool asks it before it asks for the guides.
+func checkRename(user, slug, newSlug string) (path, newPath string, err error) {
+	if path, err = writablePage(user, slug); err != nil {
+		return "", "", err
+	}
+	switch newPath = safePath(newSlug); {
+	case isProtected(slug):
+		err = refuseAs(refusedProtected, slug+" is the home page; it can't be renamed")
+	case newSlug == slug:
+		err = refuseAs(refusedUnchanged, "The page is already called "+slug)
+	default:
+		err = checkTarget(user, slug, newSlug)
+	}
+	return path, newPath, err
+}
+
+// checkTarget: why the page slug can't move to newSlug, a new name for
+// it, if not: a folder Zone skips, another user's folder, a page there
+// already, or a shared page into a private folder.
+func checkTarget(user, slug, newSlug string) error {
+	newPath := safePath(newSlug)
+	switch {
+	case newPath == "":
+		return refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
+	case !canWrite(user, newSlug):
+		return refuse("“" + newSlug + "”: that folder is another user's")
+	case exists(newPath):
+		return refuseAs(refusedExists, "A page named "+strconv.Quote(newSlug)+" already exists")
+	}
+	if msg := refuseMakingPrivate(map[string]string{slug: newSlug}); msg != "" {
+		return refuse(msg)
+	}
+	return nil
+}
+
+// renamePageOp renames the page, links to it following (movePage); what
+// it held uncommitted is committed first, so the rename's commit only
+// moves it. changed: the files whose links were re-pointed.
+func renamePageOp(user, slug, newSlug, suffix string) (changed []string, kept bool, err error) {
+	path, newPath, err := checkRename(user, slug, newSlug)
+	if err != nil {
+		return nil, false, err
+	}
+	kept = keepPending(path, slug)
+	changed, err = movePage(user, path, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug+suffix)
+	return changed, kept, err
+}
+
+// checkFolderMove: why user can't move folder to newFolder, if not; else
+// the files of the pages in it.
+func checkFolderMove(user, folder, newFolder string) ([]string, error) {
+	switch {
+	case newFolder == folder:
+		return nil, refuseAs(refusedUnchanged, "The folder is already called "+folder)
+	case strings.HasPrefix(newFolder, folder+"/"):
+		return nil, refuse(folder + "/ can't move into a folder inside itself")
+	case safePath(newFolder+"/page") == "":
+		return nil, refuse(strconv.Quote(newFolder) + ": pages can't go in folders starting with '_' or '.'")
+	}
+	var paths, taken []string
+	moved := map[string]string{}
+	for _, p := range sortedPages() {
+		if !strings.HasPrefix(p.Slug, folder+"/") {
+			continue
+		}
+		n := newFolder + p.Slug[len(folder):]
+		if !canWrite(user, p.Slug) || !canWrite(user, n) {
+			// private/ itself, say: it holds other users' folders.
+			return nil, refuse("Nothing was moved: " + folder + "/ holds pages that aren't yours to move, " +
+				"or they would land in a private folder not yours. Move the pages one by one.")
+		}
+		if np := safePath(n); np != "" && exists(np) {
+			taken = append(taken, n)
+		}
+		paths = append(paths, p.Path)
+		moved[p.Slug] = n
+	}
+	if len(paths) == 0 {
+		return nil, refuseAs(refusedNotFound, "No folder "+strconv.Quote(folder))
+	}
+	if len(taken) > 0 {
+		return nil, refuseAs(refusedExists, "These pages already exist, so nothing was moved: "+strings.Join(taken, ", "))
+	}
+	if msg := refuseMakingPrivate(moved); msg != "" {
+		return nil, refuse("Nothing was moved: " + msg)
+	}
+	return paths, nil
+}
+
+// moveFolderOp moves every page in the folder, links following, in one
+// commit (moveFolder); what they held uncommitted is committed first.
+// Returns the (slug, new slug) moves, the files whose links changed, and
+// how many pages had text kept.
+func moveFolderOp(user, folder, newFolder, suffix string) (moves [][2]string, changed []string, kept int, err error) {
+	paths, err := checkFolderMove(user, folder, newFolder)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	kept = keepPendingPages(paths, folder+"/")
+	moves, changed, err = moveFolder(user, folder, newFolder, "Move "+folder+"/ to "+newFolder+"/"+suffix)
+	return moves, changed, kept, err
 }
 
 // keepPending: before a write that replaces or removes the page at path,

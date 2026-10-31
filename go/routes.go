@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -630,46 +631,26 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 
 func renamePage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
-	if isProtected(slug) {
-		badRequestPage(w)
-		return
-	}
-	oldPath := safePath(slug)
-	if oldPath == "" || !exists(oldPath) || !canWrite(userOf(r), slug) {
-		http.NotFound(w, r)
-		return
-	}
 	// Back to where the rename was asked for: the editor, or the page view's
 	// ⋯ menu (which reopens its dialog with the error).
 	back := pathURL("edit", slug)
 	if r.PostFormValue("from") == "page" {
 		back = pathURL("page", slug)
 	}
-	// toSlug keeps underscores, so quicknote timestamps survive a rename.
+	// toSlug keeps underscores, so note timestamps survive a rename.
 	newSlug := toSlug(strings.TrimSpace(r.PostFormValue("new_name")))
-	if newSlug == "" || newSlug == slug {
-		http.Redirect(w, r, back, http.StatusFound)
-		return
+	if newSlug == "" {
+		newSlug = slug
 	}
-	newPath := safePath(newSlug)
-	if newPath == "" {
-		badRequestPage(w)
-		return
-	}
-	if !canWrite(userOf(r), newSlug) {
-		http.Redirect(w, r, back+"?rename_error="+quote("“"+newSlug+"”: that folder is another user's"), http.StatusFound)
-		return
-	}
-	if exists(newPath) {
-		http.Redirect(w, r, back+"?rename_error=A+page+named+%22"+newSlug+"%22+already+exists", http.StatusFound)
-		return
-	}
-	if msg := refuseMakingPrivate(map[string]string{slug: newSlug}); msg != "" {
-		http.Redirect(w, r, back+"?rename_name="+quote(newSlug)+"&rename_error="+quote(msg), http.StatusFound)
-		return
-	}
-	if _, err := movePage(userOf(r), oldPath, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug); err != nil {
-		serverError(w, r, err)
+	if _, _, err := renamePageOp(userOf(r), slug, newSlug, ""); err != nil {
+		switch pe, ok := refusalOf(err); {
+		case !ok || pe.kind == refusedNotFound || pe.kind == refusedProtected:
+			pageFailed(w, r, err)
+		case pe.kind == refusedUnchanged:
+			http.Redirect(w, r, back, http.StatusFound)
+		default:
+			http.Redirect(w, r, back+"?rename_name="+quote(newSlug)+"&rename_error="+url.QueryEscape(pe.msg), http.StatusFound)
+		}
 		return
 	}
 	http.Redirect(w, r, pathURL("page", newSlug), http.StatusFound)
