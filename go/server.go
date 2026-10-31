@@ -52,7 +52,7 @@ func main() {
 	}
 	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
 	public := flag.String("public", "", "the folder of the browser code (default: public/, found from the binary)")
-	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for leaf_help (default: found from -public)")
+	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for zone_help (default: found from -public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
 	c, s, err := loadConfig(os.Getenv)

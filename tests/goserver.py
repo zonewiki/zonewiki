@@ -128,7 +128,7 @@ def password_hash(password: str, iterations: int = 1000) -> str:
 
 def _flags() -> list[str]:
     """The flags for what a test sets that isn't a setting: Zone's docs
-    folder (for leaf_help), and the semantic index with the tests' fake
+    folder (for zone_help), and the semantic index with the tests' fake
     embedder (tests/semantic.py)."""
     flags = ["-docs", str(settings.DOCS or "/nonexistent")]
     if settings.SEMANTIC is not None:

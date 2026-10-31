@@ -1,6 +1,6 @@
 // The MCP tools: reading (search_wiki, search_tasks,
 // grep_wiki, read_page, list_pages, check_links, list_tags, history,
-// leaf_help, read_guides) and writing pages (write_page (also a
+// zone_help, read_guides) and writing pages (write_page (also a
 // note), edit_page, replace_in_pages, append_to_page, rename_page (also a
 // folder), delete_page, restore_page, file_note) and tasks
 // (create_task, update_task: also comments, deletes and tags on several
@@ -1944,9 +1944,9 @@ func listTags(args jsonObj, base, user string) (string, error) {
 		"tag | pages | open tasks | done tasks:\n" + strings.Join(lines, "\n"), nil
 }
 
-// leafHelp: Zone's documentation (manual.go), passages for a query, a doc
+// zoneHelp: Zone's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
-func leafHelp(args jsonObj, base, user string) (string, error) {
+func zoneHelp(args jsonObj, base, user string) (string, error) {
 	var query, topic, heading string
 	for _, a := range []struct {
 		name string
@@ -2008,7 +2008,7 @@ func leafHelp(args jsonObj, base, user string) (string, error) {
 				out = append(out, fmt.Sprintf("[%d] %s\ntopic: %s\n\n%s", i+1, d.title, d.topic, d.text))
 			}
 		}
-		return strings.Join(out, "\n\n---\n\n") + "\n\nThe whole section: leaf_help with its topic and heading.", nil
+		return strings.Join(out, "\n\n---\n\n") + "\n\nThe whole section: zone_help with its topic and heading.", nil
 	}
 	out := []string{"Zone's documentation: the README (what Zone is, its features, setup) and the spec, " +
 		"one doc per area. Read one with topic, a section with topic and heading."}
@@ -2085,7 +2085,7 @@ func anyPageIn(folder, user string) bool {
 var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, error){
 	"search_wiki": searchWiki, "search_tasks": searchTasks, "grep_wiki": grepWiki, "read_page": readPage,
 	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
-	"leaf_help": leafHelp, "read_guides": readGuides,
+	"zone_help": zoneHelp, "read_guides": readGuides,
 	"write_page": writePage, "edit_page": editPageTool, "replace_in_pages": replaceInPages,
 	"append_to_page": appendToPage, "file_note": fileNote, "rename_page": renamePageTool,
 	"delete_page": deletePageTool, "restore_page": restorePage, "create_task": createTaskTool,
@@ -2094,7 +2094,7 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 
 // mcpToolAliases: tools by the names they had before, for assistants that
 // still call them so; tools/list shows only the new ones.
-var mcpToolAliases = map[string]string{"file_scratch_note": "file_note"}
+var mcpToolAliases = map[string]string{"file_scratch_note": "file_note", "leaf_help": "zone_help"}
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
 // its answer use base-url (the settings file), else the address the client reached Zone at.

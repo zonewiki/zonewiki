@@ -237,7 +237,7 @@
   }
  },
  {
-  "name": "leaf_help",
+  "name": "zone_help",
   "title": "Zone's documentation",
   "description": "Search Zone's own documentation (its README and its spec) for how Zone works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Zone's developers: answer the user in terms of what they type or click, leaving out function and file names.",
   "inputSchema": {

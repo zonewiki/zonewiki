@@ -736,7 +736,7 @@ def test_moving_the_private_folder_is_refused(client, wiki):
 
 def test_every_tool_is_covered():
     tools = {t["name"] for t in json.loads((REPO / "go/mcp_tools.json").read_text())}
-    covered = {t[0] for t in MCP_READS} | {t[0] for t in MCP_WRITES} | {"leaf_help"}
+    covered = {t[0] for t in MCP_READS} | {t[0] for t in MCP_WRITES} | {"zone_help"}
     assert tools - covered == set(), "tools neither probed nor exempt"
     assert covered - tools == set(), "probes of tools that don't exist"
 

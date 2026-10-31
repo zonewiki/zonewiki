@@ -99,7 +99,7 @@ ENV LEAF_MODEL_DIR=/opt/leaf-model
 
 WORKDIR /app
 COPY public/ public/
-# Zone's documentation, for the MCP tool leaf_help (found next to public/).
+# Zone's documentation, for the MCP tool zone_help (found next to public/).
 COPY README.md ./
 COPY docs/spec/ docs/spec/
 COPY --from=build /zonewiki ./zonewiki

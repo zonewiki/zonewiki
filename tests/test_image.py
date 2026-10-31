@@ -40,7 +40,7 @@ def test_both_images_build_with_the_same_go():
 
 
 def test_the_image_ships_the_docs_and_the_browser_code():
-    # leaf_help finds README.md and docs/spec/ next to public/.
+    # zone_help finds README.md and docs/spec/ next to public/.
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/spec/ docs/spec/"):
         assert line in final

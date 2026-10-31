@@ -29,7 +29,7 @@ const mcpInstructions = "Zone is the user's personal wiki: their pages in markdo
 	"phrase queries the way the notes might), then read_page for a page's full " +
 	"text. search_tasks filters tasks by tag and status; grep_wiki finds every " +
 	"occurrence of exact text. Cite pages and tasks by their URL. For questions " +
-	"about Zone itself, call leaf_help.\n\n" +
+	"about Zone itself, call zone_help.\n\n" +
 	"When you research something elsewhere (an issue tracker, chat, mail, code, " +
 	"the web) and find a fact that a wiki page on the topic lacks or " +
 	"contradicts, offer to add it: name the page and each fact in one line, once " +

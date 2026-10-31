@@ -36,7 +36,7 @@ LEAF_LOCALE = ""
 LEAF_DATE_FORMAT = ""
 # Whether the server finds git on its PATH.
 GIT_ENABLED = shutil.which("git") is not None
-# Zone's docs (README.md, docs/spec/) for leaf_help; None: none there.
+# Zone's docs (README.md, docs/spec/) for zone_help; None: none there.
 DOCS: Path | None = REPO
 # The semantic index, a tests.semantic.FakeIndex; None: semantic search off.
 SEMANTIC = None

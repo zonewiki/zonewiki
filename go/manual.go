@@ -1,4 +1,4 @@
-// Zone's own documentation, for the MCP tool leaf_help: the
+// Zone's own documentation, for the MCP tool zone_help: the
 // README and the spec (docs/spec/*.md), searched by section with BM25, so
 // an assistant answers questions about Zone itself (how to rename a task list's
 // tabs, a setting, the query syntax) from the docs rather than from guesses.

@@ -53,11 +53,11 @@ class TestToolDefinitions:
         tools = self.tools(client)
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-            "list_tags", "history", "leaf_help", "read_guides",
+            "list_tags", "history", "zone_help", "read_guides",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "rename_page",
             "delete_page", "restore_page", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-                   "list_tags", "history", "leaf_help", "read_guides"}
+                   "list_tags", "history", "zone_help", "read_guides"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
         adding = {"append_to_page", "create_task"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
@@ -566,7 +566,7 @@ class TestGuide:
         # Claude Code cuts a server's instructions at about 2 KB.
         text = self.instructions(client)
         assert len(text.encode()) < 1900
-        for needed in ("search_wiki", "leaf_help", "read_guides", "offer to add it",
+        for needed in ("search_wiki", "zone_help", "read_guides", "offer to add it",
                        "Write only when the user agrees"):
             assert needed in text
         write_page(wiki_dir, "wiki-guide", "# Wiki guide\n\n" + "x" * 5000)
@@ -1783,56 +1783,56 @@ class TestLeafHelp:
 
     def test_instructions_point_to_it(self, client):
         res = rpc(client, "initialize", {"protocolVersion": "2025-06-18"}).get_json()["result"]
-        assert "leaf_help" in res["instructions"]
+        assert "zone_help" in res["instructions"]
 
     def test_query_finds_passages(self, client, docs):
-        text, err = call(client, "leaf_help", query="tab labels")
+        text, err = call(client, "zone_help", query="tab labels")
         assert not err
         assert text.startswith("[1] Tasks › Labels\ntopic: tasks\nheading: Labels\n\n`labels=Catalogue")
         assert "Testing" not in text  # how Zone is tested is left out
-        assert "leaf_help with its topic and heading" in text
+        assert "zone_help with its topic and heading" in text
 
     def test_query_limit(self, client, docs):
-        text, _ = call(client, "leaf_help", query="dates views labels wiki", limit=1)
+        text, _ = call(client, "zone_help", query="dates views labels wiki", limit=1)
         assert "[1]" in text and "[2]" not in text
 
     def test_nothing_matches(self, client, docs):
-        text, err = call(client, "leaf_help", query="xylophone")
+        text, err = call(client, "zone_help", query="xylophone")
         assert not err and text.startswith("Nothing in Zone's documentation matches")
 
     def test_topic_and_section(self, client, docs):
-        text, err = call(client, "leaf_help", topic="tasks")
+        text, err = call(client, "zone_help", topic="tasks")
         assert not err and text.startswith("topic: tasks\n\n# Tasks\n") and "## Dates" in text
-        text, err = call(client, "leaf_help", topic="Tasks.md", heading="views")
+        text, err = call(client, "zone_help", topic="Tasks.md", heading="views")
         assert not err
         assert text == ("topic: tasks\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
                         "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
                         "```\n# not a heading\n```\n")
 
     def test_bad_topic_or_heading(self, client, docs):
-        text, err = call(client, "leaf_help", topic="testing")
+        text, err = call(client, "zone_help", topic="testing")
         assert err and text == 'No topic "testing". Topics: readme, tasks.'
-        text, err = call(client, "leaf_help", topic="tasks", heading="Nope")
+        text, err = call(client, "zone_help", topic="tasks", heading="Nope")
         assert err and '"Views", "Labels", "Dates"' in text and "not a heading" not in text
-        text, err = call(client, "leaf_help", heading="Views")
+        text, err = call(client, "zone_help", heading="Views")
         assert err and text == "heading needs a topic."
 
     def test_list_of_topics(self, client, docs):
-        text, err = call(client, "leaf_help")
+        text, err = call(client, "zone_help")
         assert not err
         assert "\nreadme: Zone\n  Quick start\n" in text
         assert "\ntasks: Tasks\n  Views\n    Labels\n  Dates" in text
 
     def test_without_docs(self, client, monkeypatch):
         monkeypatch.setattr(settings, "DOCS", None)
-        text, err = call(client, "leaf_help", query="tasks")
+        text, err = call(client, "zone_help", query="tasks")
         assert err and "isn't installed" in text
 
     def test_the_real_docs(self, client):
         """The checkout's README and spec, every spec file but testing.md."""
         spec = settings.REPO / "docs" / "spec"
-        topics = re.findall(r"^(\w[\w-]*): ", call(client, "leaf_help")[0], re.M)
+        topics = re.findall(r"^(\w[\w-]*): ", call(client, "zone_help")[0], re.M)
         assert topics == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
-        text, err = call(client, "leaf_help", query="tasks tab names labels")
+        text, err = call(client, "zone_help", query="tasks tab names labels")
         assert not err and "topic: tasks" in text
 

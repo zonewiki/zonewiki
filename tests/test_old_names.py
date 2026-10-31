@@ -1,8 +1,8 @@
 """What still works by the names from before a rename: Deck is called Tasks,
 so /deck, /api/deck and the _deck/ folder (moved at start-up) go on working;
 Scratch is called Notes, so /page/_scratch, /api/scratch, ?scratch=1 and
-MCP's file_scratch_note and scratch arguments do too. The old [[deck …]]
-syntax: test_tasks_embed.py."""
+MCP's file_scratch_note and scratch arguments do too; Leaf is called Zone,
+so MCP's leaf_help does too. The old [[deck …]] syntax: test_tasks_embed.py."""
 
 import json
 import subprocess
@@ -157,3 +157,9 @@ class TestOldMcpNames:
         assert note in call(client, "search_wiki", query="roadmap", scratch=True)[0]
         text, err = call(client, "file_scratch_note", slug=note, name="Alex prep")
         assert not err and (git_wiki_dir / "alex-prep.md").exists(), text
+
+    def test_leaf_help_answers_as_zone_help(self, client):
+        names = [t["name"] for t in rpc(client, "tools/list").get_json()["result"]["tools"]]
+        assert "zone_help" in names and "leaf_help" not in names
+        new, old = (call(client, tool, query="tab labels") for tool in ("zone_help", "leaf_help"))
+        assert old == new and not new[1]

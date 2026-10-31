@@ -6,7 +6,7 @@ A self-hosted, browser-based wiki. Markdown files are served and rendered at run
 
 ## Meta
 
-- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change. The README and the spec are also Zone's help: the MCP tool `leaf_help` serves them to assistants answering users' questions about Zone, so a feature's spec should say how to use it, not only how it is built.
+- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change. The README and the spec are also Zone's help: the MCP tool `zone_help` serves them to assistants answering users' questions about Zone, so a feature's spec should say how to use it, not only how it is built.
 
 ## Spec
 
@@ -19,7 +19,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
-| `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Zone's docs for assistants) |
+| `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
 | `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
@@ -68,7 +68,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
-├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
+├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
@@ -114,7 +114,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── tokenizer.go        # The model's tokenizer
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcptools.go         # The MCP tools that read, and the task tools; mcpwrite.go those that write pages
-│   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
+│   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
