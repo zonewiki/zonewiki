@@ -1,4 +1,4 @@
-"""Task references: [[task:<id>]] in a page renders the deck task as a live
+"""Task references: [[task:<id>]] in a page renders the task as a live
 chip, and search, Linked tasks and MCP know them.
 """
 
@@ -205,7 +205,7 @@ class TestMakeTask:
         write_page(wiki_dir, "notes", "# N\n")
         body = client.get("/edit/notes", headers=HOST).data.decode()
         assert 'data-fmt="maketask"' in body and 'data-fmt="taskref"' in body
-        # A hidden deck app: its edit modal for one item, and deck-core.js
+        # A hidden task app: its edit modal for one item, and tasks-core.js
         # (imported by the editor) parses `tomorrow #work due:fri` for
         # several lines.
         assert 'data-headless="1" style="display:none"' in body

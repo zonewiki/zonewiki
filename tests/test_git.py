@@ -144,7 +144,7 @@ class TestWritesCommit:
         assert "old.md" in changed and "new.md" in changed and "ref.md" in changed
         assert is_clean(wiki_dir)
 
-    def test_rename_commit_includes_updated_deck_tasks(self, client, wiki_dir):
+    def test_rename_commit_includes_updated_tasks_tasks(self, client, wiki_dir):
         save(client, "old", "# Old\n")
         client.post("/api/deck", json={"title": "Task [[old]]"}, headers=HOST)
         client.post("/rename/old", data={"new_name": "new"}, headers=HOST)
@@ -166,7 +166,7 @@ class TestWritesCommit:
         assert "- [x] one" in (wiki_dir / "todo.md").read_text()
         assert head_sha(wiki_dir) == before
 
-    def test_deck_write_commits_deck_file(self, client, wiki_dir):
+    def test_tasks_write_commits_tasks_file(self, client, wiki_dir):
         client.post("/api/deck", json={"title": "Task"}, headers=HOST)
         assert "_deck/tasks.json" in git(wiki_dir, "ls-files").splitlines()
         assert is_clean(wiki_dir)
@@ -194,7 +194,7 @@ class TestHomePage:
         assert head_sha(wiki_dir) == before
 
 
-class TestDeckFolder:
+class TestTasksFolder:
 
     def test_a_new_wiki_gets_the_folder_on_first_write(self, client, wiki_dir):
         (wiki_dir / "_deck").rmdir()   # as in a wiki without tasks yet

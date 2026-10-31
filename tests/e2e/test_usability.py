@@ -1,4 +1,4 @@
-"""Deck filter field, commit link, phone editor menu, card swipes, checkbox undo."""
+"""Tasks filter field, commit link, phone editor menu, card swipes, checkbox undo."""
 
 import re
 from datetime import date, timedelta
@@ -28,11 +28,11 @@ def wait_until(page, predicate, timeout_ms=5000):
     assert predicate()
 
 
-def seed_deck(page, wiki, embed="[[deck]]"):
+def seed_tasks(page, wiki, embed="[[deck]]"):
     for title, tags in (("Fix bug", "work"), ("Buy milk", "home"), ("Fix fence", "home,work")):
         page.request.post("/api/deck", data={"title": title, "tags": tags})
-    wiki.write("deck", f"# Deck\n\n{embed}\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", f"# Tasks\n\n{embed}\n")
+    page.goto("/page/tasks?view=open")
 
 
 # ── 4. One filter field: text plus #tags ─────────────────────────────────────
@@ -47,7 +47,7 @@ def tag_chips(page):
     return page.locator("#task-edit-modal .tag-chip-label")
 
 def test_filter_field_text_and_tags(page, wiki):
-    seed_deck(page, wiki)
+    seed_tasks(page, wiki)
     field = page.locator("#task-filter-search")
     expect(page.locator("#task-filter-tag")).to_have_count(0)
     field.fill("#work")
@@ -59,7 +59,7 @@ def test_filter_field_text_and_tags(page, wiki):
 
 
 def test_filter_field_tag_autocomplete(page, wiki):
-    seed_deck(page, wiki)
+    seed_tasks(page, wiki)
     field = page.locator("#task-filter-search")
     field.click()
     field.press_sequentially("fix #ho")
@@ -78,7 +78,7 @@ def test_tag_suggestions_after_free_text(page, wiki):
     # Regression: suggestions came only from tasks matching the whole rest of
     # the field, text included, so "some text #ho" (text matching no task yet)
     # suggested nothing. Free text no longer narrows the suggestions.
-    seed_deck(page, wiki)
+    seed_tasks(page, wiki)
     field = page.locator("#task-filter-search")
     field.click()
     field.press_sequentially("some text #ho")
@@ -93,7 +93,7 @@ def test_tag_suggestions_after_free_text(page, wiki):
 
 
 def test_hash_key_starts_a_tag_word(page, wiki):
-    seed_deck(page, wiki)
+    seed_tasks(page, wiki)
     page.locator("body").click(position={"x": 5, "y": 5})
     page.keyboard.press("#")
     field = page.locator("#task-filter-search")
@@ -102,14 +102,14 @@ def test_hash_key_starts_a_tag_word(page, wiki):
 
 
 def test_embed_tag_param_lands_in_filter_field(page, wiki):
-    seed_deck(page, wiki, "[[deck tag=home,work]]")
+    seed_tasks(page, wiki, "[[deck tag=home,work]]")
     expect(filter_chips(page)).to_have_text(["#home", "#work"])
     expect(page.locator("#task-filter-search")).to_have_value("")
     expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
 
 
 def test_new_task_takes_tags_from_filter(page, wiki):
-    seed_deck(page, wiki)
+    seed_tasks(page, wiki)
     page.locator("#task-filter-search").fill("#work|home #urgent text")
     page.get_by_role("button", name="New task").click()
     # Only unambiguous (single-tag) words become default tags.
@@ -173,10 +173,10 @@ def swipe(page, locator, dx, dy=0, steps=8, release=True):
     return send
 
 
-def phone_deck(new_page, wiki, view="open", **fields):
+def phone_tasks(new_page, wiki, view="open", **fields):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/deck", data={"title": "Water plants", **fields})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     phone.goto(f"/deck?view={view}")
     return phone
 
@@ -186,7 +186,7 @@ NEXT_WEEK = (date.today() + timedelta(days=7)).isoformat()
 
 
 def test_swipe_right_on_open_starts_today(new_page, wiki):
-    phone = phone_deck(new_page, wiki)
+    phone = phone_tasks(new_page, wiki)
     c = card(phone, "Water plants")
     send = swipe(phone, c, 200, release=False)
     expect(c).to_have_class(re.compile(r"\btask-swipe-armed\b"))
@@ -198,7 +198,7 @@ def test_swipe_right_on_open_starts_today(new_page, wiki):
 
 
 def test_swipe_left_on_open_does_nothing(new_page, wiki):
-    phone = phone_deck(new_page, wiki, start_date=NEXT_WEEK)
+    phone = phone_tasks(new_page, wiki, start_date=NEXT_WEEK)
     c = card(phone, "Water plants")
     send = swipe(phone, c, -200, release=False)
     assert c.evaluate("el => el.style.transform") in ("", "translateX(0px)")
@@ -209,7 +209,7 @@ def test_swipe_left_on_open_does_nothing(new_page, wiki):
 
 
 def test_swipe_right_on_open_task_already_in_focus_does_nothing(new_page, wiki):
-    phone = phone_deck(new_page, wiki, start_date=(date.today() - timedelta(days=3)).isoformat())
+    phone = phone_tasks(new_page, wiki, start_date=(date.today() - timedelta(days=3)).isoformat())
     c = card(phone, "Water plants")
     send = swipe(phone, c, 200, release=False)
     expect(c).not_to_have_class(re.compile(r"\btask-swipe-armed\b"))
@@ -219,7 +219,7 @@ def test_swipe_right_on_open_task_already_in_focus_does_nothing(new_page, wiki):
 
 
 def test_swipe_right_on_plan_commits_carried_over_task_again(new_page, wiki):
-    phone = phone_deck(new_page, wiki, view="plan",
+    phone = phone_tasks(new_page, wiki, view="plan",
                        start_date=(date.today() - timedelta(days=3)).isoformat())
     c = card(phone, "Water plants")
     send = swipe(phone, c, 200, release=False)
@@ -229,7 +229,7 @@ def test_swipe_right_on_plan_commits_carried_over_task_again(new_page, wiki):
 
 
 def test_swipe_left_on_focus_moves_back_to_open(new_page, wiki):
-    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY)
+    phone = phone_tasks(new_page, wiki, view="focus", start_date=TODAY)
     c = card(phone, "Water plants")
     send = swipe(phone, c, -200, release=False)
     expect(c).to_have_class(re.compile(r"\btask-swipe-armed\b"))
@@ -241,7 +241,7 @@ def test_swipe_left_on_focus_moves_back_to_open(new_page, wiki):
 
 
 def test_swipe_right_on_focus_does_nothing(new_page, wiki):
-    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY)
+    phone = phone_tasks(new_page, wiki, view="focus", start_date=TODAY)
     c = card(phone, "Water plants")
     swipe(phone, c, 200)
     phone.wait_for_timeout(300)
@@ -252,7 +252,7 @@ def test_swipe_right_on_focus_does_nothing(new_page, wiki):
 
 def test_due_task_cannot_be_swiped_out_of_focus(new_page, wiki):
     # Clearing the start date would leave it in Focus: the deadline keeps it.
-    phone = phone_deck(new_page, wiki, view="focus", start_date=TODAY, due_date=TODAY)
+    phone = phone_tasks(new_page, wiki, view="focus", start_date=TODAY, due_date=TODAY)
     c = card(phone, "Water plants")
     send = swipe(phone, c, -200, release=False)
     expect(c).not_to_have_class(re.compile(r"\btask-swipe-armed\b"))
@@ -262,7 +262,7 @@ def test_due_task_cannot_be_swiped_out_of_focus(new_page, wiki):
 
 
 def test_swipes_on_plan_go_both_ways(new_page, wiki):
-    phone = phone_deck(new_page, wiki, view="plan", start_date=NEXT_WEEK)
+    phone = phone_tasks(new_page, wiki, view="plan", start_date=NEXT_WEEK)
     swipe(phone, card(phone, "Water plants"), 200)
     wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
     swipe(phone, card(phone, "Water plants"), -200)
@@ -270,7 +270,7 @@ def test_swipes_on_plan_go_both_ways(new_page, wiki):
 
 
 def test_short_swipe_does_nothing(new_page, wiki):
-    phone = phone_deck(new_page, wiki)
+    phone = phone_tasks(new_page, wiki)
     c = card(phone, "Water plants")
     swipe(phone, c, 40)
     phone.wait_for_timeout(300)
@@ -279,7 +279,7 @@ def test_short_swipe_does_nothing(new_page, wiki):
 
 
 def test_vertical_move_is_not_a_swipe(new_page, wiki):
-    phone = phone_deck(new_page, wiki)
+    phone = phone_tasks(new_page, wiki)
     c = card(phone, "Water plants")
     swipe(phone, c, 30, dy=120)
     phone.wait_for_timeout(300)
@@ -287,7 +287,7 @@ def test_vertical_move_is_not_a_swipe(new_page, wiki):
 
 
 def test_swipe_does_not_scroll_page_sideways(new_page, wiki):
-    phone = phone_deck(new_page, wiki)
+    phone = phone_tasks(new_page, wiki)
     swipe(phone, card(phone, "Water plants"), 250, release=False)
     assert phone.evaluate("document.documentElement.scrollWidth") <= 390
 
@@ -342,8 +342,8 @@ def seed_tags(page, wiki):
     for title, tags in (("A", "work"), ("B", "work"), ("C", "work,workshop"),
                         ("D", "wood"), ("E", "home")):
         page.request.post("/api/deck", data={"title": title, "tags": tags})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.goto("/page/tasks?view=open")
 
 
 def test_filter_tab_completes_to_best_match(page, wiki):
@@ -444,8 +444,8 @@ def test_tag_with_space_is_findable_in_filter(page, wiki):
     # since the filter splits on spaces. Tags are now one word each.
     page.request.post("/api/deck", data={"title": "Try models", "tags": "locallm xxx"})
     page.request.post("/api/deck", data={"title": "Other"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.goto("/page/tasks?view=open")
     field = page.locator("#task-filter-search")
     field.click()
     field.press_sequentially("#locallm")
@@ -493,7 +493,7 @@ def test_tags_field_takes_several_tags_at_once(page, wiki):
 
 
 def test_c_t_with_a_task_selected_opens_only_new_task(page, wiki):
-    # The t of the c t shortcut is not the deck's t (tag the selected tasks).
+    # The t of the c t shortcut is not the task app's t (tag the selected tasks).
     seed_tags(page, wiki)
     card = page.locator(".task-item").filter(has=page.get_by_text("E", exact=True))
     card.locator(".task-title").click()
@@ -527,8 +527,8 @@ def test_backspace_in_tags_field(page, wiki):
 def test_swipe_starting_on_a_date(new_page, wiki):
     # The dates sit on a card's first line, where a thumb starts a swipe: a
     # swipe from there works, and doesn't also open the date picker.
-    phone = phone_deck(new_page, wiki, view="plan", start_date=NEXT_WEEK)
+    phone = phone_tasks(new_page, wiki, view="plan", start_date=NEXT_WEEK)
     chip = card(phone, "Water plants").locator(".task-clickable-date[data-field='start_date']")
     swipe(phone, chip, 150)
     wait_until(phone, lambda: task(phone, "Water plants")["start_date"] == TODAY)
-    expect(phone.locator(".deck-datepicker")).to_have_count(0)
+    expect(phone.locator(".tasks-datepicker")).to_have_count(0)

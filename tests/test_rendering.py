@@ -220,7 +220,7 @@ class TestDisabledAttributeStripping:
 class TestDirectivesInsideCode:
     """[[wikilinks]] and [[deck]] are pre-processed on the raw text.
     Inside code they must stay literal — they used to be rewritten into HTML
-    that then showed up escaped inside the code block (or embedded a whole deck
+    that then showed up escaped inside the code block (or embedded a whole tasks
     app inside a <pre>)."""
 
     def test_wikilink_in_fenced_code_stays_literal(self, client):
@@ -241,7 +241,7 @@ class TestDirectivesInsideCode:
         assert "[[x]]" in html
         assert 'href="/page/y"' in html
 
-    def test_deck_directive_in_code_not_embedded(self, client):
+    def test_tasks_directive_in_code_not_embedded(self, client):
         html = preview(client, "```\n[[deck tag=work]]\n```\n")
         assert "tasks-app" not in html
         assert "[[deck tag=work]]" in html

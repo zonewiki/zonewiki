@@ -4,9 +4,9 @@
 {{.breadcrumb_html}}
 <header class="page-header"><h1>{{.heading}}</h1></header>
 <article class="page-content">
-{{- if .list_name}}<p class="deck-list-home">
+{{- if .list_name}}<p class="tasks-list-home">
   {{- with .home}}A separate list, from <a href="{{url "page" .Slug}}">{{.Title}}</a>.
   {{- else}}No page declares <code>[[deck list={{.list_name}}]]</code>: these are the tasks tagged #{{.list_name}}.{{end -}}
 </p>{{end -}}
-{{.deck_html}}</article>
+{{.tasks_html}}</article>
 {{end}}

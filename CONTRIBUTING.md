@@ -44,7 +44,7 @@ something that won't be merged. Then:
 
    ```bash
    ./run.sh test     # unit and API tests
-   ./run.sh e2e      # browser tests and the deck logic tests
+   ./run.sh e2e      # browser tests and the task logic tests
    ./run.sh leaks    # secret scan
    ```
 

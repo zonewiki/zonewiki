@@ -1,4 +1,4 @@
-// Search and retrieval: BM25 over pages and deck tasks
+// Search and retrieval: BM25 over pages and tasks
 // (search.go), fused with the optional semantic index (embed.go), for the
 // browser (doSearch) and for LLMs (retrieve: sections rather than pages).
 package main
@@ -17,14 +17,14 @@ import (
 	"time"
 )
 
-// SearchDoc is a page, a page's section or a deck task as BM25 indexes it.
+// SearchDoc is a page, a page's section or a task as BM25 indexes it.
 type SearchDoc struct {
 	Slug, Title string
 	Mtime       time.Time // a page's or section's file
 	Tags        []string  // for #tag queries
 	Tokens      []string
 	ExcerptText string // a page's or task's searchable text
-	TaskRefs    bool   // a page with [[task:…]], indexed with the tasks' titles
+	TaskRefs    bool   // a page with [[task:…]], indexed with the task app's titles
 
 	// A section (the section index): the key is the one its vector has in
 	// the semantic index.
@@ -167,20 +167,20 @@ func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
 var searchDocCache pageCache[*SearchDoc]
 
 // pageSearchDocs: every page as a BM25 document. A page with [[task:…]] is
-// indexed with the tasks' titles, so it is stale when the deck changes too.
+// indexed with the task app's titles, so it is stale when the tasks changes too.
 func pageSearchDocs() []*SearchDoc {
-	deckKey := deckMtimes()
-	return perPage(&searchDocCache, pageSearchDoc, deckKey,
-		func(d *SearchDoc, key string) bool { return !d.TaskRefs || key == deckKey })
+	tasksKey := tasksMtimes()
+	return perPage(&searchDocCache, pageSearchDoc, tasksKey,
+		func(d *SearchDoc, key string) bool { return !d.TaskRefs || key == tasksKey })
 }
 
-// deckMtimes: every owner's deck files' paths and mtimes, archives
+// tasksMtimes: every owner's tasks files' paths and mtimes, archives
 // included (a cache key).
-func deckMtimes() string {
+func tasksMtimes() string {
 	var b strings.Builder
 	var paths []string
 	for _, o := range everyOwner() {
-		paths = append(append(paths, deckFile(o), completedPath(o)), archiveGlob(o)...)
+		paths = append(append(paths, tasksFile(o), completedPath(o)), archiveGlob(o)...)
 	}
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil {
@@ -201,10 +201,10 @@ var taskDocs struct {
 }
 
 // taskSearchDocs: every task as a BM25 document, the title weighted,
-// cached until a deck file changes; every owner's (searches keep those
+// cached until a task list file changes; every owner's (searches keep those
 // their user sees: canSeeTask).
 func taskSearchDocs() []*SearchDoc {
-	key := deckMtimes()
+	key := tasksMtimes()
 	taskDocs.mu.Lock()
 	defer taskDocs.mu.Unlock()
 	if taskDocs.done && taskDocs.key == key {
@@ -234,7 +234,7 @@ func taskSearchDocs() []*SearchDoc {
 		}
 		text := stripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
-		d := &SearchDoc{Slug: deckDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
+		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
 			Tokens: append(tokenize(text), repeatTokens(plainTaskTitle(title), titleWeight)...),
 			Task:   t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
 		if !t.isOpen() {
@@ -323,7 +323,7 @@ type indexView struct {
 // again; more only slow every search down, fewer rebuild too often.
 func maxChanges(n int) int { return max(32, n/50) }
 
-// docShared: d is in no private folder or deck (always, without users).
+// docShared: d is in no private folder or tasks (always, without users).
 func docShared(d *SearchDoc) bool {
 	if d.isTask() {
 		return d.Task.Owner == ""
@@ -479,7 +479,7 @@ func searchIndex(rq *Req) *docIndex {
 // semanticText: a page as (title, body) for embedding and the section
 // index: the tldr and tags lead, the frontmatter block and the H1 (the
 // title already) are dropped, and so are [[deck …]] directives (markup, not
-// content: pages holding nothing but a deck embed came out as each other's
+// content: pages holding nothing but a task list embed came out as each other's
 // closest match).
 func semanticText(content, slug string) (string, string) {
 	meta, body := parseFrontmatter(taskRefsAsTitles(slug, content))
@@ -489,7 +489,7 @@ func semanticText(content, slug string) (string, string) {
 			lead = append(lead, s)
 		}
 	}
-	body = deckRE.ReplaceAllString(stripH1(body), "")
+	body = tasksRE.ReplaceAllString(stripH1(body), "")
 	if len(lead) > 0 {
 		body = strings.Join(lead, "\n") + "\n\n" + body
 	}
@@ -663,8 +663,8 @@ func taskStatus(t *Task) string {
 
 // resultMeta: the small line under a result's title, telling apart
 // results whose titles look alike: a page's folder and last edit, a task's
-// list and status ("Deck · done 2026-05-01").
-func resultMeta(d *SearchDoc, names map[string]DeckHome) string {
+// list and status ("Tasks · done 2026-05-01").
+func resultMeta(d *SearchDoc, names map[string]TasksHome) string {
 	if d.isTask() {
 		status := taskStatus(d.Task)
 		if status != "open" {
@@ -739,7 +739,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		}
 	}
 	sections := bestSections(rq, q, slugs)
-	names := deckLists(rq.user)
+	names := taskLists(rq.user)
 	for _, d := range docs {
 		var section *SearchDoc
 		excerptOf := d.ExcerptText
@@ -820,7 +820,7 @@ func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 	return chunks
 }
 
-// chunkIndex: BM25 over page sections and deck tasks (a task is one
+// chunkIndex: BM25 over page sections and tasks (a task is one
 // result, like a section), as the browser search ranks pages and tasks
 // together.
 func chunkIndex(rq *Req) *docIndex {

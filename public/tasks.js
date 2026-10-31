@@ -1,49 +1,49 @@
 // ── Zone Task App ────────────────────────────────────────────────────────────
-// An ES module; leaf.js imports it on every page. initDecks() starts each
-// deck app (.tasks-app) on the page, and one added later (the hidden deck
+// An ES module; leaf.js imports it on every page. initTaskApps() starts each
+// task app (.tasks-app) on the page, and one added later (the hidden tasks
 // that a new task from any page loads, actions.js).
 
-import DeckCore from './deck-core.js';
+import TasksCore from './tasks-core.js';
 import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
 import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
 import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
-// Pure task logic lives in deck-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = DeckCore;
+// Pure task logic lives in tasks-core.js.
+const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = TasksCore;
 
 // How dates read and the week starts: the locale setting (empty: US
-// English) and date-format = iso (YYYY-MM-DD), see deck-core.js.
-const DATES = DeckCore.dateSettings(document.body.dataset);
+// English) and date-format = iso (YYYY-MM-DD), see tasks-core.js.
+const DATES = TasksCore.dateSettings(document.body.dataset);
 const LOCALE = DATES.locale;
 
 // Track which instance owns keyboard focus (only one at a time)
-let activeDeckInstance = null;
+let activeTasksInstance = null;
 
 // Registry of initialized instances. Each embed on the page holds its own
 // task array, so after a write in one embed the others would show stale data
 // until reload. Every instance registers a `refresh` callback here; a write
 // in one instance refreshes the rest.
-const deckInstances = [];
+const tasksInstances = [];
 function refreshOtherInstances(exceptId) {
-  deckInstances.forEach(inst => { if (inst.id !== exceptId) inst.refresh(); });
+  tasksInstances.forEach(inst => { if (inst.id !== exceptId) inst.refresh(); });
 }
 
-// A deck page can stay open for days (phones keep their tabs). Coming back
+// A task list page can stay open for days (phones keep their tabs). Coming back
 // to it — the tab shown again, or the page restored from the back/forward
 // cache — reloads every embed, so tasks changed elsewhere appear and the
 // day sections are computed for today, not the day the page was loaded.
 function refreshStaleInstances() {
-  deckInstances.forEach(inst => inst.refreshIfIdle());
+  tasksInstances.forEach(inst => inst.refreshIfIdle());
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStaleInstances(); });
 window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstances(); });
 
-// The edit modal of the last deck app started: the editor's Make task and a
+// The edit modal of the last task app started: the editor's Make task and a
 // new task from any page open it (`openEditModal`'s arguments).
 let openEdit = null;
-export function openDeckEdit(taskId, opts) {
+export function openTasksEdit(taskId, opts) {
   return openEdit?.(taskId, opts);
 }
 
@@ -51,7 +51,7 @@ export function openDeckEdit(taskId, opts) {
 // The server renders them (POST /api/render-notes, render.render_notes: the
 // page renderer, so headings, lists, tables, code, wikilinks and task chips
 // look as on a page). The HTML is kept per text for the page's life and
-// shared by every deck app on it, so each text is fetched once.
+// shared by every task list app on it, so each text is fetched once.
 const renderedHtml = { notes: new Map(), comments: new Map() };
 // Until its HTML is here, a text shows as it is (line breaks kept).
 const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -71,7 +71,7 @@ function textsOf(taskList) {
   };
 }
 // Fetch the HTML of the texts not rendered yet; true when there is new.
-// Texts another deck app is fetching already are waited for, not asked
+// Texts another task list app is fetching already are waited for, not asked
 // again. A failed request caches nothing: the next render asks again.
 const renderInFlight = { notes: new Map(), comments: new Map() };
 async function renderTexts({ notes = [], comments = [] }) {
@@ -109,20 +109,20 @@ async function renderTexts({ notes = [], comments = [] }) {
   return fresh;
 }
 
-// Start every deck app on the page that hasn't started yet (marked
+// Start every task list app on the page that hasn't started yet (marked
 // data-ready once it has). Returns how many it started.
-export function initDecks() {
+export function initTaskApps() {
   const apps = [...document.querySelectorAll('.tasks-app:not([data-ready])')];
   apps.forEach(appEl => {
-    initDeckInstance(appEl);
+    initTasksInstance(appEl);
     appEl.dataset.ready = '1';
   });
   // Default: a lone instance is active
-  if (!activeDeckInstance && deckInstances.length === 1) activeDeckInstance = deckInstances[0].id;
+  if (!activeTasksInstance && tasksInstances.length === 1) activeTasksInstance = tasksInstances[0].id;
   return apps.length;
 }
 
-function initDeckInstance(appEl) {
+function initTasksInstance(appEl) {
 const sfx = appEl.dataset.instance && appEl.dataset.instance !== '0'
   ? '-' + appEl.dataset.instance : '';
 const instanceId = appEl.dataset.instance || '0';
@@ -208,7 +208,7 @@ function dropOnBucket(id, div) {
   clearBoardDropOver();
   const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
   const task = tasks.find(t => t.id === id);
-  const recommit = div.dataset.dropDay === todayStr() && task && DeckCore.isCarried(task, todayStr());
+  const recommit = div.dataset.dropDay === todayStr() && task && TasksCore.isCarried(task, todayStr());
   if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later' && !recommit) return;
   if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
   else if (div.dataset.dropBucket === 'later') {
@@ -358,7 +358,7 @@ function swipeActions(task) {
   const unplan = task.start_date && !isDueNow(task, today) ? 'unplan' : null;
   // On Plan a carried-over task (started earlier, still open) starts today:
   // committing to it again, which takes its "since" badge away.
-  const carried = DeckCore.isCarried(task, today) ? 'start' : null;
+  const carried = TasksCore.isCarried(task, today) ? 'start' : null;
   if (activeView === 'open') return { right: start, left: null };
   if (activeView === 'focus') return { right: null, left: unplan };
   if (activeView === 'plan') return { right: start || carried, left: unplan };
@@ -542,11 +542,11 @@ listEl.addEventListener('contextmenu', e => {
 });
 
 // Claim keyboard focus when user interacts with this instance
-// (A page with several decks shows the selection bar of the active one.)
+// (A page with several task lists shows the selection bar of the active one.)
 function claimInstance() {
-  if (activeDeckInstance === instanceId) return;
-  activeDeckInstance = instanceId;
-  deckInstances.forEach(inst => inst.syncSelBar());
+  if (activeTasksInstance === instanceId) return;
+  activeTasksInstance = instanceId;
+  tasksInstances.forEach(inst => inst.syncSelBar());
 }
 appEl.addEventListener('pointerdown', claimInstance);
 appEl.addEventListener('focusin', claimInstance);
@@ -561,7 +561,7 @@ const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) |
 // carrying the tag, whose filter chip is locked there (new tasks get it;
 // a task's own tags stay editable, so a task can move to another list).
 // Elsewhere a list's tag is marked as a list but otherwise a tag: the main
-// deck and tag embeds show list tasks like any other.
+// tasks and tag embeds show list tasks like any other.
 const initList = cleanList(appEl?.dataset.initList);
 let declaredLists = [];
 try { declaredLists = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
@@ -575,7 +575,7 @@ function listTooltip(name) {
   return home ? `List: ${home}` : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
-// into the tab buttons by deck.py, so they are read back from there).
+// into the tab buttons by tasks.py, so they are read back from there).
 const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
 // [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
@@ -583,7 +583,7 @@ const initKeep = appEl?.dataset.initKeep === '1';
 const initPrivate = appEl?.dataset.initPrivate === '1';
 // Compact: one line per task (title, then tags, markers and dates; notes
 // hidden; selecting or a tap expands a task). The default on every tab;
-// the density button and v switch it, remembered per deck and tab in this
+// the density button and v switch it, remembered per task list and tab in this
 // browser.
 const densityKey = view => 'leaf-deck-compact:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId, view].join('|');
@@ -595,7 +595,7 @@ function compactFor(view) {
   return true;
 }
 // Folded Plan sections: a section's header can hide its cards (its count
-// and drop target stay). Remembered per deck in this browser, by section
+// and drop target stay). Remembered per task list in this browser, by section
 // (`foldId`: a day by its distance from today, so "Tomorrow" stays folded
 // as the days go by). A filter shows every section, and a task that has to
 // be seen (a ?task= link, a new task, the due list) unfolds its own.
@@ -621,7 +621,7 @@ function toggleFold(id) {
 function unfoldFor(id) {
   const task = tasks.find(t => t.id === id);
   if (activeView !== 'plan' || !task) return false;
-  const fid = foldId(DeckCore.bucketKey(task, todayStr()));
+  const fid = foldId(TasksCore.bucketKey(task, todayStr()));
   if (!folded.delete(fid)) return false;
   saveFolded();
   render();
@@ -629,9 +629,9 @@ function unfoldFor(id) {
 }
 
 // Open and Plan sorted by deadline or by creation (the Order dropdown; o
-// cycles it) instead of the manual order (DeckCore.SORTS). Nothing reorders
+// cycles it) instead of the manual order (TasksCore.SORTS). Nothing reorders
 // in them: ordering is done back in the manual order. Each tab's sort is
-// remembered per deck in this browser.
+// remembered per task list in this browser.
 const SORT_MODES = ['manual', 'due', 'created'];
 const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
 const sortKey = () => 'leaf-deck-sort:' + [location.pathname, appEl?.dataset.initList || '',
@@ -665,7 +665,7 @@ sortSel?.addEventListener('change', () => setSort(sortSel.value));
 // Sorted, where the manual order is ranked across everything). Plan was a
 // tab of its own until 2026-10; the views keep their names, so `view=plan`
 // and `view=open` links still open the one they always did. The Plan
-// switch (d) toggles; the choice is remembered per deck in this browser,
+// switch (d) toggles; the choice is remembered per task list in this browser,
 // and the Open tab opens it.
 const isOpenTab = view => view === 'open' || view === 'plan';
 const groupKey = () => 'leaf-deck-group:' + [location.pathname, appEl?.dataset.initList || '',
@@ -695,7 +695,7 @@ function applyCompact(view) {
     expandedId = null;
     detailsOpen = detailsMode = false;
   }
-  appEl?.classList.toggle('deck-compact', compact);
+  appEl?.classList.toggle('tasks-compact', compact);
   densityBtn?.setAttribute('aria-pressed', String(compact));
   if (densityBtn) {
     const label = compact ? 'Full cards' : 'One line per task';
@@ -802,7 +802,7 @@ function cleanList(name) {
     .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
 }
 const lowerTags = t => (t.tags || []).map(x => x.toLowerCase());
-// The separate list a task belongs to (deck.py task_list): the first A–Z
+// The separate list a task belongs to (tasks.py task_list): the first A–Z
 // of its tags that is a declared list.
 function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0] || null; }
 function inScope(t) {
@@ -815,7 +815,7 @@ function scopeQuery() {
 // ?view= / [[deck view=…]] pick the tab.
 const urlView = urlParams.get('view') || '';   // explicit per-navigation override
 const embedView = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
-// ?new=1 opens the new-task modal in one embed: the deck's home if the
+// ?new=1 opens the new-task modal in one embed: the Tasks home if the
 // page has it (as the New buttons do), else the first.
 const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
   || document.querySelector('.tasks-app:not([data-headless])');
@@ -902,15 +902,15 @@ async function noticeFromResponse(res, fallback) {
 // ── API ────────────────────────────────────────────────────────────────────
 
 // /api/deck returns only open tasks, so replacing `tasks` drops the
-// completed ones: they count as not loaded again (deckGen tells a completed
+// completed ones: they count as not loaded again (tasksGen tells a completed
 // load in flight that its merge target is gone).
-let deckGen = 0;
-async function fetchDeck() {
+let tasksGen = 0;
+async function fetchTasks() {
   const res = await fetch('/api/deck');
   const fetched = (await res.json()).filter(inScope);
   await renderTexts(textsOf(fetched));
   tasks = fetched;
-  deckGen++;
+  tasksGen++;
   completedLoaded = false;
   render();
   if (activeView === 'completed') fetchCompleted();
@@ -931,7 +931,7 @@ async function refreshCompletedCount() {
 // Reload this instance from the server, honoring its current tab. Used to
 // pull in changes made by another embed on the same page.
 async function refresh() {
-  await fetchDeck();
+  await fetchTasks();
   if (activeView === 'completed') await fetchCompleted();
 }
 
@@ -945,16 +945,16 @@ async function loadCompleted() {
   let completed, gen;
   // The page load fetches open and completed tasks at the same time (the
   // filter field, restored by the browser on reload, asks for completed
-  // matches). If fetchDeck replaced `tasks` meanwhile, merging into it would
+  // matches). If fetchTasks replaced `tasks` meanwhile, merging into it would
   // be lost: fetch again. This race made the match count flip between
   // reloads.
   loadCompletedYears();
   do {
-    gen = deckGen;
+    gen = tasksGen;
     const res = await fetch('/api/deck/completed' + (completedYear ? `?year=${completedYear}` : ''));
     completed = (await res.json()).filter(inScope);
     await renderTexts(textsOf(completed));
-  } while (gen !== deckGen);
+  } while (gen !== tasksGen);
   const existingIds = new Set(tasks.map(t => t.id));
   for (const t of completed) {
     if (!existingIds.has(t.id)) tasks.push(t);
@@ -972,13 +972,13 @@ async function loadCompletedYears() {
 
 // Show another year in Completed: drop the loaded completed tasks (the
 // match count in the other views counts whatever is loaded) and fetch that
-// year's. deckGen tells a load in flight that its year is gone.
+// year's. tasksGen tells a load in flight that its year is gone.
 function setCompletedYear(year) {
   year = year === thisYear ? '' : year;
   if (year === completedYear) return;
   completedYear = year;
   tasks = tasks.filter(t => !t.completed_at);
-  deckGen++;
+  tasksGen++;
   completedLoaded = false;
   if (activeView === 'completed') fetchCompleted();
   render();
@@ -1025,7 +1025,7 @@ async function updateTask(id, data) {
     // Completion/skip/reopen of a recurring task spawns or removes an
     // instance server-side — re-fetch to pick it up.
     if (updated.recurrence && (data.completed || data.skip || 'wont_do' in data)) {
-      await fetchDeck();
+      await fetchTasks();
     } else {
       render();
     }
@@ -1071,7 +1071,7 @@ function editSnapshot(t) {
 
 // A save took tasks out of this view: say where they went, with an undo
 // that PUTs each [id, fields] back. The tasks are no longer in `tasks`, so
-// the deck reloads to bring them back.
+// the tasks reloads to bring them back.
 function offerUndoLeave(msg, restores) {
   if (headless) return;
   showUndo(msg, async () => {
@@ -1083,7 +1083,7 @@ function offerUndoLeave(msg, restores) {
       });
       if (!res.ok) { await noticeFromResponse(res, 'Undo failed'); break; }
     }
-    await fetchDeck();
+    await fetchTasks();
     refreshDueBadge();
     refreshOtherInstances(instanceId);
   });
@@ -1147,7 +1147,7 @@ function cancelPendingComplete(id) {
   return true;
 }
 
-// What completing a keep task changes (mirrors _keep_done in deck.py), so
+// What completing a keep task changes (mirrors _keep_done in tasks.py), so
 // undo can put it back.
 function keepSnapshot(t) {
   return { start_date: t.start_date || null, due_date: t.due_date || null,
@@ -1162,7 +1162,7 @@ async function completeTasks(ids, completed) {
   });
   if (res.ok) {
     // Re-fetch to capture any spawned recurring tasks
-    await fetchDeck();
+    await fetchTasks();
     refreshDueBadge(); refreshCompletedCount();
     refreshOtherInstances(instanceId);
   }
@@ -1170,7 +1170,7 @@ async function completeTasks(ids, completed) {
 
 
 async function afterBatchWrite() {
-  await fetchDeck();
+  await fetchTasks();
   refreshDueBadge(); refreshCompletedCount();
   refreshOtherInstances(instanceId);
 }
@@ -1361,7 +1361,7 @@ function runTaskAction(task, action, anchor) {
   }
 }
 
-// The link that opens this task in the deck (render.task_link): an open
+// The link that opens this task in the tasks (render.task_link): an open
 // one on Open, a done one on Completed (its archive's year when earlier),
 // in its list when it has one.
 function taskHref(task) {
@@ -1438,7 +1438,7 @@ function filterTasks(query = filterQuery()) {
   const today = todayStr();
   let filtered = tasks;
 
-  // Filter field: text search plus '#tag' words (DeckCore.parseFilter).
+  // Filter field: text search plus '#tag' words (TasksCore.parseFilter).
   const f = parseFilter(query);
   if (f.text || f.tagGroups.length || f.excludeTags.length) filtered = filtered.filter(t => matchesFilter(t, f));
 
@@ -1448,7 +1448,7 @@ function filterTasks(query = filterQuery()) {
   } else if (activeView === 'plan') {
     // Plan is a day board: show all open tasks grouped by start date; tasks
     // without one go to the Unplanned section so they can be dragged into
-    // the week (DeckCore.boardBuckets).
+    // the week (TasksCore.boardBuckets).
     filtered = filtered.filter(t => !t.completed_at);
   } else if (activeView === 'completed') {
     filtered = filtered.filter(t => !!t.completed_at);
@@ -1463,8 +1463,8 @@ function filterTasks(query = filterQuery()) {
 
 // ── Sorting ────────────────────────────────────────────────────────────────
 
-// Per-tab sort comparators. Open and Focus sort with DeckCore.byOpenOrder
-// in render(), and Plan with DeckCore.boardBuckets.
+// Per-tab sort comparators. Open and Focus sort with TasksCore.byOpenOrder
+// in render(), and Plan with TasksCore.boardBuckets.
 const TAB_SORT = {
   completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
 };
@@ -1499,7 +1499,7 @@ function sectionList() {
   return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
 }
 // Save a rearranged sectionList() in which the tasks `moved` changed place
-// (DeckCore.placeInOrder: every other task keeps its place, hidden ones too).
+// (TasksCore.placeInOrder: every other task keeps its place, hidden ones too).
 function applySectionList(list, moved, s = SECTIONS[activeView]) {
   const cut = list.indexOf(sectionKey(s.bottom));
   saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
@@ -1816,34 +1816,34 @@ function clearSelection() {
 // not the page.
 function enterSelectMode(id) {
   selectMode = true;
-  appEl.classList.add('deck-selecting');
+  appEl.classList.add('tasks-selecting');
   selectedId = anchorId = id;
   selectedIds = new Set([id]);
   updateSelectionClasses();
-  try { history.pushState({ ...history.state, deckSelect: instanceId }, ''); } catch (_) {}
+  try { history.pushState({ ...history.state, tasksSelect: instanceId }, ''); } catch (_) {}
 }
 function exitSelectMode() {
   if (!selectMode) { clearSelection(); return; }
   selectMode = false;
-  appEl.classList.remove('deck-selecting');
+  appEl.classList.remove('tasks-selecting');
   clearSelection();
-  if (history.state?.deckSelect === instanceId) history.back();
+  if (history.state?.tasksSelect === instanceId) history.back();
 }
 window.addEventListener('popstate', () => { if (selectMode) exitSelectMode(); });
 
 // The selection bar: while several tasks are selected (on a page with
-// several decks, only the active one's), how many, and what to do to all.
+// several task lists, only the active one's), how many, and what to do to all.
 // Today goes when every selected task is completed, and Done says Reopen.
 function syncSelBar() {
   if (!selBar) return;
   const show = (selectMode || selectedIds.size > 1) &&
-    (deckInstances.length < 2 || activeDeckInstance === instanceId);
+    (tasksInstances.length < 2 || activeTasksInstance === instanceId);
   selBar.hidden = !show;
   if (!show) return;
   const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
-  selBar.querySelector('.deck-selbar-count').textContent =
+  selBar.querySelector('.tasks-selbar-count').textContent =
     selectedIds.size ? `${selectedIds.size} selected` : 'Tap tasks to select';
-  selBar.querySelectorAll('.deck-selbar-actions .btn').forEach(b => { b.disabled = !selectedIds.size; });
+  selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !selectedIds.size; });
   selBar.querySelector('[data-sel="today"]').hidden = allDone;
   const done = selBar.querySelector('[data-sel="done"]');
   done.textContent = allDone ? 'Reopen' : 'Done';
@@ -1870,7 +1870,7 @@ function runSelectionAction(action) {
 }
 
 // Fields of several tasks in one request (each task its own; batch-update),
-// then the deck reloads. False if the server refused.
+// then the tasks reloads. False if the server refused.
 async function batchUpdate(changes) {
   const res = await fetch('/api/deck/batch-update', {
     method: 'POST',
@@ -1986,7 +1986,7 @@ function formatDate(dateStr) {
 
 // "Sep 21" (plus the year when it isn't this year), for "since …" labels.
 function shortDate(dateStr) {
-  return DeckCore.shortDate(dateStr, todayStr(), DATES);
+  return TasksCore.shortDate(dateStr, todayStr(), DATES);
 }
 
 function dueDateClass(task) {
@@ -2009,9 +2009,9 @@ function urgencyClass(task) {
   return '';
 }
 
-// Day-board grouping lives in DeckCore; bind it to the current date here.
+// Day-board grouping lives in TasksCore; bind it to the current date here.
 function boardBuckets(list) {
-  return DeckCore.boardBuckets(list, todayStr(), activeSort(), DATES);
+  return TasksCore.boardBuckets(list, todayStr(), activeSort(), DATES);
 }
 
 // Custom in-page calendar popup, anchored at `anchor`. Calls cb with the
@@ -2025,10 +2025,10 @@ function boardBuckets(list) {
 // the popup renders in the same top layer instead of behind the modal.
 function openDatePicker(current, cb, anchor, min, parent = document.body) {
   // Only one picker at a time.
-  document.querySelectorAll('.deck-datepicker').forEach(el => el.remove());
+  document.querySelectorAll('.tasks-datepicker').forEach(el => el.remove());
 
-  const WEEK_START = DeckCore.weekStart(LOCALE);
-  const WEEKDAYS = DeckCore.weekdayNames(LOCALE, WEEK_START);
+  const WEEK_START = TasksCore.weekStart(LOCALE);
+  const WEEKDAYS = TasksCore.weekdayNames(LOCALE, WEEK_START);
   const today = todayStr();
   // View month starts on the current value, else today.
   const anchorDate = new Date((current || today) + 'T00:00:00');
@@ -2036,7 +2036,7 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
   let viewM = anchorDate.getMonth();
 
   const pop = document.createElement('div');
-  pop.className = 'deck-datepicker';
+  pop.className = 'tasks-datepicker';
   const r = anchor ? anchor.getBoundingClientRect() : { left: 20, top: 16, bottom: 20 };
   // A transformed parent makes position:fixed resolve against its box rather
   // than the viewport; offset by its rect then. (The edit modal is no longer
@@ -2091,7 +2091,7 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
     const ds = dateOffset(days);
     const off = min && ds < min;
     return `<button type="button" class="dp-quick-btn${ds === current ? ' dp-selected' : ''}" data-date="${ds}"` +
-      `${off ? ' disabled' : ''} title="${esc(name + ': ' + DeckCore.longDayLabel(ds, DATES))}"` +
+      `${off ? ' disabled' : ''} title="${esc(name + ': ' + TasksCore.longDayLabel(ds, DATES))}"` +
       ` aria-label="${esc(name)}">${label}</button>`;
   }).join('');
 
@@ -2117,7 +2117,7 @@ function openDatePicker(current, cb, anchor, min, parent = document.body) {
       `<div class="dp-quick">${quickHtml}</div>` +
       `<div class="dp-head">` +
         `<button type="button" class="dp-nav" data-nav="-1">‹</button>` +
-        `<span class="dp-title">${esc(DeckCore.monthTitle(viewY, viewM, LOCALE))}</span>` +
+        `<span class="dp-title">${esc(TasksCore.monthTitle(viewY, viewM, LOCALE))}</span>` +
         `<button type="button" class="dp-nav" data-nav="1">›</button>` +
       `</div>` +
       `<div class="dp-weekdays">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>` +
@@ -2172,7 +2172,7 @@ function swallowNextClick() {
 }
 
 // The HTML of a note or comment (renderedHtml). One not rendered yet (a
-// task another deck app or the MCP just changed) shows as plain text, is
+// task another task list app or the MCP just changed) shows as plain text, is
 // fetched, and the list and the modal's comments redrawn when it is here.
 let missingTexts = null;
 function htmlOf(kind, text) {
@@ -2206,7 +2206,7 @@ function render() {
   if (activeView === 'open' && activeSort()) {
     orderedTasks = [...filtered].reverse().sort(SORTS[activeSort()]);
   } else if (SECTIONS[activeView]) {
-    // DeckCore.byOpenOrder, which the Plan board uses too. Reversed first,
+    // TasksCore.byOpenOrder, which the Plan board uses too. Reversed first,
     // so tasks created in the same second (created_at has no finer
     // resolution) keep newest-first.
     const sorted = [...filtered].reverse().sort(byOpenOrder);
@@ -2385,7 +2385,7 @@ function render() {
       const body = isFolded ? '' : s.tasks.map((t, i) =>
         (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
         (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
-        taskHTML(t, true, 'board-item' + (DeckCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
+        taskHTML(t, true, 'board-item' + (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
       return header + body;
     }).join('');
     listEl.innerHTML = html;
@@ -2773,7 +2773,7 @@ function filterQuery() {
   return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
 }
 // Whether the viewer filters: words beyond the embed's locked ones (a
-// list= deck always has its list's tag in the field, and isn't filtered).
+// list= tasks always has its list's tag in the field, and isn't filtered).
 function userFiltering() {
   const locked = new Set(embedFilterWords.map(w => w.toLowerCase()));
   return (filterChips?.words() || []).some(w => !locked.has(w.toLowerCase())) || !!filterSearch?.value.trim();
@@ -2871,7 +2871,7 @@ function chipField(input, { label = w => w, onChange, locked = [], listWord = ()
 // ── Tag autocomplete ───────────────────────────────────────────────────────
 // One dropdown for every place a tag is typed: the filter field (#tag), the
 // edit modal's Tags field, a new task's title (#tag shorthand) and the bulk
-// tag dialog. The best match (DeckCore.rankTags) is highlighted from the
+// tag dialog. The best match (TasksCore.rankTags) is highlighted from the
 // start, so Tab or Enter completes a half-typed tag to it; ↑/↓ pick another,
 // Esc closes (and keeps what was typed). Each field supplies:
 //   word()          the tag being typed at the caret, or null
@@ -3068,7 +3068,7 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
   },
 });
 
-// A new task's title: the #tag shorthand (DeckCore.parseQuickAdd) gets the
+// A new task's title: the #tag shorthand (TasksCore.parseQuickAdd) gets the
 // same suggestions, from every tag in use.
 if (titleInput) attachTagAc(titleInput, {
   word: () => document.getElementById('task-edit-id' + sfx).value ? null : hashWordAtCaret(titleInput),
@@ -3082,7 +3082,7 @@ addBtn.addEventListener('click', () => openEditModal(null));
 
 // ── Edit modal ─────────────────────────────────────────────────────────────
 
-// Quick-add shorthand (DeckCore.parseQuickAdd) — new tasks only: a title
+// Quick-add shorthand (TasksCore.parseQuickAdd) — new tasks only: a title
 // ending in "tomorrow #work due:fri" fills those fields on save. The line
 // under the title shows what was recognised, so nothing is a surprise.
 const quickPreview = document.getElementById('task-edit-quick' + sfx);
@@ -3147,7 +3147,7 @@ privateCb?.addEventListener('change', syncPrivateNote);
 titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
-// (deck.py _log), with its creation as the oldest. Closed on every open;
+// (tasks.py _log), with its creation as the oldest. Closed on every open;
 // hidden for a new task. Tasks from before the log existed get their
 // creation from created_at.
 const historyDetails = document.getElementById('task-edit-history' + sfx);
@@ -3439,7 +3439,7 @@ document.getElementById('task-edit-lead' + sfx).addEventListener('input', () => 
 
 cancelBtn.addEventListener('click', () => { editTagAc?.hide(); modal.close(); });
 // Closed without saving (Cancel, Esc): no callback later by mistake.
-// Focus would stay on a field of the closed dialog, and the deck's keys
+// Focus would stay on a field of the closed dialog, and the task app's keys
 // (j/k, Enter, Esc …) ignore keys typed into a field. Esc's cancel comes
 // at once (close only after the key), so the next key already works.
 const blurInside = () => { if (modal.contains(document.activeElement)) document.activeElement.blur(); };
@@ -3717,7 +3717,7 @@ function planKeyMove(direction) {
 
 document.addEventListener('keydown', async e => {
   // Only the active instance handles keyboard events (multi-embed safety)
-  if (deckInstances.length > 1 && activeDeckInstance !== instanceId) return;
+  if (tasksInstances.length > 1 && activeTasksInstance !== instanceId) return;
   if (headless) return;
   // The second key of g … / c … is the page's (the t of c t, g t)
   if (keyPrefix.key) return;
@@ -3925,7 +3925,7 @@ function refreshIfIdle() {
   const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open || deadlineModal.open;
   if (!busy) refresh();
 }
-deckInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });
+tasksInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });
 
 openEdit = openEditModal;
 
@@ -3976,7 +3976,7 @@ function flashTask(el) {
   setTimeout(() => el.classList.remove('task-flash'), 2000);
 }
 
-fetchDeck().then(async () => {
+fetchTasks().then(async () => {
   if (activeView === 'completed') await fetchCompleted();
   if (initTaskId) revealTask(initTaskId);
 });
@@ -3990,6 +3990,6 @@ if (initNew) {
   history.replaceState(null, '', url);
 }
 
-} // end initDeckInstance
+} // end initTasksInstance
 
-initDecks();
+initTaskApps();

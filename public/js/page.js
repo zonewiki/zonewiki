@@ -16,7 +16,7 @@ localizeDates();
 // ── Heading links ─────────────────────────────────────────────────────────────
 
 // On a page view, a link icon after the title and after each heading with an
-// anchor (#, ##, ###; not a deck embed's), shown on hover: a click copies the
+// anchor (#, ##, ###; not a task list embed's), shown on hover: a click copies the
 // link to the page, or to the section, and puts the section's anchor in the URL.
 const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
 const LINK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.8.8"/><path d="M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.8-.8"/></svg>';
@@ -51,12 +51,12 @@ const LINK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" st
 
 // ── Task list checkboxes ───────────────────────────────────────────────────────
 
-// The page's own checkboxes: a deck's task notes have theirs (deck.js).
-const IN_DECK = '.tasks-app, .task-edit-modal';
+// The page's own checkboxes: a task list's task notes have theirs (tasks.js).
+const IN_TASKS = '.tasks-app, .task-edit-modal';
 document.addEventListener('change', e => {
-  if (!e.target.matches('.task-list-item-checkbox') || e.target.closest(IN_DECK)) return;
+  if (!e.target.matches('.task-list-item-checkbox') || e.target.closest(IN_TASKS)) return;
   const checkboxes = Array.from(document.querySelectorAll('.task-list-item-checkbox'))
-    .filter(cb => !cb.closest(IN_DECK));
+    .filter(cb => !cb.closest(IN_TASKS));
   const idx = checkboxes.indexOf(e.target);
   if (idx === -1) return;
 
@@ -107,8 +107,8 @@ function toggleCheckboxOnServer(idx) {
 
 // ── Task references ([[task:…]] chips) ───────────────────────────────────────
 
-// A chip's checkbox completes (or reopens) the task in the deck, through the
-// same API as the deck, so repeating and keep tasks behave as there. The chip
+// A chip's checkbox completes (or reopens) the task in the tasks, through the
+// same API as the tasks, so repeating and keep tasks behave as there. The chip
 // is then re-rendered by the server (/api/preview of the reference): a
 // repeating task shows its next occurrence, a keep task its "✓ today".
 async function rerenderTaskRef(chip, id) {

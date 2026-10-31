@@ -1,58 +1,58 @@
-import { initDecks, openDeckEdit } from '../deck.js';
+import { initTaskApps, openTasksEdit } from '../tasks.js';
 import { closeOnBackdropClick, localDate, showToast } from './util.js';
 import { openSearchModal } from './search.js';
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-// A new task in the deck's home, from any page (c t, the New task button).
+// A new task in the Tasks home, from any page (c t, the New task button).
 // On the home page its own "+ New" (so the view's tags and dates apply);
-// where a deck app is loaded (an embed, the editor's hidden one) its edit
+// where a task list app is loaded (an embed, the editor's hidden one) its edit
 // modal, with the tags and keep the home gives new tasks (the server puts
-// them on <body>: data-deck-tags, data-deck-keep; none without a home);
+// them on <body>: data-tasks-tags, data-tasks-keep; none without a home);
 // elsewhere the home page (or /deck) opens with the modal.
-// A page without a deck app loads a hidden one first (/api/deck/headless,
-// started by deck.js's initDecks), so you stay on the page; a toast says
+// A page without a task list app loads a hidden one first (/api/deck/headless,
+// started by tasks.js's initTaskApps), so you stay on the page; a toast says
 // where the task went. Should that fail, the home page opens instead.
 export async function openHomeTask() {
   const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
   if (homeAdd) { homeAdd.click(); return; }
-  const { deckTags = '', deckKeep, deckToday, deckPrivate } = document.body.dataset;
+  const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate } = document.body.dataset;
   // The start date as the home's "+ New" gives it (today on Focus); without
   // a home, as /deck's Focus does.
-  const homeless = !('deckTags' in document.body.dataset);
-  const opts = { tags: deckTags, keep: deckKeep === '1', private: deckPrivate === '1',
-                 start_date: homeless || deckToday === '1' ? localDate() : null };
+  const homeless = !('tasksTags' in document.body.dataset);
+  const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1',
+                 start_date: homeless || tasksToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {
-      await loadHeadlessDeck();
+      await loadHeadlessTasks();
     } catch (err) {
-      window.location.href = deckHomeHref() + '?new=1';
+      window.location.href = tasksHomeHref() + '?new=1';
       return;
     }
     opts.onCreated = task => {
-      if (task) showToast(`Added “${task.title}” to your deck`);
+      if (task) showToast(`Added “${task.title}” to your tasks`);
     };
   }
-  openDeckEdit(null, opts);
+  openTasksEdit(null, opts);
 }
 
-// The hidden deck app (/api/deck/headless), added to the page and started.
-let headlessDeck = null;
-function loadHeadlessDeck() {
-  headlessDeck ??= (async () => {
+// The hidden task app (/api/deck/headless), added to the page and started.
+let headlessTasks = null;
+function loadHeadlessTasks() {
+  headlessTasks ??= (async () => {
     const res = await fetch('/api/deck/headless');
     if (!res.ok) throw new Error(res.status);
     const holder = document.createElement('div');
     holder.innerHTML = await res.text();
     document.body.append(...holder.childNodes);
-    if (!initDecks()) throw new Error('no deck');
-  })().catch(err => { headlessDeck = null; throw err; });
-  return headlessDeck;
+    if (!initTaskApps()) throw new Error('no tasks');
+  })().catch(err => { headlessTasks = null; throw err; });
+  return headlessTasks;
 }
 
-// Where the Deck module links go: the deck's home page, else /deck.
-export const deckHomeHref = () =>
-  document.querySelector('.module-link[data-module="deck"]')?.getAttribute('href') || '/deck';
+// Where the Tasks module links go: the Tasks home page, else /deck.
+export const tasksHomeHref = () =>
+  document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/deck';
 
 // ── Scratch modal ───────────────────────────────────────────────────────────────
 
@@ -85,17 +85,17 @@ scratchForm?.addEventListener('submit', async e => {
 
 // ── Action bar ───────────────────────────────────────────────────────────────
 // The phone's actions, as the desktop's top actions: a new scratch note, a
-// new task and Search (Ctrl+P). In the deck the new task comes from its own
-// "+ New" (so the view's tags and dates apply; on the deck's home page the
-// home embed's), elsewhere it goes to your deck (openHomeTask).
+// new task and Search (Ctrl+P). In the tasks the new task comes from its own
+// "+ New" (so the view's tags and dates apply; on the Tasks home page the
+// home embed's), elsewhere it goes to your tasks (openHomeTask).
 
-const deckAddButton = () =>
+const tasksAddButton = () =>
   document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
 document.querySelector('.action-scratch')?.addEventListener('click', openScratch);
 document.querySelector('.action-task')?.addEventListener('click', () => {
-  const add = document.body.dataset.module === 'deck' && deckAddButton();
+  const add = document.body.dataset.module === 'tasks' && tasksAddButton();
   if (add) add.click(); else openHomeTask();
 });
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
@@ -103,7 +103,7 @@ document.querySelector('.action-search')?.addEventListener('click', openSearchMo
 // A tap on the tab bar acts on its touchend and cancels the browser's own
 // click. Firefox for Android, as an installed app with its toolbar scrolled
 // away, draws the bar lower than it lays it out: a touch on the strip under
-// the labels lands below the bar's box, on the page there (a deck card, which
+// the labels lands below the bar's box, on the page there (a task list card, which
 // got selected and scrolled into view). So a touch on the bar, or below its
 // box where nothing covers the bar, goes to the tab at its x, before the page
 // sees it. A long press or a move is left to the browser (its link menu, a

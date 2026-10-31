@@ -821,16 +821,16 @@ class TestDueCount:
 # ---------- Tasks Page ----------
 
 
-class TestDeckPage:
-    def test_deck_embed_in_wiki_page(self, client, wiki_dir):
-        """A wiki page with [[deck]] renders the full deck app."""
-        (wiki_dir / "deck.md").write_text("# Deck\n\n[[deck]]\n", encoding="utf-8")
-        resp = client.get("/page/deck")
+class TestTasksPage:
+    def test_tasks_embed_in_wiki_page(self, client, wiki_dir):
+        """A wiki page with [[deck]] renders the full task app."""
+        (wiki_dir / "tasks.md").write_text("# Tasks\n\n[[deck]]\n", encoding="utf-8")
+        resp = client.get("/page/tasks")
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
         assert "task-add-btn" in body
-        assert '<script type="module" src="/public/leaf.js"></script>' in body   # it loads deck.js
+        assert '<script type="module" src="/public/leaf.js"></script>' in body   # it loads tasks.js
 
 
 # ── Dates ────────────────────────────────────────────────────────────────────
@@ -1228,35 +1228,35 @@ class TestBatchUpdate:
 #
 # The server handles requests concurrently, so two task mutations can run at once. The
 # original storage layer did an unguarded read-modify-write on _deck.json with a
-# truncate-in-place write, and read_deck() swallowed a torn/empty read as an
+# truncate-in-place write, and read_tasks() swallowed a torn/empty read as an
 # empty list. A create landing in that window read [], appended its one task,
-# and overwrote every other task — exactly what wiped the deck in production.
+# and overwrote every other task — exactly what wiped the tasks in production.
 
 
 class TestConcurrentWriteSafety:
-    def test_empty_deck_file_is_not_overwritten(self, client, wiki_dir):
+    def test_empty_tasks_file_is_not_overwritten(self, client, wiki_dir):
         """A zero-length _deck.json (a torn write) must not be treated as an
         empty list and clobbered — the create is refused with 503."""
         create_task(client, title="Keeper")
-        deck_file = wiki_dir / "_deck" / "tasks.json"
-        deck_file.write_text("", encoding="utf-8")  # simulate a torn write
+        tasks_file = wiki_dir / "_deck" / "tasks.json"
+        tasks_file.write_text("", encoding="utf-8")  # simulate a torn write
         resp = create_task(client, title="Would clobber")
         assert resp.status_code == 503
         # The file was left untouched, not overwritten with just the new task.
-        assert deck_file.read_text(encoding="utf-8") == ""
+        assert tasks_file.read_text(encoding="utf-8") == ""
 
-    def test_corrupt_deck_file_is_not_overwritten(self, client, wiki_dir):
+    def test_corrupt_tasks_file_is_not_overwritten(self, client, wiki_dir):
         create_task(client, title="Keeper")
-        deck_file = wiki_dir / "_deck" / "tasks.json"
-        deck_file.write_text("{ this is not json", encoding="utf-8")
+        tasks_file = wiki_dir / "_deck" / "tasks.json"
+        tasks_file.write_text("{ this is not json", encoding="utf-8")
         resp = create_task(client, title="Would clobber")
         assert resp.status_code == 503
-        assert deck_file.read_text(encoding="utf-8") == "{ this is not json"
+        assert tasks_file.read_text(encoding="utf-8") == "{ this is not json"
 
-    def test_genuinely_empty_deck_still_creates(self, client, wiki_dir):
-        """An empty deck is stored as '[]', which must still accept new tasks."""
-        deck_file = wiki_dir / "_deck" / "tasks.json"
-        deck_file.write_text("[]", encoding="utf-8")
+    def test_genuinely_empty_tasks_still_creates(self, client, wiki_dir):
+        """An empty tasks is stored as '[]', which must still accept new tasks."""
+        tasks_file = wiki_dir / "_deck" / "tasks.json"
+        tasks_file.write_text("[]", encoding="utf-8")
         resp = create_task(client, title="First")
         assert resp.status_code == 201
         assert [t["title"] for t in client.get("/api/deck").get_json()] == ["First"]
@@ -1280,7 +1280,7 @@ class TestConcurrentWriteSafety:
         assert len(titles) == threads_n * per_thread
         assert len(set(titles)) == threads_n * per_thread
 
-    def test_deck_file_always_valid_json_during_concurrent_writes(self, client, wiki_dir):
+    def test_tasks_file_always_valid_json_during_concurrent_writes(self, client, wiki_dir):
         """A reader hammering the file while writers run never sees a torn/empty
         file — atomic replace guarantees a complete document every time."""
         stop = threading.Event()
@@ -1633,9 +1633,9 @@ class TestLimitParam:
     def test_invalid_limit_is_empty(self, client, wiki_dir):
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[deck limit=lots]]")
 
-    def test_deck_code_comes_with_leaf_js(self, client, wiki_dir):
+    def test_tasks_code_comes_with_leaf_js(self, client, wiki_dir):
         # The embed carries no script of its own: leaf.js, an ES module on
-        # every page, imports deck.js, which imports deck-core.js.
+        # every page, imports tasks.js, which imports tasks-core.js.
         (wiki_dir / "board.md").write_text("# Board\n\n[[deck]]\n[[deck]]\n", encoding="utf-8")
         html_out = client.get("/page/board").get_data(as_text=True)
         assert html_out.count("<script") == 2   # highlight.js and leaf.js
@@ -1659,13 +1659,13 @@ class TestFileFormat:
                               env=settings.GIT_ENV).stdout.splitlines()
 
     def test_rewritten_once_at_start(self, git_wiki_dir, tmp_path_factory):
-        deck = git_wiki_dir / "_deck" / "tasks.json"
-        deck.write_text(json.dumps(self.OLD, indent=2), encoding="utf-8")
+        tasks = git_wiki_dir / "_deck" / "tasks.json"
+        tasks.write_text(json.dumps(self.OLD, indent=2), encoding="utf-8")
         subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         subprocess.run(["git", "commit", "-qm", "old"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         git_setup(tmp_path_factory)   # a start
-        assert self.log(git_wiki_dir)[0] == "Write the deck's files in Zone's format"
-        task = json.loads(deck.read_text(encoding="utf-8"))[0]
+        assert self.log(git_wiki_dir)[0] == "Write the task files in Zone's format"
+        task = json.loads(tasks.read_text(encoding="utf-8"))[0]
         assert list(task)[:5] == ["id", "title", "description", "tags", "start_date"]
         assert list(task)[-1] == "blocked_by" and task["blocked_by"] == ["x"]
         assert task["sort_order"] == 1 and task["comments"] == [] and task["keep"] is False
@@ -1784,7 +1784,7 @@ class TestCompletedByYear:
         arch.write_text(json.dumps([{"id": "g", "title": "Milk", "tags": ["groceries"],
                                      "completed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
         years = lambda q: client.get("/api/deck/completed-years" + q).get_json()["years"]  # noqa: E731
-        # The main deck's are every task's: list tasks included.
+        # The main task list's are every task's: list tasks included.
         assert years("") == [str(year), str(year-1), str(year-2)]
         assert years("?list=groceries") == [str(year), str(year-2)]
 
@@ -1929,7 +1929,7 @@ class TestMalformedInput:
 
 class TestNoTaskLinking:
     """Task-to-task links (blocked_by / blocking) were removed. The API ignores
-    them, and dependency data left in existing deck files has no effect."""
+    them, and dependency data left in existing tasks files has no effect."""
 
     def test_link_fields_are_ignored(self, client):
         other = create_task(client, title="Other").get_json()
@@ -1986,7 +1986,7 @@ class TestTagCleaning:
 class TestLists:
     """A separate list is a tag some page declares with [[deck list=<tag>]]:
     the tag is marked as a list and links to its tasks open /deck?list=<tag>,
-    but otherwise it is a tag: the main deck, the due badge and the main
+    but otherwise it is a tag: the main task list, the due badge and the main
     Completed count include its tasks."""
 
     @pytest.fixture()
@@ -2026,15 +2026,15 @@ class TestLists:
         # The home page's title, for the list tag's tooltip.
         assert 'data-list-homes="{&#34;groceries&#34;:&#34;Shop&#34;}"' in body
         assert 'id="task-edit-list"' not in body
-        assert "task-show-lists" not in body       # the main deck hides nothing
+        assert "task-show-lists" not in body       # the main task list hides nothing
 
-    def test_deck_list_page_uses_the_declaring_embed(self, client, shop):
+    def test_tasks_list_page_uses_the_declaring_embed(self, client, shop):
         body = client.get("/deck?list=groceries").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body and 'data-init-keep="1"' in body
         assert ">Catalogue</button>" in body and ">Shopping</button>" in body
         assert 'href="/page/shop">Shop</a>' in body
 
-    def test_deck_list_page_without_declaration(self, client):
+    def test_tasks_list_page_without_declaration(self, client):
         body = client.get("/deck?list=books").get_data(as_text=True)
         assert 'data-init-list="books"' in body
         assert "these are the tasks tagged #books" in body

@@ -127,8 +127,8 @@ func TestGolden(t *testing.T) {
 		check("clean_list", text, nilIfEmpty(cleanList(text)), c["clean_list"])
 		check("parse_date_word", text, nilIfEmpty(parseDateWord(text, day)), c["parse_date_word"])
 		params := [][]string{}
-		for _, m := range deckRE.FindAllStringSubmatch(text, -1) {
-			p := parseDeckParams(m[1])
+		for _, m := range tasksRE.FindAllStringSubmatch(text, -1) {
+			p := parseTasksParams(m[1])
 			for _, k := range p.keys {
 				params = append(params, []string{k, p.m[k]})
 			}

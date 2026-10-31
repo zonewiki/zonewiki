@@ -39,7 +39,7 @@ function promotedSlug(folder, name, date) {
 // ── Page ⋯ menu ───────────────────────────────────────────────────────────────
 // Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
 // rendered hidden) for both ⋯ buttons, the header's and the right column's:
-// a popover under the pressed one, a bottom sheet on phones (the deck's
+// a popover under the pressed one, a bottom sheet on phones (the tasks'
 // .task-menu styles). ↑/↓ move, Esc closes and returns focus to the ⋯.
 
 (function () {

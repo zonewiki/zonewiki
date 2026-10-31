@@ -1,6 +1,6 @@
 // Zone's own documentation, for the MCP tool leaf_help: the
 // README and the spec (docs/spec/*.md), searched by section with BM25, so
-// an assistant answers questions about Zone itself (how to rename a deck's
+// an assistant answers questions about Zone itself (how to rename a task list's
 // tabs, a setting, the query syntax) from the docs rather than from guesses.
 package main
 
@@ -41,7 +41,7 @@ func docsRoot() string {
 type manualTopic struct{ name, path string }
 
 // manualTopics: the docs by topic name, "readme", then each spec file's
-// name ("deck", "editor", …), in that order.
+// name ("tasks", "editor", …), in that order.
 func manualTopics() []manualTopic {
 	root := docsRoot()
 	if root == "" {
@@ -77,7 +77,7 @@ func manualHeadings(text string) []docHeading {
 	return out
 }
 
-// manualTitle: a doc's first heading ("Deck"), else the topic name.
+// manualTitle: a doc's first heading ("Tasks"), else the topic name.
 func manualTitle(topic, text string) string {
 	if h := manualHeadings(text); len(h) > 0 {
 		return h[0].text

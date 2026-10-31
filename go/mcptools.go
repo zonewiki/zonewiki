@@ -2,7 +2,7 @@
 // grep_wiki, read_page, list_pages, check_links, list_tags, history,
 // leaf_help, read_guides) and writing pages (write_page (also a scratch
 // note), edit_page, replace_in_pages, append_to_page, rename_page (also a
-// folder), delete_page, restore_page, file_scratch_note) and deck tasks
+// folder), delete_page, restore_page, file_scratch_note) and tasks
 // (create_task, update_task: also comments, deletes and tags on several
 // tasks). The protocol is in mcp.go.
 package main
@@ -228,7 +228,7 @@ func newSlug(raw, user string) (string, error) {
 // written → the name or slug it was meant for, to suggest a near match.
 func missingLinks(content string, slugs map[string]bool, slug, user string) map[string]string {
 	masked, _ := maskCode(content)
-	masked = taskRefRE.ReplaceAllString(deckRE.ReplaceAllString(masked, ""), "")
+	masked = taskRefRE.ReplaceAllString(tasksRE.ReplaceAllString(masked, ""), "")
 	missing := map[string]string{}
 	for _, m := range wikilinkRE.FindAllStringSubmatch(masked, -1) {
 		name, _, _ := splitWikilink(m[1])
@@ -803,14 +803,14 @@ func noHeading(slug, content, heading string) string {
 
 func trimNewlines(s string) string { return strings.TrimRight(s, "\n") }
 
-// ── Deck tasks ──────────────────────────────────────────────────────────────
+// ── Tasks ──────────────────────────────────────────────────────────────
 
 var recurrenceUnits = map[string]string{"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}
 
 func shortID(id string) string { return runePrefix(id, shortIDLen) }
 
-// mcpTaskText: one deck task for user's LLM: title, a line of facts
-// (status, private, tags, dates, repeat, list), its link in the deck, its
+// mcpTaskText: one task for user's LLM: title, a line of facts
+// (status, private, tags, dates, repeat, list), its link in the tasks, its
 // notes and comments.
 func mcpTaskText(t *Task, base, user string) string {
 	status := taskStatus(t)
@@ -854,7 +854,7 @@ func mcpTaskText(t *Task, base, user string) string {
 		}
 		facts = append(facts, keep+")")
 	}
-	list := taskList(t, deckLists(user))
+	list := taskList(t, taskLists(user))
 	if list != "" {
 		facts = append(facts, "list: "+list)
 	}
@@ -897,7 +897,7 @@ func mcpTaskRefs(content, base, user string) string {
 		return ""
 	}
 	tasks := resolveTaskRefs(user, refs)
-	lists := deckLists(user)
+	lists := taskLists(user)
 	var lines []string
 	for _, ref := range refs {
 		t := tasks[ref]
@@ -1063,7 +1063,7 @@ func tagListArg(args jsonObj, name string) ([]string, error) {
 
 func splitComma(s string) []string { return strings.Split(s, ",") }
 
-// taskFields: the deck API's fields from the tools' arguments (only those
+// taskFields: the tasks API's fields from the tools' arguments (only those
 // given); task, when updating one, for add_tags/remove_tags and repeat.
 func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	data := jsonObj{}
@@ -1147,12 +1147,12 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	return data, nil
 }
 
-// deckWrite: a deck write's refusals (a bad date, an empty title …) as
+// tasksWrite: a task list write's refusals (a bad date, an empty title …) as
 // tool errors the model can correct.
-func deckWrite[T any](v T, err error) (T, error) {
+func tasksWrite[T any](v T, err error) (T, error) {
 	var ae *apiError
 	switch {
-	case errors.Is(err, errDeckCorrupt):
+	case errors.Is(err, errTasksCorrupt):
 		return v, toolErr("The tasks' storage can't be read right now; try again")
 	case errors.As(err, &ae):
 		return v, toolErr(ae.msg)
@@ -1235,9 +1235,9 @@ func tagHints(task *Task, user string) string {
 	return out
 }
 
-// homeTags: a new task's tags, the deck home's new-task tags (its list, its
+// homeTags: a new task's tags, the Tasks home's new-task tags (its list, its
 // single tags, as its "+ New" and c t give them) before the ones given, so
-// the task shows in user's deck. Not when the given tags already name a
+// the task shows in user's tasks. Not when the given tags already name a
 // declared list: the task is filed there.
 func homeTags(tags json.RawMessage, user string) json.RawMessage {
 	l, ok := as[[]string](tags)
@@ -1247,11 +1247,11 @@ func homeTags(tags json.RawMessage, user string) json.RawMessage {
 	if !ok && !isNull(tags) {
 		return tags // createTask refuses it
 	}
-	home := lookupDeckHome(user)
+	home := lookupTasksHome(user)
 	if home == nil {
 		return tags
 	}
-	lists := deckLists(user)
+	lists := taskLists(user)
 	for _, t := range l {
 		if _, ok := lists[strings.ToLower(strings.TrimLeft(t, "#"))]; ok {
 			return tags
@@ -1270,22 +1270,22 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	data["tags"] = homeTags(data["tags"], user)
-	// As c t in the browser: private when the user's deck home is theirs alone.
-	if h := lookupDeckHome(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
+	// As c t in the browser: private when the user's Tasks home is theirs alone.
+	if h := lookupTasksHome(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
 		data.set("private", true)
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
 		return "", err
 	}
-	task, err := deckWrite(createTask(user, data, msg))
+	task, err := tasksWrite(createTask(user, data, msg))
 	if err != nil {
 		return "", err
 	}
 	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base, user) + tagHints(task, user), nil
 }
 
-// taskStatusFields: a status as the deck API's field and its value.
+// taskStatusFields: a status as the tasks API's field and its value.
 var taskStatusFields = map[string]struct {
 	field string
 	value bool
@@ -1333,7 +1333,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if _, err := deckWrite(struct{}{}, deleteTask(user, task.ID, msg)); err != nil {
+		if _, err := tasksWrite(struct{}{}, deleteTask(user, task.ID, msg)); err != nil {
 			return "", err
 		}
 		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
@@ -1365,12 +1365,12 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	if len(data) > 0 {
-		if task, err = deckWrite(updateTask(user, task.ID, data, suffix)); err != nil {
+		if task, err = tasksWrite(updateTask(user, task.ID, data, suffix)); err != nil {
 			return "", err
 		}
 	}
 	if comment != nil {
-		if task, err = deckWrite(addComment(user, task.ID, *comment, "Comment on task"+suffix)); err != nil {
+		if task, err = tasksWrite(addComment(user, task.ID, *comment, "Comment on task"+suffix)); err != nil {
 			return "", err
 		}
 	}
@@ -1392,7 +1392,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	return out, nil
 }
 
-// More ids than this in one call is likely a mistake (a whole deck retagged).
+// More ids than this in one call is likely a mistake (a whole tasks retagged).
 const tagTasksMax = 200
 
 func tagTasksTool(args jsonObj, user string) (string, error) {
@@ -1436,7 +1436,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tasks, err := deckWrite(tagTasks(user, found, add, remove, msg))
+	tasks, err := tasksWrite(tagTasks(user, found, add, remove, msg))
 	if err != nil {
 		return "", err
 	}
@@ -1537,7 +1537,7 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	return head + "\n" + content + mcpTaskRefs(content, base, user) + mcpPageLinks(slug, content, user), nil
 }
 
-// isOrphan: no other page links to it. The home page, the deck's home and
+// isOrphan: no other page links to it. The home page, the Tasks home and
 // scratch notes are reached otherwise (the module switcher), and the guide
 // is read by the assistant, so they never are.
 func isOrphan(slug string, counts map[string]int, home string) bool {
@@ -1563,7 +1563,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	counts := allBacklinkCounts(&Req{user: user})
 	home := ""
-	if h := lookupDeckHome(user); h != nil {
+	if h := lookupTasksHome(user); h != nil {
 		home = h.Slug
 	}
 	type row struct {
@@ -1734,7 +1734,7 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 }
 
 // fileLabel: a changed file as the model knows it, a page by its slug, the
-// deck's files as tasks.
+// task files as tasks.
 func fileLabel(fp string) string {
 	if strings.HasPrefix(fp, "_deck/") || strings.Contains(fp, "/_deck/") {
 		return "tasks"
@@ -1916,7 +1916,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 	if len(counts) == 0 {
 		return "No tags yet: neither pages (frontmatter tags:) nor tasks have any.", nil
 	}
-	lists := deckLists(user)
+	lists := taskLists(user)
 	tags := sortedKeys(counts)
 	sum := func(t string) int { c := counts[t]; return c[0] + c[1] + c[2] }
 	sort.SliceStable(tags, func(i, j int) bool { return sum(tags[i]) > sum(tags[j]) })

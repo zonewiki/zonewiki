@@ -3,7 +3,7 @@ import { linkAutocomplete } from './completion.js';
 
 // ── Markdown textarea ─────────────────────────────────────────────────────────
 // What makes a textarea Zone's markdown editor, shared by the page editor
-// (js/editor.js) and the deck's task notes (deck.js): page and task
+// (js/editor.js) and the task app's task notes (tasks.js): page and task
 // completion, the formatting bar and its shortcuts, snippets, list
 // continuation, file paste/drop/attach, URL paste. Every change goes through
 // execCommand('insertText'), so Ctrl+Z undoes it in one step and the input
@@ -13,7 +13,7 @@ import { linkAutocomplete } from './completion.js';
 // file input), onChange, onEnter(e) (runs before list continuation; may
 // preventDefault), formats (more bar buttons by data-fmt, e.g. the editor's
 // Make task), tabIndents (Tab inserts two spaces after a failed snippet; the
-// deck's modal leaves Tab to move between its fields), page (the slug of
+// tasks' modal leaves Tab to move between its fields), page (the slug of
 // the page being edited, or a function giving it: an upload for a private
 // page is private too).
 

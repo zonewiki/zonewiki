@@ -180,7 +180,7 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
 
 
 def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
-    # Deck and Scratch are modules, in the module switcher: the empty-query
+    # Tasks and Scratch are modules, in the module switcher: the empty-query
     # list leaves them out, typing finds them. Deleted Pages stays pinned.
     seed(wiki)
     page.goto("/page/index")
@@ -188,7 +188,7 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     items = page.locator("#modal-page-list .page-list-item")
     expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")   # git is on
     expect(items.nth(1)).not_to_have_class(re.compile(r"page-list-special"))
-    expect(items.locator("a", has_text=re.compile(r"^(Deck|Scratch)$"))).to_have_count(0)
+    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Scratch)$"))).to_have_count(0)
     # Whatever the sort.
     page.locator("#modal-sort").select_option("title-desc")
     expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")
@@ -196,12 +196,12 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     # only" (orphan pages) leaves them out.
     page.locator("#modal-filter").fill("scra")
     expect(items.first.locator("a")).to_have_text("Notes")
-    page.locator("#modal-filter").fill("deck")
+    page.locator("#modal-filter").fill("tasks")
     expect(items.first.locator("a")).to_have_attribute("href", "/deck")
     page.locator("#modal-filter").fill("")
     page.locator("#modal-unlinked").check()
     expect(page.locator("#modal-page-list .page-list-special")).to_have_count(0)
-    expect(items.locator("a", has_text=re.compile(r"^(Deck|Scratch)$"))).to_have_count(0)
+    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Scratch)$"))).to_have_count(0)
 
 
 def test_phone_reaches_scratch_list_in_one_tap(new_page, wiki):
@@ -211,10 +211,10 @@ def test_phone_reaches_scratch_list_in_one_tap(new_page, wiki):
     phone.wait_for_url("**/page/_scratch")
 
 
-def test_task_result_opens_the_deck_page(page, wiki):
-    # Regression: with no deck.md, opening a task from Ctrl+P landed on
+def test_task_result_opens_the_tasks_page(page, wiki):
+    # Regression: with no tasks.md, opening a task from Ctrl+P landed on
     # /edit/deck, an empty new page. It now opens the built-in /deck, whatever
-    # pages embed a deck.
+    # pages embed a task list.
     wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     tid = page.request.post("/api/deck", data={"title": "Renew passport"}).json()["id"]
     page.goto("/page/index")
@@ -332,7 +332,7 @@ def test_highlights_start_in_the_linked_section(page, wiki):
     expect(page.locator(".search-hl-bar")).to_contain_text("2 of 2")
 
 
-def test_n_does_not_reach_the_deck_while_highlighting(page, wiki):
+def test_n_does_not_reach_the_tasks_while_highlighting(page, wiki):
     wiki.write("tasks", "# Tasks\n\nzebra notes.\n\n[[deck]]\n")
     page.goto("/page/tasks?hl=zebra")
     expect(page.locator(".search-hl-bar")).to_contain_text("1 of 1")

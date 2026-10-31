@@ -1,5 +1,5 @@
-import DeckCore from '../deck-core.js';
-import { openDeckEdit } from '../deck.js';
+import TasksCore from '../tasks-core.js';
+import { openTasksEdit } from '../tasks.js';
 import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
 import { markdownEditor } from './mdedit.js';
 
@@ -20,7 +20,7 @@ if (textarea && previewPane) {
 
   const pageSlug = decodeURIComponent((document.getElementById('editor-form')?.getAttribute('action') || '')
     .replace(/^\/edit\//, ''));
-  // The markdown helpers (js/mdedit.js), shared with the deck's task notes;
+  // The markdown helpers (js/mdedit.js), shared with the task app's task notes;
   // Enter on a [[wikilink]] follows it (after saving).
   const { replaceRange, selectedLines } = markdownEditor(textarea, {
     bar: document.getElementById('format-bar'),
@@ -44,13 +44,13 @@ if (textarea && previewPane) {
 
   textarea.addEventListener('input', schedulePreview);
 
-  // Make task: the selected text, or the current line, becomes a deck task,
+  // Make task: the selected text, or the current line, becomes a task,
   // and the text is replaced by its [[task:…]] reference, so the page shows
-  // the live task where the text was. It opens the deck's edit modal (from
-  // the page's hidden deck app) to review first; several selected lines make
+  // the live task where the text was. It opens the task app's edit modal (from
+  // the page's hidden task app) to review first; several selected lines make
   // one task each (a list of action items), the modal's fields shared by
   // all, and keep their list markers. A checklist item's `[ ]` goes, the chip has its own
-  // checkbox. Trailing quick-add shorthand works as in the deck (`tomorrow
+  // checkbox. Trailing quick-add shorthand works as in the tasks (`tomorrow
   // #work due:fri`), and the task's notes link back to this page.
   const LIST_PREFIX_RE = /^(\s*(?:>\s?)*(?:[-*+]|\d+[.)])\s+)(?:\[[ xX]\]\s+)?/;
   const TASK_REF_ONLY_RE = /^\[\[task:[^\]]*\]\]$/;
@@ -98,7 +98,7 @@ if (textarea && previewPane) {
     if (document.querySelector('.tasks-app[data-ready]')) {
       // One item: the modal with its text as title. Several: the modal in
       // batch mode, its fields (tags, dates, …) for all of them.
-      openDeckEdit(null, {
+      openTasksEdit(null, {
         ...(todo.length === 1 ? { title: todo[0].text } : { titles: todo.map(it => it.text) }),
         description, start_date: null,
         onCreated: made => {
@@ -121,11 +121,11 @@ if (textarea && previewPane) {
       return;
     }
 
-    // Without the deck app (it failed to load): create right away.
+    // Without the task app (it failed to load): create right away.
     const today = localDate();
     const created = [];
     for (const it of todo) {
-      const q = DeckCore.parseQuickAdd(it.text, today);
+      const q = TasksCore.parseQuickAdd(it.text, today);
       const body = { title: q.title, tags: q.tags, start_date: q.start_date, due_date: q.due_date, description };
       const res = await fetch('/api/deck', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

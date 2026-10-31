@@ -313,7 +313,7 @@ _PILL_LABEL_GAPS = """() => [...document.querySelectorAll('.module-switch .modul
 
 def test_the_pills_labels_are_vertically_centred(alice):
     # Regression: padding tuned for Windows' Segoe UI (more below than above)
-    # put Wiki, Deck, Private and Scratch high in their pills with other fonts.
+    # put Wiki, Tasks, Private and Scratch high in their pills with other fonts.
     alice.goto("/page/index")
     rows = alice.evaluate(_PILL_LABEL_GAPS)
     assert [r[0] for r in rows] == ["Wiki", "Tasks", "Private", "Notes"]

@@ -1,4 +1,4 @@
-"""Deck on a touch phone: tap to edit, the ⋯ menu as a bottom sheet."""
+"""Tasks on a touch phone: tap to edit, the ⋯ menu as a bottom sheet."""
 
 import re
 from datetime import date, timedelta
@@ -40,8 +40,8 @@ def phone(new_page, wiki):
     pg.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     pg.request.post("/api/deck", data={"title": "Weekly review",
                                        "rec_type": "weekly", "due_date": day(2)})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     return pg
 
 
@@ -132,7 +132,7 @@ def test_menu_plan_and_unplan(phone):
 
 def test_menu_pick_date_opens_picker(phone):
     open_menu(phone, "Water plants").get_by_role("menuitem", name="Pick start date…").tap()
-    picker = phone.locator(".deck-datepicker")
+    picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     pick_day(picker, day(3))
     wait_until(phone, lambda: tasks_by_title(phone)["Water plants"]["start_date"] == day(3))
@@ -171,14 +171,14 @@ def test_completed_task_menu(phone):
 
 @pytest.fixture()
 def selecting(new_page, wiki):
-    """A phone deck on Open (newest first: Saw, Glue, Nuts, Bolts) in
+    """A phone tasks on Open (newest first: Saw, Glue, Nuts, Bolts) in
     selection mode, started from Saw's ⋯ menu."""
     pg = new_page(**TOUCH_PHONE)
     for title in ("Bolts", "Nuts", "Glue", "Saw"):
         pg.request.post("/api/deck", data={"title": title})
     pg.goto("/deck?view=open")
     open_menu(pg, "Saw").get_by_role("menuitem", name="Select several").tap()
-    expect(pg.locator(".tasks-app")).to_contain_class("deck-selecting")
+    expect(pg.locator(".tasks-app")).to_contain_class("tasks-selecting")
     return pg
 
 
@@ -189,24 +189,24 @@ def selected(page):
 def test_select_mode_taps_toggle_cards(selecting):
     pg = selecting
     bar = pg.locator("#task-selbar")
-    expect(bar.locator(".deck-selbar-count")).to_have_text("1 selected")
+    expect(bar.locator(".tasks-selbar-count")).to_have_text("1 selected")
     expect(pg.locator(".action-buttons")).to_be_hidden()        # the bar takes the tab bar's place
     box = bar.bounding_box()
     assert box["x"] == 0 and box["width"] == 390 and abs(box["y"] + box["height"] - 844) < 1, box
     card(pg, "Nuts").locator(".task-title").tap()
     card(pg, "Bolts").locator(".task-checkbox").tap()            # the checkbox selects, not completes
     assert selected(pg) == ["Saw", "Nuts", "Bolts"]
-    expect(bar.locator(".deck-selbar-count")).to_have_text("3 selected")
+    expect(bar.locator(".tasks-selbar-count")).to_have_text("3 selected")
     card(pg, "Saw").locator(".task-title").tap()                 # a second tap drops it, no editor
     assert selected(pg) == ["Nuts", "Bolts"]
     expect(pg.locator("#task-edit-modal")).to_be_hidden()
     assert all(t["completed_at"] is None for t in tasks_by_title(pg).values())
     card(pg, "Nuts").locator(".task-title").tap()
     card(pg, "Bolts").locator(".task-title").tap()
-    expect(bar.locator(".deck-selbar-count")).to_have_text("Tap tasks to select")
+    expect(bar.locator(".tasks-selbar-count")).to_have_text("Tap tasks to select")
     expect(bar.locator("[data-sel='tag']")).to_be_disabled()
     bar.locator("[data-sel='all']").tap()
-    expect(bar.locator(".deck-selbar-count")).to_have_text("4 selected")
+    expect(bar.locator(".tasks-selbar-count")).to_have_text("4 selected")
 
 
 def test_select_mode_has_no_swipes_or_drags(selecting):
@@ -228,7 +228,7 @@ def test_select_mode_tag_keeps_the_mode(selecting):
     pg.locator(".bulk-tag-modal").get_by_role("button", name="Apply").tap()
     wait_until(pg, lambda: tasks_by_title(pg)["Glue"]["tags"] == ["shop"])
     assert tasks_by_title(pg)["Saw"]["tags"] == ["shop"]
-    expect(pg.locator(".tasks-app")).to_contain_class("deck-selecting")
+    expect(pg.locator(".tasks-app")).to_contain_class("tasks-selecting")
     assert selected(pg) == ["Saw", "Glue"]
 
 
@@ -237,7 +237,7 @@ def test_select_mode_done_ends_it(selecting):
     card(pg, "Glue").locator(".task-title").tap()
     pg.locator("#task-selbar [data-sel='done']").tap()
     expect(pg.locator(".task-undo-toast")).to_contain_text("2 tasks completed")
-    expect(pg.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(pg.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
     expect(pg.locator("#task-selbar")).to_be_hidden()
     expect(pg.locator(".action-buttons")).to_be_visible()
     expect(pg.locator(".task-item .task-title")).to_have_text(["Nuts", "Bolts"])
@@ -257,18 +257,18 @@ def test_select_mode_ends(selecting, how):
         pg.go_back()                             # a phone's back gesture: leaves the mode, not the page
     else:
         open_tab(pg, "focus")
-    expect(pg.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(pg.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
     expect(pg.locator("#task-selbar")).to_be_hidden()
     assert pg.url.endswith("/deck?view=open")
     assert selected(pg) == []
     # The mode's history entry goes with it: back is back to the page before.
-    wait_until(pg, lambda: pg.evaluate("history.state?.deckSelect === undefined"))
+    wait_until(pg, lambda: pg.evaluate("history.state?.tasksSelect === undefined"))
 
 
 def test_desktop_click_selects_does_not_edit(page, wiki):
     page.request.post("/api/deck", data={"title": "Water plants"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.goto("/page/tasks?view=open")
     card(page, "Water plants").locator(".task-content").click()
     expect(card(page, "Water plants")).to_contain_class("task-selected")
     expect(page.locator("#task-edit-modal")).to_be_hidden()
@@ -278,8 +278,8 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     # With a mouse ⋯ is always shown; right-click (or the menu key, or
     # Shift+F10 on the selected card) opens the menu as a popover too.
     page.request.post("/api/deck", data={"title": "Water plants"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.goto("/page/tasks?view=open")
     page.mouse.move(0, 0)
     expect(card(page, "Water plants").locator(".task-menu-btn")).to_be_visible()
     title = card(page, "Water plants").locator(".task-title")
@@ -294,7 +294,7 @@ def test_desktop_menu_popover_and_keyboard(page, wiki):
     expect(menu.get_by_role("menuitem", name="Start today")).to_be_focused()
     page.keyboard.press("Enter")
     expect(menu).to_have_count(0)
-    expect(page.locator("#task-edit-modal")).to_be_hidden()   # deck keys stayed out
+    expect(page.locator("#task-edit-modal")).to_be_hidden()   # tasks keys stayed out
     wait_until(page, lambda: tasks_by_title(page)["Water plants"]["start_date"] == day(0))
     # Keyboard: Shift+F10 on the selected card; Esc closes.
     expect(card(page, "Water plants")).to_have_class(re.compile(r"\btask-selected\b"))
@@ -329,8 +329,8 @@ def test_edit_modal_save_reachable_on_phone(new_page, wiki):
     # A short window (e.g. phone with the keyboard open): the form must scroll.
     phone = new_page(viewport={"width": 360, "height": 460}, has_touch=True, is_mobile=True)
     phone.request.post("/api/deck", data={"title": "Weekly review", "rec_type": "weekly"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    phone.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    phone.goto("/page/tasks?view=open")
     modal = open_editor(phone)
     save = modal.get_by_role("button", name="Save")
     # The action bar sticks to the bottom: Save is on screen without scrolling.
@@ -366,7 +366,7 @@ def test_date_picker_in_modal_stays_on_screen(phone):
     trigger = modal.locator(".date-trigger").first
     trigger.scroll_into_view_if_needed()
     trigger.tap()
-    picker = phone.locator(".deck-datepicker")
+    picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     assert in_viewport(phone, picker)
     tb, pb = trigger.bounding_box(), picker.bounding_box()
@@ -377,8 +377,8 @@ def test_date_picker_in_modal_stays_on_screen(phone):
 def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
     pg = new_page(viewport={"width": 1280, "height": 560})
     pg.request.post("/api/deck", data={"title": "Weekly review", "rec_type": "weekly"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     c = card(pg, "Weekly review")
     c.dblclick(position={"x": c.bounding_box()["width"] * 0.6, "y": 12})   # empty space in the card
     modal = pg.locator("#task-edit-modal")
@@ -396,7 +396,7 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
 def test_card_date_picker_fits_on_phone(phone, field):
     chip = card(phone, "Water plants").locator(f".task-clickable-date[data-field='{field}']")
     chip.tap()
-    picker = phone.locator(".deck-datepicker")
+    picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     pb, cb = picker.bounding_box(), chip.bounding_box()
     assert pb["x"] >= 0 and pb["x"] + pb["width"] <= 390, pb
@@ -430,7 +430,7 @@ def _open_chip_picker_at_bottom(page, field="start_date"):
     # Not tap(): Playwright would scroll the page (content follows the card,
     # e.g. the Sorted heading) and the card would leave the bottom edge.
     chip.dispatch_event("click")
-    picker = page.locator(".deck-datepicker")
+    picker = page.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     return chip, picker
 
@@ -451,12 +451,12 @@ def test_date_picker_pinned_on_screen_when_it_fits_nowhere(new_page, wiki):
     # Landscape phone: 390px tall — no room above or below a mid-screen chip.
     pg = new_page(viewport={"width": 844, "height": 390}, has_touch=True, is_mobile=True)
     pg.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     c = card(pg, "Water plants")
     c.evaluate("el => { document.body.style.paddingBottom = '100vh'; el.scrollIntoView({block: 'center'}); }")
     c.locator(".task-clickable-date[data-field='start_date']").tap()
-    picker = pg.locator(".deck-datepicker")
+    picker = pg.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     assert in_viewport(pg, picker), picker.bounding_box()
 
@@ -516,8 +516,8 @@ def test_touch_drop_on_a_header_does_not_fold_it(new_page, wiki):
     tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
     tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
     tall.request.post("/api/deck", data={"title": "Loose"})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    tall.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    tall.goto("/page/tasks?view=open")
     open_tab(tall, "plan")
     target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
     touch_drag(tall, card(tall, "Water plants"), target)
@@ -529,8 +529,8 @@ def test_touch_drop_on_a_header_does_not_fold_it(new_page, wiki):
 def test_touch_drag_to_unplanned_clears_start(new_page, wiki):
     tall = new_page(viewport={"width": 390, "height": 1400}, has_touch=True, is_mobile=True)
     tall.request.post("/api/deck", data={"title": "Water plants", "start_date": day(0)})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    tall.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    tall.goto("/page/tasks?view=open")
     open_tab(tall, "plan")
     target = tall.locator(".board-day-divider[data-drop-bucket='unplanned']")
     touch_drag(tall, card(tall, "Water plants"), target)
@@ -541,8 +541,8 @@ def test_touch_drag_reorders_all_tab(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("One", "Two", "Three")]
     pg.request.post("/api/deck/reorder", data={"order": ids})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     open_tab(pg, "open")
     send = touch_drag(pg, card(pg, "Three"), card(pg, "One"), release=False, at=0.25)
     # Mid-drag: a floating copy follows the finger, a line marks where it
@@ -582,8 +582,8 @@ def test_long_press_in_place_starts_selection_mode(phone):
     open_tab(phone, "plan")
     c = card(phone, "Water plants")
     touch_drag(phone, c, c)
-    expect(phone.locator(".tasks-app")).to_contain_class("deck-selecting")
-    expect(phone.locator("#task-selbar .deck-selbar-count")).to_have_text("1 selected")
+    expect(phone.locator(".tasks-app")).to_contain_class("tasks-selecting")
+    expect(phone.locator("#task-selbar .tasks-selbar-count")).to_have_text("1 selected")
     expect(phone.locator(".task-touch-ghost")).to_have_count(0)
     expect(phone.locator("#task-edit-modal")).to_be_hidden()     # not a tap either
     assert tasks_by_title(phone)["Water plants"]["start_date"] == day(0)
@@ -604,16 +604,16 @@ def test_long_press_where_nothing_drags_starts_selection_mode(phone):
     open_tab(phone, "completed")
     c = card(phone, "Old chore")
     touch_drag(phone, c, c)
-    expect(phone.locator(".tasks-app")).to_contain_class("deck-selecting")
+    expect(phone.locator(".tasks-app")).to_contain_class("tasks-selecting")
     assert selected(phone) == ["Old chore"]
 
 
 def test_long_press_then_move_where_nothing_drags_does_nothing(phone):
     complete_one(phone)
     open_tab(phone, "completed")
-    touch_drag(phone, card(phone, "Old chore"), phone.locator(".deck-header"))
+    touch_drag(phone, card(phone, "Old chore"), phone.locator(".tasks-header"))
     phone.wait_for_timeout(200)
-    expect(phone.locator(".tasks-app")).not_to_contain_class("deck-selecting")
+    expect(phone.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
     expect(phone.locator("#task-selbar")).to_be_hidden()
 
 
@@ -625,8 +625,8 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     ids = [pg.request.post("/api/deck", data={"title": t}).json()["id"] for t in ("One", "Two")]
     pg.request.post("/api/deck/reorder", data={"order": ids})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     open_tab(pg, "open")
     one = card(pg, "One")
     assert one.evaluate("el => el.draggable")
@@ -646,7 +646,7 @@ def test_touch_drag_across_focus_sections(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
     for t in ("Alpha", "Bravo"):
         pg.request.post("/api/deck", data={"title": t, "start_date": day(0)})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     pg.goto("/deck?view=focus")
     sorted_ = pg.locator(".list-section[data-section='sorted']")
     unsorted = pg.locator(".list-section[data-section='unsorted']")
@@ -661,7 +661,7 @@ def test_tap_outside_only_closes_the_card_date_picker(phone):
     # Regression: the picker closed on mousedown, which touch fires only with
     # the click, so the same tap also opened the card under the finger.
     card(phone, "Water plants").locator(".task-clickable-date[data-field='start_date']").tap()
-    picker = phone.locator(".deck-datepicker")
+    picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
     card(phone, "Weekly review").locator(".task-title").tap()
     expect(picker).to_have_count(0)
@@ -680,7 +680,7 @@ def test_click_outside_only_closes_the_date_picker(page, wiki):
     page.request.post("/api/deck", data={"title": "Weekly review"})
     page.goto("/deck?view=open")
     chip = card(page, "Water plants").locator(".task-clickable-date[data-field='start_date']")
-    picker = page.locator(".deck-datepicker")
+    picker = page.locator(".tasks-datepicker")
     chip.click()
     expect(picker).to_be_visible()
     other = card(page, "Weekly review")

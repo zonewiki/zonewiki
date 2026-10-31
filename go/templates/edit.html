@@ -1,6 +1,6 @@
 {{- /* The editor (server.go editPage): the text (a whole page or one
     section, with the hash and range a save checks against), the toolbar,
-    the formatting bar, the live preview, and a hidden deck app for Make
+    the formatting bar, the live preview, and a hidden task app for Make
     task. */ -}}
 {{define "body"}}
 <div class="editor-wrap">
@@ -71,7 +71,7 @@
     <div id="editor-preview" class="page-content"></div>
   </div>
 </div>
-{{- /* A hidden deck app: Make task (js/editor.js) opens its edit modal, and
-    uses the deck's quick-add parser (deck-core.js) for several lines at once. */}}
-{{.deck_html}}
+{{- /* A hidden task app: Make task (js/editor.js) opens its edit modal, and
+    uses the task app's quick-add parser (tasks-core.js) for several lines at once. */}}
+{{.tasks_html}}
 {{end}}

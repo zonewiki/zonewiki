@@ -1,39 +1,39 @@
-{{- /* The deck app (deck.go buildDeckEmbed): an [[deck …]] embed, /deck, or
+{{- /* The task app (tasks.go buildTasksEmbed): an [[deck …]] embed, /deck, or
     hidden (headless) for the edit modal alone (the editor's Make task, c t
-    on any page). Its params reach deck.js as data-init-* attributes; ids
+    on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
-{{define "deck_embed" -}}
+{{define "tasks_embed" -}}
 <div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .home}} data-home="1"{{end}}>
-  <div class="deck-header">
+  <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .labels 0}}</button>
       <button type="button" role="tab" data-view="focus" aria-selected="false">{{index .labels 1}}</button>
     </div>
     {{- /* Beside the tabs, not in the toolbar: it modifies the Open tab, and on
         phones it shares the tabs' row, leaving the search its room. */}}
-    <button type="button" class="deck-plan-switch" id="task-plan{{.sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="deck-plan-track" aria-hidden="true"></span>Plan</button>
+    <button type="button" class="tasks-plan-switch" id="task-plan{{.sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{{.sfx}}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
-      <select class="deck-sort" id="task-sort{{.sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
-      <button type="button" class="btn deck-density-btn" id="task-density-btn{{.sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
+      <select class="tasks-sort" id="task-sort{{.sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
+      <button type="button" class="btn tasks-density-btn" id="task-density-btn{{.sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
       <button class="btn btn-primary" id="task-add-btn{{.sfx}}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
   <ul class="tasks-list" id="tasks-list{{.sfx}}"></ul>
-  <div class="deck-footer">
-    <button type="button" class="deck-completed-link" id="task-completed-link{{.sfx}}">✓ Completed</button>
+  <div class="tasks-footer">
+    <button type="button" class="tasks-completed-link" id="task-completed-link{{.sfx}}">✓ Completed</button>
   </div>
-  {{- /* Shown while several tasks are selected (deck.js syncSelBar). */}}
-  <div class="deck-selbar" id="task-selbar{{.sfx}}" role="toolbar" aria-label="Selected tasks" hidden>
-    <span class="deck-selbar-count" aria-live="polite"></span>
+  {{- /* Shown while several tasks are selected (tasks.js syncSelBar). */}}
+  <div class="tasks-selbar" id="task-selbar{{.sfx}}" role="toolbar" aria-label="Selected tasks" hidden>
+    <span class="tasks-selbar-count" aria-live="polite"></span>
     <button type="button" class="btn" data-sel="all" title="Select every task shown (Ctrl+A)">All</button>
-    <span class="deck-selbar-actions">
+    <span class="tasks-selbar-actions">
       <button type="button" class="btn" data-sel="tag" title="Tags of the selected tasks (t)">Tag…</button>
       <button type="button" class="btn" data-sel="today" title="Start the selected tasks today">Today</button>
       <button type="button" class="btn" data-sel="done" title="Complete the selected tasks (Space)">Done</button>
       <button type="button" class="btn danger" data-sel="delete" title="Delete the selected tasks (Delete)">Delete…</button>
     </span>
-    <button type="button" class="btn deck-selbar-close" data-sel="clear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
+    <button type="button" class="btn tasks-selbar-close" data-sel="clear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
   </div>
 </div>
 <dialog id="task-edit-modal{{.sfx}}" class="task-edit-modal">

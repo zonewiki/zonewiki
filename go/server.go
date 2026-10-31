@@ -74,8 +74,8 @@ func main() {
 	commitSettings("Change settings")
 	ensureHomePage()
 	cleanLeftDrafts()
-	initDeck()
-	// The semantic index's worker reads tasks: after the deck is set up.
+	initTasks()
+	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {
 			fatal(fmt.Errorf("-semantic-test: %w", err))
@@ -99,7 +99,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, ln.Addr())
-	// One process: the deck's lock, the caches, the login throttle and the
+	// One process: the task app's lock, the caches, the login throttle and the
 	// semantic-search worker live in its memory. At most 100 connections,
 	// those beyond the limit wait.
 	if err := srv.Serve(limitListener(ln, 100)); err != nil {
@@ -181,7 +181,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)
-	deckRoutes(mux)
+	tasksRoutes(mux)
 	return checks(mux)
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 // The wiki's pages (pages.go): listing, safe paths, link targets and
-// backlinks, renames' references; and the deck syntax's tag rules.
+// backlinks, renames' references; and the tasks syntax's tag rules.
 
 func TestIterPagesSkipsUnderscoreAndHiddenFolders(t *testing.T) {
 	pages := map[string]string{"index": "# Home\n", "top": "# Top\n", "a/b/deep": "# Deep\n"}
@@ -78,13 +78,13 @@ func TestNewTaskTags(t *testing.T) {
 		"":                          nil,
 		"list=task tag=Task":        {"task"},
 	} {
-		if got := newTaskTags(parseDeckParams(raw)); len(got)+len(want) > 0 && !reflect.DeepEqual(got, want) {
+		if got := newTaskTags(parseTasksParams(raw)); len(got)+len(want) > 0 && !reflect.DeepEqual(got, want) {
 			t.Errorf("newTaskTags(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }
 
-// An embed's tag= on the server (the due count), as deck-core.js reads it.
+// An embed's tag= on the server (the due count), as tasks-core.js reads it.
 func TestTagParamMatches(t *testing.T) {
 	for _, c := range []struct {
 		raw  string

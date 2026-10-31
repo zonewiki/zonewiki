@@ -207,7 +207,7 @@ func excludeFromGit(wiki, entry string) {
 var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
 // movePage moves a page's file, points every link to it at the new slug,
-// and commits the move (by user) with the pages and deck files whose links
+// and commits the move (by user) with the pages and tasks files whose links
 // changed.
 func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
 	commitOthersDrafts(user) // the page's, and those of the pages whose links follow

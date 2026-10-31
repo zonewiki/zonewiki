@@ -421,9 +421,9 @@ class TestSearchTasks:
     def test_list_label_and_link(self, client, wiki_dir):
         (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries]]\n", encoding="utf-8")
         task(client, title="Milk", tags=["groceries"])
-        task(client, title="Main deck task")
+        task(client, title="Main task")
         text, _ = call(client, "search_tasks", tag="groceries")
-        assert "Task: Milk" in text and "list: groceries" in text and "Main deck" not in text
+        assert "Task: Milk" in text and "list: groceries" in text and "Main tasks" not in text
         assert "list=groceries" in text
 
     def test_repeat_keep_and_start(self, client, wiki_dir):
@@ -546,7 +546,7 @@ class TestListPages:
     def test_orphans(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]]\n")
         write_page(pages, "2026-10-08_14-03-11_idea", "# Idea\n")       # a scratch note
-        write_page(pages, "tasks", "# Tasks\n\n[[deck home=1]]\n")     # the deck's home
+        write_page(pages, "tasks", "# Tasks\n\n[[deck home=1]]\n")     # the Tasks home
         text, err = call(client, "list_pages", orphans=True)
         assert not err and text.startswith("Pages no other page links to")
         assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote"]
@@ -1596,9 +1596,9 @@ class TestCreateTask:
         friday = today + timedelta(days=(4 - today.weekday() + 6) % 7 + 1)
         assert f"due: {friday}" in call(client, "update_task", id=tid, due="Fri")[0]
 
-    def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
-        # The home deck shows list=task: a task without the tag wasn't in it.
-        write_page(wiki_dir, "my-deck", "# My deck\n\n[[deck list=task tag=work view=focus home=1]]\n")
+    def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
+        # The home tasks shows list=task: a task without the tag wasn't in it.
+        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[deck list=task tag=work view=focus home=1]]\n")
         write_page(wiki_dir, "shop", "[[deck list=groceries]]\n")
         assert "tags: #task #work" in call(client, "create_task", title="Report")[0]
         assert "tags: #task #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
@@ -1630,7 +1630,7 @@ class TestUpdateTask:
 
     def test_status_done_spawns_the_next_occurrence(self, client, wiki_dir):
         # Due 3 days ago: the next week's date is still to come (a date
-        # already past would be skipped, see deck.md Completing).
+        # already past would be skipped, see tasks.md Completing).
         due = (date.today() - timedelta(days=3)).isoformat()
         nxt = (date.today() + timedelta(days=4)).isoformat()
         tid = _task_id(call(client, "create_task", title="Backup", due=due, repeat="weekly")[0])
@@ -1772,8 +1772,8 @@ class TestLeafHelp:
         spec = tmp_path / "docs" / "spec"
         spec.mkdir(parents=True)
         (tmp_path / "README.md").write_text("# Zone\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
-        (spec / "deck.md").write_text(
-            "# Deck\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
+        (spec / "tasks.md").write_text(
+            "# Tasks\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
             "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
             "```\n# not a heading\n```\n\n## Dates\n\nDue and start dates.\n")
         (spec / "testing.md").write_text("# Testing\n\nFixtures and labels.\n")
@@ -1787,7 +1787,7 @@ class TestLeafHelp:
     def test_query_finds_passages(self, client, docs):
         text, err = call(client, "leaf_help", query="tab labels")
         assert not err
-        assert text.startswith("[1] Deck › Labels\ntopic: deck\nheading: Labels\n\n`labels=Catalogue")
+        assert text.startswith("[1] Tasks › Labels\ntopic: tasks\nheading: Labels\n\n`labels=Catalogue")
         assert "Testing" not in text  # how Zone is tested is left out
         assert "leaf_help with its topic and heading" in text
 
@@ -1800,18 +1800,18 @@ class TestLeafHelp:
         assert not err and text.startswith("Nothing in Zone's documentation matches")
 
     def test_topic_and_section(self, client, docs):
-        text, err = call(client, "leaf_help", topic="deck")
-        assert not err and text.startswith("topic: deck\n\n# Deck\n") and "## Dates" in text
-        text, err = call(client, "leaf_help", topic="Deck.md", heading="views")
+        text, err = call(client, "leaf_help", topic="tasks")
+        assert not err and text.startswith("topic: tasks\n\n# Tasks\n") and "## Dates" in text
+        text, err = call(client, "leaf_help", topic="Tasks.md", heading="views")
         assert not err
-        assert text == ("topic: deck\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
+        assert text == ("topic: tasks\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
                         "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
                         "```\n# not a heading\n```\n")
 
     def test_bad_topic_or_heading(self, client, docs):
         text, err = call(client, "leaf_help", topic="testing")
-        assert err and text == 'No topic "testing". Topics: readme, deck.'
-        text, err = call(client, "leaf_help", topic="deck", heading="Nope")
+        assert err and text == 'No topic "testing". Topics: readme, tasks.'
+        text, err = call(client, "leaf_help", topic="tasks", heading="Nope")
         assert err and '"Views", "Labels", "Dates"' in text and "not a heading" not in text
         text, err = call(client, "leaf_help", heading="Views")
         assert err and text == "heading needs a topic."
@@ -1820,11 +1820,11 @@ class TestLeafHelp:
         text, err = call(client, "leaf_help")
         assert not err
         assert "\nreadme: Zone\n  Quick start\n" in text
-        assert "\ndeck: Deck\n  Views\n    Labels\n  Dates" in text
+        assert "\ntasks: Tasks\n  Views\n    Labels\n  Dates" in text
 
     def test_without_docs(self, client, monkeypatch):
         monkeypatch.setattr(settings, "DOCS", None)
-        text, err = call(client, "leaf_help", query="deck")
+        text, err = call(client, "leaf_help", query="tasks")
         assert err and "isn't installed" in text
 
     def test_the_real_docs(self, client):
@@ -1832,6 +1832,6 @@ class TestLeafHelp:
         spec = settings.REPO / "docs" / "spec"
         topics = re.findall(r"^(\w[\w-]*): ", call(client, "leaf_help")[0], re.M)
         assert topics == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
-        text, err = call(client, "leaf_help", query="deck tab names labels")
-        assert not err and "topic: deck" in text
+        text, err = call(client, "leaf_help", query="tasks tab names labels")
+        assert not err and "topic: tasks" in text
 

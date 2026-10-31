@@ -28,7 +28,7 @@ def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server points at."""
     monkeypatch.setattr(settings, "LEAF_DATA", tmp_path)
     (tmp_path / "_assets").mkdir()
-    (tmp_path / "_deck").mkdir()   # tests write deck files directly
+    (tmp_path / "_deck").mkdir()   # tests write tasks files directly
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
     return tmp_path
 
@@ -44,7 +44,7 @@ def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
 
 def git_setup(tmp_path_factory) -> None:
     """What Zone does to the wiki when it starts (git init, the first
-    commit, the deck's files): a server started and stopped."""
+    commit, the task files): a server started and stopped."""
     from tests.goserver import _flags, _settings
     GoServer(_settings(), tmp_path_factory.mktemp("go") / "setup.log", flags=_flags()).stop()
 
@@ -52,7 +52,7 @@ def git_setup(tmp_path_factory) -> None:
 @pytest.fixture()
 def client(wiki_dir, tmp_path_factory):
     with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
-        c.live.ensure()   # its start-up (git, the deck's files) before the test
+        c.live.ensure()   # its start-up (git, the task files) before the test
         yield c
 
 

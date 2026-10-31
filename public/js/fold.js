@@ -19,7 +19,7 @@ const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stro
 let sections = [];
 
 // The article's section headers (only the page view has them, around a ##
-// or ### with its ✎), not a deck embed's or those inside a quote or list.
+// or ### with its ✎), not a task list embed's or those inside a quote or list.
 function findSections(article) {
   const found = [];
   for (const header of article.querySelectorAll(':scope > .section-header')) {

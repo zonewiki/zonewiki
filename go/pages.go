@@ -1,6 +1,6 @@
 // The wiki's pages as files: slugs and paths, listing,
 // sharing mode, the link graph (link targets, backlinks, rewriting links on
-// a rename), the deck's lists and home as pages declare them, url().
+// a rename), the task app's lists and home as pages declare them, url().
 package main
 
 import (
@@ -23,8 +23,8 @@ type Req struct {
 	user     string // who is asking (userOf): "" without users
 	sharing  bool
 	homeDone bool
-	home     *DeckHome
-	counts   *DeckCounts
+	home     *TasksHome
+	counts   *TaskCounts
 }
 
 func newReq(r *http.Request) *Req {
@@ -142,7 +142,7 @@ func writeText(p, text string) error {
 // PageFile is a page's file and slug.
 type PageFile struct{ Path, Slug string }
 
-// iterPages lists every page, skipping _* folders (assets, the deck) and
+// iterPages lists every page, skipping _* folders (assets, the tasks) and
 // hidden ones (.leaf, .git), which it doesn't walk into.
 func iterPages() []PageFile {
 	var out []PageFile
@@ -445,7 +445,7 @@ func pageLinkTargets(content, slug string) map[string]bool {
 	return targets
 }
 
-// Per page, by its file's mtime: title, link targets, deck embeds' params.
+// Per page, by its file's mtime: title, link targets, task list embeds' params.
 // Edits made outside the app show, as the mtime changes.
 var (
 	metaMu    sync.Mutex
@@ -456,37 +456,37 @@ type pageMetaEntry struct {
 	mtime   time.Time
 	title   string
 	targets map[string]bool
-	embeds  []DeckParams
+	embeds  []TasksParams
 }
 
-// pageDeckEmbeds: the params of each [[deck …]] on a page, outside code.
-func pageDeckEmbeds(content string) []DeckParams {
+// pageTasksEmbeds: the params of each [[deck …]] on a page, outside code.
+func pageTasksEmbeds(content string) []TasksParams {
 	masked, _ := maskCode(content)
-	var out []DeckParams
-	for _, m := range deckRE.FindAllStringSubmatch(masked, -1) {
-		out = append(out, parseDeckParams(m[1]))
+	var out []TasksParams
+	for _, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
+		out = append(out, parseTasksParams(m[1]))
 	}
 	return out
 }
 
-// DeckList is a list an embed declares: its name and params.
-type DeckList struct {
+// TaskList is a list an embed declares: its name and params.
+type TaskList struct {
 	Name   string
-	Params DeckParams
+	Params TasksParams
 }
 
-func embedsLists(embeds []DeckParams) []DeckList {
-	var out []DeckList
+func embedsLists(embeds []TasksParams) []TaskList {
+	var out []TaskList
 	for _, p := range embeds {
 		if name := cleanList(p.Get("list")); name != "" {
-			out = append(out, DeckList{name, p})
+			out = append(out, TaskList{name, p})
 		}
 	}
 	return out
 }
 
-// pageDeckLists: each [[deck list=…]] on a page, outside code.
-func pageDeckLists(content string) []DeckList { return embedsLists(pageDeckEmbeds(content)) }
+// pageTaskLists: each [[deck list=…]] on a page, outside code.
+func pageTaskLists(content string) []TaskList { return embedsLists(pageTasksEmbeds(content)) }
 
 func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	st, err := os.Stat(p)
@@ -504,7 +504,7 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 		return pageMetaEntry{title: slugDisplayName(slug), targets: map[string]bool{}}
 	}
 	content := newlines(strings.ToValidUTF8(string(b), "�"))
-	entry := pageMetaEntry{st.ModTime(), pageTitle(content, slug), pageLinkTargets(content, slug), pageDeckEmbeds(content)}
+	entry := pageMetaEntry{st.ModTime(), pageTitle(content, slug), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
 	metaMu.Lock()
 	metaCache[slug] = entry
 	metaMu.Unlock()
@@ -517,18 +517,18 @@ func pageMeta(p, slug string) (string, map[string]bool) {
 	return e.title, e.targets
 }
 
-// DeckHome is a page with a deck embed: the deck's home, or a list's.
-type DeckHome struct {
+// TasksHome is a page with a task list embed: the Tasks home, or a list's.
+type TasksHome struct {
 	Slug, Title string
-	Params      DeckParams
+	Params      TasksParams
 }
 
-// deckLists: every list a page user sees declares ([[deck list=<name>]]),
+// taskLists: every list a page user sees declares ([[deck list=<name>]]),
 // by name; when several pages declare one, its home is the first A–Z in
 // user's private folder, else the first shared one A–Z. A list declared on
 // a private page is its owner's alone: for others its name is a plain tag.
-func deckLists(user string) map[string]DeckHome {
-	out := map[string]DeckHome{}
+func taskLists(user string) map[string]TasksHome {
+	out := map[string]TasksHome{}
 	for _, p := range sortedPages() {
 		if !canSee(user, p.Slug) {
 			continue
@@ -537,7 +537,7 @@ func deckLists(user string) map[string]DeckHome {
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, l := range embedsLists(e.embeds) {
 			if have, ok := out[l.Name]; !ok || own && !ownPrivate(user, have.Slug) {
-				out[l.Name] = DeckHome{p.Slug, e.title, l.Params}
+				out[l.Name] = TasksHome{p.Slug, e.title, l.Params}
 			}
 		}
 	}
@@ -545,8 +545,8 @@ func deckLists(user string) map[string]DeckHome {
 }
 
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page
-// declares as a list (names: deckLists), or "".
-func taskList(t *Task, names map[string]DeckHome) string {
+// declares as a list (names: taskLists), or "".
+func taskList(t *Task, names map[string]TasksHome) string {
 	var hits []string
 	for tag := range taskTagsLower(t) {
 		if _, ok := names[tag]; ok {
@@ -560,11 +560,11 @@ func taskList(t *Task, names map[string]DeckHome) string {
 	return ""
 }
 
-// lookupDeckHome: the page with a [[deck … home=1]] embed, user's own
-// deck: one in their private folder first, else a shared one (the first
-// slug A–Z when several declare one); nil: the Deck link goes to /deck.
-func lookupDeckHome(user string) *DeckHome {
-	var shared *DeckHome
+// lookupTasksHome: the page with a [[deck … home=1]] embed, user's own
+// tasks: one in their private folder first, else a shared one (the first
+// slug A–Z when several declare one); nil: the Tasks link goes to /deck.
+func lookupTasksHome(user string) *TasksHome {
+	var shared *TasksHome
 	for _, p := range sortedPages() {
 		own := ownPrivate(user, p.Slug)
 		if !canSee(user, p.Slug) || shared != nil && !own {
@@ -574,9 +574,9 @@ func lookupDeckHome(user string) *DeckHome {
 		for _, params := range e.embeds {
 			if isTrue(params.Get("home")) {
 				if own {
-					return &DeckHome{p.Slug, e.title, params}
+					return &TasksHome{p.Slug, e.title, params}
 				}
-				shared = &DeckHome{p.Slug, e.title, params}
+				shared = &TasksHome{p.Slug, e.title, params}
 				break
 			}
 		}
@@ -584,26 +584,26 @@ func lookupDeckHome(user string) *DeckHome {
 	return shared
 }
 
-// deckHome is lookupDeckHome, once per request.
-func (rq *Req) deckHome() *DeckHome {
+// tasksHome is lookupTasksHome, once per request.
+func (rq *Req) tasksHome() *TasksHome {
 	if rq == nil {
-		return lookupDeckHome("")
+		return lookupTasksHome("")
 	}
 	if !rq.homeDone {
-		rq.home, rq.homeDone = lookupDeckHome(rq.user), true
+		rq.home, rq.homeDone = lookupTasksHome(rq.user), true
 	}
 	return rq.home
 }
 
-// homePrivate: the deck home is in the user's own folder, so a task from
+// homePrivate: the Tasks home is in the user's own folder, so a task from
 // New task or c t is private.
 func (rq *Req) homePrivate() bool {
-	h := rq.deckHome()
+	h := rq.tasksHome()
 	return h != nil && ownPrivate(rq.who(), h.Slug)
 }
 
-func (rq *Req) deckHomeSlug() string {
-	if h := rq.deckHome(); h != nil {
+func (rq *Req) tasksHomeSlug() string {
+	if h := rq.tasksHome(); h != nil {
 		return h.Slug
 	}
 	return ""
@@ -793,7 +793,7 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 	return unmaskCode(text, stash)
 }
 
-// updateReferences rewrites links to oldSlug in every page and deck task
+// updateReferences rewrites links to oldSlug in every page and task
 // after a rename (to a section of newSlug: rewritePageLinks); returns the
 // files it changed, for the rename's commit.
 func updateReferences(oldSlug, newSlug, section string) []string {

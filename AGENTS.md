@@ -20,7 +20,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Zone's docs for assistants) |
-| `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
+| `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
 | `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
@@ -31,7 +31,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in the data directory (`$LEAF_DATA`) are the wiki content. Deliberate exception: Deck tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+- **Markdown is the source of truth** — `.md` files in the data directory (`$LEAF_DATA`) are the wiki content. Deliberate exception: Tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -49,7 +49,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
-| Storage             | Plain `.md` files in `$LEAF_DATA` (deck tasks in `_deck/*.json`) |
+| Storage             | Plain `.md` files in `$LEAF_DATA` (tasks in `_deck/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
@@ -72,7 +72,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
-├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for deck-core tests, gitleaks, git, pngquant
+├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
@@ -94,25 +94,25 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
-│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home
+│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── render.go           # A page's render: wikilinks, [[deck]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
-│   ├── deck.go             # Deck: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
-│   ├── deckstore.go        # Deck tasks on disk: _deck/ files (users' private ones in private/<user>/_deck/), lock, recurrence, history, comments, backlinks, search docs
-│   ├── decksyntax.go       # The deck's page syntax: [[deck …]] params, [[task:…]], tag rules, date words
-│   ├── task.go             # A deck task (Task): its fields, read leniently from a file, written in a fixed key order
-│   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): deck requests, MCP messages and arguments, task files
+│   ├── tasks.go            # Tasks: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
+│   ├── taskstore.go        # Tasks on disk: _deck/ files (users' private ones in private/<user>/_deck/), lock, recurrence, history, comments, backlinks, search docs
+│   ├── tasksyntax.go       # The page syntax of tasks: [[deck …]] params, [[task:…]], tag rules, date words
+│   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
+│   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
 │   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
 │   ├── tokenizer.go        # The model's tokenizer
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
-│   ├── mcptools.go         # The MCP tools that read, and the deck's; mcpwrite.go those that write pages
+│   ├── mcptools.go         # The MCP tools that read, and the task tools; mcpwrite.go those that write pages
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
@@ -123,8 +123,8 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     ├── leaf.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
     │                       #   shortcuts, mdedit, editor, page, fold, present (see Client code in `docs/spec/rendering.md`)
-    ├── deck-core.js        # Pure deck logic (no DOM), an ES module — shared by deck.js, the editor and Node-run tests
-    ├── deck.js             # Deck (task management) app, an ES module leaf.js imports; initDecks() starts each .tasks-app
+    ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
+    ├── tasks.js            # The task app, an ES module leaf.js imports; initTaskApps() starts each .tasks-app
     ├── favicon.svg         # Browser tab icon
     ├── icon.svg            # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
     ├── manifest.json       # Web app manifest (Add to home screen)
@@ -144,7 +144,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh            # build the image and start Zone (default: "up"), via compose
 ./run.sh build|up|down|logs
 ./run.sh test       # go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
-./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
+./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
@@ -186,7 +186,7 @@ LEAF_DATA=~/leaf go/zonewiki eval FILE       # measure retrieval
 ```bash
 ./run.sh test                         # go vet, go test, then the unit/API tests (pytest over HTTP), in the tools image
 ./run.sh test tests/test_mcp.py -n 0  # one module, in one process
-./run.sh e2e                          # browser tests (Playwright) and deck-core.js under Node
+./run.sh e2e                          # browser tests (Playwright) and tasks-core.js under Node
 (cd go && go test ./...)              # the server's own tests, with a local Go
 pytest tests/ --ignore=tests/e2e      # the API tests, with a local Go and pip install -r tests/requirements.txt
 ```
@@ -205,7 +205,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 
 `go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search). Nothing else; add a dependency only when it clearly pays for itself. **Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and commit the new pins.
 
-- **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Zone must stay a single process: the deck's lock (`deckMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
+- **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Zone must stay a single process: the task lock (`tasksMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
 - `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
 - Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `LEAF_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/leaf-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Zone searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
 - The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
@@ -219,7 +219,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.leaf/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_deck/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_deck/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `hosts` skips it.

@@ -575,7 +575,7 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: tokens()}
 		case 2:
 			owner := []string{"", "alice", "bob"}[r.Intn(3)]
-			return &SearchDoc{Slug: deckDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: tokens()}
+			return &SearchDoc{Slug: tasksDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: tokens()}
 		}
 		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: tokens()}
 	}

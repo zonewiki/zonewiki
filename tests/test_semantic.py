@@ -157,7 +157,7 @@ class TestRelated:
     def test_absent_when_nothing_similar(self, client, semantic):
         assert _related(client, "evening") is None
 
-    def test_absent_on_a_page_that_is_only_a_deck_embed(self, client, wiki_dir, monkeypatch):
+    def test_absent_on_a_page_that_is_only_a_tasks_embed(self, client, wiki_dir, monkeypatch):
         long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
         write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")
         write_page(wiki_dir, "car-tasks", "# Golf tasks\n\n[[deck tag=golf]]\n")

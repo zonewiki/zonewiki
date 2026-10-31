@@ -203,11 +203,11 @@ def main():
         settle(pg)
         pg.screenshot(path=OUT / "page.png")
 
-        # 2. The deck's Open tab with Plan on: the board.
+        # 2. The tasks' Open tab with Plan on: the board.
         pg = page(1280, 820)
         pg.goto("/deck?view=plan")
         settle(pg)
-        pg.screenshot(path=OUT / "deck.png")
+        pg.screenshot(path=OUT / "tasks.png")
 
         # 3. The editor with live preview, in dark mode.
         pg = page(1440, 820, scheme="dark")
@@ -215,7 +215,7 @@ def main():
         settle(pg)
         pg.screenshot(path=OUT / "editor.png")
 
-        # 4. On a phone: a page and the deck's Focus, side by side. Each phone
+        # 4. On a phone: a page and the task app's Focus, side by side. Each phone
         # is shown at two thirds of its size (260 of 390 px), so the pair reads
         # as phones next to the desktop shots rather than as a wall of text;
         # at 2x the text stays sharp. The README shows it at PHONE_WIDTH.

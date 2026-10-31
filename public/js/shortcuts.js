@@ -1,5 +1,5 @@
 import { closeOnBackdropClick, keyPrefix } from './util.js';
-import { deckHomeHref, openHomeTask, openScratch, toggleSharing } from './actions.js';
+import { tasksHomeHref, openHomeTask, openScratch, toggleSharing } from './actions.js';
 import { openSearchModal } from './search.js';
 import { togglePreview } from './editor.js';
 import { foldAll } from './fold.js';
@@ -7,7 +7,7 @@ import { foldAll } from './fold.js';
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 
 // The section headings of a page view (the article's ## and ###, not those
-// of a deck embed). The current section is the last heading scrolled past,
+// of a task list embed). The current section is the last heading scrolled past,
 // as the side TOC marks it; ] / [ scroll to the next / previous one and put
 // its anchor in the URL. False where there is nothing to jump to.
 function jumpSection(step) {
@@ -89,7 +89,7 @@ document.addEventListener('keydown', e => {
   // one release.
   if (keyPrefix.key === 'g') {
     resetPrefix();
-    const dest = { h: '/page/index', n: '/page/_scratch', a: '/deck', t: deckHomeHref() };
+    const dest = { h: '/page/index', n: '/page/_scratch', a: '/deck', t: tasksHomeHref() };
     dest.s = dest.n; dest.d = dest.a;
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }

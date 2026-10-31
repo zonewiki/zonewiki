@@ -1,5 +1,5 @@
 // The wiki's routes: pages, the editor, scratch notes, the
-// deck page, previews, page lists.
+// tasks page, previews, page lists.
 package main
 
 import (
@@ -42,7 +42,7 @@ func pageRoutes(mux *http.ServeMux) {
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
-	mux.HandleFunc("GET /deck", deckPage)
+	mux.HandleFunc("GET /deck", tasksPage)
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", apiToggleCheckbox)
@@ -86,7 +86,7 @@ var (
 )
 
 // apiPagePreview: a page for the search modal's preview pane, {title, html}:
-// heading ids become data-pid (the page underneath has its own), deck
+// heading ids become data-pid (the page underneath has its own), tasks
 // embeds are left out.
 func apiPagePreview(w http.ResponseWriter, r *http.Request) {
 	rq, slug := newReq(r), r.PathValue("slug")
@@ -101,7 +101,7 @@ func apiPagePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	masked, stash := maskCode(content)
-	masked = deckRE.ReplaceAllString(masked, "*(deck)*")
+	masked = tasksRE.ReplaceAllString(masked, "*(tasks)*")
 	out := renderMd(rq, stripH1(unmaskCode(masked, stash)), RenderOpts{})
 	writeJSON(w, http.StatusOK, M{"title": pageTitle(content, slug), "html": pidRE.ReplaceAllString(out, `$1 data-pid="`)})
 }
@@ -163,7 +163,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		tasks = append(tasks, t)
 	}
 	var lists []string
-	for _, l := range pageDeckLists(content) {
+	for _, l := range pageTaskLists(content) {
 		lists = append(lists, l.Name)
 	}
 	sections := linkSections(rq, backlinks, tasks, lists)
@@ -299,7 +299,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		"private_offer":   privateOffer,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
-		"deck_html":       htmlOf(buildDeckEmbed(rq.user, DeckParams{}, 0, true, ownPrivate(rq.user, slug)))})
+		"tasks_html":       htmlOf(buildTasksEmbed(rq.user, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -777,7 +777,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiPagesList: every page for the search modal's list, and the built-in
-// ones: Deck and Scratch are modules (typing finds them); Deleted Pages is
+// ones: Tasks and Scratch are modules (typing finds them); Deleted Pages is
 // pinned to the top of the empty query's list (special).
 func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
@@ -810,22 +810,22 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// deckPage: /deck, every task, or with ?list= that list, looking as on the
+// tasksPage: /deck, every task, or with ?list= that list, looking as on the
 // page that declares it (that embed's params apply). Every link to "the
-// deck" goes here; [[deck …]] embeds are for views on ordinary pages.
-func deckPage(w http.ResponseWriter, r *http.Request) {
+// tasks" goes here; [[deck …]] embeds are for views on ordinary pages.
+func tasksPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	list := cleanList(r.URL.Query().Get("list"))
-	params, title, heading := DeckParams{}, "Tasks", "Tasks"
-	var home *DeckHome
+	params, title, heading := TasksParams{}, "Tasks", "Tasks"
+	var home *TasksHome
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/deck"
 	if list != "" {
-		if declared, ok := deckLists(rq.user)[list]; ok {
+		if declared, ok := taskLists(rq.user)[list]; ok {
 			params = declared.Params
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
-			home = &DeckHome{Slug: declared.Slug, Title: t}
+			home = &TasksHome{Slug: declared.Slug, Title: t}
 		}
 		params = params.With("list", list)
 		title, heading = list+" · Tasks", list
@@ -834,12 +834,12 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
-	data := M{"heading": heading, "list_name": list, "deck_html": htmlOf(buildDeckEmbed(rq.user, params, 0, false, private)),
+	data := M{"heading": heading, "list_name": list, "tasks_html": htmlOf(buildTasksEmbed(rq.user, params, 0, false, private)),
 		"breadcrumb_html": breadcrumb(rq, crumbs, key, true, title, "")}
 	if home != nil {
 		data["home"] = home
 	}
-	page(w, rq, http.StatusOK, "deck_page.html", title, shell{}, data)
+	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{}, data)
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
@@ -913,7 +913,7 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, renderMd(rq, string(body), RenderOpts{Page: page, PreferLists: lists}))
 }
 
-// apiRenderNotes: deck task notes and comments as HTML, as pages render:
+// apiRenderNotes: task notes and comments as HTML, as pages render:
 // {"notes": [text…], "comments": [text…]} → the same with HTML.
 func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)

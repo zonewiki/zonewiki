@@ -244,8 +244,8 @@ def test_url_paste_asks_for_a_name_and_undoes(page, wiki):
 
 
 def test_url_paste_in_task_notes_undoes(page, wiki):
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    page.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.goto("/page/tasks?view=open")
     page.locator("#task-add-btn").click()
     notes = page.locator("#task-edit-desc")
     notes.click()
@@ -295,12 +295,12 @@ def test_date_snippets_use_local_time(new_page, wiki):
 
 
 def test_task_notes_complete_page_links(page, wiki):
-    # The deck's notes and title complete [[ and [text]( like the editor
+    # A task's notes and title complete [[ and [text]( like the editor
     # (one implementation, linkAutocomplete in leaf.js).
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("todo", "# Todo\n\n[[deck]]\n")
     wiki.write("target-page", "# Target\n")
     wiki.write("tangent", "# Tangent\n")
-    page.goto("/page/deck?view=open")
+    page.goto("/page/todo?view=open")
     page.locator("#task-add-btn").click()
     notes = page.locator("#task-edit-desc")
     notes.click()

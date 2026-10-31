@@ -209,7 +209,7 @@ var renamedSettings = [][2]string{
 //     settings file overrides it (searchFloor).
 //   - related: pages less similar than this (page↔page, each page the mean
 //     of its sections) are not listed as related.
-//   - tasks: as search, for deck tasks. Their texts are a few words, and
+//   - tasks: as search, for tasks. Their texts are a few words, and
 //     short texts let nonsense score higher, so the floor sits higher.
 //
 // Measured on a test wiki: the floor sits above what nonsense queries and
@@ -503,7 +503,7 @@ type semanticIndex struct {
 	// slug → the mean of its chunks
 	pageVecs  map[string][]float32
 	tasks     map[string]string // task id → hash of its text
-	taskOrder []string          // the ids as the deck lists them
+	taskOrder []string          // the ids as the tasks lists them
 	queries   map[string][]float32
 	// Scoring: rows per index generation, and the scores of recent
 	// queries, so one search scores each vector once.
@@ -887,7 +887,7 @@ func (x *semanticIndex) queryVec(query string) []float32 {
 // scored: the chunk rows, their scores, the task rows and theirs for the
 // query, scoring every vector once per query and index generation (a
 // search asks several times: pages, tasks, sections for the links). Rows
-// are in the pages' A–Z order, the tasks' in the deck's.
+// are in the pages' A–Z order, the task app's in theirs.
 func (x *semanticIndex) scored(query string) ([]chunkRow, []float64, []taskRow, []float64) {
 	key := queryKey(query)
 	x.mu.Lock()
@@ -1110,7 +1110,7 @@ func (x *semanticIndex) nearest(me []float32, pages map[string]*semPage, pageVec
 // then search is by keywords only and pages have no Related section.
 var semantic *semanticIndex
 
-// semanticTasks: the deck's tasks for the index, each embedded as its
+// semanticTasks: every task for the index, each embedded as its
 // search text (title, notes and #tags).
 func semanticTasks() []semTask {
 	docs := taskSearchDocs()

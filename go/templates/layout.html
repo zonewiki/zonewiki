@@ -24,19 +24,19 @@
   {{- if .editor}} class="editor-page"{{end}}
   {{- if .module}} data-module="{{.module}}"{{end}}
   {{- /* How dates read and the week starts (LEAF_LOCALE, LEAF_DATE_FORMAT;
-      deck-core.js). */}}
+      tasks-core.js). */}}
   {{- /* With users, private/ holds their private pages (js/completion.js). */}}
   {{- if .users}} data-users="1"{{end}}
   {{- if .locale}} data-locale="{{.locale}}"{{end}}
   {{- if .date_format}} data-date-format="{{.date_format}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the
-      deck's home gives them, are keep tasks if it makes them, start
+      Tasks home gives them, are keep tasks if it makes them, start
       today when its "+ New" would, and are private when it is in the
       user's private folder (js/actions.js openHomeTask). */}}
-  {{- with .deck_new}} data-deck-tags="{{.tags}}"
-    {{- if .keep}} data-deck-keep="1"{{end}}
-    {{- if .today}} data-deck-today="1"{{end}}
-    {{- if .private}} data-deck-private="1"{{end}}
+  {{- with .tasks_new}} data-tasks-tags="{{.tags}}"
+    {{- if .keep}} data-tasks-keep="1"{{end}}
+    {{- if .today}} data-tasks-today="1"{{end}}
+    {{- if .private}} data-tasks-private="1"{{end}}
   {{- end}}>
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">

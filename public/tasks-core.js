@@ -1,6 +1,6 @@
-// ── Deck core — pure task logic, no DOM ──────────────────────────────────────
-// An ES module imported by deck.js and the editor (Make task's quick-add
-// parser), and by the Node tests (tests/test_deck_core.py), which is why
+// ── Tasks core — pure task logic, no DOM ──────────────────────────────────────
+// An ES module imported by tasks.js and the editor (Make task's quick-add
+// parser), and by the Node tests (tests/test_tasks_core.py), which is why
 // nothing here may touch the DOM, fetch, or per-instance state.
 
 function dateToStr(d) {
@@ -78,7 +78,7 @@ function placeInOrder(old, shown, moved) {
   return order;
 }
 
-// The deck's single filter field: words starting with '#' filter by tag, the
+// The tasks' single filter field: words starting with '#' filter by tag, the
 // rest is a text search over title + description. Separate tag words must
 // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
 // A word starting with '-#' excludes its tags (`-#mary`, `-#a|b`: neither).
@@ -401,7 +401,7 @@ function parseQuickAdd(input, today) {
   return out;
 }
 
-const DeckCore = {
+const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, tagParamToQuery,
@@ -409,4 +409,4 @@ const DeckCore = {
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };
 
-export default DeckCore;
+export default TasksCore;

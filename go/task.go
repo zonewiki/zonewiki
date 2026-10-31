@@ -1,4 +1,4 @@
-// A deck task: its fields as Zone knows them, and whatever else a file
+// A task: its fields as Zone knows them, and whatever else a file
 // gave it (keys of older versions, or added by hand), kept as it was.
 package main
 
@@ -27,7 +27,7 @@ type Task struct {
 	Comments               []Comment
 	Extra                  map[string]json.RawMessage // keys Zone doesn't know, as the file had them
 	// Owner: the user whose private task it is, "" a shared one. Not in
-	// the file: it is whose files the task was read from (deckDir), and a
+	// the file: it is whose files the task was read from (tasksDir), and a
 	// write files it there; the API shows it as "private".
 	Owner string
 }
@@ -254,7 +254,7 @@ func (t *Task) marshal(private bool) ([]byte, error) {
 	return append(b, '}'), nil
 }
 
-// encodeTasks: a deck file's text, two spaces of indent, text as it is
+// encodeTasks: a task list file's text, two spaces of indent, text as it is
 // (no \u escapes but those JSON needs).
 func encodeTasks(tasks []*Task) (string, error) {
 	file := make([]fileTask, len(tasks))

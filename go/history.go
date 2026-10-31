@@ -285,7 +285,7 @@ func apiUncommitted(w http.ResponseWriter, r *http.Request) {
 }
 
 // visibleUncommitted: the uncommitted files the request may see: pages
-// as hiddenPage says, other files (uploads, deck files) as canSeePath.
+// as hiddenPage says, other files (uploads, tasks files) as canSeePath.
 func visibleUncommitted(rq *Req, files []UncommittedFile) []UncommittedFile {
 	var out []UncommittedFile
 	for _, f := range files {

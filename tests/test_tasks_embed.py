@@ -11,7 +11,7 @@ from tests.conftest import create_task, preview
 
 class TestTasksLinkRender:
     def test_basic_embed_no_tasks(self, client, wiki_dir):
-        """[[deck]] renders the full deck app embed."""
+        """[[deck]] renders the full task app embed."""
         html = preview(client, "[[deck]]\n")
         assert "tasks-app" in html
         assert "tasks-list" in html
@@ -20,7 +20,7 @@ class TestTasksLinkRender:
         # Regression: placeholder _1 is a prefix of _10, so the 11th embed
         # was replaced by (part of) the 2nd one's HTML.
         html = preview(client, "\n\n".join(f"[[deck tag=t{i}]]" for i in range(11)) + "\n")
-        assert "LEAFDECKPLACEHOLDER" not in html
+        assert "LEAFTASKSPLACEHOLDER" not in html
         for i in range(11):
             sfx = f"-{i}" if i else ""
             assert html.count(f'id="tasks-app{sfx}"') == 1
@@ -32,9 +32,9 @@ class TestTasksLinkRender:
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_density_button(self, client, wiki_dir):
-        """Every deck has the switch between one line per task and full cards."""
+        """Every task list has the switch between one line per task and full cards."""
         html = preview(client, "[[deck]]\n")
-        assert 'class="btn deck-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
+        assert 'class="btn tasks-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[deck tag=work]] passes tag as data attribute."""
@@ -83,7 +83,7 @@ class TestTasksLinkRender:
 
     def test_multiple_embeds_have_independent_element_ids(self, client, wiki_dir):
         """Each embed must expose its own suffixed list/tabs/modal IDs so the
-        deck.js instance registry can address and refresh each independently
+        tasks.js instance registry can address and refresh each independently
         (cross-instance refresh relies on this)."""
         create_task(client, title="A", tags=["alpha"])
         md = "[[deck tag=alpha]]\n\n[[deck tag=beta]]\n"
@@ -139,8 +139,8 @@ class TestNoPageField:
 
 
 class TestPageViewLink:
-    def test_page_with_deck_embed(self, client, wiki_dir):
-        """A wiki page with [[deck]] renders the full deck app."""
+    def test_page_with_tasks_embed(self, client, wiki_dir):
+        """A wiki page with [[deck]] renders the full task app."""
         create_task(client, title="Page task", tags=["test"])
         (wiki_dir / "my-page.md").write_text(
             "# My Page\n\nSome text.\n\n[[deck tag=test]]\n", encoding="utf-8"
@@ -151,7 +151,7 @@ class TestPageViewLink:
         assert "tasks-app" in body
         assert 'data-init-tag="test"' in body
 
-    def test_preview_with_deck_embed(self, client, wiki_dir):
+    def test_preview_with_tasks_embed(self, client, wiki_dir):
         """Preview endpoint renders [[deck]] as the full embed."""
         create_task(client, title="Preview task")
         resp = client.post(
@@ -162,7 +162,7 @@ class TestPageViewLink:
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
 
-    def test_deck_embed_with_params(self, client, wiki_dir):
+    def test_tasks_embed_with_params(self, client, wiki_dir):
         """[[deck tag=work list=proj view=plan]] passes all data attrs."""
         (wiki_dir / "my-page.md").write_text(
             "# My Page\n\n[[deck tag=work list=proj view=plan]]\n", encoding="utf-8"

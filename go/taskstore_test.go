@@ -14,13 +14,13 @@ import (
 // A list is declared by a page's [[deck list=…]], outside code; the first
 // page A–Z is its home. A task belongs to the first (A–Z) of its tags that
 // is a list.
-func TestDeckLists(t *testing.T) {
+func TestTasksLists(t *testing.T) {
 	testWiki(t, map[string]string{
 		"shop": "# Shop\n\n[[deck list=Groceries keep=1 labels=Catalogue,,Shopping]]\n",
 		"code": "# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
 		"home": "# Home\n\n[[deck list=chores]]\n",
 	})
-	lists := deckLists("")
+	lists := taskLists("")
 	var names []string
 	for n := range lists {
 		names = append(names, n)
@@ -36,7 +36,7 @@ func TestDeckLists(t *testing.T) {
 		}
 	}
 	putPage(t, "a-list", "# A\n\n[[deck list=groceries]]\n")
-	if home := deckLists("")["groceries"].Slug; home != "a-list" {
+	if home := taskLists("")["groceries"].Slug; home != "a-list" {
 		t.Errorf("home %q", home)
 	}
 }
@@ -81,7 +81,7 @@ func TestShortDate(t *testing.T) {
 	}
 }
 
-func TestParseDeckParams(t *testing.T) {
+func TestParseTasksParams(t *testing.T) {
 	for raw, want := range map[string]map[string]string{
 		"":         {},
 		"tag=work": {"tag": "work"},
@@ -89,8 +89,8 @@ func TestParseDeckParams(t *testing.T) {
 		"list=groceries":     {"list": "groceries"},
 		"Tag=work VIEW=plan": {"tag": "work", "view": "plan"},
 	} {
-		if got := parseDeckParams(raw).m; !reflect.DeepEqual(got, want) {
-			t.Errorf("parseDeckParams(%q) = %v, want %v", raw, got, want)
+		if got := parseTasksParams(raw).m; !reflect.DeepEqual(got, want) {
+			t.Errorf("parseTasksParams(%q) = %v, want %v", raw, got, want)
 		}
 	}
 }
@@ -143,21 +143,21 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if mine.Owner != "alice" {
 		t.Fatalf("owner %q", mine.Owner)
 	}
-	if got := titles(readDeck("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
+	if got := titles(readTasks("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
 		t.Errorf("alice sees %v", got)
 	}
-	if got := titles(readDeck("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(readTasks("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("bob sees %v", got)
 	}
-	if got := titles(readDeck("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(readTasks("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("Zone sees %v", got)
 	}
-	shared, own := fileText(t, deckFile("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_deck/tasks.json"))
+	shared, own := fileText(t, tasksFile("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_deck/tasks.json"))
 	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
 		strings.Contains(own, "Shared one") || strings.Contains(own+shared, `"private"`) {
 		t.Errorf("files:\n%s\n%s", shared, own)
 	}
-	if _, err := os.Stat(deckFile("bob")); err == nil {
+	if _, err := os.Stat(tasksFile("bob")); err == nil {
 		t.Error("bob got files of his own for no task")
 	}
 	b, _ := json.Marshal(mine)
@@ -173,7 +173,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 			t.Errorf("bob's write: %v", err)
 		}
 	}
-	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(readDeck("alice")) != 2 {
+	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(readTasks("alice")) != 2 {
 		t.Errorf("bob's delete took alice's task: %v", err)
 	}
 	if len(findTasks("bob", strings.ToLower(mine.ID[:8]))) != 0 || len(findTasks("alice", mine.ID)) != 1 {
@@ -194,10 +194,10 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "alice", "Water plants", true, "due_date", isoDay(today()), "rec_type", "weekly")
-	if titles(readDeck("bob")); len(readDeck("bob")) != 0 || len(readDeck("alice")) != 1 {
-		t.Fatalf("after private: bob %v, alice %v", titles(readDeck("bob")), titles(readDeck("alice")))
+	if titles(readTasks("bob")); len(readTasks("bob")) != 0 || len(readTasks("alice")) != 1 {
+		t.Fatalf("after private: bob %v, alice %v", titles(readTasks("bob")), titles(readTasks("alice")))
 	}
-	if strings.Contains(fileText(t, deckFile("")), "Water") {
+	if strings.Contains(fileText(t, tasksFile("")), "Water") {
 		t.Error("still in the shared file")
 	}
 	done := jsonObj{}
@@ -208,8 +208,8 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if !strings.Contains(fileText(t, completedPath("alice")), task.ID) || strings.Contains(fileText(t, completedPath("")), "Water") {
 		t.Error("completed into the wrong file")
 	}
-	open := readDeck("alice")
-	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(readDeck("bob")) != 0 {
+	open := readTasks("alice")
+	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(readTasks("bob")) != 0 {
 		t.Errorf("next occurrence %+v", open)
 	}
 	if got := completedInYear("bob", currentYear()); len(got) != 0 {
@@ -220,8 +220,8 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(readDeck("bob")) != 1 || fileText(t, deckFile("alice")) != "[]\n" {
-		t.Errorf("back to shared: bob %v, alice's file %q", titles(readDeck("bob")), fileText(t, deckFile("alice")))
+	if len(readTasks("bob")) != 1 || fileText(t, tasksFile("alice")) != "[]\n" {
+		t.Errorf("back to shared: bob %v, alice's file %q", titles(readTasks("bob")), fileText(t, tasksFile("alice")))
 	}
 }
 
@@ -279,27 +279,27 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	}
 }
 
-// The deck home and the lists are per user: a home in your private folder
+// The Tasks home and the lists are per user: a home in your private folder
 // wins over a shared one; a list declared on a private page is its owner's.
-func TestDeckHomeAndListsPerUser(t *testing.T) {
+func TestTasksHomeAndListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"deck":                "# Deck\n\n[[deck home=1]]\n",
+		"tasks":                "# Tasks\n\n[[deck home=1]]\n",
 		"private/alice/mine":  "# Mine\n\n[[deck home=1 list=secret]]\n",
 		"private/bob/nothing": "# Nothing\n",
 	})
 	withUsers(t, "alice", "bob")
-	if h := lookupDeckHome("alice"); h == nil || h.Slug != "private/alice/mine" {
+	if h := lookupTasksHome("alice"); h == nil || h.Slug != "private/alice/mine" {
 		t.Errorf("alice's home %+v", h)
 	}
 	for _, u := range []string{"bob", ""} {
-		if h := lookupDeckHome(u); h == nil || h.Slug != "deck" {
+		if h := lookupTasksHome(u); h == nil || h.Slug != "tasks" {
 			t.Errorf("%q's home %+v", u, h)
 		}
 	}
-	if _, ok := deckLists("alice")["secret"]; !ok {
+	if _, ok := taskLists("alice")["secret"]; !ok {
 		t.Error("alice's list")
 	}
-	if _, ok := deckLists("bob")["secret"]; ok {
+	if _, ok := taskLists("bob")["secret"]; ok {
 		t.Error("bob sees alice's list")
 	}
 }
@@ -307,19 +307,19 @@ func TestDeckHomeAndListsPerUser(t *testing.T) {
 // Your own declaration of a list is its home for you, whatever the names
 // A–Z. A task's tags never decide where it is kept: a new task is private
 // only when the request says so.
-func TestDeckListsPerUser(t *testing.T) {
+func TestTasksListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"deck/gifts":          "# Gifts\n\n[[deck list=gifts]]\n",
+		"tasks/gifts":          "# Gifts\n\n[[deck list=gifts]]\n",
 		"private/alice/gifts": "# My gifts\n\n[[deck list=gifts]]\n",
 		"private/alice/diary": "# Diary\n\n[[deck list=diary]]\n",
 		"zebra":               "# Z\n\n[[deck list=diary]]\n",
 	})
 	withUsers(t, "alice", "bob")
-	lists := deckLists("alice")
+	lists := taskLists("alice")
 	if lists["gifts"].Slug != "private/alice/gifts" || lists["diary"].Slug != "private/alice/diary" {
 		t.Errorf("alice's homes %+v", lists)
 	}
-	if deckLists("bob")["gifts"].Slug != "deck/gifts" {
+	if taskLists("bob")["gifts"].Slug != "tasks/gifts" {
 		t.Error("bob's lists")
 	}
 	if task := newTestTask(t, "alice", "Scarf", false, "tags", "Gifts"); task.Owner != "" {
@@ -330,14 +330,14 @@ func TestDeckListsPerUser(t *testing.T) {
 	}
 }
 
-// What Zone does over all decks reaches every user's files: a rename's
+// What Zone does over all task lists reaches every user's files: a rename's
 // links, the yearly archive, the search index.
 func TestEveryUsersFiles(t *testing.T) {
 	testWiki(t, map[string]string{"old": "# Old\n"})
 	withUsers(t, "alice", "bob")
 	mine := newTestTask(t, "alice", "See [[old]]", true)
 	changed, err := renamePageRefs(func(_, s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
-	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, deckFile("alice")), "[[new]]") {
+	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, tasksFile("alice")), "[[new]]") {
 		t.Errorf("rename: %v %v", changed, err)
 	}
 	last := jsonObj{}
@@ -377,7 +377,7 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	if _, err := updateTask("alice", task.ID, data, ""); err == nil {
 		t.Fatal("alice made bob's shared task private")
 	}
-	if got := titles(readDeck("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(readDeck("alice")) != 1 {
+	if got := titles(readTasks("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(readTasks("alice")) != 1 {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
@@ -385,8 +385,8 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	if _, err := updateTask("alice", mine.ID, data, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(readDeck("bob")) != 2 {
-		t.Errorf("bob sees %v", titles(readDeck("bob")))
+	if len(readTasks("bob")) != 2 {
+		t.Errorf("bob sees %v", titles(readTasks("bob")))
 	}
 	data.set("private", true)
 	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {

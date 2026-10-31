@@ -280,7 +280,7 @@ class TestMakeShared:
 
 
 class TestModuleMenu:
-    """With users the switcher has two pills, Wiki · Deck and Private · Scratch,
+    """With users the switcher has two pills, Wiki · Tasks and Private · Scratch,
     and a user menu (who, Sign out) behind the user button; without them one
     pill with Scratch third."""
 
@@ -296,7 +296,7 @@ class TestModuleMenu:
         body = client.get("/page/index", headers=HOST).data.decode()
         crumb, bar, top = self.parts(body)
         groups = re.findall(r'<span class="module-group">(.*?)</span>(?=<span class="module-group">|</nav>|$)', crumb + "</nav>", re.S)
-        assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "deck"], ["private", "scratch"]]
+        assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "tasks"], ["private", "scratch"]]
         assert 'href="/private"' in groups[1] and 'href="/page/_scratch"' in groups[1]
         # A lock opens the second pill: only you see Private and Scratch.
         assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Notes"' in groups[1]
@@ -307,7 +307,7 @@ class TestModuleMenu:
         # Scratch's tab carries a lock (Private's icon is one); no other tab does.
         assert bar.count('class="action-lock"') == 1
         assert bar.index('data-module="scratch"') < bar.index('class="action-lock"') < bar.index('class="action-label"', bar.index('data-module="scratch"'))
-        assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('data-module="private"')
+        assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('data-module="private"')
         assert "module-menu-btn" not in bar and "module-menu-btn" not in crumb
         # Desktop: the user button after Search opens the menu: who and Sign out only.
         assert top.index("top-search") < top.index('class="top-user module-menu-btn"')
@@ -327,7 +327,7 @@ class TestModuleMenu:
         assert "module-menu" not in body and "top-user" not in top
         assert crumb.count('class="module-group"') == 1 and 'data-module="private"' not in crumb and "module-lock" not in crumb
         assert "action-lock" not in body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
-        assert crumb.index('data-module="deck"') < crumb.index('data-module="scratch"')
+        assert crumb.index('data-module="tasks"') < crumb.index('data-module="scratch"')
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Tasks", "Notes"]
 
     def test_the_pills_are_current_in_private_and_scratch_views(self, client, git_wiki_dir, users):
@@ -338,7 +338,7 @@ class TestModuleMenu:
         (git_wiki_dir / "plans.md").write_text("# Plans\n")
         for url, module in [("/page/private/alice/index", "private"), ("/page/private/alice/diary", "private"),
                             ("/page/_scratch", "scratch"), (f"/page/{note}", "scratch"),
-                            ("/page/plans", "wiki"), ("/deck", "deck")]:
+                            ("/page/plans", "wiki"), ("/deck", "tasks")]:
             body = client.get(url, headers=HOST).data.decode()
             assert f'<body data-module="{module}"' in body, url
             crumb, bar, top = self.parts(body)

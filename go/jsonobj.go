@@ -1,4 +1,4 @@
-// JSON read a member at a time: deck requests, MCP messages and their
+// JSON read a member at a time: tasks requests, MCP messages and their
 // tools' arguments, and task files are objects whose members are checked
 // one by one, each read as the type its field needs.
 package main
@@ -79,7 +79,7 @@ func scalarText(raw json.RawMessage) (string, bool) {
 
 // marshalText is json.Marshal leaving <, > and & as they are: the encoder
 // that writes it out escapes them for HTML when it should (API answers),
-// a deck file keeps its text as written.
+// a task list file keeps its text as written.
 func marshalText(v any) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)

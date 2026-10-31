@@ -64,7 +64,7 @@ See [[index]] and [[missing page]].
 
 def seed(wiki, page):
     wiki.write("stress", STRESS)
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     for title, extra in [("Short task", {}),
                          ("A task with a rather long title that should wrap on narrow screens",
                           {"tags": ["work", "layout"]}),
@@ -86,9 +86,9 @@ def horizontal_overflow(page) -> int:
 VIEWS = [
     ("page", "/page/stress", None),
     ("editor", "/edit/stress", None),
-    ("deck-all", "/page/deck", "open"),
-    ("deck-plan", "/page/deck", "plan"),
-    ("deck-focus", "/page/deck", "focus"),
+    ("tasks-all", "/page/tasks", "open"),
+    ("tasks-plan", "/page/tasks", "plan"),
+    ("tasks-focus", "/page/tasks", "focus"),
 ]
 
 
@@ -194,8 +194,8 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     # Regression: line-height 1.2 put all spare leading below the text, so
     # the labels sat visibly high (caps 1.3px above centre).
     pg = new_page(viewport=viewport)
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=open")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=open")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
 
@@ -221,8 +221,8 @@ def test_board_header_labels_vertically_centred(new_page, wiki, viewport):
     pg = new_page(viewport=viewport)
     pg.request.post("/api/deck", data={"title": "Loose"})
     pg.request.post("/api/deck", data={"title": "Started", "start_date": date.today().isoformat()})
-    wiki.write("deck", "# Deck\n\n[[deck]]\n")
-    pg.goto("/page/deck?view=plan")
+    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.goto("/page/tasks?view=plan")
     pg.locator(".board-day-divider").first.wait_for()
     rows = pg.evaluate(_BOARD_HEADER_GAPS)
     assert len(rows) >= 9          # with cards (Unplanned, Today) and empty ones
@@ -275,26 +275,26 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
     page.wait_for_function("() => scrollY > 0")
 
 
-DECK_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
+TASKS_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
 
 
-def deck_header_rows(pg) -> int:
+def tasks_header_rows(pg) -> int:
     """Number of distinct lines the Open tab's header controls sit on."""
     centres = sorted(
         (lambda b: b["y"] + b["height"] / 2)(pg.locator(sel).bounding_box())
-        for sel in DECK_HEADER_PARTS)
+        for sel in TASKS_HEADER_PARTS)
     return 1 + sum(1 for a, b in zip(centres, centres[1:]) if b - a > 8)
 
 
 @pytest.mark.parametrize("ctx,rows", [({"viewport": DESKTOP}, 1), (TOUCH_PHONE, 2)],
                          ids=["desktop", "phone"])
-def test_deck_all_tab_header_is_compact(new_page, wiki, ctx, rows):
+def test_tasks_all_tab_header_is_compact(new_page, wiki, ctx, rows):
     # Tabs + search + New: one line on desktop, two on a
     # phone (it used to be two and five).
     pg = new_page(**ctx)
     seed(wiki, pg)
-    open_view(pg, "/page/deck", "open")
-    assert deck_header_rows(pg) == rows
+    open_view(pg, "/page/tasks", "open")
+    assert tasks_header_rows(pg) == rows
     assert pg.locator("#task-filter-search").bounding_box()["width"] >= 100
     assert horizontal_overflow(pg) <= 0
 
@@ -302,7 +302,7 @@ def test_deck_all_tab_header_is_compact(new_page, wiki, ctx, rows):
 def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     # Regression: the navigation trail (up to 6 visited pages) was one flex
     # row that neither wrapped nor shrank, so a few long titles made the page
-    # wider than the phone. The full-screen deck edit modal grew with it and
+    # wider than the phone. The full-screen tasks edit modal grew with it and
     # its Save/Cancel bar ended up off-screen.
     pg = new_page(**TOUCH_PHONE)
     pg.request.post("/api/deck", data={"title": "Water plants", "start_date": _today()})
@@ -468,7 +468,7 @@ def test_no_side_columns_below_1320(new_page, wiki):
 
 
 def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
-    # Regression: only page views were wide, so on Scratch or the Deck the
+    # Regression: only page views were wide, so on Scratch or the Tasks the
     # switcher and the top actions jumped inward. Every view shares the top
     # row; the text column sits in the same place on each.
     _side_wiki(wiki)
@@ -655,13 +655,13 @@ def test_wide_images_use_the_middle_column(new_page, wiki):
     assert abs(wide["x"] + wide["width"] / 2 - (text["x"] + text["width"] / 2)) < 1
     assert small["width"] == 200 and abs(small["x"] - text["x"]) < 1
     assert inline["width"] <= text["width"] + 1
-    deck = page.locator(".tasks-app").bounding_box()     # a deck keeps the text's width
-    assert abs(deck["width"] - text["width"]) < 1 and abs(deck["x"] - text["x"]) < 1
+    tasks = page.locator(".tasks-app").bounding_box()     # a task list keeps the text's width
+    assert abs(tasks["width"] - text["width"]) < 1 and abs(tasks["x"] - text["x"]) < 1
 
 
-def test_deck_scratch_and_wiki_content_share_one_width(new_page, wiki):
+def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
     # Every view's content has the text's width, on big screens and small:
-    # a page's text, a deck embed on it, /deck, Scratch and search results.
+    # a page's text, a task list embed on it, /deck, Scratch and search results.
     _side_wiki(wiki)
     wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
     wiki.write("2026-10-01_09-00-00_note", "# Note\n")
@@ -673,7 +673,7 @@ def test_deck_scratch_and_wiki_content_share_one_width(new_page, wiki):
         page.goto("/page/tasks")
         boxes["embed"] = page.locator(".tasks-app").bounding_box()
         page.goto("/deck")
-        boxes["deck"] = page.locator(".tasks-app").bounding_box()
+        boxes["tasks"] = page.locator(".tasks-app").bounding_box()
         page.goto("/page/_scratch")
         boxes["scratch"] = page.locator(".notes-list").bounding_box()
         page.goto("/search?q=note")

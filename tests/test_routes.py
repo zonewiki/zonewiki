@@ -56,7 +56,7 @@ class TestViewPage:
     def test_viewport_resizes_with_on_screen_keyboard(self, client, wiki_dir):
         # Regression: without interactive-widget=resizes-content, Android
         # Chrome's keyboard only shrinks the visual viewport, so the
-        # full-screen deck editor kept its height and its Save/Cancel bar sat
+        # full-screen tasks editor kept its height and its Save/Cancel bar sat
         # behind the keyboard.
         write_page(wiki_dir, "my-page", "# My Page\n")
         text = client.get("/page/my-page", headers=HOST).data.decode()
@@ -67,7 +67,7 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         scratch = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for url, module in (("/page/my-page", "wiki"), ("/page/index", "wiki"),
-                            ("/deck", "deck"), ("/deck?list=shop", "deck"),
+                            ("/deck", "tasks"), ("/deck?list=shop", "tasks"),
                             ("/page/_scratch", "scratch"), (f"/page/{scratch}", "scratch"),
                             ("/history/my-page", "wiki")):
             body = client.get(url, headers=HOST).get_data(as_text=True)
@@ -90,39 +90,39 @@ class TestViewPage:
             assert '<span class="module-label">Wiki</span>' in crumb
 
     @staticmethod
-    def _deck_links(body):
-        return re.findall(r'<a href="([^"]*)" class="(?:action-module )?module-link" data-module="deck"', body)
+    def _tasks_links(body):
+        return re.findall(r'<a href="([^"]*)" class="(?:action-module )?module-link" data-module="tasks"', body)
 
-    def test_deck_links_go_to_deck_without_a_home(self, client, wiki_dir):
+    def test_tasks_links_go_to_tasks_without_a_home(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n\n[[deck list=task]]\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
-        assert self._deck_links(body) == ["/deck", "/deck"]   # switcher, bar
+        assert self._tasks_links(body) == ["/deck", "/deck"]   # switcher, bar
         assert '<body data-module="wiki">' in body
 
-    def test_deck_home_page_is_where_the_deck_links_go(self, client, wiki_dir):
-        # [[deck … home=1]] makes that page your own deck: the Deck module
-        # links go there, and the page belongs to the Deck module.
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task view=focus home=1]]\n")
+    def test_tasks_home_page_is_where_the_tasks_links_go(self, client, wiki_dir):
+        # [[deck … home=1]] makes that page your own tasks: the Tasks module
+        # links go there, and the page belongs to the Tasks module.
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task view=focus home=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
-        assert self._deck_links(body) == ["/page/deck", "/page/deck"]
-        home = client.get("/page/deck", headers=HOST).get_data(as_text=True)
-        assert '<body data-module="deck" data-deck-tags="task" data-deck-today="1">' in home
+        assert self._tasks_links(body) == ["/page/tasks", "/page/tasks"]
+        home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
+        assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in home
         assert 'data-home="1"' in home   # the embed New clicks
-        # /deck stays the view of every task, in the Deck module.
-        assert '<body data-module="deck" data-deck-tags="task" data-deck-today="1">' in client.get("/deck", headers=HOST).get_data(as_text=True)
+        # /deck stays the view of every task, in the Tasks module.
+        assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/deck", headers=HOST).get_data(as_text=True)
 
-    def test_deck_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
+    def test_tasks_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
         write_page(wiki_dir, "aaa", "# A\n\n```\n[[deck home=1]]\n```\n")
         write_page(wiki_dir, "zzz", "# Z\n\n[[deck tag=x home=yes]]\n")
         write_page(wiki_dir, "mmm", "# M\n\n[[deck home=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._deck_links(body)[0] == "/page/mmm"
+        assert self._tasks_links(body)[0] == "/page/mmm"
         # Removing the declaration ends it at once.
         write_page(wiki_dir, "mmm", "# M\n\n[[deck]]\n")
         os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._deck_links(body)[0] == "/page/zzz"
+        assert self._tasks_links(body)[0] == "/page/zzz"
 
     def test_bottom_bar_lists_the_modules(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
@@ -130,7 +130,7 @@ class TestViewPage:
             '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Notes", "Note", "Task", "Search"]
         # Navigation, a divider, then the actions.
-        assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
+        assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
 
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
@@ -169,23 +169,23 @@ class TestViewPage:
         for url in ("/page/my-page", "/edit/my-page", "/deck"):
             assert '<html lang="en" class="sharing">' in client.get(url, headers=HOST).get_data(as_text=True), url
 
-    def test_new_tasks_get_the_deck_homes_tags(self, client, wiki_dir):
-        # c t and the New task button tag a task as the deck's home does:
+    def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
+        # c t and the New task button tag a task as the Tasks home does:
         # leaf.js reads the tags (and keep) from <body>, on every view.
         write_page(wiki_dir, "my-page", "# My Page\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
-        assert "data-deck-tags" not in body and "data-deck-keep" not in body   # no home: no tags
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=Task tag=work,-mary home=1 keep=1]]\n")
+        assert "data-tasks-tags" not in body and "data-tasks-keep" not in body   # no home: no tags
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=Task tag=work,-mary home=1 keep=1]]\n")
         for url in ("/page/my-page", "/edit/my-page", "/deck"):
             tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
-            assert 'data-deck-tags="task,work"' in tag and 'data-deck-keep="1"' in tag, url
-            assert 'data-deck-today="1"' in tag, url   # the default view, Focus: start today
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task view=open home=1]]\n")
+            assert 'data-tasks-tags="task,work"' in tag and 'data-tasks-keep="1"' in tag, url
+            assert 'data-tasks-today="1"' in tag, url   # the default view, Focus: start today
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task view=open home=1]]\n")
         tag = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
-        assert 'data-deck-tags="task"' in tag and "data-deck-today" not in tag and "data-deck-keep" not in tag
+        assert 'data-tasks-tags="task"' in tag and "data-tasks-today" not in tag and "data-tasks-keep" not in tag
 
-    def test_headless_deck_for_pages_without_one(self, client, wiki_dir):
-        # c t on a page without a deck app loads this hidden one (scripts
+    def test_headless_tasks_for_pages_without_one(self, client, wiki_dir):
+        # c t on a page without a task list app loads this hidden one (scripts
         # left out: the page loads them).
         body = client.get("/api/deck/headless", headers=HOST).get_data(as_text=True)
         assert 'data-headless="1"' in body and 'id="task-edit-modal"' in body
@@ -399,12 +399,12 @@ class TestViewPage:
 class TestPagePreview:
     """/api/page-preview: a page for the search modal's preview pane."""
 
-    def test_rendered_without_ids_and_decks(self, client, wiki_dir):
+    def test_rendered_without_ids_and_taskss(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n[[deck list=garden]]\n\n```\n[[deck]]\n```\n")
         data = client.get("/api/page-preview/garden", headers=HOST).get_json()
         assert data["title"] == "Garden"
         assert '<h2 data-pid="beds">Beds</h2>' in data["html"] and ' id="' not in data["html"]
-        assert "tasks-app" not in data["html"] and "<em>(deck)</em>" in data["html"]
+        assert "tasks-app" not in data["html"] and "<em>(tasks)</em>" in data["html"]
         assert "[[deck]]" in data["html"]    # code stays as written
         assert "<h1" not in data["html"]
 
@@ -953,7 +953,7 @@ class TestApiPagesList:
         assert "_daily" not in slugs   # daily notes were removed
 
     def test_built_in_pages_are_marked(self, client, wiki_dir):
-        # Deck and Scratch are modules (the module switcher links to them), so
+        # Tasks and Scratch are modules (the module switcher links to them), so
         # only Deleted Pages is pinned (`special`, git only); all three are
         # `builtin`, which the empty-query list and "Unlinked only" leave out.
         write_page(wiki_dir, "aaa", "# AAA\n")
@@ -1297,7 +1297,7 @@ class TestSearch:
         assert results[0]["slug"] == "rare"
 
     def test_search_page_task_links_to_the_task_by_id(self, client, wiki_dir):
-        # A task result must open the deck (/deck) at that task (by id) — not the
+        # A task result must open the tasks (/deck) at that task (by id) — not the
         # bare _deck storage slug, and not a title search.
         tid = client.post("/api/deck", json={"title": "buymilk urgent chore"}).get_json()["id"]
         resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
@@ -1781,8 +1781,8 @@ class TestSearchResultHref:
         phrase = client.get("/api/search?q=runs+again", headers=HOST).get_json()[0]
         assert phrase["href"] == "/page/run?hl=RUNS+again"
 
-    def test_task_result_href_opens_deck_at_the_task(self, client, wiki_dir):
-        # Regression: the href prefilled the title into the deck's filter
+    def test_task_result_href_opens_tasks_at_the_task(self, client, wiki_dir):
+        # Regression: the href prefilled the title into the task app's filter
         # field, where a "#word" in the title reads as a tag filter.
         tid = client.post("/api/deck", json={"title": "Water the ferns #3"},
                           headers=HOST).get_json()["id"]
@@ -1808,7 +1808,7 @@ class TestBacklinkCacheInvalidation:
 
 
 # ===========================================================================
-# Linked tasks (deck tasks that wikilink to a page)
+# Linked tasks (tasks that wikilink to a page)
 # ===========================================================================
 
 class TestTaskBacklinks:
@@ -1856,8 +1856,8 @@ class TestTaskBacklinks:
 
     def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
         # Regression: the task title's own wikilinks were rendered as <a>
-        # inside the outer deck <a> — nested anchors, which browsers split so
-        # half the entry went to the deck and half to the page.
+        # inside the outer tasks <a> — nested anchors, which browsers split so
+        # half the entry went to the tasks and half to the page.
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]] and [x](/page/garden)"},
                     headers=HOST)
@@ -1925,7 +1925,7 @@ def test_raw_inbox_is_gone(client, wiki_dir):
 # ===========================================================================
 
 class TestRenameUpdatesAllReferences:
-    """Backlinks count markdown links, and deck tasks link pages too — a
+    """Backlinks count markdown links, and tasks link pages too — a
     rename used to update only [[wikilinks]] in pages, so every other link to
     the page broke. It also rewrote wikilinks inside code examples."""
 
@@ -1969,7 +1969,7 @@ class TestRenameUpdatesAllReferences:
             "[[new]] and `[[old]]` and [x](new)\n\n"
             "```\n[[old]] [x](old)\n```\n")
 
-    def test_deck_tasks_follow_rename(self, client, wiki_dir):
+    def test_tasks_tasks_follow_rename(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         linked = client.post("/api/deck", json={
             "title": "Do [[old]] and [[Old|label]]", "description": "see [x](/page/old)",
@@ -1989,28 +1989,28 @@ class TestRenameUpdatesAllReferences:
         html = client.get("/page/new", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' in html
 
-    def test_rename_without_deck_files_does_not_create_them(self, client, wiki_dir):
+    def test_rename_without_tasks_files_does_not_create_them(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         self.rename(client, "old", "new")
         assert not (wiki_dir / "_deck" / "tasks.json").exists()
 
 
 # ===========================================================================
-# /deck — find the page that embeds the deck
+# /deck — find the page that embeds the tasks
 # ===========================================================================
 
-class TestDeckPage:
-    """/deck is a built-in page with one full main deck. It used to redirect
+class TestTasksPage:
+    """/deck is a built-in page with one full main tasks. It used to redirect
     to whichever page embedded [[deck]], so where the due badge and task links
-    landed depended on the wiki's pages (and, before that, /page/deck opened
-    the editor in a wiki without deck.md)."""
+    landed depended on the wiki's pages (and, before that, /page/tasks opened
+    the editor in a wiki without tasks.md)."""
 
     def get(self, client, qs=""):
         resp = client.get("/deck" + qs, headers=HOST)
         assert resp.status_code == 200
         return resp.get_data(as_text=True)
 
-    def test_renders_one_main_deck(self, client, wiki_dir):
+    def test_renders_one_main_tasks(self, client, wiki_dir):
         body = self.get(client)
         assert body.count('class="tasks-app"') == 1
         assert 'data-init-list=""' in body
@@ -2019,11 +2019,11 @@ class TestDeckPage:
         assert "<h1>Tasks</h1>" in body
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
-        # Embeds elsewhere (even a deck.md) are ordinary pages now.
-        write_page(wiki_dir, "deck", "# My deck\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
+        # Embeds elsewhere (even a task list.md) are ordinary pages now.
+        write_page(wiki_dir, "tasks", "# My tasks\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
         body = self.get(client, "?task=abc&view=today")
         assert body.count('class="tasks-app"') == 1
-        assert "My deck" not in body
+        assert "My tasks" not in body
         assert 'data-init-tag=""' in body
 
     def test_list(self, client, wiki_dir):
@@ -2038,8 +2038,8 @@ class TestDeckPage:
 
     def test_in_search_modal_list(self, client, wiki_dir):
         pages = client.get("/api/pages-list", headers=HOST).get_json()
-        deck = [p for p in pages if p.get("href") == "/deck"]
-        assert len(deck) == 1 and deck[0]["title"] == "Tasks"
+        tasks = [p for p in pages if p.get("href") == "/deck"]
+        assert len(tasks) == 1 and tasks[0]["title"] == "Tasks"
 
     def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
@@ -2049,7 +2049,7 @@ class TestDeckPage:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert f'href="/deck?task={tid}&amp;view=open&amp;list=shop"' in body
 
-    def test_due_count_follows_the_deck_home(self, client, wiki_dir):
+    def test_due_count_follows_the_tasks_home(self, client, wiki_dir):
         from datetime import date
         today = date.today().isoformat()
         for title, tags in (("Pay rent", ["task"]), ("Milk", ["shop"]),
@@ -2057,14 +2057,14 @@ class TestDeckPage:
             client.post("/api/deck", json={"title": title, "tags": tags, "due_date": today}, headers=HOST)
         count = lambda: client.get("/api/deck/due-count", headers=HOST).get_json()["count"]
         assert count() == 4   # no home: every task
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task home=1]]\n")
         assert count() == 2   # the home's list
-        write_page(wiki_dir, "deck", "# Deck\n\n[[deck list=task tag=-waiting home=1]]\n")
-        os.utime(wiki_dir / "deck.md", (2_000_000_000, 2_000_000_000))
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task tag=-waiting home=1]]\n")
+        os.utime(wiki_dir / "tasks.md", (2_000_000_000, 2_000_000_000))
         assert count() == 1   # and its tag filter
 
-    def test_deck_counts_are_rendered_into_the_page(self, client, wiki_dir):
-        # In the HTML, not only fetched later: the Deck link must not change
+    def test_task_counts_are_rendered_into_the_page(self, client, wiki_dir):
+        # In the HTML, not only fetched later: the Tasks link must not change
         # width after the page has painted.
         from datetime import date, timedelta
         today = date.today()
@@ -2090,8 +2090,8 @@ class TestDeckPage:
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck" class="module-link" data-module="deck"' in body
-        assert "/page/deck" not in body
+        assert 'href="/deck" class="module-link" data-module="tasks"' in body
+        assert "/page/tasks" not in body
 
 
 # ===========================================================================
@@ -2100,7 +2100,7 @@ class TestDeckPage:
 
 class TestCrossSiteWrites:
     """Regression: any website could post a form to localhost:5000 and delete
-    or overwrite pages (or deck tasks); the Host check alone let it through."""
+    or overwrite pages (or tasks); the Host check alone let it through."""
 
     EVIL = {**HOST, "Origin": "https://evil.example"}
     SAME = {**HOST, "Origin": "http://localhost:5000"}
@@ -2112,7 +2112,7 @@ class TestCrossSiteWrites:
         assert resp.status_code == 403
         assert (wiki_dir / "victim.md").read_text(encoding="utf-8") == "# Victim\n\nkeep me\n"
 
-    def test_forged_deck_writes_are_refused(self, client, wiki_dir):
+    def test_forged_tasks_writes_are_refused(self, client, wiki_dir):
         # text/plain: a cross-site fetch/form can send it without a preflight.
         tid = client.post("/api/deck", json={"title": "Keep"}, headers=HOST).get_json()["id"]
         resp = client.post("/api/deck", data='{"title": "Spam"}', content_type="text/plain", headers=self.EVIL)
@@ -2447,7 +2447,7 @@ class TestAppendToPage:
         assert client.post("/append/garden", data={"page": "other", "heading": "H"},
                            headers=HOST).status_code == 400
 
-    def test_append_points_deck_links_at_the_section(self, client, wiki_dir):
+    def test_append_points_tasks_links_at_the_section(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Notes\n")
         write_page(wiki_dir, "garden", "# Garden\n")
         client.post("/api/deck", json={"title": f"Follow up [[{SCRATCH}]]"}, headers=HOST)

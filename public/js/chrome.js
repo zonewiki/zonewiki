@@ -23,12 +23,12 @@
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Scratch, /deck, the deck's home page (where the Deck link goes) and
+  // Scratch, /deck, the Tasks home page (where the Tasks link goes) and
   // your private home (the Private pill).
-  const deckHref = bc.querySelector('.module-link[data-module="deck"]')?.getAttribute('href');
+  const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
     .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
-      && (p.url || '').split('?')[0] !== deckHref)
+      && (p.url || '').split('?')[0] !== tasksHref)
                             .slice(-maxPrev);
   const homeEl = bc.querySelector('.breadcrumb-home');
   if (!intermediates.length || !homeEl) return ready();
@@ -186,16 +186,16 @@
 
 // ── Modules ─────────────────────────────────────────────────────────────────
 // The module switcher (breadcrumb) and the phone's bottom bar link to the
-// modules; the server marks the current one (aria-current). The Deck
+// modules; the server marks the current one (aria-current). The Tasks
 // links carry the counts of tasks due and in Focus.
 
 // The server renders the counts into the page (no change of width after it
 // has painted); refreshDueBadge keeps them current: every minute, when the
-// tab comes back, and after deck writes (deck.js).
-const deckLinks = document.querySelectorAll('.module-link[data-module="deck"]');
+// tab comes back, and after tasks writes (tasks.js).
+const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]');
 
-// Same as views.py's _deck_counts_title.
-function deckCountsTitle({ focus, overdue, today }) {
+// Same as views.py's _task_counts_title.
+function taskCountsTitle({ focus, overdue, today }) {
   const parts = [];
   if (focus > 0) parts.push(`${focus} in Focus`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
@@ -210,19 +210,19 @@ function showCount(el, n) {
 }
 
 export async function refreshDueBadge() {
-  if (!deckLinks.length) return;
+  if (!tasksLinks.length) return;
   try {
     const res = await fetch('/api/deck/due-count');
     const c = await res.json();
-    deckLinks.forEach(a => {
+    tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);
       showCount(a.querySelector('.module-focus'), c.focus);
-      a.title = deckCountsTitle(c);
+      a.title = taskCountsTitle(c);
     });
   } catch (e) {}
 }
 
-if (deckLinks.length) {
+if (tasksLinks.length) {
   setInterval(() => { if (!document.hidden) refreshDueBadge(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDueBadge(); });
   // A page restored from the back/forward cache shows old counts.

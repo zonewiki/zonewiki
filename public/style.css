@@ -177,7 +177,7 @@ html.sharing :is(
   .module-counts, #uncommitted-badge             /* status counts */
 ) { display: none !important; }
 
-/* The Deck links' counts (server.py _deck_counts_html, kept current by
+/* The Tasks links' counts (server.py _task_counts_html, kept current by
    leaf.js): tasks due today or overdue (orange) and tasks in Focus (muted),
    each hidden at zero. */
 .module-counts { display: inline-flex; gap: .2rem; margin-left: .3rem; }
@@ -272,7 +272,7 @@ main {
   }
   body:not(.editor-page) main { --main-pad: 3.5rem; }
   /* Every view gets that top row (breadcrumb and top actions), so it stays
-     put when switching modules; the views without side columns (deck,
+     put when switching modules; the views without side columns (tasks,
      scratch, search, …) keep their content at its usual width, centred. */
   body:not(.editor-page) main:not(.wide) > :not(.breadcrumb, .top-actions, .top-badges, .remote-badge) {
     max-width: 46rem; margin-inline: auto;
@@ -1005,7 +1005,7 @@ main {
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
 /* The breadcrumb's root is the module switcher (home_link() in server.py):
-   the Z logo with Wiki, then Scratch and Deck. It is a control, not part
+   the Z logo with Wiki, then Scratch and Tasks. It is a control, not part
    of the trail: a pill group with the current module shaded, and a thin
    vertical divider (the first separator) between it and the pages. Phones
    and the editor show the logo only, followed by a plain "›". */
@@ -1079,7 +1079,7 @@ main {
 @keyframes trail-show { to { visibility: visible; } }
 /* The navigation trail holds up to 6 pages. It stays on one line, and the
    page titles shrink with an ellipsis instead of pushing the page wider than
-   a phone (which also pushed the full-screen deck modal's buttons off-screen). */
+   a phone (which also pushed the full-screen tasks modal's buttons off-screen). */
 .breadcrumb > a:not(.breadcrumb-home),
 .breadcrumb > span:not(.breadcrumb-sep):not(.breadcrumb-right) {
   min-width: 0;
@@ -1692,7 +1692,7 @@ body.editor-page main {
 
 .page-header-actions { display: flex; gap: .5rem; align-items: center; flex-shrink: 0; }
 .page-menu-btn { padding-left: .55rem; padding-right: .55rem; letter-spacing: .05em; }
-/* The page's ⋯ menu: the deck's ⋯ menu look (.task-menu rules below, a
+/* The page's ⋯ menu: the task app's ⋯ menu look (.task-menu rules below, a
    bottom sheet on phones); links as items, shortcuts on the right. */
 .page-menu[hidden], .page-menu-backdrop[hidden] { display: none !important; }
 .page-menu [hidden] { display: none !important; }
@@ -1925,7 +1925,7 @@ body.editor-page main {
 
   main { padding: 1.5rem 1rem 3rem; }
 
-  /* The action bar becomes a bottom tab bar: Wiki, Scratch, Deck | New
+  /* The action bar becomes a bottom tab bar: Wiki, Scratch, Tasks | New
      note, New task | Search, each an icon over its label,
      the current module in the accent colour. The breadcrumb's switcher
      shrinks to the logo. */
@@ -1948,7 +1948,7 @@ body.editor-page main {
   .action-sep { display: block; flex: none; align-self: center; width: 1px; height: 2rem; margin: 0 .25rem; background: var(--border); }
   .action-buttons .action-module[aria-current] { color: var(--btn-primary); font-weight: 600; }
   .action-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
-  /* The Deck tab's counts stand right of its icon, due above Focus, centred
+  /* The Tasks tab's counts stand right of its icon, due above Focus, centred
      on the icon (which sits .45rem above the tab's centre, the label below
      it), so they never cover it. They may reach a little past the tab's edge,
      clear of the next tab's icon; the tabs keep one width, so the icons stay
@@ -2072,7 +2072,7 @@ body.editor-page main {
 /* ── Task App ────────────────────────────────────────────────────────────── */
 
 .tasks-app { margin: 1.25rem auto; }
-/* The deck's own tones: its lines and frames a step darker than the wiki's
+/* The tasks' own tones: its lines and frames a step darker than the wiki's
    (cards, section headers, labels, fields: all use --border), cards on a
    faint tint with a soft resting shadow, and section headers a shade deeper
    than the cards (--section-bg; unsorted cards keep --code-bg), so a card stands out from the page and from its section.
@@ -2104,12 +2104,12 @@ body.editor-page main {
 
 /* Single compact header band: tabs on the left, filters + sort + New on the
    right. Wraps to a second line only when the viewport can't fit both. */
-.deck-header {
+.tasks-header {
   display: flex; align-items: center; gap: .4rem .6rem;
   margin-bottom: .6rem; flex-wrap: wrap;
   border-bottom: 1px solid var(--border); padding-bottom: .35rem;
 }
-.deck-header .btn { padding: .25rem .7rem; }
+.tasks-header .btn { padding: .25rem .7rem; }
 
 /* View selector — a segmented control: every view visible, one click to
    switch, the current one filled with the primary colour. */
@@ -2157,7 +2157,7 @@ body.editor-page main {
 }
 /* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
 .tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
-/* A field with tag chips (chipField in deck.js): the box looks like the
+/* A field with tag chips (chipField in tasks.js): the box looks like the
    field, the input inside it has no frame of its own. Element-qualified to
    outrank `.tasks-toolbar input` and `.task-field input`. */
 div.chip-input {
@@ -2208,18 +2208,18 @@ div.chip-input > input {
 
 /* Completed is not a tab (it is rarely needed): a quiet link under the list
    opens it, and turns into "← Back to open tasks" there. */
-.deck-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
-.deck-completed-link {
+.tasks-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
+.tasks-completed-link {
   background: none; border: none; padding: .3rem .2rem; margin: 0;
   font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer;
 }
-.deck-completed-link:hover { color: var(--link); text-decoration: underline; }
-.deck-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
+.tasks-completed-link:hover { color: var(--link); text-decoration: underline; }
+.tasks-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
 /* /deck?list=…: where the list comes from. */
-.deck-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
+.tasks-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
 .task-quick-preview[hidden] { display: none; }
-/* Start after Due in the edit modal (syncDateWarning in deck.js). */
+/* Start after Due in the edit modal (syncDateWarning in tasks.js). */
 .task-date-warning {
   display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem;
   margin: -.25rem 0 .75rem; font-size: .85rem; color: #b45309;
@@ -2229,8 +2229,8 @@ div.chip-input > input {
 /* Batch mode (Make task with several lines): the titles instead of the field. */
 .task-edit-batch-list { margin: .1rem 0 .35rem; padding-left: 1.2rem; max-height: 10rem; overflow-y: auto; }
 .task-edit-batch-list li { margin: .1rem 0; }
-.deck-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
-@media (pointer: coarse) { .deck-completed-link { padding: .6rem .4rem; } }
+.tasks-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+@media (pointer: coarse) { .tasks-completed-link { padding: .6rem .4rem; } }
 
 /* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
    which would otherwise force a 1.5rem left margin and indent the list + its
@@ -2322,7 +2322,7 @@ div.chip-input > input {
   0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 55%, transparent); }
   100% { box-shadow: 0 0 0 3px transparent; }
 }
-/* Touch swipe (deck.js): the card follows the finger; the uncovered space
+/* Touch swipe (tasks.js): the card follows the finger; the uncovered space
    beside it says what releasing does, and the card takes that colour once
    the swipe is far enough to count (.task-swipe-armed). */
 /* Clip, not hidden: no scroll container, so the page never scrolls sideways
@@ -2475,10 +2475,10 @@ div.chip-input > input {
 
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
 
-/* Cards (deck.js taskHTML): one layout for every card. The first line:
+/* Cards (tasks.js taskHTML): one layout for every card. The first line:
    checkbox, title, the tags right after it, markers and dates at the right
    end, the actions. Under it the notes, then the latest comments. Full
-   cards show all of it. Compact view (.deck-compact, applyCompact)
+   cards show all of it. Compact view (.tasks-compact, applyCompact)
    collapses each card to its line (title cut off with …, notes and
    comments hidden), except the expanded one (Enter, a tap), which looks
    exactly like a full card; so does a card in full view.
@@ -2533,7 +2533,7 @@ div.chip-input > input {
   .tasks-app .task-item:hover .task-date-empty { visibility: visible; }
 }
 /* Touch has no hover: there full cards always offer them. */
-@media (hover: none) { .tasks-app:not(.deck-compact) .task-date-empty { display: inline; } }
+@media (hover: none) { .tasks-app:not(.tasks-compact) .task-date-empty { display: inline; } }
 /* The latest comments, under the notes. */
 .task-card-comments {
   grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
@@ -2549,12 +2549,12 @@ div.chip-input > input {
 /* Compact: every card is its line. The expanded one (selected) shows its
    whole title, wrapped; only one with its details open (.task-details: 📝,
    💬 or →) shows notes and comments, as a full card. */
-.tasks-app.deck-compact .task-item:not(.task-details) {
+.tasks-app.tasks-compact .task-item:not(.task-details) {
   grid-template-areas: "check title tags . dates actions";
   padding-block: .15rem; margin-bottom: .2rem;
 }
-.deck-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.deck-compact .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
+.tasks-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tasks-compact .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
 /* 📝: a task has notes (a compact line hides them; a click on it shows
    them). Shown on every card, so opening a line changes nothing on it. */
 .task-has-notes {
@@ -2581,7 +2581,7 @@ div.chip-input > input {
   .tasks-app .task-item .task-meta,
   .tasks-app .task-item .task-meta--hover-only,
   .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
-  .tasks-app.deck-compact .task-item:not(.task-details) {
+  .tasks-app.tasks-compact .task-item:not(.task-details) {
     grid-template-areas: "check title actions" ". meta meta";
   }
   /* Every tag shows: they wrap onto more lines rather than drop out; the
@@ -2599,34 +2599,34 @@ div.chip-input > input {
   .tasks-app .task-meta:not(:has(.task-tag, .task-recurring, .task-last-done, .task-comments-btn, .task-has-notes, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
     display: none;
   }
-  .tasks-app:not(.deck-compact) .task-meta:has(.task-date-empty) { display: flex; }
+  .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
-.deck-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
-.deck-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
-.tasks-toolbar select.deck-sort { flex: none; }
-.deck-sort[hidden] { display: none; }
+.tasks-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.tasks-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
+.tasks-toolbar select.tasks-sort { flex: none; }
+.tasks-sort[hidden] { display: none; }
 /* The Open tab's Plan switch: on, the board by start date; off, one list */
-.deck-plan-switch {
+.tasks-plan-switch {
   flex: none; display: inline-flex; align-items: center; gap: .4rem;
   padding: .2rem .35rem; border: none; background: none; cursor: pointer;
   font: inherit; font-size: .8rem; color: var(--muted);
 }
-.deck-plan-switch[hidden] { display: none; }
-.deck-plan-track {
+.tasks-plan-switch[hidden] { display: none; }
+.tasks-plan-track {
   position: relative; width: 1.9rem; height: 1.05rem; border-radius: 999px;
   background: var(--border); transition: background .15s;
 }
-.deck-plan-track::after {
+.tasks-plan-track::after {
   content: ''; position: absolute; top: .15rem; left: .15rem;
   width: .75rem; height: .75rem; border-radius: 50%; background: var(--bg);
   transition: transform .15s;
 }
-.deck-plan-switch[aria-checked="true"] { color: var(--fg); }
-.deck-plan-switch[aria-checked="true"] .deck-plan-track { background: var(--btn-primary); }
-.deck-plan-switch[aria-checked="true"] .deck-plan-track::after { transform: translateX(.85rem); }
-.deck-plan-switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
-@media (pointer: coarse) { .deck-plan-switch { min-height: 2.25rem; } }
+.tasks-plan-switch[aria-checked="true"] { color: var(--fg); }
+.tasks-plan-switch[aria-checked="true"] .tasks-plan-track { background: var(--btn-primary); }
+.tasks-plan-switch[aria-checked="true"] .tasks-plan-track::after { transform: translateX(.85rem); }
+.tasks-plan-switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+@media (pointer: coarse) { .tasks-plan-switch { min-height: 2.25rem; } }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
 .task-skip-btn {
@@ -2652,8 +2652,8 @@ div.chip-input > input {
 .task-date-empty { opacity: .6; }
 .task-date-empty:hover { opacity: 1; }
 
-/* Custom calendar popup (deck plan/due date picker) */
-.deck-datepicker {
+/* Custom calendar popup (tasks plan/due date picker) */
+.tasks-datepicker {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2664,63 +2664,63 @@ div.chip-input > input {
   color: var(--fg);
   user-select: none;
 }
-.deck-datepicker .dp-head {
+.tasks-datepicker .dp-head {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: .4rem;
 }
-.deck-datepicker .dp-title { font-weight: 600; }
-.deck-datepicker .dp-nav {
+.tasks-datepicker .dp-title { font-weight: 600; }
+.tasks-datepicker .dp-nav {
   background: var(--btn-bg); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 4px;
   width: 1.6rem; height: 1.6rem; line-height: 1; cursor: pointer;
   font-size: 1rem; padding: 0;
 }
-.deck-datepicker .dp-nav:hover { background: var(--code-bg); }
-.deck-datepicker .dp-weekdays,
-.deck-datepicker .dp-grid {
+.tasks-datepicker .dp-nav:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-weekdays,
+.tasks-datepicker .dp-grid {
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
 }
-.deck-datepicker .dp-weekdays span {
+.tasks-datepicker .dp-weekdays span {
   text-align: center; color: var(--muted); font-size: .7rem; padding: .15rem 0;
 }
-.deck-datepicker .dp-day {
+.tasks-datepicker .dp-day {
   aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
   border: none; background: none; color: var(--fg);
   border-radius: 4px; cursor: pointer; font-size: .8rem; padding: 0;
 }
-.deck-datepicker button.dp-day:hover { background: var(--code-bg); }
-.deck-datepicker .dp-blank { visibility: hidden; }
-.deck-datepicker .dp-today { outline: 1px solid var(--border); }
-.deck-datepicker .dp-selected {
+.tasks-datepicker button.dp-day:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-blank { visibility: hidden; }
+.tasks-datepicker .dp-today { outline: 1px solid var(--border); }
+.tasks-datepicker .dp-selected {
   background: var(--btn-primary); color: var(--btn-primary-fg);
 }
-.deck-datepicker .dp-selected:hover { background: var(--btn-primary); }
-.deck-datepicker .dp-disabled { opacity: .3; cursor: default; }
-.deck-datepicker .dp-foot {
+.tasks-datepicker .dp-selected:hover { background: var(--btn-primary); }
+.tasks-datepicker .dp-disabled { opacity: .3; cursor: default; }
+.tasks-datepicker .dp-foot {
   display: flex; justify-content: flex-end; margin-top: .4rem;
 }
-.deck-datepicker .dp-foot button {
+.tasks-datepicker .dp-foot button {
   background: var(--btn-bg); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 4px;
   padding: .2rem .5rem; cursor: pointer; font-size: .75rem;
 }
-.deck-datepicker .dp-foot button:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-foot button:hover { background: var(--code-bg); }
 /* Shortcuts above the month: Today, Tmrw, +2d, Mon, +1w. */
-.deck-datepicker .dp-quick {
+.tasks-datepicker .dp-quick {
   display: flex; gap: .25rem;
   margin-bottom: .5rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border);
 }
-.deck-datepicker .dp-quick-btn {
+.tasks-datepicker .dp-quick-btn {
   background: var(--btn-bg); color: var(--btn-fg);
   border: 1px solid var(--border); border-radius: 4px;
   padding: .25rem .2rem; cursor: pointer; font-size: .75rem; white-space: nowrap;
   flex: 1 1 auto; min-width: 0;
 }
-.deck-datepicker .dp-quick-btn:hover { background: var(--code-bg); }
-.deck-datepicker .dp-quick-btn.dp-selected { border-color: var(--btn-primary); }
-.deck-datepicker .dp-quick-btn:disabled { opacity: .3; cursor: default; }
-@media (pointer: coarse) { .deck-datepicker .dp-quick-btn { padding: .55rem .1rem; font-size: .85rem; } }
-/* Planned tasks (deck.js taskHTML): in Focus already (start today or
+.tasks-datepicker .dp-quick-btn:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-quick-btn.dp-selected { border-color: var(--btn-primary); }
+.tasks-datepicker .dp-quick-btn:disabled { opacity: .3; cursor: default; }
+@media (pointer: coarse) { .tasks-datepicker .dp-quick-btn { padding: .55rem .1rem; font-size: .85rem; } }
+/* Planned tasks (tasks.js taskHTML): in Focus already (start today or
    earlier) amber, planned later blue, the same on every tab. A due/overdue
    urgency colour wins. */
 .task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
@@ -2740,59 +2740,59 @@ div.chip-input > input {
 
 .tasks-empty .btn { margin-left: .5rem; }
 
-/* Selection bar (deck.js syncSelBar): while several tasks are selected, at
+/* Selection bar (tasks.js syncSelBar): while several tasks are selected, at
    the bottom of the window; toasts move up above it. */
-.deck-selbar {
+.tasks-selbar {
   position: fixed; z-index: 900; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
   display: flex; align-items: center; gap: .4rem; max-width: calc(100vw - 2rem);
   padding: .4rem .45rem .4rem .9rem;
   background: var(--nav-bg); border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: .9rem;
 }
-.deck-selbar[hidden] { display: none; }
-.deck-selbar-count { font-weight: 600; white-space: nowrap; margin-right: .2rem; }
-.deck-selbar-actions { display: flex; gap: .4rem; }
-.deck-selbar .btn { white-space: nowrap; }
-.deck-selbar .btn[hidden] { display: none; }
-.deck-selbar .btn:disabled { opacity: .45; cursor: default; }
-.deck-selbar .btn.danger { color: #dc2626; }
-.deck-selbar-close { padding-inline: .6rem; }
-body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
-/* Selection mode (.deck-selecting): each card's checkbox becomes a round
+.tasks-selbar[hidden] { display: none; }
+.tasks-selbar-count { font-weight: 600; white-space: nowrap; margin-right: .2rem; }
+.tasks-selbar-actions { display: flex; gap: .4rem; }
+.tasks-selbar .btn { white-space: nowrap; }
+.tasks-selbar .btn[hidden] { display: none; }
+.tasks-selbar .btn:disabled { opacity: .45; cursor: default; }
+.tasks-selbar .btn.danger { color: #dc2626; }
+.tasks-selbar-close { padding-inline: .6rem; }
+body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
+/* Selection mode (.tasks-selecting): each card's checkbox becomes a round
    mark, filled on the selected cards; a tap anywhere on a card toggles it. */
-.deck-selecting .task-item { cursor: pointer; }
-.deck-selecting :is(.task-menu-btn, .task-expand-btn) { visibility: hidden; }   /* a tap there would only toggle the card */
-.deck-selecting .task-checkbox { position: relative; }
-.deck-selecting .task-checkbox input { visibility: hidden; }
-.deck-selecting .task-checkbox::before {
+.tasks-selecting .task-item { cursor: pointer; }
+.tasks-selecting :is(.task-menu-btn, .task-expand-btn) { visibility: hidden; }   /* a tap there would only toggle the card */
+.tasks-selecting .task-checkbox { position: relative; }
+.tasks-selecting .task-checkbox input { visibility: hidden; }
+.tasks-selecting .task-checkbox::before {
   content: ""; position: absolute; inset: 0; margin: auto;
   width: 1.15rem; height: 1.15rem; box-sizing: border-box;
   border: 2px solid var(--muted); border-radius: 50%;
 }
-.deck-selecting .task-item.task-selected .task-checkbox::before {
+.tasks-selecting .task-item.task-selected .task-checkbox::before {
   border-color: var(--btn-primary);
   background: var(--btn-primary) no-repeat center / 70%
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-@media (pointer: coarse) { .deck-selecting .task-checkbox::before { width: 1.4rem; height: 1.4rem; } }
+@media (pointer: coarse) { .tasks-selecting .task-checkbox::before { width: 1.4rem; height: 1.4rem; } }
 /* Phones: the bar takes the bottom edge in place of the tab bar, the count,
    All and ✕ on top, the actions in a row of equal buttons under them. */
 @media (max-width: 640px) {
-  .deck-selbar {
+  .tasks-selbar {
     left: 0; right: 0; bottom: 0; transform: none; max-width: none;
     flex-wrap: wrap; gap: .4rem; border-radius: 12px 12px 0 0; border-bottom: none;
     padding: .5rem .75rem calc(.6rem + env(safe-area-inset-bottom));
   }
-  .deck-selbar-count { flex: 1; }
-  .deck-selbar-actions { order: 1; flex-basis: 100%; }
-  .deck-selbar-actions .btn { flex: 1 1 0; }
-  .deck-selbar .btn { min-height: 2.75rem; font-size: .9rem; }
-  body:has(.deck-selbar:not([hidden])) .action-buttons { display: none; }
-  body:has(.deck-selbar:not([hidden])) main { padding-bottom: calc(8.5rem + env(safe-area-inset-bottom)); }
-  body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: calc(8rem + env(safe-area-inset-bottom)); }
+  .tasks-selbar-count { flex: 1; }
+  .tasks-selbar-actions { order: 1; flex-basis: 100%; }
+  .tasks-selbar-actions .btn { flex: 1 1 0; }
+  .tasks-selbar .btn { min-height: 2.75rem; font-size: .9rem; }
+  body:has(.tasks-selbar:not([hidden])) .action-buttons { display: none; }
+  body:has(.tasks-selbar:not([hidden])) main { padding-bottom: calc(8.5rem + env(safe-area-inset-bottom)); }
+  body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: calc(8rem + env(safe-area-inset-bottom)); }
 }
 
-/* Bulk tag dialog (deck.js openBulkTagModal): the selection's tags, each a
+/* Bulk tag dialog (tasks.js openBulkTagModal): the selection's tags, each a
    three-state box: on every task ✓, on some –, on none empty. */
 .bulk-tag-list {
   list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto;
@@ -2832,8 +2832,8 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-menu-btn:hover, .task-expand-btn:hover { background: var(--code-bg); color: var(--fg); }
 .task-expand-btn svg { transition: transform .15s; }
 .task-expand-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-.tasks-app:not(.deck-compact) .task-expand-btn { display: none; }
-.tasks-app.deck-compact .task-actions { min-width: 3.2rem; justify-content: flex-end; }
+.tasks-app:not(.tasks-compact) .task-expand-btn { display: none; }
+.tasks-app.tasks-compact .task-actions { min-width: 3.2rem; justify-content: flex-end; }
 @media (prefers-reduced-motion: reduce) { .task-expand-btn svg { transition: none; } }
 .task-menu-backdrop, .page-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
 .task-menu, .page-menu {
@@ -2881,10 +2881,10 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   /* A long press picks a card up (touch drag), so it must not select text
      or open the iOS callout instead. */
   .task-item[data-drag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  /* Sideways moves on a card are swipes (deck.js), not the browser's pan. */
+  /* Sideways moves on a card are swipes (tasks.js), not the browser's pan. */
   .task-item { touch-action: pan-y; }
   .task-menu-btn, .task-expand-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
-  .tasks-app.deck-compact .task-actions { min-width: 5rem; }
+  .tasks-app.tasks-compact .task-actions { min-width: 5rem; }
   .task-checkbox input { width: 1.35rem; height: 1.35rem; }
   /* A finger-sized target: the label reaches into the card's padding and
      the gap before the title, so a tap just beside the box ticks it rather
@@ -3005,7 +3005,7 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-edit-form { display: flex; flex-direction: column; gap: .75rem; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
 /* Notes: the label with Edit | Preview beside it, the editor's formatting
-   bar, the textarea, or the preview in its place (deck.js setNotesPreview). */
+   bar, the textarea, or the preview in its place (tasks.js setNotesPreview). */
 .task-notes-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .task-notes-mode { display: inline-flex; }
 .task-notes-mode .btn { padding: .1rem .6rem; font-size: .8rem; color: var(--muted); }
@@ -3069,7 +3069,7 @@ body:has(.deck-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-history li { padding: .1rem 0; }
 .task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
 /* Comments: status lines, newest first; the field adds one at once. `ul.`
-   outranks .page-content ul (the deck page is a page). */
+   outranks .page-content ul (the tasks page is a page). */
 .task-comments[hidden] { display: none; }
 .task-comment-add { display: flex; gap: .4rem; }
 .task-comment-add input { flex: 1; min-width: 0; }
@@ -3164,7 +3164,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .tasks-toolbar #task-filter-search { min-width: 0; }
   .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
   .task-add-label { display: none; }
-  .deck-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
+  .tasks-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
   /* Compact phone editor: small fields share a line instead of each taking a
      full-width row, and spacing is tighter. */
   /* The form fills the full-screen dialog so the action bar sits at the

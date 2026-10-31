@@ -1,4 +1,4 @@
-import DeckCore from '../deck-core.js';
+import TasksCore from '../tasks-core.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -9,9 +9,9 @@ export function closeOnBackdropClick(dialog) {
 }
 
 // The first key of a two-key shortcut (g or c, shortcuts.js) while it waits
-// for the second, else null. The deck's keydown runs before the page's (deck.js
+// for the second, else null. The tasks' keydown runs before the page's (tasks.js
 // is imported first), so it leaves that second key alone: the t of c t isn't
-// the deck's t (tag the selected tasks).
+// the task app's t (tag the selected tasks).
 export const keyPrefix = { key: null, timer: null };
 
 export function he(s) {
@@ -27,16 +27,16 @@ export const localDate = (d = new Date()) =>
 // task chips' badges) rewritten in the locale setting; without one they stay as they
 // are (with date-format = iso the server writes them as ISO already).
 export function localizeDates(root = document) {
-  const dates = DeckCore.dateSettings(document.body.dataset);
+  const dates = TasksCore.dateSettings(document.body.dataset);
   if (!dates.locale || dates.iso) return;
   const today = localDate();
   root.querySelectorAll('time.local-date').forEach(el => {
-    el.textContent = DeckCore.shortDate(el.dateTime, today, dates);
+    el.textContent = TasksCore.shortDate(el.dateTime, today, dates);
   });
 }
 
 // Prompt for a display name when pasting a bare URL. Resolves with the name,
-// null (no name — insert plain URL), or false (cancelled). Shared with deck.js.
+// null (no name — insert plain URL), or false (cancelled). Shared with tasks.js.
 function askUrlName(url) {
   const urlNameModal   = document.getElementById('url-name-modal');
   const urlNameHref    = document.getElementById('url-name-href');
@@ -65,7 +65,7 @@ function askUrlName(url) {
 }
 closeOnBackdropClick(document.getElementById('url-name-modal'));
 
-// Pasting a bare URL into a markdown textarea (page editor, deck notes):
+// Pasting a bare URL into a markdown textarea (page editor, tasks notes):
 // selected text becomes [selection](url); otherwise the name prompt asks for
 // a label (none, or cancel, inserts the plain URL). The insertion goes through
 // execCommand('insertText') so it is one step on the native undo stack and
@@ -120,8 +120,8 @@ export function wikilinkHref(inner) {
 
 // Enter at the end of a list item starts the next one (a checkbox item gets
 // an unchecked box, a number counts up); Enter on an empty item ends the
-// list. Returns true when it handled the key. Shared with the deck's task
-// notes (deck.js), so it takes the textarea.
+// list. Returns true when it handled the key. Shared with the task app's task
+// notes (tasks.js), so it takes the textarea.
 export function continueList(ta, e) {
   const pos = ta.selectionStart;
   if (pos !== ta.selectionEnd) return false;
@@ -209,7 +209,7 @@ export function showToast(msg, undo, label = 'Undo') {
   setTimeout(() => el.remove(), 6000);
 }
 
-// PUT fields of a deck task (the task chips here, deck.js's batched writes).
+// PUT fields of a task (the task chips here, tasks.js's batched writes).
 export function putTask(id, body) {
   return fetch(`/api/deck/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

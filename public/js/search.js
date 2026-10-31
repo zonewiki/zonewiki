@@ -104,7 +104,7 @@ async function showModalPreview(item) {
   const url = new URL(href, location.origin);
   const m = url.pathname.match(/^\/page\/(.+)$/);
   if (!m || m[1].startsWith('_')) {
-    // A task, the deck, a built-in page: the result card says enough.
+    // A task, the tasks, a built-in page: the result card says enough.
     const card = document.createElement('div');
     card.className = 'search-preview-card';
     card.append(...[...link.childNodes].map(n => n.cloneNode(true)));
@@ -301,7 +301,7 @@ function applyModalControls() {
     // No query: static list, sort by dropdown, filter by unlinked checkbox.
     // Sort the data first and render once (no post-render DOM shuffling).
     // Deleted Pages (`special`) comes first, whatever the sort; the other
-    // built-in pages (Deck, Scratch) are modules, in the module switcher, so
+    // built-in pages (Tasks, Scratch) are modules, in the module switcher, so
     // only typing lists them. "Unlinked only" looks for orphan pages, so it
     // leaves them all out.
     const special = unlinked ? [] : modalPages.filter(p => p.special);
@@ -449,7 +449,7 @@ async function fetchModalContentMatches(q) {
 // ?hl=… (search.matched_words: as written in the page, stems, typos and
 // phrases already resolved). They are marked in the article, a bar shows
 // "word · 2 of 5" with ↑ ↓ ×, n/N step through them and Esc clears them.
-// Code blocks (highlight.js rewrites them) and deck embeds are left alone.
+// Code blocks (highlight.js rewrites them) and task list embeds are left alone.
 
 function initSearchHighlights() {
   const article = document.querySelector('article.page-content');
@@ -462,7 +462,7 @@ function initSearchHighlights() {
 }
 
 // Mark every whole-word occurrence of the terms in root (<mark class=
-// "search-hl">), skipping code and deck embeds; returns the marks in order.
+// "search-hl">), skipping code and task list embeds; returns the marks in order.
 function markTerms(root, terms) {
   // No terms (a page matched by its title): nothing to mark. An empty
   // pattern would match everywhere.
@@ -528,7 +528,7 @@ function searchHighlightBar(article, params, marks, terms) {
     const qs = params.toString();
     history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
   };
-  // In the capture phase, so n doesn't also reach a deck embed's "new task".
+  // In the capture phase, so n doesn't also reach a task list embed's "new task".
   const onKey = e => {
     if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open], .presentation-overlay')) return;
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;

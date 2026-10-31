@@ -1,4 +1,4 @@
-"""Tests for the pure client-side deck logic in public/deck-core.js.
+"""Tests for the pure client-side tasks logic in public/tasks-core.js.
 
 The module is DOM-free, so these tests import it in Node (``node -e``) and
 compare JSON output. They skip automatically when Node is not installed.
@@ -12,22 +12,22 @@ from pathlib import Path
 
 import pytest
 
-CORE = Path(__file__).resolve().parent.parent / "public" / "deck-core.js"
+CORE = Path(__file__).resolve().parent.parent / "public" / "tasks-core.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
                                 reason="node not installed")
 
 
-# deck-core.js as an .mjs file: an older Node only loads a file as an ES
+# tasks-core.js as an .mjs file: an older Node only loads a file as an ES
 # module by that extension (there is no package.json to say so).
-CORE_MJS = Path(tempfile.mkdtemp(prefix="deckcore_")) / "deck-core.mjs"
+CORE_MJS = Path(tempfile.mkdtemp(prefix="taskscore_")) / "tasks-core.mjs"
 CORE_MJS.write_text(CORE.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def run_core(expr: str) -> object:
-    """Evaluate an expression against DeckCore in Node and return it as JSON."""
+    """Evaluate an expression against TasksCore in Node and return it as JSON."""
     script = (
-        f"import DeckCore from {json.dumps(CORE_MJS.as_uri())};"
+        f"import TasksCore from {json.dumps(CORE_MJS.as_uri())};"
         f"process.stdout.write(JSON.stringify({expr}));"
     )
     out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
@@ -40,8 +40,8 @@ TODAY = "2026-07-26"
 
 class TestDates:
     def test_add_days(self):
-        assert run_core("DeckCore.addDays('2026-07-26', 6)") == "2026-08-01"
-        assert run_core("DeckCore.addDays('2026-03-01', -1)") == "2026-02-28"
+        assert run_core("TasksCore.addDays('2026-07-26', 6)") == "2026-08-01"
+        assert run_core("TasksCore.addDays('2026-03-01', -1)") == "2026-02-28"
 
 
 
@@ -49,45 +49,45 @@ class TestLocale:
     """Dates in LEAF_LOCALE; without one, US English with weeks from Monday."""
 
     def test_settings_from_the_body(self):
-        assert run_core("DeckCore.dateSettings({})") == {"locale": "", "iso": False}
-        assert run_core("DeckCore.dateSettings({locale: 'de-AT', dateFormat: 'iso'})") == {"locale": "de-AT", "iso": True}
+        assert run_core("TasksCore.dateSettings({})") == {"locale": "", "iso": False}
+        assert run_core("TasksCore.dateSettings({locale: 'de-AT', dateFormat: 'iso'})") == {"locale": "de-AT", "iso": True}
 
     def test_short_date(self):
-        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18')") == "Oct 5"
-        assert run_core("DeckCore.shortDate('2025-10-05', '2026-10-18')") == "Oct 5, 2025"
-        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18', {locale: 'en-GB'})") == "5 Oct"
-        assert run_core("DeckCore.shortDate('2026-10-05', '2026-10-18', {locale: 'de-AT'})") == "5. Okt."
+        assert run_core("TasksCore.shortDate('2026-10-05', '2026-10-18')") == "Oct 5"
+        assert run_core("TasksCore.shortDate('2025-10-05', '2026-10-18')") == "Oct 5, 2025"
+        assert run_core("TasksCore.shortDate('2026-10-05', '2026-10-18', {locale: 'en-GB'})") == "5 Oct"
+        assert run_core("TasksCore.shortDate('2026-10-05', '2026-10-18', {locale: 'de-AT'})") == "5. Okt."
 
     def test_iso(self):
         iso = "{locale: 'de-AT', iso: true}"
-        assert run_core(f"DeckCore.shortDate('2026-10-05T09:30', '2026-10-18', {iso})") == "2026-10-05"
-        assert run_core(f"DeckCore.shortDate('2025-10-05', '2026-10-18', {iso})") == "2025-10-05"
-        assert run_core("DeckCore.fullDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
-        assert run_core("DeckCore.longDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
-        assert run_core("DeckCore.longDayLabel('2026-10-21', {})") == "Wed, Oct 21"
-        labels = run_core(f"DeckCore.boardBuckets([], '{TODAY}', '', {{iso: true}}).map(s => s.label)")
+        assert run_core(f"TasksCore.shortDate('2026-10-05T09:30', '2026-10-18', {iso})") == "2026-10-05"
+        assert run_core(f"TasksCore.shortDate('2025-10-05', '2026-10-18', {iso})") == "2025-10-05"
+        assert run_core("TasksCore.fullDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
+        assert run_core("TasksCore.longDayLabel('2026-10-21', {iso: true})") == "Wed 2026-10-21"
+        assert run_core("TasksCore.longDayLabel('2026-10-21', {})") == "Wed, Oct 21"
+        labels = run_core(f"TasksCore.boardBuckets([], '{TODAY}', '', {{iso: true}}).map(s => s.label)")
         assert "Tue 2026-07-28" in labels
 
     def test_week_start(self):
-        assert run_core("DeckCore.weekStart('')") == 1
-        assert run_core("DeckCore.weekStart('de-AT')") == 1
-        assert run_core("DeckCore.weekStart('en-US')") == 0
+        assert run_core("TasksCore.weekStart('')") == 1
+        assert run_core("TasksCore.weekStart('de-AT')") == 1
+        assert run_core("TasksCore.weekStart('en-US')") == 0
 
     def test_calendar_heads_and_title(self):
-        assert run_core("DeckCore.weekdayNames('', 1)") == ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
-        assert run_core("DeckCore.weekdayNames('en-US', 0)") == ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
-        assert run_core("DeckCore.weekdayNames('de-AT', 1)") == ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-        assert run_core("DeckCore.monthTitle(2026, 9)") == "October 2026"
-        assert run_core("DeckCore.monthTitle(2026, 9, 'de-AT')") == "Oktober 2026"
+        assert run_core("TasksCore.weekdayNames('', 1)") == ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        assert run_core("TasksCore.weekdayNames('en-US', 0)") == ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+        assert run_core("TasksCore.weekdayNames('de-AT', 1)") == ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+        assert run_core("TasksCore.monthTitle(2026, 9)") == "October 2026"
+        assert run_core("TasksCore.monthTitle(2026, 9, 'de-AT')") == "Oktober 2026"
 
     def test_board_day_labels(self):
-        labels = run_core(f"DeckCore.boardBuckets([], '{TODAY}', '', {{locale: 'de-AT'}}).map(s => s.label)")
+        labels = run_core(f"TasksCore.boardBuckets([], '{TODAY}', '', {{locale: 'de-AT'}}).map(s => s.label)")
         assert "Di., 28." in labels   # 2026-07-28, a Tuesday
 
 
 class TestOrders:
     def _sorted(self, fn, tasks):
-        return run_core(f"{json.dumps(tasks)}.sort(DeckCore.{fn}).map(t => t.id)")
+        return run_core(f"{json.dumps(tasks)}.sort(TasksCore.{fn}).map(t => t.id)")
 
     def test_open_order_unsorted_newest_first_then_sorted(self):
         assert self._sorted("byOpenOrder", [
@@ -99,7 +99,7 @@ class TestOrders:
 
     def test_no_focus_order(self):
         # Focus uses Open's order; there is no comparator of its own.
-        assert run_core("typeof DeckCore.byFocusOrder") == "undefined"
+        assert run_core("typeof TasksCore.byFocusOrder") == "undefined"
 
 
 class TestIsFocus:
@@ -116,12 +116,12 @@ class TestIsFocus:
         ({"due_date": "2026-07-01", "start_date": "2026-08-01"}, True),  # overdue wins
     ])
     def test_is_focus(self, task, expected):
-        assert run_core(f"DeckCore.isFocus({json.dumps(task)}, '{TODAY}')") is expected
+        assert run_core(f"TasksCore.isFocus({json.dumps(task)}, '{TODAY}')") is expected
 
 
 class TestBoardBuckets:
     def _by_key(self, tasks):
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         return {s["key"]: [t["id"] for t in s["tasks"]] for s in sections}
 
     def test_grouping_is_by_start_date(self):
@@ -163,12 +163,12 @@ class TestBoardBuckets:
             {"id": "today", "start_date": TODAY},
             {"id": "done", "start_date": "2026-07-01", "completed_at": "2026-07-02T10:00"},
         ]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         by_key = {s["key"]: s for s in sections}
         assert [t["id"] for t in by_key[TODAY]["carried"]] == ["old", "recent"]
         assert all("carried" not in s or s["key"] == TODAY for s in sections)
         assert run_core(f"[{json.dumps(tasks[1])}, {json.dumps(tasks[2])}, {json.dumps(tasks[3])}]"
-                        f".map(t => DeckCore.isCarried(t, '{TODAY}'))") == [True, False, False]
+                        f".map(t => TasksCore.isCarried(t, '{TODAY}'))") == [True, False, False]
 
     def test_day_sections_name_their_deadlines_wherever_the_cards_sit(self):
         tasks = [
@@ -177,7 +177,7 @@ class TestBoardBuckets:
             {"id": "planned-that-day", "start_date": "2026-07-28", "due_date": "2026-07-28"},
             {"id": "due-later", "due_date": "2026-09-01"},
         ]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         due = {s["key"]: [t["id"] for t in s.get("due", [])] for s in sections}
         assert sorted(due["2026-07-28"]) == ["planned-that-day", "planned-today", "unplanned"]
         assert due[TODAY] == []
@@ -192,7 +192,7 @@ class TestBoardBuckets:
             {"id": "2", "title": "carried", "start_date": "2026-07-20"},
             {"id": "3", "title": "loose"},
         ]
-        keys = [s["key"] for s in run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")]
+        keys = [s["key"] for s in run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")]
         assert keys[:2] == ["unplanned", TODAY]
         assert keys[-1] == "later"
 
@@ -225,7 +225,7 @@ class TestBoardBuckets:
             {"id": "very-late", "due_date": "2026-07-01"},
             {"id": "late-but-started", "due_date": "2026-07-20", "start_date": "2026-07-19"},
         ]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         unplanned = sections[0]
         assert sorted(t["id"] for t in unplanned["tasks"]) == ["due-soon", "late", "loose", "very-late"]
         assert [t["id"] for t in unplanned["overdue"]] == ["very-late", "late"]
@@ -236,11 +236,11 @@ class TestBoardBuckets:
             {"id": "4", "title": "nothing"},
             {"id": "5", "title": "later", "start_date": "2026-09-01"},
         ]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         assert all(s["droppable"] for s in sections)
 
     def test_seven_day_sections_always_present(self):
-        sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets([], '{TODAY}')")
         day_sections = [s for s in sections if s["date"]]
         assert len(day_sections) == 7
         assert day_sections[0]["key"] == TODAY
@@ -272,14 +272,14 @@ class TestBoardBuckets:
             {"id": "deadline", "due_date": "2026-07-10", "sort_order": 5},
         ]
         assert self._by_key(tasks)["unplanned"] == ["unsorted", "sorted", "deadline"]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         unplanned = next(s for s in sections if s["key"] == "unplanned")
         assert [t["id"] for t in unplanned["overdue"]] == ["deadline", "sorted"]
 
     def test_empty_later_and_unplanned_still_offered_as_drop_targets(self):
         # Regression: they used to be omitted when empty, so once every task
         # was planned there was nowhere to drag one back to "unplanned".
-        sections = run_core(f"DeckCore.boardBuckets([], '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets([], '{TODAY}')")
         by_key = {s["key"]: s for s in sections}
         assert by_key["later"]["tasks"] == [] and by_key["later"]["droppable"]
         assert by_key["unplanned"]["tasks"] == [] and by_key["unplanned"]["droppable"]
@@ -289,7 +289,7 @@ class TestBoardBuckets:
 
 
 class TestFilterField:
-    """The deck's single filter field: text plus #tag words."""
+    """The tasks' single filter field: text plus #tag words."""
 
     @pytest.mark.parametrize("q,expected", [
         ("", {"text": "", "tagGroups": [], "excludeTags": []}),
@@ -305,7 +305,7 @@ class TestFilterField:
         ("pre-fix", {"text": "pre-fix", "tagGroups": [], "excludeTags": []}),
     ])
     def test_parse(self, q, expected):
-        assert run_core(f"DeckCore.parseFilter({json.dumps(q)})") == expected
+        assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == expected
 
     TASKS = [
         {"id": "1", "title": "Fix bug", "tags": ["work"]},
@@ -329,8 +329,8 @@ class TestFilterField:
         ("fix -#WORK", []),
     ])
     def test_matches(self, q, ids):
-        expr = (f"{json.dumps(self.TASKS)}.filter(t => DeckCore.matchesFilter(t, "
-                f"DeckCore.parseFilter({json.dumps(q)}))).map(t => t.id)")
+        expr = (f"{json.dumps(self.TASKS)}.filter(t => TasksCore.matchesFilter(t, "
+                f"TasksCore.parseFilter({json.dumps(q)}))).map(t => t.id)")
         assert run_core(expr) == ids
 
     @pytest.mark.parametrize("raw,q", [
@@ -339,19 +339,19 @@ class TestFilterField:
     ])
     def test_tag_param_to_query(self, raw, q):
         # [[deck tag=…]] keeps its old syntax: comma = all, pipe = any.
-        assert run_core(f"DeckCore.tagParamToQuery({json.dumps(raw)})") == q
+        assert run_core(f"TasksCore.tagParamToQuery({json.dumps(raw)})") == q
 
 
 class TestTagMatchScore:
     def test_prefix_beats_substring_beats_subsequence(self):
-        assert run_core("DeckCore.tagMatchScore('wo', 'work')") == 2
-        assert run_core("DeckCore.tagMatchScore('or', 'work')") == 1
-        assert run_core("DeckCore.tagMatchScore('wk', 'work')") == 0
-        assert run_core("DeckCore.tagMatchScore('xyz', 'work')") == -1
+        assert run_core("TasksCore.tagMatchScore('wo', 'work')") == 2
+        assert run_core("TasksCore.tagMatchScore('or', 'work')") == 1
+        assert run_core("TasksCore.tagMatchScore('wk', 'work')") == 0
+        assert run_core("TasksCore.tagMatchScore('xyz', 'work')") == -1
 
 
 def quick(title: str) -> dict:
-    return run_core(f"DeckCore.parseQuickAdd({json.dumps(title)}, {json.dumps(TODAY)})")
+    return run_core(f"TasksCore.parseQuickAdd({json.dumps(title)}, {json.dumps(TODAY)})")
 
 
 class TestQuickAdd:
@@ -402,7 +402,7 @@ class TestTagRanking:
     COUNTS = {"work": 5, "workout": 1, "wood": 9, "at-work": 2, "web": 3}
 
     def rank(self, partial, counts=None, limit=8):
-        return run_core(f"DeckCore.rankTags({json.dumps(partial)}, {json.dumps(counts or self.COUNTS)}, {limit})")
+        return run_core(f"TasksCore.rankTags({json.dumps(partial)}, {json.dumps(counts or self.COUNTS)}, {limit})")
 
     def test_prefix_before_substring_most_used_first(self):
         assert self.rank("wo") == ["wood", "work", "workout", "at-work"]
@@ -421,17 +421,17 @@ class TestTagRanking:
 
     def test_tag_counts(self):
         tasks = [{"tags": ["a", "b"]}, {"tags": ["a"]}, {}]
-        assert run_core(f"DeckCore.tagCounts({json.dumps(tasks)})") == {"a": 2, "b": 1}
+        assert run_core(f"TasksCore.tagCounts({json.dumps(tasks)})") == {"a": 2, "b": 1}
 
 
 class TestBulkTags:
     def test_selection_tags_count_tasks_case_ignored(self):
         tasks = [{"tags": ["Work", "b"]}, {"tags": ["work", "a", "WORK"]}, {"tags": ["b"]}, {}]
-        assert run_core(f"DeckCore.selectionTags({json.dumps(tasks)})") == [
+        assert run_core(f"TasksCore.selectionTags({json.dumps(tasks)})") == [
             {"tag": "b", "count": 2}, {"tag": "Work", "count": 2}, {"tag": "a", "count": 1}]
 
     def change(self, states, added=()):
-        return run_core(f"DeckCore.bulkTagChange({json.dumps(states)}, {json.dumps(list(added))})")
+        return run_core(f"TasksCore.bulkTagChange({json.dumps(states)}, {json.dumps(list(added))})")
 
     def test_all_adds_none_removes_some_stays(self):
         assert self.change({"a": "all", "b": "none", "c": "some"}, ["new"]) == {
@@ -446,7 +446,7 @@ class TestBulkTags:
 
 class TestSanitizeTagInput:
     def clean(self, value, caret=None, lst=True):
-        return run_core(f"DeckCore.sanitizeTagInput({json.dumps(value)}, {json.dumps(caret)}, {json.dumps(lst)})")
+        return run_core(f"TasksCore.sanitizeTagInput({json.dumps(value)}, {json.dumps(caret)}, {json.dumps(lst)})")
 
     @pytest.mark.parametrize("value,expected", [
         ("local ", "local-"),            # a space inside a tag is a hyphen at once
@@ -472,7 +472,7 @@ class TestSanitizeTagInput:
 
 class TestManualOrder:
     def _place(self, old, shown, moved):
-        return run_core(f"DeckCore.placeInOrder({json.dumps(old)}, {json.dumps(shown)}, {json.dumps(moved)})")
+        return run_core(f"TasksCore.placeInOrder({json.dumps(old)}, {json.dumps(shown)}, {json.dumps(moved)})")
 
     def test_moved_task_goes_after_the_visible_one_above_hidden_ones_stay(self):
         assert self._place(list("ahbc"), list("acb"), ["c"]) == list("achb")
@@ -482,7 +482,7 @@ class TestManualOrder:
 
     def test_every_section_is_ordered(self):
         tasks = [{"id": "c", "title": "C", "start_date": "2026-07-20"}]
-        sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
+        sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         assert all(s.get("ordered") for s in sections)
 
     def test_by_deadline_nearest_first_then_open_order_undated_last(self):
@@ -493,7 +493,7 @@ class TestManualOrder:
             {"id": "tue-a", "due_date": "2026-07-28", "sort_order": 1},
             {"id": "none-sorted", "sort_order": 0},
         ]
-        assert run_core(f"{json.dumps(tasks)}.sort(DeckCore.byDeadline).map(t => t.id)") == [
+        assert run_core(f"{json.dumps(tasks)}.sort(TasksCore.byDeadline).map(t => t.id)") == [
             "tue-a", "tue-b", "fri", "none-new", "none-sorted"]
 
     def test_by_created_newest_first(self):
@@ -502,7 +502,7 @@ class TestManualOrder:
             {"id": "c", "created_at": "2026-07-03T09:00:00"},
             {"id": "b", "created_at": "2026-07-02T09:00:00"},
         ]
-        assert run_core(f"{json.dumps(tasks)}.sort(DeckCore.byCreated).map(t => t.id)") == ["c", "b", "a"]
+        assert run_core(f"{json.dumps(tasks)}.sort(TasksCore.byCreated).map(t => t.id)") == ["c", "b", "a"]
 
     def test_board_sort_sorts_every_section_and_none_is_ordered(self):
         today = "2026-07-27"
@@ -516,7 +516,7 @@ class TestManualOrder:
                 (None, ["d-old", "d-new"], ["u-new", "u-old"]),
                 ("due", ["d-new", "d-old"], ["u-old", "u-new"]),
                 ("created", ["d-new", "d-old"], ["u-new", "u-old"])):
-            sections = run_core(f"DeckCore.boardBuckets({json.dumps(tasks)}, {json.dumps(today)}, {json.dumps(sort)})"
+            sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, {json.dumps(today)}, {json.dumps(sort)})"
                                 ".map(s => ({key: s.key, ordered: !!s.ordered, ids: s.tasks.map(t => t.id)}))")
             by_key = {s["key"]: s for s in sections}
             assert by_key[today]["ids"] == today_ids

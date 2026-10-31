@@ -2,9 +2,9 @@ import { sharingOn } from './actions.js';
 import { toSlug } from './util.js';
 
 // ── Link completion ───────────────────────────────────────────────────────────
-// In a text field, `[[` offers pages, `[[task:` open deck tasks (with
+// In a text field, `[[` offers pages, `[[task:` open tasks (with
 // `tasks: true`, the editor) and `[text](` pages as /page/ links. One
-// implementation for the editor and the deck's task fields (deck.js). `page`
+// implementation for the editor and the task app's task fields (tasks.js). `page`
 // (its slug, or a function giving it; '' for text that is on no page, such as
 // a shared task's; null: unknown) says where the text is. On a page in a private folder `[[` also offers a new
 // page in that folder: wikilinks are absolute, so the private page is named

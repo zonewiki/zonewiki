@@ -1,5 +1,5 @@
 """Private pages and tasks don't leak (docs/spec/users.md): with alice's
-private page, upload, draft and deck tasks in the wiki, bob, signed in or
+private page, upload, draft and tasks in the wiki, bob, signed in or
 through his MCP token, must not see a word of them anywhere, nor change
 them.
 
@@ -70,15 +70,15 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
-    # Her deck: her own home and a list of hers, and her tasks.
-    (w / "private/alice/deck.md").write_text(f"# My deck {SECRET}\n\n[[deck home=1 list=secretlist]]\n")
-    deck = w / "private/alice/_deck"
-    deck.mkdir(parents=True)
+    # Her tasks: her own home and a list of hers, and her tasks.
+    (w / "private/alice/deck.md").write_text(f"# My tasks {SECRET}\n\n[[deck home=1 list=secretlist]]\n")
+    tasks = w / "private/alice/_deck"
+    tasks.mkdir(parents=True)
     this_year = __import__("datetime").date.today().year
-    (deck / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
-    (deck / "completed.json").write_text(
+    (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
+    (tasks / "completed.json").write_text(
         json.dumps([private_task(DONE_ID, "Done", f"{this_year}-01-05T10:00:00")], indent=2) + "\n")
-    (deck / "completed-2001.json").write_text(
+    (tasks / "completed-2001.json").write_text(
         json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
@@ -187,10 +187,10 @@ def test_alice_sees_her_own(client, wiki):
     plans = client.get("/page/plans", headers=HOST).data.decode()
     assert 'href="/page/private/alice/diary"' in plans
     assert f"Task {SECRET}" in plans                                 # the [[task:…]] chip
-    deck = client.get("/api/deck", headers=HOST).get_json()
-    assert [t["private"] for t in deck if t["id"] == TASK_ID] == [True]
+    tasks = client.get("/api/deck", headers=HOST).get_json()
+    assert [t["private"] for t in tasks if t["id"] == TASK_ID] == [True]
     assert "2001" in client.get("/api/deck/completed-years", headers=HOST).get_json()["years"]
-    # Her deck home is hers: the Deck link goes there.
+    # Her Tasks home is hers: the Tasks link goes there.
     assert 'href="/page/private/alice/deck"' in client.get("/page/index", headers=HOST).data.decode()
 
 
@@ -348,24 +348,24 @@ def test_links_from_invisible_pages_dont_count(alice, wiki):
 
 
 def test_a_new_task_in_a_private_place_is_private(alice, wiki):
-    """An embed on a page in her folder, and New task / c t with her deck
+    """An embed on a page in her folder, and New task / c t with her tasks
     home there, start a new task private; /deck doesn't."""
     assert 'data-init-private="1"' in alice.get("/page/private/alice/deck", headers=HOST).data.decode()
     index = alice.get("/page/index", headers=HOST).data.decode()
-    assert 'data-deck-private="1"' in index
-    deck = alice.get("/deck", headers=HOST).data.decode()
-    assert 'id="task-edit-private"' in deck and "data-init-private" not in deck
-    assert 'data-private-folder="private/alice"' in deck
+    assert 'data-tasks-private="1"' in index
+    tasks = alice.get("/deck", headers=HOST).data.decode()
+    assert 'id="task-edit-private"' in tasks and "data-init-private" not in tasks
+    assert 'data-private-folder="private/alice"' in tasks
     assert 'data-init-private="1"' in alice.get("/api/deck/headless", headers=HOST).data.decode()
     sign_in(alice, "bob")
     bob = alice
     index = bob.get("/page/index", headers=HOST).data.decode()
-    assert "data-deck-private" not in index and 'id="task-edit-private"' in bob.get("/deck", headers=HOST).data.decode()
+    assert "data-tasks-private" not in index and 'id="task-edit-private"' in bob.get("/deck", headers=HOST).data.decode()
 
 
 def test_no_private_box_without_users(client, wiki_dir):
-    deck = client.get("/deck", headers=HOST).data.decode()
-    assert "task-edit-private" not in deck and "data-private-folder" not in deck
+    tasks = client.get("/deck", headers=HOST).data.decode()
+    assert "task-edit-private" not in tasks and "data-private-folder" not in tasks
     assert "private" not in client.post("/api/deck", json={"title": "x"}, headers=HOST).get_json()
     resp = client.post("/api/deck", json={"title": "y", "private": True}, headers=HOST)
     assert resp.status_code == 400
@@ -451,7 +451,7 @@ def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
 
 
 def test_alices_assistant_makes_private_tasks(client, wiki):
-    """Her deck home is in her folder: create_task makes private tasks
+    """Her Tasks home is in her folder: create_task makes private tasks
     unless told otherwise, as c t does."""
     text = mcp(client, "create_task", token="alice-token", title="Call mum")
     assert "· private ·" in text
@@ -618,14 +618,14 @@ def _write_params():
 
 
 def _alices_files(wiki):
-    """alice's private files, and whether a shared deck file holds one of
+    """alice's private files, and whether a shared tasks file holds one of
     her task ids (a restore of a snapshot with her id)."""
     files = {p.relative_to(wiki).as_posix(): p.read_bytes()
              for folder in ("private",)
              for p in (wiki / folder).rglob("*") if p.is_file()
              and "private/bob/" not in p.relative_to(wiki).as_posix() + "/"}   # bob's own, bob may change
     shared = "".join(p.read_text() for p in (wiki / "_deck").glob("*.json"))
-    files["shared deck has her ids"] = str(TASK_ID in shared or DONE_ID in shared)
+    files["shared tasks has her ids"] = str(TASK_ID in shared or DONE_ID in shared)
     return files
 
 

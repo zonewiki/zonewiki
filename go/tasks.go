@@ -1,4 +1,4 @@
-// The deck: the /api/deck routes (their task writes as
+// The tasks: the /api/deck routes (their task writes as
 // functions the MCP tools share), the [[deck]] embed's HTML, the module
 // counts.
 package main
@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// apiError is a refused request: status and the reason deck.js shows.
+// apiError is a refused request: status and the reason tasks.js shows.
 type apiError struct {
 	status int
 	msg    string
@@ -28,15 +28,15 @@ func badRequest(msg string) error { return &apiError{http.StatusBadRequest, msg}
 
 var errNotFound = &apiError{http.StatusNotFound, "Not Found"}
 
-// deckRoute answers a deck API request: a refusal as {"error": …} (400),
-// 404, or 503 when a deck file is unreadable (the client retries).
-func deckRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+// tasksRoute answers a task list API request: a refusal as {"error": …} (400),
+// 404, or 503 when a task list file is unreadable (the client retries).
+func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := h(w, r)
 		var ae *apiError
 		switch {
 		case err == nil:
-		case errors.Is(err, errDeckCorrupt):
+		case errors.Is(err, errTasksCorrupt):
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		case errors.As(err, &ae) && ae.status == http.StatusBadRequest:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": ae.msg})
@@ -174,13 +174,13 @@ func commentText(s string) (string, error) {
 
 // ---- the embed ----
 
-const deckPlaceholder = "LEAFDECKPLACEHOLDER"
+const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
 
-// buildDeckEmbed renders the deck app for user on a page (instance numbers
+// buildTasksEmbed renders the task app for user on a page (instance numbers
 // a page's embeds); headless hides it but for its edit modal (the editor's
-// Make task, c t on any page), and deck.js skips its shortcuts. private:
+// Make task, c t on any page), and tasks.js skips its shortcuts. private:
 // a new task here is private (a page in user's own folder).
-func buildDeckEmbed(user string, params DeckParams, instance int, headless, private bool) string {
+func buildTasksEmbed(user string, params TasksParams, instance int, headless, private bool) string {
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
 	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
@@ -202,7 +202,7 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 			labels[i] = name
 		}
 	}
-	lists := deckLists(user)
+	lists := taskLists(user)
 	names = sortedKeys(lists)
 	homes := map[string]string{}
 	for _, n := range names {
@@ -218,10 +218,10 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 		keep = "1"
 	}
 	var b bytes.Buffer
-	err := partials.ExecuteTemplate(&b, "deck_embed", map[string]any{
+	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
 		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": embedView(params),
 		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
-		// keep=1: new tasks here are keep tasks; home=1: the user's own deck.
+		// keep=1: new tasks here are keep tasks; home=1: the user's own tasks.
 		"keep": keep, "home": isTrue(params.Get("home")),
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
@@ -229,29 +229,29 @@ func buildDeckEmbed(user string, params DeckParams, instance int, headless, priv
 		"lists_json": listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {
-		logf("deck embed: %v", err)
+		logf("task list embed: %v", err)
 	}
 	return b.String()
 }
 
-type deckEmbed struct{ placeholder, html string }
+type tasksEmbed struct{ placeholder, html string }
 
-// processDeckEmbeds swaps each [[deck …]] for a placeholder; the embeds'
-// HTML replaces them after rendering (injectDeckEmbeds). private: the page
+// processTasksEmbeds swaps each [[deck …]] for a placeholder; the embeds'
+// HTML replaces them after rendering (injectTasksEmbeds). private: the page
 // is in rq's user's own folder.
-func processDeckEmbeds(rq *Req, text string, private bool) (string, []deckEmbed) {
-	var embeds []deckEmbed
-	text = deckRE.ReplaceAllStringFunc(text, func(m string) string {
-		g := deckRE.FindStringSubmatch(m)
-		ph := deckPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, deckEmbed{ph, buildDeckEmbed(rq.who(), parseDeckParams(g[1]), len(embeds), false, private)})
+func processTasksEmbeds(rq *Req, text string, private bool) (string, []tasksEmbed) {
+	var embeds []tasksEmbed
+	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
+		g := tasksRE.FindStringSubmatch(m)
+		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq.who(), parseTasksParams(g[1]), len(embeds), false, private)})
 		return ph
 	})
 	return text, embeds
 }
 
-// injectDeckEmbeds: the last first, as _1 is a prefix of _10.
-func injectDeckEmbeds(html string, embeds []deckEmbed) string {
+// injectTasksEmbeds: the last first, as _1 is a prefix of _10.
+func injectTasksEmbeds(html string, embeds []tasksEmbed) string {
 	for i := len(embeds) - 1; i >= 0; i-- {
 		e := embeds[i]
 		html = strings.ReplaceAll(html, "<p>"+e.placeholder+"</p>", e.html)
@@ -260,8 +260,8 @@ func injectDeckEmbeds(html string, embeds []deckEmbed) string {
 	return html
 }
 
-// DeckCounts is what the Deck module links show.
-type DeckCounts struct {
+// TaskCounts is what the Tasks module links show.
+type TaskCounts struct {
 	Count   int    `json:"count"`
 	Overdue int    `json:"overdue"`
 	Today   int    `json:"today"`
@@ -269,17 +269,17 @@ type DeckCounts struct {
 	Title   string `json:"-"`
 }
 
-// deckCounts: the open tasks in Focus (started, or due today or earlier)
-// and of those how many are overdue or due today; of the deck home's view
+// taskCounts: the open tasks in Focus (started, or due today or earlier)
+// and of those how many are overdue or due today; of the Tasks home's view
 // (its list= and tag=) when a page declares one.
-func deckCounts(rq *Req) DeckCounts {
+func taskCounts(rq *Req) TaskCounts {
 	day := isoDay(today())
-	var params DeckParams
-	if h := rq.deckHome(); h != nil {
+	var params TasksParams
+	if h := rq.tasksHome(); h != nil {
 		params = h.Params
 	}
 	scope, tag := cleanList(params.Get("list")), params.Get("tag")
-	var c DeckCounts
+	var c TaskCounts
 	for _, t := range openTasks(rq.who()) {
 		if !inScope(t, scope) || !tagParamMatches(t, tag) {
 			continue
@@ -300,19 +300,19 @@ func deckCounts(rq *Req) DeckCounts {
 
 // ---- the API ----
 
-func deckRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/deck", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+func tasksRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/deck", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
 		return nil
 	}))
-	// A hidden deck app, for a page without one that wants its edit modal
+	// A hidden task app, for a page without one that wants its edit modal
 	// (js/actions.js openHomeTask: c t, the New task button).
 	mux.HandleFunc("GET /api/deck/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildDeckEmbed(rq.user, DeckParams{}, 0, true, rq.homePrivate()))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq.user, TasksParams{}, 0, true, rq.homePrivate()))
 	})
-	mux.HandleFunc("GET /api/deck/completed", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/deck/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
 		if err != nil {
 			return err
@@ -320,11 +320,11 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, completedInYear(userOf(r), year))
 		return nil
 	}))
-	mux.HandleFunc("GET /api/deck/completed-years", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/deck/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(userOf(r), cleanList(r.URL.Query().Get("list")))})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/deck/completed-count", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/deck/completed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		scope, n := cleanList(r.URL.Query().Get("list")), 0
 		for _, t := range completedInYear(userOf(r), currentYear()) {
 			if inScope(t, scope) {
@@ -335,9 +335,9 @@ func deckRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/deck/due-count", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, deckCounts(newReq(r)))
+		writeJSON(w, http.StatusOK, taskCounts(newReq(r)))
 	})
-	mux.HandleFunc("POST /api/deck", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/deck", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -349,7 +349,7 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusCreated, t)
 		return nil
 	}))
-	mux.HandleFunc("PUT /api/deck/{id}", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("PUT /api/deck/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -361,7 +361,7 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, t)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/{id}/toggle-check", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/deck/{id}/toggle-check", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -380,7 +380,7 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, t)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/{id}/comments", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/deck/{id}/comments", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -396,20 +396,20 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusCreated, t)
 		return nil
 	}))
-	mux.HandleFunc("PUT /api/deck/{id}/comments/{cid}", deckRoute(apiEditComment))
-	mux.HandleFunc("DELETE /api/deck/{id}/comments/{cid}", deckRoute(apiDeleteComment))
-	mux.HandleFunc("DELETE /api/deck/{id}", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("PUT /api/deck/{id}/comments/{cid}", tasksRoute(apiEditComment))
+	mux.HandleFunc("DELETE /api/deck/{id}/comments/{cid}", tasksRoute(apiDeleteComment))
+	mux.HandleFunc("DELETE /api/deck/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete task"); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/batch-delete", deckRoute(apiBatchDelete))
-	mux.HandleFunc("POST /api/deck/restore", deckRoute(apiRestore))
-	mux.HandleFunc("POST /api/deck/batch-complete", deckRoute(apiBatchComplete))
-	mux.HandleFunc("POST /api/deck/reorder", deckRoute(apiReorder))
-	mux.HandleFunc("POST /api/deck/batch-tag", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/deck/batch-delete", tasksRoute(apiBatchDelete))
+	mux.HandleFunc("POST /api/deck/restore", tasksRoute(apiRestore))
+	mux.HandleFunc("POST /api/deck/batch-complete", tasksRoute(apiBatchComplete))
+	mux.HandleFunc("POST /api/deck/reorder", tasksRoute(apiReorder))
+	mux.HandleFunc("POST /api/deck/batch-tag", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -436,7 +436,7 @@ func deckRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, tasks)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/batch-update", deckRoute(apiBatchUpdate))
+	mux.HandleFunc("POST /api/deck/batch-update", tasksRoute(apiBatchUpdate))
 }
 
 var yearArgRE = regexp.MustCompile(`^\d{4}$`)
@@ -466,19 +466,19 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if strings.TrimSpace(title) == "" {
 		return nil, badRequest("Title cannot be empty")
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	t := newTask()
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")
-	active, err := readDeckStrict(user)
+	active, err := readTasksStrict(user)
 	if err != nil {
 		return nil, err
 	}
-	return t, writeDeckLocked(user, append(active, t), message)
+	return t, writeTasksLocked(user, append(active, t), message)
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:
@@ -692,8 +692,8 @@ func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
 func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	return updateTaskLocked(user, id, data, suffix)
 }
 
@@ -782,8 +782,8 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
 func toggleNoteCheck(user, id string, idx int) (*Task, error) {
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	_, _, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
@@ -804,8 +804,8 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
@@ -839,8 +839,8 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if text, err = commentText(text); err != nil {
 		return err
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
@@ -858,8 +858,8 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 }
 
 func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
@@ -877,8 +877,8 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 }
 
 func deleteTask(user, id, message string) error {
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	return deleteTasksLocked(user, map[string]bool{id: true}, message)
 }
 
@@ -913,8 +913,8 @@ func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
 	if len(ids) == 0 {
 		return badRequest("Bad Request")
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete tasks"); err != nil {
 		return err
 	}
@@ -933,8 +933,8 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	if !ok || len(snaps) == 0 {
 		return badRequest("Bad Request")
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	user := userOf(r)
 	active, completed, err := readForWriteLocked(user)
 	if err != nil {
@@ -990,8 +990,8 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("Bad Request")
 	}
 	set := idSet(ids)
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, err := readForWriteLocked(userOf(r))
 	if err != nil {
 		return err
@@ -1068,9 +1068,9 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if len(order) == 0 && len(updates) == 0 {
 		return badRequest("Bad Request")
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
-	active, err := readDeckStrict(userOf(r))
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, err := readTasksStrict(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -1096,7 +1096,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 			t.SortOrder = &f
 		}
 	}
-	if err := writeDeckLocked(userOf(r), active, "Reorder deck"); err != nil {
+	if err := writeTasksLocked(userOf(r), active, "Reorder tasks"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1112,8 +1112,8 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
 		return nil, badRequest("Give task ids and tags to add or remove")
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, err := readForWriteLocked(user)
 	if err != nil {
 		return nil, err
@@ -1158,8 +1158,8 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
-	deckMu.Lock()
-	defer deckMu.Unlock()
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
 	active, completed, err := readForWriteLocked(userOf(r))
 	if err != nil {
 		return err

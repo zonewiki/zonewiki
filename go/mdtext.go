@@ -446,7 +446,7 @@ func taskLineKeys(content string) []string {
 }
 
 // toggleNthCheckbox ticks or unticks the Nth checkbox (0-based, in rendered
-// order), recording when it was done. A deck task's notes have no
+// order), recording when it was done. A task's notes have no
 // frontmatter (frontmatter false): a leading --- block there is text.
 func toggleNthCheckbox(content string, idx int, frontmatter bool) string {
 	lines := splitLines(content)
@@ -820,7 +820,7 @@ func addFrontmatterTags(content string, tags []string) string {
 var plainMdRE = regexp.MustCompile(`\[([^\[\]]*)\]\(([^()\s]+)\)`)
 
 // plainTaskTitle: a task title with its links reduced to their labels, as
-// deck.js plainTitle does (for a title inside one link: no nested <a>).
+// tasks.js plainTitle does (for a title inside one link: no nested <a>).
 func plainTaskTitle(title string) string {
 	title = wikilinkRE.ReplaceAllStringFunc(title, func(m string) string {
 		_, _, label := splitWikilink(m[2 : len(m)-2])

@@ -53,7 +53,7 @@ var funcs = template.FuncMap{
 }
 
 // partials: the layout and partials, whose named templates Go code renders
-// too (the breadcrumb, the deck embed, macros); views: each view's
+// too (the breadcrumb, the task list embed, macros); views: each view's
 // template with them.
 var (
 	partials *template.Template
@@ -64,7 +64,7 @@ func init() {
 	partials = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS,
 		"templates/layout.html", "templates/partials/*.html"))
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "scratch.html",
-		"hidden.html", "deleted_page.html", "deck_page.html", "search.html", "history/deleted.html",
+		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
@@ -109,17 +109,17 @@ func diffLines(diff string) []diffLine {
 	return lines
 }
 
-// Zone's modules: the wiki, the deck, with users your Private home, and the
+// Zone's modules: the wiki, the tasks, with users your Private home, and the
 // scratch notes. Every view names the one it belongs to (<body data-module>:
 // "private" for a page in your private folder); the matching links are
 // aria-current, and js/actions.js makes "New" create that module's kind.
 // With users the switcher has two groups (the third field, 0 and 1): Wiki and
-// Deck, then Private and Scratch; without users one.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Tasks", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
+// Tasks, then Private and Scratch; without users one.
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
 
-// deckCountsTitle: the Deck links' tooltip, "Deck: 5 in Focus · 1 overdue
-// · 1 due today" (js/chrome.js deckCountsTitle builds the same).
-func deckCountsTitle(c DeckCounts) string {
+// taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
+// · 1 due today" (js/chrome.js taskCountsTitle builds the same).
+func taskCountsTitle(c TaskCounts) string {
 	var parts []string
 	if c.Focus > 0 {
 		parts = append(parts, itoa(c.Focus)+" in Focus")
@@ -136,18 +136,18 @@ func deckCountsTitle(c DeckCounts) string {
 	return "Tasks: " + strings.Join(parts, " · ")
 }
 
-// deckCounts once per request, with its tooltip.
-func (rq *Req) deckCounts() DeckCounts {
+// taskCounts once per request, with its tooltip.
+func (rq *Req) taskCounts() TaskCounts {
 	if rq.counts == nil {
-		c := deckCounts(rq)
-		c.Title = deckCountsTitle(c)
+		c := taskCounts(rq)
+		c.Title = taskCountsTitle(c)
 		rq.counts = &c
 	}
 	return *rq.counts
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
-// view's, the Deck's counts, the group it is shown in). With users Private
+// view's, the Tasks's counts, the group it is shown in). With users Private
 // comes before Scratch in a group of its own and the list ends with the user
 // menu ("menu": who is signed in, Sign out; the desktop's user button).
 func moduleLinks(rq *Req) []M {
@@ -163,15 +163,15 @@ func moduleLinks(rq *Req) []M {
 			group = 1
 		}
 		href := m[2]
-		// The Deck goes to the deck's home page when a page declares one.
-		if m[0] == "deck" {
-			if home := rq.deckHomeSlug(); home != "" {
+		// The Tasks link goes to the Tasks home page when a page declares one.
+		if m[0] == "tasks" {
+			if home := rq.tasksHomeSlug(); home != "" {
 				href = pathURL("page", home)
 			}
 		}
 		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group}
-		if m[0] == "deck" {
-			link["counts"] = rq.deckCounts()
+		if m[0] == "tasks" {
+			link["counts"] = rq.taskCounts()
 		}
 		out = append(out, link)
 	}
@@ -183,7 +183,7 @@ func moduleLinks(rq *Req) []M {
 
 var moduleViewRE = regexp.MustCompile(`^/(?:page|history)/(.+)$`)
 
-// currentModule: the module the request's view belongs to: "deck",
+// currentModule: the module the request's view belongs to: "tasks",
 // "scratch", "private" (a page in your own private folder), "wiki", or ""
 // for views of none (search results, login).
 func currentModule(rq *Req) string {
@@ -193,7 +193,7 @@ func currentModule(rq *Req) string {
 	p := rq.r.URL.Path
 	switch p {
 	case "/deck":
-		return "deck"
+		return "tasks"
 	case "/search", "/login":
 		return ""
 	}
@@ -201,8 +201,8 @@ func currentModule(rq *Req) string {
 	if m != nil && (m[1] == "_scratch" || isScratch(m[1])) {
 		return "scratch"
 	}
-	if strings.HasPrefix(p, "/page/") && m != nil && m[1] == rq.deckHomeSlug() {
-		return "deck"
+	if strings.HasPrefix(p, "/page/") && m != nil && m[1] == rq.tasksHomeSlug() {
+		return "tasks"
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {
 		return "private"
@@ -250,7 +250,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	ctx := M{
 		"title": title, "editor": o.editor, "wide": o.wide,
 		"show_actions": !o.noActions && !o.editor,
-		"module":       "", "deck_new": nil,
+		"module":       "", "tasks_new": nil,
 		"sharing":  rq.sharing,
 		"semantic": semanticStatus(), "app_name": appName, "version": version, "build": cfg.Build,
 		"allow_remote": cfg.AllowRemote, "locale": s.Locale, "date_format": s.DateFormat,
@@ -261,11 +261,11 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		ctx["module"] = currentModule(rq)
 	}
 	if !o.noActions {
-		if home := rq.deckHome(); home != nil {
+		if home := rq.tasksHome(); home != nil {
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
 			v := embedView(home.Params)
-			ctx["deck_new"] = M{"tags": strings.Join(newTaskTags(home.Params), ","),
+			ctx["tasks_new"] = M{"tags": strings.Join(newTaskTags(home.Params), ","),
 				"keep": isTrue(home.Params.Get("keep")), "today": v == "" || v == "focus", "private": rq.homePrivate()}
 		}
 	}
@@ -337,7 +337,7 @@ func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []strin
 		sections = append(sections, M{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(backlinks)})
 	}
 	if len(tasks) > 0 {
-		lists := deckLists(rq.user)
+		lists := taskLists(rq.user)
 		var links []M
 		for _, t := range tasks {
 			links = append(links, M{"href": taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),

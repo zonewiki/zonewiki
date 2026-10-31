@@ -70,7 +70,7 @@ if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)
 fi
 export LEAF_BUILD="${LEAF_BUILD:-unknown}"
 
-# The user's timezone, so "today" (due badge, deck dates, scratch-note names,
+# The user's timezone, so "today" (due badge, tasks dates, scratch-note names,
 # "Last changed") is their day instead of UTC: TZ in .env (e.g. Europe/Berlin),
 # else the host's, else UTC.
 TZ=$(env_val TZ)
@@ -161,17 +161,17 @@ case "${1:-up}" in
     # The server's own checks (go vet, go test), then the unit/API tests
     # against it, in the tools image (Containerfile.tools), one worker per
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
-    # path the whole suite runs but the browser and deck-core tests (e2e).
+    # path the whole suite runs but the browser and tasks-core tests (e2e).
     image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" -- sh -c \
       '(cd go && go vet ./... && go test ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
-       [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_deck_core.py "$@"
+       [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"
        python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
     ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
-    # deck-core.js tests, in the tools image (Containerfile.tools).
+    # tasks-core.js tests, in the tools image (Containerfile.tools).
     # Screenshots land in tests/e2e/_screenshots/. In parallel (pytest-xdist),
     # one worker per two CPUs: each runs its own Chromium, and a worker per
     # CPU starves the browsers until timing-sensitive tests fail. -n 0 (or
@@ -179,7 +179,7 @@ case "${1:-up}" in
     image=$(build_image leaf-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- sh -c \
       'n=$(( $(nproc) / 2 )); [ "$n" -ge 1 ] || n=1
-       python3 -m pytest tests/e2e tests/test_deck_core.py -v -p no:cacheprovider \
+       python3 -m pytest tests/e2e tests/test_tasks_core.py -v -p no:cacheprovider \
          -n "$n" "$@"' -- "${@:2}"
     ;;
   leaks)
@@ -260,7 +260,7 @@ case "${1:-up}" in
     echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
     echo "  test   - go vet, go test and the unit/API tests in the tools image (extra args go to pytest)"
-    echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"
+    echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"

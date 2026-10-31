@@ -1,7 +1,7 @@
-{{- /* The formatting bar of the editor and of the deck's task notes: one
+{{- /* The formatting bar of the editor and of the task app's task notes: one
     button per markdown construct, applied to the selection by js/mdedit.js
     (data-fmt, see applyFormat). Line icons, not letters: a letter's height
-    depends on the font. The deck's modal (deck_embed.html) passes its own
+    depends on the font. The tasks' modal (tasks_embed.html) passes its own
     ids (bar_id, attach_id) and nomaketask: Make task is the editor's. */ -}}
 {{define "format_bar" -}}
 <div class="format-bar" id="{{or .bar_id "format-bar"}}" role="toolbar" aria-label="Formatting">

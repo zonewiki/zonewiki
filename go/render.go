@@ -1,6 +1,6 @@
 // A page's markdown to HTML: Zone's directives
 // (wikilinks, [[deck]], [[task:…]]) around markdown.go, and the HTML after
-// it (task chips, deck embeds, the frontmatter block, sources).
+// it (task chips, task list embeds, the frontmatter block, sources).
 package main
 
 import (
@@ -70,7 +70,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool, from string) 
 // ### heading its ✎, SectionTasks (findTaskBacklinks) a heading tasks link
 // to its ☑ N chip; PreferLists are lists a task chip links into.
 type RenderOpts struct {
-	Page               string // the page rendered, "" none: its deck embeds make private tasks in the user's own folder, its links are marked by where it is (a preview gets it as ?page=)
+	Page               string // the page rendered, "" none: its task list embeds make private tasks in the user's own folder, its links are marked by where it is (a preview gets it as ?page=)
 	HideTags, HideTldr bool
 	PreferLists        []string
 	EditSlug           string
@@ -81,20 +81,20 @@ type RenderOpts struct {
 func renderMd(rq *Req, text string, o RenderOpts) string {
 	meta, text := parseFrontmatter(text)
 	var prefer []string
-	for _, l := range pageDeckLists(text) {
+	for _, l := range pageTaskLists(text) {
 		prefer = append(prefer, l.Name)
 	}
 	prefer = append(prefer, o.PreferLists...)
 	fmHTML := renderFrontmatterHTML(meta, !o.HideTags, !o.HideTldr)
 	text, stash := maskCode(text)
-	text, embeds := processDeckEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
+	text, embeds := processTasksEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
 	text = unmaskCode(processWikilinks(rq, text, nil, o.Page), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq)}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)
 	if len(embeds) > 0 {
-		result = injectDeckEmbeds(result, embeds)
+		result = injectTasksEmbeds(result, embeds)
 	}
 	return fmHTML + result + renderSourcesHTML(rq, meta.Sources, result)
 }
@@ -108,7 +108,7 @@ func requestHost(rq *Req) string {
 
 var headingIDAttrRE = regexp.MustCompile(`(<h[1-6])` + `[ \t\n\r\f\v]+id="[^"]*"`)
 
-// renderNotes renders deck task notes (or, inline, comments: one line each)
+// renderNotes renders task notes (or, inline, comments: one line each)
 // as a page is, without what only a page has (frontmatter, [[deck]], ✎) and
 // without heading ids, which would clash with the page's own.
 func renderNotes(rq *Req, texts []string, inline bool) []string {
@@ -177,7 +177,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 		}
 		html = html[i+4:]
 	}
-	lists := deckLists(rq.who())
+	lists := taskLists(rq.who())
 	return taskRefTokenRE.ReplaceAllStringFunc(b.String(), func(m string) string {
 		i, err := strconv.Atoi(taskRefTokenRE.FindStringSubmatch(m)[1])
 		if err != nil || i >= len(refs) {
@@ -191,7 +191,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 	})
 }
 
-// shortDate: "Oct 5" (this year) or "Oct 5, 2025", as the deck's cards show
+// shortDate: "Oct 5" (this year) or "Oct 5, 2025", as the task app's cards show
 // dates, in a <time class="local-date"> the browser rewrites in the locale
 // setting (js/util.js localizeDates); "2025-10-05" with date-format = iso.
 func shortDate(iso, day string) string {
@@ -210,7 +210,7 @@ func shortDate(iso, day string) string {
 
 // linkList: the list a link to a task opens it in: one of prefer (the
 // lists the linking page declares) when the task is in it, else its own.
-func linkList(t *Task, prefer []string, lists map[string]DeckHome) string {
+func linkList(t *Task, prefer []string, lists map[string]TasksHome) string {
 	tags := taskTagsLower(t)
 	var hits []string
 	for _, p := range prefer {
@@ -226,8 +226,8 @@ func linkList(t *Task, prefer []string, lists map[string]DeckHome) string {
 }
 
 // taskRefHTML: a task as an inline chip: its checkbox (completes it, js/page.js),
-// its title linking to it in the deck, badges for what its card shows.
-func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[string]DeckHome) string {
+// its title linking to it in the tasks, badges for what its card shows.
+func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[string]TasksHome) string {
 	if t == nil {
 		return `<span class="task-ref task-ref-missing" title="No task with id ` + html.EscapeString(ref) + `">task ` + html.EscapeString(ref) + `?</span>`
 	}
@@ -307,7 +307,7 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 	if len(order) == 0 {
 		return chips
 	}
-	lists := deckLists(rq.who())
+	lists := taskLists(rq.who())
 	for _, anchor := range order {
 		ts := byAnchor[anchor]
 		var items strings.Builder
@@ -389,7 +389,7 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	return `<section class="page-sources"><h2 id="` + hid + `">Sources</h2><ul>` + items.String() + `</ul></section>`
 }
 
-// taskHref: the link that opens one task in the deck on tab; year: the
+// taskHref: the link that opens one task in the tasks on tab; year: the
 // Completed year of a task in an earlier year's archive.
 func taskHref(id, tab, list, year string) string {
 	q := []string{"task=" + url.QueryEscape(id), "view=" + url.QueryEscape(tab)}

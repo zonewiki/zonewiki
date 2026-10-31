@@ -1,5 +1,5 @@
 """Task references in the browser: the chip's checkbox completes the task in
-the deck (with undo), the editor completes `[[task:` from open tasks, and
+the tasks (with undo), the editor completes `[[task:` from open tasks, and
 "Make task" turns a line or selection into a task and its reference."""
 
 import json
@@ -15,7 +15,7 @@ def _task(page, **fields):
     return page.request.post("/api/deck", data=fields).json()
 
 
-def _deck_task(wiki, task_id):
+def _tasks_task(wiki, task_id):
     """The task as stored, open or completed (None if neither)."""
     for name in ("tasks.json", "completed.json"):
         path = wiki.root / "_deck" / name
@@ -34,16 +34,16 @@ def test_chip_checkbox_completes_and_undo_reopens(page, wiki):
     expect(chip).to_contain_text("Call the plumber")
     chip.locator(".task-ref-check").check()
     expect(page.locator(".task-undo-toast")).to_contain_text("Done “Call the plumber”")
-    wait_until(page, lambda: (_deck_task(wiki, t["id"]) or {}).get("completed_at"))
+    wait_until(page, lambda: (_tasks_task(wiki, t["id"]) or {}).get("completed_at"))
     expect(page.locator(f'.task-ref-done[data-task-id="{t["id"]}"]')).to_be_visible()
 
     page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
-    wait_until(page, lambda: not _deck_task(wiki, t["id"])["completed_at"])
+    wait_until(page, lambda: not _tasks_task(wiki, t["id"])["completed_at"])
     reopened = page.locator(f'.task-ref[data-task-id="{t["id"]}"]')
     expect(reopened).not_to_have_class("task-ref task-ref-done")
     expect(reopened.locator(".task-ref-check")).not_to_be_checked()
     # Undo leaves no trace in the task's history.
-    assert [e["event"] for e in _deck_task(wiki, t["id"])["history"]] == ["created"]
+    assert [e["event"] for e in _tasks_task(wiki, t["id"])["history"]] == ["created"]
 
 
 def test_keep_task_chip_comes_back_and_undo_restores_its_dates(page, wiki):
@@ -54,10 +54,10 @@ def test_keep_task_chip_comes_back_and_undo_restores_its_dates(page, wiki):
     page.locator(".task-ref-check").check()
     expect(page.locator(".task-ref")).to_contain_text("⟲ ✓")      # done today, still open
     expect(page.locator(".task-ref-check")).not_to_be_checked()
-    assert _deck_task(wiki, t["id"])["start_date"] is None
+    assert _tasks_task(wiki, t["id"])["start_date"] is None
     page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
-    wait_until(page, lambda: _deck_task(wiki, t["id"])["start_date"] == today)
-    assert _deck_task(wiki, t["id"])["last_done"] is None
+    wait_until(page, lambda: _tasks_task(wiki, t["id"])["start_date"] == today)
+    assert _tasks_task(wiki, t["id"])["last_done"] is None
 
 
 def test_ticked_chip_keeps_linking_to_the_pages_list(page, wiki):
@@ -113,14 +113,14 @@ def _edit_with_cursor(page, wiki, text, at, end=None):
     off = len("# Notes\n\n")
     page.locator("#editor-textarea").evaluate(
         f"ta => ta.setSelectionRange({off + at}, {off + (at if end is None else end)})")
-    page.locator(".tasks-app[data-ready]").wait_for(state="attached")   # the hidden deck has started
+    page.locator(".tasks-app[data-ready]").wait_for(state="attached")   # the hidden tasks has started
 
 
 def _save_modal(page):
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
 
 
-def test_make_task_from_the_current_line_opens_the_deck_modal(page, wiki):
+def test_make_task_from_the_current_line_opens_the_tasks_modal(page, wiki):
     _edit_with_cursor(page, wiki, "Action items:\n- [ ] Call Bob tomorrow #work\nend", 20)
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
     modal = page.locator("#task-edit-modal")
@@ -128,9 +128,9 @@ def test_make_task_from_the_current_line_opens_the_deck_modal(page, wiki):
     expect(page.locator("#task-edit-title")).to_have_value("Call Bob tomorrow #work")
     expect(page.locator("#task-edit-title")).to_be_focused()
     expect(page.locator("#task-edit-desc")).to_have_value("From [[notes]]")
-    # The modal's quick-add preview reads the shorthand, as in the deck.
+    # The modal's quick-add preview reads the shorthand, as in the tasks.
     expect(page.locator("#task-edit-quick")).to_be_visible()
-    page.keyboard.press("Enter")                     # Enter saves, as in the deck
+    page.keyboard.press("Enter")                     # Enter saves, as in the tasks
     expect(modal).to_be_hidden()
     expect(page.locator(".task-undo-toast")).to_contain_text("Task “Call Bob” created")
     [t] = _open_tasks(wiki)
@@ -239,12 +239,12 @@ def test_make_task_modal_takes_more_fields_and_cancel_changes_nothing(page, wiki
     expect(page.locator("#editor-textarea")).to_have_value(f"# Notes\n\n- [[task:{t['id'][:8]}]]")
 
 
-def test_hidden_deck_does_not_take_the_editors_keys(page, wiki):
+def test_hidden_tasks_does_not_take_the_editors_keys(page, wiki):
     wiki.write("notes", "# Notes\n\n")
     page.goto("/edit/notes")
     page.locator(".tasks-app[data-ready]").wait_for(state="attached")
     page.keyboard.press("Control+End")
-    page.keyboard.type("n/#")   # the deck's new task / filter keys
+    page.keyboard.type("n/#")   # the task app's new task / filter keys
     expect(page.locator("#task-edit-modal")).to_be_hidden()
     expect(page.locator("#editor-textarea")).to_have_value("# Notes\n\nn/#")
     expect(page.locator(".tasks-app")).to_be_hidden()

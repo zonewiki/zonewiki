@@ -58,11 +58,11 @@ func TestWikilinks(t *testing.T) {
 	}
 }
 
-// prepare is renderMd up to markdown: code masked, decks and task refs
+// prepare is renderMd up to markdown: code masked, task lists and task refs
 // swapped for placeholders, wikilinks, code back.
-func prepare(text string) (string, []deckEmbed, []string) {
+func prepare(text string) (string, []tasksEmbed, []string) {
 	text, stash := maskCode(text)
-	text, embeds := processDeckEmbeds(nil, text, false)
+	text, embeds := processTasksEmbeds(nil, text, false)
 	text, refs := maskTaskRefs(text)
 	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, ""), stash), embeds, refs
 }
@@ -82,7 +82,7 @@ func TestPrepareMasksCode(t *testing.T) {
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
 	text, embeds, refs := prepare("[[deck]] [[DECK list=work]] [[task:ABCD-1234]]\u00a0[[deck\u00a0view=x]]")
-	if text != "LEAFDECKPLACEHOLDER_0 LEAFDECKPLACEHOLDER_1 \ue0020\ue003\u00a0LEAFDECKPLACEHOLDER_2" {
+	if text != "LEAFTASKSPLACEHOLDER_0 LEAFTASKSPLACEHOLDER_1 \ue0020\ue003\u00a0LEAFTASKSPLACEHOLDER_2" {
 		t.Errorf("text %q", text)
 	}
 	if len(embeds) != 3 || !strings.Contains(embeds[1].html, `data-init-list="work"`) ||

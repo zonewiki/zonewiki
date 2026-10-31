@@ -91,14 +91,14 @@ class Wiki:
 
 
 def open_tab(page, view: str):
-    """Switch the deck to a view by its name (open/plan/focus/completed).
+    """Switch the tasks to a view by its name (open/plan/focus/completed).
     Completed has no tab; its link under the list opens it. Open and Plan
     are the Open tab with its Plan switch off and on."""
     if view == "completed":
         page.locator("#task-completed-link").click()
     elif view in ("open", "plan"):
         page.locator("#tasks-tabs [data-view='open']").click()
-        switch = page.locator(".deck-plan-switch").first
+        switch = page.locator(".tasks-plan-switch").first
         if (switch.get_attribute("aria-checked") == "true") != (view == "plan"):
             switch.click()
     else:
@@ -106,7 +106,7 @@ def open_tab(page, view: str):
 
 
 def pick_date(picker, d: str, tap: bool = False):
-    """Click (or tap) date `d` (YYYY-MM-DD) in the deck's date picker, once it
+    """Click (or tap) date `d` (YYYY-MM-DD) in the task app's date picker, once it
     is open, paging toward it as needed: the picker opens on the month of the
     date it holds, which near a month's end may be after `d` or before it."""
     from playwright.sync_api import expect
@@ -148,7 +148,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
             external.append(r.request.url)
             r.abort()
     ctx.route("**/*", route)
-    # Decks open with full cards in tests, as before the per-tab defaults
+    # Task lists open with full cards in tests, as before the per-tab defaults
     # (Open compact): most tests exercise cards, not density. A test of the
     # real defaults calls real_density(page) first.
     ctx.add_init_script("""
@@ -176,7 +176,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
 
 
 def real_density(page):
-    """Use the deck's real density defaults (Open compact …) on this page's
+    """Use the task app's real density defaults (Open compact …) on this page's
     tab from the next load on; the test setup otherwise keeps full cards."""
     if page.url.startswith("about:"):
         page.goto("/page/index")

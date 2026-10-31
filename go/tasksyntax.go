@@ -1,4 +1,4 @@
-// The deck's syntax in page text: [[deck …]] embeds and
+// The tasks' syntax in page text: [[deck …]] embeds and
 // their params, [[task:<id>]] references, and how tags are written.
 package main
 
@@ -36,24 +36,24 @@ func cleanList(name string) string {
 }
 
 var (
-	deckRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + spaceClass + `+([^\]]*))?\]\]`)
+	tasksRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + spaceClass + `+([^\]]*))?\]\]`)
 	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )
 
-// DeckParams are an embed's key=value pairs, in order.
-type DeckParams struct {
+// TasksParams are an embed's key=value pairs, in order.
+type TasksParams struct {
 	keys []string
 	m    map[string]string
 }
 
-func (p DeckParams) Get(k string) string { return p.m[k] }
+func (p TasksParams) Get(k string) string { return p.m[k] }
 
-func (p DeckParams) Has(k string) bool { _, ok := p.m[k]; return ok }
+func (p TasksParams) Has(k string) bool { _, ok := p.m[k]; return ok }
 
 // With is a copy with k set (last when new).
-func (p DeckParams) With(k, v string) DeckParams {
-	c := DeckParams{keys: append([]string(nil), p.keys...), m: map[string]string{}}
+func (p TasksParams) With(k, v string) TasksParams {
+	c := TasksParams{keys: append([]string(nil), p.keys...), m: map[string]string{}}
 	for key, val := range p.m {
 		c.m[key] = val
 	}
@@ -64,9 +64,9 @@ func (p DeckParams) With(k, v string) DeckParams {
 	return c
 }
 
-// parseDeckParams reads [[deck key=val …]]'s pairs.
-func parseDeckParams(raw string) DeckParams {
-	p := DeckParams{m: map[string]string{}}
+// parseTasksParams reads [[deck key=val …]]'s pairs.
+func parseTasksParams(raw string) TasksParams {
+	p := TasksParams{m: map[string]string{}}
 	for _, token := range strings.Fields(raw) {
 		k, v, ok := strings.Cut(token, "=")
 		if !ok {
@@ -81,13 +81,13 @@ func parseDeckParams(raw string) DeckParams {
 	return p
 }
 
-// The deck's views, by the names [[deck view=…]] and ?view= use.
-var deckViews = []string{"focus", "open", "plan", "completed"}
+// The tasks' views, by the names [[deck view=…]] and ?view= use.
+var tasksViews = []string{"focus", "open", "plan", "completed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.
-func embedView(p DeckParams) string {
+func embedView(p TasksParams) string {
 	v := strings.ToLower(strings.TrimSpace(p.Get("view")))
-	for _, name := range deckViews {
+	for _, name := range tasksViews {
 		if v == name {
 			return v
 		}
@@ -133,7 +133,7 @@ func retag(tags, add, remove []string) []string {
 	return out
 }
 
-// tagParamMatches: a task passes an embed's tag= (DeckCore.tagParamToQuery):
+// tagParamMatches: a task passes an embed's tag= (TasksCore.tagParamToQuery):
 // `a|b` any of them, else comma-separated tags all there, `-tag` excluding.
 func tagParamMatches(t *Task, raw string) bool {
 	raw = strings.TrimSpace(raw)
@@ -164,7 +164,7 @@ func tagParamMatches(t *Task, raw string) bool {
 
 // newTaskTags: the tags a new task gets in an embed with these params: the
 // list= tag, then the single tags of tag= (not an a|b group, not -tag).
-func newTaskTags(p DeckParams) []string {
+func newTaskTags(p TasksParams) []string {
 	tags := []string{cleanList(p.Get("list"))}
 	if raw := strings.TrimSpace(p.Get("tag")); raw != "" && !strings.Contains(raw, "|") {
 		for _, t := range strings.Split(raw, ",") {
@@ -183,7 +183,7 @@ var (
 
 var weekdays = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 
-// parseDateWord: a date as quick-add reads one (DeckCore.parseDateWord),
+// parseDateWord: a date as quick-add reads one (TasksCore.parseDateWord),
 // YYYY-MM-DD, "" when it isn't one: today · tomorrow/tmrw · mon…sun (the
 // next one, never today) · +3 / +3d / +2w · 2026-10-03.
 func parseDateWord(word string, today time.Time) string {
@@ -232,7 +232,7 @@ func today() time.Time {
 	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.Local)
 }
 
-// inScope: a task belongs to a deck view: scope is a list name (its tasks)
+// inScope: a task belongs to a task list view: scope is a list name (its tasks)
 // or "" for every task.
 func inScope(t *Task, scope string) bool {
 	return scope == "" || taskTagsLower(t)[scope]

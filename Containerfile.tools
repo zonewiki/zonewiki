@@ -2,13 +2,13 @@
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Go,
 # which builds and tests the server, the tests' Python packages
 # (tests/requirements.txt: pytest, pytest-xdist, which runs them in
-# parallel), Node for the deck-core tests, and gitleaks for the secret scan.
+# parallel), Node for the tasks-core tests, and gitleaks for the secret scan.
 # Test-only — the app image (Containerfile) stays browser-free. The repo is
 # bind-mounted at /repo at run time, so the image only needs rebuilding when
 # dependencies change.
 #
 #   ./run.sh test           # build (cached), go vet + go test, the API tests
-#   ./run.sh e2e            # the browser tests + deck-core
+#   ./run.sh e2e            # the browser tests + tasks-core
 #   ./run.sh leaks          # scan the git history for secrets
 #
 # Keep the playwright pin (tests/requirements.txt) in lockstep with the image
@@ -16,7 +16,7 @@
 # the matching image.
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
-# Node runs tests/test_deck_core.py (the pure deck logic in deck-core.js);
+# Node runs tests/test_tasks_core.py (the pure tasks logic in tasks-core.js);
 # curl fetches gitleaks below; pngquant compresses the README's screenshots
 # (docs/screenshots/make_screenshots.py).
 RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates pngquant \
@@ -63,4 +63,4 @@ COPY tests/requirements.txt /tmp/requirements.txt
 RUN pip install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
 
 WORKDIR /repo
-CMD ["python3", "-m", "pytest", "tests/e2e", "tests/test_deck_core.py", "-v"]
+CMD ["python3", "-m", "pytest", "tests/e2e", "tests/test_tasks_core.py", "-v"]
