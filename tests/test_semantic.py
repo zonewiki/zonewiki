@@ -188,3 +188,46 @@ class TestRelatedWithUsers:
         client.post("/logout", headers=HOST)
         client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
         assert len(_related(client, "golf")) == 5
+
+
+class TestSearchWithUsers:
+    """Alice's private page and task are the closest in meaning to Bob's query
+    (no word in common, only the model links them). Every way to search by
+    meaning leaves them out for Bob, and shows them to Alice."""
+
+    @pytest.fixture()
+    def alice_bob(self, client, semantic, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
+        write_page(wiki_dir, "private/alice/policy",
+                   "# Policy\n\nInsurance papers: the policy renewal is due, rent and savings stay.\n")
+        semantic.sync()
+
+    def _mcp(self, client, tool, token, **args):
+        resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {token}"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+        return resp.get_json()["result"]["content"][0]["text"]
+
+    def test_search_wiki_by_meaning(self, client, alice_bob):
+        assert "private/alice/policy" not in self._mcp(client, "search_wiki", "bob-token", query="budget")
+        assert "private/alice/policy" in self._mcp(client, "search_wiki", "alice-token", query="budget")
+
+    def test_the_search_route_by_meaning(self, client, alice_bob):
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        assert "private/alice/policy" not in str(_search(client, "budget"))
+        client.post("/logout", headers=HOST)
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert "private/alice/policy" in str(_search(client, "budget"))
+
+    def test_tasks_by_meaning(self, client, semantic, alice_bob):
+        self._mcp(client, "create_task", "alice-token", title="Renew insurance", private=True)
+        semantic.sync()
+        assert "Renew insurance" in self._mcp(client, "search_tasks", "alice-token", query="budget")
+        assert "Renew insurance" not in self._mcp(client, "search_tasks", "bob-token", query="budget")
+
+    def test_a_new_page_is_not_compared_with_her_private_pages(self, client, alice_bob):
+        text = self._mcp(client, "write_page", "bob-token", slug="costs",
+                         content="# Costs\n\n" + "Budget: rent and savings, insurance every month. " * 4)
+        assert "private/alice" not in text
+        text = self._mcp(client, "write_page", "alice-token", slug="private/alice/costs",
+                         content="# Costs\n\n" + "Budget: rent and savings, insurance every month. " * 4)
+        assert "private/alice/policy" in text   # the note exists, Bob's just had nothing to name
