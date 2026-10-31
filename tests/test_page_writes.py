@@ -116,6 +116,28 @@ class TestTextNotInGit:
         assert stat.startswith("R100")
 
 
+    def test_move_a_note_into_the_wiki(self, client, wiki, door):
+        note = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        write_page(wiki, note, "# Idea\n\nOnly on disk.\n")
+        if door == "browser":
+            client.post(f"/promote/{note}", data={"name": "idea"}, headers=HOST)
+        else:
+            mcp(client, "file_note", slug=note, name="idea")
+        assert (wiki / "idea.md").read_text() == "# Idea\n\nOnly on disk.\n"
+        assert subjects(wiki)[1] == f"Save {note}"
+
+    def test_append_a_note_to_a_page(self, client, wiki, door):
+        commit(wiki, "plans", "# Plans\n")
+        note = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        write_page(wiki, note, "# Idea\n\nOnly on disk.\n")
+        if door == "browser":
+            client.post(f"/append/{note}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
+        else:
+            mcp(client, "file_note", slug=note, page="plans", heading="Idea")
+        assert "Only on disk." in (wiki / "plans.md").read_text()
+        assert subjects(wiki)[1] == f"Save {note}"
+
+
 @pytest.mark.parametrize("door", DOORS)
 class TestRefused:
     """What neither door does; the wiki is left as it was."""

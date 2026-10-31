@@ -653,15 +653,8 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 // (400 for another page, 404 for none).
 func quicknoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 	slug := r.PathValue("slug")
-	if refuseWrite(w, r, slug) {
-		return "", false
-	}
-	if !isQuicknote(slug) {
-		badRequestPage(w)
-		return "", false
-	}
-	if p := safePath(slug); p == "" || !exists(p) {
-		http.NotFound(w, r)
+	if _, err := notePath(userOf(r), slug); err != nil {
+		pageFailed(w, r, err)
 		return "", false
 	}
 	return slug, true
@@ -697,7 +690,7 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	newSlug, err := moveQuicknote(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
+	newSlug, _, err := moveQuicknote(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
 	if err != nil {
 		quicknoteFailed(w, r, back, err)
 		return
@@ -738,7 +731,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back+quote("There is no page “"+raw+"”"), http.StatusFound)
 		return
 	}
-	anchor, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
+	anchor, _, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
 	if err != nil {
 		quicknoteFailed(w, r, back, err)
 		return

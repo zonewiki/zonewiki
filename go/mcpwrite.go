@@ -197,11 +197,12 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
 		}
-		pending := pendingNote(slug, keepPending(path, slug)) + pendingNote(target, keepPending(safePath(target), target))
-		anchor, err := refused(appendQuicknote(user, slug, target, heading, suffix))
+		pending := pendingNote(target, keepPending(safePath(target), target))
+		anchor, kept, err := appendQuicknote(user, slug, target, heading, suffix)
 		if err != nil {
-			return "", err
+			return "", toolRefusal(err)
 		}
+		pending = pendingNote(slug, kept) + pending
 		return "Appended note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
 			"the note; links to it now point at that section.\nurl: " + base + pathURL("page", target) + "#" + anchor +
 			"\nfile: " + hostFile(target) + pending, nil
@@ -223,11 +224,11 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 			return "", err
 		}
 	}
-	pending := pendingNote(slug, keepPending(path, slug))
-	moved, err := refused(moveQuicknote(user, slug, folder, name, keepDate, suffix))
+	moved, kept, err := moveQuicknote(user, slug, folder, name, keepDate, suffix)
 	if err != nil {
-		return "", err
+		return "", toolRefusal(err)
 	}
+	pending := pendingNote(slug, kept)
 	return "Moved note " + slug + " into the wiki as " + moved + "; links to it were updated. " +
 		"No page links to it yet: add a link where it belongs (edit_page).\n" + pageInfo(moved, base) + pending, nil
 }

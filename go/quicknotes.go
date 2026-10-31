@@ -67,23 +67,24 @@ func createQuicknote(user, title string, content *string, suffix string) (string
 
 // notePath: the file of a note user may change.
 func notePath(user, slug string) (string, error) {
-	p := ""
-	if isQuicknote(slug) && canWrite(user, slug) {
-		p = safePath(slug)
+	p, err := writablePage(user, slug)
+	if err != nil {
+		return "", refuseAs(refusedNotFound, "There is no note “"+slug+"”")
 	}
-	if p == "" || !exists(p) {
-		return "", refuse("There is no note “" + slug + "”")
+	if !isQuicknote(slug) {
+		return "", refuse(slug + " is not a note")
 	}
 	return p, nil
 }
 
 // moveQuicknote moves a note into the wiki (Move to wiki): a rename
-// to folder/name, links following, with its own commit message. Returns
-// the new slug.
-func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string) (string, error) {
+// to folder/name, links following, with its own commit message, what the
+// note held uncommitted committed first (keepPending). Returns the new
+// slug, and whether it kept any.
+func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string) (string, bool, error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	date := ""
 	if keepDate {
@@ -91,41 +92,33 @@ func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string
 	}
 	newSlug := promotedSlug(folder, name, date)
 	if newSlug == "" {
-		return "", refuse("Give the page a name")
+		return "", false, refuse("Give the page a name")
 	}
 	if isQuicknote(newSlug) {
-		return "", refuse("That name would still be a note")
-	}
-	newPath := safePath(newSlug)
-	if newPath == "" {
-		return "", refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
-	}
-	if !canWrite(user, newSlug) {
-		return "", refuse("“" + newSlug + "”: that folder is another user's")
-	}
-	if exists(newPath) {
-		return "", refuse("A page named “" + newSlug + "” already exists")
+		return "", false, refuse("That name would still be a note")
 	}
 	// A shared note (one from before users) can't be taken into a private folder.
-	if msg := refuseMakingPrivate(map[string]string{slug: newSlug}); msg != "" {
-		return "", refuse(msg)
+	if err := checkTarget(user, slug, newSlug); err != nil {
+		return "", false, err
 	}
-	if _, err := movePage(user, oldPath, newPath, slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
-		return "", err
+	kept := keepPending(oldPath, slug)
+	if _, err := movePage(user, oldPath, safePath(newSlug), slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
+		return "", kept, err
 	}
-	return newSlug, nil
+	return newSlug, kept, nil
 }
 
 var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 
 // appendQuicknote appends a note to the page target as a `## heading`
 // section (its tags into the page's frontmatter) and deletes the note;
-// links to the note point at that section, all in one commit. Returns the
-// section's anchor.
-func appendQuicknote(user, slug, target, heading, suffix string) (string, error) {
+// links to the note point at that section, all in one commit; what the
+// note held uncommitted is committed first (keepPending). Returns the
+// section's anchor, and whether it kept any.
+func appendQuicknote(user, slug, target, heading, suffix string) (anchor string, kept bool, err error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	commitOthersDrafts(user) // the page's, and those whose links to the note follow
 	// [ ] | would break the wikilinks that now point at the section.
@@ -136,40 +129,41 @@ func appendQuicknote(user, slug, target, heading, suffix string) (string, error)
 	}
 	if targetPath == "" || !exists(targetPath) {
 		if target == "" {
-			return "", refuse("Choose a page")
+			return "", false, refuse("Choose a page")
 		}
-		return "", refuse("There is no page “" + target + "”")
+		return "", false, refuse("There is no page “" + target + "”")
 	}
 	if target == slug {
-		return "", refuse("Choose another page than this note")
+		return "", false, refuse("Choose another page than this note")
 	}
 	if heading == "" {
-		return "", refuse("Give the section a heading")
+		return "", false, refuse("Give the section a heading")
 	}
 	pageText, err := readText(targetPath)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	anchor := sectionAnchor(heading)
+	anchor = sectionAnchor(heading)
 	masked, _ := maskCode(pageText)
 	for _, m := range headingTextRE.FindAllStringSubmatch(masked, -1) {
 		if sectionAnchor(m[1]) == anchor {
-			return "", refuse("“" + target + "” already has a section “" + heading + "”")
+			return "", false, refuse("“" + target + "” already has a section “" + heading + "”")
 		}
 	}
+	kept = keepPending(oldPath, slug)
 	note, err := readText(oldPath)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	section, tags := noteAsSection(note, heading)
 	pageText = addFrontmatterTags(pageText, tags)
 	if err := writeText(targetPath, trimNewlines(pageText)+"\n\n"+section); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", err
+		return "", false, err
 	}
 	refs := updateReferences(slug, target, heading)
 	gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)
-	return anchor, nil
+	return anchor, kept, nil
 }
