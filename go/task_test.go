@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// A task as the Python Leaf wrote it (its key order, 1.0, a key it no
-// longer knows, a field missing) reads into a Task and is written in Leaf's
+// A task as the Python Zone wrote it (its key order, 1.0, a key it no
+// longer knows, a field missing) reads into a Task and is written in Zone's
 // order, the unknown keys last (A–Z) and kept; written again, nothing
 // changes.
 func TestTaskFileRoundTrip(t *testing.T) {

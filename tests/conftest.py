@@ -1,5 +1,5 @@
 """Shared setup: a fresh temporary wiki for each test (wiki_dir,
-git_wiki_dir) and Leaf's server on it (client: tests/goserver.py). The
+git_wiki_dir) and Zone's server on it (client: tests/goserver.py). The
 browser tests (tests/e2e) build on git_wiki_dir too."""
 
 import hashlib
@@ -35,7 +35,7 @@ def wiki_dir(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
-    """wiki_dir as a git repository, as Leaf sets one up when it starts."""
+    """wiki_dir as a git repository, as Zone sets one up when it starts."""
     monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "")
     monkeypatch.setattr(settings, "GIT_ENABLED", True)
     git_setup(tmp_path_factory)
@@ -43,7 +43,7 @@ def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
 
 
 def git_setup(tmp_path_factory) -> None:
-    """What Leaf does to the wiki when it starts (git init, the first
+    """What Zone does to the wiki when it starts (git init, the first
     commit, the deck's files): a server started and stopped."""
     from tests.goserver import _flags, _settings
     GoServer(_settings(), tmp_path_factory.mktemp("go") / "setup.log", flags=_flags()).stop()
@@ -93,7 +93,7 @@ def rendered(client, wiki_dir: Path, content: str, slug: str = "render-test") ->
 
 
 def preview(client, text: str) -> str:
-    """Markdown as Leaf renders it (the editor's preview: no page around it)."""
+    """Markdown as Zone renders it (the editor's preview: no page around it)."""
     return client.post("/api/preview", data=text.encode("utf-8"), headers=HOST).get_data(as_text=True)
 
 

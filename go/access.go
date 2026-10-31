@@ -66,7 +66,7 @@ func ownPrivate(user, slug string) bool {
 }
 
 // inScratch: slug is a note in user's Scratch: any scratch note without
-// users or for Leaf itself (user ""), with users only one in their own folder
+// users or for Zone itself (user ""), with users only one in their own folder
 // (a note from before users, at the top level, is a page like any other).
 func inScratch(user, slug string) bool {
 	if !isScratch(slug) {
@@ -76,7 +76,7 @@ func inScratch(user, slug string) bool {
 }
 
 // privateFolder: user's private folder ("private/alice"), "" without
-// users (or for Leaf itself, which has no user).
+// users (or for Zone itself, which has no user).
 func privateFolder(user string) string {
 	if settings().Users == nil || user == "" {
 		return ""
@@ -87,8 +87,8 @@ func privateFolder(user string) string {
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, anything
 // else in private/ (a user's uploads and deck in private/<user>/_assets/
-// and _deck/ too) like a page there. Leaf's own files in .leaf/ (the
-// settings file, with its password hashes) no one sees in Leaf.
+// and _deck/ too) like a page there. Zone's own files in .leaf/ (the
+// settings file, with its password hashes) no one sees in Zone.
 func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, ".leaf/") {
 		return false

@@ -3,7 +3,7 @@ private page, upload, draft and deck tasks in the wiki, bob, signed in or
 through his MCP token, must not see a word of them anywhere, nor change
 them.
 
-Every route Leaf registers is either probed here or listed as exempt
+Every route Zone registers is either probed here or listed as exempt
 (test_every_route_is_covered), and every MCP tool
 (test_every_tool_is_covered), so a new one gets checked too."""
 
@@ -814,7 +814,7 @@ def test_a_rename_leaves_her_saved_draft_to_her(client, wiki):
 
 
 def test_a_rename_leaves_a_draft_leaf_doesnt_know_to_its_owner(bob, wiki):
-    """The same for text on disk that Leaf never saw (written by hand, or before a
+    """The same for text on disk that Zone never saw (written by hand, or before a
     restart): in a private folder the owner is known from the path."""
     (wiki / f"{DIARY}.md").write_text(DRAFT)
     log, stat = _rename_as_bob(bob, wiki)

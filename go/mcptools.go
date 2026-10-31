@@ -205,7 +205,7 @@ func existingPage(args jsonObj, name, user string) (string, string, error) {
 
 // newSlug: the slug a new page gets from a name or slug ("Tickets/BUG
 // 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
-// in a folder Leaf skips (_assets, _deck, .git …), or in private/ outside
+// in a folder Zone skips (_assets, _deck, .git …), or in private/ outside
 // user's own folder.
 func newSlug(raw, user string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
@@ -363,7 +363,7 @@ func commitMsg(action string, args jsonObj) (string, error) {
 // savePending: before a write, commit what the page holds that isn't
 // committed yet (the browser editor auto-saves without committing; or
 // edits on disk), as "Save <slug>" by whoever wrote it (commitAuthorOf;
-// unknown: Leaf). Else that text would end up in the model's commit, or
+// unknown: Zone). Else that text would end up in the model's commit, or
 // be lost to an overwrite or a delete. Returns a note for the model: the
 // user may have the page open.
 func savePending(path, slug string) string {
@@ -1035,7 +1035,7 @@ func findTask(raw, user string) (*Task, error) {
 }
 
 // dateArg: a date argument, YYYY-MM-DD or a word quick-add knows
-// ("tomorrow", "fri", "+3d"), resolved with Leaf's today; "" for none.
+// ("tomorrow", "fri", "+3d"), resolved with Zone's today; "" for none.
 func dateArg(args jsonObj, name string) (string, error) {
 	s, err := strArg(args, name, false)
 	if err != nil || strings.TrimSpace(s) == "" {
@@ -1742,7 +1742,7 @@ func fileLabel(fp string) string {
 	return strings.TrimSuffix(fp, ".md")
 }
 
-func noGit() error { return toolErr("There is no history: git isn't installed where Leaf runs.") }
+func noGit() error { return toolErr("There is no history: git isn't installed where Zone runs.") }
 
 func history(args jsonObj, base, user string) (string, error) {
 	if !cfg.GitEnabled {
@@ -1807,7 +1807,7 @@ func history(args jsonObj, base, user string) (string, error) {
 		"what it changed:\n" + strings.Join(rows, "\n"), nil
 }
 
-// byAuthor: " (by alice)" after a commit's message; nothing for Leaf's own.
+// byAuthor: " (by alice)" after a commit's message; nothing for Zone's own.
 func byAuthor(author string) string {
 	if author == "" {
 		return ""
@@ -1933,7 +1933,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 		"tag | pages | open tasks | done tasks:\n" + strings.Join(lines, "\n"), nil
 }
 
-// leafHelp: Leaf's documentation (manual.go), passages for a query, a doc
+// leafHelp: Zone's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
 func leafHelp(args jsonObj, base, user string) (string, error) {
 	var query, topic, heading string
@@ -1950,7 +1950,7 @@ func leafHelp(args jsonObj, base, user string) (string, error) {
 	topic = strings.TrimSuffix(strings.ToLower(topic), ".md")
 	docs := manualTopics()
 	if len(docs) == 0 {
-		return "", toolErr("Leaf's documentation isn't installed with this server.")
+		return "", toolErr("Zone's documentation isn't installed with this server.")
 	}
 	var names []string
 	paths := map[string]string{}
@@ -1987,7 +1987,7 @@ func leafHelp(args jsonObj, base, user string) (string, error) {
 		}
 		hits := manualFind(query, limit)
 		if len(hits) == 0 {
-			return "Nothing in Leaf's documentation matches. Try other words, or leave out query for the list of topics.", nil
+			return "Nothing in Zone's documentation matches. Try other words, or leave out query for the list of topics.", nil
 		}
 		var out []string
 		for i, d := range hits {
@@ -1999,7 +1999,7 @@ func leafHelp(args jsonObj, base, user string) (string, error) {
 		}
 		return strings.Join(out, "\n\n---\n\n") + "\n\nThe whole section: leaf_help with its topic and heading.", nil
 	}
-	out := []string{"Leaf's documentation: the README (what Leaf is, its features, setup) and the spec, " +
+	out := []string{"Zone's documentation: the README (what Zone is, its features, setup) and the spec, " +
 		"one doc per area. Read one with topic, a section with topic and heading."}
 	for _, d := range docs {
 		text, _ := readText(d.path)
@@ -2082,7 +2082,7 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 }
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
-// its answer use base-url (the settings file), else the address the client reached Leaf at.
+// its answer use base-url (the settings file), else the address the client reached Zone at.
 func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	base := settings().BaseURL
 	if base == "" {

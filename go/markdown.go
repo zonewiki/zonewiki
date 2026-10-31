@@ -1,6 +1,6 @@
-// Markdown to HTML on goldmark (the Python Leaf used markdown-it). Not a
-// copy of markdown-it's HTML: goldmark's own output where Leaf doesn't care
-// (footnotes, deflists, entities, URL escaping), Leaf's rules where a
+// Markdown to HTML on goldmark (the Python Zone used markdown-it). Not a
+// copy of markdown-it's HTML: goldmark's own output where Zone doesn't care
+// (footnotes, deflists, entities, URL escaping), Zone's rules where a
 // feature depends on them: checkboxes the page can tick (counted as mdtext
 // counts them), callouts, heading ids that [[Page#Section]] points at, ✎
 // and ☑ N per section, image width and img-block, external links in a new
@@ -227,7 +227,7 @@ func unsafeLink(href []byte) bool {
 }
 
 // external: an http(s) link to another site opens in a new tab; one to the
-// host the request came in on (Leaf itself) does not. Not url.Parse: it
+// host the request came in on (Zone itself) does not. Not url.Parse: it
 // refuses some URLs a browser follows (a ` in the host, say).
 func (t *leafTransformer) external(n ast.Node, href []byte) {
 	scheme, rest, _ := strings.Cut(string(href), ":")

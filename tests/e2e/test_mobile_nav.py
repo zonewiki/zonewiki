@@ -538,7 +538,7 @@ def test_no_action_buttons_in_desktop_editor(page, wiki):
 # ── Status badges on phones ──────────────────────────────────────────────────
 
 def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
-    # Regression: the fixed badges sat on top of "Leaf ›" on narrow screens.
+    # Regression: the fixed badges sat on top of "Zone ›" on narrow screens.
     wiki.write("draft", "# Draft\n\nNot committed yet.\n")   # → uncommitted badge
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/draft")

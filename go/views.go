@@ -1,7 +1,7 @@
-// Leaf's views: the page shell every view shares, the
+// Zone's views: the page shell every view shares, the
 // breadcrumb and module switcher, menus and dialogs, side columns, around
 // each view's template (templates/, html/template, auto-escaped). A value
-// that is HTML Leaf built itself is a template.HTML; nothing else is.
+// that is HTML Zone built itself is a template.HTML; nothing else is.
 package main
 
 import (
@@ -109,7 +109,7 @@ func diffLines(diff string) []diffLine {
 	return lines
 }
 
-// Leaf's modules: the wiki, the deck, with users your Private home, and the
+// Zone's modules: the wiki, the deck, with users your Private home, and the
 // scratch notes. Every view names the one it belongs to (<body data-module>:
 // "private" for a page in your private folder); the matching links are
 // aria-current, and js/actions.js makes "New" create that module's kind.

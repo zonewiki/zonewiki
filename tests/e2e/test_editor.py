@@ -77,7 +77,7 @@ def test_navigating_away_saves_pending_edit(page, wiki):
 
 @pytest.fixture()
 def slow_saves(browser, base_url, wiki):
-    """A page that reaches Leaf through a proxy: auto-saves write the file at
+    """A page that reaches Zone through a proxy: auto-saves write the file at
     once, but their answer comes 2.5 seconds later, as over a slow
     connection."""
     upstream = base_url.split("//", 1)[1]

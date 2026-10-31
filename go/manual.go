@@ -1,6 +1,6 @@
-// Leaf's own documentation, for the MCP tool leaf_help: the
+// Zone's own documentation, for the MCP tool leaf_help: the
 // README and the spec (docs/spec/*.md), searched by section with BM25, so
-// an assistant answers questions about Leaf itself (how to rename a deck's
+// an assistant answers questions about Zone itself (how to rename a deck's
 // tabs, a setting, the query syntax) from the docs rather than from guesses.
 package main
 
@@ -17,7 +17,7 @@ import (
 // image alike.
 var docsDir string
 
-// How Leaf is tested: nothing a user asks about.
+// How Zone is tested: nothing a user asks about.
 var manualSkip = map[string]bool{"testing": true}
 
 // manualChunkChars: a search hit's size. Long sections are split at

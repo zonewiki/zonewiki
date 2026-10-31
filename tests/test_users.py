@@ -527,11 +527,11 @@ class TestAuthors:
         assert by["Create deck task"] == "alice"
         assert [a for a, s in log if s.startswith("Create from-mcp")] == ["alice"]   # alice's token
         assert [a for a, s in log if s.endswith("_idea")] == ["alice"]               # the scratch note
-        assert log[-1][0] == "Leaf"                                                  # Leaf's start-up commit
+        assert log[-1][0] == "Zone"                                                  # Zone's start-up commit
 
     def test_without_users_leaf_is_the_author(self, client, git_wiki_dir):
         client.post("/new", data={"slug": "plans"}, headers=HOST)
-        assert authors(git_wiki_dir)[0] == ("Leaf", "Create plans")
+        assert authors(git_wiki_dir)[0] == ("Zone", "Create plans")
 
     def test_history_names_the_author(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")

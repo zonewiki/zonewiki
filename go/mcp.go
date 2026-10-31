@@ -23,13 +23,13 @@ var protocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-
 // about 2 KB, so what every session needs comes first and the tools' own
 // descriptions carry the details. The wiki's guide follows them
 // (instructionsWithGuide).
-const mcpInstructions = "Leaf is the user's personal wiki: their notes in markdown, plus the Deck, " +
+const mcpInstructions = "Zone is the user's personal wiki: their notes in markdown, plus the Deck, " +
 	"their task list. Use search_wiki when an answer may be in what the user " +
 	"wrote down (it finds tasks too, and matches meaning as well as words, so " +
 	"phrase queries the way the notes might), then read_page for a page's full " +
 	"text. search_tasks filters tasks by tag and status; grep_wiki finds every " +
 	"occurrence of exact text. Cite pages and tasks by their URL. For questions " +
-	"about Leaf itself, call leaf_help.\n\n" +
+	"about Zone itself, call leaf_help.\n\n" +
 	"When you research something elsewhere (an issue tracker, chat, mail, code, " +
 	"the web) and find a fact that a wiki page on the topic lacks or " +
 	"contradicts, offer to add it: name the page and each fact in one line, once " +
@@ -149,7 +149,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 		if v, _ := as[string](params["protocolVersion"]); slices.Contains(protocolVersions, v) {
 			res.ProtocolVersion = v
 		}
-		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "leaf", "Leaf wiki", version
+		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "leaf", "Zone wiki", version
 		res.Instructions = instructionsWithGuide()
 		return rpcResult(id, res), nil
 	case "ping":

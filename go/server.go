@@ -1,6 +1,6 @@
-// Leaf's web server: one process, its request checks and routes.
+// Zone's web server: one process, its request checks and routes.
 // Run: LEAF_DATA=~/leaf leaf [-addr :5000] [-public dir]. Also: leaf eval
-// measures retrieval (eval.go), leaf health asks a running Leaf whether
+// measures retrieval (eval.go), leaf health asks a running Zone whether
 // it answers (the container's healthcheck), leaf user and leaf config edit
 // and check the settings file (commands.go).
 package main
@@ -28,7 +28,7 @@ import (
 var publicDir string
 
 func logf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Leaf: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "Zone: "+format+"\n", args...)
 }
 
 func main() {
@@ -98,7 +98,7 @@ func main() {
 		ReadHeaderTimeout: 60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	fmt.Printf("Leaf %s (%s) listening on %s\n", version, cfg.Build, ln.Addr())
+	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, ln.Addr())
 	// One process: the deck's lock, the caches, the login throttle and the
 	// semantic-search worker live in its memory. At most 100 connections,
 	// those beyond the limit wait.
@@ -107,28 +107,28 @@ func main() {
 	}
 }
 
-// fatal says what stops Leaf from starting (or serving), and exits.
+// fatal says what stops Zone from starting (or serving), and exits.
 func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "Leaf:", err)
+	fmt.Fprintln(os.Stderr, "Zone:", err)
 	os.Exit(1)
 }
 
-// health: whether Leaf answers at url within 5 seconds, its settings file
+// health: whether Zone answers at url within 5 seconds, its settings file
 // taken (0), or not (1), for the container's healthcheck (compose.yaml),
 // which has no curl.
 func health(url string) int {
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Leaf:", err)
+		fmt.Fprintln(os.Stderr, "Zone:", err)
 		return 1
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		var answer struct{ Error string }
 		if json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&answer) == nil && answer.Error != "" {
-			fmt.Fprintln(os.Stderr, "Leaf:", answer.Error)
+			fmt.Fprintln(os.Stderr, "Zone:", answer.Error)
 		} else {
-			fmt.Fprintln(os.Stderr, "Leaf:", resp.Status)
+			fmt.Fprintln(os.Stderr, "Zone:", resp.Status)
 		}
 		return 1
 	}
@@ -185,15 +185,15 @@ func newHandler() http.Handler {
 	return checks(mux)
 }
 
-// apiHealth: Leaf answers, and took its settings file's last change (503
-// with the error if not: Leaf runs on the settings from before), for leaf
+// apiHealth: Zone answers, and took its settings file's last change (503
+// with the error if not: Zone runs on the settings from before), for leaf
 // health. It needs no login, and the error may name users: the error
 // itself only to whoever may read the wiki, everyone else is pointed to
 // the log.
 func apiHealth(w http.ResponseWriter, r *http.Request) {
 	if msg := settingsError(); msg != "" {
 		if _, ok, _ := signedIn(r); settings().authOn() && !ok {
-			msg = configName + " has an error, or a change Leaf doesn't take while it runs: see Leaf's log " +
+			msg = configName + " has an error, or a change Zone doesn't take while it runs: see Zone's log " +
 				"(./run.sh logs), or run leaf config check"
 		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})
@@ -389,7 +389,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, dir, name, disposition st
 }
 
 // Uploads are shown inline only when the browser treats them as passive
-// media. Anything else (HTML, JS, …) would run with Leaf's origin, and so
+// media. Anything else (HTML, JS, …) would run with Zone's origin, and so
 // could read and rewrite the wiki, so it is served as a download. SVG stays
 // inline for <img> tags but gets a sandbox CSP, which disables its scripts
 // when the file is opened directly.
@@ -447,7 +447,7 @@ func serveUploadFile(w http.ResponseWriter, r *http.Request, dir, filename strin
 	} else {
 		// A download keeps its name but not its type: an uploaded .js served
 		// as text/javascript would run from <script src=…> (a download
-		// doesn't stop that), and script-src 'self' trusts Leaf's own origin.
+		// doesn't stop that), and script-src 'self' trusts Zone's own origin.
 		w.Header().Set("Content-Type", "application/octet-stream")
 		disposition = "attachment"
 	}

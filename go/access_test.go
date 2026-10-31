@@ -85,7 +85,7 @@ func TestHiddenPageAndSharing(t *testing.T) {
 		t.Error("sharing")
 	}
 	if hiddenPage(nil, "private/bob/x") {
-		t.Error("no request (Leaf itself) sees everything")
+		t.Error("no request (Zone itself) sees everything")
 	}
 }
 
@@ -125,7 +125,7 @@ func TestInScratch(t *testing.T) {
 	}
 	withUsers(t, "alice")
 	if !inScratch("alice", mine) || inScratch("alice", old) || inScratch("alice", theirs) || !inScratch("", old) {
-		t.Error("with users: only the user's own; Leaf itself sees all")
+		t.Error("with users: only the user's own; Zone itself sees all")
 	}
 }
 

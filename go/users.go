@@ -1,6 +1,6 @@
 // Users (docs/spec/users.md): several people on one wiki, each signing in
 // with a password of their own and owning a private folder: the settings
-// file's [user …] sections (configfile.go). Without them Leaf has no users:
+// file's [user …] sections (configfile.go). Without them Zone has no users:
 // one password (or none) and one MCP token, everything shared.
 package main
 
@@ -116,7 +116,7 @@ func askPassword(stdin io.Reader, stderr io.Writer) (string, bool) {
 }
 
 // echoOff stops a terminal on stdin from showing what is typed, with stty
-// (no terminal package: Leaf keeps to its few dependencies); the returned
+// (no terminal package: Zone keeps to its few dependencies); the returned
 // function turns it back on. Not a terminal (a pipe, run.sh's container):
 // nothing to do.
 func echoOff() func() {

@@ -1,20 +1,20 @@
 # Rendering
 
-Part of Leaf's spec (see `AGENTS.md` for the index).
+Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Rendering
 
-- Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Leaf's own script files (Scripts in pages don't run, `docs/spec/security.md`).
+- Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`).
 - `viewPage` (`go/routes.go`) reads `<slug>.md`, `renderMd()` (`go/render.go`) converts it to HTML with goldmark (`go/markdown.go`), and `page(…, "view.html", …)` renders it into the page (see Templates). A path with a slug in it is built with `pathURL()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/scratch modals. There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
 - **Deck task notes and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[deck]]`, ✎ per section, heading ids). See Notes in `docs/spec/deck.md`.
-- The shared shell renders the product brand as `Leaf` (page titles, the switcher's accessible name), with a small green inline SVG leaf logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
+- The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG Z logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
 ### Autolinks and callouts
 
 - **Bare URLs become links** (goldmark's linkify, with `urlRE`, which needs no dot in the host, so `http://localhost:5000/…` and `http://nas:5000` are links): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link. Code spans, fenced code and existing links are untouched. It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
-- **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`leafTransformer.external`, on the parsed document, so autolinks too); `deck.js` does the same for links in task titles and notes (`extAttrs`). Leaf's own links, `mailto:` and a full URL to Leaf itself stay in the tab.
+- **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`leafTransformer.external`, on the parsed document, so autolinks too); `deck.js` does the same for links in task titles and notes (`extAttrs`). Zone's own links, `mailto:` and a full URL to Zone itself stay in the tab.
 - **Callouts** (GitHub/Obsidian syntax, `alertTransformer`): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css` (GitHub colours, a `--alert` variable per kind, dark variants). Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 
 ### Sortable tables
@@ -23,7 +23,7 @@ Clicking a column header of a table in a page's article sorts its rows: ascendin
 
 ### Templates
 
-Every view is a Go `html/template` in `go/templates` (embedded in the binary) that fills the blocks of `layout.html` (head, the dialogs the client code opens, the status badges, top actions and action bar), rendered by `page(w, rq, status, template, title, …)` (`go/views.go`). Templates escape by context; their functions (`funcs`) include `url` (`pathURL`) and `dict` (a template's arguments). HTML that Leaf built itself is passed as `template.HTML` (rendered markdown, an excerpt with `<mark>`s), anything else is escaped. Reusable parts are named templates in `templates/partials/` (`page.html`: the ⋯ menu and dialogs, link sections, side columns, meta row; `history.html`; `modules.html`; `icons.html`), which Go code renders with `macro(name, data)` (the breadcrumb, the deck embed). Markdown-level fragments (task chips, ☑ chips) stay in `go/render.go`.
+Every view is a Go `html/template` in `go/templates` (embedded in the binary) that fills the blocks of `layout.html` (head, the dialogs the client code opens, the status badges, top actions and action bar), rendered by `page(w, rq, status, template, title, …)` (`go/views.go`). Templates escape by context; their functions (`funcs`) include `url` (`pathURL`) and `dict` (a template's arguments). HTML that Zone built itself is passed as `template.HTML` (rendered markdown, an excerpt with `<mark>`s), anything else is escaped. Reusable parts are named templates in `templates/partials/` (`page.html`: the ⋯ menu and dialogs, link sections, side columns, meta row; `history.html`; `modules.html`; `icons.html`), which Go code renders with `macro(name, data)` (the breadcrumb, the deck embed). Markdown-level fragments (task chips, ☑ chips) stay in `go/render.go`.
 
 ### Client code
 
@@ -48,7 +48,7 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 
 ### Section headings and HTML post-processing
 
-Leaf's additions to goldmark's output work on the parsed document, not by regexes over the HTML (`go/markdown.go`): the `heading` render function wraps each `##`/`###` in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view; numbered as `splitSections` counts sections), and adds the `☑ N` chip from `SectionTasks`; `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `toggleNthCheckbox`) into chips; `leafTransformer` handles image widths and `img-block` paragraphs; `taskTransformer` gives exactly the lines `toggleNthCheckbox` counts a checkbox.
+Zone's additions to goldmark's output work on the parsed document, not by regexes over the HTML (`go/markdown.go`): the `heading` render function wraps each `##`/`###` in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view; numbered as `splitSections` counts sections), and adds the `☑ N` chip from `SectionTasks`; `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `toggleNthCheckbox`) into chips; `leafTransformer` handles image widths and `img-block` paragraphs; `taskTransformer` gives exactly the lines `toggleNthCheckbox` counts a checkbox.
 
 ### Page header
 
@@ -118,10 +118,10 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 - Git is installed in the container image. On startup, `gitSetup()` initializes a bare repo in `LEAF_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
 - Every write operation (Done/save, create, rename, delete, restore, upload) calls `gitCommit()` (a rename or move through `movePage()`, with the pages and deck files whose links changed) to stage and commit the change. **Auto-save (`/api/save`) is the exception** — it writes the file to disk but does not create a git commit. Assets are tracked like pages — a `git push` backs up everything.
 - `cfg.GitEnabled` (git on the `PATH`) — all git paths are no-ops when git is absent (graceful degradation).
-- git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (`gitEnv`, also used by the tests' own git calls): git 2.47+ starts its automatic maintenance after a commit as a detached process, which nobody reaped with Leaf as the container's PID 1, so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions). Not detached, git reaps its own children; `run.sh`'s `--init` covers anything else.
+- git runs with `maintenance.autoDetach=false` and `gc.autoDetach=false` (`gitEnv`, also used by the tests' own git calls): git 2.47+ starts its automatic maintenance after a commit as a detached process, which nobody reaped with Zone as the container's PID 1, so every commit left a zombie until the PID limit (2048) stopped everything (it also crashed test sessions). Not detached, git reaps its own children; `run.sh`'s `--init` covers anything else.
 - SHA values are validated with `shaRE` (`^[0-9a-f]{7,40}$`) before use.
 - History is in the page view's ⋯ menu (and the breadcrumb of a revision or diff links back to it).
-- **`/history/<slug>`** lists the page's saved versions, newest first, one row each (`.hist-list`): date and time, what the save did in words (`versionLabel`: Leaf's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported; other messages as written) and the lines added/removed (`--numstat`). The row opens that version; the page as it is now is marked **Current** and opens the page itself (`isCurrent`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead). **Changes** opens the diff.
+- **`/history/<slug>`** lists the page's saved versions, newest first, one row each (`.hist-list`): date and time, what the save did in words (`versionLabel`: Zone's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported; other messages as written) and the lines added/removed (`--numstat`). The row opens that version; the page as it is now is marked **Current** and opens the page itself (`isCurrent`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead). **Changes** opens the diff.
 - **`/revision/<slug>/<sha>`** shows that version with a bar (`.version-bar`) saying where it stands ("The version of 2026-10-08 14:32 · 2 versions back", "The current version", or a deleted page's last version), **What this save changed** (the diff), **Restore this version** (a plain button that asks first: `form[data-confirm]` in `js/git.js`; not offered for the current version) and **← Older / Newer →** (`versionIndex`; Newer from the version before the current one is **Current →**, the page). The breadcrumb names the version by its time, not its hash.
 - **`/diff/<slug>/<sha>`** ("Changes") shows what that save changed, red taken out and green put in, without git's file headers (`diffLines` leaves out everything before a file's first `@@`; a hunk header becomes `⋯`), with **View this version** and the same ← Older / Newer →. No Restore there: a diff shows a change, not a version.
 - **Renames**: `gitLog` (`--follow`) records each commit's path for the file (`path`, from `--numstat`, `numstatPath` reading `old => new` and `dir/{old => new}.md`), and revision, diff and restore read a version under the name it had then (`versionPath`); before, a version from before a rename was a 404. The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pure rename shows no change instead of the whole page as new.
@@ -132,7 +132,7 @@ A page's contents are listed by the side column on big screens ("On this page", 
 
 ### Since the Go server (2026-10)
 
-Leaf rendered with markdown-it until the server moved to Go; goldmark renders differently where no Leaf feature depends on it, and nothing a page relies on changed (checkboxes, callouts, heading ids, ✎ and ☑ chips, image widths, external links, task-date chips render as before). What reads differently:
+Zone rendered with markdown-it until the server moved to Go; goldmark renders differently where no Zone feature depends on it, and nothing a page relies on changed (checkboxes, callouts, heading ids, ✎ and ☑ chips, image widths, external links, task-date chips render as before). What reads differently:
 
 - Footnote markers read `1`, not `[1]`; ids are `fn:1`, not `fn1`. Inline footnotes `^[…]` are plain text.
 - `~one~` is struck through, as in GFM (before: only `~~two~~`).

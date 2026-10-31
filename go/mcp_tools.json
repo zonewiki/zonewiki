@@ -238,8 +238,8 @@
  },
  {
   "name": "leaf_help",
-  "title": "Leaf's documentation",
-  "description": "Search Leaf's own documentation (its README and its spec) for how Leaf works: features, markdown syntax ([[deck …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Leaf's developers: answer the user in terms of what they type or click, leaving out function and file names.",
+  "title": "Zone's documentation",
+  "description": "Search Zone's own documentation (its README and its spec) for how Zone works: features, markdown syntax ([[deck …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Zone's developers: answer the user in terms of what they type or click, leaving out function and file names.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -321,7 +321,7 @@
     "scratch": {
      "type": "boolean",
      "default": false,
-     "description": "Make a new scratch note: slug is then just its name, in any words ('Alex prep'), and Leaf puts the date and time in front."
+     "description": "Make a new scratch note: slug is then just its name, in any words ('Alex prep'), and Zone puts the date and time in front."
     },
     "summary": {
      "type": "string",
@@ -723,7 +723,7 @@
     },
     "due": {
      "type": "string",
-     "description": "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, which Leaf resolves with its own date; empty to clear. A date the user gives the task ('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start."
+     "description": "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, which Zone resolves with its own date; empty to clear. A date the user gives the task ('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start."
     },
     "start": {
      "type": "string",

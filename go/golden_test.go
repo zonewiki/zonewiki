@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The answers of the Python Leaf (until 2026-10) on every string in Leaf's
+// The answers of the Python Zone (until 2026-10) on every string in Zone's
 // tests then and some edge cases, recorded before it was removed: the text
 // functions still give them. A deliberate change to one of them changes its
 // cases here too: LEAF_GOLDEN_UPDATE=1 go test -run TestGolden writes what

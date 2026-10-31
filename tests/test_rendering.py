@@ -311,7 +311,7 @@ class TestCallouts:
 
 
 class TestExternalLinks:
-    """Links to other sites open in a new tab; Leaf's own links don't."""
+    """Links to other sites open in a new tab; Zone's own links don't."""
 
     def test_marked_in_rendered_pages(self, client):
         out = preview(client, "[a](https://example.com) https://x.org www.y.org [p](/page/x) [[Home]] [m](mailto:a@b.c)\n")

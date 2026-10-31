@@ -124,11 +124,11 @@ func TestSearchRanksTitleAndTypos(t *testing.T) {
 	}
 }
 
-// ---- the cases of Leaf's search tests ----
+// ---- the cases of Zone's search tests ----
 
 type testDoc struct{ slug, title, text string }
 
-// ranked: the slugs a search finds, best first (titles weigh as in Leaf).
+// ranked: the slugs a search finds, best first (titles weigh as in Zone).
 func ranked(docs []testDoc, query string) []string {
 	var toks [][]string
 	for _, d := range docs {

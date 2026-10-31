@@ -1,9 +1,9 @@
-"""The settings the tests give Leaf (tests/goserver.py): the deployment's
+"""The settings the tests give Zone (tests/goserver.py): the deployment's
 as the server's environment and flags, the wiki's in its settings file
 (.leaf/config). A test patches them here (monkeypatch.setattr(settings,
 "LEAF_PASSWORD", "pw")); the server restarts with them before its next
-request. The names are those of the variables Leaf read until 2026-10, a
-few values typed as Leaf parses them (LEAF_HOSTS a set of names,
+request. The names are those of the variables Zone read until 2026-10, a
+few values typed as Zone parses them (LEAF_HOSTS a set of names,
 LEAF_NOSHARE as tags and folders); passwords and tokens plain, goserver.py
 writes their hashes."""
 
@@ -36,14 +36,14 @@ LEAF_LOCALE = ""
 LEAF_DATE_FORMAT = ""
 # Whether the server finds git on its PATH.
 GIT_ENABLED = shutil.which("git") is not None
-# Leaf's docs (README.md, docs/spec/) for leaf_help; None: none there.
+# Zone's docs (README.md, docs/spec/) for leaf_help; None: none there.
 DOCS: Path | None = REPO
 # The semantic index, a tests.semantic.FakeIndex; None: semantic search off.
 SEMANTIC = None
 # Extra environment (LEAF_SEMANTIC_SEARCH …).
 ENV: dict[str, str] = {}
 
-# The environment of the tests' own git calls: as Leaf's, no detached
+# The environment of the tests' own git calls: as Zone's, no detached
 # maintenance (it would linger as a zombie).
 GIT_ENV = {
     **os.environ,

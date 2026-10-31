@@ -55,7 +55,7 @@ func deckOwners(user string) []string {
 	return []string{"", user}
 }
 
-// everyOwner: the owners of every deck, for what Leaf does over all of
+// everyOwner: the owners of every deck, for what Zone does over all of
 // them (the yearly archive, a rename's links, the search index).
 func everyOwner() []string { return append([]string{""}, sortedKeys(settings().Users)...) }
 
@@ -367,8 +367,8 @@ func readArchived(owners []string) []*Task {
 
 // archiveOldCompleted rolls earlier years' completed tasks into their
 // archives (at start; every write files by year too), and writes files in
-// another format (the Python Leaf's key order, a hand-edited file) as
-// Leaf writes them, so later commits show only what changed; every
+// another format (the Python Zone's key order, a hand-edited file) as
+// Zone writes them, so later commits show only what changed; every
 // owner's files, in one commit. An unreadable file is left alone (its
 // owner's files are): this is never worth failing over.
 func archiveOldCompleted() {
@@ -395,7 +395,7 @@ func archiveOldCompleted() {
 	if len(changed) == 0 {
 		return
 	}
-	msg := "Write the deck's files in Leaf's format"
+	msg := "Write the deck's files in Zone's format"
 	if moved {
 		msg = "Archive completed deck tasks"
 	}
@@ -734,7 +734,7 @@ var datedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 const historyLimit = 30
 
-// logEvent adds an event to a task's history, by user ("" no one: Leaf, or
+// logEvent adds an event to a task's history, by user ("" no one: Zone, or
 // no users); from and to are the days a dated event moved between ("" none).
 func logEvent(t *Task, user, event, from, to string) {
 	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event, By: user}

@@ -1,6 +1,6 @@
 """Browser (end-to-end) test harness.
 
-Runs Leaf's server, a process per test (tests/goserver.py), and drives it
+Runs Zone's server, a process per test (tests/goserver.py), and drives it
 with headless Chromium via Playwright. Every test gets a fresh temp wiki
 (with a real git repo) and a fresh browser context (clean
 localStorage/sessionStorage).
@@ -136,7 +136,7 @@ def browser():
 def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **context_opts):
     ctx = browser.new_context(base_url=base_url, viewport=viewport, color_scheme=color_scheme,
                               **context_opts)
-    # Leaf loads nothing from other hosts (no CDN; highlight.js is vendored).
+    # Zone loads nothing from other hosts (no CDN; highlight.js is vendored).
     # Such a request is blocked, keeping runs offline, and fails the test.
     host = base_url.split("//", 1)[1]
     external = []
@@ -165,7 +165,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     page.on("pageerror", lambda exc: errors.append(str(exc)))
     page.js_errors = errors
     page.external_requests = external
-    # Leaf's own pages must run under its Content-Security-Policy (script-src
+    # Zone's own pages must run under its Content-Security-Policy (script-src
     # 'self': no inline scripts or handlers). Chromium reports a blocked one
     # on the console; a test that blocks one on purpose clears the list.
     violations = []

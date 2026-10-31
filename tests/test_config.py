@@ -1,7 +1,7 @@
-"""The settings file, .leaf/config (docs/spec/users.md): Leaf reloads it
+"""The settings file, .leaf/config (docs/spec/users.md): Zone reloads it
 when it changes, so users, passwords and tokens change without a restart;
 a broken file keeps the settings from before and says so on /api/health;
-Leaf commits the file (its tokens only as hashes), but no route or history
+Zone commits the file (its tokens only as hashes), but no route or history
 view shows it."""
 
 import subprocess
@@ -18,14 +18,14 @@ USERS = {"alice": ("alice-pw", "alice-token")}
 
 @pytest.fixture()
 def config(wiki_dir, client, monkeypatch):
-    """alice from the settings file, Leaf running; returns the file."""
+    """alice from the settings file, Zone running; returns the file."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     client.live.ensure()
     return wiki_dir / ".leaf" / "config"
 
 
 def write(path, text):
-    """Rewrites the file as an editor would, and waits until Leaf looks at
+    """Rewrites the file as an editor would, and waits until Zone looks at
     it again (at most once a second, at a request): its next request takes
     the change. (Not polled with logins: wrong ones are throttled.)"""
     path.write_text(text, encoding="utf-8")
@@ -38,7 +38,7 @@ def user(name, password, token=""):
 
 
 def until(check, timeout=5.0):
-    """check() turns true within timeout (Leaf looks at the file at most
+    """check() turns true within timeout (Zone looks at the file at most
     once a second)."""
     end = time.monotonic() + timeout
     while True:
@@ -79,7 +79,7 @@ def test_a_removed_user_is_signed_out(client, config):
 
 def test_removing_every_user_keeps_the_login_until_a_restart(client, config):
     """No users and no password would open the wiki, and private/ with it:
-    a running Leaf doesn't take that from a reload."""
+    a running Zone doesn't take that from a reload."""
     login(client, "alice", "alice-pw")
     write(config, "locale = de-AT\n")
     assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
@@ -133,7 +133,7 @@ def test_health_tells_only_who_may_read_the_wiki_what_is_wrong(client, config):
     write(config, config.read_text() + "[user dave]\n")
     assert until(lambda: client.get("/api/health", headers=HOST).status_code == 503)
     error = client.get("/api/health", headers=HOST).get_json()["error"]
-    assert "dave" not in error and "see Leaf's log" in error
+    assert "dave" not in error and "see Zone's log" in error
     login(client, "alice", "alice-pw")
     assert "dave" in client.get("/api/health", headers=HOST).get_json()["error"]
 
@@ -154,13 +154,13 @@ def test_a_password_without_users(client, wiki_dir, monkeypatch):
 
 
 def test_a_setting_left_in_the_environment_stops_leaf(client, wiki_dir, monkeypatch):
-    """Leaf reads the wiki's settings only from the file; one still in .env
+    """Zone reads the wiki's settings only from the file; one still in .env
     would be ignored (a forgotten LEAF_PASSWORD: an open wiki)."""
     monkeypatch.setattr(settings, "ENV", {"LEAF_PASSWORD": "pw"})
     with pytest.raises(RuntimeError, match="didn't start"):
         client.get("/page/index", headers=HOST)
     log = client.live.log.read_text()
-    assert "LEAF_PASSWORD is set in the environment (.env), but Leaf reads the wiki's settings only" in log
+    assert "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only" in log
     assert "./run.sh config import" in log
 
 
@@ -170,13 +170,13 @@ def git(wiki, *args):
 
 
 def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch):
-    """Leaf commits the file at start and at each reload (saying what
-    changed), and only it of .leaf/; no page route serves it, and Leaf's
+    """Zone commits the file at start and at each reload (saying what
+    changed), and only it of .leaf/; no page route serves it, and Zone's
     history leaves it out."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     login(client, "alice", "alice-pw")
     config = git_wiki_dir / ".leaf" / "config"
-    assert git(git_wiki_dir, "log", "-1", "--format=%an %s", "--", ".leaf/config").strip() == "Leaf Change settings"
+    assert git(git_wiki_dir, "log", "-1", "--format=%an %s", "--", ".leaf/config").strip() == "Zone Change settings"
     files = git(git_wiki_dir, "ls-files")
     assert ".leaf/config" in files and "secret_key" not in files
     assert "alice-token" not in git(git_wiki_dir, "show", "HEAD:.leaf/config")   # only its hash
@@ -199,7 +199,7 @@ def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch
 
 @pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", "")])
 def test_an_older_wikis_exclude_lets_the_file_in(client, git_wiki_dir, monkeypatch, line, kept):
-    """A wiki an older Leaf set up excluded all of .leaf/ (also as written
+    """A wiki an older Zone set up excluded all of .leaf/ (also as written
     by hand: without the slashes, or a newline at the end)."""
     exclude = git_wiki_dir / ".git" / "info" / "exclude"
     assert "/.leaf/*\n!/.leaf/config\n" in exclude.read_text()

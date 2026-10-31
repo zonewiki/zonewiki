@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and run Leaf with compose (compose.yaml), and run its tests. This
+# Build and run Zone with compose (compose.yaml), and run its tests. This
 # script works out what compose can't: the build string from git, the port's
 # bind address from LEAF_ALLOW_REMOTE, the host's timezone, and the wiki path.
 set -e
@@ -48,7 +48,7 @@ case "$LEAF_ALLOW_REMOTE" in
   *) export LEAF_BIND="127.0.0.1" ;;
 esac
 
-# The user Leaf runs as (compose.yaml), so the files it writes are the host
+# The user Zone runs as (compose.yaml), so the files it writes are the host
 # user's: your own IDs. Rootless podman maps them into the container as they
 # are (keep-id, compose.podman.yaml). Rootless docker can't: there the
 # container's root is you, and any other UID would be a subordinate one.
@@ -61,8 +61,8 @@ elif [[ $ENGINE == docker && "$(id -u)" -ne 0 ]] &&
   export LEAF_UID=0 LEAF_GID=0
 fi
 
-# The build Leaf's image comes from ("<hash> <commit date>", "+dirty" with
-# uncommitted source changes), shown next to Leaf's version; same format as
+# The build Zone's image comes from ("<hash> <commit date>", "+dirty" with
+# uncommitted source changes), shown next to Zone's version; same format as
 # a local go build's (go/config.go sourceBuild).
 LEAF_BUILD=$(git log -1 --format='%h %cd' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || true)
 if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)" ]]; then
@@ -132,7 +132,7 @@ case "${1:-up}" in
     compose build
     ;;
   up)
-    # The wiki must exist: Leaf doesn't make one where a typo in .env points.
+    # The wiki must exist: Zone doesn't make one where a typo in .env points.
     if [[ ! -d "$LEAF_DATA" ]]; then
       echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
       exit 1
@@ -148,8 +148,8 @@ case "${1:-up}" in
       $ENGINE rm -f leaf >/dev/null
     fi
     compose up -d --build
-    echo "Leaf running at http://localhost:5000"
-    echo "Leaf data: $LEAF_DATA"
+    echo "Zone running at http://localhost:5000"
+    echo "Zone data: $LEAF_DATA"
     ;;
   down)
     compose down
@@ -231,8 +231,8 @@ case "${1:-up}" in
   user|config)
     # The settings file's commands (leaf user …, leaf config …; see
     # docs/spec/users.md), in a one-off container of the app's image, with
-    # .env and the wiki as up gives them, so the file is written as Leaf's
-    # user and import sees .env. A running Leaf takes the change itself.
+    # .env and the wiki as up gives them, so the file is written as Zone's
+    # user and import sees .env. A running Zone takes the change itself.
     if [[ ! -d "$LEAF_DATA" ]]; then
       echo "No wiki at $LEAF_DATA. Create the folder, or set LEAF_DATA in .env to your wiki." >&2
       exit 1
@@ -256,8 +256,8 @@ case "${1:-up}" in
   *)
     echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|user|config]"
     echo "  build  - build the container image only"
-    echo "  up     - build and start Leaf (default)"
-    echo "  down   - stop Leaf"
+    echo "  up     - build and start Zone (default)"
+    echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
     echo "  test   - go vet, go test and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and deck-core tests in the tools image (extra args go to pytest)"

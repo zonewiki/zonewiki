@@ -1,9 +1,9 @@
 // The settings file, .leaf/config in the wiki (docs/spec/users.md,
-// docs/spec/deployment.md): the wiki's settings and its users, which Leaf
+// docs/spec/deployment.md): the wiki's settings and its users, which Zone
 // reloads when the file changes, so adding a user or changing a password
-// needs no restart. A small INI, read by Leaf's own parser:
+// needs no restart. A small INI, read by Zone's own parser:
 //
-//	# Leaf's settings. Leaf reloads this file when it changes.
+//	# Zone's settings. Zone reloads this file when it changes.
 //	locale = de-AT
 //	hosts = wiki.example.org, nas.local
 //
@@ -13,7 +13,7 @@
 //
 // The environment (.env) holds only what the deployment needs (LEAF_DATA,
 // LEAF_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
-// Leaf, pointing to leaf config import. The file is in .leaf/, out of
+// Zone, pointing to leaf config import. The file is in .leaf/, out of
 // safePath's reach; it is committed (the rest of .leaf/ isn't), so its MCP
 // tokens are kept only as hashes, passwords as PBKDF2 hashes.
 package main
@@ -42,7 +42,7 @@ func configPath() string { return filepath.Join(cfg.Data, ".leaf", "config") }
 
 // configKeys: the keys outside a [user …] section, in the order `leaf
 // config check` shows them, with the environment variables that held them
-// until 2026-10 (leaf config import reads them; set, they stop Leaf).
+// until 2026-10 (leaf config import reads them; set, they stop Zone).
 var configKeys = []struct{ key, env string }{
 	{"password", "LEAF_PASSWORD"}, {"mcp-token", "LEAF_MCP_TOKEN"}, {"hosts", "LEAF_HOSTS"},
 	{"base-url", "LEAF_BASE_URL"}, {"git-remote", "LEAF_GIT_REMOTE"}, {"noshare", "LEAF_NOSHARE"},
@@ -115,7 +115,7 @@ func isComment(line string) bool {
 
 // parseConfig reads the file's text; an unknown key, a section that isn't
 // a user's, a key given twice: an error naming its line, as a typo
-// shouldn't leave Leaf on a default.
+// shouldn't leave Zone on a default.
 func parseConfig(text string) (*configFile, error) {
 	read := text
 	text = strings.TrimPrefix(strings.ReplaceAll(text, "\r\n", "\n"), "\ufeff")
@@ -134,7 +134,7 @@ func parseConfig(text string) (*configFile, error) {
 		if name, ok := sectionName(line); ok {
 			kind, user, _ := strings.Cut(name, " ")
 			if kind != "user" {
-				return nil, lineError(n, "[%s] isn't a section Leaf knows. Users are [user NAME].", name)
+				return nil, lineError(n, "[%s] isn't a section Zone knows. Users are [user NAME].", name)
 			}
 			if !userNameRE.MatchString(user) {
 				return nil, lineError(n, "%q isn't a user name. Use lowercase letters, digits and hyphens "+
@@ -158,7 +158,7 @@ func parseConfig(text string) (*configFile, error) {
 				return nil, lineError(n, "%q isn't a user's setting. A user has %s; the wiki's settings "+
 					"go before the first [user …].", key, strings.Join(userKeys, " and "))
 			}
-			return nil, lineError(n, "%q isn't a setting Leaf knows.", key)
+			return nil, lineError(n, "%q isn't a setting Zone knows.", key)
 		}
 		if v, twice := values[key]; twice {
 			return nil, lineError(n, "%s is set twice (line %d).", key, v.line)
@@ -169,7 +169,7 @@ func parseConfig(text string) (*configFile, error) {
 }
 
 // readConfigFile reads the file at path; a missing file is an empty one
-// (nil). Leaf warns when others may read it: it holds password hashes and
+// (nil). Zone warns when others may read it: it holds password hashes and
 // tokens.
 func readConfigFile(path string) (*configFile, error) {
 	b, err := os.ReadFile(path)
@@ -196,7 +196,7 @@ type Settings struct {
 	PasswordHash     string           // the login gate without users
 	MCPToken         string           // /mcp's token without users, as kept (tokenMatches); "": /mcp is off
 	Users            map[string]*User // users.go; nil: no users
-	BaseURL          string           // Leaf's address as the user's browser knows it
+	BaseURL          string           // Zone's address as the user's browser knows it
 	QueryLog         bool             // keep search_wiki's queries in .leaf/queries.jsonl
 	GitRemote        string
 	Hosts            map[string]bool // names besides localhost, without port, lowercase
@@ -214,8 +214,8 @@ var current atomic.Pointer[Settings]
 
 func settings() *Settings { return current.Load() }
 
-// staleEnv: the wiki's settings still in the environment, where Leaf no
-// longer reads them; Leaf stops rather than run without them (a forgotten
+// staleEnv: the wiki's settings still in the environment, where Zone no
+// longer reads them; Zone stops rather than run without them (a forgotten
 // LEAF_PASSWORD would leave the wiki open).
 func staleEnv(getenv func(string) string) error {
 	var moved []string
@@ -232,12 +232,12 @@ func staleEnv(getenv func(string) string) error {
 		if len(moved) == 1 {
 			verb = "is"
 		}
-		return fmt.Errorf("%s %s set in the environment (.env), but Leaf reads the wiki's settings only from "+
+		return fmt.Errorf("%s %s set in the environment (.env), but Zone reads the wiki's settings only from "+
 			"%s now. Move them there with ./run.sh config import (leaf config import), then delete them from .env.",
 			strings.Join(moved, ", "), verb, configName)
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
-		return errors.New("LEAF_SECRET_KEY is set in the environment (.env), but Leaf no longer reads it: it " +
+		return errors.New("LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it: it " +
 			"keeps its own key in .leaf/secret_key. Delete it from .env (everyone signs in once more).")
 	}
 	return nil
@@ -382,7 +382,7 @@ func tokenMatches(given, kept string) bool {
 
 // Reloading: the request checks call reloadSettings, which looks at the
 // file at most once a second (no watcher: no dependency, no goroutine).
-// A file with an error keeps the settings Leaf has, so a broken edit
+// A file with an error keeps the settings Zone has, so a broken edit
 // never locks everyone out or opens the wiki; health() reports it.
 var (
 	reloadMu    sync.Mutex
@@ -392,7 +392,7 @@ var (
 	settingsErr atomic.Pointer[string]
 )
 
-// startSettings: the settings Leaf starts with, and the file's state for
+// startSettings: the settings Zone starts with, and the file's state for
 // reloads.
 func startSettings(s *Settings) {
 	current.Store(s)
@@ -442,10 +442,10 @@ func takeSettings() (old, s *Settings) {
 		return nil, nil
 	}
 	if st == nil {
-		// Gone (or between an editor's delete and write): keep what Leaf
+		// Gone (or between an editor's delete and write): keep what Zone
 		// has, as taking it away could open the wiki.
 		lastStat = nil
-		settingsFailed(fmt.Errorf("%s was removed: Leaf keeps the settings it had until it is back, or a restart", configName))
+		settingsFailed(fmt.Errorf("%s was removed: Zone keeps the settings it had until it is back, or a restart", configName))
 		return nil, nil
 	}
 	lastStat = st
@@ -458,7 +458,7 @@ func takeSettings() (old, s *Settings) {
 		// The users (or the password) gone: everyone could get in, and
 		// private/ would be an ordinary folder. Only on purpose, a restart.
 		err = fmt.Errorf("%s sets no users and no password now, which leaves the wiki without a login "+
-			"(and private/ open to everyone): Leaf takes that only at its next start", configName)
+			"(and private/ open to everyone): Zone takes that only at its next start", configName)
 	}
 	if err != nil {
 		settingsFailed(err)
@@ -472,8 +472,8 @@ func takeSettings() (old, s *Settings) {
 }
 
 // commitSettings commits the settings file, if it is there and changed:
-// at start and at each reload, by Leaf, so a change made by hand or with
-// leaf user (another process, which leaves git to Leaf) is in the history.
+// at start and at each reload, by Zone, so a change made by hand or with
+// leaf user (another process, which leaves git to Zone) is in the history.
 func commitSettings(message string) {
 	if settingsError() == "" && exists(configPath()) {
 		gitCommit("", message, configPath())
@@ -527,7 +527,7 @@ func settingsChange(old, s *Settings) string {
 func sameFloat(a, b *float64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func settingsFailed(err error) {
-	msg := err.Error() + " (Leaf keeps its settings from before)"
+	msg := err.Error() + " (Zone keeps its settings from before)"
 	settingsErr.Store(&msg)
 	logf("%s", msg)
 }

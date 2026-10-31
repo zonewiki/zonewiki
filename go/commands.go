@@ -2,8 +2,8 @@
 // changes and removes users, leaf config checks the settings, sets the
 // wiki's password and token, and moves settings out of the environment.
 // They edit .leaf/config in the wiki LEAF_DATA names, keeping its comments,
-// and refuse a change that would leave settings Leaf doesn't start with; a
-// running Leaf takes the change within a second and commits it (else Leaf
+// and refuse a change that would leave settings Zone doesn't start with; a
+// running Zone takes the change within a second and commits it (else Zone
 // at its next start): git stays with the one process. New MCP tokens are
 // shown once and kept as hashes.
 package main
@@ -61,8 +61,8 @@ func openConfig(getenv func(string) string) (*configFile, error) {
 // saveConfig writes f, if the settings it makes are good.
 func saveConfig(f *configFile) error {
 	if len(f.lines) == 0 || !strings.HasPrefix(strings.TrimSpace(f.lines[0]), "#") {
-		header := []string{"# Leaf's settings and users (docs/spec/users.md). " +
-			"Leaf reloads this file when it changes."}
+		header := []string{"# Zone's settings and users (docs/spec/users.md). " +
+			"Zone reloads this file when it changes."}
 		if len(f.lines) > 0 && strings.TrimSpace(f.lines[0]) != "" {
 			header = append(header, "")
 		}
@@ -215,7 +215,7 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		switch {
 		case openFlag:
 			fmt.Fprintln(stdout, "No users and no password now: the wiki has no login, and private/ is an "+
-				"ordinary folder. A running Leaf takes this only at its next start (restart it).")
+				"ordinary folder. A running Zone takes this only at its next start (restart it).")
 		case passwordFlag:
 			fmt.Fprintln(stdout, "No users now: the wiki's password signs in, and private/ is an ordinary folder.")
 		}
@@ -272,7 +272,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 		case key == "mcp-token" && args[0] == "set":
 			return fail("the MCP token is made with: leaf config token")
 		case !knownKey(key):
-			return fail("%q isn't a setting Leaf knows.", key)
+			return fail("%q isn't a setting Zone knows.", key)
 		}
 		if args[0] == "set" {
 			value := strings.Join(args[2:], " ")
@@ -287,7 +287,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("%v", err)
 		}
 		if args[0] == "unset" && key == "password" && len(f.users) == 0 {
-			fmt.Fprintln(stdout, "The wiki has no login now. A running Leaf takes this only at its next "+
+			fmt.Fprintln(stdout, "The wiki has no login now. A running Zone takes this only at its next "+
 				"start (restart it).")
 		}
 	case "passwd", "token":
@@ -325,7 +325,7 @@ func firstOf(args []string) string {
 	return args[0]
 }
 
-// importEnv moves the wiki's settings from the environment, where Leaf
+// importEnv moves the wiki's settings from the environment, where Zone
 // read them until 2026-10, into the file: a plain LEAF_PASSWORD and the MCP
 // tokens as their hashes (the clients keep their tokens), LEAF_USERS and
 // each user's LEAF_USER_<NAME>_… as sections.
@@ -363,7 +363,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		}
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
-		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Leaf keeps its key in .leaf/secret_key)")
+		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Zone keeps its key in .leaf/secret_key)")
 	}
 	if len(moved) == 0 {
 		fmt.Fprintf(stdout, "Nothing to import: the environment sets none of the settings %s holds.\n", configName)
@@ -373,7 +373,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		fmt.Fprintf(stderr, "leaf config: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Moved into %s. Now delete these from .env and restart Leaf "+
+	fmt.Fprintf(stdout, "Moved into %s. Now delete these from .env and restart Zone "+
 		"(until then it refuses to start):\n", configName)
 	for _, name := range moved {
 		fmt.Fprintln(stdout, "  "+name)
@@ -414,7 +414,7 @@ func envUsers(getenv func(string) string) ([]*User, error) {
 // showSettings prints the settings in effect and where each comes from,
 // hashes masked.
 func showSettings(w io.Writer, f *configFile, s *Settings) {
-	fmt.Fprintf(w, "Settings in effect (%s, else Leaf's default):\n", configName)
+	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName)
 	for _, k := range configKeys {
 		v, set := f.top[k.key]
 		value, from := v.value, fmt.Sprintf("line %d", v.line)

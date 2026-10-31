@@ -24,7 +24,7 @@ const searchMode = document.getElementById('search-mode');
 const SEARCH_MODES = {
   on: ['Keywords + meaning', 'Content matches are found by their words and by meaning (semantic search).'],
   indexing: ['Meaning: indexing…', 'Semantic search is still indexing the wiki; until then content matches are found by their words only.'],
-  failed: ['Keywords only', "The semantic search model fails (see Leaf's log); content matches are found by their words only."],
+  failed: ['Keywords only', "The semantic search model fails (see Zone's log); content matches are found by their words only."],
   off: ['Keywords only', 'Semantic search is off (LEAF_SEMANTIC_SEARCH=on in .env turns it on); content matches are found by their words.'],
 };
 

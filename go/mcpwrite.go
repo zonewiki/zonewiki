@@ -99,7 +99,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 }
 
 // writeScratch: write_page with scratch, a new scratch note, named by slug
-// (any words; Leaf puts the time in front) or else by the content's title.
+// (any words; Zone puts the time in front) or else by the content's title.
 func writeScratch(args jsonObj, content, base, user string) (string, error) {
 	if jsonTrue(args["overwrite"]) {
 		return "", toolErr("A scratch note is always a new one: overwrite doesn't apply. " +

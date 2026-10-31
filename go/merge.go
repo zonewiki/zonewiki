@@ -18,7 +18,7 @@ import (
 
 // drafts: a page's file, as git names it (wikiRel) → the user whose save
 // last wrote it without a commit (the editor's auto-save, a ticked
-// checkbox). In memory, as Leaf is one process; after a restart an
+// checkbox). In memory, as Zone is one process; after a restart an
 // uncommitted file's author is unknown.
 var (
 	draftsMu sync.Mutex
@@ -37,7 +37,7 @@ func noteDraft(path, user string) {
 	}
 }
 
-// draftAuthor: who wrote path's uncommitted text ("": unknown, or Leaf).
+// draftAuthor: who wrote path's uncommitted text ("": unknown, or Zone).
 func draftAuthor(path string) string {
 	rel, _ := wikiRel(path)
 	draftsMu.Lock()
@@ -87,7 +87,7 @@ func commitOthersDrafts(user string) {
 	for _, rel := range rels {
 		commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel)))
 	}
-	// What Leaf didn't see saved (written on disk, or before a restart) has no
+	// What Zone didn't see saved (written on disk, or before a restart) has no
 	// known author, but in a private folder the folder says whose it is: one
 	// commit per owner.
 	byOwner := map[string][]string{}
@@ -111,7 +111,7 @@ func commitOthersDrafts(user string) {
 }
 
 // commitAuthorOf: whom a commit of path's uncommitted text names: who
-// wrote it if Leaf knows, else fallback.
+// wrote it if Zone knows, else fallback.
 func commitAuthorOf(path, fallback string) string {
 	if author := draftAuthor(path); author != "" && settings().Users != nil {
 		return author
@@ -174,7 +174,7 @@ func (l *baseList) get(hash string) (string, bool) {
 func keepBase(text string) string      { return writtenBases.keep(text) }
 func keepGivenBase(text string) string { return givenBases.keep(text) }
 
-// baseText: the text behind hash, if Leaf still has it.
+// baseText: the text behind hash, if Zone still has it.
 func baseText(hash string) (string, bool) {
 	if text, ok := givenBases.get(hash); ok {
 		return text, true
@@ -283,7 +283,7 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 
 // commitBeforeOverwrite: before user's save that overwrites the page at
 // path whatever it holds (Keep mine), what it holds uncommitted is
-// committed first, by whoever wrote it (Leaf if not known), unless it is
+// committed first, by whoever wrote it (Zone if not known), unless it is
 // user's own draft: so an overwrite never loses text that was never in git.
 func commitBeforeOverwrite(user, slug, path string) {
 	if !exists(path) || !isUncommitted(path) {
@@ -296,8 +296,8 @@ func commitBeforeOverwrite(user, slug, path string) {
 	gitCommit(author, "Save "+slug, path)
 }
 
-// otherAuthor: who other than user changed path last, as far as Leaf
-// knows: the draft's author, else the last commit's ("": none, or Leaf).
+// otherAuthor: who other than user changed path last, as far as Zone
+// knows: the draft's author, else the last commit's ("": none, or Zone).
 func otherAuthor(path, user string) string {
 	if settings().Users == nil {
 		return ""
@@ -413,7 +413,7 @@ func mergeWrite(slug, path, current, content, baseHash, user string) (string, er
 	base, kept := baseText(baseHash)
 	if !kept {
 		return "", toolErr("Nothing written: " + slug + " changed since you read it (hash " + baseHash +
-			"), and Leaf no longer has that version to merge from." + again)
+			"), and Zone no longer has that version to merge from." + again)
 	}
 	label := otherAuthor(path, user)
 	if label == "" {
@@ -421,7 +421,7 @@ func mergeWrite(slug, path, current, content, baseHash, user string) (string, er
 	}
 	merged, clean, err := mergeText(base, current, content, label)
 	if err != nil {
-		return "", toolErr("Nothing written: " + slug + " changed since you read it, and Leaf can't merge (" +
+		return "", toolErr("Nothing written: " + slug + " changed since you read it, and Zone can't merge (" +
 			err.Error() + ")." + again)
 	}
 	if !clean {

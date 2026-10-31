@@ -1,11 +1,11 @@
 ---
 name: Bug report
-about: Something in Leaf doesn't work as it should
+about: Something in Zone doesn't work as it should
 labels:
   - bug
 ---
 
-**Leaf's version** (press `?` in Leaf; it's at the bottom of the dialog):
+**Zone's version** (press `?` in Zone; it's at the bottom of the dialog):
 
 **How you run it** (run.sh with Podman / Docker, or without a container; OS; browser, phone or not):
 

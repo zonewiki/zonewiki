@@ -542,11 +542,11 @@ func TestChunkPage(t *testing.T) {
 func TestSemanticText(t *testing.T) {
 	testWiki(t, nil)
 	// Deck embeds are markup: pages of only an embed were each other's closest match.
-	_, body := semanticText("# Leaf\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
+	_, body := semanticText("# Zone\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
 	if strings.Contains(strings.ToLower(body), "deck") || !strings.Contains(body, "Notes  here.") {
 		t.Errorf("deck embeds: %q", body)
 	}
-	if _, body := semanticText("# Leaf\n\n[[Deck tag=leaf]]\n", "leaf"); strings.TrimSpace(body) != "" {
+	if _, body := semanticText("# Zone\n\n[[Deck tag=leaf]]\n", "leaf"); strings.TrimSpace(body) != "" {
 		t.Errorf("only an embed: %q", body)
 	}
 	title, body := semanticText("---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")
@@ -582,7 +582,7 @@ func TestExcludeFromGit(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
 		t.Errorf("exclude %q", b)
 	}
-	// .leaf/ but the settings file: an older Leaf's line goes.
+	// .leaf/ but the settings file: an older Zone's line goes.
 	excludeLeafState(dir)
 	excludeLeafState(dir)
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/*\n!/.leaf/config\n" {

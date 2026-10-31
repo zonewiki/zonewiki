@@ -52,7 +52,7 @@ func TestDiffLines(t *testing.T) {
 }
 
 // Regression: git (2.47+) detached its auto-maintenance after each commit;
-// with Leaf as the container's PID 1 nobody reaped it, and zombies piled
+// with Zone as the container's PID 1 nobody reaped it, and zombies piled
 // up to the PID limit.
 func TestGitDoesNotDetach(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {

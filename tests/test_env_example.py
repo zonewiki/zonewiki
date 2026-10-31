@@ -1,4 +1,4 @@
-"""`.env.example` names only settings Leaf reads, and every one it reads."""
+"""`.env.example` names only settings Zone reads, and every one it reads."""
 
 import re
 from pathlib import Path

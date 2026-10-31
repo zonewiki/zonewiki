@@ -31,7 +31,7 @@ func newReq(r *http.Request) *Req {
 	return &Req{r: r, user: userOf(r), sharing: sharingOn(r)}
 }
 
-// who: the user asking, "" for none (rq nil: Leaf itself, which has no
+// who: the user asking, "" for none (rq nil: Zone itself, which has no
 // private tasks of its own).
 func (rq *Req) who() string {
 	if rq == nil {
@@ -40,7 +40,7 @@ func (rq *Req) who() string {
 	return rq.user
 }
 
-// pathURL is a path in Leaf from its parts, each percent-encoded ("/" kept), as
+// pathURL is a path in Zone from its parts, each percent-encoded ("/" kept), as
 // urllib's quote(p, safe="/"): letters, digits, _.-~ and / stay.
 func pathURL(parts ...string) string {
 	var b strings.Builder
@@ -699,7 +699,7 @@ func replaceMdLinks(text string, fn func(m mdLinkMatch) string) string {
 
 // mdLinkMisses: the markdown links in content (code aside) that lead to no
 // page: each link as written → the slug it resolves to. External links,
-// anchors, folders (a trailing /), files (another extension) and Leaf's own
+// anchors, folders (a trailing /), files (another extension) and Zone's own
 // _folders and views are not checked.
 func mdLinkMisses(content, slug string, slugs map[string]bool) map[string]string {
 	text, _ := maskCode(content)
@@ -720,7 +720,7 @@ func mdLinkMisses(content, slug string, slugs map[string]bool) map[string]string
 			target = resolveBareLink(href, slug)
 		}
 		if target != "" && strings.HasPrefix(strings.Split(target, "/")[0], "_") {
-			continue // Leaf's own folders and views
+			continue // Zone's own folders and views
 		}
 		if target != "" && !slugs[target] {
 			misses[text[m.start:m.end]] = target

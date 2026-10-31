@@ -24,7 +24,7 @@ import (
 const gitTimeout = 60 * time.Second
 
 // git (2.47+) starts its automatic maintenance after a commit as a detached
-// background process. In the container Leaf is PID 1 and never reaps that
+// background process. In the container Zone is PID 1 and never reaps that
 // orphan, so every commit left a zombie process behind until the PID limit
 // was reached and nothing could start any more. Not detached, git runs the
 // (usually trivial) maintenance itself and reaps its own children.
@@ -109,14 +109,14 @@ func setGitRemote() {
 	}
 }
 
-// setCommitter: Leaf commits as "Leaf <leaf@localhost>".
+// setCommitter: Zone commits as "Zone <leaf@localhost>".
 func setCommitter() {
 	runGit("config", "user.email", "leaf@localhost")
-	runGit("config", "user.name", "Leaf")
+	runGit("config", "user.name", "Zone")
 }
 
 // commitAuthor: who a commit is by, as the history shows it, with users: a
-// user's name, or whoever committed by hand; "" for Leaf's own, and without
+// user's name, or whoever committed by hand; "" for Zone's own, and without
 // users, so a wiki without them shows no names.
 func commitAuthor(name string) string {
 	if settings().Users == nil || name == appName {
@@ -128,8 +128,8 @@ func commitAuthor(name string) string {
 var commitMu sync.Mutex
 
 // gitCommit stages paths (in the wiki) and commits them together, by user
-// (the author; "": Leaf itself, or a wiki without users). The committer is
-// always Leaf. One at a time (commitMu): another's add between this add
+// (the author; "": Zone itself, or a wiki without users). The committer is
+// always Zone. One at a time (commitMu): another's add between this add
 // and its commit would go into this commit, in this user's name.
 func gitCommit(user, message string, paths ...string) {
 	if !cfg.GitEnabled {
@@ -156,7 +156,7 @@ func gitCommit(user, message string, paths ...string) {
 
 // excludeLeafState keeps .leaf/ out of git (the session key, the caches,
 // the query log), but for the settings file, which is the wiki's and is
-// committed (its tokens are only hashes). An older Leaf excluded all of
+// committed (its tokens are only hashes). An older Zone excluded all of
 // .leaf/ ("/.leaf/", a folder git then never looks into): that line goes,
 // as does one written otherwise ("/.leaf", ".leaf/", without a newline at
 // the end of the file).
@@ -727,7 +727,7 @@ var (
 	restoredRE = regexp.MustCompile(`^Restore \S+ to ([0-9a-f]{7,40})$`)
 )
 
-// versionLabel: what a commit did to the page, in words: Leaf's own commit
+// versionLabel: what a commit did to the page, in words: Zone's own commit
 // messages read alike in a list, so they are named by kind; others as written.
 func versionLabel(e GitEntry, entries []GitEntry) string {
 	msg := e.Msg

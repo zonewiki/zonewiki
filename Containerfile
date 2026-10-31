@@ -1,4 +1,4 @@
-# Leaf's image: the server (one Go binary), the browser code it serves, and
+# Zone's image: the server (one Go binary), the browser code it serves, and
 # with LEAF_SEMANTIC_SEARCH=on the model and onnxruntime that run semantic
 # search. Three stages, so a change to the code rebuilds neither the model
 # layer nor the toolchain's.
@@ -40,7 +40,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /leaf .
 # ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
 # With LEAF_SEMANTIC_SEARCH=on in .env, compose.yaml passes it here and both
 # are baked into the image, so the first search doesn't wait for a download
-# and Leaf works offline. Without it, the folders stay empty. Pinned and
+# and Zone works offline. Without it, the folders stay empty. Pinned and
 # checked against their SHA-256: onnxruntime's GitHub release (the sums of
 # its files), the model's files at a fixed revision (go/embed.go has the
 # same names and sums; tests/test_image.py checks they agree).
@@ -91,7 +91,7 @@ RUN apt-get update && \
       git tzdata ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# onnxruntime where the loader finds it, and the model where Leaf looks.
+# onnxruntime where the loader finds it, and the model where Zone looks.
 COPY --from=semantic /opt/onnxruntime/ /usr/local/lib/
 COPY --from=semantic /opt/leaf-model/ /opt/leaf-model/
 RUN ldconfig
@@ -99,17 +99,17 @@ ENV LEAF_MODEL_DIR=/opt/leaf-model
 
 WORKDIR /app
 COPY public/ public/
-# Leaf's documentation, for the MCP tool leaf_help (found next to public/).
+# Zone's documentation, for the MCP tool leaf_help (found next to public/).
 COPY README.md ./
 COPY docs/spec/ docs/spec/
 COPY --from=build /leaf ./leaf
 
-# The build ("<hash> <commit date>") shown next to Leaf's version, passed in by
+# The build ("<hash> <commit date>") shown next to Zone's version, passed in by
 # run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
 ARG LEAF_BUILD=unknown
 ENV LEAF_BUILD=$LEAF_BUILD
 
-# compose.yaml runs Leaf as the host user's UID (any UID, maybe without an
+# compose.yaml runs Zone as the host user's UID (any UID, maybe without an
 # account here): git gets a HOME it can use.
 ENV HOME=/tmp
 

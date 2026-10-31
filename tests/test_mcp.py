@@ -1,7 +1,7 @@
 """Tests for the MCP server: the /mcp endpoint with its auth, the tool
 definitions, and the tools (search_wiki, search_tasks, read_page,
 list_pages, grep_wiki, check_links, the writing tools). The protocol's
-handling and the limits Leaf cuts long answers at have Go tests
+handling and the limits Zone cuts long answers at have Go tests
 (go/mcp_test.go).
 """
 
@@ -574,7 +574,7 @@ class TestGuide:
 
     def test_without_a_guide_a_nudge_to_start_one(self, client, wiki_dir):
         text = self.instructions(client)
-        assert text.startswith("Leaf is the user's personal wiki")
+        assert text.startswith("Zone is the user's personal wiki")
         assert text.endswith("it is shown to you at the start of every session.")
         assert "This wiki has no guide yet" in text
 
@@ -1584,7 +1584,7 @@ class TestCreateTask:
         assert "keep task" in text and "repeats" not in text
 
     def test_date_words_use_leafs_today(self, client, wiki_dir):
-        # "tomorrow" is resolved by Leaf, so a client without the date (or
+        # "tomorrow" is resolved by Zone, so a client without the date (or
         # with a wrong one) still gets it right.
         today = date.today()
         text, err = call(client, "create_task", title="Call Bob", due="tomorrow", start="today")
@@ -1763,7 +1763,7 @@ class TestCommentAndDeleteTask:
             assert "Unknown tool" in json.dumps(r)
 
 
-# ── Leaf's documentation ─────────────────────────────────────────────────────
+# ── Zone's documentation ─────────────────────────────────────────────────────
 
 class TestLeafHelp:
     @pytest.fixture
@@ -1771,7 +1771,7 @@ class TestLeafHelp:
         """A docs root like the checkout's: README.md and docs/spec/."""
         spec = tmp_path / "docs" / "spec"
         spec.mkdir(parents=True)
-        (tmp_path / "README.md").write_text("# Leaf\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
+        (tmp_path / "README.md").write_text("# Zone\n\nA wiki.\n\n## Quick start\n\nRun ./run.sh.\n")
         (spec / "deck.md").write_text(
             "# Deck\n\n## Views\n\nOpen, Plan and Focus.\n\n### Labels\n\n"
             "`labels=Catalogue,Plan,Shopping` gives the tabs other names.\n\n"
@@ -1788,7 +1788,7 @@ class TestLeafHelp:
         text, err = call(client, "leaf_help", query="tab labels")
         assert not err
         assert text.startswith("[1] Deck › Labels\ntopic: deck\nheading: Labels\n\n`labels=Catalogue")
-        assert "Testing" not in text  # how Leaf is tested is left out
+        assert "Testing" not in text  # how Zone is tested is left out
         assert "leaf_help with its topic and heading" in text
 
     def test_query_limit(self, client, docs):
@@ -1797,7 +1797,7 @@ class TestLeafHelp:
 
     def test_nothing_matches(self, client, docs):
         text, err = call(client, "leaf_help", query="xylophone")
-        assert not err and text.startswith("Nothing in Leaf's documentation matches")
+        assert not err and text.startswith("Nothing in Zone's documentation matches")
 
     def test_topic_and_section(self, client, docs):
         text, err = call(client, "leaf_help", topic="deck")
@@ -1819,7 +1819,7 @@ class TestLeafHelp:
     def test_list_of_topics(self, client, docs):
         text, err = call(client, "leaf_help")
         assert not err
-        assert "\nreadme: Leaf\n  Quick start\n" in text
+        assert "\nreadme: Zone\n  Quick start\n" in text
         assert "\ndeck: Deck\n  Views\n    Labels\n  Dates" in text
 
     def test_without_docs(self, client, monkeypatch):

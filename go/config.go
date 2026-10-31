@@ -1,4 +1,4 @@
-// Leaf's deployment settings: from the environment (.env through run.sh),
+// Zone's deployment settings: from the environment (.env through run.sh),
 // and the wiki's directories, read once at start. The wiki's own settings
 // are in its settings file (configfile.go).
 package main
@@ -14,13 +14,13 @@ import (
 	"time"
 )
 
-const appName = "Leaf"
+const appName = "Zone"
 
-// Leaf's version (semver), bumped by hand when a change is worth a number.
+// Zone's version (semver), bumped by hand when a change is worth a number.
 const version = "1.1.0"
 
 // Config: what is fixed for the process, from the environment. What the
-// wiki's settings file can set, and Leaf reloads, is Settings
+// wiki's settings file can set, and Zone reloads, is Settings
 // (configfile.go).
 type Config struct {
 	Build       string
@@ -75,7 +75,7 @@ var localeRE = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 
 // loadConfig reads the settings, the deployment's from the environment and
 // the wiki's from its settings file, or says what is wrong with them: a typo shouldn't leave
-// Leaf running on a default.
+// Zone running on a default.
 func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 	c, err := loadWiki(getenv)
 	if err != nil {
@@ -105,7 +105,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	if c.Build == "" {
 		c.Build = sourceBuild()
 	}
-	// Required, no default, and it must exist: Leaf doesn't make a wiki
+	// Required, no default, and it must exist: Zone doesn't make a wiki
 	// where a mistyped LEAF_DATA points.
 	c.Data = getenv("LEAF_DATA")
 	if c.Data == "" {
@@ -125,7 +125,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	return c, nil
 }
 
-// sourceBuild is the build Leaf runs from, as "<short hash> <commit date>"
+// sourceBuild is the build Zone runs from, as "<short hash> <commit date>"
 // ("+dirty" when built with uncommitted changes), from what go build
 // recorded. The container image is built without .git, so run.sh passes
 // the same string in LEAF_BUILD instead. Shown next to the version.

@@ -9,5 +9,5 @@ import "errors"
 const maxTokens = 512
 
 func newOnnxEmbedder(folder string) (embedder, error) {
-	return nil, errors.New("this build of Leaf has no onnxruntime (built without cgo)")
+	return nil, errors.New("this build of Zone has no onnxruntime (built without cgo)")
 }

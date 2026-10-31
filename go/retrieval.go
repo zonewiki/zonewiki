@@ -343,7 +343,7 @@ func usersKey() string {
 	return "users:" + strings.Join(sortedKeys(users), ",")
 }
 
-// get: the index rq searches (nil: Leaf itself, over everything).
+// get: the index rq searches (nil: Zone itself, over everything).
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -471,7 +471,7 @@ func docVisible(user string, d *SearchDoc) bool {
 
 var searchIndexCache, chunkIndexCache indexCache
 
-// searchIndex: the index rq searches (nil: Leaf itself, over everything).
+// searchIndex: the index rq searches (nil: Zone itself, over everything).
 func searchIndex(rq *Req) *docIndex {
 	return searchIndexCache.get(rq, append(pageSearchDocs(), taskSearchDocs()...))
 }
@@ -641,7 +641,7 @@ func bestSections(rq *Req, q *Query, slugs map[string]bool) map[string]*SearchDo
 	return best
 }
 
-// hiddenDoc: a search result to leave out for rq (nil: Leaf, which sees
+// hiddenDoc: a search result to leave out for rq (nil: Zone, which sees
 // all): another user's private task (canSeeTask), a page hiddenPage hides.
 func hiddenDoc(rq *Req, d *SearchDoc) bool {
 	if d.isTask() {
@@ -843,7 +843,7 @@ func inFolder(slug, folder string) bool {
 // retrieve: the sections and tasks most relevant to the query, best first.
 // The query syntax applies. With under, only sections of pages in that
 // folder, with scratch only of scratch notes; either way no tasks. Only
-// pages rq may see (nil: Leaf itself, which sees all).
+// pages rq may see (nil: Zone itself, which sees all).
 func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*SearchDoc {
 	q := ParseQuery(raw)
 	if strings.TrimSpace(q.RankingText()) == "" {

@@ -1,4 +1,4 @@
-// A deck task: its fields as Leaf knows them, and whatever else a file
+// A deck task: its fields as Zone knows them, and whatever else a file
 // gave it (keys of older versions, or added by hand), kept as it was.
 package main
 
@@ -25,7 +25,7 @@ type Task struct {
 	SpawnedFrom            string // the occurrence this one follows
 	History                []HistoryEntry
 	Comments               []Comment
-	Extra                  map[string]json.RawMessage // keys Leaf doesn't know, as the file had them
+	Extra                  map[string]json.RawMessage // keys Zone doesn't know, as the file had them
 	// Owner: the user whose private task it is, "" a shared one. Not in
 	// the file: it is whose files the task was read from (deckDir), and a
 	// write files it there; the API shows it as "private".
@@ -208,7 +208,7 @@ type fileTask struct{ *Task }
 func (f fileTask) MarshalJSON() ([]byte, error) { return f.marshal(false) }
 
 // marshal writes the fields in the order the files keep (private after
-// them), the keys Leaf doesn't know last, A–Z.
+// them), the keys Zone doesn't know last, A–Z.
 func (t *Task) marshal(private bool) ([]byte, error) {
 	tags, history, comments := t.Tags, t.History, t.Comments
 	if tags == nil {

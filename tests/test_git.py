@@ -1,4 +1,4 @@
-"""Tests for Leaf's git-backed version history — commits on write, history,
+"""Tests for Zone's git-backed version history — commits on write, history,
 revision/diff/restore, deleted pages, and the uncommitted-changes workflow.
 
 Unlike the other test modules, the wiki here is a real git repo
@@ -81,7 +81,7 @@ class TestGitSetup:
     def test_rerun_restores_missing_identity(self, wiki_dir, tmp_path_factory):
         git(wiki_dir, "config", "--unset", "user.name")
         git_setup(tmp_path_factory)
-        assert git(wiki_dir, "config", "user.name").strip() == "Leaf"
+        assert git(wiki_dir, "config", "user.name").strip() == "Zone"
 
     def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch, tmp_path_factory):
         monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "https://example.invalid/a.git")

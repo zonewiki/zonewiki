@@ -1,4 +1,4 @@
-# Tools image: what checking Leaf needs beyond the app itself. Microsoft's
+# Tools image: what checking Zone needs beyond the app itself. Microsoft's
 # Playwright image (Ubuntu, Chromium + system deps preinstalled) plus Go,
 # which builds and tests the server, the tests' Python packages
 # (tests/requirements.txt: pytest, pytest-xdist, which runs them in

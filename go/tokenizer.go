@@ -1,4 +1,4 @@
-// The tokenizer of Leaf's embedding model (jina-embeddings-v2-base-de) in
+// The tokenizer of Zone's embedding model (jina-embeddings-v2-base-de) in
 // Go: what Hugging Face's `tokenizers` does with its tokenizer.json, which
 // is a byte-level BPE (GPT-2's), no normalizer, RoBERTa's <s> … </s>
 // around the text, at most 512 tokens (embed.MAX_TOKENS). Only what this

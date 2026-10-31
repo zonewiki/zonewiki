@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	f, err := parseConfig("\ufeff# Leaf\r\nlocale = de-AT\n  # indented comment\nnoshare = #noshare, people/\n\n" +
+	f, err := parseConfig("\ufeff# Zone\r\nlocale = de-AT\n  # indented comment\nnoshare = #noshare, people/\n\n" +
 		"[user alice]\npassword = h=1\nmcp-token=  tok  \n[ user   mary-ann ]\n")
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestLoadSettingsFromFile(t *testing.T) {
 	}
 }
 
-// configWiki: a test wiki with this settings file, Leaf started on it.
+// configWiki: a test wiki with this settings file, Zone started on it.
 func configWiki(t *testing.T, text string) string {
 	t.Helper()
 	testWiki(t, nil)
@@ -246,14 +246,14 @@ func TestReloadClearsNoshare(t *testing.T) {
 }
 
 func TestConfigFileEdits(t *testing.T) {
-	f, _ := parseConfig("# Leaf's settings\n# more\n\nlocale = de\n\n# Alice, admin\n[user alice]\npassword = a\n\n" +
+	f, _ := parseConfig("# Zone's settings\n# more\n\nlocale = de\n\n# Alice, admin\n[user alice]\npassword = a\n\n" +
 		"# Bob\n[user bob]\npassword = b\n")
 	f.set("", "hosts", "x")
 	f.set("", "locale", "en")
 	f.set("alice", "mcp-token", "t")
 	f.set("bob", "password", "b2")
 	f.set("carol", "password", "c")
-	want := "# Leaf's settings\n# more\n\nlocale = en\nhosts = x\n\n# Alice, admin\n[user alice]\npassword = a\n" +
+	want := "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Alice, admin\n[user alice]\npassword = a\n" +
 		"mcp-token = t\n\n# Bob\n[user bob]\npassword = b2\n\n[user carol]\npassword = c\n"
 	if f.text() != want {
 		t.Fatalf("set:\n%s\nwant:\n%s", f.text(), want)
@@ -261,26 +261,26 @@ func TestConfigFileEdits(t *testing.T) {
 	f.removeUser("alice")
 	f.removeUser("carol")
 	f.removeUser("nobody")
-	want = "# Leaf's settings\n# more\n\nlocale = en\nhosts = x\n\n# Bob\n[user bob]\npassword = b2\n"
+	want = "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Bob\n[user bob]\npassword = b2\n"
 	if f.text() != want {
 		t.Fatalf("remove:\n%s\nwant:\n%s", f.text(), want)
 	}
-	f, _ = parseConfig("# Leaf\n[user a]\npassword = x\n")
-	if f.removeUser("a"); f.text() != "# Leaf\n" {
+	f, _ = parseConfig("# Zone\n[user a]\npassword = x\n")
+	if f.removeUser("a"); f.text() != "# Zone\n" {
 		t.Errorf("the file's own comment went: %q", f.text())
 	}
-	f, _ = parseConfig("# Leaf\n\n[user a]\npassword = x\n")
-	if f.set("", "locale", "de"); f.text() != "# Leaf\nlocale = de\n\n[user a]\npassword = x\n" {
+	f, _ = parseConfig("# Zone\n\n[user a]\npassword = x\n")
+	if f.set("", "locale", "de"); f.text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
 		t.Errorf("before the users: %q", f.text())
 	}
-	f, _ = parseConfig("# Leaf\n[user a]\npassword = x\n")
-	if f.set("", "locale", "de"); f.text() != "# Leaf\nlocale = de\n\n[user a]\npassword = x\n" {
+	f, _ = parseConfig("# Zone\n[user a]\npassword = x\n")
+	if f.set("", "locale", "de"); f.text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
 		t.Errorf("before the users: %q", f.text())
 	}
 	// Into a file of comments only: below them.
-	f, _ = parseConfig("# Leaf\n\n# end\n")
+	f, _ = parseConfig("# Zone\n\n# end\n")
 	f.set("", "locale", "de")
-	if f.text() != "# Leaf\nlocale = de\n\n# end\n" {
+	if f.text() != "# Zone\nlocale = de\n\n# end\n" {
 		t.Errorf("%q", f.text())
 	}
 }
@@ -378,7 +378,7 @@ func TestUserCommands(t *testing.T) {
 			t.Errorf("%v: %d %q", c.args, code, errs)
 		}
 	}
-	// A change Leaf wouldn't start with is refused, the file left as it was.
+	// A change Zone wouldn't start with is refused, the file left as it was.
 	path := filepath.Join(wiki, ".leaf", "config")
 	_ = writeConfig(path, before+"[user dave]\n")
 	if code, _, errs := run("pw\npw\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {

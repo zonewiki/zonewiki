@@ -1,4 +1,4 @@
-// ── Leaf ─────────────────────────────────────────────────────────────────────
+// ── Zone ─────────────────────────────────────────────────────────────────────
 // The entry module every page loads (templates/layout.html). The code lives
 // in ES modules under js/, imported here; no build step, the browser loads
 // them as they are. Each module wires up what it finds on the page.

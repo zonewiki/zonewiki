@@ -1005,7 +1005,7 @@ main {
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
 /* The breadcrumb's root is the module switcher (home_link() in server.py):
-   the leaf logo with Wiki, then Scratch and Deck. It is a control, not part
+   the Z logo with Wiki, then Scratch and Deck. It is a control, not part
    of the trail: a pill group with the current module shaded, and a thin
    vertical divider (the first separator) between it and the pages. Phones
    and the editor show the logo only, followed by a plain "›". */

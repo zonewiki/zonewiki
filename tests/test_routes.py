@@ -1,4 +1,4 @@
-"""Tests for Leaf HTTP routes — page view/edit/save, search, upload, auth,
+"""Tests for Zone HTTP routes — page view/edit/save, search, upload, auth,
 rename with reference updates, conflict detection, and API endpoints."""
 
 import html
@@ -226,7 +226,7 @@ class TestViewPage:
     def test_page_title_in_head(self, client, wiki_dir):
         write_page(wiki_dir, "about", "# About Us\n\nInfo.\n")
         resp = client.get("/page/about", headers=HOST)
-        assert "<title>About Us — Leaf</title>" in resp.data.decode()
+        assert "<title>About Us — Zone</title>" in resp.data.decode()
 
     def test_edit_link_present(self, client, wiki_dir):
         write_page(wiki_dir, "editable", "# Editable\n\ncontent\n")
@@ -1440,7 +1440,7 @@ class TestApiUpload:
 
 
 class TestServeUpload:
-    """Uploads must not run scripts with Leaf's origin (stored XSS)."""
+    """Uploads must not run scripts with Zone's origin (stored XSS)."""
 
     def put(self, wiki_dir, name, data=b"x"):
         (wiki_dir / "_assets" / name).write_bytes(data)
@@ -1463,7 +1463,7 @@ class TestServeUpload:
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
 
     def test_script_upload_is_not_served_as_a_script(self, client, wiki_dir):
-        # script-src 'self' trusts Leaf's origin, so an uploaded .js served as
+        # script-src 'self' trusts Zone's origin, so an uploaded .js served as
         # text/javascript would run from <script src="/_assets/…">.
         resp = client.get(self.put(wiki_dir, "x.js", b"window.x=1"), headers=HOST)
         assert resp.headers["Content-Type"] == "application/octet-stream"
@@ -1514,7 +1514,7 @@ class TestAuth:
         monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", True)
         body = auth_client.get("/login", headers=HOST).data.decode()
         assert body.count('class="remote-badge"') == 1
-        assert re.search(r'<h2>Sign in to Leaf<span class="remote-badge"[^>]*>🌐</span></h2>', body)
+        assert re.search(r'<h2>Sign in to Zone<span class="remote-badge"[^>]*>🌐</span></h2>', body)
         monkeypatch.setattr(settings, "LEAF_ALLOW_REMOTE", False)
         assert "remote-badge" not in auth_client.get("/login", headers=HOST).data.decode()
 
@@ -1558,7 +1558,7 @@ class TestAuth:
         manifest = auth_client.get("/public/manifest.json", headers=HOST)
         assert manifest.status_code == 200
         data = json.loads(manifest.data)
-        assert data["name"] == "Leaf" and data["start_url"] == "/"
+        assert data["name"] == "Zone" and data["start_url"] == "/"
         for icon in data["icons"]:
             resp = auth_client.get(icon["src"], headers=HOST)
             assert resp.status_code == 200, icon["src"]
@@ -2139,7 +2139,7 @@ class TestCrossSiteWrites:
         assert client.get("/page/r", headers=self.EVIL).status_code == 200
 
 
-# ── Leaf version ──────────────────────────────────────────────────────────────
+# ── Zone version ──────────────────────────────────────────────────────────────
 
 
 class TestVersion:
@@ -2147,8 +2147,8 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="leaf-version">Leaf {v} · abc1234 2026-09-26 12:00</p>' in body
-        assert f'<meta name="generator" content="Leaf {v}">' in body
+        assert f'<p class="leaf-version">Zone {v} · abc1234 2026-09-26 12:00</p>' in body
+        assert f'<meta name="generator" content="Zone {v}">' in body
         assert client.get("/api/version", headers=HOST).get_json() == {
             "version": v, "build": "abc1234 2026-09-26 12:00"}
 
@@ -2156,7 +2156,7 @@ class TestVersion:
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<p class="leaf-version">Leaf {v}</p>' in body
+        assert f'<p class="leaf-version">Zone {v}</p>' in body
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
@@ -2164,13 +2164,13 @@ class TestVersion:
         for path in ("/page/index", "/deck", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
-                    f'Leaf {v} · abc1234</div>') in body, path
+                    f'Zone {v} · abc1234</div>') in body, path
         monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f">Leaf {v} · abc1234+dirty</div>" in body
+        assert f">Zone {v} · abc1234+dirty</div>" in body
         monkeypatch.setattr(settings, "LEAF_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<div class="leaf-build">Leaf {v}</div>' in body
+        assert f'<div class="leaf-build">Zone {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "LEAF_BUILD", "<b>")
@@ -2179,7 +2179,7 @@ class TestVersion:
 
     @staticmethod
     def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
-        """Start Leaf with LEAF_DATA=wiki (None: unset) until it listens."""
+        """Start Zone with LEAF_DATA=wiki (None: unset) until it listens."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         if wiki is not None:
             env["LEAF_DATA"] = str(wiki)
@@ -2200,7 +2200,7 @@ class TestVersion:
         assert "LEAF_DATA isn't set" in r.stderr
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
-        # Leaf never makes the wiki itself, so a mistyped LEAF_DATA can't
+        # Zone never makes the wiki itself, so a mistyped LEAF_DATA can't
         # start an empty wiki somewhere else.
         r = self._start(tmp_path / "nowhere")
         assert r.returncode != 0

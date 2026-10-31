@@ -263,15 +263,15 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-// The wiki's settings left in the environment stop Leaf: they would be
+// The wiki's settings left in the environment stop Zone: they would be
 // ignored (a forgotten LEAF_PASSWORD: an open wiki).
 func TestStaleEnv(t *testing.T) {
 	wiki := t.TempDir()
 	for _, c := range []struct{ env, want string }{
-		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Leaf reads the wiki's settings only from .leaf/config now. Move them there with ./run.sh config import"},
+		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only from .leaf/config now. Move them there with ./run.sh config import"},
 		{"LEAF_USERS", "LEAF_USERS is set"}, {"LEAF_LOCALE", "LEAF_LOCALE is set"},
 		{"LEAF_SEMANTIC_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE is set"},
-		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Leaf no longer reads it"},
+		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it"},
 	} {
 		getenv := func(k string) string { return map[string]string{"LEAF_DATA": wiki, c.env: "x"}[k] }
 		if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), c.want) {

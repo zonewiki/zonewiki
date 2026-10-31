@@ -1,4 +1,4 @@
-"""Leaf's server under the tests: the `client` fixture talks HTTP to a Go
+"""Zone's server under the tests: the `client` fixture talks HTTP to a Go
 server on the test's wiki, the browser tests drive one.
 
 GoClient takes the calls of Flask's test client, which the tests were
@@ -67,7 +67,7 @@ def _settings() -> dict[str, str]:
 
 def config_text() -> str:
     """The settings file the server gets (.leaf/config): the wiki's settings
-    that differ from Leaf's defaults, CONFIG_FILE, then the users; "" when
+    that differ from Zone's defaults, CONFIG_FILE, then the users; "" when
     there is nothing to say (the wiki then has no file)."""
     noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
     values = {
@@ -127,7 +127,7 @@ def password_hash(password: str, iterations: int = 1000) -> str:
 
 
 def _flags() -> list[str]:
-    """The flags for what a test sets that isn't a setting: Leaf's docs
+    """The flags for what a test sets that isn't a setting: Zone's docs
     folder (for leaf_help), and the semantic index with the tests' fake
     embedder (tests/semantic.py)."""
     flags = ["-docs", str(settings.DOCS or "/nonexistent")]

@@ -1,7 +1,7 @@
 {
-  "name": "Leaf",
-  "short_name": "Leaf",
-  "description": "A self-hosted wiki with a task deck",
+  "name": "Zone",
+  "short_name": "Zone",
+  "description": "Wiki, notes and tasks for you, or for your small team",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

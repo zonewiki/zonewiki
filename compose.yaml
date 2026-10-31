@@ -1,4 +1,4 @@
-# Leaf: build the image from this checkout and run it.
+# Zone: build the image from this checkout and run it.
 #
 # ./run.sh up drives this file: it fills in what compose can't work out
 # itself (the build string from git, the port's bind address from
@@ -23,12 +23,12 @@ services:
         LEAF_SEMANTIC_SEARCH: ${LEAF_SEMANTIC_SEARCH:-}
     image: leaf
     container_name: leaf
-    # Not root: Leaf runs as the host user, so the files it writes in the wiki
+    # Not root: Zone runs as the host user, so the files it writes in the wiki
     # are theirs. run.sh sets your id -u/-g (with rootless podman plus
     # compose.podman.yaml's keep-id, which maps them in unchanged). Used
     # directly, set LEAF_UID/LEAF_GID in .env if yours aren't 1000.
     user: "${LEAF_UID:-1000}:${LEAF_GID:-1000}"
-    # A minimal init as PID 1 reaps orphaned processes (Leaf as PID 1
+    # A minimal init as PID 1 reaps orphaned processes (Zone as PID 1
     # wouldn't, and they would pile up as zombies until the PID limit).
     init: true
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
           create_host_path: false
           # Relabel for SELinux (ignored where SELinux is off).
           selinux: Z
-    # Reported as unhealthy when Leaf stops answering (compose ps); restarting
+    # Reported as unhealthy when Zone stops answering (compose ps); restarting
     # then is podman's --health-on-failure or an autoheal container's job.
     healthcheck:
       test: ["CMD", "/app/leaf", "health"]

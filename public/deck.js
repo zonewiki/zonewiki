@@ -1,4 +1,4 @@
-// ── Leaf Task App ────────────────────────────────────────────────────────────
+// ── Zone Task App ────────────────────────────────────────────────────────────
 // An ES module; leaf.js imports it on every page. initDecks() starts each
 // deck app (.tasks-app) on the page, and one added later (the hidden deck
 // that a new task from any page loads, actions.js).
@@ -2583,7 +2583,7 @@ function esc(str) {
 }
 
 // A link to another site opens in a new tab (as render.py _is_external
-// marks them in pages); a full URL to Leaf itself stays.
+// marks them in pages); a full URL to Zone itself stays.
 const extAttrs = href => {
   try {
     const u = new URL(href, location.href);

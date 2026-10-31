@@ -1,4 +1,4 @@
-// How Leaf protects the wiki (docs/spec/security.md): the Host and Origin
+// How Zone protects the wiki (docs/spec/security.md): the Host and Origin
 // checks, the login gate and its session cookie, the page policy, and the
 // throttle on wrong passwords and MCP tokens.
 package main
@@ -28,7 +28,7 @@ import (
 var now = time.Now
 
 // DNS rebinding: a page on evil.example whose name later resolves to
-// 127.0.0.1 reaches Leaf with "Host: evil.example". Only localhost, and the
+// 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
 // names in the hosts setting (a reverse proxy's public name, any port), get
 // in. LEAF_ALLOW_REMOTE without hosts turns the check off (LAN access by IP).
 var allowedHosts = map[string]bool{"localhost:5000": true, "127.0.0.1:5000": true}
@@ -46,7 +46,7 @@ func hostAllowed(host string) bool {
 // API, which takes text/plain bodies without a CORS preflight), and the Host
 // check passes because the Host really is localhost. Browsers send Origin on
 // every cross-site POST, so a write whose Origin names another site, or is
-// "null" (a sandboxed iframe), is refused. Leaf's own forms, fetches and the
+// "null" (a sandboxed iframe), is refused. Zone's own forms, fetches and the
 // pagehide beacon are same-origin; tools like curl send no Origin.
 func crossSite(r *http.Request) bool {
 	switch r.Method {
@@ -69,12 +69,12 @@ func crossSite(r *http.Request) bool {
 // What a page may run. Pages render their raw HTML as written, and pages are
 // also written by AI clients (MCP), which may have read a prompt injection: a
 // <script>, an onerror= or a javascript: link in a page would run with the
-// user's session and could read and rewrite the whole wiki. So only Leaf's own
-// script files run (script-src 'self'; Leaf has no inline scripts or
+// user's session and could read and rewrite the whole wiki. So only Zone's own
+// script files run (script-src 'self'; Zone has no inline scripts or
 // handlers), no plugins, no <base> that re-points those files, no form that
-// posts elsewhere. Clickjacking: another site could load Leaf invisibly in a
+// posts elsewhere. Clickjacking: another site could load Zone invisibly in a
 // frame and trick a signed-in user into clicking Delete or Commit, so only
-// Leaf's own pages may frame it (a page's raw HTML may show an upload in an
+// Zone's own pages may frame it (a page's raw HTML may show an upload in an
 // <iframe>). A response with its own policy (an SVG upload's) keeps it and
 // gets only frame-ancestors added.
 const pageCSP = "script-src 'self'; object-src 'none'; base-uri 'self'; " +
@@ -95,16 +95,16 @@ func contentPolicy(h http.Header) {
 	}
 }
 
-// isHTTPS: the browser's connection is HTTPS, Leaf's own (rare) or a
+// isHTTPS: the browser's connection is HTTPS, Zone's own (rare) or a
 // reverse proxy's, which says so in X-Forwarded-Proto.
 func isHTTPS(r *http.Request) bool {
 	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
 	return r.TLS != nil || strings.ToLower(strings.TrimSpace(proto)) == "https"
 }
 
-// secretKey signs session cookies: one Leaf made once and keeps in
+// secretKey signs session cookies: one Zone made once and keeps in
 // .leaf/secret_key in the wiki folder (owner-only, kept out of git), so a
-// restart doesn't sign everyone out. A wiki folder Leaf can't write to gets
+// restart doesn't sign everyone out. A wiki folder Zone can't write to gets
 // a new key per start.
 func secretKey(dataDir string) []byte {
 	path := filepath.Join(dataDir, ".leaf", "secret_key")

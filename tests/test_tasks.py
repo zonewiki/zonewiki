@@ -1,4 +1,4 @@
-"""Comprehensive tests for the Leaf task app API."""
+"""Comprehensive tests for the Zone task app API."""
 
 import json
 import os
@@ -1646,9 +1646,9 @@ class TestLimitParam:
 
 
 class TestFileFormat:
-    """Leaf writes each task's fields in one order; files in another (the
-    Python Leaf's, a hand edit) are rewritten once, at start, in a commit of
-    their own. Keys Leaf doesn't know stay."""
+    """Zone writes each task's fields in one order; files in another (the
+    Python Zone's, a hand edit) are rewritten once, at start, in a commit of
+    their own. Keys Zone doesn't know stay."""
 
     OLD = [{"id": "a1", "title": "Old", "description": "", "tags": [], "due_date": None,
             "created_at": "2026-01-02T10:00:00", "completed_at": None, "wont_do": False,
@@ -1664,7 +1664,7 @@ class TestFileFormat:
         subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         subprocess.run(["git", "commit", "-qm", "old"], cwd=git_wiki_dir, env=settings.GIT_ENV, check=True)
         git_setup(tmp_path_factory)   # a start
-        assert self.log(git_wiki_dir)[0] == "Write the deck's files in Leaf's format"
+        assert self.log(git_wiki_dir)[0] == "Write the deck's files in Zone's format"
         task = json.loads(deck.read_text(encoding="utf-8"))[0]
         assert list(task)[:5] == ["id", "title", "description", "tags", "start_date"]
         assert list(task)[-1] == "blocked_by" and task["blocked_by"] == ["x"]

@@ -1,6 +1,6 @@
 # Routes and page views
 
-Part of Leaf's spec (see `AGENTS.md` for the index).
+Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Routes
 
@@ -21,7 +21,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 | POST   | `/api/render-notes`   | Deck task notes and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Notes in `docs/spec/deck.md`) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
-| GET    | `/api/version`        | `{ version, build }`: Leaf's version and build (see Version in `docs/spec/deployment.md`) |
+| GET    | `/api/version`        | `{ version, build }`: Zone's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `leaf health`; the error itself only with a session (or without a login), else a pointer to the log, as it may name users |
 | POST   | `/api/upload`         | Upload a file; returns `{ url }` for insertion into markdown; `page`: the page it is for (a private page's are kept in `private/<user>/_assets/`) |
 | GET    | `/_assets/<path>`     | An upload: `<file>`, or `private/<user>/<file>` for that user only |
@@ -62,7 +62,7 @@ Part of Leaf's spec (see `AGENTS.md` for the index).
 A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_deck/`, `.leaf/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview). These are the folders `iterPages()` skips. A file name starting with `_` (`notes`, `a/_notes`) is still a page.
 
 Every page view includes:
-- **Breadcrumb** — `Wiki Deck Scratch › Page Title` above the page header: its root is the module switcher (see Modules), the green leaf logo in front of Wiki, the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen deck edit modal's buttons off-screen.
+- **Breadcrumb** — `Wiki Deck Scratch › Page Title` above the page header: its root is the module switcher (see Modules), the green Z logo in front of Wiki, the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen deck edit modal's buttons off-screen.
 - **Backlinks** — section at the bottom listing all pages that link to the current page (`findBacklinks`, `pageLinkTargets`): a `[[wikilink]]`, or a markdown link that is relative (`page`, `../dir/page`, `page.md`) or absolute (`/page/<slug>`), with or without an `#anchor` or a title; the forms a rename re-points. Shows "No pages link here." when empty.
 - **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the right end of the breadcrumb (left of the top actions; hidden where the side columns list the backlinks). On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section. Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `js/chrome.js`) instead of scrolling down. A second tap or a tap elsewhere closes it. The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
 - **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`build_related_html`). Absent when none clears the similarity floor.
