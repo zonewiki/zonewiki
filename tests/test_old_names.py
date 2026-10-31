@@ -1,11 +1,17 @@
 """What still works by the names from before a rename: Deck is called Tasks,
-so /deck, /api/deck and the _deck/ folder (moved at start-up) go on working.
-The old [[deck …]] syntax: test_tasks_embed.py."""
+so /deck, /api/deck and the _deck/ folder (moved at start-up) go on working;
+Scratch is called Notes, so /page/_scratch, /api/scratch, ?scratch=1 and
+MCP's file_scratch_note and scratch arguments do too. The old [[deck …]]
+syntax: test_tasks_embed.py."""
 
 import json
 import subprocess
 
-from tests.conftest import HOST, create_task
+import pytest
+
+from tests import settings
+from tests.conftest import HOST, create_task, write_page
+from tests.test_mcp import TOKEN, call, rpc
 
 
 def git(wiki, *args):
@@ -104,3 +110,50 @@ class TestTasksFolderMove:
         (wiki_dir / "_deck" / "tasks.json").write_text(task_file("Plain files"))
         assert [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()] == ["Plain files"]
         assert (wiki_dir / "_tasks" / "tasks.json").exists() and not (wiki_dir / "_deck").exists()
+
+
+# ── /page/_scratch, /api/scratch, MCP's old names ───────────────────────────────
+
+class TestOldNotesNames:
+    NOTE = "2026-09-02_10-00-00_groceries"
+
+    def test_page_scratch_redirects_to_notes_with_its_query(self, client):
+        resp = client.get("/page/_scratch", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/notes"
+        assert client.get("/page/_scratch?q=milk", headers=HOST).headers["Location"] == "/notes?q=milk"
+
+    def test_the_notes_module_links_to_notes(self, client):
+        body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+        assert 'href="/notes" class="action-module module-link" data-module="notes"' in body
+        assert "/page/_scratch" not in body
+        assert '<body data-module="notes">' in client.get("/notes", headers=HOST).get_data(as_text=True)
+
+    def test_api_scratch_still_makes_a_note(self, client, wiki_dir):
+        slug = client.post("/api/scratch", data={"title": "Old client"}, headers=HOST).get_json()["slug"]
+        assert slug.endswith("_old-client") and (wiki_dir / f"{slug}.md").exists()
+
+    def test_search_still_takes_scratch_1(self, client, wiki_dir):
+        write_page(wiki_dir, self.NOTE, "# Groceries\n\nmilk\n")
+        write_page(wiki_dir, "dairy", "# Dairy\n\nmilk\n")
+        for param in ("notes", "scratch"):
+            hits = client.get("/api/search", query_string={"q": "milk", param: "1"}, headers=HOST).get_json()
+            assert [h["slug"] for h in hits] == [self.NOTE], param
+
+
+class TestOldMcpNames:
+    @pytest.fixture(autouse=True)
+    def _token(self, monkeypatch):
+        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", TOKEN)
+
+    def test_tools_list_names_only_file_note(self, client):
+        names = [t["name"] for t in rpc(client, "tools/list").get_json()["result"]["tools"]]
+        assert "file_note" in names and "file_scratch_note" not in names
+
+    def test_scratch_arguments_and_file_scratch_note_still_work(self, client, git_wiki_dir):
+        text, err = call(client, "write_page", slug="Alex prep", content="Roadmap", scratch=True)
+        assert not err and "Created note" in text
+        note = next(p.stem for p in git_wiki_dir.glob("*_alex-prep.md"))
+        assert note in call(client, "list_pages", scratch=True)[0]
+        assert note in call(client, "search_wiki", query="roadmap", scratch=True)[0]
+        text, err = call(client, "file_scratch_note", slug=note, name="Alex prep")
+        assert not err and (git_wiki_dir / "alex-prep.md").exists(), text

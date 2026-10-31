@@ -65,10 +65,10 @@ class TestViewPage:
 
     def test_views_name_their_module(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
-        quicknote = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        quicknote = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for url, module in (("/page/my-page", "wiki"), ("/page/index", "wiki"),
                             ("/tasks", "tasks"), ("/tasks?list=shop", "tasks"),
-                            ("/page/_scratch", "notes"), (f"/page/{quicknote}", "notes"),
+                            ("/notes", "notes"), (f"/page/{quicknote}", "notes"),
                             ("/history/my-page", "wiki")):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert f'<body data-module="{module}">' in body, url
@@ -83,10 +83,10 @@ class TestViewPage:
 
     def test_breadcrumb_root_is_the_module_switcher(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/tasks", "/page/_scratch"):
+        for url in ("/page/my-page", "/tasks", "/notes"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
-            assert crumb.index('href="/"') < crumb.index('href="/tasks"') < crumb.index('href="/page/_scratch"'), url
+            assert crumb.index('href="/"') < crumb.index('href="/tasks"') < crumb.index('href="/notes"'), url
             assert '<span class="module-label">Wiki</span>' in crumb
 
     @staticmethod
@@ -144,7 +144,7 @@ class TestViewPage:
         # New note, New task and Search, at the start of <main> so the
         # CSS can put them at the top right, in line with the breadcrumb.
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/tasks", "/page/_scratch"):
+        for url in ("/page/my-page", "/tasks", "/notes"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
             # Before the page itself; only the status badges, which share
@@ -392,7 +392,7 @@ class TestViewPage:
 
     def test_only_page_views_are_wide(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        for url in ("/tasks", "/page/_scratch", "/search?q=garden", "/edit/garden"):
+        for url in ("/tasks", "/notes", "/search?q=garden", "/edit/garden"):
             assert 'class="wide"' not in client.get(url, headers=HOST).get_data(as_text=True), url
 
 
@@ -446,7 +446,7 @@ class TestEditPageGet:
         assert 'name="content"' in text and 'data-cursor="end"' in text
 
     def test_new_quicknote_puts_cursor_after_title(self, client):
-        slug = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        slug = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         assert 'data-cursor="end"' in client.get(f"/edit/{slug}", headers=HOST).data.decode()
 
     def test_existing_page_keeps_cursor_at_start(self, client, wiki_dir):
@@ -949,7 +949,7 @@ class TestApiPagesList:
         resp = client.get("/api/pages-list", headers=HOST)
         pages = resp.get_json()
         slugs = {p["slug"] for p in pages}
-        assert "_scratch" in slugs
+        assert "/notes" in slugs and "/tasks" in slugs
         assert "_daily" not in slugs   # daily notes were removed
 
     def test_built_in_pages_are_marked(self, client, wiki_dir):
@@ -1600,24 +1600,24 @@ class TestAuth:
 class TestSpecialPages:
 
     def test_quicknote_index_page_loads(self, client):
-        resp = client.get("/page/_scratch", headers=HOST)
+        resp = client.get("/notes", headers=HOST)
         assert resp.status_code == 200
         assert b"Notes" in resp.data
 
     def test_api_quicknote_creates_note(self, client, wiki_dir):
-        resp = client.post("/api/scratch", data={"title": "My Note"}, headers=HOST)
+        resp = client.post("/api/notes", data={"title": "My Note"}, headers=HOST)
         assert resp.status_code == 200
         slug = resp.get_json()["slug"]
         assert (wiki_dir / f"{slug}.md").exists()
 
     def test_api_quicknote_slash_in_title_makes_no_folder(self, client, wiki_dir):
         # A / used to make a folder, whose note was then no note.
-        slug = client.post("/api/scratch", data={"title": "A/B test"}, headers=HOST).get_json()["slug"]
+        slug = client.post("/api/notes", data={"title": "A/B test"}, headers=HOST).get_json()["slug"]
         assert slug.endswith("_a-b-test") and "/" not in slug
         assert (wiki_dir / f"{slug}.md").read_text() == "# A/B test\n\n"
 
     def test_api_quicknote_same_title_same_second_makes_two_notes(self, client, wiki_dir):
-        slugs = {client.post("/api/scratch", data={"title": "Twin"}, headers=HOST).get_json()["slug"]
+        slugs = {client.post("/api/notes", data={"title": "Twin"}, headers=HOST).get_json()["slug"]
                  for _ in range(3)}
         assert len(slugs) == 3
 
@@ -1629,27 +1629,27 @@ class TestSpecialPages:
         client.post("/api/tasks", json={"title": "Roof repair"}, headers=HOST)
         get = lambda q, **kw: client.get("/api/search", query_string={"q": q, **kw}, headers=HOST).get_json()
         assert {r["slug"] for r in get("roof repair")} >= {"roof", "2026-09-01_10-00-00_bob-call"}
-        hits = get("roof repair", scratch="1")
+        hits = get("roof repair", notes="1")
         assert [r["slug"] for r in hits] == ["2026-09-01_10-00-00_bob-call"]
         assert "<mark>" in hits[0]["excerpt"] and "hl=" in hits[0]["href"]
         # The query syntax works as everywhere.
-        assert [r["slug"] for r in get('"milk, eggs"', scratch="1")] == ["2026-09-02_10-00-00_groceries"]
-        assert [r["slug"] for r in get("roof -quote", scratch="1")] == []
+        assert [r["slug"] for r in get('"milk, eggs"', notes="1")] == ["2026-09-02_10-00-00_groceries"]
+        assert [r["slug"] for r in get("roof -quote", notes="1")] == []
         # Every match, not only the search modal's 100.
         for i in range(120):
             write_page(wiki_dir, f"2026-08-01_10-00-{i // 60:02d}_n{i}", f"# Note {i}\n\nzebra\n")
-        assert len(get("zebra", scratch="1", limit="1000")) == 120
+        assert len(get("zebra", notes="1", limit="1000")) == 120
         assert len(get("zebra", limit="1000")) == 100
 
     def test_quicknote_page_has_a_filter(self, client, wiki_dir):
         write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n")
-        body = client.get("/page/_scratch?q=bob", headers=HOST).get_data(as_text=True)
+        body = client.get("/notes?q=bob", headers=HOST).get_data(as_text=True)
         assert 'id="notes-filter"' in body and 'value="bob"' in body
         assert 'data-slug="2026-09-01_10-00-00_bob-call"' in body
         # No notes, nothing to filter.
         for f in wiki_dir.glob("2026-*.md"):
             f.unlink()
-        assert 'id="notes-filter"' not in client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        assert 'id="notes-filter"' not in client.get("/notes", headers=HOST).get_data(as_text=True)
 
     def test_daily_notes_are_gone(self, client, wiki_dir):
         # The feature was removed: no endpoint, no shortcut, no index. An old
@@ -2277,7 +2277,7 @@ class TestNoshare:
         write_page(wiki_dir, "2026-10-01_09-00-00_salary", "---\ntags: noshare\n---\n# Salary talk\n")
         write_page(wiki_dir, "2026-10-01_10-00-00_lunch", "# Lunch\n")
         client.set_cookie("leaf-sharing", "1")
-        body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        body = client.get("/notes", headers=HOST).get_data(as_text=True)
         assert "Lunch" in body and "Salary" not in body
 
 
@@ -2320,7 +2320,7 @@ class TestPromotePage:
         assert "[[conversations/2026-10-08_alex-sync]]" in text
         assert "(/page/conversations/2026-10-08_alex-sync#a)" in text
         # It left Notes list.
-        body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        body = client.get("/notes", headers=HOST).get_data(as_text=True)
         assert "Meeting with Alex" not in body
 
     def test_promote_refuses_and_says_why(self, client, wiki_dir):

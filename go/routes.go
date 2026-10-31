@@ -16,17 +16,20 @@ import (
 
 func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /private", privateRoute)
-	mux.HandleFunc("GET /page/_scratch", notesPage)
+	mux.HandleFunc("GET /notes", notesPage)
+	// /page/_scratch: Notes' address while it was called Scratch; its links
+	// and bookmarks still work.
+	mux.HandleFunc("GET /page/_scratch", func(w http.ResponseWriter, r *http.Request) {
+		to := "/notes"
+		if r.URL.RawQuery != "" {
+			to += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, to, http.StatusFound)
+	})
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
-	mux.HandleFunc("POST /api/scratch", func(w http.ResponseWriter, r *http.Request) {
-		slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
-		if err != nil {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-			return
-		}
-		writeJSON(w, http.StatusOK, M{"slug": slug})
-	})
+	mux.HandleFunc("POST /api/notes", apiNewNote)
+	mux.HandleFunc("POST /api/scratch", apiNewNote) // what it was called before
 	mux.HandleFunc("GET /edit/{slug...}", editPage)
 	mux.HandleFunc("POST /edit/{slug...}", savePage)
 	mux.HandleFunc("POST /api/save/{slug...}", apiSave)
@@ -81,11 +84,21 @@ func htmlOf(s string) template.HTML { return template.HTML(s) }
 func quote(s string) string { return pathURL(s)[1:] }
 
 // notesPage: the notes. Its filter runs the search over them
+// apiNewNote: a new note titled by the form's title; answers its slug.
+func apiNewNote(w http.ResponseWriter, r *http.Request) {
+	slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
+	if err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, M{"slug": slug})
+}
+
 // (js/search.js initNotesFilter); ?q= keeps the query.
 func notesPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	page(w, rq, http.StatusOK, "notes.html", "Notes", shell{}, M{"notes": listQuicknote(rq),
-		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Notes", "", "")})
+		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": breadcrumb(rq, []crumb{{"Notes", ""}}, "/notes", true, "Notes", "")})
 }
 
 var (
@@ -814,7 +827,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	out = append(out, pages...)
 	out = append(out,
 		M{"slug": "/tasks", "title": "Tasks", "href": "/tasks", "links": 0, "mtime": 0, "builtin": true},
-		M{"slug": "_scratch", "title": "Notes", "links": counts["_scratch"], "mtime": 0, "builtin": true})
+		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": counts["_scratch"], "mtime": 0, "builtin": true})
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -948,8 +961,8 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// apiSearch: the search modal's results (?limit=, ?unlinked=1; ?scratch=1:
-// notes only, for Notes page's filter).
+// apiSearch: the search modal's results (?limit=, ?unlinked=1; ?notes=1,
+// or ?scratch=1 as it was called before: notes only, for Notes page's filter).
 func apiSearch(w http.ResponseWriter, r *http.Request) {
 	args := r.URL.Query()
 	q := strings.TrimSpace(args.Get("q"))
@@ -957,7 +970,7 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []M{})
 		return
 	}
-	quicknote := args.Get("scratch") == "1"
+	quicknote := args.Get("notes") == "1" || args.Get("scratch") == "1"
 	limit, ok := intArg(args.Get("limit"), args.Has("limit"))
 	if !ok {
 		limit = searchLimit

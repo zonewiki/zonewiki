@@ -1326,7 +1326,7 @@ kbd {
   background: var(--code-bg);
 }
 
-/* ── Notes list (_scratch page) ───────────────────────────────────────────── */
+/* ── Notes list (/notes) ───────────────────────────────────────────── */
 
 .notes-list, .page-content .notes-list { list-style: none; padding: 0; margin-left: 0; }
 .notes-list li {

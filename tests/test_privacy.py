@@ -128,7 +128,8 @@ READS = [
     ("GET /api/pages", "GET", "/api/pages", {}),
     ("GET /api/pages-list", "GET", "/api/pages-list", {}),
     ("GET /pages", "GET", "/pages", {}),
-    ("GET /page/_scratch", "GET", "/page/_scratch", {}),
+    ("GET /notes", "GET", "/notes", {}),
+    ("GET /page/_scratch", "GET", "/page/_scratch", {}),   # redirects to /notes
     ("GET /page/_deleted", "GET", "/page/_deleted", {}),
     ("GET /page/{slug...}", "GET", "/page/private/alice/old", {}),   # a deleted page offers restore
     ("GET /uncommitted", "GET", "/uncommitted", {}),
@@ -226,18 +227,18 @@ def alice(client, wiki):
 
 
 def quicknote_titles(client):
-    links = re.findall(r'<a href="/page/([^"]+)"', client.get("/page/_scratch", headers=HOST).data.decode())
-    return [s for s in links if s != "_scratch"]   # Notes pill and tab
+    links = re.findall(r'<a href="/page/([^"]+)"', client.get("/notes", headers=HOST).data.decode())
+    return links
 
 
 def test_quicknotes_are_private(alice, wiki):
     (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: a shared page, in no one's Notes
-    slug = alice.post("/api/scratch", data={"title": "Mine"}, headers=HOST).get_json()["slug"]
+    slug = alice.post("/api/notes", data={"title": "Mine"}, headers=HOST).get_json()["slug"]
     assert re.fullmatch(r"private/alice/\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_mine", slug)
     assert (wiki / f"{slug}.md").exists()
     notes = quicknote_titles(alice)
     assert slug in notes and NOTE in notes and "2026-01-01_10-00-00_shared" not in notes
-    assert 'aria-label="Private">🔒</span></h1>' in alice.get("/page/_scratch", headers=HOST).data.decode()
+    assert 'aria-label="Private">🔒</span></h1>' in alice.get("/notes", headers=HOST).data.decode()
     sign_in(alice, "bob")
     bob = alice
     assert quicknote_titles(bob) == []
@@ -486,11 +487,11 @@ MCP_READS = [
     ("read_guides", {"slug": SNEAK}),
     ("search_wiki", {"query": QUERY}),
     ("search_wiki", {"query": QUERY, "under": "private"}),
-    ("search_wiki", {"query": QUERY, "scratch": True}),
+    ("search_wiki", {"query": QUERY, "notes": True}),
     ("grep_wiki", {"pattern": QUERY}),
     ("list_pages", {}),
     ("list_pages", {"under": "private"}),
-    ("list_pages", {"scratch": True}),
+    ("list_pages", {"notes": True}),
     ("check_links", {}),
     ("list_tags", {}),
     ("history", {"slug": DIARY}),
@@ -548,7 +549,7 @@ def test_history_names_no_private_page(client, wiki):
     """A commit that moved alice's note into the wiki is in the shared
     page's history, but its message doesn't name the note for bob."""
     alice = "alice-token"
-    mcp(client, "file_scratch_note", token=alice, slug=NOTE, name="Idea")
+    mcp(client, "file_note", token=alice, slug=NOTE, name="Idea")
     assert NOTE in mcp(client, "history", token=alice, slug="idea")
     for text in (mcp(client, "history", slug="idea"), mcp(client, "history")):
         assert "Promote a private page to idea" in text and "private/alice" not in text
@@ -564,10 +565,10 @@ def test_recent_changes_fill_the_limit_with_visible_commits(client, wiki):
 
 
 def test_bobs_assistant_writes_quicknotes_in_his_folder(client, wiki):
-    text = mcp(client, "write_page", scratch=True, slug="Thought", content="Hm\n")
+    text = mcp(client, "write_page", note=True, slug="Thought", content="Hm\n")
     assert "Created note private/bob/" in text
-    assert "private/bob/" in mcp(client, "list_pages", scratch=True)
-    assert "private/bob/" not in mcp(client, "list_pages", token="alice-token", scratch=True)
+    assert "private/bob/" in mcp(client, "list_pages", notes=True)
+    assert "private/bob/" not in mcp(client, "list_pages", token="alice-token", notes=True)
 
 
 # ── Writes ───────────────────────────────────────────────────────────────────
@@ -638,7 +639,7 @@ def _alices_files(wiki):
 @pytest.mark.parametrize("method,path,kwargs", _write_params())
 def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
     if "{bobs}" in path:   # bob's own note, aiming at alice's pages from there
-        path = path.replace("{bobs}", bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"])
+        path = path.replace("{bobs}", bob.post("/api/notes", data={"title": "Bobs"}, headers=HOST).get_json()["slug"])
     kwargs = {k: v() if callable(v) else v for k, v in kwargs.items()}
     before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
     resp = bob.open(fill(path, wiki), method=method, headers=HOST, **kwargs)
@@ -661,7 +662,7 @@ MCP_WRITES = [
     ("append_to_page", {"slug": SNEAK, "content": "Bob was here"}),
     ("delete_page", {"slug": SNEAK}),
     ("rename_page", {"slug": SNEAK, "new_slug": "stolen"}),
-    ("file_scratch_note", {"slug": "{bobs}", "page": SNEAK}),
+    ("file_note", {"slug": "{bobs}", "page": SNEAK}),
     ("append_to_page", {"slug": DIARY, "content": "Bob was here"}),
     ("replace_in_pages", {"find": QUERY, "replace": "bob", "dry_run": False}),
     ("rename_page", {"slug": DIARY, "new_slug": "stolen"}),
@@ -671,9 +672,9 @@ MCP_WRITES = [
     ("delete_page", {"slug": DIARY}),
     ("restore_page", {"slug": "private/alice/old", "version": "{old}"}),
     ("restore_page", {"slug": DIARY, "version": "{sha}"}),
-    ("file_scratch_note", {"slug": NOTE, "name": "stolen"}),
-    ("file_scratch_note", {"slug": "{bobs}", "page": DIARY}),
-    ("file_scratch_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
+    ("file_note", {"slug": NOTE, "name": "stolen"}),
+    ("file_note", {"slug": "{bobs}", "page": DIARY}),
+    ("file_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
     ("create_task", {"title": "Bob's", "private": True}),
     ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
     ("update_task", {"id": TASK_ID, "status": "deleted"}),
@@ -685,7 +686,7 @@ MCP_WRITES = [
 @pytest.mark.parametrize("tool,args", [pytest.param(t, a, id=f"{t} {i}") for i, (t, a) in enumerate(MCP_WRITES)])
 def test_bobs_assistant_changes_nothing_of_alices(client, wiki, tool, args):
     if "{bobs}" in args.values():
-        bobs = mcp(client, "write_page", scratch=True, slug="Bobs", content="Bob's\n")
+        bobs = mcp(client, "write_page", note=True, slug="Bobs", content="Bob's\n")
         args = {k: re.search(r"note (\S+)", bobs)[1] if v == "{bobs}" else v for k, v in args.items()}
     args = {k: fill(v, wiki) if isinstance(v, str) else v for k, v in args.items()}
     before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
@@ -703,7 +704,7 @@ def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
         return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in (wiki / "private/alice").rglob("*") if p.is_file()}
     before = hers()
     mcp(bob, "write_page", slug=SNEAK, content="# Bob was here\n", overwrite=True)
-    note = bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"]
+    note = bob.post("/api/notes", data={"title": "Bobs"}, headers=HOST).get_json()["slug"]
     bob.post(f"/promote/{note}", data={"folder": "private/bob/../alice", "name": "x"}, headers=HOST)
     assert hers() == before
 
@@ -727,7 +728,7 @@ def test_an_assistant_cannot_make_a_shared_page_private(alice, wiki):
 def test_moving_the_private_folder_is_refused(client, wiki):
     """With a note of bob's in private/, private/ is a folder he sees, but
     it holds alice's too: nothing moves."""
-    mcp(client, "write_page", scratch=True, slug="Bobs", content="Bob's\n")
+    mcp(client, "write_page", note=True, slug="Bobs", content="Bob's\n")
     before = _alices_files(wiki)
     assert "Nothing was moved" in mcp(client, "rename_page", slug="private/", new_slug="stolen")
     assert _alices_files(wiki) == before and not (wiki / "stolen").exists()
@@ -747,7 +748,7 @@ EXEMPT = {
     "/mcp",                         # its tools: MCP_READS
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
     "GET /api/health",              # ok, or the settings file's error
-    "POST /api/scratch",            # makes bob's own note
+    "POST /api/notes", "POST /api/scratch",   # makes bob's own note
     "GET /private",                 # redirects to the caller's own private home (test_users.py)
 }
 

@@ -1,5 +1,5 @@
 {{- /* The notes, newest first. The filter runs the search over them
-    (js/search.js initNotesFilter, /api/search?scratch=1); ?q= keeps it. */ -}}
+    (js/search.js initNotesFilter, /api/search?notes=1); ?q= keeps it. */ -}}
 {{define "body"}}
 {{.breadcrumb_html}}
 <header class="page-header"><h1>Notes{{if .private}} <span class="lock" title="Private: only you see your notes" aria-label="Private">🔒</span>{{end}}</h1></header>

@@ -97,7 +97,7 @@ def test_phone_tab_bar_marks_and_opens_modules(new_page, wiki):
     expect(tab("tasks")).to_have_attribute("aria-current", "page")
     expect(tab("wiki")).not_to_have_attribute("aria-current", "page")
     tab("notes").tap()
-    phone.wait_for_url("**/page/_scratch")
+    phone.wait_for_url("**/notes")
     expect(tab("notes")).to_have_attribute("aria-current", "page")
 
 
@@ -208,7 +208,7 @@ def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
     _count_trusted_clicks(phone)
     with phone.expect_navigation():
         _touch_tap(phone, phone.locator(".action-module[data-module=notes]"))
-    assert phone.url.endswith("/page/_scratch")
+    assert phone.url.endswith("/notes")
     assert phone.evaluate("sessionStorage.trusted") == "0"
     phone.goto("/tasks")
     _count_trusted_clicks(phone)
@@ -237,7 +237,7 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
     assert under   # a card is what the browser finds there
     with phone.expect_navigation():
         _touch_tap(phone, tab, below=20)
-    assert phone.url.endswith("/page/_scratch")
+    assert phone.url.endswith("/notes")
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
@@ -415,7 +415,7 @@ def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("n")
-    page.wait_for_url("**/page/_scratch")
+    page.wait_for_url("**/notes")
     page.keyboard.press("g")
     page.keyboard.press("a")
     page.wait_for_url(re.compile(r"/tasks$"))
@@ -431,7 +431,7 @@ def test_the_keys_from_before_the_rename_still_work(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("s")
-    page.wait_for_url("**/page/_scratch")
+    page.wait_for_url("**/notes")
     page.keyboard.press("g")
     page.keyboard.press("d")
     page.wait_for_url(re.compile(r"/tasks$"))
@@ -455,7 +455,7 @@ def test_desktop_breadcrumb_switches_modules(page, wiki):
     page.wait_for_url("**/tasks")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("aria-current", "page")
     page.locator(".breadcrumb .module-link[data-module=notes]").click()
-    page.wait_for_url("**/page/_scratch")
+    page.wait_for_url("**/notes")
     # The navigation trail keeps the page, but not the modules' own pages.
     expect(page.locator(".breadcrumb > a")).to_have_text(["Garden"])
 

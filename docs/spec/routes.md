@@ -16,7 +16,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
-| GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&scratch=1`: only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
+| GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1` (or `&scratch=1`, from before the rename): only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no task list embeds) |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview); `?page=` the page being edited (your own private page: its links to new shared pages are marked) |
 | POST   | `/api/render-notes`   | Task notes and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Notes in `docs/spec/tasks.md`) |
@@ -48,8 +48,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/api/tasks/completed` | Completed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
 | GET    | `/api/tasks/completed-years` | `{ years }`: years with completed tasks, newest first, this year always included (Completed's year switcher). `?list=<name>` as for the count. |
 | GET    | `/api/tasks/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it); without it, every task's (a leftover `?all=1` changes nothing). |
-| POST   | `/api/scratch`    | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }` |
-| GET    | `/page/_scratch`        | Auto-generated index of all notes, newest first, with a filter box (`?q=`) that searches notes only |
+| POST   | `/api/notes`      | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }`. `/api/scratch`, its name before Scratch was called Notes, does the same |
+| GET    | `/notes`                | Auto-generated index of all notes, newest first, with a filter box (`?q=`) that searches notes only |
+| GET    | `/page/_scratch`        | Notes' address while it was called Scratch: redirects to `/notes` (302) with its query |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/promote/<slug>`     | Move a note to the wiki (see Notes → Move to wiki): fields `folder`, `name`, `keep_date`, `link_from`; redirects to the new page, or back with `?promote_error=…` |
 | POST   | `/append/<slug>`      | Append a note to a page as a section (see Notes → Append to page): fields `page`, `heading`; redirects to the section, or back with `?append_error=…` |

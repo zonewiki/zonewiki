@@ -474,7 +474,7 @@ def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
     rows = []
-    for url in ("/page/release", "/page/_scratch", "/tasks"):
+    for url in ("/page/release", "/notes", "/tasks"):
         page.goto(url)
         sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
         h1 = page.locator("h1").first.bounding_box()
@@ -674,7 +674,7 @@ def test_tasks_quicknote_and_wiki_content_share_one_width(new_page, wiki):
         boxes["embed"] = page.locator(".tasks-app").bounding_box()
         page.goto("/tasks")
         boxes["tasks"] = page.locator(".tasks-app").bounding_box()
-        page.goto("/page/_scratch")
+        page.goto("/notes")
         boxes["quicknote"] = page.locator(".notes-list").bounding_box()
         page.goto("/search?q=note")
         boxes["search"] = page.locator(".search-results").bounding_box()

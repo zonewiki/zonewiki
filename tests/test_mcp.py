@@ -54,7 +54,7 @@ class TestToolDefinitions:
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "leaf_help", "read_guides",
-            "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_scratch_note", "rename_page",
+            "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "rename_page",
             "delete_page", "restore_page", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "leaf_help", "read_guides"}
@@ -76,7 +76,7 @@ class TestToolDefinitions:
 
     def test_the_writes_take_guides(self, client):
         writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
-                  "delete_page", "restore_page", "read_guides", "file_scratch_note"}
+                  "delete_page", "restore_page", "read_guides", "file_note"}
         for tool in self.tools(client):
             assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
 
@@ -1143,54 +1143,54 @@ def subjects(wiki):
 
 
 class TestQuicknoteNotes:
-    """Notes over MCP: write_page's scratch, list_pages' and
-    search_wiki's scratch filter, file_scratch_note (quicknotes.go)."""
+    """Notes over MCP: write_page's note, list_pages' and
+    search_wiki's notes filter, file_note (quicknotes.go)."""
 
     def test_write_page_makes_a_quicknote(self, client, git_wiki_dir):
         text, err = call(client, "write_page", slug="Alex prep", content="Ask about the roadmap.",
-                         scratch=True, summary="for Friday")
+                         note=True, summary="for Friday")
         assert not err
         slug = re.search(r"Created note (\S+) ", text).group(1)
         assert re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_alex-prep", slug)
-        assert "file_scratch_note" in text
+        assert "file_note" in text
         # No title in the content: the name becomes it.
         assert (git_wiki_dir / f"{slug}.md").read_text() == "# Alex prep\n\nAsk about the roadmap.\n"
         assert subjects(git_wiki_dir)[0] == f"Create {slug}: for Friday (MCP)"
 
     def test_the_contents_title_names_it_and_frontmatter_stays_first(self, client, wiki_dir):
-        text, _ = call(client, "write_page", slug="", content="# Idea: a/b test\n\nbody", scratch=True)
+        text, _ = call(client, "write_page", slug="", content="# Idea: a/b test\n\nbody", note=True)
         slug = re.search(r"Created note (\S+) ", text).group(1)
         assert slug.endswith("_idea-a-b-test") and "/" not in slug
-        text, _ = call(client, "write_page", slug="Tagged", content="---\ntags: [x]\n---\nbody", scratch=True)
+        text, _ = call(client, "write_page", slug="Tagged", content="---\ntags: [x]\n---\nbody", note=True)
         slug = re.search(r"Created note (\S+) ", text).group(1)
         assert (wiki_dir / f"{slug}.md").read_text() == "---\ntags: [x]\n---\n# Tagged\n\nbody\n"
 
     def test_same_name_in_the_same_second_makes_two_notes(self, client, wiki_dir):
         slugs = {re.search(r"Created note (\S+) ", call(client, "write_page", slug="Twin",
-                                                                  content="x", scratch=True)[0]).group(1)
+                                                                  content="x", note=True)[0]).group(1)
                  for _ in range(3)}
         assert len(slugs) == 3
 
     def test_quicknote_refusals(self, client, wiki_dir):
-        text, err = call(client, "write_page", slug="", content="no title", scratch=True)
+        text, err = call(client, "write_page", slug="", content="no title", note=True)
         assert err and "title" in text
-        text, err = call(client, "write_page", slug="x", content="# X", scratch=True, overwrite=True)
+        text, err = call(client, "write_page", slug="x", content="# X", note=True, overwrite=True)
         assert err and "always a new one" in text
 
     def test_list_and_search_only_quicknotes(self, client, pages):
         write_page(pages, QUICKNOTE, "# Alex prep\n\nBremsen beim Golf ansprechen.\n")
-        text, _ = call(client, "list_pages", scratch=True)
+        text, _ = call(client, "list_pages", notes=True)
         assert text.startswith("Notes") and QUICKNOTE in text and "golf |" not in text
-        text, _ = call(client, "search_wiki", query="Bremsen", scratch=True)
+        text, _ = call(client, "search_wiki", query="Bremsen", notes=True)
         assert f"slug: {QUICKNOTE}" in text and "slug: golf" not in text
         assert f"slug: golf" in call(client, "search_wiki", query="Bremsen")[0]
         (pages / f"{QUICKNOTE}.md").unlink()
-        assert call(client, "list_pages", scratch=True)[0] == "No notes."
+        assert call(client, "list_pages", notes=True)[0] == "No notes."
 
     def test_move_to_the_wiki(self, client, git_wiki_dir):
         write_page(git_wiki_dir, QUICKNOTE, "# Alex prep\n\nnotes\n")
         write_page(git_wiki_dir, "hub", f"# Hub\n\n[[{QUICKNOTE}]]\n")
-        text, err = call(client, "file_scratch_note", slug=QUICKNOTE, name="Alex Sam debrief",
+        text, err = call(client, "file_note", slug=QUICKNOTE, name="Alex Sam debrief",
                          folder="conversations", keep_date=True)
         assert not err
         new = "conversations/2026-10-15_alex-sam-debrief"
@@ -1203,7 +1203,7 @@ class TestQuicknoteNotes:
         write_page(git_wiki_dir, QUICKNOTE, "---\ntags: [people]\n---\n# Alex prep\n\n## Topics\n\nRoadmap\n")
         write_page(git_wiki_dir, "people/alex", "# Alex\n\nLead.\n")
         write_page(git_wiki_dir, "hub", f"# Hub\n\n[[{QUICKNOTE}]]\n")
-        text, err = call(client, "file_scratch_note", slug=QUICKNOTE, page="people/alex", summary="1:1")
+        text, err = call(client, "file_note", slug=QUICKNOTE, page="people/alex", summary="1:1")
         assert not err
         assert "as the section “Alex prep (2026-10-15)”" in text
         assert "url: http://localhost:5000/page/people/alex#alex-prep-2026-10-15" in text
@@ -1223,7 +1223,7 @@ class TestQuicknoteNotes:
                             ({"slug": QUICKNOTE, "name": "golf"}, "already exists"),
                             ({"slug": QUICKNOTE, "name": "2026-01-01_10-00-00_x"}, "still be a note"),
                             ({"slug": QUICKNOTE, "page": "golf", "heading": "Werkstatt"}, "already has a section")]:
-            text, err = call(client, "file_scratch_note", **args)
+            text, err = call(client, "file_note", **args)
             assert err and words in text, (args, text)
         assert (pages / f"{QUICKNOTE}.md").exists()
 

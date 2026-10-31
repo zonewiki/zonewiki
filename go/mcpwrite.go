@@ -1,6 +1,6 @@
 // The MCP tools that write pages: write_page (also a
 // note), edit_page, append_to_page, replace_in_pages, rename_page
-// (also a folder), delete_page, restore_page, file_scratch_note. Each write
+// (also a folder), delete_page, restore_page, file_note. Each write
 // is a git commit, refused while a guide for the page isn't confirmed
 // (checkGuides).
 package main
@@ -26,7 +26,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	quicknote, err := boolArg(args, "scratch")
+	quicknote, err := renamedBoolArg(args, "note", "scratch")
 	if err != nil {
 		return "", err
 	} else if quicknote {
@@ -120,7 +120,7 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 	}
 	// Notes sit at the wiki's root, with users in the user's
 	// private folder: the guides of that folder apply.
-	where := "scratch-note"
+	where := "note"
 	if own := privateFolder(user); own != "" {
 		where = own + "/" + where
 	}
@@ -138,7 +138,7 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Created note " + slug + " (in Notes, not yet in the wiki; file_scratch_note " +
+	return "Created note " + slug + " (in Notes, not yet in the wiki; file_note " +
 		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
 
@@ -151,9 +151,9 @@ func quicknoteErr(s string, err error) (string, error) {
 	return s, err
 }
 
-// fileQuicknoteNote: the note's Move to wiki (name, folder,
+// fileNote: the note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
-func fileQuicknoteNote(args jsonObj, base, user string) (string, error) {
+func fileNote(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err

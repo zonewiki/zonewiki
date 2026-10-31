@@ -85,7 +85,7 @@ def test_private_and_quicknote_are_pills_in_a_group_of_their_own(alice):
 def test_quicknote_pill_and_g_p_goes_home(alice):
     alice.goto("/page/index")
     alice.get_by_role("link", name="Notes").click()
-    alice.wait_for_url("**/page/_scratch")
+    alice.wait_for_url("**/notes")
     expect(alice.locator(".breadcrumb .module-link[data-module=notes]")).to_have_attribute("aria-current", "page")
     alice.keyboard.press("g")
     alice.keyboard.press("p")

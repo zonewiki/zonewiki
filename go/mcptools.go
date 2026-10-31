@@ -1,8 +1,8 @@
 // The MCP tools: reading (search_wiki, search_tasks,
 // grep_wiki, read_page, list_pages, check_links, list_tags, history,
-// leaf_help, read_guides) and writing pages (write_page (also a quicknote
+// leaf_help, read_guides) and writing pages (write_page (also a
 // note), edit_page, replace_in_pages, append_to_page, rename_page (also a
-// folder), delete_page, restore_page, file_scratch_note) and tasks
+// folder), delete_page, restore_page, file_note) and tasks
 // (create_task, update_task: also comments, deletes and tags on several
 // tasks). The protocol is in mcp.go.
 package main
@@ -81,6 +81,15 @@ func strArg(args jsonObj, name string, required bool) (string, error) {
 		return "", toolErr(name + " must be a non-empty string")
 	}
 	return s, nil
+}
+
+// renamedBoolArg: boolArg by name, or by old, what it was called before
+// (an assistant may still send that).
+func renamedBoolArg(args jsonObj, name, old string) (bool, error) {
+	if args.null(name) && !args.null(old) {
+		name = old
+	}
+	return boolArg(args, name)
 }
 
 // boolArg: true or false; missing or null is false.
@@ -1557,7 +1566,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	onlyQuicknote, err := boolArg(args, "scratch")
+	onlyQuicknote, err := renamedBoolArg(args, "notes", "scratch")
 	if err != nil {
 		return "", err
 	}
@@ -2037,7 +2046,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	quicknote, err := boolArg(args, "scratch")
+	quicknote, err := renamedBoolArg(args, "notes", "scratch")
 	if err != nil {
 		return "", err
 	}
@@ -2078,10 +2087,14 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
 	"leaf_help": leafHelp, "read_guides": readGuides,
 	"write_page": writePage, "edit_page": editPageTool, "replace_in_pages": replaceInPages,
-	"append_to_page": appendToPage, "file_scratch_note": fileQuicknoteNote, "rename_page": renamePageTool,
+	"append_to_page": appendToPage, "file_note": fileNote, "rename_page": renamePageTool,
 	"delete_page": deletePageTool, "restore_page": restorePage, "create_task": createTaskTool,
 	"update_task": updateTaskTool,
 }
+
+// mcpToolAliases: tools by the names they had before, for assistants that
+// still call them so; tools/list shows only the new ones.
+var mcpToolAliases = map[string]string{"file_scratch_note": "file_note"}
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
 // its answer use base-url (the settings file), else the address the client reached Zone at.
@@ -2093,6 +2106,9 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 			scheme = "https"
 		}
 		base = scheme + "://" + r.Host
+	}
+	if n, ok := mcpToolAliases[name]; ok {
+		name = n
 	}
 	f, ok := mcpToolFuncs[name]
 	if !ok {

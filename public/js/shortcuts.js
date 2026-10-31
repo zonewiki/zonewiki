@@ -89,7 +89,7 @@ document.addEventListener('keydown', e => {
   // one release.
   if (keyPrefix.key === 'g') {
     resetPrefix();
-    const dest = { h: '/page/index', n: '/page/_scratch', a: '/tasks', t: tasksHomeHref() };
+    const dest = { h: '/page/index', n: '/notes', a: '/tasks', t: tasksHomeHref() };
     dest.s = dest.n; dest.d = dest.a;
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }

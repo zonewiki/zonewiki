@@ -362,7 +362,7 @@ async function fetchModalContentMatches(q) {
 }
 
 // ── Notes filter ────────────────────────────────────────────────────────────
-// The Notes page's filter box runs the search (/api/search?scratch=1: the
+// The Notes page's filter box runs the search (/api/search?notes=1: the
 // same ranking, query syntax, excerpts and on-page highlights) over quicknote
 // notes only. Matches show in ranked order with their excerpt, linking to
 // the section that matched; an empty box restores the newest-first list.
@@ -407,7 +407,7 @@ async function fetchModalContentMatches(q) {
     }
     let results;
     try {
-      const res = await fetch(`/api/search?scratch=1&limit=1000&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/search?notes=1&limit=1000&q=${encodeURIComponent(q)}`);
       results = await res.json();
     } catch (_) { return; }
     if (mine !== seq) return;   // a newer query is on its way

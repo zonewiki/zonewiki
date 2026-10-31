@@ -195,7 +195,7 @@ class TestMakeShared:
 
     def test_not_offered_for_homes_quicknotes_or_without_users(self, alice, client, wiki_dir, monkeypatch):
         alice.get("/private", headers=HOST)
-        note = alice.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        note = alice.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for slug in ("index", "private/alice/index", note):
             body = self.view(alice, slug)
             assert "Make shared" not in body, slug
@@ -297,7 +297,7 @@ class TestModuleMenu:
         crumb, bar, top = self.parts(body)
         groups = re.findall(r'<span class="module-group">(.*?)</span>(?=<span class="module-group">|</nav>|$)', crumb + "</nav>", re.S)
         assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "tasks"], ["private", "notes"]]
-        assert 'href="/private"' in groups[1] and 'href="/page/_scratch"' in groups[1]
+        assert 'href="/private"' in groups[1] and 'href="/notes"' in groups[1]
         # A lock opens the second pill: only you see Private and Notes.
         assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Notes"' in groups[1]
         assert "module-lock" not in groups[0]
@@ -319,7 +319,7 @@ class TestModuleMenu:
 
     def test_an_empty_quicknote_says_it_is_private(self, client, users):
         login(client, "alice", "alice-pw")
-        assert "only you see them" in client.get("/page/_scratch", headers=HOST).data.decode()
+        assert "only you see them" in client.get("/notes", headers=HOST).data.decode()
 
     def test_without_users_quicknote_stays_a_pill_in_the_third_place(self, client, wiki_dir):
         body = client.get("/page/index", headers=HOST).data.decode()
@@ -334,10 +334,10 @@ class TestModuleMenu:
         login(client, "alice", "alice-pw")
         client.get("/private", headers=HOST)
         (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n")
-        note = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        note = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         (git_wiki_dir / "plans.md").write_text("# Plans\n")
         for url, module in [("/page/private/alice/index", "private"), ("/page/private/alice/diary", "private"),
-                            ("/page/_scratch", "notes"), (f"/page/{note}", "notes"),
+                            ("/notes", "notes"), (f"/page/{note}", "notes"),
                             ("/page/plans", "wiki"), ("/tasks", "tasks")]:
             body = client.get(url, headers=HOST).data.decode()
             assert f'<body data-module="{module}"' in body, url
@@ -513,7 +513,7 @@ class TestAuthors:
         login(client, "alice", "alice-pw")
         client.post("/new", data={"slug": "plans"}, headers=HOST)
         client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST)
-        client.post("/api/scratch", data={"title": "Idea"}, headers=HOST)
+        client.post("/api/notes", data={"title": "Idea"}, headers=HOST)
         client.post("/api/upload", data={"file": (BytesIO(b"\x89PNG"), "a.png")},
                     content_type="multipart/form-data", headers=HOST)
         mcp(client, "alice-token", "write_page", slug="from-mcp", content="# From MCP\n")
@@ -667,7 +667,7 @@ class TestDrafts:
         if write.startswith("rename"):
             client.post("/rename/golf", data={"new_name": "golfing"}, headers=HOST)
         else:
-            note = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+            note = client.post("/api/notes", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
             client.post(f"/append/{note}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
         with_line = [author for author, diff in self.commits(bobs_draft) if "+Bob's line." in diff]
         assert with_line == ["bob"]

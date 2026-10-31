@@ -77,7 +77,7 @@ newNoteForm?.addEventListener('submit', async e => {
   const data = new FormData();
   data.append('title', title);
   try {
-    const res = await fetch('/api/scratch', { method: 'POST', body: data });
+    const res = await fetch('/api/notes', { method: 'POST', body: data });
     const { slug } = await res.json();
     window.location.href = `/edit/${slug}`;
   } catch (_) {}

@@ -27,7 +27,7 @@
   // your private home (the Private pill).
   const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
-    .filter(p => !['index', '_scratch', '/tasks'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
+    .filter(p => !['index', '/notes', '/tasks'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
       && (p.url || '').split('?')[0] !== tasksHref)
                             .slice(-maxPrev);
   const homeEl = bc.querySelector('.breadcrumb-home');

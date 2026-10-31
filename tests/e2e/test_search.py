@@ -194,8 +194,9 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")
     # Typing matches the built-in pages like any other entry; "Unlinked
     # only" (orphan pages) leaves them out.
-    page.locator("#modal-filter").fill("scra")
+    page.locator("#modal-filter").fill("notes")
     expect(items.first.locator("a")).to_have_text("Notes")
+    expect(items.first.locator("a")).to_have_attribute("href", "/notes")
     page.locator("#modal-filter").fill("tasks")
     expect(items.first.locator("a")).to_have_attribute("href", "/tasks")
     page.locator("#modal-filter").fill("")
@@ -208,7 +209,7 @@ def test_phone_reaches_quicknote_list_in_one_tap(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
     phone.locator(".action-buttons [data-module=notes]").tap()
-    phone.wait_for_url("**/page/_scratch")
+    phone.wait_for_url("**/notes")
 
 
 def test_task_result_opens_the_tasks_page(page, wiki):
@@ -359,7 +360,7 @@ def test_quicknote_filter_uses_the_search(page, wiki):
     wiki.write("2026-09-02_10-00-00_groceries", "# Groceries\n\nMilk, eggs.\n")
     wiki.write("2026-09-03_10-00-00_garden", "# Garden\n\nThe roof of the shed.\n")
     wiki.write("roof", "# Roof\n\nThe roof repair plan.\n")   # a page, not a note
-    page.goto("/page/_scratch")
+    page.goto("/notes")
     items = page.locator(".notes-list li:not([hidden])")
     expect(items).to_have_count(3)
     expect(items.locator("a")).to_have_text(["Garden", "Groceries", "Bob call"])   # newest first
@@ -370,7 +371,7 @@ def test_quicknote_filter_uses_the_search(page, wiki):
     expect(items.locator("a")).to_have_text(["Bob call", "Garden"])
     expect(page.locator("#notes-filter-count")).to_have_text("2 of 3")
     expect(items.first.locator(".note-excerpt mark").first).to_have_text(re.compile("roof", re.I))
-    expect(page).to_have_url(re.compile(r"/page/_scratch\?q=roof\+repair$"))
+    expect(page).to_have_url(re.compile(r"/notes\?q=roof\+repair$"))
 
     box.fill('"roof repair"')   # the query syntax works
     expect(items.locator("a")).to_have_text(["Bob call"])
@@ -381,7 +382,7 @@ def test_quicknote_filter_uses_the_search(page, wiki):
     box.press("Escape")   # clears: the full list, newest first, again
     expect(items.locator("a")).to_have_text(["Garden", "Groceries", "Bob call"])
     expect(page.locator(".note-excerpt")).to_have_count(0)
-    expect(page).to_have_url(re.compile(r"/page/_scratch$"))
+    expect(page).to_have_url(re.compile(r"/notes$"))
 
     # Enter opens the best match at the section that matched, highlighted.
     box.fill("runs late")

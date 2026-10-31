@@ -21,10 +21,10 @@
      "type": "string",
      "description": "Only pages in this folder and its subfolders, without tasks, e.g. 'tickets' or 'projects' (the slug part before a '/')."
     },
-    "scratch": {
+    "notes": {
      "type": "boolean",
      "default": false,
-     "description": "Only scratch notes (the user's quick notes, not yet filed into the wiki), without tasks."
+     "description": "Only notes (the user's quick notes in Notes, not yet filed into the wiki), without tasks."
     }
    },
    "required": [
@@ -138,7 +138,7 @@
  {
   "name": "list_pages",
   "title": "List pages",
-  "description": "List the wiki's pages (slug, title, last edited, how many pages link to it), most recently edited first; with `under`, one folder's; with `orphans`, only pages no other page links to; with `scratch`, only scratch notes. Slugs show the folder structure.",
+  "description": "List the wiki's pages (slug, title, last edited, how many pages link to it), most recently edited first; with `under`, one folder's; with `orphans`, only pages no other page links to; with `notes`, only notes. Slugs show the folder structure.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -155,12 +155,12 @@
     "orphans": {
      "type": "boolean",
      "default": false,
-     "description": "Only pages no other page links to (the home page, the Tasks home and scratch notes aside): candidates to link from somewhere."
+     "description": "Only pages no other page links to (the home page, the Tasks home and notes aside): candidates to link from somewhere."
     },
-    "scratch": {
+    "notes": {
      "type": "boolean",
      "default": false,
-     "description": "Only scratch notes: the user's quick notes, named '<date>_<time>_<name>', not yet filed into the wiki."
+     "description": "Only notes: the user's quick notes in Notes, named '<date>_<time>_<name>', not yet filed into the wiki."
     }
    }
   },
@@ -297,7 +297,7 @@
  {
   "name": "write_page",
   "title": "Create a page",
-  "description": "Create a wiki page with the given markdown (start it with '# Title'). Fails if the page exists, unless overwrite, which replaces all of it; for part of a page, use edit_page or append_to_page. Names pages with similar names and wikilinks that lead nowhere. With scratch, a scratch note instead: a quick note in the Scratch module, for when the user wants something jotted down rather than filed in the wiki.",
+  "description": "Create a wiki page with the given markdown (start it with '# Title'). Fails if the page exists, unless overwrite, which replaces all of it; for part of a page, use edit_page or append_to_page. Names pages with similar names and wikilinks that lead nowhere. With note, a note instead: a quick note in the Notes module, for when the user wants something jotted down rather than filed in the wiki.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -318,10 +318,10 @@
      "type": "string",
      "description": "read_page's hash: merges a change made since."
     },
-    "scratch": {
+    "note": {
      "type": "boolean",
      "default": false,
-     "description": "Make a new scratch note: slug is then just its name, in any words ('Alex prep'), and Zone puts the date and time in front."
+     "description": "Make a new note: slug is then just its name, in any words ('Alex prep'), and Zone puts the date and time in front."
     },
     "summary": {
      "type": "string",
@@ -533,15 +533,15 @@
   }
  },
  {
-  "name": "file_scratch_note",
-  "title": "File a scratch note",
-  "description": "File a scratch note into the wiki, as the user does from the note's menu: with name, move it there as its own page (folder/name); with page, append it to that page as a section and delete the note (its title goes, its headings move down, its tags join the page's). Either way links to the note follow.",
+  "name": "file_note",
+  "title": "File a note",
+  "description": "File a note (from Notes) into the wiki, as the user does from the note's menu: with name, move it there as its own page (folder/name); with page, append it to that page as a section and delete the note (its title goes, its headings move down, its tags join the page's). Either way links to the note follow.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "slug": {
      "type": "string",
-     "description": "The scratch note's slug, e.g. '2026-10-15_09-30-00_alex-prep'."
+     "description": "The note's slug, e.g. '2026-10-15_09-30-00_alex-prep'."
     },
     "name": {
      "type": "string",
