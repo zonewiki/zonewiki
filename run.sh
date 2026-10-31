@@ -212,7 +212,7 @@ case "${1:-up}" in
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   eval)
-    # Retrieval quality on your wiki (leaf eval, go/eval.go): the questions
+    # Retrieval quality on your wiki (zonewiki eval, go/eval.go): the questions
     # are a file in the wiki (default _eval/retrieval.json), the wiki is
     # mounted read-only. The image is the app's with LEAF_SEMANTIC_SEARCH's model
     # baked in, as up builds it, so it compares keyword and hybrid ranking.
@@ -226,10 +226,10 @@ case "${1:-up}" in
       --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
     in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
       -e "LEAF_SEMANTIC_SEARCH=$semantic" -- \
-      /app/leaf eval "/wiki-data/$file" "${@:3}"
+      /app/zonewiki eval "/wiki-data/$file" "${@:3}"
     ;;
   user|config)
-    # The settings file's commands (leaf user …, leaf config …; see
+    # The settings file's commands (zonewiki user …, zonewiki config …; see
     # docs/spec/users.md), in a one-off container of the app's image, with
     # .env and the wiki as up gives them, so the file is written as Zone's
     # user and import sees .env. A running Zone takes the change itself.
@@ -251,7 +251,7 @@ case "${1:-up}" in
     rm -f "$log"
     tty=()
     [[ -t 0 ]] || tty=(-T)
-    compose run --rm --no-deps "${tty[@]}" leaf /app/leaf "$@"
+    compose run --rm --no-deps "${tty[@]}" leaf /app/zonewiki "$@"
     ;;
   *)
     echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|user|config]"

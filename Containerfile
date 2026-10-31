@@ -35,7 +35,7 @@ WORKDIR /src
 COPY go/go.mod go/go.sum ./
 RUN go mod download
 COPY go/ ./
-RUN go build -trimpath -ldflags="-s -w" -o /leaf .
+RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 
 # ── Semantic search: onnxruntime and the model (opt-in) ─────────────────────
 # With LEAF_SEMANTIC_SEARCH=on in .env, compose.yaml passes it here and both
@@ -102,7 +102,10 @@ COPY public/ public/
 # Zone's documentation, for the MCP tool leaf_help (found next to public/).
 COPY README.md ./
 COPY docs/spec/ docs/spec/
-COPY --from=build /leaf ./leaf
+COPY --from=build /zonewiki ./zonewiki
+# The binary was called leaf before the rename: compose files and healthchecks
+# from then still call /app/leaf, for one release.
+RUN ln -s zonewiki leaf
 
 # The build ("<hash> <commit date>") shown next to Zone's version, passed in by
 # run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.
@@ -115,4 +118,4 @@ ENV HOME=/tmp
 
 EXPOSE 5000
 
-CMD ["/app/leaf"]
+CMD ["/app/zonewiki"]

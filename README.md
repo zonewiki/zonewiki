@@ -189,12 +189,12 @@ Without a container, you need Go 1.27 or newer, a C compiler (for semantic
 search; `CGO_ENABLED=0` builds without it) and git:
 
 ```bash
-(cd go && go build -o leaf .)
-LEAF_DATA=~/leaf go/leaf
+(cd go && go build -o zonewiki .)
+LEAF_DATA=~/leaf go/zonewiki
 ```
 
-In Windows PowerShell: `cd go; go build -o leaf.exe .; cd ..`, then
-`$env:LEAF_DATA="$HOME\leaf"; go\leaf.exe` starts Zone. For semantic search
+In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then
+`$env:LEAF_DATA="$HOME\leaf"; go\zonewiki.exe` starts Zone. For semantic search
 outside the container, onnxruntime's library must be where the loader finds
 it (`docs/spec/search.md`).
 

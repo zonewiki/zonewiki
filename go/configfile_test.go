@@ -455,7 +455,7 @@ func TestConfigCommands(t *testing.T) {
 	if code, out, _ := run("", "import"); code != 0 || !strings.Contains(out, "Nothing to import") {
 		t.Errorf("import, nothing: %q", out)
 	}
-	if code, _, errs := run("pw\npw\n", "passwd"); code == 0 || !strings.Contains(errs, "leaf user passwd NAME") {
+	if code, _, errs := run("pw\npw\n", "passwd"); code == 0 || !strings.Contains(errs, "zonewiki user passwd NAME") {
 		t.Errorf("passwd with users: %q", errs)
 	}
 	// Without users: the wiki's password and token; a plain LEAF_PASSWORD goes in as its hash.
@@ -537,7 +537,7 @@ func TestConfigCommands(t *testing.T) {
 	}
 }
 
-// leaf health fails while the settings file's last change wasn't taken.
+// zonewiki health fails while the settings file's last change wasn't taken.
 func TestHealthSettingsError(t *testing.T) {
 	path := configWiki(t, "locale = de\n")
 	cfg.AllowRemote = true // the test server's Host

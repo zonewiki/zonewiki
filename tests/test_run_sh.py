@@ -228,7 +228,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     (run,) = _engine_calls(log, "run")
     assert f"-v {wiki}:/wiki-data:ro,z -e LEAF_DATA=/wiki-data" in run
     assert "-e LEAF_SEMANTIC_SEARCH=on " in run
-    assert run.endswith("/app/leaf eval /wiki-data/_eval/retrieval.json -k 5")
+    assert run.endswith("/app/zonewiki eval /wiki-data/_eval/retrieval.json -k 5")
 
 
 def test_user_and_config_run_leaf_in_a_one_off_container(sandbox, tmp_path):
@@ -243,7 +243,7 @@ def test_user_and_config_run_leaf_in_a_one_off_container(sandbox, tmp_path):
                            stdin=subprocess.DEVNULL)
         assert r.returncode == 0, r.stderr
         call = [l for l in _engine_calls(log, "compose") if " run " in l][-1]
-        assert call.endswith("run --rm --no-deps -T leaf /app/leaf " + " ".join(args))
+        assert call.endswith("run --rm --no-deps -T leaf /app/zonewiki " + " ".join(args))
         assert [l for l in _engine_calls(log, "compose") if " build -q leaf" in l]
     (repo / ".env").write_text(f"LEAF_DATA={wiki}-missing\n")
     r = subprocess.run(["./run.sh", "user", "list"], cwd=repo, env=env, capture_output=True, text=True)

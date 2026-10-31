@@ -22,7 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Zone's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `leaf user`/`leaf config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
+| `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
@@ -83,10 +83,10 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── go/                     # The server: one package (main), a file per area
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; leaf eval, leaf health, leaf user, leaf config
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .leaf/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
-│   ├── commands.go         # leaf user (add, passwd, token, remove, list) and leaf config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
@@ -114,7 +114,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcptools.go         # The MCP tools that read, and the deck's; mcpwrite.go those that write pages
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
-│   ├── eval.go             # leaf eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
+│   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
@@ -157,9 +157,9 @@ Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (g
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
 ```bash
-(cd go && go build -o leaf .)
-LEAF_DATA=~/leaf go/leaf                 # http://localhost:5000 (finds public/ from the binary)
-LEAF_DATA=~/leaf go/leaf eval FILE       # measure retrieval
+(cd go && go build -o zonewiki .)
+LEAF_DATA=~/leaf go/zonewiki                 # http://localhost:5000 (finds public/ from the binary)
+LEAF_DATA=~/leaf go/zonewiki eval FILE       # measure retrieval
 ```
 
 ---

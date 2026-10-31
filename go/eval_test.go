@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// leaf eval (eval.go): ranks, targets, the report, and that it leaves the
+// zonewiki eval (eval.go): ranks, targets, the report, and that it leaves the
 // wiki alone.
 
 func evalWiki(t *testing.T) {

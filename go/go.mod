@@ -1,4 +1,4 @@
-module leaf
+module zonewiki
 
 go 1.27.3
 

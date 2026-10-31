@@ -44,3 +44,13 @@ def test_the_image_ships_the_docs_and_the_browser_code():
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/spec/ docs/spec/"):
         assert line in final
+
+
+def test_the_binary_is_zonewiki_and_still_answers_as_leaf():
+    # Compose files and healthchecks from before the rename call /app/leaf.
+    final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
+    assert "COPY --from=build /zonewiki ./zonewiki" in final
+    assert "RUN ln -s zonewiki leaf" in final
+    assert 'CMD ["/app/zonewiki"]' in final
+    for compose in ("compose.yaml", "compose.nas.yaml"):
+        assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")

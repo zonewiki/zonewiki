@@ -40,7 +40,7 @@ def binary() -> Path:
         if os.environ.get("LEAF_TEST_BINARY"):
             _binary = Path(os.environ["LEAF_TEST_BINARY"])
         else:
-            out = Path(tempfile.mkdtemp(prefix="leaf_go_")) / "leaf"
+            out = Path(tempfile.mkdtemp(prefix="zonewiki_go_")) / "zonewiki"
             go = shutil.which("go") or "go"
             subprocess.run([go, "build", "-o", str(out), "."], cwd=REPO / "go", check=True)
             os.environ["LEAF_TEST_BINARY"] = str(out)

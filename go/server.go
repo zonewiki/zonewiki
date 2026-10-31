@@ -1,7 +1,7 @@
 // Zone's web server: one process, its request checks and routes.
-// Run: LEAF_DATA=~/leaf leaf [-addr :5000] [-public dir]. Also: leaf eval
-// measures retrieval (eval.go), leaf health asks a running Zone whether
-// it answers (the container's healthcheck), leaf user and leaf config edit
+// Run: LEAF_DATA=~/leaf zonewiki [-addr :5000] [-public dir]. Also: zonewiki eval
+// measures retrieval (eval.go), zonewiki health asks a running Zone whether
+// it answers (the container's healthcheck), zonewiki user and zonewiki config edit
 // and check the settings file (commands.go).
 package main
 
@@ -136,7 +136,7 @@ func health(url string) int {
 }
 
 // findPublic finds public/ from the binary: next to it (the image) or in
-// the checkout it was built in (go/leaf → public/).
+// the checkout it was built in (go/zonewiki → public/).
 func findPublic() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -194,7 +194,7 @@ func apiHealth(w http.ResponseWriter, r *http.Request) {
 	if msg := settingsError(); msg != "" {
 		if _, ok, _ := signedIn(r); settings().authOn() && !ok {
 			msg = configName + " has an error, or a change Zone doesn't take while it runs: see Zone's log " +
-				"(./run.sh logs), or run leaf config check"
+				"(./run.sh logs), or run zonewiki config check"
 		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})
 		return

@@ -16,8 +16,8 @@
 # container; first of all the names you open Zone by (or LEAF_ALLOW_REMOTE=1
 # in .env), then a login:
 #
-#   docker compose -f compose.nas.yaml run --rm leaf /app/leaf config set hosts nas.local
-#   docker compose -f compose.nas.yaml run --rm leaf /app/leaf user add alice
+#   docker compose -f compose.nas.yaml run --rm leaf /app/zonewiki config set hosts nas.local
+#   docker compose -f compose.nas.yaml run --rm leaf /app/zonewiki user add alice
 #   TZ=Europe/Vienna
 name: leaf
 
@@ -48,7 +48,7 @@ services:
           # A mistyped path must not start an empty wiki somewhere else.
           create_host_path: false
     healthcheck:
-      test: ["CMD", "/app/leaf", "health"]
+      test: ["CMD", "/app/zonewiki", "health"]
       interval: 30s
       timeout: 10s
       retries: 3

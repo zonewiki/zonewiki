@@ -891,7 +891,7 @@ func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*Sea
 }
 
 // search_wiki's queries, one JSON line each (query-log in the settings file), for turning
-// into questions for leaf eval (eval.go). In .leaf/, so never in git.
+// into questions for zonewiki eval (eval.go). In .leaf/, so never in git.
 // Past queryLogMax bytes the log moves to queries.1.jsonl (the one before
 // is dropped), so it can't grow without end.
 var queryLogMax int64 = 1_000_000

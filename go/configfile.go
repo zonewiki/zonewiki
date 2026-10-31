@@ -13,7 +13,7 @@
 //
 // The environment (.env) holds only what the deployment needs (LEAF_DATA,
 // LEAF_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
-// Zone, pointing to leaf config import. The file is in .leaf/, out of
+// Zone, pointing to zonewiki config import. The file is in .leaf/, out of
 // safePath's reach; it is committed (the rest of .leaf/ isn't), so its MCP
 // tokens are kept only as hashes, passwords as PBKDF2 hashes.
 package main
@@ -42,7 +42,7 @@ func configPath() string { return filepath.Join(cfg.Data, ".leaf", "config") }
 
 // configKeys: the keys outside a [user …] section, in the order `leaf
 // config check` shows them, with the environment variables that held them
-// until 2026-10 (leaf config import reads them; set, they stop Zone).
+// until 2026-10 (zonewiki config import reads them; set, they stop Zone).
 var configKeys = []struct{ key, env string }{
 	{"password", "LEAF_PASSWORD"}, {"mcp-token", "LEAF_MCP_TOKEN"}, {"hosts", "LEAF_HOSTS"},
 	{"base-url", "LEAF_BASE_URL"}, {"git-remote", "LEAF_GIT_REMOTE"}, {"noshare", "LEAF_NOSHARE"},
@@ -233,7 +233,7 @@ func staleEnv(getenv func(string) string) error {
 			verb = "is"
 		}
 		return fmt.Errorf("%s %s set in the environment (.env), but Zone reads the wiki's settings only from "+
-			"%s now. Move them there with ./run.sh config import (leaf config import), then delete them from .env.",
+			"%s now. Move them there with ./run.sh config import (zonewiki config import), then delete them from .env.",
 			strings.Join(moved, ", "), verb, configName)
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
@@ -260,13 +260,13 @@ func loadSettings(f *configFile) (*Settings, error) {
 	var set bool
 	if s.PasswordHash, where, set = get("password"); set {
 		if _, _, _, err := parseHash(s.PasswordHash); err != nil {
-			return nil, fmt.Errorf("%s… isn't a password hash (%v). Set the password with: leaf config passwd",
+			return nil, fmt.Errorf("%s… isn't a password hash (%v). Set the password with: zonewiki config passwd",
 				where, err)
 		}
 	}
 	if s.MCPToken, where, set = get("mcp-token"); set && !isTokenHash(s.MCPToken) {
 		return nil, fmt.Errorf("%s… isn't a token's hash (sha256:<64 hex digits>). Make a token with: "+
-			"leaf config token", where)
+			"zonewiki config token", where)
 	}
 	baseURL, _, _ := get("base-url")
 	s.BaseURL = strings.TrimRight(baseURL, "/")
@@ -330,21 +330,21 @@ func fileUsers(f *configFile) (map[string]*User, error) {
 	for _, u := range f.users {
 		hash, ok := u.values["password"]
 		if !ok || hash.value == "" {
-			return nil, lineError(u.line, "[user %s] has no password. Set one with: leaf user passwd %s",
+			return nil, lineError(u.line, "[user %s] has no password. Set one with: zonewiki user passwd %s",
 				u.name, u.name)
 		}
 		if _, _, _, err := parseHash(hash.value); err != nil {
 			return nil, lineError(hash.line, "%s's password isn't a password hash (%v). Set one with: "+
-				"leaf user passwd %s", u.name, err, u.name)
+				"zonewiki user passwd %s", u.name, err, u.name)
 		}
 		token, hasToken := u.values["mcp-token"]
 		if hasToken && !isTokenHash(token.value) {
 			return nil, lineError(token.line, "%s's mcp-token isn't a token's hash (sha256:<64 hex digits>). "+
-				"Make a token with: leaf user token %s", u.name, u.name)
+				"Make a token with: zonewiki user token %s", u.name, u.name)
 		}
 		if other, taken := tokens[token.value]; taken && token.value != "" {
 			return nil, lineError(token.line, "%s's mcp-token is %s's too. Give each user a token of their "+
-				"own: leaf user token %s", u.name, other, u.name)
+				"own: zonewiki user token %s", u.name, other, u.name)
 		}
 		tokens[token.value] = u.name
 		users[u.name] = &User{Name: u.name, PasswordHash: hash.value, MCPToken: token.value}
@@ -473,7 +473,7 @@ func takeSettings() (old, s *Settings) {
 
 // commitSettings commits the settings file, if it is there and changed:
 // at start and at each reload, by Zone, so a change made by hand or with
-// leaf user (another process, which leaves git to Zone) is in the history.
+// zonewiki user (another process, which leaves git to Zone) is in the history.
 func commitSettings(message string) {
 	if settingsError() == "" && exists(configPath()) {
 		gitCommit("", message, configPath())
@@ -543,7 +543,7 @@ func applySettings(old, s *Settings) {
 	noshareMu.Unlock()
 }
 
-// Writing the file (`leaf user`, `leaf config`): whole, to a temporary file
+// Writing the file (`zonewiki user`, `zonewiki config`): whole, to a temporary file
 // in .leaf/ renamed over it (a reload never reads half a file), owner-only,
 // keeping the comments and the order of the lines it doesn't change.
 

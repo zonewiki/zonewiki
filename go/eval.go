@@ -1,8 +1,8 @@
-// leaf eval: how well retrieval (search_wiki) finds the right section for a
+// zonewiki eval: how well retrieval (search_wiki) finds the right section for a
 // question, measured on a wiki and a list of questions with their answers.
 //
 //	./run.sh eval [FILE]               in the app image, with the semantic model
-//	LEAF_DATA=~/leaf leaf eval FILE    keywords only, unless LEAF_SEMANTIC_SEARCH is on
+//	LEAF_DATA=~/leaf zonewiki eval FILE    keywords only, unless LEAF_SEMANTIC_SEARCH is on
 //
 // FILE is JSON, a list of {"q": "question", "expect": [target, …]}. A target
 // is a page ("people/alex"), a section ("people/alex#current-projects", the
@@ -40,14 +40,14 @@ type question struct {
 	Expect []string
 }
 
-// evalMain runs `leaf eval`; its exit code.
+// evalMain runs `zonewiki eval`; its exit code.
 func evalMain(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("leaf eval", flag.ContinueOnError)
+	fs := flag.NewFlagSet("zonewiki eval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	k := fs.Int("k", 8, "results per question (search_wiki's default: 8)")
 	newOnly := fs.Bool("new", false, "list logged search_wiki queries not in the file yet, as stubs to paste")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: leaf eval [-k N] [-new] QUESTIONS.json")
+		fmt.Fprintln(stderr, "usage: zonewiki eval [-k N] [-new] QUESTIONS.json")
 		fs.PrintDefaults()
 	}
 	// Flags before or after the file, as the Python tool took them.
