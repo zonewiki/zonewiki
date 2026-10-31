@@ -1,4 +1,4 @@
-# Leaf
+# Zone
 
 A self-hosted, browser-based wiki. Markdown files are served and rendered at runtime by a Go server (one binary). Pages can be edited directly on disk or via an in-browser editor. Full-text search runs server-side.
 
@@ -6,7 +6,7 @@ A self-hosted, browser-based wiki. Markdown files are served and rendered at run
 
 ## Meta
 
-- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change. The README and the spec are also Leaf's help: the MCP tool `leaf_help` serves them to assistants answering users' questions about Leaf, so a feature's spec should say how to use it, not only how it is built.
+- **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec). Do it in the same change. The README and the spec are also Zone's help: the MCP tool `leaf_help` serves them to assistants answering users' questions about Zone, so a feature's spec should say how to use it, not only how it is built.
 
 ## Spec
 
@@ -19,7 +19,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
-| `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Leaf's docs for assistants) |
+| `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Zone's docs for assistants) |
 | `docs/spec/deck.md` | The deck (tasks): embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
 | `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `leaf user`/`leaf config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
@@ -43,7 +43,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Concern             | Choice                                       |
 |---------------------|----------------------------------------------|
 | Server              | Go (`net/http`), one process, one binary (`go/`) |
-| Markdown render     | `goldmark` (server renders to HTML), with Leaf's rules (`go/markdown.go`) |
+| Markdown render     | `goldmark` (server renders to HTML), with Zone's rules (`go/markdown.go`) |
 | HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped |
 | Syntax highlight    | `highlight.js` (vendored in `public/vendor/`, no CDN) |
 | Styling             | Custom CSS (classless, semantic HTML)        |
@@ -61,12 +61,12 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 
 ```
 /
-├── AGENTS.md               # This file (how to work on Leaf; the index of the spec)
-├── README.md               # For people who find the repo: what Leaf is, features, quick start
+├── AGENTS.md               # This file (how to work on Zone; the index of the spec)
+├── README.md               # For people who find the repo: what Zone is, features, quick start
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (none now)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`)
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for leaf_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
@@ -95,7 +95,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, deck lists/home
-│   ├── markdown.go         # Markdown → HTML on goldmark, with Leaf's rules (checkboxes, callouts, heading ids …)
+│   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── render.go           # A page's render: wikilinks, [[deck]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
@@ -113,7 +113,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── tokenizer.go        # The model's tokenizer
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcptools.go         # The MCP tools that read, and the deck's; mcpwrite.go those that write pages
-│   ├── manual.go           # Leaf's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
+│   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool leaf_help
 │   ├── eval.go             # leaf eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
@@ -141,7 +141,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ## Running
 
 ```bash
-./run.sh            # build the image and start Leaf (default: "up"), via compose
+./run.sh            # build the image and start Zone (default: "up"), via compose
 ./run.sh build|up|down|logs
 ./run.sh test       # go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + deck-core.js (Node) tests in the tools image
@@ -152,7 +152,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
-Leaf is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `LEAF_DATA`, `LEAF_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Leaf). The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
+Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `LEAF_DATA`, `LEAF_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
@@ -205,9 +205,9 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 
 `go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search). Nothing else; add a dependency only when it clearly pays for itself. **Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and commit the new pins.
 
-- **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Leaf must stay a single process: the deck's lock (`deckMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
+- **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Zone must stay a single process: the deck's lock (`deckMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
 - `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
-- Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `LEAF_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/leaf-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Leaf searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
+- Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `LEAF_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/leaf-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Zone searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
 - The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
 
 ---
@@ -217,18 +217,18 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - Do not use a database. Files are the only storage.
 - Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
-  - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Leaf keeps in `.leaf/secret_key` (0600, excluded from git).
+  - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.leaf/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_deck/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every deck read takes the user (`readDeck(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
-  - Every response carries the page policy (`pageCSP`): only Leaf's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Leaf's code, or the browser tests fail), no framing by other sites, `nosniff`.
+  - Every response carries the page policy (`pageCSP`): only Zone's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Zone's code, or the browser tests fail), no framing by other sites, `nosniff`.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
 - `LEAF_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 - Slugs are file paths relative to `LEAF_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `toSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders. Routes take the rest of the path as the slug (`{slug...}`).
 - **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_deck/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
-- `index.md` is the home page and must always exist (Leaf creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
+- `index.md` is the home page and must always exist (Zone creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).
