@@ -1,12 +1,12 @@
 package main
 
 import (
-	"strconv"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -283,7 +283,7 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 // wins over a shared one; a list declared on a private page is its owner's.
 func TestTasksHomeAndListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"tasks":                "# Tasks\n\n[[tasks: home=1]]\n",
+		"tasks":               "# Tasks\n\n[[tasks: home=1]]\n",
 		"private/alice/mine":  "# Mine\n\n[[tasks: home=1 list=secret]]\n",
 		"private/bob/nothing": "# Nothing\n",
 	})
@@ -309,7 +309,7 @@ func TestTasksHomeAndListsPerUser(t *testing.T) {
 // only when the request says so.
 func TestTasksListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"tasks/gifts":          "# Gifts\n\n[[tasks: list=gifts]]\n",
+		"tasks/gifts":         "# Gifts\n\n[[tasks: list=gifts]]\n",
 		"private/alice/gifts": "# My gifts\n\n[[tasks: list=gifts]]\n",
 		"private/alice/diary": "# Diary\n\n[[tasks: list=diary]]\n",
 		"zebra":               "# Z\n\n[[tasks: list=diary]]\n",

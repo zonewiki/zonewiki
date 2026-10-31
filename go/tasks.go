@@ -226,7 +226,7 @@ func buildTasksEmbed(user string, params TasksParams, instance int, headless, pr
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
 		"private_folder": privateFolder(user),
-		"lists_json": listsJSON, "homes_json": homesJSON,
+		"lists_json":     listsJSON, "homes_json": homesJSON,
 	})
 	if err != nil {
 		logf("task list embed: %v", err)

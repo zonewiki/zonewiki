@@ -51,7 +51,7 @@ func tasksDir(owner string) string {
 	return dir
 }
 
-func tasksFile(owner string) string      { return filepath.Join(tasksDir(owner), "tasks.json") }
+func tasksFile(owner string) string     { return filepath.Join(tasksDir(owner), "tasks.json") }
 func completedPath(owner string) string { return filepath.Join(tasksDir(owner), "completed.json") }
 func archivePath(owner, year string) string {
 	return filepath.Join(tasksDir(owner), "completed-"+year+".json")

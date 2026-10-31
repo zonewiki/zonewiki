@@ -317,11 +317,11 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// The file's hash for conflict detection, whole page or section.
 		"file_hash": fileHash, "can_rename": editable && !isProtected(slug), "can_delete": editable && !isProtected(slug),
 		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"), "left_draft": left,
-		"rename_name": q.Get("rename_name"),
+		"rename_name":     q.Get("rename_name"),
 		"private_offer":   privateOffer,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
-		"tasks_html":       htmlOf(buildTasksEmbed(rq.user, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
+		"tasks_html":      htmlOf(buildTasksEmbed(rq.user, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.

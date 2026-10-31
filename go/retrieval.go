@@ -688,9 +688,9 @@ func resultMeta(d *SearchDoc, names map[string]TasksHome) string {
 }
 
 const (
-	searchLimit        = 15   // results in the search modal (/api/search default)
-	searchPageLimit    = 50   // results on the /search page ("All results")
-	searchMaxLimit     = 100  //
+	searchLimit      = 15   // results in the search modal (/api/search default)
+	searchPageLimit  = 50   // results on the /search page ("All results")
+	searchMaxLimit   = 100  //
 	notesFilterLimit = 1000 // Notes page's filter lists every match
 )
 
