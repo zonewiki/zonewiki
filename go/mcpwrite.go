@@ -51,33 +51,32 @@ func writePage(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	path := safePath(slug)
-	pending, old := "", ""
-	if existing != "" {
+	content = trimNewlines(content) + "\n"
+	suffix, err := msgSuffix(args)
+	if err != nil {
+		return "", err
+	}
+	pending, old, merged := "", "", ""
+	if existing == "" {
+		if err := createPageOp(user, slug, content, suffix); err != nil {
+			return "", toolRefusal(err)
+		}
+	} else {
 		pending = pendingNote(slug, keepPending(path, slug))
 		if old, err = readText(path); err != nil {
 			return "", err
 		}
-	}
-	content = trimNewlines(content) + "\n"
-	merged := ""
-	if baseHash, _ := as[string](args["base_hash"]); existing != "" && baseHash != "" && baseHash != contentHash(old) {
-		if content, err = mergeWrite(slug, path, old, content, baseHash, user); err != nil {
+		if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != contentHash(old) {
+			if content, err = mergeWrite(slug, path, old, content, baseHash, user); err != nil {
+				return "", err
+			}
+			merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
+		}
+		if err := writeText(path, content); err != nil {
 			return "", err
 		}
-		merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
+		gitCommit(user, "Update "+slug+suffix, path)
 	}
-	action := "Create "
-	if existing != "" {
-		action = "Update "
-	}
-	msg, err := commitMsg(action+slug, args)
-	if err != nil {
-		return "", err
-	}
-	if err := writeText(path, content); err != nil {
-		return "", err
-	}
-	gitCommit(user, msg, path)
 	out := "Created page " + slug + ".\n" + pageInfo(slug, base)
 	if existing != "" {
 		out = "Replaced page " + slug + "." + merged + "\n" + pageInfo(slug, base)

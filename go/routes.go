@@ -608,23 +608,16 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 		!strings.HasPrefix(slug, own+"/") {
 		slug = own + "/" + slug
 	}
-	path := ""
-	if slug != "" {
-		path = safePath(slug)
-	}
-	if path == "" {
+	if slug == "" {
 		badRequestPage(w)
 		return
 	}
-	if refuseWrite(w, r, slug) {
-		return
-	}
-	if !exists(path) {
-		if err := writeText(path, "# "+titleWords(strings.TrimSpace(raw))+"\n\n"); err != nil {
-			serverError(w, r, err)
+	// A page by that name is there already: it opens in the editor.
+	if err := createPageOp(userOf(r), slug, "# "+titleWords(strings.TrimSpace(raw))+"\n\n", ""); err != nil {
+		if pe, ok := refusalOf(err); !ok || pe.kind != refusedExists {
+			pageFailed(w, r, err)
 			return
 		}
-		gitCommit(userOf(r), "Create "+slug, path)
 	}
 	http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
 }

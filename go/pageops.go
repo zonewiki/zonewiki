@@ -125,6 +125,26 @@ func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err 
 	return old, kept, nil
 }
 
+// createPageOp makes the page slug with content; refused when it
+// exists, or can't be made there by user (another user's folder answers
+// as missing).
+func createPageOp(user, slug, content, suffix string) error {
+	path := safePath(slug)
+	switch {
+	case path == "":
+		return refuse("“" + slug + "”: pages can't go in folders starting with '_' or '.'")
+	case !canWrite(user, slug):
+		return refuseAs(refusedNotFound, "“"+slug+"”: that folder is another user's")
+	case exists(path):
+		return refuseAs(refusedExists, "A page named "+strconv.Quote(slug)+" already exists")
+	}
+	if err := writeText(path, content); err != nil {
+		return err
+	}
+	gitCommit(user, "Create "+slug+suffix, path)
+	return nil
+}
+
 // checkRename: why user can't rename slug to newSlug, if not; else the
 // files of both. The MCP tool asks it before it asks for the guides.
 func checkRename(user, slug, newSlug string) (path, newPath string, err error) {
