@@ -529,7 +529,7 @@ class TestAuthors:
         assert [a for a, s in log if s.endswith("_idea")] == ["alice"]               # the note
         assert log[-1][0] == "Zone"                                                  # Zone's start-up commit
 
-    def test_without_users_leaf_is_the_author(self, client, git_wiki_dir):
+    def test_without_users_zone_is_the_author(self, client, git_wiki_dir):
         client.post("/new", data={"slug": "plans"}, headers=HOST)
         assert authors(git_wiki_dir)[0] == ("Zone", "Create plans")
 

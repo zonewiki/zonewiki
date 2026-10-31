@@ -189,6 +189,26 @@ class TestStateFolderMove:
         assert (wiki_dir / ".zone" / "secret_key").read_text() == key
 
 
+class TestOldCommitter:
+    def test_an_older_wikis_leaf_commits_as_zone_and_leaf_isnt_shown_as_a_user(self, git_wiki_dir, client,
+                                                                                monkeypatch):
+        """A wiki an older Zone set up commits as Leaf <leaf@localhost>: Zone
+        takes that over at start, and the history doesn't show its commits
+        from before as a user's."""
+        client.live.stop()
+        git(git_wiki_dir, "config", "user.name", "Leaf")
+        git(git_wiki_dir, "config", "user.email", "leaf@localhost")
+        write_page(git_wiki_dir, "plans", "# Plans\n")
+        git(git_wiki_dir, "add", "plans.md")
+        git(git_wiki_dir, "commit", "-qm", "Create plans")
+        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "")})
+        assert login(client, "alice", "alice-pw").status_code == 302
+        assert git(git_wiki_dir, "config", "user.name").strip() == "Zone"
+        assert git(git_wiki_dir, "config", "user.email").strip() == "zone@localhost"
+        body = client.get("/history/plans", headers=HOST).get_data(as_text=True)
+        assert "hist-row" in body and "hist-by" not in body
+
+
 # ── /page/_scratch, /api/scratch, MCP's old names ───────────────────────────────
 
 class TestOldNotesNames:

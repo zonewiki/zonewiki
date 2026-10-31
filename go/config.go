@@ -17,6 +17,9 @@ import (
 
 const appName = "Zone"
 
+// legacyAppName: Zone's name before, its commits' author in older wikis.
+const legacyAppName = "Leaf"
+
 // Zone's version (semver), bumped by hand when a change is worth a number.
 const version = "1.1.0"
 

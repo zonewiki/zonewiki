@@ -90,8 +90,8 @@ func gitSetup() {
 		}
 		runGit("add", ".")
 		runGit("commit", "--allow-empty", "-m", "Initial import")
-	} else if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
-		setCommitter()
+	} else if name := strings.TrimSpace(runGit("config", "user.name").Stdout); name == "" || name == legacyAppName {
+		setCommitter() // none, or still the one from before Leaf was called Zone
 	}
 	setGitRemote()
 }
@@ -116,10 +116,11 @@ func setCommitter() {
 }
 
 // commitAuthor: who a commit is by, as the history shows it, with users: a
-// user's name, or whoever committed by hand; "" for Zone's own, and without
-// users, so a wiki without them shows no names.
+// user's name, or whoever committed by hand; "" for Zone's own (also those
+// from before Leaf was called Zone), and without users, so a wiki without
+// them shows no names.
 func commitAuthor(name string) string {
-	if settings().Users == nil || name == appName {
+	if settings().Users == nil || name == appName || name == legacyAppName {
 		return ""
 	}
 	return name
