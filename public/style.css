@@ -1022,13 +1022,15 @@ main {
   }
   /* The lock at the start of Private · Scratch: only you see these. */
   .module-lock { display: inline-flex; align-items: center; padding: 0 .1rem 0 .5rem; color: var(--muted); }
+  /* A fixed height with the content centred, the label's box trimmed to its
+     capitals: the letters sit in the middle whatever the font's metrics
+     (padding tuned for one font, Segoe UI, put them high with another).
+     A browser without text-box centres the line box instead. */
   body:not(.editor-page) .module-switch .module-link {
-    /* More room below than above: lowercase text sits low in its line box. */
-    padding: .06rem .65rem .16rem; border-radius: 999px;
+    height: 1.5rem; padding: 0 .65rem; border-radius: 999px;
     transition: background .15s, color .15s;
   }
-  /* The padding above lifts the label; the counts stay where they were. */
-  body:not(.editor-page) .module-switch .module-counts { position: relative; top: .05rem; }
+  body:not(.editor-page) .module-switch .module-label { text-box: trim-both cap alphabetic; }
   body:not(.editor-page) .module-switch .module-link:hover,
   body:not(.editor-page) .module-switch .module-menu-btn:hover { background: var(--btn-bg); color: var(--fg); }
   body:not(.editor-page) .module-switch .module-link[aria-current],

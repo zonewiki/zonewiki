@@ -293,3 +293,29 @@ def test_without_users_private_is_an_ordinary_folder_for_completion(page, wiki):
     page.keyboard.press("Control+End")
     page.keyboard.type("[[note")
     expect(items).to_have_text(["notes"])   # no "New private page" offer
+
+
+# ── The pills' labels ───────────────────────────────────────────────────────────
+
+_PILL_LABEL_GAPS = """() => [...document.querySelectorAll('.module-switch .module-link')].map(a => {
+  const r = a.getBoundingClientRect(), label = a.querySelector('.module-label');
+  const cs = getComputedStyle(label);
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const m = ctx.measureText('H');
+  const range = document.createRange(); range.selectNodeContents(label.firstChild);
+  const box = range.getClientRects()[0];
+  // The baseline: the text's line box less the font's descent below it.
+  const baseline = box.bottom - m.fontBoundingBoxDescent;
+  return [label.textContent, baseline - m.actualBoundingBoxAscent - r.top, r.bottom - baseline];
+})"""
+
+
+def test_the_pills_labels_are_vertically_centred(alice):
+    # Regression: padding tuned for Windows' Segoe UI (more below than above)
+    # put Wiki, Deck, Private and Scratch high in their pills with other fonts.
+    alice.goto("/page/index")
+    rows = alice.evaluate(_PILL_LABEL_GAPS)
+    assert [r[0] for r in rows] == ["Wiki", "Deck", "Private", "Scratch"]
+    for label, above, below in rows:
+        assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
