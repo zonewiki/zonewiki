@@ -141,14 +141,16 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
 
-// refused: an operation's refusal as a tool error.
-func refused[T any](v T, err error) (T, error) {
+// toolRefusal: an operation's refusal as a tool error.
+func toolRefusal(err error) error {
 	if pe, ok := refusalOf(err); ok {
-		var zero T
-		return zero, toolErr(pe.msg)
+		return toolErr(pe.msg)
 	}
-	return v, err
+	return err
 }
+
+// refused: toolRefusal for an operation's result.
+func refused[T any](v T, err error) (T, error) { return v, toolRefusal(err) }
 
 // fileNote: the note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
@@ -582,45 +584,30 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := safePath(slug)
-	entries := pageLog(user, path)
+	entries := pageLog(user, safePath(slug))
 	i := versionOf(entries, version)
 	if i < 0 {
 		return "", toolErr(strconv.Quote(version) + " is not a version of " + slug + "; history(slug) lists them.")
 	}
-	sha := entries[i].Sha
-	content, ok := gitShow(sha, versionPath(path, entries, sha))
-	if !ok {
-		return "", toolErr("Version " + runePrefix(sha, 7) + " of " + slug + " has no text (the page was deleted then); " +
-			"pick the version before it.")
-	}
-	existed := exists(path)
-	pending, old := pendingNote(slug, keepPending(path, slug)), ""
-	if existed {
-		if old, err = readText(path); err != nil {
-			return "", err
-		}
-		if old == content {
-			return "", toolErr(slug + " already reads as version " + runePrefix(sha, 7) + ".")
-		}
-	}
 	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
-	msg, err := commitMsg("Restore "+slug+" to "+runePrefix(sha, 7), args)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	if err := writeText(path, content); err != nil {
-		return "", err
+	sha := entries[i].Sha
+	old, kept, err := restorePageOp(user, slug, sha, suffix)
+	if err != nil {
+		return "", toolRefusal(err)
 	}
-	gitCommit(user, msg, path)
-	what := "Brought back the deleted page"
-	if existed {
-		what = "Restored"
+	what, before := "Brought back the deleted page", ""
+	if old != nil {
+		what, before = "Restored", *old
 	}
+	content, _ := readText(safePath(slug))
 	return what + " " + slug + " as of version " + runePrefix(sha, 7) + " (" + entries[i].Time + ").\n" +
-		pageInfo(slug, base) + pending + linkWarning(slug, old, content, user) + guideNote(slug, user), nil
+		pageInfo(slug, base) + pendingNote(slug, kept) + linkWarning(slug, before, content, user) + guideNote(slug, user), nil
 }
 
 // ── replace_in_pages ────────────────────────────────────────────────────────

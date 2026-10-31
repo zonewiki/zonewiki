@@ -35,7 +35,7 @@ type pageError struct {
 
 func (e *pageError) Error() string { return e.msg }
 
-func refuse(msg string) error          { return &pageError{refusedInvalid, msg} }
+func refuse(msg string) error              { return &pageError{refusedInvalid, msg} }
 func refuseAs(k refusal, msg string) error { return &pageError{k, msg} }
 
 // refusalOf: err's refusal, if it is one.
@@ -88,6 +88,40 @@ func deletePageOp(user, slug, suffix string) (kept bool, err error) {
 	}
 	gitCommit(user, "Delete "+slug+suffix, path)
 	return kept, nil
+}
+
+// restorePageOp writes the page's text as of version sha (a commit in its
+// log; a deleted page comes back), what it held uncommitted committed
+// first. old: its text before, nil when it was deleted.
+func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err error) {
+	if !cfg.GitEnabled {
+		return nil, false, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
+	}
+	path := ""
+	if canWrite(user, slug) {
+		path = safePath(slug)
+	}
+	if path == "" {
+		return nil, false, refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+	}
+	short := runePrefix(sha, 7)
+	content, ok := gitShow(sha, versionPath(path, pageLog(user, path), sha))
+	if !ok {
+		return nil, false, refuseAs(refusedNotFound, "Version "+short+" of "+slug+
+			" has no text (the page was deleted then); pick the version before it.")
+	}
+	if old, err = currentText(path); err != nil {
+		return nil, false, err
+	}
+	if old != nil && *old == content {
+		return old, false, refuseAs(refusedUnchanged, slug+" already reads as version "+short+".")
+	}
+	kept = keepPending(path, slug)
+	if err := writeText(path, content); err != nil {
+		return old, kept, err
+	}
+	gitCommit(user, "Restore "+slug+" to "+short+suffix, path)
+	return old, kept, nil
 }
 
 // keepPending: before a write that replaces or removes the page at path,

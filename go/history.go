@@ -203,27 +203,17 @@ func restoreRevision(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	path := safePath(slug)
-	if !shaRE.MatchString(sha) || path == "" {
+	if !shaRE.MatchString(sha) || safePath(slug) == "" {
 		badRequestPage(w)
 		return
 	}
-	user := userOf(r)
-	if !canWrite(user, slug) {
-		http.NotFound(w, r)
-		return
+	// A page that already reads as the version: nothing to do but show it.
+	if _, _, err := restorePageOp(userOf(r), slug, sha, ""); err != nil {
+		if pe, ok := refusalOf(err); !ok || pe.kind != refusedUnchanged {
+			pageFailed(w, r, err)
+			return
+		}
 	}
-	content, found := gitShow(sha, versionPath(path, pageLog(user, path), sha))
-	if !found {
-		http.NotFound(w, r)
-		return
-	}
-	keepPending(path, slug)
-	if err := writeText(path, content); err != nil {
-		serverError(w, r, err)
-		return
-	}
-	gitCommit(userOf(r), "Restore "+slug+" to "+sha[:7], path)
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 }
 
