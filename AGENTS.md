@@ -92,7 +92,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
-│   ├── pageops.go          # Page writes the routes and the MCP tools share: their refusals (pageError), keeping text not yet in git
+│   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, refusals (pageError), text not yet in git kept
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
@@ -232,5 +232,6 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 - Slugs are file paths relative to `ZONE_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `toSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders. Routes take the rest of the path as the slug (`{slug...}`).
 - **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.zone/`, `.git/`, `_tasks/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
+- **A page write is an operation in `go/pageops.go`** (delete, rename, restore, create, a save; a note's move and append in `quicknotes.go`): it checks access itself and keeps text not yet in git (`keepPending` before a write that replaces or removes a page's text, `commitOthersDraft` before one that continues it), and the routes and MCP tools only parse their input and turn the result or the refusal into their answer. A new write gets an operation there and a test through each door in `tests/test_page_writes.py`.
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).
