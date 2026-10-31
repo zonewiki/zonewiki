@@ -62,20 +62,18 @@ func writePage(args jsonObj, base, user string) (string, error) {
 			return "", toolRefusal(err)
 		}
 	} else {
-		pending = pendingNote(slug, keepPending(path, slug))
-		if old, err = readText(path); err != nil {
-			return "", err
-		}
-		if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != contentHash(old) {
-			if content, err = mergeWrite(slug, path, old, content, baseHash, user); err != nil {
-				return "", err
+		var kept bool
+		old, content, kept, err = changePageOp(user, slug, "Update", suffix, func(old string) (string, error) {
+			if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != contentHash(old) {
+				merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
+				return mergeWrite(slug, path, old, content, baseHash, user)
 			}
-			merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
+			return content, nil
+		})
+		if err != nil {
+			return "", toolRefusal(err)
 		}
-		if err := writeText(path, content); err != nil {
-			return "", err
-		}
-		gitCommit(user, "Update "+slug+suffix, path)
+		pending = pendingNote(slug, kept)
 	}
 	out := "Created page " + slug + ".\n" + pageInfo(slug, base)
 	if existing != "" {
@@ -261,7 +259,7 @@ func applyEdit(content, slug string, edit jsonObj, which string) (string, int, e
 }
 
 func editPageTool(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug", user)
+	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
@@ -287,33 +285,32 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 			return "", toolErr("give either old_string/new_string or edits, not both")
 		}
 	}
-	pending := pendingNote(slug, keepPending(path, slug))
-	content, err := readText(path)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
 	// All or nothing: each edit applies to the text the ones before it left,
 	// and the page is written only when every one of them matched.
-	text, total := content, 0
-	for i, e := range edits {
-		which := ""
-		if several {
-			which = fmt.Sprintf("Edit %d: ", i+1)
+	total := 0
+	content, text, kept, err := changePageOp(user, slug, "Update", suffix, func(text string) (string, error) {
+		for i, e := range edits {
+			which := ""
+			if several {
+				which = fmt.Sprintf("Edit %d: ", i+1)
+			}
+			var n int
+			var err error
+			if text, n, err = applyEdit(text, slug, e, which); err != nil {
+				return "", err
+			}
+			total += n
 		}
-		var n int
-		if text, n, err = applyEdit(text, slug, e, which); err != nil {
-			return "", err
-		}
-		total += n
-	}
-	msg, err := commitMsg("Update "+slug, args)
+		return text, nil
+	})
 	if err != nil {
-		return "", err
+		return "", toolRefusal(err)
 	}
-	if err := writeText(path, text); err != nil {
-		return "", err
-	}
-	gitCommit(user, msg, path)
+	pending := pendingNote(slug, kept)
 	what := "1 occurrence"
 	if total > 1 {
 		what = fmt.Sprintf("%d occurrences", total)
@@ -342,7 +339,7 @@ func appendAt(content, addition, heading string) (string, bool) {
 }
 
 func appendToPage(args jsonObj, base, user string) (string, error) {
-	slug, path, err := existingPage(args, "slug", user)
+	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
@@ -359,29 +356,27 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 	if err := checkGuides(args, []string{slug}, user); err != nil {
 		return "", err
 	}
-	pending := pendingNote(slug, keepPending(path, slug))
-	content, err := readText(path)
+	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	text := trimNewlines(content) + "\n\n" + addition + "\n"
 	where := ""
-	if heading != "" {
-		var ok bool
-		if text, ok = appendAt(content, addition, heading); !ok {
+	content, text, kept, err := changePageOp(user, slug, "Append to", suffix, func(content string) (string, error) {
+		if heading == "" {
+			return trimNewlines(content) + "\n\n" + addition + "\n", nil
+		}
+		text, ok := appendAt(content, addition, heading)
+		if !ok {
 			return "", toolErr(noHeading(slug, content, heading) +
 				" To start a new section, put its heading in content and leave out under_heading.")
 		}
 		where = " under " + strconv.Quote(heading)
-	}
-	msg, err := commitMsg("Append to "+slug, args)
+		return text, nil
+	})
 	if err != nil {
-		return "", err
+		return "", toolRefusal(err)
 	}
-	if err := writeText(path, text); err != nil {
-		return "", err
-	}
-	gitCommit(user, msg, path)
+	pending := pendingNote(slug, kept)
 	return "Appended to page " + slug + where + ".\n" + pageInfo(slug, base) + pending +
 		linkWarning(slug, content, text, user) + guideNote(slug, user), nil
 }

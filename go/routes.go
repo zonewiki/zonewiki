@@ -380,14 +380,6 @@ func (s *editorSave) changedSince() bool {
 	return s.fileHash != "" && s.current != nil && contentHash(*s.current) != s.fileHash
 }
 
-// write writes content unless the file holds it already.
-func (s *editorSave) write(content string) error {
-	if s.current != nil && *s.current == content {
-		return nil
-	}
-	return writeText(s.path, content)
-}
-
 func savePage(w http.ResponseWriter, r *http.Request) {
 	s, ok := readEditorSave(w, r)
 	if !ok {
@@ -414,15 +406,12 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		}
 		content = m.content
 	}
-	commitOthersDraft(userOf(r), s.slug, s.path)
-	// Unchanged: no write, but still a commit when the file is dirty.
-	if err := s.write(content); err != nil {
+	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, true); err != nil {
 		serverError(w, r, err)
 		return
 	}
 	keepBase(content)
 	dropDraft(userOf(r), s.path)
-	gitCommit(userOf(r), "Update "+s.slug, s.path)
 	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
 
@@ -505,12 +494,10 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		// Keep mine: whatever the page holds, but never what was never in git.
 		keepPending(s.path, s.slug)
 	}
-	commitOthersDraft(userOf(r), s.slug, s.path)
-	if err := s.write(content); err != nil {
+	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, false); err != nil {
 		serverError(w, r, err)
 		return
 	}
-	noteDraft(s.path, userOf(r))
 	dropDraft(userOf(r), s.path)
 	keepBase(content)
 	switch {
@@ -857,13 +844,11 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	commitOthersDraft(userOf(r), r.PathValue("slug"), path)
 	toggled := toggleNthCheckbox(content, idx, true)
-	if err := writeText(path, toggled); err != nil {
+	if err := writeDraft(userOf(r), r.PathValue("slug"), path, &content, toggled, false); err != nil {
 		serverError(w, r, err)
 		return
 	}
-	noteDraft(path, userOf(r))
 	writeJSON(w, http.StatusOK, M{"file_hash": contentHash(toggled)})
 }
 

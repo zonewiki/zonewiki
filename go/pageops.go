@@ -145,6 +145,51 @@ func createPageOp(user, slug, content, suffix string) error {
 	return nil
 }
 
+// writeDraft writes the editor's text to the page (current: what it holds,
+// nil for none; the same text isn't written again): an auto-save or a
+// ticked checkbox stays a draft, not committed; Done's save (commit)
+// commits it as "Update <slug>", also when only the file was dirty.
+// Either continues the writer's text, so only another user's draft there
+// is committed first (commitOthersDraft), not the writer's own.
+func writeDraft(user, slug, path string, current *string, text string, commit bool) error {
+	commitOthersDraft(user, slug, path)
+	if current == nil || *current != text {
+		if err := writeText(path, text); err != nil {
+			return err
+		}
+	}
+	if commit {
+		gitCommit(user, "Update "+slug, path)
+	} else {
+		noteDraft(path, user)
+	}
+	return nil
+}
+
+// changePageOp writes the page's text as change makes it from the text it
+// has, in one commit "<action> <slug><suffix>"; what it held uncommitted is
+// committed first (keepPending), so the commit holds only this change. A
+// refusal from change leaves everything as it was. Returns the text before
+// and after.
+func changePageOp(user, slug, action, suffix string, change func(old string) (string, error)) (old, text string, kept bool, err error) {
+	path, err := writablePage(user, slug)
+	if err != nil {
+		return "", "", false, err
+	}
+	if old, err = readText(path); err != nil {
+		return "", "", false, err
+	}
+	if text, err = change(old); err != nil {
+		return old, "", false, err
+	}
+	kept = keepPending(path, slug)
+	if err := writeText(path, text); err != nil {
+		return old, text, kept, err
+	}
+	gitCommit(user, action+" "+slug+suffix, path)
+	return old, text, kept, nil
+}
+
 // checkRename: why user can't rename slug to newSlug, if not; else the
 // files of both. The MCP tool asks it before it asks for the guides.
 func checkRename(user, slug, newSlug string) (path, newPath string, err error) {

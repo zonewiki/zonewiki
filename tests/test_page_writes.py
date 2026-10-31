@@ -221,3 +221,13 @@ class TestAnotherUsersPrivatePage:
             text, _ = mcp(client, "delete_page", "alice-token", slug="private/bob/diary")
             missing, _ = mcp(client, "delete_page", "alice-token", slug="private/bob/nothing")
             assert text == missing.replace("nothing", "diary")
+
+
+def test_a_refused_change_commits_nothing(client, wiki):
+    """An edit that doesn't apply leaves the page's uncommitted text as it was."""
+    commit(wiki, "p", "# P\n\nCommitted.\n")
+    write_page(wiki, "p", "# P\n\nOnly on disk.\n")
+    head = subjects(wiki)
+    text, err = mcp(client, "edit_page", slug="p", old_string="Not there.", new_string="x")
+    assert err and "not found" in text
+    assert subjects(wiki) == head and git(wiki, "status", "--porcelain").strip() == "M p.md"
