@@ -153,7 +153,7 @@ def test_a_password_without_users(client, wiki_dir, monkeypatch):
     assert signed_in(client)
 
 
-def test_a_setting_left_in_the_environment_stops_leaf(client, wiki_dir, monkeypatch):
+def test_a_setting_left_in_the_environment_stops_zone(client, wiki_dir, monkeypatch):
     """Zone reads the wiki's settings only from the file; one still in .env
     would be ignored (a forgotten LEAF_PASSWORD: an open wiki)."""
     monkeypatch.setattr(settings, "ENV", {"LEAF_PASSWORD": "pw"})

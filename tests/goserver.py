@@ -120,7 +120,7 @@ def password_hash(password: str, iterations: int = 1000) -> str:
     """A password's hash as `zonewiki config passwd` makes it (go/users.go), with a
     fixed salt so the settings, and so the server, stay the same between
     requests, and few iterations, so a login is quick."""
-    salt = b"leaf-tests-salt!"
+    salt = b"zone-tests-salt!"
     key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations, 32)
     b64 = lambda b: base64.b64encode(b).decode().rstrip("=")
     return f"pbkdf2-sha256:{iterations}:{b64(salt)}:{b64(key)}"

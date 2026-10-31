@@ -1708,7 +1708,7 @@ class TestProduction:
             assert "frame-ancestors 'self'" in resp.headers["Content-Security-Policy"], path
             assert resp.headers["X-Frame-Options"] == "SAMEORIGIN", path
 
-    def test_only_leafs_own_scripts_run(self, client, wiki_dir):
+    def test_only_zones_own_scripts_run(self, client, wiki_dir):
         # A page's raw HTML (written by an AI client after a prompt injection,
         # say) must not run a script: script-src 'self' without
         # 'unsafe-inline' blocks <script>, onerror= and javascript: links.

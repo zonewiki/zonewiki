@@ -152,7 +152,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     # (Open compact): most tests exercise cards, not density. A test of the
     # real defaults calls real_density(page) first.
     ctx.add_init_script("""
-      if (!sessionStorage.getItem('leaf-test-real-density')) {
+      if (!sessionStorage.getItem('zone-test-real-density')) {
         const get = Storage.prototype.getItem;
         Storage.prototype.getItem = function (key) {
           const value = get.call(this, key);
@@ -180,7 +180,7 @@ def real_density(page):
     tab from the next load on; the test setup otherwise keeps full cards."""
     if page.url.startswith("about:"):
         page.goto("/page/index")
-    page.evaluate("sessionStorage.setItem('leaf-test-real-density', '1')")
+    page.evaluate("sessionStorage.setItem('zone-test-real-density', '1')")
 
 
 @pytest.fixture()

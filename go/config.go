@@ -21,7 +21,7 @@ const appName = "Zone"
 const legacyAppName = "Leaf"
 
 // Zone's version (semver), bumped by hand when a change is worth a number.
-const version = "1.1.0"
+const version = "1.2.0"
 
 // environ: the environment Zone reads its deployment settings from, with
 // the names from before Leaf was called Zone (zoneEnv).

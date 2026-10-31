@@ -540,7 +540,7 @@ class TestUncommitted:
         header = html.split('<header class="page-header">', 1)[1].split("</header>", 1)[0]
         assert 'id="commit-all-btn"' in header     # with the title, not loose under the list
 
-    def test_lists_file_deleted_outside_leaf(self, client, wiki_dir):
+    def test_lists_file_deleted_outside_zone(self, client, wiki_dir):
         save(client, "p", "# P\n")
         (wiki_dir / "p.md").unlink()
         entries = client.get("/api/uncommitted", headers=HOST).get_json()

@@ -1583,7 +1583,7 @@ class TestCreateTask:
         text, _ = call(client, "create_task", title="Milk", keep=True, repeat="daily")
         assert "keep task" in text and "repeats" not in text
 
-    def test_date_words_use_leafs_today(self, client, wiki_dir):
+    def test_date_words_use_zones_today(self, client, wiki_dir):
         # "tomorrow" is resolved by Zone, so a client without the date (or
         # with a wrong one) still gets it right.
         today = date.today()
