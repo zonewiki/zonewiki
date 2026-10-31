@@ -164,7 +164,7 @@ def test_changes_left_in_conflict_come_back_on_the_next_visit(editors, wiki):
     saved(bob)
     type_after(alice, " By Alice.", "First.")
     alice.goto("/page/index")                  # before her auto-save: the save on leaving
-    kept = wiki.root / ".leaf/drafts/alice/plans.json"
+    kept = wiki.root / ".zone/drafts/alice/plans.json"
     for _ in range(50):
         if kept.exists():
             break
@@ -197,7 +197,7 @@ def test_leaving_in_a_conflict_keeps_the_text(clash, wiki, state):
     if state == "markers left":
         banner.get_by_role("button", name="Merge by hand").click()
     alice.goto("/page/index")
-    assert wait_for(alice, wiki.root / ".leaf/drafts/alice/plans.json")
+    assert wait_for(alice, wiki.root / ".zone/drafts/alice/plans.json")
     assert "By Alice" not in wiki.read("plans")
     alice.goto("/edit/plans")
     expect(alice.locator(".conflict-banner")).to_contain_text("You left changes here")

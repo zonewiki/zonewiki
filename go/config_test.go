@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -30,4 +32,33 @@ func TestZoneEnvReadsTheOldNames(t *testing.T) {
 		!strings.Contains(warnings[0], "ZONE_DATA") {
 		t.Errorf("warnings %q, want one for LEAF_DATA", warnings)
 	}
+}
+
+// Zone's folder is .zone/, or an older Zone's .leaf/ while that one is still
+// the wiki's: a stray .zone/ never takes the settings file's place.
+func TestStateDirIn(t *testing.T) {
+	wiki := t.TempDir()
+	in := func(want string, why string) {
+		t.Helper()
+		if got := filepath.Base(stateDirIn(wiki)); got != want {
+			t.Errorf("%s: %s, want %s", why, got, want)
+		}
+	}
+	mk := func(rel string) {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(wiki, rel)), 0o777)
+		_ = os.WriteFile(filepath.Join(wiki, rel), []byte("x"), 0o600)
+	}
+	in(".zone", "neither")
+	mk(".leaf/secret_key")
+	in(".leaf", ".leaf/ alone")
+	_ = os.Mkdir(filepath.Join(wiki, ".zone"), 0o777)
+	in(".leaf", "an empty .zone/")
+	mk(".zone/tmp/x")
+	in(".zone", ".zone/ with files, neither has settings")
+	mk(".leaf/config")
+	in(".leaf", "only .leaf/ has settings")
+	mk(".zone/config")
+	in(".zone", "both have settings")
+	_ = os.RemoveAll(filepath.Join(wiki, ".leaf"))
+	in(".zone", ".zone/ alone")
 }

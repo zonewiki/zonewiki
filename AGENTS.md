@@ -22,7 +22,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users: setup, the settings file `.leaf/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
+| `docs/spec/users.md` | Several users: setup, the settings file `.zone/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
@@ -85,7 +85,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
-│   ├── configfile.go       # The settings file .leaf/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
+│   ├── configfile.go       # The settings file .zone/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
@@ -100,7 +100,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
-│   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (_deck/ → _tasks/)
+│   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (.leaf/ → .zone/, _deck/ → _tasks/)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
 │   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
@@ -149,11 +149,11 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file (.leaf/config)
+./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
-Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
+Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
@@ -218,11 +218,11 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - Do not use a database. Files are the only storage.
 - Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
-  - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.leaf/secret_key` (0600, excluded from git).
-  - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
+  - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
+  - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
-  - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
+  - **The settings file** `.zone/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.zone/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - Every response carries the page policy (`pageCSP`): only Zone's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Zone's code, or the browser tests fail), no framing by other sites, `nosniff`.
@@ -230,6 +230,6 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - `ZONE_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 - Slugs are file paths relative to `ZONE_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `toSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders. Routes take the rest of the path as the slug (`{slug...}`).
-- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_tasks/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
+- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.zone/`, `.git/`, `_tasks/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).

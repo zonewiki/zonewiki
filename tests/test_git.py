@@ -656,7 +656,7 @@ class TestGitDisabled:
 
 
 def test_secret_key_folder_is_kept_out_of_git(client, wiki_dir):
-    assert (wiki_dir / ".leaf" / "secret_key").exists()
-    assert ".leaf" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
+    assert (wiki_dir / ".zone" / "secret_key").exists()
+    assert ".zone" not in git(wiki_dir, "status", "--porcelain", "--untracked-files=all")
 
 

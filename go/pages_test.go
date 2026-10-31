@@ -13,7 +13,7 @@ import (
 
 func TestIterPagesSkipsUnderscoreAndHiddenFolders(t *testing.T) {
 	pages := map[string]string{"index": "# Home\n", "top": "# Top\n", "a/b/deep": "# Deep\n"}
-	for _, skipped := range []string{"_assets/x", ".leaf/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"} {
+	for _, skipped := range []string{"_assets/x", ".leaf/y", ".zone/y", ".git/objects/z", "a/_drafts/w", "a/.hidden/v"} {
 		pages[skipped] = "# no\n"
 	}
 	testWiki(t, pages)
@@ -29,7 +29,7 @@ func TestIterPagesSkipsUnderscoreAndHiddenFolders(t *testing.T) {
 		t.Errorf("pages %q", slugs)
 	}
 	// What iterPages skips no route reads or writes; a page named _x is fine.
-	for _, slug := range []string{".leaf/index/n", ".git/n", "_tasks/n", "a/_drafts/n", "a/.hidden/n", "a/../.leaf/n"} {
+	for _, slug := range []string{".leaf/index/n", ".zone/index/n", ".git/n", "_tasks/n", "a/_drafts/n", "a/.hidden/n", "a/../.leaf/n"} {
 		if safePath(slug) != "" {
 			t.Errorf("safePath(%q) allowed", slug)
 		}

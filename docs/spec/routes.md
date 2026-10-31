@@ -62,7 +62,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
-A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.leaf/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview). These are the folders `iterPages()` skips. A file name starting with `_` (`notes`, `a/_notes`) is still a page.
+A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview). These are the folders `iterPages()` skips. A file name starting with `_` (`notes`, `a/_notes`) is still a page.
 
 Every page view includes:
 - **Breadcrumb** — `Wiki Tasks Notes › Page Title` above the page header: its root is the module switcher (see Modules), the green Z logo in front of Wiki, the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen tasks edit modal's buttons off-screen.

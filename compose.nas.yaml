@@ -12,7 +12,7 @@
 #   ZONE_UID=1026                         # the owner of that folder (id -u)
 #   ZONE_GID=100                          # its group (id -g; Synology: users)
 #
-# The wiki's own settings go in its settings file (.leaf/config), through the
+# The wiki's own settings go in its settings file (.zone/config), through the
 # container; first of all the names you open Zone by (or ZONE_ALLOW_REMOTE=1
 # in .env), then a login:
 #

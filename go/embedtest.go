@@ -7,7 +7,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"path/filepath"
 )
 
 type conceptEmbedder struct {
@@ -70,7 +69,7 @@ func semanticForTest(spec string) (*semanticIndex, error) {
 		return nil, err
 	}
 	emb := &conceptEmbedder{s.Name, s.ModelName, s.Concepts, s.Dim, s.Fail}
-	x := newSemanticIndex(emb, filepath.Join(cfg.Data, ".leaf", "index", "embeddings.json"), semanticTasks,
+	x := newSemanticIndex(emb, statePath("index", "embeddings.json"), semanticTasks,
 		s.MinScore, s.RelatedMinScore, s.TaskMinScore, s.RelatedMinChars)
 	if s.Synced {
 		x.sync()

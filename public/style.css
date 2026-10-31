@@ -1304,16 +1304,16 @@ main {
 .shortcuts-hint { font-size: .8rem; opacity: .6; font-weight: normal; }
 /* Version and commit, bottom left on big screens (layout.html), faint until
    hovered. */
-.leaf-build {
+.zone-build {
   position: fixed; left: .75rem; bottom: .6rem; z-index: 1;
   font: .7rem/1 "JetBrains Mono", "Fira Code", monospace;
   color: var(--muted); opacity: .55; white-space: nowrap;
 }
-.leaf-build:hover { opacity: 1; }
-body.editor-page .leaf-build { display: none; }   /* the editor fills the screen */
+.zone-build:hover { opacity: 1; }
+body.editor-page .zone-build { display: none; }   /* the editor fills the screen */
 /* Only where the margin beside the 720px column has room for it. */
-@media (max-width: 1139px) { .leaf-build { display: none; } }
-@media print { .leaf-build { display: none; } }
+@media (max-width: 1139px) { .zone-build { display: none; } }
+@media print { .zone-build { display: none; } }
 
 .zone-version { margin: 0; font-size: .75rem; opacity: .6; text-align: center; font-family: "JetBrains Mono", "Fira Code", monospace; }
 kbd {

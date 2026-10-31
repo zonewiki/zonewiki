@@ -222,7 +222,7 @@ default while there is no `~/zonewiki`.
 
 ### The settings file
 
-The wiki's own settings and its users are in the wiki, in `.leaf/config`,
+The wiki's own settings and its users are in the wiki, in `.zone/config`,
 committed with it (passwords and MCP tokens only as hashes). Zone reloads it
 when it changes, so none of them needs a restart (but for taking the login
 away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
@@ -238,7 +238,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 
 | Setting | Does |
 |---------|------|
-| `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Zone keeps its own key in `.leaf/` (never in git) |
+| `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Zone keeps its own key in `.zone/` (never in git) |
 | `[user NAME]` | Several users instead of one password, each with a `password` and maybe an `mcp-token` (`./run.sh user …`); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
 | `mcp-token` | Turns on `/mcp` (`./run.sh config token`; see [Connect an AI assistant](#connect-an-ai-assistant)) |
 | `hosts` | Names Zone may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
@@ -247,7 +247,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `noshare` | Pages hidden in sharing mode, e.g. `#noshare, people/` |
 | `locale` | How dates read and the day weeks start on, e.g. `de-AT` or `en-GB` (default: US English dates, weeks from Monday). The UI's words stay English |
 | `date-format` | `iso`: dates as `YYYY-MM-DD` (ISO 8601); weekday and month names still follow `locale` |
-| `query-log` | `yes`: keep the queries AI clients send to `search_wiki` in `.leaf/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
+| `query-log` | `yes`: keep the queries AI clients send to `search_wiki` in `.zone/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
 
 A typo in the file keeps the settings Zone has and shows up in its log. Up
@@ -408,7 +408,7 @@ Everything is files in `ZONE_DATA`, which is a git repository:
   have fields (dates, repeats, tags) and are written safely when several
   things change them at once. They are still plain files in the git
   repository.
-- `.leaf/` is Zone's own state, never committed but for `config`, the
+- `.zone/` is Zone's own state, never committed but for `config`, the
   settings file (users, password hashes, token hashes): whoever has the
   repository has those hashes, so use good passwords. `secret_key` keeps you signed
   in across restarts, `index/` is the semantic search cache (only with

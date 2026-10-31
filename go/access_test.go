@@ -23,7 +23,7 @@ func TestAccessWithoutUsers(t *testing.T) {
 		}
 	}
 	if !canSeePath("", "private/alice/_tasks/tasks.json") || !canSeePath("", "private/alice/_assets/a.png") ||
-		canSeePath("", ".leaf/config") {
+		canSeePath("", ".leaf/config") || canSeePath("", ".zone/config") || canSeePath("", ".zone/secret_key") {
 		t.Error("paths")
 	}
 }

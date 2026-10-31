@@ -692,7 +692,7 @@ class TestMergeOnSave:
         self.save(client, self.PAGE.replace("First.", "First, A."))
         mine = self.PAGE.replace("First.", "First, B.")
         assert self.save(client, mine, leaving="1").status_code == 409
-        kept = git_wiki_dir / ".leaf/drafts/_/plans.json"
+        kept = git_wiki_dir / ".zone/drafts/_/plans.json"
         assert json.loads(kept.read_text())["content"] == mine and "First, B." not in page.read_text()
         body = client.get("/edit/plans", headers=HOST).get_data(as_text=True)
         assert 'id="left-draft"' in body and "First, B." in body and "&lt;&lt;&lt;&lt;&lt;&lt;&lt; yours" in body
@@ -708,11 +708,11 @@ class TestMergeOnSave:
         self.save(client, self.PAGE.replace("Second.", "Second, A."))
         client.post("/api/save/plans", data={**fields, "content": "## Two\n\nSecond, B.\n", "merge": "1",
                                              "leaving": "1", "section_idx": "2"}, headers=HOST)
-        kept = json.loads((git_wiki_dir / ".leaf/drafts/_/plans.json").read_text())
+        kept = json.loads((git_wiki_dir / ".zone/drafts/_/plans.json").read_text())
         assert kept["content"] == self.PAGE.replace("Second.", "Second, B.") and kept["base"] == self.PAGE
 
     def test_left_drafts_go_after_30_days(self, client, page, git_wiki_dir):
-        kept = git_wiki_dir / ".leaf/drafts/_/plans.json"
+        kept = git_wiki_dir / ".zone/drafts/_/plans.json"
         kept.parent.mkdir(parents=True)
         kept.write_text(json.dumps({"content": "Old.\n", "base": "", "at": "2026-01-01T10:00:00Z"}))
         assert 'id="left-draft"' not in client.get("/edit/plans", headers=HOST).get_data(as_text=True)
@@ -970,8 +970,8 @@ class TestApiPagesList:
 # ===========================================================================
 
 class TestIterPages:
-    @pytest.mark.parametrize("slug", [".leaf/index/n", ".git/n", "_tasks/n", "a/_drafts/n", "a/.hidden/n",
-                                      "a/../.leaf/n"])
+    @pytest.mark.parametrize("slug", [".leaf/index/n", ".zone/index/n", ".git/n", "_tasks/n", "a/_drafts/n",
+                                      "a/.hidden/n", "a/../.leaf/n", "a/../.zone/n"])
     def test_pages_in_skipped_folders_are_not_served(self, client, wiki_dir, slug):
         """What iter_pages skips no route reads or writes, even by direct URL."""
         path = wiki_dir / (slug.replace("a/../", "") + ".md")
@@ -2163,14 +2163,14 @@ class TestVersion:
         monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00")
         for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
-            assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
+            assert ('<div class="zone-build" title="Build abc1234 2026-09-26 12:00">'
                     f'Zone {v} · abc1234</div>') in body, path
         monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00 +dirty")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f">Zone {v} · abc1234+dirty</div>" in body
         monkeypatch.setattr(settings, "ZONE_BUILD", "unknown")
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert f'<div class="leaf-build">Zone {v}</div>' in body
+        assert f'<div class="zone-build">Zone {v}</div>' in body
 
     def test_build_escaped(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_BUILD", "<b>")

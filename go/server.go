@@ -70,7 +70,7 @@ func main() {
 	}
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
-	excludeLeafState(cfg.Data) // the secret key, the caches; not the settings file
+	excludeState(cfg.Data) // the secret key, the caches; not the settings file
 	commitSettings("Change settings")
 	migrateNames() // before anything reads the tasks
 	ensureHomePage()
@@ -194,7 +194,7 @@ func newHandler() http.Handler {
 func apiHealth(w http.ResponseWriter, r *http.Request) {
 	if msg := settingsError(); msg != "" {
 		if _, ok, _ := signedIn(r); settings().authOn() && !ok {
-			msg = configName + " has an error, or a change Zone doesn't take while it runs: see Zone's log " +
+			msg = configName() + " has an error, or a change Zone doesn't take while it runs: see Zone's log " +
 				"(./run.sh logs), or run zonewiki config check"
 		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg})

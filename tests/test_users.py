@@ -1,4 +1,4 @@
-"""Users ([user …] in .leaf/config, docs/spec/users.md): a login per user, the session
+"""Users ([user …] in .zone/config, docs/spec/users.md): a login per user, the session
 naming its user, per-user MCP tokens, and commits authored by whoever made
 the change."""
 

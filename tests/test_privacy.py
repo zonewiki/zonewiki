@@ -86,8 +86,8 @@ def wiki(git_wiki_dir, monkeypatch):
     git(w, "commit", "-q", "-m", "Delete private/alice/old")
     (w / "private/alice/draft.md").write_text(f"# Draft {SECRET}\n\n{QUERY} {SECRET}\n")
     # Changes she left on the shared page in conflict (the editor's save on leaving).
-    (w / ".leaf/drafts/alice").mkdir(parents=True)
-    (w / ".leaf/drafts/alice/plans.json").write_text(json.dumps(
+    (w / ".zone/drafts/alice").mkdir(parents=True)
+    (w / ".zone/drafts/alice/plans.json").write_text(json.dumps(
         {"content": f"# Plans {SECRET}\n", "base": "# Plans\n", "at": datetime.datetime.now().isoformat() + "Z"}))
     return w
 

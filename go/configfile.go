@@ -35,10 +35,16 @@ import (
 	"time"
 )
 
-// configName: the file as messages name it, relative to the wiki.
-const configName = ".leaf/config"
+// configName(): the file as messages name it, relative to the wiki
+// (.zone/config, or .leaf/config while Zone reads that one).
+func configName() string {
+	if cfg == nil {
+		return stateDirName + "/config"
+	}
+	return filepath.Base(stateDirIn(cfg.Data)) + "/config"
+}
 
-func configPath() string { return filepath.Join(cfg.Data, ".leaf", "config") }
+func configPath() string { return statePath("config") }
 
 // configKeys: the keys outside a [user …] section, in the order `leaf
 // config check` shows them, with the environment variables that held them
@@ -93,7 +99,7 @@ func (f *configFile) user(name string) *configUser {
 
 // lineError: what is wrong on a line of the file.
 func lineError(n int, format string, args ...any) error {
-	return fmt.Errorf("%s line %d: %s", configName, n, fmt.Sprintf(format, args...))
+	return fmt.Errorf("%s line %d: %s", configName(), n, fmt.Sprintf(format, args...))
 }
 
 // sectionName: a line's section header's name ("[user alice]" → "user
@@ -177,7 +183,7 @@ func readConfigFile(path string) (*configFile, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", configName, err)
+		return nil, fmt.Errorf("%s: %w", configName(), err)
 	}
 	return parseConfig(string(b))
 }
@@ -186,7 +192,7 @@ func readConfigFile(path string) (*configFile, error) {
 func warnReadable(path string) {
 	if st, err := os.Stat(path); err == nil && st.Mode().Perm()&0o077 != 0 {
 		logf("%s can be read by others (mode %o): it holds password hashes and tokens. "+
-			"Make it the owner's only: chmod 600 %s", configName, st.Mode().Perm(), path)
+			"Make it the owner's only: chmod 600 %s", configName(), st.Mode().Perm(), path)
 	}
 }
 
@@ -234,7 +240,7 @@ func staleEnv(getenv func(string) string) error {
 		}
 		return fmt.Errorf("%s %s set in the environment (.env), but Zone reads the wiki's settings only from "+
 			"%s now. Move them there with ./run.sh config import (zonewiki config import), then delete them from .env.",
-			strings.Join(moved, ", "), verb, configName)
+			strings.Join(moved, ", "), verb, configName())
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
 		return errors.New("LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it: it " +
@@ -253,7 +259,7 @@ func loadSettings(f *configFile) (*Settings, error) {
 	// locale = ").
 	get := func(key string) (value, where string, set bool) {
 		v, set := f.top[key]
-		return v.value, fmt.Sprintf("%s line %d: %s = ", configName, v.line, key), set
+		return v.value, fmt.Sprintf("%s line %d: %s = ", configName(), v.line, key), set
 	}
 	s := &Settings{Hosts: map[string]bool{}}
 	var where string
@@ -445,7 +451,7 @@ func takeSettings() (old, s *Settings) {
 		// Gone (or between an editor's delete and write): keep what Zone
 		// has, as taking it away could open the wiki.
 		lastStat = nil
-		settingsFailed(fmt.Errorf("%s was removed: Zone keeps the settings it had until it is back, or a restart", configName))
+		settingsFailed(fmt.Errorf("%s was removed: Zone keeps the settings it had until it is back, or a restart", configName()))
 		return nil, nil
 	}
 	lastStat = st
@@ -458,7 +464,7 @@ func takeSettings() (old, s *Settings) {
 		// The users (or the password) gone: everyone could get in, and
 		// private/ would be an ordinary folder. Only on purpose, a restart.
 		err = fmt.Errorf("%s sets no users and no password now, which leaves the wiki without a login "+
-			"(and private/ open to everyone): Zone takes that only at its next start", configName)
+			"(and private/ open to everyone): Zone takes that only at its next start", configName())
 	}
 	if err != nil {
 		settingsFailed(err)
@@ -466,7 +472,7 @@ func takeSettings() (old, s *Settings) {
 	}
 	current.Store(s)
 	settingsErr.Store(nil)
-	logf("reloaded %s", configName)
+	logf("reloaded %s", configName())
 	warnReadable(path)
 	return old, s
 }

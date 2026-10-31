@@ -44,7 +44,7 @@ func TestMergeText(t *testing.T) {
 		}
 	}
 	// Its temporary files go.
-	if entries, _ := os.ReadDir(filepath.Join(cfg.Data, ".leaf", "tmp")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(filepath.Join(cfg.Data, ".zone", "tmp")); len(entries) != 0 {
 		t.Errorf("left %d files", len(entries))
 	}
 	cfg.GitEnabled = false

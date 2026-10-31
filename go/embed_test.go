@@ -45,7 +45,7 @@ func newRecorder() *recorder {
 	return &recorder{conceptEmbedder: conceptEmbedder{name: "fake:concepts", model: "fake", concepts: testConcepts, dim: 4}}
 }
 
-func cachePath() string { return filepath.Join(cfg.Data, ".leaf", "index", "embeddings.json") }
+func cachePath() string { return filepath.Join(cfg.Data, ".zone", "index", "embeddings.json") }
 
 func testIndex(emb embedder, tasks func() []semTask) *semanticIndex {
 	return newSemanticIndex(emb, cachePath(), tasks, 0.5, 0.5, 0.5, 0)
@@ -584,7 +584,7 @@ func TestFuse(t *testing.T) {
 	}
 }
 
-// .leaf/ (the cache, the session key) is in .git/info/exclude, once.
+// .zone/ (the cache, the session key) is in .git/info/exclude, once.
 func TestExcludeFromGit(t *testing.T) {
 	dir := t.TempDir()
 	excludeFromGit(dir, "/.leaf/")
@@ -599,10 +599,18 @@ func TestExcludeFromGit(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
 		t.Errorf("exclude %q", b)
 	}
-	// .leaf/ but the settings file: an older Zone's line goes.
-	excludeLeafState(dir)
-	excludeLeafState(dir)
-	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/*\n!/.leaf/config\n" {
+	// .zone/ but the settings file: an older Zone's line for .leaf/ goes,
+	// and with no .leaf/ there, its other lines too.
+	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~\n/.leaf/\n/.leaf/*\n!/.leaf/config\n"), 0o666)
+	excludeState(dir)
+	excludeState(dir)
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n!/.zone/config\n" {
+		t.Errorf("exclude %q", b)
+	}
+	// While .leaf/ is there (not moved yet), both folders' lines.
+	_ = os.Mkdir(filepath.Join(dir, ".leaf"), 0o777)
+	excludeState(dir)
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n!/.zone/config\n/.leaf/*\n!/.leaf/config\n" {
 		t.Errorf("exclude %q", b)
 	}
 }

@@ -82,8 +82,8 @@ func gitSetup() {
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
 		runGit("init")
 		setCommitter()
-		// Before the first add: .leaf/ holds the session key.
-		excludeLeafState(cfg.Data)
+		// Before the first add: .zone/ holds the session key.
+		excludeState(cfg.Data)
 		gitignore := filepath.Join(cfg.Data, ".gitignore")
 		if _, err := os.Stat(gitignore); err != nil {
 			_ = os.WriteFile(gitignore, nil, 0o666)
@@ -109,9 +109,9 @@ func setGitRemote() {
 	}
 }
 
-// setCommitter: Zone commits as "Zone <leaf@localhost>".
+// setCommitter: Zone commits as "Zone <zone@localhost>".
 func setCommitter() {
-	runGit("config", "user.email", "leaf@localhost")
+	runGit("config", "user.email", "zone@localhost")
 	runGit("config", "user.name", "Zone")
 }
 
@@ -147,35 +147,45 @@ func gitCommit(user, message string, paths ...string) {
 	}
 	runGit(args...)
 	if user != "" {
-		runGit("commit", "--author", user+" <"+user+"@leaf>", "-m", message)
+		runGit("commit", "--author", user+" <"+user+"@zone>", "-m", message)
 	} else {
 		runGit("commit", "-m", message)
 	}
 	forgetDrafts(args[2:]...) // committed: no one's draft now
 }
 
-// excludeLeafState keeps .leaf/ out of git (the session key, the caches,
-// the query log), but for the settings file, which is the wiki's and is
-// committed (its tokens are only hashes). An older Zone excluded all of
-// .leaf/ ("/.leaf/", a folder git then never looks into): that line goes,
-// as does one written otherwise ("/.leaf", ".leaf/", without a newline at
-// the end of the file).
-func excludeLeafState(wiki string) {
-	exclude := filepath.Join(wiki, ".git", "info", "exclude")
-	wholeFolder := func(l string) bool {
-		return slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf"}, strings.TrimSpace(l))
+// excludeState keeps Zone's folder .zone/ out of git (the session key, the
+// caches, the query log), but for the settings file, which is the wiki's and
+// is committed (its tokens are only hashes). .leaf/, an older Zone's folder,
+// likewise while it is there, and its lines go once it is moved. An older
+// Zone excluded all of .leaf/ ("/.leaf/", a folder git then never looks
+// into): that line goes, as does one written otherwise ("/.leaf", ".leaf/",
+// without a newline at the end of the file).
+func excludeState(wiki string) {
+	oldThere := exists(filepath.Join(wiki, legacyStateDirName))
+	stale := func(l string) bool {
+		l = strings.TrimSpace(l)
+		if slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf"}, l) {
+			return true
+		}
+		return !oldThere && (l == "/.leaf/*" || l == "!/.leaf/config")
 	}
-	if b, err := os.ReadFile(exclude); err == nil && slices.ContainsFunc(strings.Split(string(b), "\n"), wholeFolder) {
-		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), wholeFolder)
+	exclude := filepath.Join(wiki, ".git", "info", "exclude")
+	if b, err := os.ReadFile(exclude); err == nil && slices.ContainsFunc(strings.Split(string(b), "\n"), stale) {
+		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), stale)
 		if err := os.WriteFile(exclude, []byte(strings.Join(lines, "")), 0o666); err != nil {
 			logf("could not update %s: %v", exclude, err)
 		}
 	}
-	excludeFromGit(wiki, "/.leaf/*")
-	excludeFromGit(wiki, "!/.leaf/config")
+	excludeFromGit(wiki, "/"+stateDirName+"/*")
+	excludeFromGit(wiki, "!/"+stateDirName+"/config")
+	if oldThere {
+		excludeFromGit(wiki, "/.leaf/*")
+		excludeFromGit(wiki, "!/.leaf/config")
+	}
 }
 
-// excludeFromGit lists entry (e.g. /.leaf/*: cache, secret key) in
+// excludeFromGit lists entry (e.g. /.zone/*: cache, secret key) in
 // .git/info/exclude, not .gitignore, which would itself show up as an
 // uncommitted change.
 func excludeFromGit(wiki, entry string) {

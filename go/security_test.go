@@ -98,7 +98,7 @@ func TestHostName(t *testing.T) {
 func TestSecretKeyIsMadeOnceAndKept(t *testing.T) {
 	wiki := t.TempDir()
 	key := secretKey(wiki)
-	path := filepath.Join(wiki, ".leaf", "secret_key")
+	path := filepath.Join(wiki, ".zone", "secret_key")
 	b, _ := os.ReadFile(path)
 	st, _ := os.Stat(path)
 	if len(key) != 64 || string(b) != string(key) || st.Mode().Perm() != 0o600 {
@@ -111,7 +111,7 @@ func TestSecretKeyIsMadeOnceAndKept(t *testing.T) {
 
 func TestSecretKeyWithoutAWritableWiki(t *testing.T) {
 	wiki := t.TempDir()
-	_ = os.WriteFile(filepath.Join(wiki, ".leaf"), []byte("not a folder"), 0o666)
+	_ = os.WriteFile(filepath.Join(wiki, ".zone"), []byte("not a folder"), 0o666)
 	first, second := secretKey(wiki), secretKey(wiki)
 	if len(first) != 64 || len(second) != 64 || string(first) == string(second) {
 		t.Fatal("works, not kept")
@@ -214,7 +214,7 @@ func TestLoadConfig(t *testing.T) {
 		return func(k string) string { return m[k] }
 	}
 	file := func(text string) {
-		if err := writeConfig(filepath.Join(wiki, ".leaf", "config"), text); err != nil {
+		if err := writeConfig(filepath.Join(wiki, ".zone", "config"), text); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -268,7 +268,7 @@ func TestLoadConfig(t *testing.T) {
 func TestStaleEnv(t *testing.T) {
 	wiki := t.TempDir()
 	for _, c := range []struct{ env, want string }{
-		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only from .leaf/config now. Move them there with ./run.sh config import"},
+		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only from .zone/config now. Move them there with ./run.sh config import"},
 		{"LEAF_USERS", "LEAF_USERS is set"}, {"LEAF_LOCALE", "LEAF_LOCALE is set"},
 		{"LEAF_SEMANTIC_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE is set"},
 		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it"},

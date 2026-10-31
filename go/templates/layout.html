@@ -111,7 +111,7 @@
   {{- if .show_actions}}{{template "action_bar" .}}{{end}}
   {{- /* Version and the commit it was built from, quietly in the corner; the
       full build (commit date, +dirty) on hover and in the ? modal. */}}
-  <div class="leaf-build"{{with .commit}} title="Build {{text $.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{text .}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
+  <div class="zone-build"{{with .commit}} title="Build {{text $.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{text .}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
 </body>
 </html>
 {{end}}

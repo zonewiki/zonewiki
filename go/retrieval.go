@@ -898,7 +898,7 @@ var queryLogMax int64 = 1_000_000
 
 var queryLogMu sync.Mutex
 
-func queryLogPath() string { return filepath.Join(cfg.Data, ".leaf", "queries.jsonl") }
+func queryLogPath() string { return statePath("queries.jsonl") }
 
 // resultTarget: a result as the eval's questions name it, slug#anchor or
 // task:<id>.

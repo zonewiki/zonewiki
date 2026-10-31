@@ -1,6 +1,6 @@
 """The settings the tests give Zone (tests/goserver.py): the deployment's
 as the server's environment and flags, the wiki's in its settings file
-(.leaf/config). A test patches them here (monkeypatch.setattr(settings,
+(.zone/config). A test patches them here (monkeypatch.setattr(settings,
 "LEAF_PASSWORD", "pw")); the server restarts with them before its next
 request. The names are those of the variables Zone read until 2026-10, a
 few values typed as Zone parses them (LEAF_HOSTS a set of names,

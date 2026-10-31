@@ -6,7 +6,7 @@ written for (get/post/put/delete with headers, data, json, query_string,
 content_type, follow_redirects; set_cookie), and answers with werkzeug's
 TestResponse. The settings a test
 patches in tests/settings.py (a password, LEAF_HOSTS …) go to the server
-as its environment (and settings file, .leaf/config): when they change, the
+as its environment (and settings file, .zone/config): when they change, the
 server restarts on the same wiki before the next request."""
 
 import base64
@@ -66,7 +66,7 @@ def _settings() -> dict[str, str]:
 
 
 def config_text() -> str:
-    """The settings file the server gets (.leaf/config): the wiki's settings
+    """The settings file the server gets (.zone/config): the wiki's settings
     that differ from Zone's defaults, CONFIG_FILE, then the users; "" when
     there is nothing to say (the wiki then has no file)."""
     noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
@@ -104,7 +104,7 @@ _written: dict[Path, str] = {}
 def write_config(text: str) -> None:
     """Gives the wiki the settings file text (none for "", unless a test
     wrote one there itself)."""
-    path = Path(settings.ZONE_DATA) / ".leaf" / "config"
+    path = Path(settings.ZONE_DATA) / ".zone" / "config"
     if text:
         path.parent.mkdir(exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -117,7 +117,7 @@ def write_config(text: str) -> None:
 
 
 def password_hash(password: str, iterations: int = 1000) -> str:
-    """A password's hash as `leaf passwd` makes it (go/users.go), with a
+    """A password's hash as `zonewiki config passwd` makes it (go/users.go), with a
     fixed salt so the settings, and so the server, stay the same between
     requests, and few iterations, so a login is quick."""
     salt = b"leaf-tests-salt!"

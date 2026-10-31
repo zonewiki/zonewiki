@@ -35,7 +35,7 @@ const configUsage = `Usage: zonewiki config COMMAND
   unset KEY        back to its default (password: no login; mcp-token: /mcp off)
   passwd           set the wiki's password, without users (asks for it)
   token            give the wiki a new MCP token, without users (the old one stops working)
-  import           move the wiki's settings from the environment (.env, before 2026-10) into ` + configName
+  import           move the wiki's settings from the environment (.env, before 2026-10) into the settings file`
 
 // newToken: an MCP token, 32 random bytes as hex.
 func newToken() string {
@@ -90,7 +90,7 @@ func saveConfig(f *configFile) error {
 		return err
 	}
 	if string(b) != f.read {
-		return fmt.Errorf("not changed: %s changed while this command ran. Run it again.", configName)
+		return fmt.Errorf("not changed: %s changed while this command ran. Run it again.", configName())
 	}
 	return writeConfig(configPath(), f.text())
 }
@@ -142,7 +142,7 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 	case cmd == "add" && exists:
 		return fail("%s is a user already. Change the password with: zonewiki user passwd %s", name, name)
 	case cmd != "add" && !exists:
-		return fail("there is no user %s in %s.", name, configName)
+		return fail("there is no user %s in %s.", name, configName())
 	}
 	switch cmd {
 	case "add", "passwd":
@@ -169,7 +169,7 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			return fail("%v", err)
 		}
 		if cmd == "add" {
-			fmt.Fprintf(stdout, "Added %s to %s.\n", name, configName)
+			fmt.Fprintf(stdout, "Added %s to %s.\n", name, configName())
 		} else {
 			fmt.Fprintf(stdout, "Changed %s's password.\n", name)
 		}
@@ -211,7 +211,7 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
-		fmt.Fprintf(stdout, "Removed %s from %s.\n", name, configName)
+		fmt.Fprintf(stdout, "Removed %s from %s.\n", name, configName())
 		switch {
 		case openFlag:
 			fmt.Fprintln(stdout, "No users and no password now: the wiki has no login, and private/ is an "+
@@ -366,7 +366,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Zone keeps its key in .leaf/secret_key)")
 	}
 	if len(moved) == 0 {
-		fmt.Fprintf(stdout, "Nothing to import: the environment sets none of the settings %s holds.\n", configName)
+		fmt.Fprintf(stdout, "Nothing to import: the environment sets none of the settings %s holds.\n", configName())
 		return 0
 	}
 	if err := saveConfig(f); err != nil {
@@ -374,7 +374,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		return 1
 	}
 	fmt.Fprintf(stdout, "Moved into %s. Now delete these from .env and restart Zone "+
-		"(until then it refuses to start):\n", configName)
+		"(until then it refuses to start):\n", configName())
 	for _, name := range moved {
 		fmt.Fprintln(stdout, "  "+name)
 	}
@@ -414,7 +414,7 @@ func envUsers(getenv func(string) string) ([]*User, error) {
 // showSettings prints the settings in effect and where each comes from,
 // hashes masked.
 func showSettings(w io.Writer, f *configFile, s *Settings) {
-	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName)
+	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName())
 	for _, k := range configKeys {
 		v, set := f.top[k.key]
 		value, from := v.value, fmt.Sprintf("line %d", v.line)

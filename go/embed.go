@@ -1154,7 +1154,7 @@ func semanticFromEnv(getenv func(string) string) *semanticIndex {
 		return nil
 	}
 	semLog("semantic search on, model %s", emb.Name())
-	return newSemanticIndex(emb, filepath.Join(cfg.Data, ".leaf", "index", "embeddings.json"),
+	return newSemanticIndex(emb, statePath("index", "embeddings.json"),
 		semanticTasks, math.NaN(), math.NaN(), math.NaN(), relatedMinChars)
 }
 

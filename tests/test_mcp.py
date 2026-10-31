@@ -187,7 +187,7 @@ class TestSearchWiki:
         assert first.endswith("Crashes at startup.")
 
     def test_queries_are_logged_only_when_asked(self, client, pages, monkeypatch):
-        log = pages / ".leaf" / "queries.jsonl"
+        log = pages / ".zone" / "queries.jsonl"
         call(client, "search_wiki", query="git push")
         assert not log.exists()
         monkeypatch.setattr(settings, "LEAF_QUERY_LOG", True)

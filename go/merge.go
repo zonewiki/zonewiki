@@ -193,7 +193,7 @@ func mergeText(base, theirs, mine, theirName string) (merged string, clean bool,
 	if !cfg.GitEnabled {
 		return "", false, errNoMerge
 	}
-	dir := filepath.Join(cfg.Data, ".leaf", "tmp")
+	dir := statePath("tmp")
 	if err := os.MkdirAll(dir, 0o777); err != nil {
 		return "", false, err
 	}
@@ -350,7 +350,7 @@ type leftDraft struct {
 
 const leftDraftDays = 30
 
-func leftDraftsDir() string { return filepath.Join(cfg.Data, ".leaf", "drafts") }
+func leftDraftsDir() string { return statePath("drafts") }
 
 // leftDraftPath: the file of user's draft of the page at path.
 func leftDraftPath(user, path string) string {

@@ -62,6 +62,35 @@ type Config struct {
 
 var cfg *Config
 
+// Zone's own folder in the wiki: the settings file (committed), the session
+// key, the caches, drafts (not). An older Zone's is .leaf/, moved at start-up
+// (migrateNames); Zone reads it while it is the only one there.
+const (
+	stateDirName       = ".zone"
+	legacyStateDirName = ".leaf"
+)
+
+// stateDirIn: Zone's folder in the wiki data, .zone/, or .leaf/ while that
+// one is still the wiki's (not moved yet, or the move failed): .zone/ has no
+// settings file, and either .leaf/ has one or .zone/ is missing or empty. So
+// a stray .zone/ never leaves the wiki without its settings, and its login.
+func stateDirIn(data string) string {
+	dir, old := filepath.Join(data, stateDirName), filepath.Join(data, legacyStateDirName)
+	if !isDir(old) || exists(filepath.Join(dir, "config")) {
+		return dir
+	}
+	entries, _ := os.ReadDir(dir)
+	if exists(filepath.Join(old, "config")) || len(entries) == 0 {
+		return old
+	}
+	return dir
+}
+
+// statePath: a file in Zone's folder of the wiki (stateDirIn).
+func statePath(parts ...string) string {
+	return filepath.Join(append([]string{stateDirIn(cfg.Data)}, parts...)...)
+}
+
 func truthy(s string) bool {
 	switch strings.ToLower(s) {
 	case "1", "true", "yes":
@@ -113,7 +142,7 @@ func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 	if err := staleEnv(getenv); err != nil {
 		return nil, nil, err
 	}
-	f, err := readConfigFile(filepath.Join(c.Data, ".leaf", "config"))
+	f, err := readConfigFile(filepath.Join(stateDirIn(c.Data), "config"))
 	if err != nil {
 		return nil, nil, err
 	}

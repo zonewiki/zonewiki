@@ -1,4 +1,4 @@
-"""The settings file, .leaf/config (docs/spec/users.md): Zone reloads it
+"""The settings file, .zone/config (docs/spec/users.md): Zone reloads it
 when it changes, so users, passwords and tokens change without a restart;
 a broken file keeps the settings from before and says so on /api/health;
 Zone commits the file (its tokens only as hashes), but no route or history
@@ -21,7 +21,7 @@ def config(wiki_dir, client, monkeypatch):
     """alice from the settings file, Zone running; returns the file."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     client.live.ensure()
-    return wiki_dir / ".leaf" / "config"
+    return wiki_dir / ".zone" / "config"
 
 
 def write(path, text):
@@ -145,7 +145,7 @@ def test_settings_reload_too(client, config):
 
 
 def test_a_password_without_users(client, wiki_dir, monkeypatch):
-    """The file's password is a hash, from leaf passwd."""
+    """The file's password is a hash, from zonewiki config passwd."""
     monkeypatch.setattr(settings, "CONFIG_FILE", f"password = {password_hash('pw')}\n")
     assert client.get("/page/index", headers=HOST).status_code == 302
     assert client.post("/login", data={"password": "nope"}, headers=HOST).status_code == 200
@@ -171,43 +171,43 @@ def git(wiki, *args):
 
 def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch):
     """Zone commits the file at start and at each reload (saying what
-    changed), and only it of .leaf/; no page route serves it, and Zone's
+    changed), and only it of .zone/; no page route serves it, and Zone's
     history leaves it out."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     login(client, "alice", "alice-pw")
-    config = git_wiki_dir / ".leaf" / "config"
-    assert git(git_wiki_dir, "log", "-1", "--format=%an %s", "--", ".leaf/config").strip() == "Zone Change settings"
+    config = git_wiki_dir / ".zone" / "config"
+    assert git(git_wiki_dir, "log", "-1", "--format=%an %s", "--", ".zone/config").strip() == "Zone Change settings"
     files = git(git_wiki_dir, "ls-files")
-    assert ".leaf/config" in files and "secret_key" not in files
-    assert "alice-token" not in git(git_wiki_dir, "show", "HEAD:.leaf/config")   # only its hash
+    assert ".zone/config" in files and "secret_key" not in files
+    assert "alice-token" not in git(git_wiki_dir, "show", "HEAD:.zone/config")   # only its hash
     write(config, config.read_text() + user("carol", "carol-pw", "carol-token"))
     client.get("/page/index", headers=HOST)
     assert git(git_wiki_dir, "log", "-1", "--format=%s").strip() == "Change settings: add user carol"
     assert git(git_wiki_dir, "status", "--porcelain").strip() == ""
-    for path in ("/page/.leaf/config", "/api/page-preview/.leaf/config", "/edit/.leaf/config",
-                 "/_assets/../.leaf/config"):
+    for path in ("/page/.zone/config", "/api/page-preview/.zone/config", "/edit/.zone/config",
+                 "/_assets/../.zone/config", "/page/.leaf/config", "/_assets/../.leaf/config"):
         resp = client.get(path, headers=HOST)
         assert resp.status_code in (400, 404) and b"pbkdf2" not in resp.data, path
     for path in ("/uncommitted", "/api/uncommitted"):
         body = client.get(path, headers=HOST).data.decode()
-        assert ".leaf" not in body and "Change settings" not in body, path
+        assert ".zone" not in body and "Change settings" not in body, path
     text = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "history", "arguments": {}}},
     ).get_json()["result"]["content"][0]["text"]
-    assert ".leaf" not in text and "Change settings" not in text
+    assert ".zone" not in text and "Change settings" not in text
 
 
 @pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", "")])
 def test_an_older_wikis_exclude_lets_the_file_in(client, git_wiki_dir, monkeypatch, line, kept):
     """A wiki an older Zone set up excluded all of .leaf/ (also as written
-    by hand: without the slashes, or a newline at the end)."""
+    by hand: without the slashes, or a newline at the end): the line goes."""
     exclude = git_wiki_dir / ".git" / "info" / "exclude"
-    assert "/.leaf/*\n!/.leaf/config\n" in exclude.read_text()
+    assert "/.zone/*\n!/.zone/config\n" in exclude.read_text()
     exclude.write_text(line)
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
-    assert exclude.read_text() == kept + "/.leaf/*\n!/.leaf/config\n"
-    assert ".leaf/config" in git(git_wiki_dir, "ls-files")
+    assert exclude.read_text() == kept + "/.zone/*\n!/.zone/config\n"
+    assert ".zone/config" in git(git_wiki_dir, "ls-files")
 
 
 def test_a_new_wikis_first_commit_has_no_secret_key(client, wiki_dir, monkeypatch):
@@ -215,4 +215,4 @@ def test_a_new_wikis_first_commit_has_no_secret_key(client, wiki_dir, monkeypatc
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
     files = git(wiki_dir, "ls-files")
-    assert "index.md" in files and ".leaf/config" in files and "secret_key" not in files
+    assert "index.md" in files and ".zone/config" in files and "secret_key" not in files

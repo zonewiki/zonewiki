@@ -3,7 +3,7 @@ so /deck, /api/deck and the _deck/ folder (moved at start-up) go on working;
 Scratch is called Notes, so /page/_scratch, /api/scratch, ?scratch=1 and
 MCP's file_scratch_note and scratch arguments do too; Leaf is called Zone,
 so MCP's leaf_help and the LEAF_… environment variables do too (run.sh's
-side: test_run_sh.py). The old [[deck …]] syntax: test_tasks_embed.py."""
+side: test_run_sh.py), and the wiki's .leaf/ moves to .zone/ at start-up. The old [[deck …]] syntax: test_tasks_embed.py."""
 
 import json
 import subprocess
@@ -13,6 +13,7 @@ import pytest
 
 from tests import settings
 from tests.conftest import HOST, create_task, write_page
+from tests.test_config import login, signed_in, user
 from tests.goserver import GoServer, _flags, _settings
 from tests.test_mcp import TOKEN, call, rpc
 
@@ -113,6 +114,79 @@ class TestTasksFolderMove:
         (wiki_dir / "_deck" / "tasks.json").write_text(task_file("Plain files"))
         assert [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()] == ["Plain files"]
         assert (wiki_dir / "_tasks" / "tasks.json").exists() and not (wiki_dir / "_deck").exists()
+
+
+# ── .leaf/ → .zone/ ─────────────────────────────────────────────────────────────
+
+class TestStateFolderMove:
+    OLD_EXCLUDE = "/.leaf/*\n!/.leaf/config\n"
+
+    def _old_wiki(self, wiki, client, git_too=True):
+        """A wiki as an older Zone left it: its folder .leaf/ (alice in the
+        settings file, committed; the session key, a cache, a draft, not),
+        and the exclude lines for it."""
+        client.live.stop()
+        state = wiki / ".zone"
+        state.rename(wiki / ".leaf")
+        old = wiki / ".leaf"
+        (old / "config").write_text(user("alice", "alice-pw"))
+        (old / "config").chmod(0o600)
+        (old / "index").mkdir(exist_ok=True)
+        (old / "index" / "embeddings.json").write_text("{}")
+        (old / "drafts" / "_").mkdir(parents=True)
+        (old / "drafts" / "_" / "plans.json").write_text("{}")
+        if git_too:
+            (wiki / ".git" / "info" / "exclude").write_text(self.OLD_EXCLUDE)
+            git(wiki, "add", "-A")
+            git(wiki, "commit", "-qm", "Settings in .leaf/")
+            assert git(wiki, "ls-files", ".leaf") == ".leaf/config\n"
+        return (old / "secret_key").read_text()
+
+    def test_start_up_moves_leaf_to_zone_in_one_commit(self, git_wiki_dir, client):
+        key = self._old_wiki(git_wiki_dir, client)
+        assert login(client, "alice", "alice-pw").status_code == 302   # the same users
+        assert signed_in(client)
+        state = git_wiki_dir / ".zone"
+        assert not (git_wiki_dir / ".leaf").exists()
+        assert (state / "secret_key").read_text() == key                # sessions survive
+        assert (state / "index" / "embeddings.json").exists()
+        assert (state / "drafts" / "_" / "plans.json").exists()
+        [move] = git(git_wiki_dir, "log", "--format=%H", "--fixed-strings",
+                     "--grep=Move .leaf/ to .zone/: Leaf is called Zone").split()
+        assert git(git_wiki_dir, "show", "--name-status", "--format=", move).strip() == \
+            "R100\t.leaf/config\t.zone/config"
+        assert git(git_wiki_dir, "status", "--porcelain", "--untracked-files=all") == ""
+        assert (git_wiki_dir / ".git" / "info" / "exclude").read_text() == "/.zone/*\n!/.zone/config\n"
+        assert "moved .leaf/ to .zone/" in client.live.log.read_text()
+
+    def test_the_move_happens_once(self, git_wiki_dir, client):
+        self._old_wiki(git_wiki_dir, client)
+        client.live.ensure()
+        head = git(git_wiki_dir, "rev-parse", "HEAD")
+        client.live.stop()
+        client.live.ensure()
+        assert git(git_wiki_dir, "rev-parse", "HEAD") == head
+        assert not (git_wiki_dir / ".leaf").exists()
+
+    def test_a_stray_zone_folder_keeps_the_old_settings_and_their_login(self, git_wiki_dir, client):
+        """.zone/ already there with something in it, but no settings file:
+        nothing moves, and Zone goes on with .leaf/, its users and login."""
+        self._old_wiki(git_wiki_dir, client)
+        (git_wiki_dir / ".zone" / "tmp").mkdir(parents=True)
+        (git_wiki_dir / ".zone" / "tmp" / "x").write_text("stray")
+        assert client.get("/page/index", headers=HOST).status_code == 302   # still the login
+        assert login(client, "alice", "alice-pw").status_code == 302 and signed_in(client)
+        assert (git_wiki_dir / ".leaf" / "config").exists()
+        assert ".leaf/ and .zone/ are both there" in client.live.log.read_text()
+        exclude = (git_wiki_dir / ".git" / "info" / "exclude").read_text()
+        assert self.OLD_EXCLUDE in exclude and "/.zone/*\n" in exclude
+        assert git(git_wiki_dir, "status", "--porcelain", "--untracked-files=all") == ""
+
+    def test_without_git_the_folder_moves_too(self, wiki_dir, client):
+        key = self._old_wiki(wiki_dir, client, git_too=False)
+        assert login(client, "alice", "alice-pw").status_code == 302 and signed_in(client)
+        assert not (wiki_dir / ".leaf").exists()
+        assert (wiki_dir / ".zone" / "secret_key").read_text() == key
 
 
 # ── /page/_scratch, /api/scratch, MCP's old names ───────────────────────────────

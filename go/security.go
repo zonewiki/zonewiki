@@ -107,7 +107,7 @@ func isHTTPS(r *http.Request) bool {
 // restart doesn't sign everyone out. A wiki folder Zone can't write to gets
 // a new key per start.
 func secretKey(dataDir string) []byte {
-	path := filepath.Join(dataDir, ".leaf", "secret_key")
+	path := filepath.Join(stateDirIn(dataDir), "secret_key")
 	if b, err := os.ReadFile(path); err == nil {
 		if k := strings.TrimSpace(string(b)); len(k) >= 32 {
 			return []byte(k)

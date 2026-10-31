@@ -22,14 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 
-WIKI = Path(tempfile.mkdtemp(prefix="leaf_screenshots_"))
+WIKI = Path(tempfile.mkdtemp(prefix="zonewiki_screenshots_"))
 # hosts in the settings file, not ZONE_ALLOW_REMOTE (which would show its
 # badge): the server listens on a random port, and the Host check compares
 # names only.
 os.environ.update(ZONE_DATA=str(WIKI))
 os.environ.pop("ZONE_ALLOW_REMOTE", None)
-(WIKI / ".leaf").mkdir()
-(WIKI / ".leaf" / "config").write_text("hosts = 127.0.0.1\n")
+(WIKI / ".zone").mkdir()
+(WIKI / ".zone" / "config").write_text("hosts = 127.0.0.1\n")
 # The commit the screenshots show at the bottom left, without "+dirty".
 os.environ["ZONE_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],
@@ -172,7 +172,7 @@ def main():
     from tests.goserver import GoServer
 
     build_wiki()                     # before Zone starts: its first commit takes them in
-    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("LEAF_")}, WIKI.parent / "leaf.log",
+    srv = GoServer({k: v for k, v in os.environ.items() if k.startswith("ZONE_")}, WIKI.parent / "zonewiki.log",
                    config="")       # the wiki has its own (above)
     base = f"http://127.0.0.1:{srv.port}"
 

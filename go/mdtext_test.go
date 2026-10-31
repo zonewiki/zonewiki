@@ -21,7 +21,7 @@ func testWiki(t *testing.T, pages map[string]string) {
 			t.Fatal(err)
 		}
 	}
-	if err := writeConfig(filepath.Join(dir, ".leaf", "config"), "noshare = #noshare, secret/\n"); err != nil {
+	if err := writeConfig(filepath.Join(dir, ".zone", "config"), "noshare = #noshare, secret/\n"); err != nil {
 		t.Fatal(err)
 	}
 	c, s, err := loadConfig(func(k string) string { return map[string]string{"ZONE_DATA": dir}[k] })
