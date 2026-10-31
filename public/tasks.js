@@ -1400,7 +1400,7 @@ async function postReorder(body) {
 deleteCancelBtn?.addEventListener('click', () => deleteModal.close());
 
 function confirmDelete(title, count = 1) {
-  const labelEl = deleteModal.querySelector('.scratch-label');
+  const labelEl = deleteModal.querySelector('.modal-label');
   if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
   deleteTitleEl.textContent = count > 1 ? '' : title;
   return confirmModal(deleteModal, deleteConfirmBtn, deleteCancelBtn);
@@ -1630,16 +1630,16 @@ function openBulkTagModal(ids, removing = false) {
   const states = { ...initial };
 
   const dlg = document.createElement('dialog');
-  dlg.className = 'scratch-modal bulk-tag-modal';
+  dlg.className = 'modal bulk-tag-modal';
   dlg.innerHTML = `
-    <p class="scratch-label">Tags of ${count} task${count > 1 ? 's' : ''}</p>
+    <p class="modal-label">Tags of ${count} task${count > 1 ? 's' : ''}</p>
     <ul class="bulk-tag-list"${rows.length ? '' : ' hidden'}></ul>
     <div class="task-field">
       <input type="text" id="bulk-tag-input" autocomplete="off" spellcheck="false"
              aria-label="${removing ? 'Tag to remove' : 'Tags to add'}"
              placeholder="${removing ? 'Tag to remove…' : 'Add tags…'}">
     </div>
-    <div class="scratch-actions">
+    <div class="modal-actions">
       <button type="button" class="btn btn-primary" id="bulk-tag-ok">Apply</button>
       <button type="button" class="btn" id="bulk-tag-cancel">Cancel</button>
     </div>`;
@@ -3748,7 +3748,7 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  if (modal.open || deleteModal.open || document.querySelector('dialog[open].scratch-modal')) return;
+  if (modal.open || deleteModal.open || document.querySelector('dialog[open].modal')) return;
   const focus = document.activeElement;
 
   // '/' focuses the filter field; '#' focuses it and starts a tag word

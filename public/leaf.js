@@ -5,7 +5,7 @@
 
 import './js/chrome.js';      // navigation trail, backlinks chip, side columns, module counts
 import './js/git.js';         // uncommitted changes badge, Commit buttons
-import './js/search.js';      // search modal and preview, Scratch filter, search highlights
+import './js/search.js';      // search modal and preview, Notes filter, search highlights
 import './js/actions.js';     // new note / page / task, action bar, sharing mode
 import './js/pagemenu.js';    // the page's ⋯ menu and its dialogs
 import './js/shortcuts.js';   // keyboard shortcuts

@@ -1,0 +1,12 @@
+{{- /* The notes, newest first. The filter runs the search over them
+    (js/search.js initNotesFilter, /api/search?scratch=1); ?q= keeps it. */ -}}
+{{define "body"}}
+{{.breadcrumb_html}}
+<header class="page-header"><h1>Notes{{if .private}} <span class="lock" title="Private: only you see your notes" aria-label="Private">🔒</span>{{end}}</h1></header>
+<article class="page-content">
+{{- if .notes}}<div class="notes-filter"><input type="search" id="notes-filter" value="{{.q}}" placeholder="Filter notes…" title="Search syntax works: &quot;phrase&quot;, -word, #tag, edited:2026-09 …" aria-label="Filter notes" autocomplete="off" spellcheck="false"><span class="notes-filter-count" id="notes-filter-count" aria-live="polite"></span></div><ul class='notes-list'>
+{{- range .notes}}<li data-slug="{{.Slug}}"><a href="{{url "page" .Slug}}">{{.Title}}</a><span class="note-date">{{.Date}}</span></li>{{end -}}
+</ul>
+{{- else}}<p>No entries yet.{{if .private}} Notes are private: only you see them, until you move one to the wiki.{{end}}</p>{{end -}}
+</article>
+{{end}}

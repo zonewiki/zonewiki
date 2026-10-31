@@ -123,7 +123,7 @@ class TestWritesCommit:
         client.post("/new", data={"slug": "Fresh Page"}, headers=HOST)
         assert commit_messages(wiki_dir)[0] == "Create fresh-page"
 
-    def test_scratch_commit(self, client, wiki_dir):
+    def test_quicknote_commit(self, client, wiki_dir):
         slug = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         assert commit_messages(wiki_dir)[0] == f"Create {slug}"
         assert is_clean(wiki_dir)

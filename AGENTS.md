@@ -17,7 +17,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | `docs/spec/routes.md` | Every route, what each page view includes, side columns on big screens |
 | `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
-| `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, scratch notes, keyboard shortcuts, presentation mode |
+| `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
 | `docs/spec/mcp.md` | The MCP server and its tools, `leaf_help` (Zone's docs for assistants) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
@@ -91,7 +91,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
-│   ├── routes.go           # The wiki's routes: pages, the editor, scratch notes, search, previews, uploads
+│   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
@@ -99,7 +99,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
-│   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
+│   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (_deck/ → _tasks/)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed

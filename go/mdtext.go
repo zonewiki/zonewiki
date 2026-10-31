@@ -60,16 +60,16 @@ func toSlug(name string) string {
 	return strings.Join(parts, "/")
 }
 
-// scratchRE: a scratch note's slug, at the wiki's top level or at the top
-// of a user's private folder (isScratch checks the user); the first group
+// quicknoteRE: a note's slug, at the wiki's top level or at the top
+// of a user's private folder (isQuicknote checks the user); the first group
 // is its timestamp.
-var scratchRE = regexp.MustCompile(`^(?:` + privateDir + `/[a-z0-9-]+/)?(\d{4}-\d{2}-\d{2}_` +
+var quicknoteRE = regexp.MustCompile(`^(?:` + privateDir + `/[a-z0-9-]+/)?(\d{4}-\d{2}-\d{2}_` +
 	`\d{2}-\d{2}-\d{2})_(.+)$`)
 
-// isScratch: slug is a scratch note: at the top level, or (with users) at
+// isQuicknote: slug is a note: at the top level, or (with users) at
 // the top of a user's private folder.
-func isScratch(slug string) bool {
-	if !scratchRE.MatchString(slug) {
+func isQuicknote(slug string) bool {
+	if !quicknoteRE.MatchString(slug) {
 		return false
 	}
 	if !strings.HasPrefix(slug, privateDir+"/") {
@@ -835,7 +835,7 @@ func plainTaskTitle(title string) string {
 	})
 }
 
-// promotedSlug: where a scratch note moved to the wiki goes, `folder/name`,
+// promotedSlug: where a note moved to the wiki goes, `folder/name`,
 // with `date_` before the name when the date is kept. The name makes no
 // folders of its own (a / in it is a hyphen). Mirrored by promotedSlug in
 // js/pagemenu.js.
@@ -870,7 +870,7 @@ func pageWikilink(slug, label string) string {
 
 var headingLevelRE = regexp.MustCompile(`^(#{1,6})[ \t]`)
 
-// noteAsSection: a scratch note's text as a `## heading` section of another
+// noteAsSection: a note's text as a `## heading` section of another
 // page, and its frontmatter tags. Its title goes (the heading replaces it),
 // a tldr becomes an italic first paragraph, its headings move down so the
 // highest is a ###, its sources become a list at the end.

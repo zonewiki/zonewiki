@@ -188,21 +188,21 @@ func slugSet() map[string]bool {
 	return out
 }
 
-// ScratchNote is a scratch note in the list.
-type ScratchNote struct {
+// Quicknote is a note in the list.
+type Quicknote struct {
 	Slug, Title, Date string
 	ts                time.Time
 }
 
-// listScratch: every scratch note, newest first (in sharing mode without
+// listQuicknote: every note, newest first (in sharing mode without
 // those not for sharing): the wiki's top level, or with users only the top
-// of the user's private folder (inScratch).
-func listScratch(rq *Req) []ScratchNote {
+// of the user's private folder (inQuicknote).
+func listQuicknote(rq *Req) []Quicknote {
 	folders := []string{""}
 	if own := privateFolder(rq.user); own != "" {
 		folders = []string{own}
 	}
-	var notes []ScratchNote
+	var notes []Quicknote
 	for _, folder := range folders {
 		prefix := ""
 		if folder != "" {
@@ -215,8 +215,8 @@ func listScratch(rq *Req) []ScratchNote {
 				continue
 			}
 			slug := prefix + strings.TrimSuffix(name, ".md")
-			m := scratchRE.FindStringSubmatch(slug)
-			if m == nil || !inScratch(rq.user, slug) || hiddenPage(rq, slug) {
+			m := quicknoteRE.FindStringSubmatch(slug)
+			if m == nil || !inQuicknote(rq.user, slug) || hiddenPage(rq, slug) {
 				continue
 			}
 			ts, err := time.ParseInLocation("2006-01-02_15-04-05", m[1], time.Local)
@@ -224,7 +224,7 @@ func listScratch(rq *Req) []ScratchNote {
 				continue
 			}
 			title, _ := pageMeta(filepath.Join(cfg.Data, filepath.FromSlash(slug)+".md"), slug)
-			notes = append(notes, ScratchNote{slug, title, ts.Format("2006-01-02 15:04"), ts})
+			notes = append(notes, Quicknote{slug, title, ts.Format("2006-01-02 15:04"), ts})
 		}
 	}
 	sort.SliceStable(notes, func(i, j int) bool { return notes[i].ts.After(notes[j].ts) })
@@ -751,7 +751,7 @@ func relPath(target, start string) string {
 
 // rewritePageLinks points every link to oldSlug in text at newSlug. With a
 // section (a heading's text), links without an #anchor of their own point
-// at that heading of newSlug (a scratch note appended to a page is that
+// at that heading of newSlug (a note appended to a page is that
 // section now). Wikilinks and markdown links (relative, .md, /page/) keep
 // their style, anchor and title; relative hrefs are recomputed from
 // source's folder. Code is left alone.
@@ -933,7 +933,7 @@ func rewriteMovedLinks(moves map[string]string) []string {
 	return modified
 }
 
-// pageFolders: the folders that hold pages, A–Z, for filing a scratch note
+// pageFolders: the folders that hold pages, A–Z, for filing a note
 // (hidden pages don't name theirs in sharing mode).
 func pageFolders(rq *Req) []string {
 	set := map[string]bool{}

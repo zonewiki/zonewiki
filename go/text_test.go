@@ -245,7 +245,7 @@ func TestToggleMatchesRenderedCheckboxes(t *testing.T) {
 
 func toggle1(content string, idx int) string { return toggleNthCheckbox(content, idx, true) }
 
-// Scratch notes moved to the wiki (Move to wiki) or into a page (Append).
+// Notes moved to the wiki (Move to wiki) or into a page (Append).
 func TestPromotedSlug(t *testing.T) {
 	for _, c := range [][4]string{
 		{"", "Meeting with Alex", "", "meeting-with-alex"},

@@ -1,5 +1,5 @@
 // The MCP tools that write pages: write_page (also a
-// scratch note), edit_page, append_to_page, replace_in_pages, rename_page
+// note), edit_page, append_to_page, replace_in_pages, rename_page
 // (also a folder), delete_page, restore_page, file_scratch_note. Each write
 // is a git commit, refused while a guide for the page isn't confirmed
 // (checkGuides).
@@ -26,11 +26,11 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	scratch, err := boolArg(args, "scratch")
+	quicknote, err := boolArg(args, "scratch")
 	if err != nil {
 		return "", err
-	} else if scratch {
-		return writeScratch(args, content, base, user)
+	} else if quicknote {
+		return writeQuicknote(args, content, base, user)
 	}
 	overwrite := jsonTrue(args["overwrite"])
 	raw, err := strArg(args, "slug", true)
@@ -98,9 +98,9 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	return out + pending + linkWarning(slug, old, content, user) + guideNote(slug, user), nil
 }
 
-// writeScratch: write_page with scratch, a new scratch note, named by slug
+// writeQuicknote: write_page with quicknote, a new note, named by slug
 // (any words; Zone puts the time in front) or else by the content's title.
-func writeScratch(args jsonObj, content, base, user string) (string, error) {
+func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 	if jsonTrue(args["overwrite"]) {
 		return "", toolErr("A note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
@@ -118,7 +118,7 @@ func writeScratch(args jsonObj, content, base, user string) (string, error) {
 		_, body := parseFrontmatter(content)
 		content = content[:len(content)-len(body)] + "# " + name + "\n\n" + strings.TrimLeftFunc(body, unicode.IsSpace)
 	}
-	// Scratch notes sit at the wiki's root, with users in the user's
+	// Notes sit at the wiki's root, with users in the user's
 	// private folder: the guides of that folder apply.
 	where := "scratch-note"
 	if own := privateFolder(user); own != "" {
@@ -134,31 +134,31 @@ func writeScratch(args jsonObj, content, base, user string) (string, error) {
 	if name == "" {
 		name = title
 	}
-	slug, err := scratchErr(createScratch(user, name, &content, suffix))
+	slug, err := quicknoteErr(createQuicknote(user, name, &content, suffix))
 	if err != nil {
 		return "", err
 	}
-	return "Created scratch note " + slug + " (in Scratch, not yet in the wiki; file_scratch_note " +
+	return "Created note " + slug + " (in Notes, not yet in the wiki; file_scratch_note " +
 		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
 
-// scratchErr: a scratch note's refusal as a tool error.
-func scratchErr(s string, err error) (string, error) {
-	var se *scratchError
+// quicknoteErr: a note's refusal as a tool error.
+func quicknoteErr(s string, err error) (string, error) {
+	var se *quicknoteError
 	if errors.As(err, &se) {
 		return "", toolErr(se.msg)
 	}
 	return s, err
 }
 
-// fileScratchNote: the scratch note's Move to wiki (name, folder,
+// fileQuicknoteNote: the note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
-func fileScratchNote(args jsonObj, base, user string) (string, error) {
+func fileQuicknoteNote(args jsonObj, base, user string) (string, error) {
 	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
 	}
-	if !isScratch(slug) {
+	if !isQuicknote(slug) {
 		return "", toolErr(slug + " is not a note. rename_page moves a page, append_to_page adds text to one.")
 	}
 	page, err := strArg(args, "page", false)
@@ -198,7 +198,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 			return "", err
 		}
 		pending := savePending(path, slug) + savePending(safePath(target), target)
-		anchor, err := scratchErr(appendScratch(user, slug, target, heading, suffix))
+		anchor, err := quicknoteErr(appendQuicknote(user, slug, target, heading, suffix))
 		if err != nil {
 			return "", err
 		}
@@ -224,7 +224,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	pending := savePending(path, slug)
-	moved, err := scratchErr(moveScratch(user, slug, folder, name, keepDate, suffix))
+	moved, err := quicknoteErr(moveQuicknote(user, slug, folder, name, keepDate, suffix))
 	if err != nil {
 		return "", err
 	}

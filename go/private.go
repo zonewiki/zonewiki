@@ -69,13 +69,13 @@ func privateRoute(w http.ResponseWriter, r *http.Request) {
 
 // sharedMove: where Make shared would move slug for user: their own private
 // page out of their folder (the same path without it). ok false: not offered
-// (no users, not their own private page, a private home, a scratch note,
+// (no users, not their own private page, a private home, a note,
 // which Move to wiki takes out of the folder). There is no Make private for
 // a shared page: others have seen it, and its links on shared pages would
 // have to go; a new page is made private from the start (sharedNewOffer).
 func sharedMove(user, slug string) (target string, ok bool) {
 	folder := privateFolder(user)
-	if folder == "" || isProtected(slug) || isScratch(slug) || !canWrite(user, slug) {
+	if folder == "" || isProtected(slug) || isQuicknote(slug) || !canWrite(user, slug) {
 		return "", false
 	}
 	if _, private := pageOwner(slug); !private {

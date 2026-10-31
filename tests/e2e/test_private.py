@@ -1,4 +1,4 @@
-"""Private pages in the browser (docs/spec/users.md): the Private and Scratch
+"""Private pages in the browser (docs/spec/users.md): the Private and Notes
 pills, the user menu (Sign out), Make private / Make shared in the page menu, and `[[`
 completion offering a new page in your private folder."""
 
@@ -40,8 +40,8 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     expect(menu).to_be_hidden()
     # A note is private with users: the dialog says so.
     alice.keyboard.press("c"); alice.keyboard.press("n")
-    expect(alice.locator("#scratch-modal .scratch-label")).to_have_text("New private note")
-    expect(alice.locator("#scratch-modal .modal-desc")).to_contain_text("Only you see it")
+    expect(alice.locator("#modal .modal-label")).to_have_text("New private note")
+    expect(alice.locator("#modal .modal-desc")).to_contain_text("Only you see it")
     alice.keyboard.press("Escape")
     expect(btn).to_have_attribute("aria-expanded", "false")
     expect(btn).to_be_focused()
@@ -61,7 +61,7 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     expect(menu).to_be_hidden()
 
 
-def test_private_and_scratch_are_pills_in_a_group_of_their_own(alice):
+def test_private_and_quicknote_are_pills_in_a_group_of_their_own(alice):
     alice.goto("/page/index")
     groups = alice.locator(".breadcrumb .module-group")
     expect(groups).to_have_count(2)
@@ -82,11 +82,11 @@ def test_private_and_scratch_are_pills_in_a_group_of_their_own(alice):
     expect(alice.locator(".breadcrumb > a")).to_have_count(0)
 
 
-def test_scratch_pill_and_g_p_goes_home(alice):
+def test_quicknote_pill_and_g_p_goes_home(alice):
     alice.goto("/page/index")
     alice.get_by_role("link", name="Notes").click()
     alice.wait_for_url("**/page/_scratch")
-    expect(alice.locator(".breadcrumb .module-link[data-module=scratch]")).to_have_attribute("aria-current", "page")
+    expect(alice.locator(".breadcrumb .module-link[data-module=notes]")).to_have_attribute("aria-current", "page")
     alice.keyboard.press("g")
     alice.keyboard.press("p")
     alice.wait_for_url("**/page/private/alice/index")
@@ -103,10 +103,10 @@ def test_sign_out_is_in_the_menu_on_desktop(alice):
 def test_without_users_there_is_no_menu(page, wiki):
     page.goto("/page/index")
     expect(page.locator(".module-menu-btn")).to_have_count(0)
-    expect(page.locator(".breadcrumb .module-link[data-module=scratch]")).to_be_visible()
+    expect(page.locator(".breadcrumb .module-link[data-module=notes]")).to_be_visible()
 
 
-def test_the_phone_has_private_and_scratch_tabs(new_page, wiki, monkeypatch):
+def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1")})
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"username": "alice", "password": "pw"})
@@ -115,8 +115,8 @@ def test_the_phone_has_private_and_scratch_tabs(new_page, wiki, monkeypatch):
     items = bar.locator(".action-module, button")
     expect(items).to_have_text(["Wiki", "Tasks", "Private", "Notes", "Note", "Task", "Search"])
     assert all(i.bounding_box()["width"] >= 40 for i in items.all())
-    # Scratch's icon carries a small lock, inside its tab and clear of the label.
-    tab, lock = bar.locator("[data-module=scratch]"), bar.locator(".action-lock")
+    # Notes' icon carries a small lock, inside its tab and clear of the label.
+    tab, lock = bar.locator("[data-module=notes]"), bar.locator(".action-lock")
     expect(lock).to_have_count(1)
     expect(lock).to_be_visible()
     t, l, lab = tab.bounding_box(), lock.bounding_box(), tab.locator(".action-label").bounding_box()
@@ -313,7 +313,7 @@ _PILL_LABEL_GAPS = """() => [...document.querySelectorAll('.module-switch .modul
 
 def test_the_pills_labels_are_vertically_centred(alice):
     # Regression: padding tuned for Windows' Segoe UI (more below than above)
-    # put Wiki, Tasks, Private and Scratch high in their pills with other fonts.
+    # put Wiki, Tasks, Private and Notes high in their pills with other fonts.
     alice.goto("/page/index")
     rows = alice.evaluate(_PILL_LABEL_GAPS)
     assert [r[0] for r in rows] == ["Wiki", "Tasks", "Private", "Notes"]

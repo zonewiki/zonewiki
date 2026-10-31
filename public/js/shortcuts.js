@@ -1,5 +1,5 @@
 import { closeOnBackdropClick, keyPrefix } from './util.js';
-import { tasksHomeHref, openHomeTask, openScratch, toggleSharing } from './actions.js';
+import { tasksHomeHref, openHomeTask, openNewNote, toggleSharing } from './actions.js';
 import { openSearchModal } from './search.js';
 import { togglePreview } from './editor.js';
 import { foldAll } from './fold.js';
@@ -105,7 +105,7 @@ document.addEventListener('keydown', e => {
   // ct=task in the Tasks home
   if (keyPrefix.key === 'c') {
     resetPrefix();
-    if (e.key === 'n' || e.key === 's') { e.preventDefault(); openScratch(); }
+    if (e.key === 'n' || e.key === 's') { e.preventDefault(); openNewNote(); }
     else if (e.key === 't') { e.preventDefault(); openHomeTask(); }
     return;
   }

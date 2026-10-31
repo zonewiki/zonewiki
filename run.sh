@@ -70,7 +70,7 @@ if [[ -n "$LEAF_BUILD" && -n "$(git status --porcelain -- go public 2>/dev/null)
 fi
 export LEAF_BUILD="${LEAF_BUILD:-unknown}"
 
-# The user's timezone, so "today" (due badge, tasks dates, scratch-note names,
+# The user's timezone, so "today" (due badge, tasks dates, note names,
 # "Last changed") is their day instead of UTC: TZ in .env (e.g. Europe/Berlin),
 # else the host's, else UTC.
 TZ=$(env_val TZ)

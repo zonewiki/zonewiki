@@ -101,15 +101,15 @@ func TestStrayPrivate(t *testing.T) {
 	}
 }
 
-func TestScratchNotesInPrivateFolders(t *testing.T) {
+func TestQuicknoteNotesInPrivateFolders(t *testing.T) {
 	testWiki(t, nil)
 	note := "private/alice/2026-10-27_12-00-00_idea"
-	if !isScratch("2026-10-27_12-00-00_idea") || isScratch(note) {
-		t.Error("without users only top-level notes are scratch notes")
+	if !isQuicknote("2026-10-27_12-00-00_idea") || isQuicknote(note) {
+		t.Error("without users only top-level notes are notes")
 	}
 	withUsers(t, "alice")
-	if !isScratch(note) || isScratch("private/carol/2026-10-27_12-00-00_idea") ||
-		isScratch("private/alice/x/2026-10-27_12-00-00_idea") || isScratch("notes/2026-10-27_12-00-00_idea") {
+	if !isQuicknote(note) || isQuicknote("private/carol/2026-10-27_12-00-00_idea") ||
+		isQuicknote("private/alice/x/2026-10-27_12-00-00_idea") || isQuicknote("notes/2026-10-27_12-00-00_idea") {
 		t.Error("with users: at the top of a user's folder")
 	}
 	if noteDate(note) != "2026-10-27" || privateFolder("alice") != "private/alice" || privateFolder("") != "" {
@@ -117,14 +117,14 @@ func TestScratchNotesInPrivateFolders(t *testing.T) {
 	}
 }
 
-func TestInScratch(t *testing.T) {
+func TestInQuicknote(t *testing.T) {
 	testWiki(t, nil)
 	old, mine, theirs := "2026-10-27_12-00-00_idea", "private/alice/2026-10-27_12-00-00_idea", "private/carol/2026-10-27_12-00-00_idea"
-	if !inScratch("", old) || inScratch("", "notes") {
+	if !inQuicknote("", old) || inQuicknote("", "notes") {
 		t.Error("without users: the top-level notes")
 	}
 	withUsers(t, "alice")
-	if !inScratch("alice", mine) || inScratch("alice", old) || inScratch("alice", theirs) || !inScratch("", old) {
+	if !inQuicknote("alice", mine) || inQuicknote("alice", old) || inQuicknote("alice", theirs) || !inQuicknote("", old) {
 		t.Error("with users: only the user's own; Zone itself sees all")
 	}
 }

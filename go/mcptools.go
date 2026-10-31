@@ -1,6 +1,6 @@
 // The MCP tools: reading (search_wiki, search_tasks,
 // grep_wiki, read_page, list_pages, check_links, list_tags, history,
-// leaf_help, read_guides) and writing pages (write_page (also a scratch
+// leaf_help, read_guides) and writing pages (write_page (also a quicknote
 // note), edit_page, replace_in_pages, append_to_page, rename_page (also a
 // folder), delete_page, restore_page, file_scratch_note) and tasks
 // (create_task, update_task: also comments, deletes and tags on several
@@ -1538,10 +1538,10 @@ func readPage(args jsonObj, base, user string) (string, error) {
 }
 
 // isOrphan: no other page links to it. The home page, the Tasks home and
-// scratch notes are reached otherwise (the module switcher), and the guide
+// notes are reached otherwise (the module switcher), and the guide
 // is read by the assistant, so they never are.
 func isOrphan(slug string, counts map[string]int, home string) bool {
-	return counts[slug] == 0 && !isProtected(slug) && slug != home && slug != guideSlug && !isScratch(slug)
+	return counts[slug] == 0 && !isProtected(slug) && slug != home && slug != guideSlug && !isQuicknote(slug)
 }
 
 func listPages(args jsonObj, base, user string) (string, error) {
@@ -1557,7 +1557,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	onlyScratch, err := boolArg(args, "scratch")
+	onlyQuicknote, err := boolArg(args, "scratch")
 	if err != nil {
 		return "", err
 	}
@@ -1572,7 +1572,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	var rows []row
 	for _, p := range visiblePages(user) {
-		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyScratch && !inScratch(user, p.Slug) {
+		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyQuicknote && !inQuicknote(user, p.Slug) {
 			continue
 		}
 		st, err := os.Stat(p.Path)
@@ -1595,8 +1595,8 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	where := underWhere(under)
 	if len(rows) == 0 {
 		switch {
-		case onlyScratch:
-			return "No scratch notes" + where + ".", nil
+		case onlyQuicknote:
+			return "No notes" + where + ".", nil
 		case orphans:
 			return "Every page" + where + " is linked from another page.", nil
 		case under != "":
@@ -1614,7 +1614,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 		shown = fmt.Sprintf("%d of %d", len(lines), len(rows))
 	}
 	what := "Pages"
-	if onlyScratch {
+	if onlyQuicknote {
 		what = "Notes"
 	} else if orphans {
 		what = "Pages no other page links to (the home page, the Tasks home and notes aside)"
@@ -2037,11 +2037,11 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	scratch, err := boolArg(args, "scratch")
+	quicknote, err := boolArg(args, "scratch")
 	if err != nil {
 		return "", err
 	}
-	hits := retrieve(&Req{user: user}, query, limit, under, scratch)
+	hits := retrieve(&Req{user: user}, query, limit, under, quicknote)
 	logQuery(query, under, hits)
 	if len(hits) == 0 {
 		return "No matching sections or tasks. Try other words, or list_pages to browse.", nil
@@ -2078,7 +2078,7 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
 	"leaf_help": leafHelp, "read_guides": readGuides,
 	"write_page": writePage, "edit_page": editPageTool, "replace_in_pages": replaceInPages,
-	"append_to_page": appendToPage, "file_scratch_note": fileScratchNote, "rename_page": renamePageTool,
+	"append_to_page": appendToPage, "file_scratch_note": fileQuicknoteNote, "rename_page": renamePageTool,
 	"delete_page": deletePageTool, "restore_page": restorePage, "create_task": createTaskTool,
 	"update_task": updateTaskTool,
 }

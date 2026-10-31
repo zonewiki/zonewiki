@@ -905,7 +905,7 @@ def test_bulk_tag_dialog_three_states(page, wiki):
     select_by_keys(page, "Nuts", 2)                   # newest first: Nuts, Bolts
     page.keyboard.press("t")
     dlg = page.locator(".bulk-tag-modal")
-    expect(dlg.locator(".scratch-label")).to_have_text("Tags of 2 tasks")
+    expect(dlg.locator(".modal-label")).to_have_text("Tags of 2 tasks")
     rows = dlg.locator(".bulk-tag-row")
     expect(rows).to_have_count(2)
     x, y = rows.filter(has_text="#x"), rows.filter(has_text="#y")
@@ -1020,7 +1020,7 @@ def test_selection_bar_tag_opens_the_dialog(page, wiki):
     card(page, "Saw").locator(".task-title").click()
     card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
     page.locator("#task-selbar [data-sel='tag']").click()
-    expect(page.locator(".bulk-tag-modal .scratch-label")).to_have_text("Tags of 2 tasks")
+    expect(page.locator(".bulk-tag-modal .modal-label")).to_have_text("Tags of 2 tasks")
     page.locator("#bulk-tag-input").fill("shop")
     page.keyboard.press("Enter")
     wait_for_field(page, "Saw", "tags", ["shop"])
@@ -1072,7 +1072,7 @@ def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
     expect(menu.locator(".task-menu-title")).to_have_text("2 tasks")
     assert selected_titles(page) == ["Saw", "Glue"]       # the right-click kept it
     menu.get_by_role("menuitem", name="Delete…").click()
-    expect(page.locator("#task-delete-modal .scratch-label")).to_have_text("Delete 2 tasks?")
+    expect(page.locator("#task-delete-modal .modal-label")).to_have_text("Delete 2 tasks?")
     page.locator("#task-delete-confirm").click()
     expect(card(page, "Saw")).to_have_count(0)
     expect(card(page, "Glue")).to_have_count(0)

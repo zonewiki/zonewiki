@@ -7,7 +7,7 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 
-// mdtext.promoted_slug: where a scratch note moved to the wiki goes.
+// mdtext.promoted_slug: where a note moved to the wiki goes.
 function promotedSlug(folder, name, date) {
   let n = toSlug(name.replace(/\//g, '-'));
   if (!n) return '';
@@ -96,7 +96,7 @@ function promotedSlug(folder, name, date) {
     else if (item.dataset.action === 'append') openAppend();
   });
 
-  // Move to wiki (scratch notes): the slug the page will get, as the server
+  // Move to wiki (notes): the slug the page will get, as the server
   // makes it (promoted_slug), shown while typing.
   const promote = document.getElementById('page-promote-dialog');
   function openPromote() {
@@ -144,7 +144,7 @@ function promotedSlug(folder, name, date) {
     reopenWithError(promote, openPromote, 'promote_error');
   }
 
-  // Append to page (scratch notes): the page, then the section's heading.
+  // Append to page (notes): the page, then the section's heading.
   const append = document.getElementById('page-append-dialog');
   function openAppend() {
     if (!append) return;

@@ -65,11 +65,11 @@ func ownPrivate(user, slug string) bool {
 	return owner != "" && owner == user
 }
 
-// inScratch: slug is a note in user's Scratch: any scratch note without
+// inQuicknote: slug is a note in user's Notes: any note without
 // users or for Zone itself (user ""), with users only one in their own folder
 // (a note from before users, at the top level, is a page like any other).
-func inScratch(user, slug string) bool {
-	if !isScratch(slug) {
+func inQuicknote(user, slug string) bool {
+	if !isQuicknote(slug) {
 		return false
 	}
 	return privateFolder(user) == "" || ownPrivate(user, slug)

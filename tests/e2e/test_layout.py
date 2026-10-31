@@ -468,7 +468,7 @@ def test_no_side_columns_below_1320(new_page, wiki):
 
 
 def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
-    # Regression: only page views were wide, so on Scratch or the Tasks the
+    # Regression: only page views were wide, so on Notes or the Tasks the
     # switcher and the top actions jumped inward. Every view shares the top
     # row; the text column sits in the same place on each.
     _side_wiki(wiki)
@@ -659,9 +659,9 @@ def test_wide_images_use_the_middle_column(new_page, wiki):
     assert abs(tasks["width"] - text["width"]) < 1 and abs(tasks["x"] - text["x"]) < 1
 
 
-def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
+def test_tasks_quicknote_and_wiki_content_share_one_width(new_page, wiki):
     # Every view's content has the text's width, on big screens and small:
-    # a page's text, a task list embed on it, /tasks, Scratch and search results.
+    # a page's text, a task list embed on it, /tasks, Notes and search results.
     _side_wiki(wiki)
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     wiki.write("2026-10-01_09-00-00_note", "# Note\n")
@@ -675,7 +675,7 @@ def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
         page.goto("/tasks")
         boxes["tasks"] = page.locator(".tasks-app").bounding_box()
         page.goto("/page/_scratch")
-        boxes["scratch"] = page.locator(".notes-list").bounding_box()
+        boxes["quicknote"] = page.locator(".notes-list").bounding_box()
         page.goto("/search?q=note")
         boxes["search"] = page.locator(".search-results").bounding_box()
         edges = {k: (round(b["x"]), round(b["width"])) for k, b in boxes.items()}
@@ -755,8 +755,8 @@ def test_history_flow(page, wiki):
     expect(page.locator("article.page-content")).to_have_text("v3")
 
 
-def test_move_scratch_note_to_wiki(page, wiki):
-    # A scratch note's ⋯ has Move to wiki…: folder, name (its title), the
+def test_move_quicknote_to_wiki(page, wiki):
+    # A note's ⋯ has Move to wiki…: folder, name (its title), the
     # date and the page to link from, with the page's slug previewed while
     # typing.
     note = "2026-10-08_14-03-11_alex-notes"
@@ -801,7 +801,7 @@ def test_move_scratch_note_to_wiki(page, wiki):
     assert not (wiki.root / f"{note}.md").exists()
 
 
-def test_append_scratch_note_to_page(page, wiki):
+def test_append_quicknote_to_page(page, wiki):
     # Append to page…: pick the page, keep the suggested heading, and land
     # on the new section there.
     note = "2026-10-08_14-03-11_alex-notes"

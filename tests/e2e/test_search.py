@@ -180,7 +180,7 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
 
 
 def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
-    # Tasks and Scratch are modules, in the module switcher: the empty-query
+    # Tasks and Notes are modules, in the module switcher: the empty-query
     # list leaves them out, typing finds them. Deleted Pages stays pinned.
     seed(wiki)
     page.goto("/page/index")
@@ -188,7 +188,7 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     items = page.locator("#modal-page-list .page-list-item")
     expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")   # git is on
     expect(items.nth(1)).not_to_have_class(re.compile(r"page-list-special"))
-    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Scratch)$"))).to_have_count(0)
+    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Notes)$"))).to_have_count(0)
     # Whatever the sort.
     page.locator("#modal-sort").select_option("title-desc")
     expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")
@@ -201,13 +201,13 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     page.locator("#modal-filter").fill("")
     page.locator("#modal-unlinked").check()
     expect(page.locator("#modal-page-list .page-list-special")).to_have_count(0)
-    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Scratch)$"))).to_have_count(0)
+    expect(items.locator("a", has_text=re.compile(r"^(Tasks|Notes)$"))).to_have_count(0)
 
 
-def test_phone_reaches_scratch_list_in_one_tap(new_page, wiki):
+def test_phone_reaches_quicknote_list_in_one_tap(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
-    phone.locator(".action-buttons [data-module=scratch]").tap()
+    phone.locator(".action-buttons [data-module=notes]").tap()
     phone.wait_for_url("**/page/_scratch")
 
 
@@ -250,7 +250,7 @@ def test_query_syntax_in_the_modal(page, wiki):
 def test_equal_title_scores_prefer_the_main_page(page, wiki):
     # Regression: every title starting with "alex" scored the same, and the
     # alphabetical order put a deep conversation note before the person's
-    # page. Ties now go to non-scratch pages, then fewer folders, then the
+    # page. Ties now go to pages that are no notes, then fewer folders, then the
     # shorter name.
     wiki.write("conversations/situations/alex-1on1/prep", "# Alex 1:1 Kickoff\n\nx\n")
     wiki.write("conversations/people/alex", "# Alex — People Profile\n\nx\n")
@@ -351,10 +351,10 @@ def test_search_result_opens_highlighted(page, wiki):
     expect(page.locator("article mark.search-hl")).to_have_text(["tomatoes"])
 
 
-# ── Scratch filter ───────────────────────────────────────────────────────────
-# The Scratch page's filter box: the search, over scratch notes only.
+# ── Notes filter ───────────────────────────────────────────────────────────
+# The Notes page's filter box: the search, over notes only.
 
-def test_scratch_filter_uses_the_search(page, wiki):
+def test_quicknote_filter_uses_the_search(page, wiki):
     wiki.write("2026-09-01_10-00-00_bob-call", "# Bob call\n\n## Quote\n\nRoof repair, running late.\n")
     wiki.write("2026-09-02_10-00-00_groceries", "# Groceries\n\nMilk, eggs.\n")
     wiki.write("2026-09-03_10-00-00_garden", "# Garden\n\nThe roof of the shed.\n")
@@ -364,11 +364,11 @@ def test_scratch_filter_uses_the_search(page, wiki):
     expect(items).to_have_count(3)
     expect(items.locator("a")).to_have_text(["Garden", "Groceries", "Bob call"])   # newest first
 
-    box = page.locator("#scratch-filter")
+    box = page.locator("#notes-filter")
     box.fill("roof repair")
     # Ranked like the search (stems: "runs" finds "running"), excerpts marked.
     expect(items.locator("a")).to_have_text(["Bob call", "Garden"])
-    expect(page.locator("#scratch-filter-count")).to_have_text("2 of 3")
+    expect(page.locator("#notes-filter-count")).to_have_text("2 of 3")
     expect(items.first.locator(".note-excerpt mark").first).to_have_text(re.compile("roof", re.I))
     expect(page).to_have_url(re.compile(r"/page/_scratch\?q=roof\+repair$"))
 
@@ -376,7 +376,7 @@ def test_scratch_filter_uses_the_search(page, wiki):
     expect(items.locator("a")).to_have_text(["Bob call"])
     box.fill("zzzqqq")
     expect(items).to_have_count(0)
-    expect(page.locator(".scratch-filter-empty")).to_be_visible()
+    expect(page.locator(".notes-filter-empty")).to_be_visible()
 
     box.press("Escape")   # clears: the full list, newest first, again
     expect(items.locator("a")).to_have_text(["Garden", "Groceries", "Bob call"])
@@ -391,7 +391,7 @@ def test_scratch_filter_uses_the_search(page, wiki):
     expect(page.locator("mark.search-hl").first).to_be_visible()
     # Back returns to the filtered list.
     page.go_back()
-    expect(page.locator("#scratch-filter")).to_have_value("runs late")
+    expect(page.locator("#notes-filter")).to_have_value("runs late")
     expect(items.locator("a")).to_have_text(["Bob call"])
 
 

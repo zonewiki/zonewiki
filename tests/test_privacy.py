@@ -28,7 +28,7 @@ SECRET = "quokkaflute"
 QUERY = "zebracorn"
 DIARY = "private/alice/diary"
 SNEAK = "private/bob/../alice/diary"   # the diary, by way of bob's own folder
-NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her scratch note
+NOTE = "private/alice/2026-10-27_09-00-00_idea"   # her note
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
 
@@ -57,7 +57,7 @@ def git(wiki, *args):
 
 @pytest.fixture()
 def wiki(git_wiki_dir, monkeypatch):
-    """alice's private pages, committed (the diary, a scratch note; an old
+    """alice's private pages, committed (the diary, a note; an old
     page, deleted) and not (a draft); a shared page linking to the diary,
     which links back."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
@@ -225,22 +225,22 @@ def alice(client, wiki):
     return client
 
 
-def scratch_titles(client):
+def quicknote_titles(client):
     links = re.findall(r'<a href="/page/([^"]+)"', client.get("/page/_scratch", headers=HOST).data.decode())
-    return [s for s in links if s != "_scratch"]   # the Scratch pill and tab
+    return [s for s in links if s != "_scratch"]   # Notes pill and tab
 
 
-def test_scratch_notes_are_private(alice, wiki):
-    (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: a shared page, in no one's Scratch
+def test_quicknotes_are_private(alice, wiki):
+    (wiki / "2026-01-01_10-00-00_shared.md").write_text("# Shared\n")   # from before users: a shared page, in no one's Notes
     slug = alice.post("/api/scratch", data={"title": "Mine"}, headers=HOST).get_json()["slug"]
     assert re.fullmatch(r"private/alice/\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_mine", slug)
     assert (wiki / f"{slug}.md").exists()
-    notes = scratch_titles(alice)
+    notes = quicknote_titles(alice)
     assert slug in notes and NOTE in notes and "2026-01-01_10-00-00_shared" not in notes
     assert 'aria-label="Private">🔒</span></h1>' in alice.get("/page/_scratch", headers=HOST).data.decode()
     sign_in(alice, "bob")
     bob = alice
-    assert scratch_titles(bob) == []
+    assert quicknote_titles(bob) == []
     assert alice.get("/page/2026-01-01_10-00-00_shared", headers=HOST).status_code == 200   # still a page
 
 
@@ -251,7 +251,7 @@ def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):
 
 
 def test_an_old_shared_note_cannot_be_moved_into_private(alice, wiki):
-    """A scratch note from before users is a shared page: Move to wiki into
+    """A note from before users is a shared page: Move to wiki into
     private/alice would make a shared page private, so it is refused and
     nothing moves."""
     note = "2026-01-01_10-00-00_old"
@@ -563,9 +563,9 @@ def test_recent_changes_fill_the_limit_with_visible_commits(client, wiki):
     assert "(2, the limit)" in text and "private/alice" not in text
 
 
-def test_bobs_assistant_writes_scratch_notes_in_his_folder(client, wiki):
+def test_bobs_assistant_writes_quicknotes_in_his_folder(client, wiki):
     text = mcp(client, "write_page", scratch=True, slug="Thought", content="Hm\n")
-    assert "Created scratch note private/bob/" in text
+    assert "Created note private/bob/" in text
     assert "private/bob/" in mcp(client, "list_pages", scratch=True)
     assert "private/bob/" not in mcp(client, "list_pages", token="alice-token", scratch=True)
 
@@ -637,7 +637,7 @@ def _alices_files(wiki):
 
 @pytest.mark.parametrize("method,path,kwargs", _write_params())
 def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
-    if "{bobs}" in path:   # bob's own scratch note, aiming at alice's pages from there
+    if "{bobs}" in path:   # bob's own note, aiming at alice's pages from there
         path = path.replace("{bobs}", bob.post("/api/scratch", data={"title": "Bobs"}, headers=HOST).get_json()["slug"])
     kwargs = {k: v() if callable(v) else v for k, v in kwargs.items()}
     before, log = _alices_files(wiki), git(wiki, "log", "--format=%H")
@@ -651,7 +651,7 @@ def test_bob_changes_nothing_of_alices(bob, wiki, method, path, kwargs):
         assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
 
 
-# What bob's assistant tries on alice's pages; "{bobs}" is a scratch note of
+# What bob's assistant tries on alice's pages; "{bobs}" is a note of
 # his, "{old}" the version that still had her deleted page.
 MCP_WRITES = [
     ("write_page", {"slug": DIARY, "content": "# Bob was here\n", "overwrite": True}),

@@ -1,4 +1,4 @@
-// The wiki's routes: pages, the editor, scratch notes, the
+// The wiki's routes: pages, the editor, notes, the
 // tasks page, previews, page lists.
 package main
 
@@ -16,11 +16,11 @@ import (
 
 func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /private", privateRoute)
-	mux.HandleFunc("GET /page/_scratch", scratchPage)
+	mux.HandleFunc("GET /page/_scratch", notesPage)
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
 	mux.HandleFunc("POST /api/scratch", func(w http.ResponseWriter, r *http.Request) {
-		slug, err := createScratch(userOf(r), r.PostFormValue("title"), nil, "")
+		slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
 		if err != nil {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -80,11 +80,11 @@ func htmlOf(s string) template.HTML { return template.HTML(s) }
 // quote is urllib's quote(s): letters, digits, _.-~ and / stay.
 func quote(s string) string { return pathURL(s)[1:] }
 
-// scratchPage: the scratch notes. Its filter runs the search over them
-// (js/search.js initScratchFilter); ?q= keeps the query.
-func scratchPage(w http.ResponseWriter, r *http.Request) {
+// notesPage: the notes. Its filter runs the search over them
+// (js/search.js initNotesFilter); ?q= keeps the query.
+func notesPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	page(w, rq, http.StatusOK, "scratch.html", "Notes", shell{}, M{"notes": listScratch(rq),
+	page(w, rq, http.StatusOK, "notes.html", "Notes", shell{}, M{"notes": listQuicknote(rq),
 		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Notes", "", "")})
 }
 
@@ -282,7 +282,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	editable := !isNew && !hasSection // a whole existing page
-	// Nothing but the title yet (a new page, a new scratch note): the cursor
+	// Nothing but the title yet (a new page, a new note): the cursor
 	// starts after it, ready for the body.
 	onlyTitle := !hasSection && onlyTitleRE.MatchString(content)
 	if !isNew && !hasSection {
@@ -632,7 +632,7 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("from") == "page" {
 		back = pathURL("page", slug)
 	}
-	// toSlug keeps underscores, so scratch timestamps survive a rename.
+	// toSlug keeps underscores, so quicknote timestamps survive a rename.
 	newSlug := toSlug(strings.TrimSpace(r.PostFormValue("new_name")))
 	if newSlug == "" || newSlug == slug {
 		http.Redirect(w, r, back, http.StatusFound)
@@ -662,14 +662,14 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", newSlug), http.StatusFound)
 }
 
-// scratchNoteArg: the scratch note a Move to wiki or Append route acts on
+// quicknoteArg: the note a Move to wiki or Append route acts on
 // (400 for another page, 404 for none).
-func scratchNoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
+func quicknoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 	slug := r.PathValue("slug")
 	if refuseWrite(w, r, slug) {
 		return "", false
 	}
-	if !isScratch(slug) {
+	if !isQuicknote(slug) {
 		badRequestPage(w)
 		return "", false
 	}
@@ -680,10 +680,10 @@ func scratchNoteArg(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return slug, true
 }
 
-// scratchFailed answers a failed move or append: a refusal goes back to
+// quicknoteFailed answers a failed move or append: a refusal goes back to
 // the page's dialog (back, the message appended), anything else is a 500.
-func scratchFailed(w http.ResponseWriter, r *http.Request, back string, err error) {
-	var se *scratchError
+func quicknoteFailed(w http.ResponseWriter, r *http.Request, back string, err error) {
+	var se *quicknoteError
 	if errors.As(err, &se) {
 		http.Redirect(w, r, back+quote(se.msg), http.StatusFound)
 		return
@@ -691,10 +691,10 @@ func scratchFailed(w http.ResponseWriter, r *http.Request, back string, err erro
 	serverError(w, r, err)
 }
 
-// promotePage moves a scratch note into the wiki (the Move to wiki dialog),
+// promotePage moves a note into the wiki (the Move to wiki dialog),
 // links to it following, with its own commit message.
 func promotePage(w http.ResponseWriter, r *http.Request) {
-	slug, ok := scratchNoteArg(w, r)
+	slug, ok := quicknoteArg(w, r)
 	if !ok {
 		return
 	}
@@ -711,9 +711,9 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	newSlug, err := moveScratch(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
+	newSlug, err := moveQuicknote(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
 	if err != nil {
-		scratchFailed(w, r, back, err)
+		quicknoteFailed(w, r, back, err)
 		return
 	}
 	// The page to link it from opens in the editor, the link to paste where
@@ -733,10 +733,10 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", newSlug), http.StatusFound)
 }
 
-// appendPage appends a scratch note to a page as a section and deletes the
+// appendPage appends a note to a page as a section and deletes the
 // note; links to the note point at that section, all in one commit.
 func appendPage(w http.ResponseWriter, r *http.Request) {
-	slug, ok := scratchNoteArg(w, r)
+	slug, ok := quicknoteArg(w, r)
 	if !ok {
 		return
 	}
@@ -752,9 +752,9 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back+quote("There is no page “"+raw+"”"), http.StatusFound)
 		return
 	}
-	anchor, err := appendScratch(userOf(r), slug, target, r.PostFormValue("heading"), "")
+	anchor, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
 	if err != nil {
-		scratchFailed(w, r, back, err)
+		quicknoteFailed(w, r, back, err)
 		return
 	}
 	http.Redirect(w, r, pathURL("page", target)+"#"+anchor, http.StatusFound)
@@ -785,7 +785,7 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiPagesList: every page for the search modal's list, and the built-in
-// ones: Tasks and Scratch are modules (typing finds them); Deleted Pages is
+// ones: Tasks and Notes are modules (typing finds them); Deleted Pages is
 // pinned to the top of the empty query's list (special).
 func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
@@ -949,7 +949,7 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiSearch: the search modal's results (?limit=, ?unlinked=1; ?scratch=1:
-// scratch notes only, for the Scratch page's filter).
+// notes only, for Notes page's filter).
 func apiSearch(w http.ResponseWriter, r *http.Request) {
 	args := r.URL.Query()
 	q := strings.TrimSpace(args.Get("q"))
@@ -957,16 +957,16 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []M{})
 		return
 	}
-	scratch := args.Get("scratch") == "1"
+	quicknote := args.Get("scratch") == "1"
 	limit, ok := intArg(args.Get("limit"), args.Has("limit"))
 	if !ok {
 		limit = searchLimit
 	}
 	most := searchMaxLimit
-	if scratch {
-		most = scratchFilterLimit
+	if quicknote {
+		most = notesFilterLimit
 	}
-	results := doSearch(newReq(r), q, args.Get("unlinked") == "1", max(1, min(limit, most)), scratch)
+	results := doSearch(newReq(r), q, args.Get("unlinked") == "1", max(1, min(limit, most)), quicknote)
 	// The search dialog's indicator (js/search.js) follows it: indexing → on.
 	w.Header().Set("X-Leaf-Semantic", semanticStatus())
 	writeJSON(w, http.StatusOK, results)

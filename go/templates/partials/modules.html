@@ -7,7 +7,7 @@
 {{- end}}
 
 {{- /* The root of every breadcrumb: the Z logo with "Wiki" (the home page),
-    then Tasks and Scratch; with users Wiki and Tasks, then Private and Scratch,
+    then Tasks and Notes; with users Wiki and Tasks, then Private and Notes,
     each group a pill of its own (.module-group). Phones and the editor show
     the logo only (style.css). The trail code in js/chrome.js keeps it as the
     first crumb. */}}
@@ -50,11 +50,11 @@
 {{- /* the user button is the desktop's (top_actions) */ -}}
 {{- else -}}
 {{- if ne .group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .group}}{{end -}}
-<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "scratch") (eq .group 1)}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "notes") (eq .group 1)}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>
-<button type="button" class="action-scratch" aria-label="New note" title="New note (c n)">{{template "icon_new_note"}}<span class="action-label" aria-hidden="true">Note</span></button>
+<button type="button" class="action-new-note" aria-label="New note" title="New note (c n)">{{template "icon_new_note"}}<span class="action-label" aria-hidden="true">Note</span></button>
 <button type="button" class="action-task" aria-label="New task" title="New task (c t)">{{template "icon_new_task"}}<span class="action-label" aria-hidden="true">Task</span></button>
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>

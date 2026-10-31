@@ -60,32 +60,32 @@
     </div>
     <div id="modal-preview" class="search-preview" aria-live="polite"></div>
   </dialog>
-  <dialog id="scratch-modal" class="scratch-modal">
-    <p class="scratch-label">New {{if .user}}private {{end}}note</p>
+  <dialog id="modal" class="modal">
+    <p class="modal-label">New {{if .user}}private {{end}}note</p>
     {{- if .user}}<p class="modal-desc">Only you see it, until you move it to the wiki.</p>{{end}}
-    <form id="scratch-form">
-      <input type="text" id="scratch-title" placeholder="Title…" autocomplete="off" spellcheck="false">
-      <div class="scratch-actions">
+    <form id="new-note-form">
+      <input type="text" id="new-note-title" placeholder="Title…" autocomplete="off" spellcheck="false">
+      <div class="modal-actions">
         <button type="submit" class="btn btn-primary">Create &amp; Edit</button>
-        <button type="button" class="btn" id="scratch-cancel">Cancel</button>
+        <button type="button" class="btn" id="new-note-cancel">Cancel</button>
       </div>
     </form>
   </dialog>
   {{template "shortcuts" .}}
-  <dialog id="url-name-modal" class="scratch-modal">
-    <p class="scratch-label">Paste link</p>
+  <dialog id="url-name-modal" class="modal">
+    <p class="modal-label">Paste link</p>
     <code id="url-name-href" class="url-name-href"></code>
     <input type="text" id="url-name-input" placeholder="Display name (optional)" autocomplete="off" spellcheck="false">
-    <div class="scratch-actions">
+    <div class="modal-actions">
       <button type="button" class="btn btn-primary" id="url-name-confirm">Insert</button>
       <button type="button" class="btn" id="url-name-cancel">Plain URL</button>
     </div>
   </dialog>
-  <dialog id="upload-conflict-modal" class="scratch-modal">
-    <p class="scratch-label">File already exists</p>
+  <dialog id="upload-conflict-modal" class="modal">
+    <p class="modal-label">File already exists</p>
     <p id="upload-conflict-msg" class="upload-conflict-msg"></p>
     <input type="text" id="upload-conflict-name" autocomplete="off" spellcheck="false">
-    <div class="scratch-actions">
+    <div class="modal-actions">
       <button type="button" class="btn btn-primary" id="upload-conflict-confirm">Upload</button>
       <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
     </div>

@@ -15,15 +15,15 @@
 {{- end}}
 
 {{define "delete_dialog" -}}
-<dialog id="page-delete-dialog" class="scratch-modal"><p class="scratch-label">Delete page</p><p class="modal-desc">Delete &ldquo;{{.title}}&rdquo;? {{if .git}}It can be restored from history.{{else}}This cannot be undone.{{end}}</p><form method="post" action="{{url "delete" .slug}}"><div class="scratch-actions"><button type="button" class="btn" id="page-delete-cancel">Cancel</button><button type="submit" class="btn btn-danger">Delete</button></div></form></dialog>
+<dialog id="page-delete-dialog" class="modal"><p class="modal-label">Delete page</p><p class="modal-desc">Delete &ldquo;{{.title}}&rdquo;? {{if .git}}It can be restored from history.{{else}}This cannot be undone.{{end}}</p><form method="post" action="{{url "delete" .slug}}"><div class="modal-actions"><button type="button" class="btn" id="page-delete-cancel">Cancel</button><button type="submit" class="btn btn-danger">Delete</button></div></form></dialog>
 {{- end}}
 
-{{- /* The "Move to wiki" dialog of a scratch note: a folder (suggesting the
+{{- /* The "Move to wiki" dialog of a note: a folder (suggesting the
     existing ones), the name (the note's title), whether to keep the date in
     front of it, a preview of the slug, and the page to link it from
     (js/pagemenu.js). Posts to /promote/<slug>. */}}
 {{define "promote_dialog" -}}
-<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="{{.title}}"{{if .promote_error}} data-open{{end}}><p class="scratch-label">Move to wiki</p><form method="post" action="{{url "promote" .slug}}">
+<dialog id="page-promote-dialog" class="modal promote-modal" data-title="{{.title}}"{{if .promote_error}} data-open{{end}}><p class="modal-label">Move to wiki</p><form method="post" action="{{url "promote" .slug}}">
 <label class="promote-field">Folder<input type="text" name="folder" id="promote-folder" list="promote-folders" placeholder="(top level)" autocomplete="off" spellcheck="false"></label>
 <datalist id="promote-folders">{{range .folders}}<option value="{{.}}/">{{end}}</datalist>
 <label class="promote-field">Name<input type="text" name="name" id="promote-name" value="{{.title}}" autocomplete="off" spellcheck="false" required></label>
@@ -31,19 +31,19 @@
 <p class="promote-preview" aria-live="polite">/page/<code id="promote-slug"></code></p>
 <label class="promote-field">Link from<input type="text" name="link_from" id="promote-link-from" list="wiki-pages" placeholder="(no link)" autocomplete="off" spellcheck="false"></label>
 <p class="modal-desc">Opens that page in the editor, the link in the clipboard to paste where it belongs.</p>
-<input type="hidden" name="copied" id="promote-copied" value="">{{template "error" (dict "message" .promote_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Move</button><button type="button" class="btn" id="page-promote-cancel">Cancel</button></div></form></dialog>
+<input type="hidden" name="copied" id="promote-copied" value="">{{template "error" (dict "message" .promote_error)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Move</button><button type="button" class="btn" id="page-promote-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 
-{{- /* The "Append to page" dialog of a scratch note: the page and the
+{{- /* The "Append to page" dialog of a note: the page and the
     heading of the section the note becomes there. Posts to /append/<slug>. */}}
 {{define "append_dialog" -}}
-<dialog id="page-append-dialog" class="scratch-modal promote-modal"{{if .append_error}} data-open{{end}}><p class="scratch-label">Append to page</p><p class="modal-desc">The note becomes a section at the end of the page and leaves Scratch. Links to it follow.</p><form method="post" action="{{url "append" .slug}}">
+<dialog id="page-append-dialog" class="modal promote-modal"{{if .append_error}} data-open{{end}}><p class="modal-label">Append to page</p><p class="modal-desc">The note becomes a section at the end of the page and leaves Notes. Links to it follow.</p><form method="post" action="{{url "append" .slug}}">
 <label class="promote-field">Page<input type="text" name="page" id="append-page" list="wiki-pages" autocomplete="off" spellcheck="false" required></label>
-<label class="promote-field">Section heading<input type="text" name="heading" id="append-heading" value="{{.append_heading}}" autocomplete="off" required></label>{{template "error" (dict "message" .append_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Append</button><button type="button" class="btn" id="page-append-cancel">Cancel</button></div></form></dialog>
+<label class="promote-field">Section heading<input type="text" name="heading" id="append-heading" value="{{.append_heading}}" autocomplete="off" required></label>{{template "error" (dict "message" .append_error)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Append</button><button type="button" class="btn" id="page-append-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 
 {{- /* The page view's ⋯ menu (Present, History, Move to wiki… and Append to
-    page… for a scratch note, Rename…, Delete…) and the dialogs behind it.
+    page… for a note, Rename…, Delete…) and the dialogs behind it.
     One hidden element that js/pagemenu.js opens under whichever ⋯ was
     pressed; Present shows only on a page with headings. Outside the page
     grid: the middle column is a size container, which would anchor
@@ -52,22 +52,22 @@
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>
 <button type="button" role="menuitem" id="present-btn" hidden>Present<kbd class="menu-key">p</kbd></button>
 {{- if .git}}<a role="menuitem" href="{{url "history" .slug}}">History</a>{{end}}
-{{- if .scratch}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
+{{- if .quicknote}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
 {{- if .shared_target}}<button type="button" role="menuitem" data-action="privacy">Make shared…</button>{{end -}}
 {{- if .renamable}}<button type="button" role="menuitem" data-action="rename">Rename…</button><button type="button" role="menuitem" data-action="delete" class="danger">Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>{{end -}}
 </div>
-{{- if .scratch}}
+{{- if .quicknote}}
 <datalist id="wiki-pages">{{range .wiki_pages}}<option value="{{.Slug}}">{{.Title}}</option>{{end}}</datalist>
 {{- template "promote_dialog" .}}
 {{- template "append_dialog" .}}
 {{- end}}
 {{- if .shared_target}}
-<dialog id="page-privacy-dialog" class="scratch-modal"><p class="scratch-label">Make shared</p>
+<dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Make shared</p>
 <p class="modal-desc">“{{.title}}” moves out of your private folder, to <code>{{.shared_target}}</code>. Everyone who uses this wiki will see and be able to change it. Links to it follow.</p>
-<form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="new_name" value="{{.shared_target}}"><div class="scratch-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
+<form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="new_name" value="{{.shared_target}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .renamable}}
-<dialog id="page-rename-dialog" class="scratch-modal"{{if .rename_error}} data-open{{end}}><p class="scratch-label">Rename page</p><form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{or .rename_name .slug}}" aria-label="New name for “{{.title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .rename_error)}}<div class="scratch-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
+<dialog id="page-rename-dialog" class="modal"{{if .rename_error}} data-open{{end}}><p class="modal-label">Rename page</p><form method="post" action="{{url "rename" .slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{or .rename_name .slug}}" aria-label="New name for “{{.title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .rename_error)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- end}}
 

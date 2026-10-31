@@ -691,13 +691,13 @@ const (
 	searchLimit        = 15   // results in the search modal (/api/search default)
 	searchPageLimit    = 50   // results on the /search page ("All results")
 	searchMaxLimit     = 100  //
-	scratchFilterLimit = 1000 // the Scratch page's filter lists every match
+	notesFilterLimit = 1000 // Notes page's filter lists every match
 )
 
 // doSearch: search results for the browser, at most limit. unlinked keeps
 // only pages no other page links to (the search modal's "Unlinked only"),
-// no tasks; scratch only scratch notes (the Scratch page's filter).
-func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
+// no tasks; quicknote only notes (Notes page's filter).
+func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M {
 	results := []M{}
 	if strings.TrimSpace(raw) == "" {
 		return results
@@ -714,8 +714,8 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, scratch bool) []M {
 		}
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && !linked[d.Slug] })
 	}
-	if scratch {
-		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && inScratch(rq.user, d.Slug) })
+	if quicknote {
+		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && inQuicknote(rq.user, d.Slug) })
 	}
 	if rq.sharing || settings().Users != nil {
 		tests = append(tests, func(d *SearchDoc) bool { return !hiddenDoc(rq, d) })
@@ -842,17 +842,17 @@ func inFolder(slug, folder string) bool {
 
 // retrieve: the sections and tasks most relevant to the query, best first.
 // The query syntax applies. With under, only sections of pages in that
-// folder, with scratch only of scratch notes; either way no tasks. Only
+// folder, with quicknote only of notes; either way no tasks. Only
 // pages rq may see (nil: Zone itself, which sees all).
-func retrieve(rq *Req, raw string, limit int, under string, scratch bool) []*SearchDoc {
+func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*SearchDoc {
 	q := ParseQuery(raw)
 	if strings.TrimSpace(q.RankingText()) == "" {
 		return nil
 	}
 	x := chunkIndex(rq)
-	pagesOnly := under != "" || scratch
+	pagesOnly := under != "" || quicknote
 	pageOK := func(slug string) bool {
-		return inFolder(slug, under) && (!scratch || inScratch(rq.who(), slug)) && !hiddenPage(rq, slug)
+		return inFolder(slug, under) && (!quicknote || inQuicknote(rq.who(), slug)) && !hiddenPage(rq, slug)
 	}
 	var keep func(*SearchDoc) bool
 	if pagesOnly || rq != nil && settings().Users != nil {

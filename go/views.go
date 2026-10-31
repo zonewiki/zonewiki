@@ -63,7 +63,7 @@ var (
 func init() {
 	partials = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS,
 		"templates/layout.html", "templates/partials/*.html"))
-	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "scratch.html",
+	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html"} {
@@ -110,12 +110,12 @@ func diffLines(diff string) []diffLine {
 }
 
 // Zone's modules: the wiki, the tasks, with users your Private home, and the
-// scratch notes. Every view names the one it belongs to (<body data-module>:
+// notes. Every view names the one it belongs to (<body data-module>:
 // "private" for a page in your private folder); the matching links are
 // aria-current, and js/actions.js makes "New" create that module's kind.
 // With users the switcher has two groups (the third field, 0 and 1): Wiki and
-// Tasks, then Private and Scratch; without users one.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/tasks"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
+// Tasks, then Private and Notes; without users one.
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/tasks"}, {"private", "Private", "/private"}, {"notes", "Notes", "/page/_scratch"}}
 
 // taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js taskCountsTitle builds the same).
@@ -148,7 +148,7 @@ func (rq *Req) taskCounts() TaskCounts {
 
 // moduleLinks: the module links (where each goes, whether it is the current
 // view's, the Tasks's counts, the group it is shown in). With users Private
-// comes before Scratch in a group of its own and the list ends with the user
+// comes before Notes in a group of its own and the list ends with the user
 // menu ("menu": who is signed in, Sign out; the desktop's user button).
 func moduleLinks(rq *Req) []M {
 	current := currentModule(rq)
@@ -159,7 +159,7 @@ func moduleLinks(rq *Req) []M {
 			continue
 		}
 		group := 0
-		if users && (m[0] == "private" || m[0] == "scratch") {
+		if users && (m[0] == "private" || m[0] == "notes") {
 			group = 1
 		}
 		href := m[2]
@@ -184,7 +184,7 @@ func moduleLinks(rq *Req) []M {
 var moduleViewRE = regexp.MustCompile(`^/(?:page|history)/(.+)$`)
 
 // currentModule: the module the request's view belongs to: "tasks",
-// "scratch", "private" (a page in your own private folder), "wiki", or ""
+// "notes", "private" (a page in your own private folder), "wiki", or ""
 // for views of none (search results, login).
 func currentModule(rq *Req) string {
 	if rq == nil || rq.r == nil {
@@ -198,8 +198,8 @@ func currentModule(rq *Req) string {
 		return ""
 	}
 	m := moduleViewRE.FindStringSubmatch(p)
-	if m != nil && (m[1] == "_scratch" || isScratch(m[1])) {
-		return "scratch"
+	if m != nil && (m[1] == "_scratch" || isQuicknote(m[1])) {
+		return "notes"
 	}
 	if strings.HasPrefix(p, "/page/") && m != nil && m[1] == rq.tasksHomeSlug() {
 		return "tasks"
@@ -434,16 +434,16 @@ func buildDeleteDialog(slug, title string) template.HTML {
 
 // pageMenu: what the page view's ⋯ menu and its dialogs need.
 func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string) M {
-	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "scratch": isScratch(slug),
+	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "quicknote": isQuicknote(slug),
 		"renamable": !isProtected(slug), "rename_error": renameError,
 		"rename_name": renameName}
 	if target, ok := sharedMove(rq.who(), slug); ok {
 		m["shared_target"] = target
 	}
-	if isScratch(slug) {
+	if isQuicknote(slug) {
 		var wiki []PageRef
 		for _, p := range iterPages() {
-			if !isScratch(p.Slug) && !hiddenPage(rq, p.Slug) {
+			if !isQuicknote(p.Slug) && !hiddenPage(rq, p.Slug) {
 				t, _ := pageMeta(p.Path, p.Slug)
 				wiki = append(wiki, PageRef{p.Slug, t})
 			}

@@ -1,5 +1,5 @@
-// Scratch notes: quick notes with a timestamped name,
-// kept in the Scratch module until moved into the wiki or appended to a
+// Notes: quick notes with a timestamped name,
+// kept in Notes module until moved into the wiki or appended to a
 // page. The web routes and the MCP tools share these, so both make the same
 // files and commits; suffix follows a commit's message (the MCP tools'
 // summary and "(MCP)").
@@ -13,31 +13,31 @@ import (
 	"time"
 )
 
-// scratchError: a move or append refused, with a message for the user.
-type scratchError struct{ msg string }
+// quicknoteError: a move or append refused, with a message for the user.
+type quicknoteError struct{ msg string }
 
-func (e *scratchError) Error() string { return e.msg }
+func (e *quicknoteError) Error() string { return e.msg }
 
-func refuse(msg string) error { return &scratchError{msg} }
+func refuse(msg string) error { return &quicknoteError{msg} }
 
-// noteDate: the day a scratch note was created (YYYY-MM-DD).
+// noteDate: the day a note was created (YYYY-MM-DD).
 func noteDate(slug string) string {
-	m := scratchRE.FindStringSubmatch(slug)
+	m := quicknoteRE.FindStringSubmatch(slug)
 	if m == nil {
 		return ""
 	}
 	return runePrefix(m[1], 10)
 }
 
-// appendHeading: the section heading a scratch note gets on the page it is
+// appendHeading: the section heading a note gets on the page it is
 // appended to: its title and its day.
 func appendHeading(slug, title string) string { return title + " (" + noteDate(slug) + ")" }
 
-// createScratch makes a scratch note named after title (a / in it is a
+// createQuicknote makes a note named after title (a / in it is a
 // hyphen), with content, or just `# title`; returns its slug. With users
-// it goes in the user's private folder: scratch notes are your own. Two notes of
+// it goes in the user's private folder: notes are your own. Two notes of
 // one name in the same second: the second gets the next second's stamp.
-func createScratch(user, title string, content *string, suffix string) (string, error) {
+func createQuicknote(user, title string, content *string, suffix string) (string, error) {
 	if title = strings.TrimSpace(title); title == "" {
 		title = "Untitled"
 	}
@@ -72,10 +72,10 @@ func createScratch(user, title string, content *string, suffix string) (string, 
 	return slug, nil
 }
 
-// notePath: the file of a scratch note user may change.
+// notePath: the file of a note user may change.
 func notePath(user, slug string) (string, error) {
 	p := ""
-	if isScratch(slug) && canWrite(user, slug) {
+	if isQuicknote(slug) && canWrite(user, slug) {
 		p = safePath(slug)
 	}
 	if p == "" || !exists(p) {
@@ -84,10 +84,10 @@ func notePath(user, slug string) (string, error) {
 	return p, nil
 }
 
-// moveScratch moves a scratch note into the wiki (Move to wiki): a rename
+// moveQuicknote moves a note into the wiki (Move to wiki): a rename
 // to folder/name, links following, with its own commit message. Returns
 // the new slug.
-func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) (string, error) {
+func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string) (string, error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", err
@@ -100,7 +100,7 @@ func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) 
 	if newSlug == "" {
 		return "", refuse("Give the page a name")
 	}
-	if isScratch(newSlug) {
+	if isQuicknote(newSlug) {
 		return "", refuse("That name would still be a note")
 	}
 	newPath := safePath(newSlug)
@@ -125,11 +125,11 @@ func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) 
 
 var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 
-// appendScratch appends a scratch note to the page target as a `## heading`
+// appendQuicknote appends a note to the page target as a `## heading`
 // section (its tags into the page's frontmatter) and deletes the note;
 // links to the note point at that section, all in one commit. Returns the
 // section's anchor.
-func appendScratch(user, slug, target, heading, suffix string) (string, error) {
+func appendQuicknote(user, slug, target, heading, suffix string) (string, error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", err

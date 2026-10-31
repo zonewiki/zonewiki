@@ -54,7 +54,7 @@ def test_page_end_not_hidden_behind_search_button(new_page, wiki):
 
 
 # ── Phone tab bar ────────────────────────────────────────────────────────────
-# The phone's way to the modules: Wiki, Scratch, Tasks, then a divider and
+# The phone's way to the modules: Wiki, Notes, Tasks, then a divider and
 # the desktop's actions: New note, New task and Search.
 
 def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
@@ -75,9 +75,9 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     assert boxes[2]["x"] + boxes[2]["width"] <= seps[0]["x"] <= boxes[3]["x"]
     assert boxes[4]["x"] + boxes[4]["width"] <= seps[1]["x"] <= boxes[5]["x"]
     # The actions say what they make, with the desktop's icons.
-    expect(bar.locator(".action-scratch")).to_have_attribute("aria-label", "New note")
+    expect(bar.locator(".action-new-note")).to_have_attribute("aria-label", "New note")
     expect(bar.locator(".action-task")).to_have_attribute("aria-label", "New task")
-    for a in ("scratch", "task"):
+    for a in ("new-note", "task"):
         assert (bar.locator(f".action-{a} svg").inner_html()
                 == phone.locator(f".top-{a} svg").inner_html())
     # The breadcrumb's switcher shrinks to the logo: the bar has the rest.
@@ -96,21 +96,21 @@ def test_phone_tab_bar_marks_and_opens_modules(new_page, wiki):
     phone.wait_for_url("**/tasks")
     expect(tab("tasks")).to_have_attribute("aria-current", "page")
     expect(tab("wiki")).not_to_have_attribute("aria-current", "page")
-    tab("scratch").tap()
+    tab("notes").tap()
     phone.wait_for_url("**/page/_scratch")
-    expect(tab("scratch")).to_have_attribute("aria-current", "page")
+    expect(tab("notes")).to_have_attribute("aria-current", "page")
 
 
-def test_note_creates_a_scratch_note(new_page, wiki):
+def test_note_creates_a_quicknote(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
-    # In every module, the wiki too: Note always means a scratch note.
+    # In every module, the wiki too: Note always means a note.
     phone.goto("/page/index")
-    phone.locator(".action-scratch").tap()
-    expect(phone.locator("#scratch-modal")).to_be_visible()
+    phone.locator(".action-new-note").tap()
+    expect(phone.locator("#modal")).to_be_visible()
     # The title field has focus (keyboard up), so the bar steps aside.
     expect(phone.locator(".action-buttons")).to_be_hidden()
-    phone.locator("#scratch-title").fill("Shopping idea")
-    phone.locator("#scratch-title").press("Enter")
+    phone.locator("#new-note-title").fill("Shopping idea")
+    phone.locator("#new-note-title").press("Enter")
     expect(phone).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
     # The cursor waits under the title, so typing starts the body.
     ta = phone.locator("#editor-textarea")
@@ -160,7 +160,7 @@ def test_tasks_tab_counts_stand_beside_the_icon(new_page, wiki):
         assert b["x"] + b["width"] < nxt["x"], (b, nxt)                  # clear of the next tab's icon
         assert not _overlap(b, label), (b, label)
     # The icons stay evenly spaced: the counts take no room from a wider Tasks tab.
-    xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "tasks", "scratch")]
+    xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "tasks", "notes")]
     centres = [x["x"] + x["width"] / 2 for x in xs]
     assert abs((centres[1] - centres[0]) - (centres[2] - centres[1])) < 1, centres
 
@@ -207,13 +207,13 @@ def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
     phone.evaluate("scrollTo(0, 400)")
     _count_trusted_clicks(phone)
     with phone.expect_navigation():
-        _touch_tap(phone, phone.locator(".action-module[data-module=scratch]"))
+        _touch_tap(phone, phone.locator(".action-module[data-module=notes]"))
     assert phone.url.endswith("/page/_scratch")
     assert phone.evaluate("sessionStorage.trusted") == "0"
     phone.goto("/tasks")
     _count_trusted_clicks(phone)
-    _touch_tap(phone, phone.locator(".action-scratch"))
-    expect(phone.locator("#scratch-modal")).to_be_visible()      # opened once, by the touch
+    _touch_tap(phone, phone.locator(".action-new-note"))
+    expect(phone.locator("#modal")).to_be_visible()      # opened once, by the touch
     assert phone.evaluate("sessionStorage.trusted") == "0"
     expect(phone.locator(".task-item.task-selected")).to_have_count(0)
 
@@ -231,7 +231,7 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
     open_tab(phone, "open")
     phone.evaluate("scrollTo(0, 400)")
     phone.evaluate("document.querySelector('.action-buttons').style.bottom = '40px'")
-    tab = phone.locator(".action-module[data-module=scratch]")
+    tab = phone.locator(".action-module[data-module=notes]")
     b = tab.bounding_box()
     under = phone.evaluate(f"document.elementFromPoint({b['x'] + b['width'] / 2}, {b['y'] + b['height'] + 20}).closest('.task-item') !== null")
     assert under   # a card is what the browser finds there
@@ -283,14 +283,14 @@ def test_top_actions_hidden_on_phones(new_page, wiki):
     expect(phone.locator(".action-buttons")).to_be_visible()
 
 
-def test_top_actions_open_scratch_and_search(page, wiki):
+def test_top_actions_open_quicknote_and_search(page, wiki):
     page.goto("/page/index")
     page.locator(".top-search").click()
     expect(page.locator("#search-modal")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator("#search-modal")).to_be_hidden()
-    page.locator(".top-scratch").click()
-    expect(page.locator("#scratch-modal")).to_be_visible()
+    page.locator(".top-new-note").click()
+    expect(page.locator("#modal")).to_be_visible()
 
 
 # ── New task: the Tasks home decides ────────────────────────────────────────
@@ -411,7 +411,7 @@ def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("c")
     page.keyboard.press("n")
-    expect(page.locator("#scratch-modal")).to_be_visible()
+    expect(page.locator("#modal")).to_be_visible()
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("n")
@@ -422,12 +422,12 @@ def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
 
 
 def test_the_keys_from_before_the_rename_still_work(page, wiki):
-    # c s, g s and g d were the keys while Notes was Scratch and Tasks the Tasks.
+    # c s, g s and g d were the keys while Notes was called Scratch and Tasks Deck.
     wiki.write("garden", "# Garden\n")
     page.goto("/page/garden")
     page.keyboard.press("c")
     page.keyboard.press("s")
-    expect(page.locator("#scratch-modal")).to_be_visible()
+    expect(page.locator("#modal")).to_be_visible()
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("s")
@@ -437,8 +437,8 @@ def test_the_keys_from_before_the_rename_still_work(page, wiki):
     page.wait_for_url(re.compile(r"/tasks$"))
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
-# The breadcrumb starts with the modules: Wiki (with the logo), Tasks, Scratch
-# (with users two pills: Wiki · Tasks and Private · Scratch).
+# The breadcrumb starts with the modules: Wiki (with the logo), Tasks, Notes
+# (with users two pills: Wiki · Tasks and Private · Notes).
 
 def test_desktop_breadcrumb_switches_modules(page, wiki):
     wiki.write("garden", "# Garden\n\nBeds.\n")
@@ -454,7 +454,7 @@ def test_desktop_breadcrumb_switches_modules(page, wiki):
     page.locator(".breadcrumb .module-link[data-module=tasks]").click()
     page.wait_for_url("**/tasks")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("aria-current", "page")
-    page.locator(".breadcrumb .module-link[data-module=scratch]").click()
+    page.locator(".breadcrumb .module-link[data-module=notes]").click()
     page.wait_for_url("**/page/_scratch")
     # The navigation trail keeps the page, but not the modules' own pages.
     expect(page.locator(".breadcrumb > a")).to_have_text(["Garden"])

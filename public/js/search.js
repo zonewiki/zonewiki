@@ -255,17 +255,17 @@ function titleMatch(q, p) {
 
 // Equal fuzzy scores are common: every title starting with the query gets
 // the same one. Then the page most likely meant comes first, not the
-// alphabetical order: scratch notes last (temporary, often titled by their
+// alphabetical order: notes last (temporary, often titled by their
 // file name), then pages in fewer folders (a top-level page is the main page
 // for a name), then the shorter name, which the query covers more of. So
 // "alex" puts "Alex Morgan" before "Alex 1:1 Kickoff" (three folders
-// down) and the scratch note "alex_prep".
-const SCRATCH_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // mdtext.py SCRATCH_RE
+// down) and the note "alex_prep".
+const QUICKNOTE_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // mdtext.py QUICKNOTE_RE
 
 function tieBreak(p, field) {
   const name = p.slug.split('/').pop();
   return {
-    scratch: SCRATCH_SLUG_RE.test(name) ? 1 : 0,
+    quicknote: QUICKNOTE_SLUG_RE.test(name) ? 1 : 0,
     depth: p.slug.split('/').length - 1,
     len: (field === 'title' ? p.title : p.slug).length,
   };
@@ -288,7 +288,7 @@ function applyModalControls() {
       if (!best) continue;
       scored.push({ p, ...best, ...tieBreak(p, best.field) });
     }
-    scored.sort((a, b) => b.score - a.score || a.scratch - b.scratch
+    scored.sort((a, b) => b.score - a.score || a.quicknote - b.quicknote
                           || a.depth - b.depth || a.len - b.len);
     modalPageList.innerHTML = scored.slice(0, 200).map(({ p, indices, field }) => {
       const titleHtml = field === 'title' ? highlightIndices(p.title, indices) : he(p.title);
@@ -301,7 +301,7 @@ function applyModalControls() {
     // No query: static list, sort by dropdown, filter by unlinked checkbox.
     // Sort the data first and render once (no post-render DOM shuffling).
     // Deleted Pages (`special`) comes first, whatever the sort; the other
-    // built-in pages (Tasks, Scratch) are modules, in the module switcher, so
+    // built-in pages (Tasks, Notes) are modules, in the module switcher, so
     // only typing lists them. "Unlinked only" looks for orphan pages, so it
     // leaves them all out.
     const special = unlinked ? [] : modalPages.filter(p => p.special);
@@ -361,23 +361,23 @@ async function fetchModalContentMatches(q) {
   } catch (_) {}
 }
 
-// ── Scratch filter ────────────────────────────────────────────────────────────
-// The Scratch page's filter box runs the search (/api/search?scratch=1: the
-// same ranking, query syntax, excerpts and on-page highlights) over scratch
+// ── Notes filter ────────────────────────────────────────────────────────────
+// The Notes page's filter box runs the search (/api/search?scratch=1: the
+// same ranking, query syntax, excerpts and on-page highlights) over quicknote
 // notes only. Matches show in ranked order with their excerpt, linking to
 // the section that matched; an empty box restores the newest-first list.
 // The query lives in ?q=, so Back returns to the filtered list. Enter opens
 // the first match, Esc clears the box (a second Esc leaves it).
 
-(function initScratchFilter() {
-  const input = document.getElementById('scratch-filter');
+(function initNotesFilter() {
+  const input = document.getElementById('notes-filter');
   const list = document.querySelector('.notes-list');
   if (!input || !list) return;
-  const countEl = document.getElementById('scratch-filter-count');
+  const countEl = document.getElementById('notes-filter-count');
   const items = [...list.children];
   const bySlug = new Map(items.map(li => [li.dataset.slug, li]));
   const empty = document.createElement('p');
-  empty.className = 'scratch-filter-empty';
+  empty.className = 'notes-filter-empty';
   empty.textContent = 'No note matches.';
   empty.hidden = true;
   list.after(empty);

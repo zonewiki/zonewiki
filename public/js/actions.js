@@ -54,26 +54,26 @@ function loadHeadlessTasks() {
 export const tasksHomeHref = () =>
   document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 
-// ── Scratch modal ───────────────────────────────────────────────────────────────
+// ── New note modal ───────────────────────────────────────────────────────────────
 
-const scratchModal  = document.getElementById('scratch-modal');
-const scratchForm   = document.getElementById('scratch-form');
-const scratchTitle  = document.getElementById('scratch-title');
-const scratchCancel = document.getElementById('scratch-cancel');
+const newNoteModal  = document.getElementById('modal');
+const newNoteForm   = document.getElementById('new-note-form');
+const newNoteTitle  = document.getElementById('new-note-title');
+const newNoteCancel = document.getElementById('new-note-cancel');
 
-scratchCancel?.addEventListener('click', () => scratchModal.close());
-closeOnBackdropClick(scratchModal);
+newNoteCancel?.addEventListener('click', () => newNoteModal.close());
+closeOnBackdropClick(newNoteModal);
 
-export function openScratch() {
-  if (!scratchModal) return;
-  scratchTitle.value = '';
-  scratchModal.showModal();
-  scratchTitle.focus();
+export function openNewNote() {
+  if (!newNoteModal) return;
+  newNoteTitle.value = '';
+  newNoteModal.showModal();
+  newNoteTitle.focus();
 }
 
-scratchForm?.addEventListener('submit', async e => {
+newNoteForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  const title = scratchTitle.value.trim() || 'Untitled';
+  const title = newNoteTitle.value.trim() || 'Untitled';
   const data = new FormData();
   data.append('title', title);
   try {
@@ -84,7 +84,7 @@ scratchForm?.addEventListener('submit', async e => {
 });
 
 // ── Action bar ───────────────────────────────────────────────────────────────
-// The phone's actions, as the desktop's top actions: a new scratch note, a
+// The phone's actions, as the desktop's top actions: a new note, a
 // new task and Search (Ctrl+P). In the tasks the new task comes from its own
 // "+ New" (so the view's tags and dates apply; on the Tasks home page the
 // home embed's), elsewhere it goes to your tasks (openHomeTask).
@@ -93,7 +93,7 @@ const tasksAddButton = () =>
   document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
-document.querySelector('.action-scratch')?.addEventListener('click', openScratch);
+document.querySelector('.action-new-note')?.addEventListener('click', openNewNote);
 document.querySelector('.action-task')?.addEventListener('click', () => {
   const add = document.body.dataset.module === 'tasks' && tasksAddButton();
   if (add) add.click(); else openHomeTask();
@@ -177,7 +177,7 @@ export function toggleSharing() {
 sharingBtn?.addEventListener('click', toggleSharing);
 syncSharingButton();
 // The desktop's buttons at the top right (views.py top_actions_html).
-document.querySelector('.top-scratch')?.addEventListener('click', openScratch);
+document.querySelector('.top-new-note')?.addEventListener('click', openNewNote);
 document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
 // The search pill names its shortcut; on a Mac that is ⌘P.

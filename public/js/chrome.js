@@ -23,7 +23,7 @@
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Scratch, /tasks, the Tasks home page (where the Tasks link goes) and
+  // Notes, /tasks, the Tasks home page (where the Tasks link goes) and
   // your private home (the Private pill).
   const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)

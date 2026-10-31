@@ -65,10 +65,10 @@ class TestViewPage:
 
     def test_views_name_their_module(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
-        scratch = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
+        quicknote = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for url, module in (("/page/my-page", "wiki"), ("/page/index", "wiki"),
                             ("/tasks", "tasks"), ("/tasks?list=shop", "tasks"),
-                            ("/page/_scratch", "scratch"), (f"/page/{scratch}", "scratch"),
+                            ("/page/_scratch", "notes"), (f"/page/{quicknote}", "notes"),
                             ("/history/my-page", "wiki")):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert f'<body data-module="{module}">' in body, url
@@ -130,13 +130,13 @@ class TestViewPage:
             '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Notes", "Note", "Task", "Search"]
         # Navigation, a divider, then the actions.
-        assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
+        assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('class="action-new-note"')
 
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/tasks"):
             body = client.get(url, headers=HOST).data.decode()
-            assert all(f'class="action-{a}"' in body for a in ("scratch", "task", "search"))
+            assert all(f'class="action-{a}"' in body for a in ("new-note", "task", "search"))
         # The editor has its own toolbar and the keyboard owns the bottom edge.
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
@@ -151,10 +151,10 @@ class TestViewPage:
             # the row, come first.
             assert len(top) == 2 and '<div class="breadcrumb"' not in top[0] and '<header' not in top[0], url
             assert top[0].count('class="top-badges"') == 1, url
-            buttons = re.findall(r'<button type="button" class="top-(\w+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
+            buttons = re.findall(r'<button type="button" class="top-([\w-]+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
             assert buttons == [("sharing", "Sharing mode", "Sharing mode: hide what is around the page (S)"),
-                               ("scratch", "New note", "New note (c n)"),
+                               ("new-note", "New note", "New note (c n)"),
                                ("task", "Add a task", "Add a task (c t)"),
                                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
@@ -445,7 +445,7 @@ class TestEditPageGet:
         text = resp.data.decode()
         assert 'name="content"' in text and 'data-cursor="end"' in text
 
-    def test_new_scratch_note_puts_cursor_after_title(self, client):
+    def test_new_quicknote_puts_cursor_after_title(self, client):
         slug = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         assert 'data-cursor="end"' in client.get(f"/edit/{slug}", headers=HOST).data.decode()
 
@@ -848,7 +848,7 @@ class TestRenamePage:
         resp = client.post("/rename/page-a", data={"new_name": "page-b", "from": "page"}, headers=HOST)
         assert resp.headers["Location"].startswith("/page/page-a?rename_error=")
         body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-        assert '<dialog id="page-rename-dialog" class="scratch-modal" data-open>' in body
+        assert '<dialog id="page-rename-dialog" class="modal" data-open>' in body
         assert 'A page named "page-b" already exists' in html.unescape(body)
         resp = client.post("/rename/page-a", data={"new_name": "page-a", "from": "page"}, headers=HOST)
         assert resp.headers["Location"] == "/page/page-a"
@@ -953,7 +953,7 @@ class TestApiPagesList:
         assert "_daily" not in slugs   # daily notes were removed
 
     def test_built_in_pages_are_marked(self, client, wiki_dir):
-        # Tasks and Scratch are modules (the module switcher links to them), so
+        # Tasks and Notes are modules (the module switcher links to them), so
         # only Deleted Pages is pinned (`special`, git only); all three are
         # `builtin`, which the empty-query list and "Unlinked only" leave out.
         write_page(wiki_dir, "aaa", "# AAA\n")
@@ -1599,30 +1599,30 @@ class TestAuth:
 
 class TestSpecialPages:
 
-    def test_scratch_index_page_loads(self, client):
+    def test_quicknote_index_page_loads(self, client):
         resp = client.get("/page/_scratch", headers=HOST)
         assert resp.status_code == 200
         assert b"Notes" in resp.data
 
-    def test_api_scratch_creates_note(self, client, wiki_dir):
+    def test_api_quicknote_creates_note(self, client, wiki_dir):
         resp = client.post("/api/scratch", data={"title": "My Note"}, headers=HOST)
         assert resp.status_code == 200
         slug = resp.get_json()["slug"]
         assert (wiki_dir / f"{slug}.md").exists()
 
-    def test_api_scratch_slash_in_title_makes_no_folder(self, client, wiki_dir):
-        # A / used to make a folder, whose note was then no scratch note.
+    def test_api_quicknote_slash_in_title_makes_no_folder(self, client, wiki_dir):
+        # A / used to make a folder, whose note was then no note.
         slug = client.post("/api/scratch", data={"title": "A/B test"}, headers=HOST).get_json()["slug"]
         assert slug.endswith("_a-b-test") and "/" not in slug
         assert (wiki_dir / f"{slug}.md").read_text() == "# A/B test\n\n"
 
-    def test_api_scratch_same_title_same_second_makes_two_notes(self, client, wiki_dir):
+    def test_api_quicknote_same_title_same_second_makes_two_notes(self, client, wiki_dir):
         slugs = {client.post("/api/scratch", data={"title": "Twin"}, headers=HOST).get_json()["slug"]
                  for _ in range(3)}
         assert len(slugs) == 3
 
-    def test_search_can_keep_only_scratch_notes(self, client, wiki_dir):
-        # The Scratch page's filter: the same search, scratch notes only.
+    def test_search_can_keep_only_quicknotes(self, client, wiki_dir):
+        # The Notes page's filter: the same search, notes only.
         write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n\nRoof repair quote.\n")
         write_page(wiki_dir, "2026-09-02_10-00-00_groceries", "# Groceries\n\nMilk, eggs.\n")
         write_page(wiki_dir, "roof", "# Roof\n\nThe roof repair plan.\n")
@@ -1641,15 +1641,15 @@ class TestSpecialPages:
         assert len(get("zebra", scratch="1", limit="1000")) == 120
         assert len(get("zebra", limit="1000")) == 100
 
-    def test_scratch_page_has_a_filter(self, client, wiki_dir):
+    def test_quicknote_page_has_a_filter(self, client, wiki_dir):
         write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n")
         body = client.get("/page/_scratch?q=bob", headers=HOST).get_data(as_text=True)
-        assert 'id="scratch-filter"' in body and 'value="bob"' in body
+        assert 'id="notes-filter"' in body and 'value="bob"' in body
         assert 'data-slug="2026-09-01_10-00-00_bob-call"' in body
         # No notes, nothing to filter.
         for f in wiki_dir.glob("2026-*.md"):
             f.unlink()
-        assert 'id="scratch-filter"' not in client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
+        assert 'id="notes-filter"' not in client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
 
     def test_daily_notes_are_gone(self, client, wiki_dir):
         # The feature was removed: no endpoint, no shortcut, no index. An old
@@ -2273,7 +2273,7 @@ class TestNoshare:
         # Nor do they show among the page's backlinks or links.
         assert "Bob Secret" not in body and "Diary Secret" not in body
 
-    def test_scratch_notes_too(self, client, wiki_dir):
+    def test_quicknotes_too(self, client, wiki_dir):
         write_page(wiki_dir, "2026-10-01_09-00-00_salary", "---\ntags: noshare\n---\n# Salary talk\n")
         write_page(wiki_dir, "2026-10-01_10-00-00_lunch", "# Lunch\n")
         client.set_cookie("leaf-sharing", "1")
@@ -2282,18 +2282,18 @@ class TestNoshare:
 
 
 # ===========================================================================
-# Move a scratch note to the wiki (/promote/<slug>)
+# Move a note to the wiki (/promote/<slug>)
 # ===========================================================================
 
-SCRATCH = "2026-10-08_14-03-11_meeting-notes"
+QUICKNOTE = "2026-10-08_14-03-11_meeting-notes"
 
 
 class TestPromotePage:
 
-    def test_scratch_note_menu_has_move_to_wiki(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
+    def test_quicknote_menu_has_move_to_wiki(self, client, wiki_dir):
+        write_page(wiki_dir, QUICKNOTE, "# Meeting with Alex\n\nnotes\n")
         write_page(wiki_dir, "conversations/2026-07-08_debrief", "# Debrief\n")
-        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        body = client.get(f"/page/{QUICKNOTE}", headers=HOST).get_data(as_text=True)
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
         assert "Move to wiki…" in re.findall(r'role="menuitem"[^>]*>([^<]+)', menu)
         dialog = body.split('<dialog id="page-promote-dialog"', 1)[1].split("</dialog>", 1)[0]
@@ -2308,42 +2308,42 @@ class TestPromotePage:
         assert "Move to wiki" not in body
 
     def test_promote_moves_the_note_and_its_links(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Meeting with Alex\n\nnotes\n")
-        ref = write_page(wiki_dir, "ref", f"# Ref\n\nSee [[{SCRATCH}]] and [x](/page/{SCRATCH}#a).\n")
-        resp = client.post(f"/promote/{SCRATCH}", headers=HOST, data={
+        write_page(wiki_dir, QUICKNOTE, "# Meeting with Alex\n\nnotes\n")
+        ref = write_page(wiki_dir, "ref", f"# Ref\n\nSee [[{QUICKNOTE}]] and [x](/page/{QUICKNOTE}#a).\n")
+        resp = client.post(f"/promote/{QUICKNOTE}", headers=HOST, data={
             "folder": "conversations", "name": "Alex sync", "keep_date": "1"})
         assert resp.headers["Location"] == "/page/conversations/2026-10-08_alex-sync"
-        assert not (wiki_dir / f"{SCRATCH}.md").exists()
+        assert not (wiki_dir / f"{QUICKNOTE}.md").exists()
         moved = wiki_dir / "conversations" / "2026-10-08_alex-sync.md"
         assert moved.read_text(encoding="utf-8") == "# Meeting with Alex\n\nnotes\n"
         text = ref.read_text(encoding="utf-8")
         assert "[[conversations/2026-10-08_alex-sync]]" in text
         assert "(/page/conversations/2026-10-08_alex-sync#a)" in text
-        # It left the Scratch list.
+        # It left Notes list.
         body = client.get("/page/_scratch", headers=HOST).get_data(as_text=True)
         assert "Meeting with Alex" not in body
 
     def test_promote_refuses_and_says_why(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n")
         write_page(wiki_dir, "taken", "# Taken\n")
         for data, error in [({"name": "Taken"}, "already exists"),
                             ({"name": " "}, "Give the page a name"),
                             ({"name": "2026-01-01_10-00-00_x"}, "still be a note")]:
-            resp = client.post(f"/promote/{SCRATCH}", data=data, headers=HOST)
+            resp = client.post(f"/promote/{QUICKNOTE}", data=data, headers=HOST)
             loc = resp.headers["Location"]
-            assert loc.startswith(f"/page/{SCRATCH}?promote_error=")
+            assert loc.startswith(f"/page/{QUICKNOTE}?promote_error=")
             body = client.get(loc, headers=HOST).get_data(as_text=True)
-            assert '<dialog id="page-promote-dialog" class="scratch-modal promote-modal" data-title="Notes" data-open>' in body
+            assert '<dialog id="page-promote-dialog" class="modal promote-modal" data-title="Notes" data-open>' in body
             assert error in body
-        assert (wiki_dir / f"{SCRATCH}.md").exists()
+        assert (wiki_dir / f"{QUICKNOTE}.md").exists()
 
     def test_promote_opens_the_page_to_link_from(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Alex sync\n")
+        write_page(wiki_dir, QUICKNOTE, "# Alex sync\n")
         index = write_page(wiki_dir, "conversations/index", "# Conversations\n\n- [[conversations/old]]\n")
-        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        body = client.get(f"/page/{QUICKNOTE}", headers=HOST).get_data(as_text=True)
         assert 'id="promote-link-from" list="wiki-pages"' in body
         assert '<option value="conversations/index">Conversations</option>' in body
-        resp = client.post(f"/promote/{SCRATCH}", headers=HOST, data={
+        resp = client.post(f"/promote/{QUICKNOTE}", headers=HOST, data={
             "folder": "conversations", "name": "Alex sync", "link_from": "/page/conversations/index",
             "copied": "1"})
         # The editor opens on that page, the link to paste; the page itself
@@ -2366,55 +2366,55 @@ class TestPromotePage:
     def test_promote_from_a_page_already_linking_opens_the_page(self, client, wiki_dir):
         # The page linked to the note, so it links to the new page now:
         # nothing to paste.
-        write_page(wiki_dir, SCRATCH, "# Notes\n")
-        hub = write_page(wiki_dir, "hub", f"# Hub\n\nSee [[{SCRATCH}]].\n")
-        resp = client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n")
+        hub = write_page(wiki_dir, "hub", f"# Hub\n\nSee [[{QUICKNOTE}]].\n")
+        resp = client.post(f"/promote/{QUICKNOTE}", data={"name": "Notes", "link_from": "hub"}, headers=HOST)
         assert resp.headers["Location"] == "/page/notes"
         assert hub.read_text(encoding="utf-8") == "# Hub\n\nSee [[notes]].\n"
 
     def test_promote_refuses_an_unknown_link_page(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Notes\n")
-        loc = client.post(f"/promote/{SCRATCH}", data={"name": "Notes", "link_from": "nowhere"},
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n")
+        loc = client.post(f"/promote/{QUICKNOTE}", data={"name": "Notes", "link_from": "nowhere"},
                           headers=HOST).headers["Location"]
-        assert loc.startswith(f"/page/{SCRATCH}?promote_error=")
+        assert loc.startswith(f"/page/{QUICKNOTE}?promote_error=")
         assert "There is no page “nowhere” to link from" in client.get(loc, headers=HOST).get_data(as_text=True)
-        assert (wiki_dir / f"{SCRATCH}.md").exists() and not (wiki_dir / "notes.md").exists()
+        assert (wiki_dir / f"{QUICKNOTE}.md").exists() and not (wiki_dir / "notes.md").exists()
 
-    def test_promote_only_scratch_notes(self, client, wiki_dir):
+    def test_promote_only_quicknotes(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         assert client.post("/promote/garden", data={"name": "x"}, headers=HOST).status_code == 400
-        assert client.post(f"/promote/{SCRATCH}", data={"name": "x"}, headers=HOST).status_code == 404
+        assert client.post(f"/promote/{QUICKNOTE}", data={"name": "x"}, headers=HOST).status_code == 404
 
 
 # ===========================================================================
-# Append a scratch note to a page (/append/<slug>)
+# Append a note to a page (/append/<slug>)
 # ===========================================================================
 
 
 class TestAppendToPage:
 
     def test_menu_and_dialog(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Alex 1:1\n\nnotes\n")
+        write_page(wiki_dir, QUICKNOTE, "# Alex 1:1\n\nnotes\n")
         write_page(wiki_dir, "people/alex", "# Alex Morgan\n")
-        body = client.get(f"/page/{SCRATCH}", headers=HOST).get_data(as_text=True)
+        body = client.get(f"/page/{QUICKNOTE}", headers=HOST).get_data(as_text=True)
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
         assert "Append to page…" in re.findall(r'role="menuitem"[^>]*>([^<]+)', menu)
         dialog = body.split('<dialog id="page-append-dialog"', 1)[1].split("</dialog>", 1)[0]
         pages = body.split('<datalist id="wiki-pages">', 1)[1].split("</datalist>", 1)[0]
         assert '<option value="people/alex">Alex Morgan</option>' in pages
-        assert SCRATCH not in pages                                 # no scratch notes offered
+        assert QUICKNOTE not in pages                                 # no notes offered
         assert 'list="wiki-pages"' in dialog
         assert 'id="append-heading" value="Alex 1:1 (2026-10-08)"' in dialog
 
     def test_append_moves_note_into_the_page(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "---\ntags: sync\n---\n# Alex 1:1\n\nnotes\n\n## Next\n\nsteps\n")
+        write_page(wiki_dir, QUICKNOTE, "---\ntags: sync\n---\n# Alex 1:1\n\nnotes\n\n## Next\n\nsteps\n")
         page = write_page(wiki_dir, "people/alex", "# Alex\n\nAbout Alex.\n")
-        ref = write_page(wiki_dir, "ref", f"See [[{SCRATCH}]], [[{SCRATCH}#Next|next]] "
-                                          f"and [it](/page/{SCRATCH}).\n")
-        resp = client.post(f"/append/{SCRATCH}", headers=HOST,
+        ref = write_page(wiki_dir, "ref", f"See [[{QUICKNOTE}]], [[{QUICKNOTE}#Next|next]] "
+                                          f"and [it](/page/{QUICKNOTE}).\n")
+        resp = client.post(f"/append/{QUICKNOTE}", headers=HOST,
                            data={"page": "/page/people/alex", "heading": "Alex 1:1 (2026-10-08)"})
         assert resp.headers["Location"] == "/page/people/alex#alex-11-2026-10-08"
-        assert not (wiki_dir / f"{SCRATCH}.md").exists()
+        assert not (wiki_dir / f"{QUICKNOTE}.md").exists()
         assert page.read_text(encoding="utf-8") == (
             "---\ntags: sync\n---\n# Alex\n\nAbout Alex.\n\n"
             "## Alex 1:1 (2026-10-08)\n\nnotes\n\n### Next\n\nsteps\n")
@@ -2426,32 +2426,32 @@ class TestAppendToPage:
         assert 'id="alex-11-2026-10-08"' in body
 
     def test_append_refuses_and_says_why(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Notes\n\nx\n")
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n\nx\n")
         write_page(wiki_dir, "garden", "# Garden\n\n## Notes (2026-10-08)\n")
         for data, error in [({"page": "nowhere", "heading": "H"}, "There is no page"),
                             ({"page": "", "heading": "H"}, "Choose a page"),
-                            ({"page": SCRATCH, "heading": "H"}, "another page than this note"),
+                            ({"page": QUICKNOTE, "heading": "H"}, "another page than this note"),
                             ({"page": "garden", "heading": " | "}, "Give the section a heading"),
                             ({"page": "garden", "heading": "Notes (2026-10-08)"}, "already has a section")]:
-            loc = client.post(f"/append/{SCRATCH}", data=data, headers=HOST).headers["Location"]
-            assert loc.startswith(f"/page/{SCRATCH}?append_error=")
+            loc = client.post(f"/append/{QUICKNOTE}", data=data, headers=HOST).headers["Location"]
+            assert loc.startswith(f"/page/{QUICKNOTE}?append_error=")
             body = client.get(loc, headers=HOST).get_data(as_text=True)
-            assert '<dialog id="page-append-dialog" class="scratch-modal promote-modal" data-open>' in body
+            assert '<dialog id="page-append-dialog" class="modal promote-modal" data-open>' in body
             assert error in body
-        assert (wiki_dir / f"{SCRATCH}.md").exists()
+        assert (wiki_dir / f"{QUICKNOTE}.md").exists()
         assert (wiki_dir / "garden.md").read_text(encoding="utf-8") == "# Garden\n\n## Notes (2026-10-08)\n"
 
-    def test_append_only_scratch_notes(self, client, wiki_dir):
+    def test_append_only_quicknotes(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         write_page(wiki_dir, "other", "# Other\n")
         assert client.post("/append/garden", data={"page": "other", "heading": "H"},
                            headers=HOST).status_code == 400
 
     def test_append_points_tasks_links_at_the_section(self, client, wiki_dir):
-        write_page(wiki_dir, SCRATCH, "# Notes\n")
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n")
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/tasks", json={"title": f"Follow up [[{SCRATCH}]]"}, headers=HOST)
-        client.post(f"/append/{SCRATCH}", data={"page": "garden", "heading": "Notes"}, headers=HOST)
+        client.post("/api/tasks", json={"title": f"Follow up [[{QUICKNOTE}]]"}, headers=HOST)
+        client.post(f"/append/{QUICKNOTE}", data={"page": "garden", "heading": "Notes"}, headers=HOST)
         titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
         assert titles == ["Follow up [[garden#Notes]]"]
 
