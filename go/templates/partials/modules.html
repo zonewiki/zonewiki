@@ -1,4 +1,4 @@
-{{- /* Links to Leaf's three modules (views.go moduleLinks): the breadcrumb's
+{{- /* Links to Zone's three modules (views.go moduleLinks): the breadcrumb's
     module switcher (desktop) and the action bar (phones). The current
     module's link is aria-current from the first paint; the Deck's carries
     the due and Focus counts, which js/chrome.js refreshes. */ -}}
@@ -6,7 +6,7 @@
 <span class="module-counts"><span class="module-due"{{if not .Count}} hidden{{end}}>{{if .Count}}{{.Count}}{{end}}</span><span class="module-focus"{{if not .Focus}} hidden{{end}}>{{if .Focus}}{{.Focus}}{{end}}</span></span>
 {{- end}}
 
-{{- /* The root of every breadcrumb: the leaf logo with "Wiki" (the home page),
+{{- /* The root of every breadcrumb: the Z logo with "Wiki" (the home page),
     then Deck and Scratch; with users Wiki and Deck, then Private and Scratch,
     each group a pill of its own (.module-group). Phones and the editor show
     the logo only (style.css). The trail code in js/chrome.js keeps it as the
@@ -20,7 +20,7 @@
 {{- else -}}
 {{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{if eq .group 1}}<span class="module-lock" role="img" aria-label="Only you see Private and Scratch" title="Only you see Private and Scratch">{{template "icon_lock"}}</span>{{end}}{{$open = .group}}{{end -}}
 <a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}
-{{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_leaf"}}{{else}}>{{end -}}
+{{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
 <span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
