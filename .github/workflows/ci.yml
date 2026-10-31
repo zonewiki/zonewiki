@@ -95,7 +95,7 @@ jobs:
             LEAF_SEMANTIC_SEARCH=on
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Zone: wiki, notes and tasks for you, or for your small team (plain Markdown files, self-hosted)
+            org.opencontainers.image.description=Zone: wiki, notes and tasks for you, your small team, and your AI agents (plain Markdown files, self-hosted)
             org.opencontainers.image.licenses=AGPL-3.0-or-later
           outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.arch }}

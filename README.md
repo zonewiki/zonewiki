@@ -1,13 +1,14 @@
 # Zone
 
-**Wiki, notes and tasks for you, or for your small team.**
+**Wiki, notes and tasks for you, your small team, and your AI agents.**
 
 A self-hosted wiki with a built-in task deck. Your notes are plain
 Markdown files in a folder you choose; Zone renders them in the browser, lets
 you edit them there or in any editor, searches them, and keeps every version
 in git. No database, no frontend build, no cloud: run it on your machine, or
 self-host it behind HTTPS. Alone it needs no accounts; for a small team, add
-users, with private pages and tasks for each.
+users, with private pages and tasks for each. AI assistants work in it too,
+over [MCP](#connect-an-ai-assistant), and every edit they make is a git commit.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 

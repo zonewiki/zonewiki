@@ -1,7 +1,7 @@
 # Contributing to Zone
 
 Bug reports, questions and ideas are welcome in the issue tracker. Zone is
-small on purpose (see [Why Zone](README.md#why-leaf)), so an idea may be
+small on purpose (see [Why Zone](README.md#why-zone)), so an idea may be
 declined because it doesn't fit, not because it's a bad one.
 
 ## Reporting a bug
