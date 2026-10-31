@@ -64,7 +64,7 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     b = bar.bounding_box()
     assert b["x"] == 0 and b["width"] == 390 and abs(b["y"] + b["height"] - 844) < 1
     items = bar.locator(".action-module, button")
-    expect(items).to_have_text(["Wiki", "Deck", "Scratch", "Note", "Task", "Search"])
+    expect(items).to_have_text(["Wiki", "Tasks", "Notes", "Note", "Task", "Search"])
     boxes = [i.bounding_box() for i in items.all()]
     assert all(x["width"] >= 44 and x["height"] >= 44 for x in boxes)
     assert all(abs(x["y"] - boxes[0]["y"]) < 1 for x in boxes)   # one row
@@ -75,7 +75,7 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     assert boxes[2]["x"] + boxes[2]["width"] <= seps[0]["x"] <= boxes[3]["x"]
     assert boxes[4]["x"] + boxes[4]["width"] <= seps[1]["x"] <= boxes[5]["x"]
     # The actions say what they make, with the desktop's icons.
-    expect(bar.locator(".action-scratch")).to_have_attribute("aria-label", "New scratch note")
+    expect(bar.locator(".action-scratch")).to_have_attribute("aria-label", "New note")
     expect(bar.locator(".action-task")).to_have_attribute("aria-label", "New task")
     for a in ("scratch", "task"):
         assert (bar.locator(f".action-{a} svg").inner_html()
@@ -241,7 +241,7 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
-# At the top right, in line with the breadcrumb: New scratch note, New task
+# At the top right, in line with the breadcrumb: New note, Add a task
 # and Search, as icons. The bottom bar is the phone's.
 
 def test_top_actions_on_desktop(page, wiki):
@@ -250,7 +250,7 @@ def test_top_actions_on_desktop(page, wiki):
     buttons = page.locator(".top-actions button")
     expect(buttons).to_have_count(4)
     names = [b.get_attribute("aria-label") for b in buttons.all()]
-    assert names == ["Sharing mode", "New scratch note", "Add a task to your deck", "Search"]
+    assert names == ["Sharing mode", "New note", "Add a task", "Search"]
     boxes = [b.bounding_box() for b in buttons.all()]
     crumb = page.locator("main > .breadcrumb").bounding_box()
     vw = page.viewport_size["width"]
@@ -405,6 +405,37 @@ def test_g_t_goes_to_the_home_deck(page, wiki):
     page.wait_for_url(re.compile(r"/deck$"))
 
 
+
+def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("n")
+    expect(page.locator("#scratch-modal")).to_be_visible()
+    page.goto("/page/garden")
+    page.keyboard.press("g")
+    page.keyboard.press("n")
+    page.wait_for_url("**/page/_scratch")
+    page.keyboard.press("g")
+    page.keyboard.press("a")
+    page.wait_for_url(re.compile(r"/deck$"))
+
+
+def test_the_keys_from_before_the_rename_still_work(page, wiki):
+    # c s, g s and g d were the keys while Notes was Scratch and Tasks the Deck.
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("s")
+    expect(page.locator("#scratch-modal")).to_be_visible()
+    page.goto("/page/garden")
+    page.keyboard.press("g")
+    page.keyboard.press("s")
+    page.wait_for_url("**/page/_scratch")
+    page.keyboard.press("g")
+    page.keyboard.press("d")
+    page.wait_for_url(re.compile(r"/deck$"))
+
 # ── Module switcher on desktop ───────────────────────────────────────────────
 # The breadcrumb starts with the modules: Wiki (with the logo), Deck, Scratch
 # (with users two pills: Wiki · Deck and Private · Scratch).
@@ -413,7 +444,7 @@ def test_desktop_breadcrumb_switches_modules(page, wiki):
     wiki.write("garden", "# Garden\n\nBeds.\n")
     page.goto("/page/garden")
     switch = page.locator(".breadcrumb .module-switch .module-link")
-    expect(switch.locator(".module-label")).to_have_text(["Wiki", "Deck", "Scratch"])
+    expect(switch.locator(".module-label")).to_have_text(["Wiki", "Tasks", "Notes"])
     expect(switch.nth(0)).to_have_attribute("aria-current", "page")
     # One line with the page title after it.
     boxes = [m.bounding_box() for m in switch.all()]
@@ -452,7 +483,7 @@ def test_desktop_breadcrumb_deck_link_shows_the_due_count(page, wiki):
     deck = page.locator(".breadcrumb .module-link[data-module=deck]")
     expect(deck.locator(".module-due")).to_have_text("2")
     expect(deck.locator(".module-focus")).to_have_text("2")
-    expect(deck).to_have_attribute("title", "Deck: 2 in Focus · 1 overdue · 1 due today")
+    expect(deck).to_have_attribute("title", "Tasks: 2 in Focus · 1 overdue · 1 due today")
 
 
 def test_deck_counts_are_in_the_page_before_any_script(page, wiki):
@@ -467,7 +498,7 @@ def test_deck_counts_are_in_the_page_before_any_script(page, wiki):
     deck = page.locator(".breadcrumb .module-link[data-module=deck]")
     expect(deck.locator(".module-due")).to_have_text("1")
     expect(deck.locator(".module-focus")).to_have_text("2")
-    expect(deck).to_have_attribute("title", "Deck: 2 in Focus · 1 due today")
+    expect(deck).to_have_attribute("title", "Tasks: 2 in Focus · 1 due today")
 
 
 def test_deck_counts_follow_deck_changes(page, wiki):

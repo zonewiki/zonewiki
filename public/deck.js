@@ -3960,7 +3960,7 @@ const initTaskId = urlParams.get('task') || '';
 function revealTask(id) {
   if (!tasks.some(t => t.id === id)) {
     // Deleted (or in another list). One notice per page.
-    if (instanceId === '0') showNotice('That task is no longer in the deck.');
+    if (instanceId === '0') showNotice('That task is no longer in your tasks.');
     return;
   }
   unfoldFor(id);

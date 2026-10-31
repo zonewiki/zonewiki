@@ -195,7 +195,7 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     # Typing matches the built-in pages like any other entry; "Unlinked
     # only" (orphan pages) leaves them out.
     page.locator("#modal-filter").fill("scra")
-    expect(items.first.locator("a")).to_have_text("Scratch")
+    expect(items.first.locator("a")).to_have_text("Notes")
     page.locator("#modal-filter").fill("deck")
     expect(items.first.locator("a")).to_have_attribute("href", "/deck")
     page.locator("#modal-filter").fill("")

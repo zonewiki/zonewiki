@@ -76,8 +76,8 @@ func quote(s string) string { return pathURL(s)[1:] }
 // (js/search.js initScratchFilter); ?q= keeps the query.
 func scratchPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	page(w, rq, http.StatusOK, "scratch.html", "Scratch", shell{}, M{"notes": listScratch(rq),
-		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Scratch", "", "")})
+	page(w, rq, http.StatusOK, "scratch.html", "Notes", shell{}, M{"notes": listScratch(rq),
+		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": buildBreadcrumb(rq, "_scratch", "Notes", "", "")})
 }
 
 var (
@@ -805,8 +805,8 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	}
 	out = append(out, pages...)
 	out = append(out,
-		M{"slug": "/deck", "title": "Deck", "href": "/deck", "links": 0, "mtime": 0, "builtin": true},
-		M{"slug": "_scratch", "title": "Scratch", "links": counts["_scratch"], "mtime": 0, "builtin": true})
+		M{"slug": "/deck", "title": "Tasks", "href": "/deck", "links": 0, "mtime": 0, "builtin": true},
+		M{"slug": "_scratch", "title": "Notes", "links": counts["_scratch"], "mtime": 0, "builtin": true})
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -816,9 +816,9 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 func deckPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	list := cleanList(r.URL.Query().Get("list"))
-	params, title, heading := DeckParams{}, "Deck", "Deck"
+	params, title, heading := DeckParams{}, "Tasks", "Tasks"
 	var home *DeckHome
-	crumbs := []crumb{{"Deck", ""}}
+	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/deck"
 	if list != "" {
@@ -828,8 +828,8 @@ func deckPage(w http.ResponseWriter, r *http.Request) {
 			home = &DeckHome{Slug: declared.Slug, Title: t}
 		}
 		params = params.With("list", list)
-		title, heading = list+" · Deck", list
-		crumbs = []crumb{{"Deck", "/deck"}, {list, ""}}
+		title, heading = list+" · Tasks", list
+		crumbs = []crumb{{"Tasks", "/deck"}, {list, ""}}
 		key += "?list=" + list
 	}
 	// A list declared in the user's private folder makes private tasks, as there.

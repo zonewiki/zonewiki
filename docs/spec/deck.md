@@ -181,7 +181,7 @@ A separate list is a tag that a page declares with `[[deck list=<tag>]]`: a high
 
 ### Keyboard shortcuts
 
-- **g d**: go to `/deck`; **g t**: go to the deck's home
+- **g a**: go to `/deck`, all tasks (`g d` before the rename, still working for one release); **g t**: go to the Tasks home
 - **v**: one line per task / full cards (see Compact)
 - **→** / **l**, **←** / **h** (compact): open / close the selected task's notes and comments; open, they stay open as j/k move on (see Compact)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)

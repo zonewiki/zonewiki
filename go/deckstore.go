@@ -397,7 +397,7 @@ func archiveOldCompleted() {
 	}
 	msg := "Write the deck's files in Zone's format"
 	if moved {
-		msg = "Archive completed deck tasks"
+		msg = "Archive completed tasks"
 	}
 	gitCommit("", msg, changed...)
 }

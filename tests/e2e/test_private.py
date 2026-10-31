@@ -38,9 +38,9 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     assert m["y"] >= b["y"] + b["height"] and abs(m["x"] - b["x"]) < 4
     alice.keyboard.press("Escape")
     expect(menu).to_be_hidden()
-    # A scratch note is private with users: the dialog says so.
-    alice.keyboard.press("c"); alice.keyboard.press("s")
-    expect(alice.locator("#scratch-modal .scratch-label")).to_have_text("New private scratch note")
+    # A note is private with users: the dialog says so.
+    alice.keyboard.press("c"); alice.keyboard.press("n")
+    expect(alice.locator("#scratch-modal .scratch-label")).to_have_text("New private note")
     expect(alice.locator("#scratch-modal .modal-desc")).to_contain_text("Only you see it")
     alice.keyboard.press("Escape")
     expect(btn).to_have_attribute("aria-expanded", "false")
@@ -65,8 +65,8 @@ def test_private_and_scratch_are_pills_in_a_group_of_their_own(alice):
     alice.goto("/page/index")
     groups = alice.locator(".breadcrumb .module-group")
     expect(groups).to_have_count(2)
-    expect(groups.nth(0).locator(".module-label")).to_have_text(["Wiki", "Deck"])
-    expect(groups.nth(1).locator(".module-label")).to_have_text(["Private", "Scratch"])
+    expect(groups.nth(0).locator(".module-label")).to_have_text(["Wiki", "Tasks"])
+    expect(groups.nth(1).locator(".module-label")).to_have_text(["Private", "Notes"])
     expect(groups.nth(1).locator(".module-lock")).to_be_visible()
     expect(groups.nth(0).locator(".module-lock")).to_have_count(0)
     g0, g1 = groups.nth(0).bounding_box(), groups.nth(1).bounding_box()
@@ -84,7 +84,7 @@ def test_private_and_scratch_are_pills_in_a_group_of_their_own(alice):
 
 def test_scratch_pill_and_g_p_goes_home(alice):
     alice.goto("/page/index")
-    alice.get_by_role("link", name="Scratch").click()
+    alice.get_by_role("link", name="Notes").click()
     alice.wait_for_url("**/page/_scratch")
     expect(alice.locator(".breadcrumb .module-link[data-module=scratch]")).to_have_attribute("aria-current", "page")
     alice.keyboard.press("g")
@@ -113,7 +113,7 @@ def test_the_phone_has_private_and_scratch_tabs(new_page, wiki, monkeypatch):
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
     items = bar.locator(".action-module, button")
-    expect(items).to_have_text(["Wiki", "Deck", "Private", "Scratch", "Note", "Task", "Search"])
+    expect(items).to_have_text(["Wiki", "Tasks", "Private", "Notes", "Note", "Task", "Search"])
     assert all(i.bounding_box()["width"] >= 40 for i in items.all())
     # Scratch's icon carries a small lock, inside its tab and clear of the label.
     tab, lock = bar.locator("[data-module=scratch]"), bar.locator(".action-lock")
@@ -316,6 +316,6 @@ def test_the_pills_labels_are_vertically_centred(alice):
     # put Wiki, Deck, Private and Scratch high in their pills with other fonts.
     alice.goto("/page/index")
     rows = alice.evaluate(_PILL_LABEL_GAPS)
-    assert [r[0] for r in rows] == ["Wiki", "Deck", "Private", "Scratch"]
+    assert [r[0] for r in rows] == ["Wiki", "Tasks", "Private", "Notes"]
     for label, above, below in rows:
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"

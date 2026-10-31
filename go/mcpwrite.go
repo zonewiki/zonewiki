@@ -102,7 +102,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 // (any words; Zone puts the time in front) or else by the content's title.
 func writeScratch(args jsonObj, content, base, user string) (string, error) {
 	if jsonTrue(args["overwrite"]) {
-		return "", toolErr("A scratch note is always a new one: overwrite doesn't apply. " +
+		return "", toolErr("A note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
 	}
 	name, err := strArg(args, "slug", false)
@@ -159,7 +159,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	if !isScratch(slug) {
-		return "", toolErr(slug + " is not a scratch note. rename_page moves a page, append_to_page adds text to one.")
+		return "", toolErr(slug + " is not a note. rename_page moves a page, append_to_page adds text to one.")
 	}
 	page, err := strArg(args, "page", false)
 	if err != nil {
@@ -202,7 +202,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return "Appended scratch note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
+		return "Appended note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
 			"the note; links to it now point at that section.\nurl: " + base + pathURL("page", target) + "#" + anchor +
 			"\nfile: " + hostFile(target) + pending, nil
 	}
@@ -228,7 +228,7 @@ func fileScratchNote(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Moved scratch note " + slug + " into the wiki as " + moved + "; links to it were updated. " +
+	return "Moved note " + slug + " into the wiki as " + moved + "; links to it were updated. " +
 		"No page links to it yet: add a link where it belongs (edit_page).\n" + pageInfo(moved, base) + pending, nil
 }
 

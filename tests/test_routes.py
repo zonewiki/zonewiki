@@ -128,7 +128,7 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         bar = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split(
             '<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "Scratch", "Note", "Task", "Search"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Notes", "Note", "Task", "Search"]
         # Navigation, a divider, then the actions.
         assert bar.index('data-module="deck"') < bar.index('class="action-sep"') < bar.index('class="action-scratch"')
 
@@ -141,7 +141,7 @@ class TestViewPage:
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
     def test_desktop_top_actions_on_views_not_in_editor(self, client, wiki_dir):
-        # New scratch note, New task and Search, at the start of <main> so the
+        # New note, New task and Search, at the start of <main> so the
         # CSS can put them at the top right, in line with the breadcrumb.
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/deck", "/page/_scratch"):
@@ -154,8 +154,8 @@ class TestViewPage:
             buttons = re.findall(r'<button type="button" class="top-(\w+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
             assert buttons == [("sharing", "Sharing mode", "Sharing mode: hide what is around the page (S)"),
-                               ("scratch", "New scratch note", "New scratch note (c s)"),
-                               ("task", "Add a task to your deck", "Add a task to your deck (c t)"),
+                               ("scratch", "New note", "New note (c n)"),
+                               ("task", "Add a task", "Add a task (c t)"),
                                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
@@ -960,8 +960,8 @@ class TestApiPagesList:
         pages = client.get("/api/pages-list", headers=HOST).get_json()
         assert not [p for p in pages if p.get("special") and p["title"] != "Deleted Pages"]
         builtin = {p["title"]: p for p in pages if p.get("builtin")}
-        assert {"Deck", "Scratch"} <= builtin.keys()
-        assert builtin["Deck"]["href"] == "/deck"
+        assert {"Tasks", "Notes"} <= builtin.keys()
+        assert builtin["Tasks"]["href"] == "/deck"
         assert not next(p for p in pages if p["slug"] == "aaa").get("builtin")
 
 
@@ -1097,8 +1097,8 @@ class TestSearch:
         meta = {r["title"]: r["meta"] for r in client.get("/api/search?q=quokka", headers=HOST).get_json()}
         assert meta["Alex Debrief"] == "conversations/2026-07-08_alex · edited 2001-09-09"
         assert meta["Quokka"].startswith("edited 20")
-        assert meta["[Task] quokka open"] == "Deck · open"
-        assert re.fullmatch(r"Deck › zoo · done \d{4}-\d\d-\d\d", meta["[Task] quokka done"])
+        assert meta["[Task] quokka open"] == "Tasks · open"
+        assert re.fullmatch(r"Tasks › zoo · done \d{4}-\d\d-\d\d", meta["[Task] quokka done"])
         assert open_["id"]
         page = client.get("/search?q=quokka", headers=HOST).get_data(as_text=True)
         assert '<span class="result-meta">conversations/2026-07-08_alex · edited 2001-09-09</span>' in page
@@ -1107,13 +1107,13 @@ class TestSearch:
         # Regression: a pill searched the tag as a word, so it listed every
         # page mentioning "ops", tagged or not.
         write_page(wiki_dir, "tagged", "---\ntags: [ops]\n---\n# Runbook\n\nRestart steps.\n")
-        write_page(wiki_dir, "mentions", "# Notes\n\nAsk the ops team.\n")
+        write_page(wiki_dir, "mentions", "# Team chat\n\nAsk the ops team.\n")
         client.post("/api/deck", json={"title": "Rotate keys", "tags": ["ops"]}, headers=HOST)
         page = client.get("/page/tagged", headers=HOST).get_data(as_text=True)
         href = re.search(r'class="task-tag page-tag" href="([^"]+)"', page).group(1)
         assert href == "/search?q=%23ops"
         results = client.get(href, headers=HOST).get_data(as_text=True)
-        assert "Runbook" in results and "Rotate keys" in results and "Notes" not in results
+        assert "Runbook" in results and "Rotate keys" in results and "Team chat" not in results
 
     def test_limit(self, client, wiki_dir):
         for i in range(20):
@@ -1602,7 +1602,7 @@ class TestSpecialPages:
     def test_scratch_index_page_loads(self, client):
         resp = client.get("/page/_scratch", headers=HOST)
         assert resp.status_code == 200
-        assert b"Scratch" in resp.data
+        assert b"Notes" in resp.data
 
     def test_api_scratch_creates_note(self, client, wiki_dir):
         resp = client.post("/api/scratch", data={"title": "My Note"}, headers=HOST)
@@ -2016,7 +2016,7 @@ class TestDeckPage:
         assert 'data-init-list=""' in body
         assert 'data-init-tag=""' in body
         assert 'data-init-view=""' in body   # ?view= / session / Today decide
-        assert "<h1>Deck</h1>" in body
+        assert "<h1>Tasks</h1>" in body
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a deck.md) are ordinary pages now.
@@ -2029,7 +2029,7 @@ class TestDeckPage:
     def test_list(self, client, wiki_dir):
         body = self.get(client, "?list=Groceries&task=abc")
         assert 'data-init-list="groceries"' in body
-        assert '<a href="/deck">Deck</a>' in body
+        assert '<a href="/deck">Tasks</a>' in body
         assert "<h1>groceries</h1>" in body
 
     def test_list_name_escaped(self, client, wiki_dir):
@@ -2039,7 +2039,7 @@ class TestDeckPage:
     def test_in_search_modal_list(self, client, wiki_dir):
         pages = client.get("/api/pages-list", headers=HOST).get_json()
         deck = [p for p in pages if p.get("href") == "/deck"]
-        assert len(deck) == 1 and deck[0]["title"] == "Deck"
+        assert len(deck) == 1 and deck[0]["title"] == "Tasks"
 
     def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
@@ -2079,7 +2079,7 @@ class TestDeckPage:
         counts = ('<span class="module-counts"><span class="module-due">1</span>'
                   '<span class="module-focus">2</span></span>')
         assert body.count(counts) == 2   # switcher and tab bar
-        assert body.count('title="Deck: 2 in Focus · 1 overdue"') == 2
+        assert body.count('title="Tasks: 2 in Focus · 1 overdue"') == 2
         # Zero is hidden, not "0".
         client.post("/api/deck/batch-delete", json={"ids": [t["id"] for t in client.get(
             "/api/deck", headers=HOST).get_json()]}, headers=HOST)
@@ -2328,7 +2328,7 @@ class TestPromotePage:
         write_page(wiki_dir, "taken", "# Taken\n")
         for data, error in [({"name": "Taken"}, "already exists"),
                             ({"name": " "}, "Give the page a name"),
-                            ({"name": "2026-01-01_10-00-00_x"}, "still be a scratch note")]:
+                            ({"name": "2026-01-01_10-00-00_x"}, "still be a note")]:
             resp = client.post(f"/promote/{SCRATCH}", data=data, headers=HOST)
             loc = resp.headers["Location"]
             assert loc.startswith(f"/page/{SCRATCH}?promote_error=")

@@ -1220,7 +1220,7 @@ class TestBatchUpdate:
         before = len(log())
         client.post("/api/deck/batch-update", json={"tasks": [
             {"id": a["id"], "start_date": "2099-01-02"}, {"id": b["id"], "start_date": "2099-01-02"}]})
-        assert log()[0] == "Update deck tasks"
+        assert log()[0] == "Update tasks"
         assert len(log()) == before + 1
 
 
@@ -2043,7 +2043,7 @@ class TestLists:
         tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]
         hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
         assert hit["href"] == f"/deck?task={tid}&view=open&list=groceries"
-        assert hit["meta"].startswith("Deck › groceries")
+        assert hit["meta"].startswith("Tasks › groceries")
 
     def test_list_follows_the_page(self, client, wiki_dir, shop):
         """Declarations are read live: editing the page away ends the list."""

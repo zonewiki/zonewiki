@@ -670,7 +670,7 @@ func resultMeta(d *SearchDoc, names map[string]DeckHome) string {
 		if status != "open" {
 			status += " " + runePrefix(d.Task.CompletedAt, 10)
 		}
-		where := "Deck"
+		where := "Tasks"
 		if l := taskList(d.Task, names); l != "" {
 			where += " › " + l
 		}

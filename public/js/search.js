@@ -378,7 +378,7 @@ async function fetchModalContentMatches(q) {
   const bySlug = new Map(items.map(li => [li.dataset.slug, li]));
   const empty = document.createElement('p');
   empty.className = 'scratch-filter-empty';
-  empty.textContent = 'No scratch note matches.';
+  empty.textContent = 'No note matches.';
   empty.hidden = true;
   list.after(empty);
   let seq = 0, timer = null;

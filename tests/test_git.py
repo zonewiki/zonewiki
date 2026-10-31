@@ -245,7 +245,7 @@ class TestHistory:
         assert is_clean(wiki_dir)
         html = client.get("/history/notes", headers=HOST).get_data(as_text=True)
         what = re.findall(r'<span class="hist-what">([^<]*)</span>', html)
-        assert what == ["Moved from Scratch", "Edited"]
+        assert what == ["Moved from Notes", "Edited"]
 
     def test_append_commits_and_names_it_in_history(self, client, wiki_dir):
         note = "2026-10-08_14-03-11_notes"
@@ -258,7 +258,7 @@ class TestHistory:
         assert f"{note}.md" in changed and "garden.md" in changed and "ref.md" in changed
         assert is_clean(wiki_dir)
         html = client.get("/history/garden", headers=HOST).get_data(as_text=True)
-        assert re.findall(r'<span class="hist-what">([^<]*)</span>', html) == ["Scratch note appended", "Edited"]
+        assert re.findall(r'<span class="hist-what">([^<]*)</span>', html) == ["Note appended", "Edited"]
         # The note is in Deleted Pages, so it can be restored.
         assert note in client.get("/page/_deleted", headers=HOST).get_data(as_text=True)
 

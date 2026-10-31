@@ -54,7 +54,7 @@ func createScratch(user, title string, content *string, suffix string) (string, 
 	for {
 		slug = folder + at.Format("2006-01-02_15-04-05") + "_" + name
 		if path = safePath(slug); path == "" {
-			return "", refuse("'" + title + "' can't name a scratch note")
+			return "", refuse("'" + title + "' can't name a note")
 		}
 		if !exists(path) {
 			break
@@ -79,7 +79,7 @@ func notePath(user, slug string) (string, error) {
 		p = safePath(slug)
 	}
 	if p == "" || !exists(p) {
-		return "", refuse("There is no scratch note “" + slug + "”")
+		return "", refuse("There is no note “" + slug + "”")
 	}
 	return p, nil
 }
@@ -101,7 +101,7 @@ func moveScratch(user, slug, folder, name string, keepDate bool, suffix string) 
 		return "", refuse("Give the page a name")
 	}
 	if isScratch(newSlug) {
-		return "", refuse("That name would still be a scratch note")
+		return "", refuse("That name would still be a note")
 	}
 	newPath := safePath(newSlug)
 	if newPath == "" {

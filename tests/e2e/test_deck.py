@@ -174,7 +174,7 @@ def test_deck_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     deck = page.locator(".breadcrumb .module-link[data-module=deck]")
     expect(deck.locator(".module-due")).to_have_text("2")
     expect(deck.locator(".module-focus")).to_have_text("4")
-    expect(deck).to_have_attribute("title", "Deck: 4 in Focus · 1 overdue · 1 due today")
+    expect(deck).to_have_attribute("title", "Tasks: 4 in Focus · 1 overdue · 1 due today")
     deck.click()
     expect(page).to_have_url(re.compile(r"/deck$"))
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
@@ -207,7 +207,7 @@ def test_search_modal_lists_the_deck(page, wiki):
     page.goto("/page/index")
     page.keyboard.press("Control+p")
     page.locator("#modal-filter").fill("deck")
-    expect(page.locator(".page-list-item").first).to_contain_text("Deck")
+    expect(page.locator(".page-list-item").first).to_contain_text("Tasks")
     page.locator("#modal-filter").press("Enter")
     expect(page).to_have_url(re.compile(r"/deck$"))
     expect(page.locator(".tasks-app")).to_have_count(1)
@@ -591,7 +591,7 @@ def test_task_link_to_completed_task(page, wiki):
 def test_task_link_to_missing_task_says_so(page, wiki):
     _task_link_deck(page, wiki)
     page.goto("/page/deck?task=no-such-id&view=open")
-    expect(page.get_by_text("That task is no longer in the deck.")).to_be_visible()
+    expect(page.get_by_text("That task is no longer in your tasks.")).to_be_visible()
 
 
 # Swapping a list's tag in a list view moves the task into the other list.
@@ -2386,7 +2386,7 @@ def test_completed_shows_earlier_years(page, wiki):
                 if r.get("task_id") == "old")
     page.goto(href)
     expect(page.locator(".task-item[data-id='old']")).to_have_class(re.compile(r"\btask-selected\b"))
-    expect(page.get_by_text("That task is no longer in the deck.")).to_have_count(0)
+    expect(page.get_by_text("That task is no longer in your tasks.")).to_have_count(0)
 
 
 # ── Locale ───────────────────────────────────────────────────────────────────

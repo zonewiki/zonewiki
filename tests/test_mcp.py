@@ -1180,7 +1180,7 @@ class TestScratchNotes:
     def test_list_and_search_only_scratch_notes(self, client, pages):
         write_page(pages, SCRATCH_NOTE, "# Alex prep\n\nBremsen beim Golf ansprechen.\n")
         text, _ = call(client, "list_pages", scratch=True)
-        assert text.startswith("Scratch notes") and SCRATCH_NOTE in text and "golf |" not in text
+        assert text.startswith("Notes") and SCRATCH_NOTE in text and "golf |" not in text
         text, _ = call(client, "search_wiki", query="Bremsen", scratch=True)
         assert f"slug: {SCRATCH_NOTE}" in text and "slug: golf" not in text
         assert f"slug: golf" in call(client, "search_wiki", query="Bremsen")[0]
@@ -1194,7 +1194,7 @@ class TestScratchNotes:
                          folder="conversations", keep_date=True)
         assert not err
         new = "conversations/2026-10-15_alex-sam-debrief"
-        assert text.startswith(f"Moved scratch note {SCRATCH_NOTE} into the wiki as {new};")
+        assert text.startswith(f"Moved note {SCRATCH_NOTE} into the wiki as {new};")
         assert (git_wiki_dir / f"{new}.md").exists() and not (git_wiki_dir / f"{SCRATCH_NOTE}.md").exists()
         assert (git_wiki_dir / "hub.md").read_text() == f"# Hub\n\n[[{new}]]\n"
         assert subjects(git_wiki_dir)[0] == f"Promote {SCRATCH_NOTE} to {new} (MCP)"
@@ -1216,12 +1216,12 @@ class TestScratchNotes:
 
     def test_file_refusals(self, client, pages):
         write_page(pages, SCRATCH_NOTE, "# Alex prep\n")
-        for args, words in [({"slug": "golf", "name": "x"}, "not a scratch note"),
+        for args, words in [({"slug": "golf", "name": "x"}, "not a note"),
                             ({"slug": SCRATCH_NOTE}, "either name"),
                             ({"slug": SCRATCH_NOTE, "name": "x", "page": "golf"}, "either name"),
                             ({"slug": SCRATCH_NOTE, "page": "nowhere"}, 'No page "nowhere"'),
                             ({"slug": SCRATCH_NOTE, "name": "golf"}, "already exists"),
-                            ({"slug": SCRATCH_NOTE, "name": "2026-01-01_10-00-00_x"}, "still be a scratch note"),
+                            ({"slug": SCRATCH_NOTE, "name": "2026-01-01_10-00-00_x"}, "still be a note"),
                             ({"slug": SCRATCH_NOTE, "page": "golf", "heading": "Werkstatt"}, "already has a section")]:
             text, err = call(client, "file_scratch_note", **args)
             assert err and words in text, (args, text)
@@ -1412,8 +1412,8 @@ class TestWritesCommit:
             "Delete old-notes/mcp (MCP)",
             "Move notes/ to old-notes/ (MCP)",
             'Replace "1st" on notes/mcp: spell out (MCP)',
-            "Complete deck task (MCP)",
-            "Create deck task: from chat (MCP)",
+            "Complete task (MCP)",
+            "Create task: from chat (MCP)",
             "Rename mcp-notes to notes/mcp (MCP)",
             "Update mcp-notes: shorten wording (MCP)",
             "Append to mcp-notes (MCP)",
@@ -1486,7 +1486,7 @@ class TestHistory:
         assert not err
         rows = text.splitlines()
         assert rows[0].startswith("Changes, newest first (")
-        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create deck task \(MCP\) \| deck tasks", rows[1])
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create task \(MCP\) \| tasks", rows[1])
         assert rows[2].endswith("| Create other (MCP) | other")
         assert rows[4].endswith("| Create notes/p: first (MCP) | notes/p")
         assert call(client, "history", under="notes")[0].count("\n") == 2
@@ -1693,7 +1693,7 @@ class TestTagTasks:
         done = client.get("/api/deck/completed", headers=HOST).get_json()
         assert done[0]["tags"] == ["work", "diy"]
         log = self_log(git_wiki_dir)
-        assert len(log) == before + 1 and log[0] == "Tag deck tasks: sort the shed (MCP)"
+        assert len(log) == before + 1 and log[0] == "Tag tasks: sort the shed (MCP)"
 
     def test_says_which_had_it_already(self, client, wiki_dir):
         a = _task_id(call(client, "create_task", title="A", tags=["x"])[0])
@@ -1728,7 +1728,7 @@ class TestCommentAndDeleteTask:
         text, err = call(client, "update_task", id=tid, comment="left a voicemail", summary="bob")
         assert not err and text.startswith("Comment added.")
         assert re.search(r"Comments:\n- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: left a voicemail", text)
-        assert self_log(git_wiki_dir)[0] == "Comment on deck task: bob (MCP)"
+        assert self_log(git_wiki_dir)[0] == "Comment on task: bob (MCP)"
         assert call(client, "update_task", id=tid, comment=" ")[1]
 
     def test_comment_with_changes(self, client, git_wiki_dir):
@@ -1736,7 +1736,7 @@ class TestCommentAndDeleteTask:
         text, err = call(client, "update_task", id=tid, status="done", comment="reached him")
         assert not err and text.startswith("Updated, comment added.")
         assert "status: done" in text and "reached him" in text
-        assert self_log(git_wiki_dir)[:2] == ["Comment on deck task (MCP)", "Complete deck task (MCP)"]
+        assert self_log(git_wiki_dir)[:2] == ["Comment on task (MCP)", "Complete task (MCP)"]
 
     def test_bad_comment_changes_nothing(self, client, wiki_dir):
         tid = _task_id(call(client, "create_task", title="Call Bob")[0])

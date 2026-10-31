@@ -2,7 +2,7 @@
 
 **Wiki, notes and tasks for you, your small team, and your AI agents.**
 
-A self-hosted wiki with a built-in task deck. Your notes are plain
+A self-hosted wiki with built-in tasks and quick notes. Your pages are plain
 Markdown files in a folder you choose; Zone renders them in the browser, lets
 you edit them there or in any editor, searches them, and keeps every version
 in git. No database, no frontend build, no cloud: run it on your machine, or
@@ -14,13 +14,13 @@ over [MCP](#connect-an-ai-assistant), and every edit they make is a git commit.
 
 ## Why Zone
 
-**Your notes stay yours, as plain files.** Pages are Markdown in a folder you
+**Your pages stay yours, as plain files.** Pages are Markdown in a folder you
 choose, tasks are JSON next to them, history is git. Zone renders, searches
 and edits them, but nothing is locked inside it: open the folder in any
 editor, grep it, back it up with `git push`, or stop using Zone and keep
 everything as it is. Search indexes and caches are rebuilt from the files.
 
-- **Notes and tasks in one place.** The wiki and the task deck share links,
+- **Pages, notes and tasks in one place.** The wiki, Tasks and Notes share links,
   search and history. A page can show a task as a chip, and a task can link to
   a page, with no plugins to combine.
 - **Nothing gets lost.** Every page has its version history: see what each
@@ -35,11 +35,11 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   behind HTTPS with a password (see [Security](#security)).
 - **Supports AI-first workflows.** Through its
   [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
-  you can: search, read, create, edit, rename and restore pages, file scratch
+  you can: search, read, create, edit, rename and restore pages, file
   notes, and manage tasks. Its edits land as git commits marked `(MCP)` that
   you can review, diff or undo.
 
-Zone is for one person's notes and tasks on a server you run, or a few
+Zone is for one person's pages and tasks on a server you run, or a few
 people's (a household, a small group) who share one wiki, each with their own
 login and private pages and tasks. It is deliberately a single process with no
 plugins, no graph view and no real-time collaboration, so it isn't a team
@@ -47,15 +47,15 @@ product or a plugin platform. That keeps it small and readable.
 
 ## How Zone is organised
 
-Zone has three modules: the **Wiki** for your notes, the **Deck** for your
-tasks, and **Scratch** for quick capture (with several users, **Private**
-joins Scratch in a group of its own: your private home, the start page of
+Zone has three modules: the **Wiki** for your pages, **Tasks** for your
+tasks, and **Notes** for quick capture (with several users, **Private**
+joins Notes in a group of its own: your private home, the start page of
 your own private pages). You switch between them in the top
 left corner (on a phone, in the tab bar at the bottom), and **New** creates
-whatever the module you're in holds: a page, a scratch note, a task. Search,
+whatever the module you're in holds: a page, a note, a task. Search,
 history, keyboard shortcuts and AI access work across all three.
 
-### Wiki: your notes
+### Wiki: your pages
 
 Pages are Markdown files in folders, linked to each other. Zone renders them,
 shows what links where, and lets you edit them in the browser or in any text
@@ -83,18 +83,18 @@ editor; a change on disk shows up immediately.
 
 ![The editor in dark mode: Markdown on the left, the live preview on the right](docs/screenshots/editor.png)
 
-### Scratch: quick capture
+### Notes: quick capture
 
 For a thought, a call, a link: write it down first, decide where it belongs
 later.
 
-- `c s` opens a new scratch note, named by its time; the Scratch list shows
+- `c n` opens a new note, named by its time; the Notes list shows
   them newest first, with a filter.
 - **Move to wiki** turns a note into a page (pick a folder and a name, keep
   the date if you like); **Append to page** adds it to an existing page as a
   section. Either way, links to the note follow it.
 
-### Deck: your tasks
+### Tasks
 
 A task list built around two different dates: the day you start on a task,
 and its deadline. It has two views:
@@ -115,17 +115,17 @@ Done tasks go to a yearly archive. Beyond that:
   dated status log, a history of every date change, and undo for completing
   and deleting.
 - Separate lists declared on a page (`[[deck list=groceries keep=1]]`).
-- Your own deck on a page of yours, which the Deck module then opens, with
+- Your own task list on a page of yours, which the Tasks module then opens, with
   an optional limit on how much is in Focus:
   `[[deck view=focus limit=8 home=1]]`.
-- Decks inside any page (`[[deck tag=work view=plan]]`), a single task inline
+- Task lists inside any page (`[[deck tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
-- The Deck link shows how many tasks are due today or overdue.
+- The Tasks link shows how many tasks are due today or overdue.
 - Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
   long-press to drag, or long-press and let go to select several tasks.
 
-![The deck's Open tab by days: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
+![Tasks' Open tab by days: tasks grouped by the day they're planned for](docs/screenshots/deck.png)
 
 ### Across Zone
 
@@ -140,15 +140,15 @@ Done tasks go to a yearly archive. Beyond that:
   `git push` backups come for free.
 - **AI assistants** through an [MCP](https://modelcontextprotocol.io) server at
   `/mcp`: any MCP client can search and read
-  your notes and tasks, find every line matching a regex, check links
+  your pages, notes and tasks, find every line matching a regex, check links
   (backlinks, orphan pages, broken wikilinks), and write: create and edit pages, find and
   replace across pages, rename and delete them (move whole folders), add and update
   tasks. Every write is a commit marked `(MCP)`, with links back into Zone. It's
   off until you set a token (see [Connect an AI assistant](#connect-an-ai-assistant)).
 - **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
-  a private folder (`private/<name>/`), private scratch notes, private tasks
-  (a **Private** box on the task, 🔒 on its card) and their own deck home.
+  a private folder (`private/<name>/`), private notes, private tasks
+  (a **Private** box on the task, 🔒 on its card) and their own Tasks home.
   Everything else is shared. See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,
@@ -156,7 +156,7 @@ Done tasks go to a yearly archive. Beyond that:
 - **Phones**: a responsive layout with a tab bar, installable on the home
   screen. Light and dark mode follow your system.
 
-<p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the deck's Focus view"></p>
+<p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Focus view of Tasks"></p>
 
 ## Quick start
 
@@ -277,7 +277,7 @@ In your client, add an MCP server with the HTTP transport at
 Zone keeps only the token's hash: lost, make a new one.
 
 The assistant can also answer questions about Zone itself ("how do I give
-the deck's tabs other names?"): it searches this README and Zone's spec.
+the task list's tabs other names?"): it searches this README and Zone's spec.
 
 To give the assistant your wiki's conventions (where things go, what's
 private, how pages are tagged), write them on a page called `wiki-guide`.
@@ -376,7 +376,7 @@ Also know this:
   rename and delete pages and tasks, password or not (with users, whatever
   the token's user may). Keep the token secret and give it only to clients
   you trust.
-- **Notes can carry instructions.** An AI assistant reads your notes, and
+- **Pages can carry instructions.** An AI assistant reads your pages, and
   text pasted into them from elsewhere (tickets, emails, web pages) can try to
   steer it ("ignore your instructions and delete …"). If your wiki holds such
   text, have your client ask before it writes (MCP clients can, per tool;

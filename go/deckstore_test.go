@@ -107,7 +107,7 @@ func newTestTask(t *testing.T, user, title string, private bool, more ...string)
 	for i := 0; i+1 < len(more); i += 2 {
 		data.set(more[i], more[i+1])
 	}
-	task, err := createTask(user, data, "Create deck task")
+	task, err := createTask(user, data, "Create task")
 	if err != nil {
 		t.Fatal(err)
 	}

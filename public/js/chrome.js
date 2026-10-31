@@ -200,7 +200,7 @@ function deckCountsTitle({ focus, overdue, today }) {
   if (focus > 0) parts.push(`${focus} in Focus`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
   if (today > 0) parts.push(`${today} due today`);
-  return parts.length ? `Deck: ${parts.join(' · ')}` : 'Deck';
+  return parts.length ? `Tasks: ${parts.join(' · ')}` : 'Tasks';
 }
 
 function showCount(el, n) {

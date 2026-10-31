@@ -23,8 +23,8 @@ var protocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-
 // about 2 KB, so what every session needs comes first and the tools' own
 // descriptions carry the details. The wiki's guide follows them
 // (instructionsWithGuide).
-const mcpInstructions = "Zone is the user's personal wiki: their notes in markdown, plus the Deck, " +
-	"their task list. Use search_wiki when an answer may be in what the user " +
+const mcpInstructions = "Zone is the user's personal wiki: their pages in markdown, plus Tasks, " +
+	"their task list, and Notes, quick notes not yet filed into the wiki. Use search_wiki when an answer may be in what the user " +
 	"wrote down (it finds tasks too, and matches meaning as well as words, so " +
 	"phrase queries the way the notes might), then read_page for a page's full " +
 	"text. search_tasks filters tasks by tag and status; grep_wiki finds every " +
@@ -37,7 +37,7 @@ const mcpInstructions = "Zone is the user's personal wiki: their notes in markdo
 	"Writing: before creating a page, search for one that covers the topic and " +
 	"extend it instead. edit_page and append_to_page change pages, write_page " +
 	"creates them, rename_page keeps links working; create_task and update_task " +
-	"keep the Deck. Every write is a git commit the user can undo; give each a " +
+	"keep their tasks. Every write is a git commit the user can undo; give each a " +
 	"short summary, its commit message. The user's guides (for the wiki, and a " +
 	"folder's CLAUDE.md or AGENTS.md) say where things go and how to write them: " +
 	"call read_guides before drafting, and pass their ids as guides when writing."

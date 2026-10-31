@@ -8,8 +8,8 @@
 <div class="top-actions">
   <button type="button" class="top-sharing" aria-pressed="false" aria-label="Sharing mode" title="Sharing mode: hide what is around the page (S)"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></button>
   <span class="top-sep" aria-hidden="true"></span>
-  <button type="button" class="top-scratch" aria-label="New scratch note" title="New scratch note (c s)">{{template "icon_new_note"}}</button>
-  <button type="button" class="top-task" aria-label="Add a task to your deck" title="Add a task to your deck (c t)">{{template "icon_new_task"}}</button>
+  <button type="button" class="top-scratch" aria-label="New note" title="New note (c n)">{{template "icon_new_note"}}</button>
+  <button type="button" class="top-task" aria-label="Add a task" title="Add a task (c t)">{{template "icon_new_task"}}</button>
   <button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="top-search-label" aria-hidden="true">Search</span><kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>
   {{- range .module_links}}{{if .menu}}
   <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.user}}: account menu" title="{{$.user}}"><span aria-hidden="true">{{initial $.user}}</span></button>

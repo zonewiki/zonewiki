@@ -83,12 +83,14 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gs=scratch, gd=deck (every task),
-  // gt=the deck's home (your own deck; /deck without one), gp=your private
-  // home (with users: the Private pill)
+  // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=the Tasks
+  // home (/deck without one), gp=your private home (with users: the Private
+  // pill). gs and gd were Notes and all tasks before the rename, kept for
+  // one release.
   if (keyPrefix.key === 'g') {
     resetPrefix();
-    const dest = { h: '/page/index', s: '/page/_scratch', d: '/deck', t: deckHomeHref() };
+    const dest = { h: '/page/index', n: '/page/_scratch', a: '/deck', t: deckHomeHref() };
+    dest.s = dest.n; dest.d = dest.a;
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
@@ -99,10 +101,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cs=scratch note, ct=task in the deck's home
+  // c-prefix create: cn=note (cs before the rename, kept for one release),
+  // ct=task in the Tasks home
   if (keyPrefix.key === 'c') {
     resetPrefix();
-    if (e.key === 's') { e.preventDefault(); openScratch(); }
+    if (e.key === 'n' || e.key === 's') { e.preventDefault(); openScratch(); }
     else if (e.key === 't') { e.preventDefault(); openHomeTask(); }
     return;
   }

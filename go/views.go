@@ -115,7 +115,7 @@ func diffLines(diff string) []diffLine {
 // aria-current, and js/actions.js makes "New" create that module's kind.
 // With users the switcher has two groups (the third field, 0 and 1): Wiki and
 // Deck, then Private and Scratch; without users one.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Deck", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Scratch", "/page/_scratch"}}
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"deck", "Tasks", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
 
 // deckCountsTitle: the Deck links' tooltip, "Deck: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js deckCountsTitle builds the same).
@@ -131,9 +131,9 @@ func deckCountsTitle(c DeckCounts) string {
 		parts = append(parts, itoa(c.Today)+" due today")
 	}
 	if len(parts) == 0 {
-		return "Deck"
+		return "Tasks"
 	}
-	return "Deck: " + strings.Join(parts, " · ")
+	return "Tasks: " + strings.Join(parts, " · ")
 }
 
 // deckCounts once per request, with its tooltip.

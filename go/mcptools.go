@@ -915,7 +915,7 @@ func mcpTaskRefs(content, base, user string) string {
 		lines = append(lines, "- [[task:"+ref+"]]: "+t.Title+" ("+strings.Join(facts, ", ")+") "+
 			base+taskLink(t, taskList(t, lists)))
 	}
-	return "\n\n---\nDeck tasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
+	return "\n\n---\nTasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
 }
 
 func searchTasks(args jsonObj, base, user string) (string, error) {
@@ -1153,7 +1153,7 @@ func deckWrite[T any](v T, err error) (T, error) {
 	var ae *apiError
 	switch {
 	case errors.Is(err, errDeckCorrupt):
-		return v, toolErr("The deck's storage can't be read right now; try again")
+		return v, toolErr("The tasks' storage can't be read right now; try again")
 	case errors.As(err, &ae):
 		return v, toolErr(ae.msg)
 	}
@@ -1274,7 +1274,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if h := lookupDeckHome(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
 		data.set("private", true)
 	}
-	msg, err := commitMsg("Create deck task", args)
+	msg, err := commitMsg("Create task", args)
 	if err != nil {
 		return "", err
 	}
@@ -1329,7 +1329,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		if other := otherArgs(args, "id", "status", "summary"); len(other) > 0 {
 			return "", toolErr("status deleted takes nothing else, not " + strings.Join(other, ", "))
 		}
-		msg, err := commitMsg("Delete deck task", args)
+		msg, err := commitMsg("Delete task", args)
 		if err != nil {
 			return "", err
 		}
@@ -1370,7 +1370,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	if comment != nil {
-		if task, err = deckWrite(addComment(user, task.ID, *comment, "Comment on deck task"+suffix)); err != nil {
+		if task, err = deckWrite(addComment(user, task.ID, *comment, "Comment on task"+suffix)); err != nil {
 			return "", err
 		}
 	}
@@ -1432,7 +1432,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 			before[t.ID] = append([]string{}, t.Tags...)
 		}
 	}
-	msg, err := commitMsg("Tag deck tasks", args)
+	msg, err := commitMsg("Tag tasks", args)
 	if err != nil {
 		return "", err
 	}
@@ -1615,9 +1615,9 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	what := "Pages"
 	if onlyScratch {
-		what = "Scratch notes"
+		what = "Notes"
 	} else if orphans {
-		what = "Pages no other page links to (the home page, the deck's home and scratch notes aside)"
+		what = "Pages no other page links to (the home page, the Tasks home and notes aside)"
 	}
 	return what + where + ", most recently edited first (" + shown + "); " +
 		"slug | title | last edit | pages linking to it:\n" + strings.Join(lines, "\n"), nil
@@ -1737,7 +1737,7 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 // deck's files as tasks.
 func fileLabel(fp string) string {
 	if strings.HasPrefix(fp, "_deck/") || strings.Contains(fp, "/_deck/") {
-		return "deck tasks"
+		return "tasks"
 	}
 	return strings.TrimSuffix(fp, ".md")
 }

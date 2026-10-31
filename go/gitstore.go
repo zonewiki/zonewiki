@@ -749,18 +749,18 @@ func versionLabel(e GitEntry, entries []GitEntry) string {
 	}
 	if m := promotedRE.FindStringSubmatch(msg); m != nil {
 		if e.Path == m[2]+".md" {
-			return "Moved from Scratch"
+			return "Moved from Notes"
 		}
-		return "Link updated (a scratch note moved to the wiki)"
+		return "Link updated (a note moved to the wiki)"
 	}
 	if m := appendedRE.FindStringSubmatch(msg); m != nil {
 		switch e.Path {
 		case m[2] + ".md":
-			return "Scratch note appended"
+			return "Note appended"
 		case m[1] + ".md":
 			return "Appended to “" + m[2] + "”"
 		}
-		return "Link updated (a scratch note appended to a page)"
+		return "Link updated (a note appended to a page)"
 	}
 	if m := restoredRE.FindStringSubmatch(msg); m != nil {
 		for _, old := range entries {

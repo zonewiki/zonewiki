@@ -299,10 +299,10 @@ class TestModuleMenu:
         assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "deck"], ["private", "scratch"]]
         assert 'href="/private"' in groups[1] and 'href="/page/_scratch"' in groups[1]
         # A lock opens the second pill: only you see Private and Scratch.
-        assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Scratch"' in groups[1]
+        assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Notes"' in groups[1]
         assert "module-lock" not in groups[0]
         # The phone's bar: the four modules with a divider between the groups, then the actions.
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Deck", "Private", "Scratch", "Note", "Task", "Search"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Private", "Notes", "Note", "Task", "Search"]
         assert bar.count('class="action-sep"') == 3
         # Scratch's tab carries a lock (Private's icon is one); no other tab does.
         assert bar.count('class="action-lock"') == 1
@@ -328,7 +328,7 @@ class TestModuleMenu:
         assert crumb.count('class="module-group"') == 1 and 'data-module="private"' not in crumb and "module-lock" not in crumb
         assert "action-lock" not in body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         assert crumb.index('data-module="deck"') < crumb.index('data-module="scratch"')
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Deck", "Scratch"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar)[:3] == ["Wiki", "Tasks", "Notes"]
 
     def test_the_pills_are_current_in_private_and_scratch_views(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
@@ -524,7 +524,7 @@ class TestAuthors:
         assert log[0] == ("bob", "Rename plans to plans-2026")
         by = {subject: author for author, subject in log[1:]}
         assert by["Create plans"] == "alice" and by["Upload a.png"] == "alice"
-        assert by["Create deck task"] == "alice"
+        assert by["Create task"] == "alice"
         assert [a for a, s in log if s.startswith("Create from-mcp")] == ["alice"]   # alice's token
         assert [a for a, s in log if s.endswith("_idea")] == ["alice"]               # the scratch note
         assert log[-1][0] == "Zone"                                                  # Zone's start-up commit

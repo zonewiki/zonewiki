@@ -342,7 +342,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := createTask(userOf(r), data, "Create deck task")
+		t, err := createTask(userOf(r), data, "Create task")
 		if err != nil {
 			return err
 		}
@@ -389,7 +389,7 @@ func deckRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		t, err := addComment(userOf(r), r.PathValue("id"), text, "Comment on deck task")
+		t, err := addComment(userOf(r), r.PathValue("id"), text, "Comment on task")
 		if err != nil {
 			return err
 		}
@@ -399,7 +399,7 @@ func deckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/deck/{id}/comments/{cid}", deckRoute(apiEditComment))
 	mux.HandleFunc("DELETE /api/deck/{id}/comments/{cid}", deckRoute(apiDeleteComment))
 	mux.HandleFunc("DELETE /api/deck/{id}", deckRoute(func(w http.ResponseWriter, r *http.Request) error {
-		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete deck task"); err != nil {
+		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete task"); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -429,7 +429,7 @@ func deckRoutes(mux *http.ServeMux) {
 				}
 			}
 		}
-		tasks, err := tagTasks(userOf(r), ids, tags[0], tags[1], "Tag deck tasks")
+		tasks, err := tagTasks(userOf(r), ids, tags[0], tags[1], "Tag tasks")
 		if err != nil {
 			return err
 		}
@@ -762,19 +762,19 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if data.has("history") {
 		t.History = cleanHistory(data["history"])
 	}
-	msg := "Update deck task"
+	msg := "Update task"
 	switch {
 	case didSkip:
-		msg = "Skip deck task"
+		msg = "Skip task"
 	case data.has("wont_do"):
-		msg = "Abandon deck task"
+		msg = "Abandon task"
 		if !wontDo {
-			msg = "Reopen deck task"
+			msg = "Reopen task"
 		}
 	case data.has("completed"):
-		msg = "Complete deck task"
+		msg = "Complete task"
 		if !done {
-			msg = "Uncomplete deck task"
+			msg = "Uncomplete task"
 		}
 	}
 	return t, writeBothLocked(user, active, completed, msg+suffix)
@@ -850,7 +850,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	t.Comments[i].Text = text
-	if err := writeBothLocked(userOf(r), active, completed, "Edit deck task comment"); err != nil {
+	if err := writeBothLocked(userOf(r), active, completed, "Edit task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, t)
@@ -869,7 +869,7 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	t.Comments = slices.Delete(t.Comments, i, i+1)
-	if err := writeBothLocked(userOf(r), active, completed, "Delete deck task comment"); err != nil {
+	if err := writeBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, t)
@@ -915,7 +915,7 @@ func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 	deckMu.Lock()
 	defer deckMu.Unlock()
-	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete deck tasks"); err != nil {
+	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete tasks"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -963,7 +963,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		restored = append(restored, t)
 	}
 	if len(restored) > 0 {
-		if err := writeBothLocked(user, active, completed, "Restore deck tasks"); err != nil {
+		if err := writeBothLocked(user, active, completed, "Restore tasks"); err != nil {
 			return err
 		}
 	}
@@ -1024,9 +1024,9 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		completed = withoutIDs(completed, movingIDs)
 		active = append(active, moving...)
 	}
-	msg := "Reopen deck tasks"
+	msg := "Reopen tasks"
 	if markCompleted {
-		msg = "Complete deck tasks"
+		msg = "Complete tasks"
 	}
 	if err := writeBothLocked(userOf(r), active, completed, msg); err != nil {
 		return err
@@ -1184,7 +1184,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		updated = append(updated, t)
 	}
 	if len(updated) > 0 {
-		if err := writeBothLocked(userOf(r), active, completed, "Update deck tasks"); err != nil {
+		if err := writeBothLocked(userOf(r), active, completed, "Update tasks"); err != nil {
 			return err
 		}
 	}
