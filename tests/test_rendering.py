@@ -218,7 +218,7 @@ class TestDisabledAttributeStripping:
 
 
 class TestDirectivesInsideCode:
-    """[[wikilinks]] and [[deck]] are pre-processed on the raw text.
+    """[[wikilinks]] and [[tasks:]] are pre-processed on the raw text.
     Inside code they must stay literal — they used to be rewritten into HTML
     that then showed up escaped inside the code block (or embedded a whole tasks
     app inside a <pre>)."""
@@ -242,12 +242,12 @@ class TestDirectivesInsideCode:
         assert 'href="/page/y"' in html
 
     def test_tasks_directive_in_code_not_embedded(self, client):
-        html = preview(client, "```\n[[deck tag=work]]\n```\n")
+        html = preview(client, "```\n[[tasks: tag=work]]\n```\n")
         assert "tasks-app" not in html
-        assert "[[deck tag=work]]" in html
+        assert "[[tasks: tag=work]]" in html
 
     def test_directives_outside_code_still_work(self, client):
-        html = preview(client, "## A\n\n`code` then [[link]]\n\n```\nx\n```\n\n[[deck]]\n")
+        html = preview(client, "## A\n\n`code` then [[link]]\n\n```\nx\n```\n\n[[tasks:]]\n")
         assert 'href="/page/link"' in html
         assert "tasks-app" in html
 

@@ -33,7 +33,7 @@ func TestEvalRank(t *testing.T) {
 			t.Errorf("%q: rank %d, want %d", c.expect, got, c.want)
 		}
 	}
-	task := &SearchDoc{Slug: "_deck", Task: &Task{ID: "t1"}, TaskID: "t1"}
+	task := &SearchDoc{Slug: "_tasks", Task: &Task{ID: "t1"}, TaskID: "t1"}
 	if rankOf([]*SearchDoc{task}, []string{"task:t1"}) != 1 {
 		t.Error("task target")
 	}
@@ -50,7 +50,7 @@ func TestEvalRunRanksByKeywords(t *testing.T) {
 
 func TestEvalUnknownTargets(t *testing.T) {
 	evalWiki(t)
-	if err := os.MkdirAll(filepath.Join(cfg.Data, "_deck"), 0o777); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg.Data, "_tasks"), 0o777); err != nil {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(tasksFile(""), []byte(`[{"id": "t1", "title": "Reifen wechseln", "tags": []}]`), 0o666)

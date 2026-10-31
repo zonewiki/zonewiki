@@ -42,7 +42,15 @@ func pageRoutes(mux *http.ServeMux) {
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
-	mux.HandleFunc("GET /deck", tasksPage)
+	mux.HandleFunc("GET /tasks", tasksPage)
+	// /deck: what Tasks was called before; its links and bookmarks still work.
+	mux.HandleFunc("GET /deck", func(w http.ResponseWriter, r *http.Request) {
+		to := "/tasks"
+		if r.URL.RawQuery != "" {
+			to += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, to, http.StatusFound)
+	})
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", apiToggleCheckbox)
@@ -805,14 +813,14 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	}
 	out = append(out, pages...)
 	out = append(out,
-		M{"slug": "/deck", "title": "Tasks", "href": "/deck", "links": 0, "mtime": 0, "builtin": true},
+		M{"slug": "/tasks", "title": "Tasks", "href": "/tasks", "links": 0, "mtime": 0, "builtin": true},
 		M{"slug": "_scratch", "title": "Notes", "links": counts["_scratch"], "mtime": 0, "builtin": true})
 	writeJSON(w, http.StatusOK, out)
 }
 
-// tasksPage: /deck, every task, or with ?list= that list, looking as on the
+// tasksPage: /tasks, every task, or with ?list= that list, looking as on the
 // page that declares it (that embed's params apply). Every link to "the
-// tasks" goes here; [[deck …]] embeds are for views on ordinary pages.
+// tasks" goes here; [[tasks: …]] embeds are for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	list := cleanList(r.URL.Query().Get("list"))
@@ -820,7 +828,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	var home *TasksHome
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
-	key := "/deck"
+	key := "/tasks"
 	if list != "" {
 		if declared, ok := taskLists(rq.user)[list]; ok {
 			params = declared.Params
@@ -829,7 +837,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 		params = params.With("list", list)
 		title, heading = list+" · Tasks", list
-		crumbs = []crumb{{"Tasks", "/deck"}, {list, ""}}
+		crumbs = []crumb{{"Tasks", "/tasks"}, {list, ""}}
 		key += "?list=" + list
 	}
 	// A list declared in the user's private folder makes private tasks, as there.

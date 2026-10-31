@@ -253,7 +253,7 @@ async function planOnDay(id, day) {
 let noteCheckQueue = Promise.resolve();
 function toggleNoteCheck(id, idx) {
   noteCheckQueue = noteCheckQueue.then(async () => {
-    const res = await fetch(`/api/deck/${encodeURIComponent(id)}/toggle-check`, {
+    const res = await fetch(`/api/tasks/${encodeURIComponent(id)}/toggle-check`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idx }),
     }).catch(() => null);
     if (!res?.ok) { showNotice('Could not save the checkbox'); render(); return; }
@@ -554,10 +554,10 @@ appEl.addEventListener('focusin', claimInstance);
 const urlParams = new URLSearchParams(window.location.search);
 const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
 // WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
-// set: [[deck limit=N]], or ?limit=N (the built-in /deck page has no embed).
+// set: [[tasks: limit=N]], or ?limit=N (the built-in /tasks page has no embed).
 const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
 // Separate lists: a list is a tag that a page declares with
-// [[deck list=<tag>]]. That embed (and /deck?list=<tag>) shows the tasks
+// [[tasks: list=<tag>]]. That embed (and /tasks?list=<tag>) shows the tasks
 // carrying the tag, whose filter chip is locked there (new tasks get it;
 // a task's own tags stay editable, so a task can move to another list).
 // Elsewhere a list's tag is marked as a list but otherwise a tag: the main
@@ -577,10 +577,24 @@ function listTooltip(name) {
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
 // into the tab buttons by tasks.py, so they are read back from there).
 const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
-// [[deck keep=1]]: new tasks are keep tasks (a shopping list of staples).
+// [[tasks: keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
 // An embed on a page in the user's private folder: new tasks are private.
 const initPrivate = appEl?.dataset.initPrivate === '1';
+// The built-in page was /deck before Deck was called Tasks: what this browser
+// remembers for it (keyed by path, below) carries over to /tasks, once.
+if (location.pathname === '/tasks') {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      const m = k.match(/^(leaf-deck-\w+:)\/deck(\|.*)$/);
+      if (m && localStorage.getItem(m[1] + '/tasks' + m[2]) === null) {
+        localStorage.setItem(m[1] + '/tasks' + m[2], localStorage.getItem(k));
+      }
+      if (m) localStorage.removeItem(k);
+    }
+  } catch (_) { /* no storage: nothing remembered */ }
+}
+
 // Compact: one line per task (title, then tags, markers and dates; notes
 // hidden; selecting or a tap expands a task). The default on every tab;
 // the density button and v switch it, remembered per task list and tab in this
@@ -812,9 +826,9 @@ function inScope(t) {
 function scopeQuery() {
   return initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
-// ?view= / [[deck view=…]] pick the tab.
+// ?view= / [[tasks: view=…]] pick the tab.
 const urlView = urlParams.get('view') || '';   // explicit per-navigation override
-const embedView = appEl?.dataset.initView || '';   // [[deck view=…]] — always wins when specified
+const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
 // ?new=1 opens the new-task modal in one embed: the Tasks home if the
 // page has it (as the New buttons do), else the first.
 const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
@@ -825,7 +839,7 @@ const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl
 const thisYear = String(new Date().getFullYear());
 let completedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
   ? urlParams.get('year') : '';
-let completedYears = [];   // years Completed can show (/api/deck/completed-years)
+let completedYears = [];   // years Completed can show (/api/tasks/completed-years)
 
 // Remember the active tab per page + embed instance for the current tab only
 // (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
@@ -901,12 +915,12 @@ async function noticeFromResponse(res, fallback) {
 
 // ── API ────────────────────────────────────────────────────────────────────
 
-// /api/deck returns only open tasks, so replacing `tasks` drops the
+// /api/tasks returns only open tasks, so replacing `tasks` drops the
 // completed ones: they count as not loaded again (tasksGen tells a completed
 // load in flight that its merge target is gone).
 let tasksGen = 0;
 async function fetchTasks() {
-  const res = await fetch('/api/deck');
+  const res = await fetch('/api/tasks');
   const fetched = (await res.json()).filter(inScope);
   await renderTexts(textsOf(fetched));
   tasks = fetched;
@@ -923,7 +937,7 @@ async function fetchTasks() {
 let completedCount = null;
 async function refreshCompletedCount() {
   try {
-    const res = await fetch('/api/deck/completed-count' + scopeQuery());
+    const res = await fetch('/api/tasks/completed-count' + scopeQuery());
     if (res.ok) { completedCount = (await res.json()).count; syncCompletedLink(); }
   } catch (_) {}
 }
@@ -951,7 +965,7 @@ async function loadCompleted() {
   loadCompletedYears();
   do {
     gen = tasksGen;
-    const res = await fetch('/api/deck/completed' + (completedYear ? `?year=${completedYear}` : ''));
+    const res = await fetch('/api/tasks/completed' + (completedYear ? `?year=${completedYear}` : ''));
     completed = (await res.json()).filter(inScope);
     await renderTexts(textsOf(completed));
   } while (gen !== tasksGen);
@@ -965,7 +979,7 @@ async function loadCompleted() {
 
 async function loadCompletedYears() {
   try {
-    const res = await fetch('/api/deck/completed-years' + scopeQuery());
+    const res = await fetch('/api/tasks/completed-years' + scopeQuery());
     if (res.ok) { completedYears = (await res.json()).years; if (activeView === 'completed') render(); }
   } catch (_) {}
 }
@@ -985,7 +999,7 @@ function setCompletedYear(year) {
 }
 
 async function createTask(data) {
-  const res = await fetch('/api/deck', {
+  const res = await fetch('/api/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -1006,7 +1020,7 @@ async function createTask(data) {
 }
 
 async function updateTask(id, data) {
-  const res = await fetch(`/api/deck/${id}`, {
+  const res = await fetch(`/api/tasks/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -1076,7 +1090,7 @@ function offerUndoLeave(msg, restores) {
   if (headless) return;
   showUndo(msg, async () => {
     for (const [id, fields] of restores) {
-      const res = await fetch(`/api/deck/${id}`, {
+      const res = await fetch(`/api/tasks/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fields),
@@ -1090,7 +1104,7 @@ function offerUndoLeave(msg, restores) {
 }
 
 async function deleteTask(id) {
-  const res = await fetch(`/api/deck/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
   if (res.ok) {
     tasks = tasks.filter(t => t.id !== id);
     render();
@@ -1100,7 +1114,7 @@ async function deleteTask(id) {
 }
 
 async function deleteTasks(ids) {
-  const res = await fetch('/api/deck/batch-delete', {
+  const res = await fetch('/api/tasks/batch-delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -1155,7 +1169,7 @@ function keepSnapshot(t) {
 }
 
 async function completeTasks(ids, completed) {
-  const res = await fetch('/api/deck/batch-complete', {
+  const res = await fetch('/api/tasks/batch-complete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids, completed }),
@@ -1217,7 +1231,7 @@ async function deleteWithUndo(ids, beforeDelete) {
   dismissUndo();
   await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
   showUndo(count === 1 ? 'Task deleted' : `${count} tasks deleted`, async () => {
-    await fetch('/api/deck/restore', {
+    await fetch('/api/tasks/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: snapshot }),
@@ -1369,11 +1383,11 @@ function taskHref(task) {
   const list = taskList(task);
   if (list) params.set('list', list);
   if (task.completed_at && completedYear) params.set('year', completedYear);
-  return `/deck?${params}`;
+  return `/tasks?${params}`;
 }
 
 async function postReorder(body) {
-  await fetch('/api/deck/reorder', {
+  await fetch('/api/tasks/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -1728,7 +1742,7 @@ async function bulkTag(ids, add, remove) {
   dismissUndo();
   let res;
   try {
-    res = await fetch('/api/deck/batch-tag', {
+    res = await fetch('/api/tasks/batch-tag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids, add, remove }),
@@ -1872,7 +1886,7 @@ function runSelectionAction(action) {
 // Fields of several tasks in one request (each task its own; batch-update),
 // then the tasks reloads. False if the server refused.
 async function batchUpdate(changes) {
-  const res = await fetch('/api/deck/batch-update', {
+  const res = await fetch('/api/tasks/batch-update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tasks: changes }),
@@ -3219,7 +3233,7 @@ async function commentWrite(url, method, body) {
   refreshOtherInstances(instanceId);
   return updated;
 }
-const commentsUrl = id => `/api/deck/${encodeURIComponent(id)}/comments`;
+const commentsUrl = id => `/api/tasks/${encodeURIComponent(id)}/comments`;
 async function addComment() {
   const text = commentInput.value.trim();
   if (!text || !commentsTaskId) return;
@@ -3932,16 +3946,16 @@ openEdit = openEditModal;
 // ── Init ───────────────────────────────────────────────────────────────────
 
 // Apply URL-param pre-filtering
-// [[deck tag=…]] / ?tag= and ?search= all land in the one filter field.
+// [[tasks: tag=…]] / ?tag= and ?search= all land in the one filter field.
 const initSearch = urlParams.get('search') || '';
-// ?tag= / [[deck tag=…]] arrive as chips, ?search= as text.
+// ?tag= / [[tasks: tag=…]] arrive as chips, ?search= as text.
 if (filterSearch) {
   filterChips.set(tagParamToQuery(initTag).split(' ').filter(Boolean), true);
   filterSearch.value = initSearch || '';
 }
 // Precedence: URL ?view= > embed view (always wins when specified) >
-// tab remembered this session > Focus default. So a [[deck view=…]] embed
-// always opens on its configured tab; a plain [[deck]] remembers the tab the
+// tab remembered this session > Focus default. So a [[tasks: view=…]] embed
+// always opens on its configured tab; a plain [[tasks:]] remembers the tab the
 // user last clicked across refreshes within the same browser tab. A name that
 // isn't one of VIEWS is passed over.
 activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';

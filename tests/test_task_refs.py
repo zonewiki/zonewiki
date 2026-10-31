@@ -10,13 +10,13 @@ from tests.conftest import HOST, write_page
 
 
 def task(client, **fields):
-    resp = client.post("/api/deck", json=fields, headers=HOST)
+    resp = client.post("/api/tasks", json=fields, headers=HOST)
     assert resp.status_code == 201, resp.get_json()
     return resp.get_json()
 
 
 def put(client, task_id, **fields):
-    resp = client.put(f"/api/deck/{task_id}", json=fields, headers=HOST)
+    resp = client.put(f"/api/tasks/{task_id}", json=fields, headers=HOST)
     assert resp.status_code == 200, resp.get_json()
     return resp.get_json()
 
@@ -37,7 +37,7 @@ class TestRendering:
         write_page(wiki_dir, "notes", f"# Notes\n\nRemember [[task:{t['id'][:8]}]] today.\n")
         body = view(client)
         assert f'<span class="task-ref" data-task-id="{t["id"]}">' in body
-        assert f'href="/deck?task={t["id"]}&amp;view=open"' in body
+        assert f'href="/tasks?task={t["id"]}&amp;view=open"' in body
         assert ">Call the plumber</a>" in body
         assert 'aria-label="Done: Call the plumber">' in body   # not checked
         assert "[[task:" not in body
@@ -60,7 +60,7 @@ class TestRendering:
         body = view(client)
         assert f'<span class="task-ref task-ref-done" data-task-id="{a["id"]}">' in body
         assert 'aria-label="Done: Finished" checked>' in body
-        assert f'href="/deck?task={a["id"]}&amp;view=completed"' in body
+        assert f'href="/tasks?task={a["id"]}&amp;view=completed"' in body
         assert f'<span class="task-ref task-ref-wontdo" data-task-id="{b["id"]}">' in body
         assert 'aria-label="Done: Dropped" disabled>' in body
         assert "won&#x27;t do" in body or "won't do" in body
@@ -79,7 +79,7 @@ class TestRendering:
         soon = task(client, title="Soon", start_date=day(3), due_date=day(0))
         keep = task(client, title="Milk", keep=True, tags=["shop"])
         put(client, keep["id"], completed=True)          # keep: stays open, ✓ today
-        write_page(wiki_dir, "shopping", "# Shopping\n\n[[deck list=groceries]]\n")
+        write_page(wiki_dir, "shopping", "# Shopping\n\n[[tasks: list=groceries]]\n")
         listed = task(client, title="Eggs", tags=["groceries"])
         write_page(wiki_dir, "notes", "# N\n\n" + " ".join(
             f"[[task:{t['id'][:8]}]]" for t in (late, soon, keep, listed)) + "\n")
@@ -88,7 +88,7 @@ class TestRendering:
         assert 'class="task-ref-badge task-ref-due due-today"' in body
         assert 'class="task-ref-badge task-ref-start start-later"' in body
         assert f'⟲ ✓ <time class="local-date" datetime="{day(0)}">' in body
-        assert f'href="/deck?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
+        assert f'href="/tasks?task={listed["id"]}&amp;view=open&amp;list=groceries"' in body
         assert '<span class="task-ref-badge task-ref-list">groceries</span>' in body
 
     def test_alone_in_a_list_item_is_a_row(self, client, wiki_dir):
@@ -134,33 +134,33 @@ class TestTwoLists:
     list rather than to its first list A–Z."""
 
     def _setup(self, client, wiki_dir):
-        write_page(wiki_dir, "ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
+        write_page(wiki_dir, "ideas", "# Ideas\n\n[[tasks: list=presentideas]]\n")
         t = task(client, title="Lego for Sam", tags=["presentideas", "task"],
                  description="see [[todo]]")
-        write_page(wiki_dir, "todo", f"# Todo\n\n[[deck list=task]]\n\n[[task:{t['id'][:8]}]]\n")
+        write_page(wiki_dir, "todo", f"# Todo\n\n[[tasks: list=task]]\n\n[[task:{t['id'][:8]}]]\n")
         return t
 
     def test_chip_links_to_the_list_the_page_declares(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         body = view(client, "todo")
-        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in body
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=task"' in body
         assert '<span class="task-ref-badge task-ref-list">task</span>' in body
 
     def test_elsewhere_the_first_list_wins(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
-        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
 
     def test_page_declaring_a_list_the_task_is_not_in(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
-        write_page(wiki_dir, "notes", f"# N\n\n[[deck list=groceries]]\n\n[[task:{t['id'][:8]}]]\n")
-        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
+        write_page(wiki_dir, "notes", f"# N\n\n[[tasks: list=groceries]]\n\n[[task:{t['id'][:8]}]]\n")
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
 
     def test_linked_tasks_link_to_the_pages_list(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
-        write_page(wiki_dir, "todo", "# Todo\n\n[[deck list=task]]\n")   # no chip: Linked tasks
+        write_page(wiki_dir, "todo", "# Todo\n\n[[tasks: list=task]]\n")   # no chip: Linked tasks
         linked = view(client, "todo").split('id="task-backlinks"', 1)[1]
-        assert f'href="/deck?task={t["id"]}&amp;view=open&amp;list=task"' in linked
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=task"' in linked
 
     def test_preview_with_lists_param(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
@@ -196,7 +196,7 @@ class TestMcp:
         text = resp.get_json()["result"]["content"][0]["text"]
         assert f"[[task:{t['id'][:8]}]] and [[task:deadbeef]]" in text      # raw page kept
         assert f"- [[task:{t['id'][:8]}]]: Book flights (open, due 2030-01-02) " in text
-        assert f"/deck?task={t['id']}&view=open" in text
+        assert f"/tasks?task={t['id']}&view=open" in text
         assert "- [[task:deadbeef]]: no such task (deleted)" in text
 
 

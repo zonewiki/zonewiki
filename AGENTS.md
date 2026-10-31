@@ -31,7 +31,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 ## Goals & Principles
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
-- **Markdown is the source of truth** — `.md` files in the data directory (`$LEAF_DATA`) are the wiki content. Deliberate exception: Tasks live in `_deck/tasks.json`/`_deck/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+- **Markdown is the source of truth** — `.md` files in the data directory (`$LEAF_DATA`) are the wiki content. Deliberate exception: Tasks live in `_tasks/tasks.json`/`_tasks/completed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -49,7 +49,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
-| Storage             | Plain `.md` files in `$LEAF_DATA` (tasks in `_deck/*.json`) |
+| Storage             | Plain `.md` files in `$LEAF_DATA` (tasks in `_tasks/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
@@ -96,14 +96,15 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
-│   ├── render.go           # A page's render: wikilinks, [[deck]], [[task:…]], frontmatter, sources
+│   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── scratch.go          # Scratch notes: create, Move to wiki, Append to page (the routes and MCP share it)
+│   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (_deck/ → _tasks/)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
-│   ├── tasks.go            # Tasks: the /api/deck routes (their task writes as functions the MCP tools share), the [[deck]] embed
-│   ├── taskstore.go        # Tasks on disk: _deck/ files (users' private ones in private/<user>/_deck/), lock, recurrence, history, comments, backlinks, search docs
-│   ├── tasksyntax.go       # The page syntax of tasks: [[deck …]] params, [[task:…]], tag rules, date words
+│   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
+│   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
+│   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
 │   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
@@ -152,7 +153,7 @@ Keep the structure flat. Do not add subdirectories under `pages/` unless the use
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
-Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `LEAF_DATA`, `LEAF_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_deck/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
+Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `LEAF_DATA`, `LEAF_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.leaf/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `LEAF_DATA` (default `~/leaf`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the semantic cache and session key in `.leaf/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
@@ -219,7 +220,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
   - `password` in `.leaf/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.leaf/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.leaf/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_deck/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.leaf/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.leaf/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `LEAF_ALLOW_REMOTE=1` without `hosts` skips it.
@@ -229,6 +230,6 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - `LEAF_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 - Slugs are file paths relative to `LEAF_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`). Subdirectories are supported; `toSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders. Routes take the rest of the path as the slug (`{slug...}`).
-- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_deck/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
+- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.leaf/`, `.git/`, `_tasks/` …) before reading or writing; create parent folders (`os.MkdirAll`); write UTF-8 (`writeText`).
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing). It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).

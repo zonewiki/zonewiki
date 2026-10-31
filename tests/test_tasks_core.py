@@ -338,7 +338,7 @@ class TestFilterField:
         ("work,-mary", "#work -#mary"),
     ])
     def test_tag_param_to_query(self, raw, q):
-        # [[deck tag=…]] keeps its old syntax: comma = all, pipe = any.
+        # [[tasks: tag=…]] keeps its old syntax: comma = all, pipe = any.
         assert run_core(f"TasksCore.tagParamToQuery({json.dumps(raw)})") == q
 
 

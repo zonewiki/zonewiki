@@ -2,7 +2,7 @@
  {
   "name": "search_wiki",
   "title": "Search the wiki",
-  "description": "Search the user's wiki and return the most relevant page sections with their full text, best first, each with its page, the page's last edit date (to tell current notes from stale ones) and a link. Several sections may come from the same page. Deck tasks that match are results too, with their status, tags, dates and notes.",
+  "description": "Search the user's wiki and return the most relevant page sections with their full text, best first, each with its page, the page's last edit date (to tell current notes from stale ones) and a link. Several sections may come from the same page. Tasks that match are results too, with their status, tags, dates and notes.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -39,7 +39,7 @@
  {
   "name": "search_tasks",
   "title": "Search tasks",
-  "description": "List the user's deck tasks, filtered by tag and status, each with status, tags, start and due dates, repeat, notes and a link. Without a query, open tasks come by deadline, then start date; done ones newest first. With a query, by relevance. Starts with today's date.",
+  "description": "List the user's tasks, filtered by tag and status, each with status, tags, start and due dates, repeat, notes and a link. Without a query, open tasks come by deadline, then start date; done ones newest first. With a query, by relevance. Starts with today's date.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -77,7 +77,7 @@
  {
   "name": "grep_wiki",
   "title": "Find lines in the wiki",
-  "description": "Find every line of every page that matches a regular expression, as page slug, line number and line: for exact text and all its occurrences (ticket ids, names, TODOs, an old term to replace), where search_wiki gives only the most relevant sections. Perl-style regex (\\d, \\b, (?:…), lookarounds); escape . ( [ and such to match them literally. Pages only, not deck tasks.",
+  "description": "Find every line of every page that matches a regular expression, as page slug, line number and line: for exact text and all its occurrences (ticket ids, names, TODOs, an old term to replace), where search_wiki gives only the most relevant sections. Perl-style regex (\\d, \\b, (?:…), lookarounds); escape . ( [ and such to match them literally. Pages only, not tasks.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -155,7 +155,7 @@
     "orphans": {
      "type": "boolean",
      "default": false,
-     "description": "Only pages no other page links to (the home page, the deck's home and scratch notes aside): candidates to link from somewhere."
+     "description": "Only pages no other page links to (the home page, the Tasks home and scratch notes aside): candidates to link from somewhere."
     },
     "scratch": {
      "type": "boolean",
@@ -239,17 +239,17 @@
  {
   "name": "leaf_help",
   "title": "Zone's documentation",
-  "description": "Search Zone's own documentation (its README and its spec) for how Zone works: features, markdown syntax ([[deck …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Zone's developers: answer the user in terms of what they type or click, leaving out function and file names.",
+  "description": "Search Zone's own documentation (its README and its spec) for how Zone works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Zone's developers: answer the user in terms of what they type or click, leaving out function and file names.",
   "inputSchema": {
    "type": "object",
    "properties": {
     "query": {
      "type": "string",
-     "description": "What to look for, in words the docs would use, e.g. 'deck tab labels' or 'rename page'."
+     "description": "What to look for, in words the docs would use, e.g. 'tasks tab labels' or 'rename page'."
     },
     "topic": {
      "type": "string",
-     "description": "A doc to read, as the results name it: 'readme', 'deck', 'editor', 'navigation', …"
+     "description": "A doc to read, as the results name it: 'readme', 'tasks', 'editor', 'navigation', …"
     },
     "heading": {
      "type": "string",
@@ -702,7 +702,7 @@
  {
   "name": "create_task",
   "title": "Create a task",
-  "description": "Add a task to the user's deck. Returns it with its id, and the tags of similar tasks: offer the fitting ones to the user (update_task's add_tags adds them).",
+  "description": "Add a task to the user's tasks. Returns it with its id, and the tags of similar tasks: offer the fitting ones to the user (update_task's add_tags adds them).",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -760,7 +760,7 @@
     },
     "private": {
      "type": "boolean",
-     "description": "With users: seen by the user alone. Default: private if their deck home is in their private folder."
+     "description": "With users: seen by the user alone. Default: private if their Tasks home is in their private folder."
     },
     "summary": {
      "type": "string",
@@ -781,7 +781,7 @@
  {
   "name": "update_task",
   "title": "Update, comment on or delete tasks",
-  "description": "Change a deck task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (abandon it), skip (won't do this occurrence, the series goes on), open (reopen), deleted (gone for good, only in the git history: for a task made by mistake; to end a task use done or wont_do). comment adds a dated status line. With ids instead of id: add_tags/remove_tags on several tasks in one change. Case is ignored; list_tags shows the tags in use: reuse those.",
+  "description": "Change a task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (abandon it), skip (won't do this occurrence, the series goes on), open (reopen), deleted (gone for good, only in the git history: for a task made by mistake; to end a task use done or wont_do). comment adds a dated status line. With ids instead of id: add_tags/remove_tags on several tasks in one change. Case is ignored; list_tags shows the tags in use: reuse those.",
   "inputSchema": {
    "type": "object",
    "properties": {

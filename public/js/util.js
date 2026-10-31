@@ -211,7 +211,7 @@ export function showToast(msg, undo, label = 'Undo') {
 
 // PUT fields of a task (the task chips here, tasks.js's batched writes).
 export function putTask(id, body) {
-  return fetch(`/api/deck/${encodeURIComponent(id)}`, {
+  return fetch(`/api/tasks/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
 }

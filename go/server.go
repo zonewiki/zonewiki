@@ -72,6 +72,7 @@ func main() {
 	gitSetup()
 	excludeLeafState(cfg.Data) // the secret key, the caches; not the settings file
 	commitSettings("Change settings")
+	migrateNames() // before anything reads the tasks
 	ensureHomePage()
 	cleanLeftDrafts()
 	initTasks()

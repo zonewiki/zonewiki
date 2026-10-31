@@ -132,7 +132,7 @@ A slow, forgiving loaf: mix in the evening, bake the next morning.
 - *A Pattern Language*, Christopher Alexander
 - [[Projects/Garden shed]] links: *The Backyard Builder*
 """,
-    "tasks": "# Tasks\n\n[[deck view=focus home=1]]\n",
+    "tasks": "# Tasks\n\n[[tasks: view=focus home=1]]\n",
 }
 
 TASKS = [
@@ -176,8 +176,8 @@ def main():
                    config="")       # the wiki has its own (above)
     base = f"http://127.0.0.1:{srv.port}"
 
-    ids = [post(base, "/api/deck", t)["id"] for t in TASKS]
-    post(base, f"/api/deck/{ids[0]}/comments", {"text": "Hardware store has them on Saturday."})
+    ids = [post(base, "/api/tasks", t)["id"] for t in TASKS]
+    post(base, f"/api/tasks/{ids[0]}/comments", {"text": "Hardware store has them on Saturday."})
     # A task inline on the page, as a chip.
     shed = WIKI / "projects/garden-shed.md"
     shed.write_text(shed.read_text().replace(
@@ -205,7 +205,7 @@ def main():
 
         # 2. The tasks' Open tab with Plan on: the board.
         pg = page(1280, 820)
-        pg.goto("/deck?view=plan")
+        pg.goto("/tasks?view=plan")
         settle(pg)
         pg.screenshot(path=OUT / "tasks.png")
 

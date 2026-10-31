@@ -115,7 +115,7 @@ func diffLines(diff string) []diffLine {
 // aria-current, and js/actions.js makes "New" create that module's kind.
 // With users the switcher has two groups (the third field, 0 and 1): Wiki and
 // Tasks, then Private and Scratch; without users one.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/deck"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/tasks"}, {"private", "Private", "/private"}, {"scratch", "Notes", "/page/_scratch"}}
 
 // taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js taskCountsTitle builds the same).
@@ -192,7 +192,7 @@ func currentModule(rq *Req) string {
 	}
 	p := rq.r.URL.Path
 	switch p {
-	case "/deck":
+	case "/tasks":
 		return "tasks"
 	case "/search", "/login":
 		return ""

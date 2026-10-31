@@ -93,7 +93,7 @@ def test_phone_tab_bar_marks_and_opens_modules(new_page, wiki):
     tab = lambda m: phone.locator(f".action-buttons .action-module[data-module={m}]")
     expect(tab("wiki")).to_have_attribute("aria-current", "page")
     tab("tasks").tap()
-    phone.wait_for_url("**/deck")
+    phone.wait_for_url("**/tasks")
     expect(tab("tasks")).to_have_attribute("aria-current", "page")
     expect(tab("wiki")).not_to_have_attribute("aria-current", "page")
     tab("scratch").tap()
@@ -121,7 +121,7 @@ def test_note_creates_a_scratch_note(new_page, wiki):
 
 
 def test_task_adds_a_task_to_your_tasks_from_the_wiki(new_page, wiki):
-    wiki.write("tasks", "# My tasks\n\n[[deck list=task view=focus home=1]]\n")
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
     phone.locator(".action-task").tap()
@@ -133,7 +133,7 @@ def test_task_adds_a_task_to_your_tasks_from_the_wiki(new_page, wiki):
 
 def test_task_creates_a_task_in_the_tasks(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
-    phone.goto("/deck")
+    phone.goto("/tasks")
     phone.locator(".action-task").tap()
     expect(phone.locator(".task-edit-modal[open]")).to_be_visible()
 
@@ -144,7 +144,7 @@ def test_tasks_tab_counts_stand_beside_the_icon(new_page, wiki):
     # icon, due above Focus, clear of the label and of the next tab's icon.
     phone = new_page(**{**TOUCH_PHONE, "viewport": {"width": 320, "height": 640}})
     for i in range(12):
-        phone.request.post("/api/deck", data={
+        phone.request.post("/api/tasks", data={
             "title": f"Task {i}", "due_date": "2020-01-01", "start_date": date.today().isoformat()})
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
@@ -167,7 +167,7 @@ def test_tasks_tab_counts_stand_beside_the_icon(new_page, wiki):
 
 def test_tasks_tab_shows_the_due_count(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
-    phone.request.post("/api/deck", data={"title": "Pay rent", "due_date": date.today().isoformat()})
+    phone.request.post("/api/tasks", data={"title": "Pay rent", "due_date": date.today().isoformat()})
     phone.goto("/page/index")
     due = phone.locator(".action-buttons .module-due")
     expect(due).to_have_text("1")
@@ -201,8 +201,8 @@ def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
     # the browser's click, so where the browser would send it doesn't matter.
     phone = new_page(**TOUCH_PHONE)
     for i in range(30):
-        phone.request.post("/api/deck", data={"title": f"Task {i}"})
-    phone.goto("/deck")
+        phone.request.post("/api/tasks", data={"title": f"Task {i}"})
+    phone.goto("/tasks")
     open_tab(phone, "open")
     phone.evaluate("scrollTo(0, 400)")
     _count_trusted_clicks(phone)
@@ -210,7 +210,7 @@ def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
         _touch_tap(phone, phone.locator(".action-module[data-module=scratch]"))
     assert phone.url.endswith("/page/_scratch")
     assert phone.evaluate("sessionStorage.trusted") == "0"
-    phone.goto("/deck")
+    phone.goto("/tasks")
     _count_trusted_clicks(phone)
     _touch_tap(phone, phone.locator(".action-scratch"))
     expect(phone.locator("#scratch-modal")).to_be_visible()      # opened once, by the touch
@@ -226,8 +226,8 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
     # cards, as Firefox has it: the tap still goes to the tab above.
     phone = new_page(**TOUCH_PHONE)
     for i in range(30):
-        phone.request.post("/api/deck", data={"title": f"Task {i}"})
-    phone.goto("/deck")
+        phone.request.post("/api/tasks", data={"title": f"Task {i}"})
+    phone.goto("/tasks")
     open_tab(phone, "open")
     phone.evaluate("scrollTo(0, 400)")
     phone.evaluate("document.querySelector('.action-buttons').style.bottom = '40px'")
@@ -296,7 +296,7 @@ def test_top_actions_open_scratch_and_search(page, wiki):
 # ── New task: the Tasks home decides ────────────────────────────────────────
 # The New task button and c t give a new task the Tasks home's tags.
 
-def _home(wiki, embed="[[deck list=task view=focus home=1]]"):
+def _home(wiki, embed="[[tasks: list=task view=focus home=1]]"):
     wiki.write("tasks", f"# My tasks\n\n{embed}\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
 
@@ -316,7 +316,7 @@ def test_new_task_button_stays_on_the_page(page, wiki):
     modal.locator("[id^=task-edit-title]").fill("Order seeds")
     page.keyboard.press("Enter")
     expect(page.locator(".task-undo-toast")).to_contain_text("Added “Order seeds” to your tasks")
-    tasks = page.request.get("/api/deck").json()
+    tasks = page.request.get("/api/tasks").json()
     assert [(t["title"], t["tags"], t["start_date"]) for t in tasks] == [("Order seeds", ["task"], date.today().isoformat())]
     # A second time doesn't load the tasks again.
     page.keyboard.press("c")
@@ -326,7 +326,7 @@ def test_new_task_button_stays_on_the_page(page, wiki):
 
 
 def test_new_task_start_follows_the_homes_view(page, wiki):
-    _home(wiki, "[[deck list=task view=open home=1]]")
+    _home(wiki, "[[tasks: list=task view=open home=1]]")
     page.goto("/page/garden")
     page.locator(".top-task").click()
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-start]")).to_have_value("")
@@ -335,7 +335,7 @@ def test_new_task_start_follows_the_homes_view(page, wiki):
 def test_new_task_falls_back_to_the_home_page(page, wiki):
     # Should the hidden tasks fail to load, the home page opens with the modal.
     _home(wiki)
-    page.route("**/api/deck/headless", lambda route: route.fulfill(status=500, body="no"))
+    page.route("**/api/tasks/headless", lambda route: route.fulfill(status=500, body="no"))
     page.goto("/page/garden")
     page.locator(".top-task").click()
     page.wait_for_url(re.compile(r"/page/tasks(\?.*)?$"))
@@ -353,17 +353,17 @@ def test_new_task_button_on_the_home_page(page, wiki):
 
 
 def test_new_task_on_another_tasks_gets_the_homes_tags(page, wiki):
-    # A page with another task list (here /deck, every task): the modal opens
+    # A page with another task list (here /tasks, every task): the modal opens
     # there, but with the home's tags and keep, not that task list's filter.
-    _home(wiki, "[[deck list=shop keep=1 home=1]]")
-    page.goto("/deck?tag=garden")
+    _home(wiki, "[[tasks: list=shop keep=1 home=1]]")
+    page.goto("/tasks?tag=garden")
     page.locator(".top-task").click()
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip")).to_have_count(1)
     expect(modal.locator(".tag-chip")).to_contain_text("shop")
     expect(modal.locator("[id^=task-edit-keep]")).to_be_checked()
-    assert "/deck" in page.url
+    assert "/tasks" in page.url
 
 
 def test_new_task_without_a_home_has_no_tags(page, wiki):
@@ -380,7 +380,7 @@ def test_new_task_without_a_home_has_no_tags(page, wiki):
 def test_c_t_in_the_editor_tags_like_the_home(page, wiki):
     # The editor has a hidden tasks: the modal opens right there. (Not the
     # old fixed #task: c t once always tagged that.)
-    _home(wiki, "[[deck list=work home=1]]")
+    _home(wiki, "[[tasks: list=work home=1]]")
     page.goto("/edit/garden")
     page.locator("#editor-textarea").evaluate("el => el.blur()")
     page.keyboard.press("c")
@@ -398,11 +398,11 @@ def test_g_t_goes_to_the_home_tasks(page, wiki):
     page.keyboard.press("g")
     page.keyboard.press("t")
     page.wait_for_url("**/page/tasks")
-    wiki.write("tasks", "# My tasks\n\n[[deck list=task]]\n")   # no home any more
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task]]\n")   # no home any more
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
-    page.wait_for_url(re.compile(r"/deck$"))
+    page.wait_for_url(re.compile(r"/tasks$"))
 
 
 
@@ -418,7 +418,7 @@ def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
     page.wait_for_url("**/page/_scratch")
     page.keyboard.press("g")
     page.keyboard.press("a")
-    page.wait_for_url(re.compile(r"/deck$"))
+    page.wait_for_url(re.compile(r"/tasks$"))
 
 
 def test_the_keys_from_before_the_rename_still_work(page, wiki):
@@ -434,7 +434,7 @@ def test_the_keys_from_before_the_rename_still_work(page, wiki):
     page.wait_for_url("**/page/_scratch")
     page.keyboard.press("g")
     page.keyboard.press("d")
-    page.wait_for_url(re.compile(r"/deck$"))
+    page.wait_for_url(re.compile(r"/tasks$"))
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
 # The breadcrumb starts with the modules: Wiki (with the logo), Tasks, Scratch
@@ -452,7 +452,7 @@ def test_desktop_breadcrumb_switches_modules(page, wiki):
     assert all(abs(b["y"] - boxes[0]["y"]) < 3 for b in boxes)
     assert boxes[-1]["x"] + boxes[-1]["width"] < title["x"]
     page.locator(".breadcrumb .module-link[data-module=tasks]").click()
-    page.wait_for_url("**/deck")
+    page.wait_for_url("**/tasks")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("aria-current", "page")
     page.locator(".breadcrumb .module-link[data-module=scratch]").click()
     page.wait_for_url("**/page/_scratch")
@@ -477,8 +477,8 @@ def test_desktop_switcher_is_set_apart_from_the_trail(page, wiki):
 
 
 def test_desktop_breadcrumb_tasks_link_shows_the_due_count(page, wiki):
-    page.request.post("/api/deck", data={"title": "Overdue", "due_date": "2020-01-01"})
-    page.request.post("/api/deck", data={"title": "Due today", "due_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Overdue", "due_date": "2020-01-01"})
+    page.request.post("/api/tasks", data={"title": "Due today", "due_date": date.today().isoformat()})
     page.goto("/page/index")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("2")
@@ -490,10 +490,10 @@ def test_task_counts_are_in_the_page_before_any_script(page, wiki):
     # Regression: the counts came from a fetch after the page had painted, so
     # the Tasks link grew a moment later on every page load (flicker). The
     # server renders them; with scripts off they are there all the same.
-    page.request.post("/api/deck", data={"title": "Pay rent", "due_date": date.today().isoformat()})
-    page.request.post("/api/deck", data={"title": "Water plants", "start_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Pay rent", "due_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Water plants", "start_date": date.today().isoformat()})
     page.route("**/public/leaf.js", lambda route: route.abort())
-    page.route("**/api/deck/due-count", lambda route: route.abort())
+    page.route("**/api/tasks/due-count", lambda route: route.abort())
     page.goto("/page/index")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("1")
@@ -503,8 +503,8 @@ def test_task_counts_are_in_the_page_before_any_script(page, wiki):
 
 def test_task_counts_follow_tasks_changes(page, wiki):
     # A task started from the tasks shows up in the Focus count at once.
-    page.request.post("/api/deck", data={"title": "Water plants"})
-    page.goto("/deck?view=open")
+    page.request.post("/api/tasks", data={"title": "Water plants"})
+    page.goto("/tasks?view=open")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-focus")).to_be_hidden()
     page.locator(".task-item").first.click()
@@ -513,13 +513,13 @@ def test_task_counts_follow_tasks_changes(page, wiki):
 
 
 def test_tasks_home_page_is_the_tasks_module(page, wiki):
-    # [[deck … home=1]]: your own tasks. The Tasks links go there, it counts
+    # [[tasks: … home=1]]: your own tasks. The Tasks links go there, it counts
     # as the Tasks module, New task adds one in its embed (with its list tag),
     # and it is no stop in the navigation trail.
-    wiki.write("tasks", "# My tasks\n\n[[deck list=task view=focus home=1]]\n")
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
-    page.request.post("/api/deck", data={"title": "Milk", "tags": "shop", "due_date": date.today().isoformat()})
-    page.request.post("/api/deck", data={"title": "Pay rent", "tags": "task", "due_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Pay rent", "tags": "task", "due_date": date.today().isoformat()})
     page.goto("/page/garden")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("1")   # the #task list's only
@@ -581,8 +581,8 @@ def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
 # ── Compact Plan board ───────────────────────────────────────────────────────
 
 def test_empty_sections_are_single_rows(page, wiki):
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
-    page.request.post("/api/deck", data={"title": "Today's", "start_date": date.today().isoformat()})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    page.request.post("/api/tasks", data={"title": "Today's", "start_date": date.today().isoformat()})
     page.goto("/page/tasks?view=open")
     open_tab(page, "plan")
     empties = page.locator(".board-day-divider.board-day--empty")
@@ -600,7 +600,7 @@ def test_empty_sections_are_single_rows(page, wiki):
 
 
 def test_empty_sections_are_finger_sized_on_touch(new_page, wiki):
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/tasks?view=open")
     open_tab(phone, "plan")
@@ -611,9 +611,9 @@ def test_empty_sections_are_finger_sized_on_touch(new_page, wiki):
 def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     # Nothing may grow or shift when a card is picked up: the section you
     # aim at has to stay where it was.
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     phone = new_page(**TOUCH_PHONE)
-    phone.request.post("/api/deck", data={"title": "Water plants",
+    phone.request.post("/api/tasks", data={"title": "Water plants",
                                           "start_date": date.today().isoformat()})
     phone.goto("/page/tasks?view=open")
     open_tab(phone, "plan")

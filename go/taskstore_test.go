@@ -11,14 +11,14 @@ import (
 	"testing"
 )
 
-// A list is declared by a page's [[deck list=…]], outside code; the first
+// A list is declared by a page's [[tasks: list=…]], outside code; the first
 // page A–Z is its home. A task belongs to the first (A–Z) of its tags that
 // is a list.
 func TestTasksLists(t *testing.T) {
 	testWiki(t, map[string]string{
-		"shop": "# Shop\n\n[[deck list=Groceries keep=1 labels=Catalogue,,Shopping]]\n",
-		"code": "# Code\n\n`[[deck list=nope]]`\n\n```\n[[deck list=nada]]\n```\n",
-		"home": "# Home\n\n[[deck list=chores]]\n",
+		"shop": "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping]]\n",
+		"code": "# Code\n\n`[[tasks: list=nope]]`\n\n```\n[[tasks: list=nada]]\n```\n",
+		"home": "# Home\n\n[[tasks: list=chores]]\n",
 	})
 	lists := taskLists("")
 	var names []string
@@ -35,7 +35,7 @@ func TestTasksLists(t *testing.T) {
 			t.Errorf("taskList(%q) = %q, want %q", tags, got, want)
 		}
 	}
-	putPage(t, "a-list", "# A\n\n[[deck list=groceries]]\n")
+	putPage(t, "a-list", "# A\n\n[[tasks: list=groceries]]\n")
 	if home := taskLists("")["groceries"].Slug; home != "a-list" {
 		t.Errorf("home %q", home)
 	}
@@ -152,7 +152,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if got := titles(readTasks("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("Zone sees %v", got)
 	}
-	shared, own := fileText(t, tasksFile("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_deck/tasks.json"))
+	shared, own := fileText(t, tasksFile("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_tasks/tasks.json"))
 	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
 		strings.Contains(own, "Shared one") || strings.Contains(own+shared, `"private"`) {
 		t.Errorf("files:\n%s\n%s", shared, own)
@@ -226,7 +226,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 }
 
 // A task moving from a private file to the shared one is never missing
-// from a read (GET /api/deck, allTasks): the move writes two files.
+// from a read (GET /api/tasks, allTasks): the move writes two files.
 func TestReadsSeeAMovingTask(t *testing.T) {
 	const n = 100
 	for name, read := range map[string]func(string) []*Task{"openTasks": openTasks, "allTasks": allTasks} {
@@ -283,8 +283,8 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 // wins over a shared one; a list declared on a private page is its owner's.
 func TestTasksHomeAndListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"tasks":                "# Tasks\n\n[[deck home=1]]\n",
-		"private/alice/mine":  "# Mine\n\n[[deck home=1 list=secret]]\n",
+		"tasks":                "# Tasks\n\n[[tasks: home=1]]\n",
+		"private/alice/mine":  "# Mine\n\n[[tasks: home=1 list=secret]]\n",
 		"private/bob/nothing": "# Nothing\n",
 	})
 	withUsers(t, "alice", "bob")
@@ -309,10 +309,10 @@ func TestTasksHomeAndListsPerUser(t *testing.T) {
 // only when the request says so.
 func TestTasksListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"tasks/gifts":          "# Gifts\n\n[[deck list=gifts]]\n",
-		"private/alice/gifts": "# My gifts\n\n[[deck list=gifts]]\n",
-		"private/alice/diary": "# Diary\n\n[[deck list=diary]]\n",
-		"zebra":               "# Z\n\n[[deck list=diary]]\n",
+		"tasks/gifts":          "# Gifts\n\n[[tasks: list=gifts]]\n",
+		"private/alice/gifts": "# My gifts\n\n[[tasks: list=gifts]]\n",
+		"private/alice/diary": "# Diary\n\n[[tasks: list=diary]]\n",
+		"zebra":               "# Z\n\n[[tasks: list=diary]]\n",
 	})
 	withUsers(t, "alice", "bob")
 	lists := taskLists("alice")
@@ -391,5 +391,31 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	data.set("private", true)
 	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {
 		t.Error("shared again, then private")
+	}
+}
+
+// A _deck/ the start-up move left (the rename failed) is read and written
+// while there is no _tasks/; once there is one, that one.
+func TestTasksDirFallsBackToTheOldFolder(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice")
+	for _, owner := range []string{"", "alice"} {
+		base := cfg.Data
+		if owner != "" {
+			base = filepath.Join(cfg.Data, privateDir, owner)
+		}
+		_ = os.RemoveAll(filepath.Join(base, tasksDirName))
+		if err := os.MkdirAll(filepath.Join(base, legacyTasksDirName), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if got := tasksDir(owner); got != filepath.Join(base, legacyTasksDirName) {
+			t.Errorf("tasksDir(%q) = %s with only _deck/", owner, got)
+		}
+		if err := os.Mkdir(filepath.Join(base, tasksDirName), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if got := tasksDir(owner); got != filepath.Join(base, tasksDirName) {
+			t.Errorf("tasksDir(%q) = %s with both", owner, got)
+		}
 	}
 }

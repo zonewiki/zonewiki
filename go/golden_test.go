@@ -128,7 +128,7 @@ func TestGolden(t *testing.T) {
 		check("parse_date_word", text, nilIfEmpty(parseDateWord(text, day)), c["parse_date_word"])
 		params := [][]string{}
 		for _, m := range tasksRE.FindAllStringSubmatch(text, -1) {
-			p := parseTasksParams(m[1])
+			p := parseTasksParams(embedArgs(m))
 			for _, k := range p.keys {
 				params = append(params, []string{k, p.m[k]})
 			}

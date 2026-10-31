@@ -93,7 +93,7 @@ Zone's version is a semver constant, `version` in `go/config.go`, bumped by hand
 
 ## Data directory
 
-Set `LEAF_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Zone creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Zone needs `LEAF_DATA` set (there is no default; unset or empty, it exits with "LEAF_DATA isn't set"), and the folder must exist too. In an existing wiki folder Zone creates what it needs (`_assets/`, `_deck/`, `index.md`):
+Set `LEAF_DATA` in `.env` to any host path (default: `~/leaf`). `run.sh` expands a leading `~` to your home directory before starting the container. The folder must exist: neither `run.sh up` nor Zone creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else. Started without the container, Zone needs `LEAF_DATA` set (there is no default; unset or empty, it exits with "LEAF_DATA isn't set"), and the folder must exist too. In an existing wiki folder Zone creates what it needs (`_assets/`, `_tasks/`, `index.md`):
 
 ```
 LEAF_DATA=~/leaf        # or /home/user/my-wiki, /mnt/nas/wiki, etc.
@@ -103,7 +103,7 @@ Inside the container it is always mounted at `/wiki-data`. Layout:
 - `$LEAF_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$LEAF_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
 - `$LEAF_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a private page's in `private/<user>/_assets/`
-- `$LEAF_DATA/_deck/` — the tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_deck/`
+- `$LEAF_DATA/_tasks/` — the tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
 - `$LEAF_DATA/.leaf/` — Zone's own state: `config` (the settings file: the wiki's settings and users, committed, `docs/spec/users.md`); not in git: `secret_key` (session key) and `index/` (the semantic search cache, rebuildable)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.

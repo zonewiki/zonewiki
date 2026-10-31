@@ -84,12 +84,12 @@ document.addEventListener('keydown', e => {
   }
 
   // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=the Tasks
-  // home (/deck without one), gp=your private home (with users: the Private
+  // home (/tasks without one), gp=your private home (with users: the Private
   // pill). gs and gd were Notes and all tasks before the rename, kept for
   // one release.
   if (keyPrefix.key === 'g') {
     resetPrefix();
-    const dest = { h: '/page/index', n: '/page/_scratch', a: '/deck', t: tasksHomeHref() };
+    const dest = { h: '/page/index', n: '/page/_scratch', a: '/tasks', t: tasksHomeHref() };
     dest.s = dest.n; dest.d = dest.a;
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }

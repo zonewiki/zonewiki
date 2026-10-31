@@ -67,7 +67,7 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         scratch = client.post("/api/scratch", data={"title": "Idea"}, headers=HOST).get_json()["slug"]
         for url, module in (("/page/my-page", "wiki"), ("/page/index", "wiki"),
-                            ("/deck", "tasks"), ("/deck?list=shop", "tasks"),
+                            ("/tasks", "tasks"), ("/tasks?list=shop", "tasks"),
                             ("/page/_scratch", "scratch"), (f"/page/{scratch}", "scratch"),
                             ("/history/my-page", "wiki")):
             body = client.get(url, headers=HOST).get_data(as_text=True)
@@ -83,10 +83,10 @@ class TestViewPage:
 
     def test_breadcrumb_root_is_the_module_switcher(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/deck", "/page/_scratch"):
+        for url in ("/page/my-page", "/tasks", "/page/_scratch"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             crumb = body.split('<div class="breadcrumb"', 1)[1].split("</nav>", 1)[0]
-            assert crumb.index('href="/"') < crumb.index('href="/deck"') < crumb.index('href="/page/_scratch"'), url
+            assert crumb.index('href="/"') < crumb.index('href="/tasks"') < crumb.index('href="/page/_scratch"'), url
             assert '<span class="module-label">Wiki</span>' in crumb
 
     @staticmethod
@@ -94,32 +94,32 @@ class TestViewPage:
         return re.findall(r'<a href="([^"]*)" class="(?:action-module )?module-link" data-module="tasks"', body)
 
     def test_tasks_links_go_to_tasks_without_a_home(self, client, wiki_dir):
-        write_page(wiki_dir, "my-page", "# My Page\n\n[[deck list=task]]\n")
+        write_page(wiki_dir, "my-page", "# My Page\n\n[[tasks: list=task]]\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body) == ["/deck", "/deck"]   # switcher, bar
+        assert self._tasks_links(body) == ["/tasks", "/tasks"]   # switcher, bar
         assert '<body data-module="wiki">' in body
 
     def test_tasks_home_page_is_where_the_tasks_links_go(self, client, wiki_dir):
-        # [[deck … home=1]] makes that page your own tasks: the Tasks module
+        # [[tasks: … home=1]] makes that page your own tasks: the Tasks module
         # links go there, and the page belongs to the Tasks module.
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task view=focus home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus home=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body) == ["/page/tasks", "/page/tasks"]
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in home
         assert 'data-home="1"' in home   # the embed New clicks
-        # /deck stays the view of every task, in the Tasks module.
-        assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/deck", headers=HOST).get_data(as_text=True)
+        # /tasks stays the view of every task, in the Tasks module.
+        assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
     def test_tasks_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
-        write_page(wiki_dir, "aaa", "# A\n\n```\n[[deck home=1]]\n```\n")
-        write_page(wiki_dir, "zzz", "# Z\n\n[[deck tag=x home=yes]]\n")
-        write_page(wiki_dir, "mmm", "# M\n\n[[deck home=true]]\n")
+        write_page(wiki_dir, "aaa", "# A\n\n```\n[[tasks: home=1]]\n```\n")
+        write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x home=yes]]\n")
+        write_page(wiki_dir, "mmm", "# M\n\n[[tasks: home=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body)[0] == "/page/mmm"
         # Removing the declaration ends it at once.
-        write_page(wiki_dir, "mmm", "# M\n\n[[deck]]\n")
+        write_page(wiki_dir, "mmm", "# M\n\n[[tasks:]]\n")
         os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body)[0] == "/page/zzz"
@@ -134,7 +134,7 @@ class TestViewPage:
 
     def test_phone_action_buttons_on_views_not_in_editor(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/deck"):
+        for url in ("/page/my-page", "/tasks"):
             body = client.get(url, headers=HOST).data.decode()
             assert all(f'class="action-{a}"' in body for a in ("scratch", "task", "search"))
         # The editor has its own toolbar and the keyboard owns the bottom edge.
@@ -144,7 +144,7 @@ class TestViewPage:
         # New note, New task and Search, at the start of <main> so the
         # CSS can put them at the top right, in line with the breadcrumb.
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/deck", "/page/_scratch"):
+        for url in ("/page/my-page", "/tasks", "/page/_scratch"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             top = body.split("<main", 1)[1].split('<div class="top-actions">', 1)
             # Before the page itself; only the status badges, which share
@@ -163,10 +163,10 @@ class TestViewPage:
         # The server renders html.sharing from the cookie: from the first
         # paint, nothing sharing mode hides flashes on a shared screen.
         write_page(wiki_dir, "my-page", "# My Page\n")
-        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+        for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             assert '<html lang="en">' in client.get(url, headers=HOST).get_data(as_text=True), url
         client.set_cookie("leaf-sharing", "1")
-        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+        for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             assert '<html lang="en" class="sharing">' in client.get(url, headers=HOST).get_data(as_text=True), url
 
     def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
@@ -175,26 +175,26 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
         assert "data-tasks-tags" not in body and "data-tasks-keep" not in body   # no home: no tags
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=Task tag=work,-mary home=1 keep=1]]\n")
-        for url in ("/page/my-page", "/edit/my-page", "/deck"):
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=Task tag=work,-mary home=1 keep=1]]\n")
+        for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
             assert 'data-tasks-tags="task,work"' in tag and 'data-tasks-keep="1"' in tag, url
             assert 'data-tasks-today="1"' in tag, url   # the default view, Focus: start today
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task view=open home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=open home=1]]\n")
         tag = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
         assert 'data-tasks-tags="task"' in tag and "data-tasks-today" not in tag and "data-tasks-keep" not in tag
 
     def test_headless_tasks_for_pages_without_one(self, client, wiki_dir):
         # c t on a page without a task list app loads this hidden one (scripts
         # left out: the page loads them).
-        body = client.get("/api/deck/headless", headers=HOST).get_data(as_text=True)
+        body = client.get("/api/tasks/headless", headers=HOST).get_data(as_text=True)
         assert 'data-headless="1"' in body and 'id="task-edit-modal"' in body
         assert "<script" not in body
 
     def test_pages_load_nothing_from_other_hosts(self, client, wiki_dir):
         # No CDN: highlight.js is vendored and served from /public/.
         write_page(wiki_dir, "my-page", "# My Page\n\n```py\nx = 1\n```\n")
-        for url in ("/page/my-page", "/edit/my-page", "/deck", "/search?q=page"):
+        for url in ("/page/my-page", "/edit/my-page", "/tasks", "/search?q=page"):
             head = client.get(url, headers=HOST).data.decode()
             assert not re.search(r'<(?:script|link)\b[^>]*(?:src|href)="(?:https?:)?//', head), url
         for f in ("highlight.min.js", "github.min.css", "github-dark.min.css"):
@@ -321,7 +321,7 @@ class TestViewPage:
     def test_page_view_has_side_columns(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n### Roses\n\nRed.\n\n## Paths\n")
         write_page(wiki_dir, "plans", "# Plans\n\nSee [[Garden]].\n")
-        client.post("/api/deck", json={"title": "Weed the [[garden]]"})
+        client.post("/api/tasks", json={"title": "Weed the [[garden]]"})
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<main class="wide">' in body
         grid = body.split('<div class="page-grid">', 1)[1]
@@ -392,7 +392,7 @@ class TestViewPage:
 
     def test_only_page_views_are_wide(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        for url in ("/deck", "/page/_scratch", "/search?q=garden", "/edit/garden"):
+        for url in ("/tasks", "/page/_scratch", "/search?q=garden", "/edit/garden"):
             assert 'class="wide"' not in client.get(url, headers=HOST).get_data(as_text=True), url
 
 
@@ -400,12 +400,12 @@ class TestPagePreview:
     """/api/page-preview: a page for the search modal's preview pane."""
 
     def test_rendered_without_ids_and_taskss(self, client, wiki_dir):
-        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n[[deck list=garden]]\n\n```\n[[deck]]\n```\n")
+        write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n[[tasks: list=garden]]\n\n```\n[[tasks:]]\n```\n")
         data = client.get("/api/page-preview/garden", headers=HOST).get_json()
         assert data["title"] == "Garden"
         assert '<h2 data-pid="beds">Beds</h2>' in data["html"] and ' id="' not in data["html"]
         assert "tasks-app" not in data["html"] and "<em>(tasks)</em>" in data["html"]
-        assert "[[deck]]" in data["html"]    # code stays as written
+        assert "[[tasks:]]" in data["html"]    # code stays as written
         assert "<h1" not in data["html"]
 
     def test_missing_page(self, client, wiki_dir):
@@ -961,7 +961,7 @@ class TestApiPagesList:
         assert not [p for p in pages if p.get("special") and p["title"] != "Deleted Pages"]
         builtin = {p["title"]: p for p in pages if p.get("builtin")}
         assert {"Tasks", "Notes"} <= builtin.keys()
-        assert builtin["Tasks"]["href"] == "/deck"
+        assert builtin["Tasks"]["href"] == "/tasks"
         assert not next(p for p in pages if p["slug"] == "aaa").get("builtin")
 
 
@@ -970,7 +970,7 @@ class TestApiPagesList:
 # ===========================================================================
 
 class TestIterPages:
-    @pytest.mark.parametrize("slug", [".leaf/index/n", ".git/n", "_deck/n", "a/_drafts/n", "a/.hidden/n",
+    @pytest.mark.parametrize("slug", [".leaf/index/n", ".git/n", "_tasks/n", "a/_drafts/n", "a/.hidden/n",
                                       "a/../.leaf/n"])
     def test_pages_in_skipped_folders_are_not_served(self, client, wiki_dir, slug):
         """What iter_pages skips no route reads or writes, even by direct URL."""
@@ -1043,8 +1043,8 @@ class TestSearch:
     def test_tag_filter_pages_and_tasks(self, client, wiki_dir):
         write_page(wiki_dir, "tagged", "---\ntags: [Leaf, ui]\n---\n# Tagged\n\nThe date picker.\n")
         write_page(wiki_dir, "untagged", "# Untagged\n\nThe date picker again.\n")
-        client.post("/api/deck", json={"title": "Fix date picker", "tags": ["leaf"]}, headers=HOST)
-        client.post("/api/deck", json={"title": "Date picker elsewhere"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Fix date picker", "tags": ["leaf"]}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Date picker elsewhere"}, headers=HOST)
         results = client.get("/api/search?q=date+picker+%23leaf", headers=HOST).get_json()
         assert {r["title"] for r in results} == {"Tagged", "[Task] Fix date picker"}
         results = client.get("/api/search?q=date+picker+-%23leaf", headers=HOST).get_json()
@@ -1079,7 +1079,7 @@ class TestSearch:
         write_page(wiki_dir, "hub", "# Hub\n\nSee [[linked]]. Zebra.\n")
         write_page(wiki_dir, "linked", "# Linked\n\nZebra.\n")
         write_page(wiki_dir, "orphan", "# Orphan\n\nZebra.\n")
-        client.post("/api/deck", json={"title": "Zebra task"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Zebra task"}, headers=HOST)
         all_ = {r["title"] for r in client.get("/api/search?q=zebra", headers=HOST).get_json()}
         assert all_ == {"Hub", "Linked", "Orphan", "[Task] Zebra task"}
         only = [r["slug"] for r in client.get("/api/search?q=zebra&unlinked=1", headers=HOST).get_json()]
@@ -1090,10 +1090,10 @@ class TestSearch:
         path = write_page(wiki_dir, "conversations/2026-07-08_alex/prep", "# Alex Debrief\n\nquokka\n")
         os.utime(path, (1_000_000_000, 1_000_000_000))
         write_page(wiki_dir, "quokka", "# Quokka\n\nquokka\n")
-        open_ = client.post("/api/deck", json={"title": "quokka open"}, headers=HOST).get_json()
-        write_page(wiki_dir, "zoo", "# Zoo\n\n[[deck list=zoo]]\n")
-        done = client.post("/api/deck", json={"title": "quokka done", "tags": ["zoo"]}, headers=HOST).get_json()
-        client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
+        open_ = client.post("/api/tasks", json={"title": "quokka open"}, headers=HOST).get_json()
+        write_page(wiki_dir, "zoo", "# Zoo\n\n[[tasks: list=zoo]]\n")
+        done = client.post("/api/tasks", json={"title": "quokka done", "tags": ["zoo"]}, headers=HOST).get_json()
+        client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
         meta = {r["title"]: r["meta"] for r in client.get("/api/search?q=quokka", headers=HOST).get_json()}
         assert meta["Alex Debrief"] == "conversations/2026-07-08_alex · edited 2001-09-09"
         assert meta["Quokka"].startswith("edited 20")
@@ -1108,7 +1108,7 @@ class TestSearch:
         # page mentioning "ops", tagged or not.
         write_page(wiki_dir, "tagged", "---\ntags: [ops]\n---\n# Runbook\n\nRestart steps.\n")
         write_page(wiki_dir, "mentions", "# Team chat\n\nAsk the ops team.\n")
-        client.post("/api/deck", json={"title": "Rotate keys", "tags": ["ops"]}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Rotate keys", "tags": ["ops"]}, headers=HOST)
         page = client.get("/page/tagged", headers=HOST).get_data(as_text=True)
         href = re.search(r'class="task-tag page-tag" href="([^"]+)"', page).group(1)
         assert href == "/search?q=%23ops"
@@ -1159,7 +1159,7 @@ class TestSearch:
 
     def test_tasks_dated_by_last_activity(self, client, wiki_dir):
         from datetime import date
-        task = client.post("/api/deck", json={"title": "yak shaving"}, headers=HOST).get_json()
+        task = client.post("/api/tasks", json={"title": "yak shaving"}, headers=HOST).get_json()
         today = date.today().isoformat()
         hits = client.get("/api/search", query_string={"q": f"yak edited:{today}"}, headers=HOST).get_json()
         assert [r.get("task_id") for r in hits] == [task["id"]]
@@ -1218,14 +1218,14 @@ class TestSearch:
         assert any(r["slug"] == "bare" for r in results)
 
     def test_task_link_targets_are_not_indexed(self, client, wiki_dir):
-        client.post("/api/deck", json={"title": "Read", "description": "[doc](https://zzqhost.example)"})
+        client.post("/api/tasks", json={"title": "Read", "description": "[doc](https://zzqhost.example)"})
         results = client.get("/api/search?q=zzqhost", headers=HOST).get_json()
         assert results == []
 
     def test_task_found_by_tag(self, client, wiki_dir):
         # Regression: tasks were indexed by title and notes only, so a page's
         # tag pill (/search?q=<tag>) never listed the tasks with that tag.
-        client.post("/api/deck", json={"title": "Call Bob", "tags": ["zzqtag"]})
+        client.post("/api/tasks", json={"title": "Call Bob", "tags": ["zzqtag"]})
         results = client.get("/api/search?q=zzqtag", headers=HOST).get_json()
         assert [r["title"] for r in results] == ["[Task] Call Bob"]
         assert "<mark>zzqtag</mark>" in results[0]["excerpt"]
@@ -1256,13 +1256,13 @@ class TestSearch:
 
     def test_new_task_and_new_page_reach_the_cached_index(self, client, wiki_dir):
         client.get("/api/search?q=warm", headers=HOST)
-        client.post("/api/deck", json={"title": "zzqtask"})
+        client.post("/api/tasks", json={"title": "zzqtask"})
         assert client.get("/api/search?q=zzqtask", headers=HOST).get_json()
         write_page(wiki_dir, "later", "# Later\n\nzzqpage\n")
         assert client.get("/api/search?q=zzqpage", headers=HOST).get_json()
 
     def test_search_includes_task_results(self, client, wiki_dir):
-        client.post("/api/deck", json={"title": "unique_task_token_abc"})
+        client.post("/api/tasks", json={"title": "unique_task_token_abc"})
         resp = client.get("/api/search?q=unique_task_token_abc", headers=HOST)
         results = resp.get_json()
         assert any(r.get("type") == "task" for r in results)
@@ -1297,21 +1297,21 @@ class TestSearch:
         assert results[0]["slug"] == "rare"
 
     def test_search_page_task_links_to_the_task_by_id(self, client, wiki_dir):
-        # A task result must open the tasks (/deck) at that task (by id) — not the
-        # bare _deck storage slug, and not a title search.
-        tid = client.post("/api/deck", json={"title": "buymilk urgent chore"}).get_json()["id"]
+        # A task result must open the tasks (/tasks) at that task (by id) — not the
+        # bare _tasks storage slug, and not a title search.
+        tid = client.post("/api/tasks", json={"title": "buymilk urgent chore"}).get_json()["id"]
         resp = client.get("/search?q=buymilk+urgent+chore", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert "/page/_deck" not in body
-        assert f'href="/deck?task={tid}&amp;view=open"' in body
+        assert "/page/_tasks" not in body
+        assert f'href="/tasks?task={tid}&amp;view=open"' in body
 
     def test_search_page_completed_task_links_to_completed_tab(self, client, wiki_dir):
-        r = client.post("/api/deck", json={"title": "finishreport tuvwxyz"})
+        r = client.post("/api/tasks", json={"title": "finishreport tuvwxyz"})
         tid = r.get_json()["id"]
-        client.put(f"/api/deck/{tid}", json={"completed": True})
+        client.put(f"/api/tasks/{tid}", json={"completed": True})
         resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert f'href="/deck?task={tid}&amp;view=completed"' in body
+        assert f'href="/tasks?task={tid}&amp;view=completed"' in body
 
 
 # ===========================================================================
@@ -1626,7 +1626,7 @@ class TestSpecialPages:
         write_page(wiki_dir, "2026-09-01_10-00-00_bob-call", "# Bob call\n\nRoof repair quote.\n")
         write_page(wiki_dir, "2026-09-02_10-00-00_groceries", "# Groceries\n\nMilk, eggs.\n")
         write_page(wiki_dir, "roof", "# Roof\n\nThe roof repair plan.\n")
-        client.post("/api/deck", json={"title": "Roof repair"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Roof repair"}, headers=HOST)
         get = lambda q, **kw: client.get("/api/search", query_string={"q": q, **kw}, headers=HOST).get_json()
         assert {r["slug"] for r in get("roof repair")} >= {"roof", "2026-09-01_10-00-00_bob-call"}
         hits = get("roof repair", scratch="1")
@@ -1703,7 +1703,7 @@ class TestHostHeader:
 class TestProduction:
 
     def test_no_framing_by_other_sites(self, client, wiki_dir):
-        for path in ("/page/index", "/deck", "/api/version", "/login"):
+        for path in ("/page/index", "/tasks", "/api/version", "/login"):
             resp = client.get(path, headers=HOST)
             assert "frame-ancestors 'self'" in resp.headers["Content-Security-Policy"], path
             assert resp.headers["X-Frame-Options"] == "SAMEORIGIN", path
@@ -1713,7 +1713,7 @@ class TestProduction:
         # say) must not run a script: script-src 'self' without
         # 'unsafe-inline' blocks <script>, onerror= and javascript: links.
         write_page(wiki_dir, "evil", "# Evil\n\n<script>window.x=1</script><img src=x onerror=alert(1)>\n")
-        for path in ("/page/evil", "/edit/evil", "/deck", "/api/deck", "/login", "/public/leaf.js"):
+        for path in ("/page/evil", "/edit/evil", "/tasks", "/api/tasks", "/login", "/public/leaf.js"):
             resp = client.get(path, headers=HOST)
             csp = resp.headers["Content-Security-Policy"]
             assert csp == client.get("/page/index", headers=HOST).headers["Content-Security-Policy"], path
@@ -1772,7 +1772,7 @@ class TestSearchResultHref:
         # The page highlights what matched, as written there: stems, typos
         # and phrases included, each once, tasks without.
         write_page(wiki_dir, "run", "# Notes\n\nShe runs. He ran. RUNS again.\n")
-        client.post("/api/deck", json={"title": "running shoes"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "running shoes"}, headers=HOST)
         results = client.get("/api/search?q=running", headers=HOST).get_json()
         page = next(r for r in results if r["slug"] == "run")
         assert page["href"] == "/page/run?hl=runs"
@@ -1784,12 +1784,12 @@ class TestSearchResultHref:
     def test_task_result_href_opens_tasks_at_the_task(self, client, wiki_dir):
         # Regression: the href prefilled the title into the task app's filter
         # field, where a "#word" in the title reads as a tag filter.
-        tid = client.post("/api/deck", json={"title": "Water the ferns #3"},
+        tid = client.post("/api/tasks", json={"title": "Water the ferns #3"},
                           headers=HOST).get_json()["id"]
         results = client.get("/api/search?q=ferns", headers=HOST).get_json()
         task_hits = [r for r in results if r.get("type") == "task"]
         assert task_hits, "expected a task hit"
-        assert task_hits[0]["href"] == f"/deck?task={tid}&view=open"
+        assert task_hits[0]["href"] == f"/tasks?task={tid}&view=open"
 
 
 class TestBacklinkCacheInvalidation:
@@ -1818,9 +1818,9 @@ class TestTaskBacklinks:
         # names the section (linking to the heading), and the heading gets a
         # chip listing the section's tasks. A /page/<slug>#anchor link too.
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n\nSoil.\n\n## Garden paths\n\nGravel.\n")
-        weed = client.post("/api/deck", json={"title": "Weed [[Garden#Beds]]"}, headers=HOST).get_json()["id"]
-        client.post("/api/deck", json={"title": "Rake", "description": "[the paths](/page/garden#garden-paths)"}, headers=HOST)
-        client.post("/api/deck", json={"title": "Water [[garden]]"}, headers=HOST)
+        weed = client.post("/api/tasks", json={"title": "Weed [[Garden#Beds]]"}, headers=HOST).get_json()["id"]
+        client.post("/api/tasks", json={"title": "Rake", "description": "[the paths](/page/garden#garden-paths)"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Water [[garden]]"}, headers=HOST)
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
         items = re.findall(r"<li>(.*?)</li>", section)
@@ -1832,7 +1832,7 @@ class TestTaskBacklinks:
         assert "task-bl-section" not in next(i for i in items if "Water" in i)
         beds = html.split('<h2 id="beds">', 1)[1].split("</div>", 1)[0]
         assert '<details class="section-tasks"><summary title="1 linked task">☑ 1</summary>' in beds
-        assert f'href="/deck?task={weed}&amp;view=open"' in beds
+        assert f'href="/tasks?task={weed}&amp;view=open"' in beds
         paths = html.split('<h2 id="garden-paths">', 1)[1].split("</div>", 1)[0]
         assert "☑ 1" in paths and "Rake" in paths
         # The chip sits after the heading: the TOC and anchors are unchanged.
@@ -1840,7 +1840,7 @@ class TestTaskBacklinks:
 
     def test_task_with_wikilink_listed_on_page(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Water [[Garden]]"}, headers=HOST)
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' in html
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
@@ -1848,18 +1848,18 @@ class TestTaskBacklinks:
 
     def test_linked_task_links_to_the_task_by_id(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        tid = client.post("/api/deck", json={"title": "Water [[Garden]]"},
+        tid = client.post("/api/tasks", json={"title": "Water [[Garden]]"},
                           headers=HOST).get_json()["id"]
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
-        assert f'href="/deck?task={tid}&amp;view=open"' in section
+        assert f'href="/tasks?task={tid}&amp;view=open"' in section
 
     def test_linked_task_entry_is_a_single_link(self, client, wiki_dir):
         # Regression: the task title's own wikilinks were rendered as <a>
         # inside the outer tasks <a> — nested anchors, which browsers split so
         # half the entry went to the tasks and half to the page.
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "Water [[Garden]] and [x](/page/garden)"},
+        client.post("/api/tasks", json={"title": "Water [[Garden]] and [x](/page/garden)"},
                     headers=HOST)
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         section = html.split('id="task-backlinks"')[1].split("</section>")[0]
@@ -1870,26 +1870,26 @@ class TestTaskBacklinks:
 
     def test_wikilink_in_description_and_labelled_link(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "Chores",
+        client.post("/api/tasks", json={"title": "Chores",
                                        "description": "see [[garden|the beds]]"}, headers=HOST)
         assert task_backlinks(client, "garden") == ["Chores"]
 
     def test_markdown_page_link_counts(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Read [notes](/page/garden)"}, headers=HOST)
         assert len(task_backlinks(client, "garden")) == 1
 
     def test_completed_and_unrelated_tasks_excluded(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        t = client.post("/api/deck", json={"title": "Done [[garden]]"}, headers=HOST).get_json()
-        client.put(f"/api/deck/{t['id']}", json={"completed": True}, headers=HOST)
-        client.post("/api/deck", json={"title": "About [[kitchen]]"}, headers=HOST)
+        t = client.post("/api/tasks", json={"title": "Done [[garden]]"}, headers=HOST).get_json()
+        client.put(f"/api/tasks/{t['id']}", json={"completed": True}, headers=HOST)
+        client.post("/api/tasks", json={"title": "About [[kitchen]]"}, headers=HOST)
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' not in html
 
     def test_task_title_is_escaped(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "<img src=x onerror=alert(1)> [[garden]]"},
+        client.post("/api/tasks", json={"title": "<img src=x onerror=alert(1)> [[garden]]"},
                     headers=HOST)
         html = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert "<img src=x" not in html
@@ -1899,7 +1899,7 @@ class TestTaskBacklinks:
 class TestPlainTaskTitle:
 
     def test_search_shows_a_task_title_plain(self, client):
-        client.post("/api/deck", json={"title": "Read [the RFC](https://e.x/rfc) on [[Garden]]"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Read [the RFC](https://e.x/rfc) on [[Garden]]"}, headers=HOST)
         results = client.get("/api/search?q=rfc", headers=HOST).get_json()
         assert [r["title"] for r in results] == ["[Task] Read the RFC on Garden"]
 
@@ -1971,20 +1971,20 @@ class TestRenameUpdatesAllReferences:
 
     def test_tasks_tasks_follow_rename(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
-        linked = client.post("/api/deck", json={
+        linked = client.post("/api/tasks", json={
             "title": "Do [[old]] and [[Old|label]]", "description": "see [x](/page/old)",
             }, headers=HOST).get_json()
-        done = client.post("/api/deck", json={"title": "Done [[old]]"},
+        done = client.post("/api/tasks", json={"title": "Done [[old]]"},
                            headers=HOST).get_json()
-        client.put(f"/api/deck/{done['id']}", json={"completed": True}, headers=HOST)
-        other = client.post("/api/deck", json={"title": "[[older]]"},
+        client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
+        other = client.post("/api/tasks", json={"title": "[[older]]"},
                             headers=HOST).get_json()
         self.rename(client, "old", "new")
-        tasks = {t["id"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
+        tasks = {t["id"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
         assert tasks[linked["id"]]["title"] == "Do [[new]] and [[new|label]]"
         assert tasks[linked["id"]]["description"] == "see [x](/page/new)"
         assert tasks[other["id"]]["title"] == "[[older]]"
-        completed = client.get("/api/deck/completed", headers=HOST).get_json()
+        completed = client.get("/api/tasks/completed", headers=HOST).get_json()
         assert completed[0]["title"] == "Done [[new]]"
         html = client.get("/page/new", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' in html
@@ -1992,21 +1992,21 @@ class TestRenameUpdatesAllReferences:
     def test_rename_without_tasks_files_does_not_create_them(self, client, wiki_dir):
         write_page(wiki_dir, "old", "# Old\n")
         self.rename(client, "old", "new")
-        assert not (wiki_dir / "_deck" / "tasks.json").exists()
+        assert not (wiki_dir / "_tasks" / "tasks.json").exists()
 
 
 # ===========================================================================
-# /deck — find the page that embeds the tasks
+# /tasks — find the page that embeds the tasks
 # ===========================================================================
 
 class TestTasksPage:
-    """/deck is a built-in page with one full main tasks. It used to redirect
-    to whichever page embedded [[deck]], so where the due badge and task links
+    """/tasks is a built-in page with one full main tasks. It used to redirect
+    to whichever page embedded [[tasks:]], so where the due badge and task links
     landed depended on the wiki's pages (and, before that, /page/tasks opened
     the editor in a wiki without tasks.md)."""
 
     def get(self, client, qs=""):
-        resp = client.get("/deck" + qs, headers=HOST)
+        resp = client.get("/tasks" + qs, headers=HOST)
         assert resp.status_code == 200
         return resp.get_data(as_text=True)
 
@@ -2020,7 +2020,7 @@ class TestTasksPage:
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a task list.md) are ordinary pages now.
-        write_page(wiki_dir, "tasks", "# My tasks\n\n[[deck tag=work]]\n\n[[deck view=plan]]\n")
+        write_page(wiki_dir, "tasks", "# My tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
         body = self.get(client, "?task=abc&view=today")
         assert body.count('class="tasks-app"') == 1
         assert "My tasks" not in body
@@ -2029,7 +2029,7 @@ class TestTasksPage:
     def test_list(self, client, wiki_dir):
         body = self.get(client, "?list=Groceries&task=abc")
         assert 'data-init-list="groceries"' in body
-        assert '<a href="/deck">Tasks</a>' in body
+        assert '<a href="/tasks">Tasks</a>' in body
         assert "<h1>groceries</h1>" in body
 
     def test_list_name_escaped(self, client, wiki_dir):
@@ -2038,28 +2038,28 @@ class TestTasksPage:
 
     def test_in_search_modal_list(self, client, wiki_dir):
         pages = client.get("/api/pages-list", headers=HOST).get_json()
-        tasks = [p for p in pages if p.get("href") == "/deck"]
+        tasks = [p for p in pages if p.get("href") == "/tasks"]
         assert len(tasks) == 1 and tasks[0]["title"] == "Tasks"
 
     def test_linked_task_in_list_links_to_list(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        write_page(wiki_dir, "shopping", "# Shopping\n\n[[deck list=shop]]\n")
-        tid = client.post("/api/deck", json={"title": "Seeds for [[Garden]]", "tags": ["shop"]},
+        write_page(wiki_dir, "shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
+        tid = client.post("/api/tasks", json={"title": "Seeds for [[Garden]]", "tags": ["shop"]},
                           headers=HOST).get_json()["id"]
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert f'href="/deck?task={tid}&amp;view=open&amp;list=shop"' in body
+        assert f'href="/tasks?task={tid}&amp;view=open&amp;list=shop"' in body
 
     def test_due_count_follows_the_tasks_home(self, client, wiki_dir):
         from datetime import date
         today = date.today().isoformat()
         for title, tags in (("Pay rent", ["task"]), ("Milk", ["shop"]),
                             ("Call Bob", ["task", "waiting"]), ("Book trip", [])):
-            client.post("/api/deck", json={"title": title, "tags": tags, "due_date": today}, headers=HOST)
-        count = lambda: client.get("/api/deck/due-count", headers=HOST).get_json()["count"]
+            client.post("/api/tasks", json={"title": title, "tags": tags, "due_date": today}, headers=HOST)
+        count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"]
         assert count() == 4   # no home: every task
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task home=1]]\n")
         assert count() == 2   # the home's list
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[deck list=task tag=-waiting home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task tag=-waiting home=1]]\n")
         os.utime(wiki_dir / "tasks.md", (2_000_000_000, 2_000_000_000))
         assert count() == 1   # and its tag filter
 
@@ -2072,8 +2072,8 @@ class TestTasksPage:
                      {"title": "Started", "start_date": today.isoformat()},
                      {"title": "Later", "start_date": (today + timedelta(days=3)).isoformat()},
                      {"title": "Someday"}):
-            client.post("/api/deck", json=data, headers=HOST)
-        assert client.get("/api/deck/due-count", headers=HOST).get_json() == {
+            client.post("/api/tasks", json=data, headers=HOST)
+        assert client.get("/api/tasks/due-count", headers=HOST).get_json() == {
             "count": 1, "overdue": 1, "today": 0, "focus": 2}
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         counts = ('<span class="module-counts"><span class="module-due">1</span>'
@@ -2081,16 +2081,16 @@ class TestTasksPage:
         assert body.count(counts) == 2   # switcher and tab bar
         assert body.count('title="Tasks: 2 in Focus · 1 overdue"') == 2
         # Zero is hidden, not "0".
-        client.post("/api/deck/batch-delete", json={"ids": [t["id"] for t in client.get(
-            "/api/deck", headers=HOST).get_json()]}, headers=HOST)
+        client.post("/api/tasks/batch-delete", json={"ids": [t["id"] for t in client.get(
+            "/api/tasks", headers=HOST).get_json()]}, headers=HOST)
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert '<span class="module-due" hidden></span><span class="module-focus" hidden></span>' in body
 
     def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": "Water [[Garden]]"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Water [[Garden]]"}, headers=HOST)
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
-        assert 'href="/deck" class="module-link" data-module="tasks"' in body
+        assert 'href="/tasks" class="module-link" data-module="tasks"' in body
         assert "/page/tasks" not in body
 
 
@@ -2114,12 +2114,12 @@ class TestCrossSiteWrites:
 
     def test_forged_tasks_writes_are_refused(self, client, wiki_dir):
         # text/plain: a cross-site fetch/form can send it without a preflight.
-        tid = client.post("/api/deck", json={"title": "Keep"}, headers=HOST).get_json()["id"]
-        resp = client.post("/api/deck", data='{"title": "Spam"}', content_type="text/plain", headers=self.EVIL)
+        tid = client.post("/api/tasks", json={"title": "Keep"}, headers=HOST).get_json()["id"]
+        resp = client.post("/api/tasks", data='{"title": "Spam"}', content_type="text/plain", headers=self.EVIL)
         assert resp.status_code == 403
-        assert client.delete(f"/api/deck/{tid}", headers=self.EVIL).status_code == 403
-        assert client.put(f"/api/deck/{tid}", json={"title": "x"}, headers=self.EVIL).status_code == 403
-        assert [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()] == ["Keep"]
+        assert client.delete(f"/api/tasks/{tid}", headers=self.EVIL).status_code == 403
+        assert client.put(f"/api/tasks/{tid}", json={"title": "x"}, headers=self.EVIL).status_code == 403
+        assert [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()] == ["Keep"]
 
     def test_null_origin_is_refused(self, client, wiki_dir):
         # A sandboxed iframe on an attacker's page posts with Origin: null.
@@ -2132,7 +2132,7 @@ class TestCrossSiteWrites:
         write_page(wiki_dir, "b", "# B\n")
         assert client.post("/delete/a", headers=self.SAME).status_code == 302
         assert client.post("/delete/b", headers=HOST).status_code == 302   # curl, scripts
-        assert client.post("/api/deck", json={"title": "Ok"}, headers=self.SAME).status_code == 201
+        assert client.post("/api/tasks", json={"title": "Ok"}, headers=self.SAME).status_code == 201
 
     def test_reads_are_not_affected(self, client, wiki_dir):
         write_page(wiki_dir, "r", "# R\n")
@@ -2161,7 +2161,7 @@ class TestVersion:
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "LEAF_BUILD", "abc1234 2026-09-26 12:00")
-        for path in ("/page/index", "/deck", "/edit/index"):
+        for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
             assert ('<div class="leaf-build" title="Build abc1234 2026-09-26 12:00">'
                     f'Zone {v} · abc1234</div>') in body, path
@@ -2220,7 +2220,7 @@ class TestLocale:
         assert "data-locale" not in body and "data-date-format" not in body
         monkeypatch.setattr(settings, "LEAF_LOCALE", "de-AT")
         monkeypatch.setattr(settings, "LEAF_DATE_FORMAT", "iso")
-        for url in ("/page/index", "/deck", "/edit/index"):
+        for url in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert 'data-locale="de-AT"' in body and 'data-date-format="iso"' in body, url
 
@@ -2450,9 +2450,9 @@ class TestAppendToPage:
     def test_append_points_tasks_links_at_the_section(self, client, wiki_dir):
         write_page(wiki_dir, SCRATCH, "# Notes\n")
         write_page(wiki_dir, "garden", "# Garden\n")
-        client.post("/api/deck", json={"title": f"Follow up [[{SCRATCH}]]"}, headers=HOST)
+        client.post("/api/tasks", json={"title": f"Follow up [[{SCRATCH}]]"}, headers=HOST)
         client.post(f"/append/{SCRATCH}", data={"page": "garden", "heading": "Notes"}, headers=HOST)
-        titles = [t["title"] for t in client.get("/api/deck", headers=HOST).get_json()]
+        titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
         assert titles == ["Follow up [[garden#Notes]]"]
 
 

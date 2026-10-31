@@ -9,8 +9,8 @@ import { openSearchModal } from './search.js';
 // where a task list app is loaded (an embed, the editor's hidden one) its edit
 // modal, with the tags and keep the home gives new tasks (the server puts
 // them on <body>: data-tasks-tags, data-tasks-keep; none without a home);
-// elsewhere the home page (or /deck) opens with the modal.
-// A page without a task list app loads a hidden one first (/api/deck/headless,
+// elsewhere the home page (or /tasks) opens with the modal.
+// A page without a task list app loads a hidden one first (/api/tasks/headless,
 // started by tasks.js's initTaskApps), so you stay on the page; a toast says
 // where the task went. Should that fail, the home page opens instead.
 export async function openHomeTask() {
@@ -18,7 +18,7 @@ export async function openHomeTask() {
   if (homeAdd) { homeAdd.click(); return; }
   const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate } = document.body.dataset;
   // The start date as the home's "+ New" gives it (today on Focus); without
-  // a home, as /deck's Focus does.
+  // a home, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
   const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1',
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
@@ -36,11 +36,11 @@ export async function openHomeTask() {
   openTasksEdit(null, opts);
 }
 
-// The hidden task app (/api/deck/headless), added to the page and started.
+// The hidden task app (/api/tasks/headless), added to the page and started.
 let headlessTasks = null;
 function loadHeadlessTasks() {
   headlessTasks ??= (async () => {
-    const res = await fetch('/api/deck/headless');
+    const res = await fetch('/api/tasks/headless');
     if (!res.ok) throw new Error(res.status);
     const holder = document.createElement('div');
     holder.innerHTML = await res.text();
@@ -50,9 +50,9 @@ function loadHeadlessTasks() {
   return headlessTasks;
 }
 
-// Where the Tasks module links go: the Tasks home page, else /deck.
+// Where the Tasks module links go: the Tasks home page, else /tasks.
 export const tasksHomeHref = () =>
-  document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/deck';
+  document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 
 // ── Scratch modal ───────────────────────────────────────────────────────────────
 

@@ -205,7 +205,7 @@ func existingPage(args jsonObj, name, user string) (string, string, error) {
 
 // newSlug: the slug a new page gets from a name or slug ("Tickets/BUG
 // 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
-// in a folder Zone skips (_assets, _deck, .git …), or in private/ outside
+// in a folder Zone skips (_assets, _tasks, .git …), or in private/ outside
 // user's own folder.
 func newSlug(raw, user string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
@@ -1014,7 +1014,7 @@ var (
 
 // findTask: the task a reference names: its id or a prefix of it (the
 // 8-character short id the tools show), a [[task:…]] reference or a
-// /deck?task=… link; of the tasks user sees.
+// /tasks?task=… link; of the tasks user sees.
 func findTask(raw, user string) (*Task, error) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	ref := raw
@@ -1734,10 +1734,12 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 }
 
 // fileLabel: a changed file as the model knows it, a page by its slug, the
-// task files as tasks.
+// task files as tasks (in _deck/ in the history from before the move).
 func fileLabel(fp string) string {
-	if strings.HasPrefix(fp, "_deck/") || strings.Contains(fp, "/_deck/") {
-		return "tasks"
+	for _, dir := range []string{tasksDirName, legacyTasksDirName} {
+		if strings.HasPrefix(fp, dir+"/") || strings.Contains(fp, "/"+dir+"/") {
+			return "tasks"
+		}
 	}
 	return strings.TrimSuffix(fp, ".md")
 }

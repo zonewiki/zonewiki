@@ -1,9 +1,9 @@
-"""Tests for the [[deck]] embed (its HTML, data attributes) and the page
+"""Tests for the [[tasks:]] embed (its HTML, data attributes) and the page
 field tasks no longer have. Its params' parsing has a Go test."""
 
 import re
 
-from tests.conftest import create_task, preview
+from tests.conftest import create_task, preview, write_page
 
 
 # ── Rendering ───────────────────────────────────────────────────────────────────
@@ -11,15 +11,15 @@ from tests.conftest import create_task, preview
 
 class TestTasksLinkRender:
     def test_basic_embed_no_tasks(self, client, wiki_dir):
-        """[[deck]] renders the full task app embed."""
-        html = preview(client, "[[deck]]\n")
+        """[[tasks:]] renders the full task app embed."""
+        html = preview(client, "[[tasks:]]\n")
         assert "tasks-app" in html
         assert "tasks-list" in html
 
     def test_eleven_embeds_each_render_their_own(self, client, wiki_dir):
         # Regression: placeholder _1 is a prefix of _10, so the 11th embed
         # was replaced by (part of) the 2nd one's HTML.
-        html = preview(client, "\n\n".join(f"[[deck tag=t{i}]]" for i in range(11)) + "\n")
+        html = preview(client, "\n\n".join(f"[[tasks: tag=t{i}]]" for i in range(11)) + "\n")
         assert "LEAFTASKSPLACEHOLDER" not in html
         for i in range(11):
             sfx = f"-{i}" if i else ""
@@ -27,35 +27,35 @@ class TestTasksLinkRender:
             assert f'id="tasks-app{sfx}" data-init-tag="t{i}"' in html
 
     def test_no_list_field_or_show_lists_checkbox(self, client, wiki_dir):
-        html = preview(client, "[[deck]]\n[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n[[tasks:]]\n")
         assert "task-show-lists" not in html
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_density_button(self, client, wiki_dir):
         """Every task list has the switch between one line per task and full cards."""
-        html = preview(client, "[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n")
         assert 'class="btn tasks-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
-        """[[deck tag=work]] passes tag as data attribute."""
+        """[[tasks: tag=work]] passes tag as data attribute."""
         create_task(client, title="Write code", tags=["work"])
-        html = preview(client, "[[deck tag=work]]\n")
+        html = preview(client, "[[tasks: tag=work]]\n")
         assert 'data-init-tag="work"' in html
         assert "tasks-app" in html
 
     def test_embed_with_multi_tag_filter(self, client, wiki_dir):
-        """[[deck tag=a,b]] passes comma-separated tags as data attribute."""
-        html = preview(client, "[[deck tag=q3-launch,BUG-10002]]\n")
+        """[[tasks: tag=a,b]] passes comma-separated tags as data attribute."""
+        html = preview(client, "[[tasks: tag=q3-launch,BUG-10002]]\n")
         assert 'data-init-tag="q3-launch,BUG-10002"' in html
 
     def test_embed_view_param(self, client, wiki_dir):
-        """[[deck view=…]] passes the view as a data attribute, any case."""
+        """[[tasks: view=…]] passes the view as a data attribute, any case."""
         for name in ("focus", "open", "plan", "completed"):
-            html = preview(client, f"[[deck view={name.upper()}]]\n")
+            html = preview(client, f"[[tasks: view={name.upper()}]]\n")
             assert f'data-init-view="{name}"' in html, name
 
     def test_view_tabs_are_a_segmented_control_in_order(self, client, wiki_dir):
-        html = preview(client, "[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-view="(\w+)"[^>]*>([^<]+)</button>', html)
         assert tabs == [("open", "Open"), ("focus", "Focus")]
@@ -67,13 +67,13 @@ class TestTasksLinkRender:
         the old name of `view=`) opens the default view."""
         for directive in ("view=bogus", "view=due", "view=backlog", "view=today",
                           "view=all", "view=upcoming", "view=done", "filter=plan"):
-            html = preview(client, f"[[deck {directive}]]\n")
+            html = preview(client, f"[[tasks: {directive}]]\n")
             assert 'data-init-view=""' in html, directive
 
     def test_multiple_embeds_only_first(self, client, wiki_dir):
-        """Multiple [[deck]] on one page: all render with unique instance IDs."""
+        """Multiple [[tasks:]] on one page: all render with unique instance IDs."""
         create_task(client, title="A", tags=["alpha"])
-        md = "## Alpha\n\n[[deck tag=alpha]]\n\n## Beta\n\n[[deck tag=beta]]\n"
+        md = "## Alpha\n\n[[tasks: tag=alpha]]\n\n## Beta\n\n[[tasks: tag=beta]]\n"
         html = preview(client, md)
         # Both embeds should be present with unique IDs
         assert 'id="tasks-app"' in html
@@ -86,7 +86,7 @@ class TestTasksLinkRender:
         tasks.js instance registry can address and refresh each independently
         (cross-instance refresh relies on this)."""
         create_task(client, title="A", tags=["alpha"])
-        md = "[[deck tag=alpha]]\n\n[[deck tag=beta]]\n"
+        md = "[[tasks: tag=alpha]]\n\n[[tasks: tag=beta]]\n"
         html = preview(client, md)
         # Instance 0 uses no suffix; instance 1 uses "-1".
         for base in ("tasks-list", "tasks-tabs", "task-edit-modal"):
@@ -97,31 +97,46 @@ class TestTasksLinkRender:
         assert 'data-instance="1"' in html
 
     def test_embed_not_inside_paragraph(self, client, wiki_dir):
-        """[[deck]] on its own line should NOT be wrapped in <p>."""
+        """[[tasks:]] on its own line should NOT be wrapped in <p>."""
         create_task(client, title="T1")
-        html = preview(client, "[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n")
         assert "<p>" not in html.split('id="tasks-app"')[0].split('\n')[-1]
 
     def test_embed_case_insensitive(self, client, wiki_dir):
-        """[[Deck]] and [[DECK]] work too."""
-        for variant in ["[[Deck]]\n", "[[DECK]]\n", "[[deck]]\n"]:
+        """[[Tasks:]] and [[TASKS:]] work too, and so does no space after the colon."""
+        for variant in ["[[Tasks:]]\n", "[[TASKS: tag=work]]\n", "[[tasks:tag=work]]\n"]:
             html = preview(client, variant)
-            assert "tasks-app" in html
+            assert "tasks-app" in html, variant
+        assert 'data-init-tag="work"' in preview(client, "[[tasks:tag=work]]\n")
+
+    def test_the_old_deck_syntax_still_embeds(self, client, wiki_dir):
+        """[[deck …]] is how pages wrote it before Deck was called Tasks."""
+        for variant in ["[[deck]]\n", "[[Deck]]\n", "[[DECK]]\n", "[[deck list=shop view=focus]]\n"]:
+            assert "tasks-app" in preview(client, variant), variant
+        html = preview(client, "[[deck list=shop view=focus]]\n")
+        assert 'data-init-list="shop"' in html and 'data-init-view="focus"' in html
+
+    def test_a_link_to_a_page_called_tasks_stays_a_link(self, client, wiki_dir):
+        """The colon is what makes the embed: [[Tasks]] links to the page Tasks."""
+        write_page(wiki_dir, "tasks", "# Tasks\n")
+        for variant in ["[[Tasks]]\n", "[[tasks]]\n", "[[Tasks|my list]]\n", "[[decks]]\n", "[[deckchair]]\n"]:
+            html = preview(client, variant)
+            assert "tasks-app" not in html and "wikilink" in html, variant
 
     def test_embed_works_inline(self, client):
-        """[[deck]] inline is also replaced (renders embed)."""
-        html = preview(client, "Here are the [[deck]] for today.\n")
+        """[[tasks:]] inline is also replaced (renders embed)."""
+        html = preview(client, "Here are the [[tasks:]] for today.\n")
         assert "tasks-app" in html
 
     def test_embed_works_in_list(self, client):
-        """[[deck]] inside a list item renders embed."""
-        html = preview(client, "- [[deck tag=work]]\n")
+        """[[tasks:]] inside a list item renders embed."""
+        html = preview(client, "- [[tasks: tag=work]]\n")
         assert "tasks-app" in html
         assert 'data-init-tag="work"' in html
 
     def test_embed_page_param_is_ignored(self, client, wiki_dir):
         """page= was removed: it no longer narrows the embed."""
-        html = preview(client, "[[deck page=my-project]]\n")
+        html = preview(client, "[[tasks: page=my-project]]\n")
         assert "data-init-page" not in html
 
 
@@ -132,7 +147,7 @@ class TestNoPageField:
     def test_page_in_request_is_ignored(self, client, wiki_dir):
         data = create_task(client, title="T", page="my-project").get_json()
         assert "page" not in data
-        resp = client.put(f"/api/deck/{data['id']}", json={"page": "x"})
+        resp = client.put(f"/api/tasks/{data['id']}", json={"page": "x"})
         assert resp.status_code == 200 and "page" not in resp.get_json()
 
 # ── Page view rendering ────────────────────────────────────────────────────────
@@ -140,10 +155,10 @@ class TestNoPageField:
 
 class TestPageViewLink:
     def test_page_with_tasks_embed(self, client, wiki_dir):
-        """A wiki page with [[deck]] renders the full task app."""
+        """A wiki page with [[tasks:]] renders the full task app."""
         create_task(client, title="Page task", tags=["test"])
         (wiki_dir / "my-page.md").write_text(
-            "# My Page\n\nSome text.\n\n[[deck tag=test]]\n", encoding="utf-8"
+            "# My Page\n\nSome text.\n\n[[tasks: tag=test]]\n", encoding="utf-8"
         )
         resp = client.get("/page/my-page")
         assert resp.status_code == 200
@@ -152,20 +167,20 @@ class TestPageViewLink:
         assert 'data-init-tag="test"' in body
 
     def test_preview_with_tasks_embed(self, client, wiki_dir):
-        """Preview endpoint renders [[deck]] as the full embed."""
+        """Preview endpoint renders [[tasks:]] as the full embed."""
         create_task(client, title="Preview task")
         resp = client.post(
             "/api/preview",
-            data="[[deck]]\n",
+            data="[[tasks:]]\n",
             content_type="text/plain"
         )
         body = resp.get_data(as_text=True)
         assert "tasks-app" in body
 
     def test_tasks_embed_with_params(self, client, wiki_dir):
-        """[[deck tag=work list=proj view=plan]] passes all data attrs."""
+        """[[tasks: tag=work list=proj view=plan]] passes all data attrs."""
         (wiki_dir / "my-page.md").write_text(
-            "# My Page\n\n[[deck tag=work list=proj view=plan]]\n", encoding="utf-8"
+            "# My Page\n\n[[tasks: tag=work list=proj view=plan]]\n", encoding="utf-8"
         )
         resp = client.get("/page/my-page")
         body = resp.get_data(as_text=True)
@@ -174,14 +189,14 @@ class TestPageViewLink:
         assert 'data-init-view="plan"' in body
 
     def test_embed_has_single_filter_field(self, client, wiki_dir):
-        html = preview(client, "[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n")
         assert 'id="task-filter-search"' in html
         assert "task-filter-tag" not in html
 
     def test_embed_contains_start_date_field(self, client, wiki_dir):
         """Edit modal has a Start (start_date) field and an unstored
         days-before-due helper; the old lead/anchor fields are gone."""
-        html = preview(client, "[[deck]]\n")
+        html = preview(client, "[[tasks:]]\n")
         assert 'id="task-edit-start"' in html
         assert 'name="start_date"' in html
         assert 'data-date-trigger="task-edit-start"' in html

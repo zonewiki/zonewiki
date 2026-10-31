@@ -70,10 +70,10 @@ func prepare(text string) (string, []tasksEmbed, []string) {
 // Code is masked: [[…]] in it stays as written.
 func TestPrepareMasksCode(t *testing.T) {
 	testWiki(t, nil)
-	src := "`[[index]]` ``a`[[deck]]`b`` [[index]]\n```\n[[deck]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
+	src := "`[[index]]` ``a`[[tasks:]]`b`` [[index]]\n```\n[[tasks:]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
 	text, embeds, refs := prepare(src)
-	want := "`[[index]]` ``a`[[deck]]`b`` " + `<a href="/page/index" class="wikilink">index</a>` +
-		"\n```\n[[deck]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
+	want := "`[[index]]` ``a`[[tasks:]]`b`` " + `<a href="/page/index" class="wikilink">index</a>` +
+		"\n```\n[[tasks:]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
 	if text != want || embeds != nil || refs != nil {
 		t.Errorf("got %q %v %v", text, embeds, refs)
 	}
@@ -81,7 +81,7 @@ func TestPrepareMasksCode(t *testing.T) {
 
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
-	text, embeds, refs := prepare("[[deck]] [[DECK list=work]] [[task:ABCD-1234]]\u00a0[[deck\u00a0view=x]]")
+	text, embeds, refs := prepare("[[tasks:]] [[DECK list=work]] [[task:ABCD-1234]]\u00a0[[deck\u00a0view=x]]")
 	if text != "LEAFTASKSPLACEHOLDER_0 LEAFTASKSPLACEHOLDER_1 \ue0020\ue003\u00a0LEAFTASKSPLACEHOLDER_2" {
 		t.Errorf("text %q", text)
 	}

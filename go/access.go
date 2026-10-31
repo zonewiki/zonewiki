@@ -87,7 +87,7 @@ func privateFolder(user string) string {
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, anything
 // else in private/ (a user's uploads and tasks in private/<user>/_assets/
-// and _deck/ too) like a page there. Zone's own files in .leaf/ (the
+// and _tasks/ too) like a page there. Zone's own files in .leaf/ (the
 // settings file, with its password hashes) no one sees in Zone.
 func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, ".leaf/") {

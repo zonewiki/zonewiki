@@ -244,7 +244,7 @@ def test_url_paste_asks_for_a_name_and_undoes(page, wiki):
 
 
 def test_url_paste_in_task_notes_undoes(page, wiki):
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
     page.locator("#task-add-btn").click()
     notes = page.locator("#task-edit-desc")
@@ -297,7 +297,7 @@ def test_date_snippets_use_local_time(new_page, wiki):
 def test_task_notes_complete_page_links(page, wiki):
     # A task's notes and title complete [[ and [text]( like the editor
     # (one implementation, linkAutocomplete in leaf.js).
-    wiki.write("todo", "# Todo\n\n[[deck]]\n")
+    wiki.write("todo", "# Todo\n\n[[tasks:]]\n")
     wiki.write("target-page", "# Target\n")
     wiki.write("tangent", "# Tangent\n")
     page.goto("/page/todo?view=open")
@@ -349,7 +349,7 @@ def test_emoji_completion_in_the_editor(page, wiki):
 
 def test_emoji_completion_in_task_title(page, wiki):
     # The task title (and Description) get the same completion.
-    page.goto("/deck?view=open")
+    page.goto("/tasks?view=open")
     page.locator("#task-add-btn").click()
     title = page.locator("#task-edit-title")
     title.click()

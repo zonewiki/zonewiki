@@ -86,7 +86,7 @@ if (textarea && previewPane) {
       replaceRange(start, end, text, text.length, text.length);
       const msg = created.length === 1 ? `Task “${todo[0].title}” created` : `${created.length} tasks created`;
       showToast(msg, async () => {
-        await fetch('/api/deck/batch-delete', {
+        await fetch('/api/tasks/batch-delete', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: created }),
         });
         if (textarea.value.slice(start, start + text.length) === text) {
@@ -106,7 +106,7 @@ if (textarea && previewPane) {
           if (tasks.some(t => !t) || textarea.value !== v) {
             const ids = tasks.filter(Boolean).map(t => t.id);
             if (ids.length) {
-              fetch('/api/deck/batch-delete', {
+              fetch('/api/tasks/batch-delete', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
               });
             }
@@ -127,7 +127,7 @@ if (textarea && previewPane) {
     for (const it of todo) {
       const q = TasksCore.parseQuickAdd(it.text, today);
       const body = { title: q.title, tags: q.tags, start_date: q.start_date, due_date: q.due_date, description };
-      const res = await fetch('/api/deck', {
+      const res = await fetch('/api/tasks', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).catch(() => null);
       if (!res?.ok) break;
@@ -135,7 +135,7 @@ if (textarea && previewPane) {
       it.title = q.title;
       created.push(it.id);
     }
-    const deleteCreated = () => created.length && fetch('/api/deck/batch-delete', {
+    const deleteCreated = () => created.length && fetch('/api/tasks/batch-delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: created }),
     });
     // Typed on while the tasks were being created: the range is stale.

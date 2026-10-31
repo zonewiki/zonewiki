@@ -88,7 +88,7 @@ class TestHybridSearch:
         assert _search(client, "xqzt blorf") == []
 
     def test_tasks_still_found_by_keyword(self, client, semantic):
-        client.post("/api/deck", json={"title": "Call the mechaniker"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Call the mechaniker"}, headers=HOST)
         results = _search(client, "mechaniker")
         assert any(r.get("type") == "task" for r in results)
         assert any(r["slug"] == "golf" for r in results)
@@ -103,7 +103,7 @@ class TestHybridSearch:
         assert _search(client, "werkstatt")[0]["slug"] == "golf"
 
     def test_task_found_by_meaning(self, client, semantic):
-        client.post("/api/deck", json={"title": "Book the Werkstatt"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Book the Werkstatt"}, headers=HOST)
         semantic.sync()
         results = _search(client, "car repair")
         assert any(r.get("type") == "task" and r["title"] == "[Task] Book the Werkstatt" for r in results)
@@ -160,7 +160,7 @@ class TestRelated:
     def test_absent_on_a_page_that_is_only_a_tasks_embed(self, client, wiki_dir, monkeypatch):
         long = "Werkstatt beim Mechaniker, Bremsen quietschen, Termin am Dienstag. " * 3
         write_page(wiki_dir, "golf", f"# Golf\n\n{long}\n")
-        write_page(wiki_dir, "car-tasks", "# Golf tasks\n\n[[deck tag=golf]]\n")
+        write_page(wiki_dir, "car-tasks", "# Golf tasks\n\n[[tasks: tag=golf]]\n")
         idx = make_index(related_min_chars=RELATED_MIN_CHARS)
         idx.sync()
         monkeypatch.setattr(settings, "SEMANTIC", idx)

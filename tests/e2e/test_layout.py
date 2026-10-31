@@ -64,12 +64,12 @@ See [[index]] and [[missing page]].
 
 def seed(wiki, page):
     wiki.write("stress", STRESS)
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     for title, extra in [("Short task", {}),
                          ("A task with a rather long title that should wrap on narrow screens",
                           {"tags": ["work", "layout"]}),
                          ("Planned today", {"start_date": _today()})]:
-        page.request.post("/api/deck", data={"title": title, **extra})
+        page.request.post("/api/tasks", data={"title": title, **extra})
 
 
 def _today():
@@ -194,7 +194,7 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     # Regression: line-height 1.2 put all spare leading below the text, so
     # the labels sat visibly high (caps 1.3px above centre).
     pg = new_page(viewport=viewport)
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/page/tasks?view=open")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
@@ -219,9 +219,9 @@ def test_board_header_labels_vertically_centred(new_page, wiki, viewport):
     # Regression: uneven padding and line height 1.6 left the capitals of
     # a header with cards 3px above centre (4.6px above, 11.2px below).
     pg = new_page(viewport=viewport)
-    pg.request.post("/api/deck", data={"title": "Loose"})
-    pg.request.post("/api/deck", data={"title": "Started", "start_date": date.today().isoformat()})
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    pg.request.post("/api/tasks", data={"title": "Loose"})
+    pg.request.post("/api/tasks", data={"title": "Started", "start_date": date.today().isoformat()})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/page/tasks?view=plan")
     pg.locator(".board-day-divider").first.wait_for()
     rows = pg.evaluate(_BOARD_HEADER_GAPS)
@@ -305,12 +305,12 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     # wider than the phone. The full-screen tasks edit modal grew with it and
     # its Save/Cancel bar ended up off-screen.
     pg = new_page(**TOUCH_PHONE)
-    pg.request.post("/api/deck", data={"title": "Water plants", "start_date": _today()})
+    pg.request.post("/api/tasks", data={"title": "Water plants", "start_date": _today()})
     # A full trail (5 pages before the current one) of titles with long words.
     for i in range(5):
         wiki.write(f"long-{i}", f"# Infrastructure-Troubleshooting{i} Kubernetes\n")
         pg.goto(f"/page/long-{i}")
-    pg.goto("/deck?view=focus")
+    pg.goto("/tasks?view=focus")
     # A phone shows at most 4 pages: the last 3 visited and the current one.
     crumbs = pg.locator(".breadcrumb > a")   # after the module switcher
     expect(crumbs).to_have_count(4)  # 3 pages, current
@@ -353,7 +353,7 @@ def test_desktop_keeps_the_full_breadcrumb_trail(page, wiki):
     for i in range(5):
         wiki.write(f"p{i}", f"# Page {i}\n")
         page.goto(f"/page/p{i}")
-    page.goto("/deck")
+    page.goto("/tasks")
     expect(page.locator(".breadcrumb > a")).to_have_count(5)  # 5 pages (current is text)
 
 
@@ -474,7 +474,7 @@ def test_top_row_stays_put_across_views_on_big_screens(new_page, wiki):
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
     rows = []
-    for url in ("/page/release", "/page/_scratch", "/deck"):
+    for url in ("/page/release", "/page/_scratch", "/tasks"):
         page.goto(url)
         sw, ta = page.locator(".breadcrumb .module-switch").bounding_box(), page.locator(".top-actions").bounding_box()
         h1 = page.locator("h1").first.bounding_box()
@@ -643,7 +643,7 @@ def test_wide_images_use_the_middle_column(new_page, wiki):
                                    f'<rect width="{w}" height="80" fill="#888"/></svg>')
     wiki.write("pics", "# Pics\n\nSome text to measure the column by, long enough to fill a line of it.\n\n"
                        "![wide](/_assets/wide.svg)\n\n![small](/_assets/small.svg)\n\n"
-                       "In a sentence ![wide](/_assets/wide.svg) stays.\n\n[[deck]]\n")
+                       "In a sentence ![wide](/_assets/wide.svg) stays.\n\n[[tasks:]]\n")
     page = new_page(viewport=BIG)
     page.goto("/page/pics")
     text = page.locator(".page-content > p").first.bounding_box()
@@ -661,9 +661,9 @@ def test_wide_images_use_the_middle_column(new_page, wiki):
 
 def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
     # Every view's content has the text's width, on big screens and small:
-    # a page's text, a task list embed on it, /deck, Scratch and search results.
+    # a page's text, a task list embed on it, /tasks, Scratch and search results.
     _side_wiki(wiki)
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     wiki.write("2026-10-01_09-00-00_note", "# Note\n")
     for viewport in (BIG, {"width": 1100, "height": 900}):
         page = new_page(viewport=viewport)
@@ -672,7 +672,7 @@ def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
         boxes["text"] = page.locator(".page-content").bounding_box()
         page.goto("/page/tasks")
         boxes["embed"] = page.locator(".tasks-app").bounding_box()
-        page.goto("/deck")
+        page.goto("/tasks")
         boxes["tasks"] = page.locator(".tasks-app").bounding_box()
         page.goto("/page/_scratch")
         boxes["scratch"] = page.locator(".notes-list").bounding_box()
@@ -684,7 +684,7 @@ def test_tasks_scratch_and_wiki_content_share_one_width(new_page, wiki):
 
 def test_section_task_chip_opens_its_tasks(page, wiki):
     wiki.write("garden", "# Garden\n\n## Beds\n\nSoil.\n")
-    page.request.post("/api/deck", data={"title": "Weed [[Garden#Beds]]"})
+    page.request.post("/api/tasks", data={"title": "Weed [[Garden#Beds]]"})
     page.goto("/page/garden")
     chip = page.locator(".section-header .section-tasks")
     expect(chip.locator("summary")).to_have_text("☑ 1")
@@ -693,7 +693,7 @@ def test_section_task_chip_opens_its_tasks(page, wiki):
     link = chip.locator("ul a")
     expect(link).to_have_text("Weed Garden › Beds")
     link.click()
-    page.wait_for_url(re.compile(r"/deck\?task="))
+    page.wait_for_url(re.compile(r"/tasks\?task="))
 
 
 @pytest.mark.parametrize("width", [1920, 1000])

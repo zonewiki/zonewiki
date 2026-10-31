@@ -1,4 +1,4 @@
-// The tasks' syntax in page text: [[deck …]] embeds and
+// The tasks' syntax in page text: [[tasks: …]] embeds and
 // their params, [[task:<id>]] references, and how tags are written.
 package main
 
@@ -36,7 +36,11 @@ func cleanList(name string) string {
 }
 
 var (
-	tasksRE    = regexp.MustCompile(`(?i)\[\[deck(?:` + spaceClass + `+([^\]]*))?\]\]`)
+	// [[tasks: …]], with a colon so a link [[Tasks]] stays a link; [[tasks: …]]
+	// is how a page wrote it before Deck was called Tasks.
+	// is how a page wrote it before Deck was called Tasks. embedArgs reads
+	// the params from either.
+	tasksRE   = regexp.MustCompile(`(?i)\[\[(?:tasks:` + spaceClass + `*([^\]]*)|deck(?:` + spaceClass + `+([^\]]*))?)\]\]`)
 	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )
@@ -64,7 +68,10 @@ func (p TasksParams) With(k, v string) TasksParams {
 	return c
 }
 
-// parseTasksParams reads [[deck key=val …]]'s pairs.
+// embedArgs: what follows "tasks:" or "deck" in a tasksRE match.
+func embedArgs(m []string) string { return m[1] + m[2] }
+
+// parseTasksParams reads [[tasks: key=val …]]'s pairs.
 func parseTasksParams(raw string) TasksParams {
 	p := TasksParams{m: map[string]string{}}
 	for _, token := range strings.Fields(raw) {
@@ -81,7 +88,7 @@ func parseTasksParams(raw string) TasksParams {
 	return p
 }
 
-// The tasks' views, by the names [[deck view=…]] and ?view= use.
+// The tasks' views, by the names [[tasks: view=…]] and ?view= use.
 var tasksViews = []string{"focus", "open", "plan", "completed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.

@@ -1,5 +1,5 @@
-// The tasks: the /api/deck routes (their task writes as
-// functions the MCP tools share), the [[deck]] embed's HTML, the module
+// The tasks: the /api/tasks routes (their task writes as
+// functions the MCP tools share), the [[tasks:]] embed's HTML, the module
 // counts.
 package main
 
@@ -236,7 +236,7 @@ func buildTasksEmbed(user string, params TasksParams, instance int, headless, pr
 
 type tasksEmbed struct{ placeholder, html string }
 
-// processTasksEmbeds swaps each [[deck …]] for a placeholder; the embeds'
+// processTasksEmbeds swaps each [[tasks: …]] for a placeholder; the embeds'
 // HTML replaces them after rendering (injectTasksEmbeds). private: the page
 // is in rq's user's own folder.
 func processTasksEmbeds(rq *Req, text string, private bool) (string, []tasksEmbed) {
@@ -244,7 +244,7 @@ func processTasksEmbeds(rq *Req, text string, private bool) (string, []tasksEmbe
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq.who(), parseTasksParams(g[1]), len(embeds), false, private)})
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq.who(), parseTasksParams(embedArgs(g)), len(embeds), false, private)})
 		return ph
 	})
 	return text, embeds
@@ -301,18 +301,28 @@ func taskCounts(rq *Req) TaskCounts {
 // ---- the API ----
 
 func tasksRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/deck", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	// /api/deck/…: what /api/tasks/… was called before Deck was called
+	// Tasks, for clients that still use it: the same route, by its new path.
+	deckAPI := func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/api/tasks" + strings.TrimPrefix(r.URL.Path, "/api/deck")
+		r2.URL.RawPath = ""
+		mux.ServeHTTP(w, r2)
+	}
+	mux.HandleFunc("/api/deck", deckAPI)
+	mux.HandleFunc("/api/deck/{rest...}", deckAPI)
+	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
 		return nil
 	}))
 	// A hidden task app, for a page without one that wants its edit modal
 	// (js/actions.js openHomeTask: c t, the New task button).
-	mux.HandleFunc("GET /api/deck/headless", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
 		_, _ = io.WriteString(w, buildTasksEmbed(rq.user, TasksParams{}, 0, true, rq.homePrivate()))
 	})
-	mux.HandleFunc("GET /api/deck/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
 		if err != nil {
 			return err
@@ -320,11 +330,11 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, completedInYear(userOf(r), year))
 		return nil
 	}))
-	mux.HandleFunc("GET /api/deck/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/tasks/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(userOf(r), cleanList(r.URL.Query().Get("list")))})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/deck/completed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /api/tasks/completed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		scope, n := cleanList(r.URL.Query().Get("list")), 0
 		for _, t := range completedInYear(userOf(r), currentYear()) {
 			if inScope(t, scope) {
@@ -334,10 +344,10 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, map[string]int{"count": n})
 		return nil
 	}))
-	mux.HandleFunc("GET /api/deck/due-count", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/tasks/due-count", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, taskCounts(newReq(r)))
 	})
-	mux.HandleFunc("POST /api/deck", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -349,7 +359,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusCreated, t)
 		return nil
 	}))
-	mux.HandleFunc("PUT /api/deck/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("PUT /api/tasks/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -361,7 +371,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, t)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/{id}/toggle-check", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/tasks/{id}/toggle-check", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -380,7 +390,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, t)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/{id}/comments", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/tasks/{id}/comments", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -396,20 +406,20 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusCreated, t)
 		return nil
 	}))
-	mux.HandleFunc("PUT /api/deck/{id}/comments/{cid}", tasksRoute(apiEditComment))
-	mux.HandleFunc("DELETE /api/deck/{id}/comments/{cid}", tasksRoute(apiDeleteComment))
-	mux.HandleFunc("DELETE /api/deck/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("PUT /api/tasks/{id}/comments/{cid}", tasksRoute(apiEditComment))
+	mux.HandleFunc("DELETE /api/tasks/{id}/comments/{cid}", tasksRoute(apiDeleteComment))
+	mux.HandleFunc("DELETE /api/tasks/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete task"); err != nil {
 			return err
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/batch-delete", tasksRoute(apiBatchDelete))
-	mux.HandleFunc("POST /api/deck/restore", tasksRoute(apiRestore))
-	mux.HandleFunc("POST /api/deck/batch-complete", tasksRoute(apiBatchComplete))
-	mux.HandleFunc("POST /api/deck/reorder", tasksRoute(apiReorder))
-	mux.HandleFunc("POST /api/deck/batch-tag", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("POST /api/tasks/batch-delete", tasksRoute(apiBatchDelete))
+	mux.HandleFunc("POST /api/tasks/restore", tasksRoute(apiRestore))
+	mux.HandleFunc("POST /api/tasks/batch-complete", tasksRoute(apiBatchComplete))
+	mux.HandleFunc("POST /api/tasks/reorder", tasksRoute(apiReorder))
+	mux.HandleFunc("POST /api/tasks/batch-tag", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)
 		if err != nil {
 			return err
@@ -436,7 +446,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, tasks)
 		return nil
 	}))
-	mux.HandleFunc("POST /api/deck/batch-update", tasksRoute(apiBatchUpdate))
+	mux.HandleFunc("POST /api/tasks/batch-update", tasksRoute(apiBatchUpdate))
 }
 
 var yearArgRE = regexp.MustCompile(`^\d{4}$`)

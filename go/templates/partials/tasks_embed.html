@@ -1,4 +1,4 @@
-{{- /* The task app (tasks.go buildTasksEmbed): an [[deck …]] embed, /deck, or
+{{- /* The task app (tasks.go buildTasksEmbed): a [[tasks: …]] embed, /tasks, or
     hidden (headless) for the edit modal alone (the editor's Make task, c t
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
@@ -117,7 +117,7 @@
     <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
       <input type="checkbox" id="task-edit-keep{{.sfx}}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
     </label>
-    {{- /* With users: a private task is the user's alone (private/<user>/_deck/). */}}
+    {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
     {{- if .can_private}}
     <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared.">
       <input type="checkbox" id="task-edit-private{{.sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>

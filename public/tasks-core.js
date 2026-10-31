@@ -110,7 +110,7 @@ function matchesFilter(t, f) {
   return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));
 }
 
-// The [[deck tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
+// The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
 function tagParamToQuery(raw) {
   raw = (raw || '').trim();
   if (!raw) return '';

@@ -23,7 +23,7 @@ def _wiki(wiki):
 def test_sharing_mode_hides_the_surroundings(new_page, wiki):
     _wiki(wiki)
     page = new_page(viewport={"width": 1600, "height": 900})
-    page.request.post("/api/deck", data={"title": "Ship [[Release#Plan]]"})
+    page.request.post("/api/tasks", data={"title": "Ship [[Release#Plan]]"})
     for url in ("/page/q4", "/page/rollout", "/page/release"):
         page.goto(url)
     hidden = (".trail-link", ".rail-context .backlinks", ".section-tasks")

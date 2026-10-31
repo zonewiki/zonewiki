@@ -1,5 +1,5 @@
 // A page's markdown to HTML: Zone's directives
-// (wikilinks, [[deck]], [[task:…]]) around markdown.go, and the HTML after
+// (wikilinks, [[tasks:]], [[task:…]]) around markdown.go, and the HTML after
 // it (task chips, task list embeds, the frontmatter block, sources).
 package main
 
@@ -109,7 +109,7 @@ func requestHost(rq *Req) string {
 var headingIDAttrRE = regexp.MustCompile(`(<h[1-6])` + `[ \t\n\r\f\v]+id="[^"]*"`)
 
 // renderNotes renders task notes (or, inline, comments: one line each)
-// as a page is, without what only a page has (frontmatter, [[deck]], ✎) and
+// as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
 // without heading ids, which would clash with the page's own.
 func renderNotes(rq *Req, texts []string, inline bool) []string {
 	slugs := slugSet()
@@ -399,7 +399,7 @@ func taskHref(id, tab, list, year string) string {
 	if year != "" {
 		q = append(q, "year="+url.QueryEscape(year))
 	}
-	return "/deck?" + strings.Join(q, "&")
+	return "/tasks?" + strings.Join(q, "&")
 }
 
 // taskLink: taskHref for a task as it is now: open on Open, done on

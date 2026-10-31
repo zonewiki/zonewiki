@@ -34,7 +34,7 @@ function taskAcMatches(query, onLoad) {
   if (!acTasks || Date.now() - acTasksAt > 60000) {
     if (!acTasksLoading) {
       acTasksLoading = true;
-      fetch('/api/deck').then(r => r.json()).then(tasks => {
+      fetch('/api/tasks').then(r => r.json()).then(tasks => {
         acTasks = tasks; acTasksAt = Date.now();
       }).catch(() => {}).finally(() => { acTasksLoading = false; onLoad(); });
     }

@@ -1,6 +1,6 @@
-// Tasks on disk and their model: the _deck/ files
+// Tasks on disk and their model: the _tasks/ files
 // (open tasks, completed, yearly archives; with users each user's private
-// ones in private/<user>/_deck/) under one lock with atomic writes,
+// ones in private/<user>/_tasks/) under one lock with atomic writes,
 // recurrence, history, comments, and what pages need from tasks (links to
 // pages, [[task:…]] references). A task is a *Task (task.go).
 package main
@@ -27,17 +27,28 @@ import (
 // …Locked expect it held (Go's mutex isn't reentrant, Python's RLock was).
 var tasksMu sync.Mutex
 
-const tasksDirName = "_deck"
+// The tasks' folder, and what it was called before Deck was called Tasks
+// (moved at start-up, migrateNames).
+const (
+	tasksDirName       = "_tasks"
+	legacyTasksDirName = "_deck"
+)
 
-// tasksDir: the folder of owner's tasks files: _deck/ for the shared tasks
-// (owner ""), private/<owner>/_deck/ for a user's private ones: private
+// tasksDir: the folder of owner's tasks files: _tasks/ for the shared tasks
+// (owner ""), private/<owner>/_tasks/ for a user's private ones: private
 // because it lies in their folder, like their pages. The files in each are
-// the same: tasks.json, completed.json, completed-YYYY.json.
+// the same: tasks.json, completed.json, completed-YYYY.json. A _deck/ the
+// move left (it failed) is used while there is no _tasks/.
 func tasksDir(owner string) string {
-	if owner == "" {
-		return filepath.Join(cfg.Data, tasksDirName)
+	base := cfg.Data
+	if owner != "" {
+		base = filepath.Join(cfg.Data, privateDir, owner)
 	}
-	return filepath.Join(cfg.Data, privateDir, owner, tasksDirName)
+	dir := filepath.Join(base, tasksDirName)
+	if legacy := filepath.Join(base, legacyTasksDirName); !exists(dir) && isDir(legacy) {
+		return legacy
+	}
+	return dir
 }
 
 func tasksFile(owner string) string      { return filepath.Join(tasksDir(owner), "tasks.json") }
@@ -93,7 +104,7 @@ func writeTasks(path string, tasks []*Task) error {
 // atomicWrite writes a temp file and renames it into place: a reader sees
 // the whole old file or the whole new one, never a half-written one.
 func atomicWrite(path, text string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil { // _deck/ in a new wiki
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil { // _tasks/ in a new wiki
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")

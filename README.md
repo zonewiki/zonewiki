@@ -114,13 +114,15 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), comments as a
   dated status log, a history of every date change, and undo for completing
   and deleting.
-- Separate lists declared on a page (`[[deck list=groceries keep=1]]`).
+- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`).
 - Your own task list on a page of yours, which the Tasks module then opens, with
   an optional limit on how much is in Focus:
-  `[[deck view=focus limit=8 home=1]]`.
-- Task lists inside any page (`[[deck tag=work view=plan]]`), a single task inline
+  `[[tasks: view=focus limit=8 home=1]]`.
+- Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
-  to turn lines of meeting notes into tasks.
+  to turn lines of meeting notes into tasks. (Tasks used to be called Deck:
+  pages that still say `[[deck …]]` work as before, and Zone moves the tasks
+  from `_deck/` to `_tasks/` itself.)
 - The Tasks link shows how many tasks are due today or overdue.
 - Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
   long-press to drag, or long-press and let go to select several tasks.
@@ -394,7 +396,7 @@ Also know this:
 Everything is files in `LEAF_DATA`, which is a git repository:
 
 - Pages are `.md` files, in folders if you like.
-- Uploads are in `_assets/`. Tasks are in `_deck/` as JSON, not Markdown: they
+- Uploads are in `_assets/`. Tasks are in `_tasks/` as JSON, not Markdown: they
   have fields (dates, repeats, tags) and are written safely when several
   things change them at once. They are still plain files in the git
   repository.

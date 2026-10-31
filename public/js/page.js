@@ -138,7 +138,7 @@ document.addEventListener('change', async e => {
   // its dates instead of archiving it, and undo must restore them.
   let before = null;
   if (done) {
-    try { before = (await (await fetch('/api/deck')).json()).find(t => t.id === id) || null; } catch (_) { /* no undo data */ }
+    try { before = (await (await fetch('/api/tasks')).json()).find(t => t.id === id) || null; } catch (_) { /* no undo data */ }
   }
   const res = await putTask(id, { completed: done }).catch(() => null);
   if (!res?.ok) {

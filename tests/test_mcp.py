@@ -272,13 +272,13 @@ class TestSearchWiki:
 
 
 def task(client, **fields):
-    resp = client.post("/api/deck", json=fields, headers=HOST)
+    resp = client.post("/api/tasks", json=fields, headers=HOST)
     assert resp.status_code == 201, resp.get_json()
     return resp.get_json()
 
 
 def close(client, task_id, **fields):
-    resp = client.put(f"/api/deck/{task_id}", json=fields, headers=HOST)
+    resp = client.put(f"/api/tasks/{task_id}", json=fields, headers=HOST)
     assert resp.status_code == 200, resp.get_json()
 
 
@@ -332,7 +332,7 @@ class TestTasksInSearchWiki:
         assert not err
         first = text.split("\n\n---\n\n")[0]
         assert first.startswith("[1] Task: Fix the leaf importer\nstatus: open · tags: #leaf · due: 2026-10-10\n")
-        assert f"url: http://localhost:5000/deck?task={t['id']}&view=open" in first
+        assert f"url: http://localhost:5000/tasks?task={t['id']}&view=open" in first
         assert first.endswith("Crashes on empty files.")
 
     def test_tasks_and_sections_together(self, client, pages):
@@ -419,7 +419,7 @@ class TestSearchTasks:
         assert "1 matching tasks" in text and "Write the importer" in text
 
     def test_list_label_and_link(self, client, wiki_dir):
-        (wiki_dir / "shop.md").write_text("# Shop\n\n[[deck list=groceries]]\n", encoding="utf-8")
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=groceries]]\n", encoding="utf-8")
         task(client, title="Milk", tags=["groceries"])
         task(client, title="Main task")
         text, _ = call(client, "search_tasks", tag="groceries")
@@ -546,7 +546,7 @@ class TestListPages:
     def test_orphans(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]]\n")
         write_page(pages, "2026-10-08_14-03-11_idea", "# Idea\n")       # a scratch note
-        write_page(pages, "tasks", "# Tasks\n\n[[deck home=1]]\n")     # the Tasks home
+        write_page(pages, "tasks", "# Tasks\n\n[[tasks: home=1]]\n")     # the Tasks home
         text, err = call(client, "list_pages", orphans=True)
         assert not err and text.startswith("Pages no other page links to")
         assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote"]
@@ -731,7 +731,7 @@ class TestReadGuides:
 
     def test_the_description_lists_the_guided_folders(self, client, guided):
         write_page(guided, "tickets/bug-1/AGENTS", "Only summary.md here.\n")
-        write_page(guided, "_deck/CLAUDE", "# Not a page\n")
+        write_page(guided, "_tasks/CLAUDE", "# Not a page\n")
         desc = self.tool_list(client)["read_guides"]["description"]
         assert desc.endswith(" Guides in this wiki:\n- the whole wiki: Wiki guide\n"
                              "- messages/: Messages — Project Instructions\n- tickets/bug-1/: tickets/bug-1/AGENTS")
@@ -778,7 +778,7 @@ class TestListTags:
     def test_pages_and_tasks_most_used_first(self, client, pages):
         write_page(pages, "a", "---\ntags: [Backend, infra]\n---\n# A\n")
         write_page(pages, "b", "---\ntags: backend\n---\n# B\n")
-        write_page(pages, "shop", "# Shop\n\n[[deck list=shopping]]\n")
+        write_page(pages, "shop", "# Shop\n\n[[tasks: list=shopping]]\n")
         task(client, title="t1", tags=["backend"])
         close(client, task(client, title="t2", tags=["backend", "infra"])["id"], completed=True)
         task(client, title="milk", tags=["shopping"])
@@ -835,7 +835,7 @@ class TestRelatedByMeaning:
 class TestReadPageLinks:
     def test_linked_from_and_broken_links(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]], [[Nowhere]], [[golf#Werkstatt|the garage]]\n"
-                               "\n`[[In Code]]`\n\n[[deck]]\n")
+                               "\n`[[In Code]]`\n\n[[tasks:]]\n")
         write_page(pages, "b", "# B\n\n[Golf](golf.md)\n")
         text = call(client, "read_page", slug="golf")[0]
         assert text.endswith("\n\n---\nLinked from (2): a, b")
@@ -932,10 +932,10 @@ class TestGrepWiki:
 
 class TestTaskComments:
     def test_task_text_lists_comments(self, client):
-        tid = client.post("/api/deck", json={"title": "Plan on-call", "tags": ["task"],
+        tid = client.post("/api/tasks", json={"title": "Plan on-call", "tags": ["task"],
                                              "description": "the notes"},
                           headers=HOST).get_json()["id"]
-        client.post(f"/api/deck/{tid}/comments", json={"text": "asked alex: 6 people"}, headers=HOST)
+        client.post(f"/api/tasks/{tid}/comments", json={"text": "asked alex: 6 people"}, headers=HOST)
         text, err = call(client, "search_tasks", tag="task")
         assert not err
         assert "the notes\n\nComments:\n- " in text
@@ -1020,10 +1020,10 @@ class TestWritePage:
         assert "[[Golf]]" not in text.split("Note:")[1] and "Code" not in text
 
     def test_refuses_folders_leaf_skips_and_stays_inside(self, client, wiki_dir):
-        for slug in ("_deck/tasks", "_assets/x", "a/_b/c"):
+        for slug in ("_tasks/tasks", "_assets/x", "a/_b/c"):
             text, err = call(client, "write_page", slug=slug, content="# X")
             assert err and "folders starting with '_'" in text, slug
-        assert not (wiki_dir / "_deck" / "tasks.md").exists()
+        assert not (wiki_dir / "_tasks" / "tasks.md").exists()
         # to_slug drops the dots: the page lands inside the wiki
         text, err = call(client, "write_page", slug="../outside", content="# X")
         assert not err and "Created page outside." in text
@@ -1231,7 +1231,7 @@ class TestScratchNotes:
 class TestRenamePage:
     def test_moves_the_page_and_its_links(self, client, pages):
         write_page(pages, "hub", "# Hub\n\nSee [[golf]] and [car](golf).\n")
-        tid = client.post("/api/deck", json={"title": "Fix [[golf]]"}, headers=HOST).get_json()["id"]
+        tid = client.post("/api/tasks", json={"title": "Fix [[golf]]"}, headers=HOST).get_json()["id"]
         text, err = call(client, "rename_page", slug="golf", new_slug="cars/golf")
         assert not err and text.startswith("Renamed page golf to cars/golf. Links to it were updated in 2 files.")
         assert not (pages / "golf.md").exists() and (pages / "cars" / "golf.md").exists()
@@ -1266,7 +1266,7 @@ class TestRenameFolder:
         return wiki_dir
 
     def test_moves_every_page_and_their_links(self, client, tree):
-        tid = client.post("/api/deck", json={"title": "Fix [[tickets/bug-1]]"}, headers=HOST).get_json()["id"]
+        tid = client.post("/api/tasks", json={"title": "Fix [[tickets/bug-1]]"}, headers=HOST).get_json()["id"]
         text, err = call(client, "rename_page", slug="tickets/", new_slug="work/tickets")
         assert not err and text.startswith("Moved folder tickets/ to work/tickets/: 2 pages.")
         assert "- tickets/sub/bug-2 → work/tickets/sub/bug-2" in text
@@ -1598,8 +1598,8 @@ class TestCreateTask:
 
     def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
         # The home tasks shows list=task: a task without the tag wasn't in it.
-        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[deck list=task tag=work view=focus home=1]]\n")
-        write_page(wiki_dir, "shop", "[[deck list=groceries]]\n")
+        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task tag=work view=focus home=1]]\n")
+        write_page(wiki_dir, "shop", "[[tasks: list=groceries]]\n")
         assert "tags: #task #work" in call(client, "create_task", title="Report")[0]
         assert "tags: #task #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
         assert "tags: #task #work #x" in call(client, "create_task", title="Y", tags="x")[0]
@@ -1649,8 +1649,9 @@ class TestUpdateTask:
         assert "status: won't do" in text and "Next occurrence" in text
 
     def test_ids_links_and_refs_name_the_task(self, client, wiki_dir):
-        full = client.post("/api/deck", json={"title": "By id"}, headers=HOST).get_json()["id"]
-        for ref in (full, full[:8], f"[[task:{full[:8]}]]", f"http://localhost:5000/deck?task={full}"):
+        full = client.post("/api/tasks", json={"title": "By id"}, headers=HOST).get_json()["id"]
+        for ref in (full, full[:8], f"[[task:{full[:8]}]]", f"http://localhost:5000/tasks?task={full}",
+                    f"http://localhost:5000/deck?task={full}"):   # a link from before the rename
             text, err = call(client, "update_task", id=ref, notes=ref)
             assert not err, ref
 
@@ -1666,7 +1667,7 @@ class TestUpdateTask:
     def test_ambiguous_prefix(self, client, wiki_dir):
         import json
         tasks = [{"id": f"abcd{i}000-0000-0000-0000-000000000000", "title": f"T{i}"} for i in (1, 2)]
-        (wiki_dir / "_deck" / "tasks.json").write_text(json.dumps(tasks))
+        (wiki_dir / "_tasks" / "tasks.json").write_text(json.dumps(tasks))
         text, err = call(client, "update_task", id="abcd", title="x")
         assert err and "Several tasks" in text
         assert not call(client, "update_task", id="abcd1", title="x")[1]
@@ -1675,7 +1676,7 @@ class TestUpdateTask:
 class TestTagTasks:
     """update_task with ids: tags on several tasks in one commit."""
     def _tasks(self, client):
-        return {t["title"]: t for t in client.get("/api/deck", headers=HOST).get_json()}
+        return {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
 
     def test_adds_and_removes_on_several_in_one_commit(self, client, git_wiki_dir):
         a = _task_id(call(client, "create_task", title="Nails", tags=["old", "Work"])[0])
@@ -1690,7 +1691,7 @@ class TestTagTasks:
         assert f"- Nails ({a}): #Work #diy" in text and f"- Glue ({b}): #work #diy" in text
         assert self._tasks(client)["Nails"]["tags"] == ["Work", "diy"]
         assert self._tasks(client)["Glue"]["tags"] == ["work", "diy"]
-        done = client.get("/api/deck/completed", headers=HOST).get_json()
+        done = client.get("/api/tasks/completed", headers=HOST).get_json()
         assert done[0]["tags"] == ["work", "diy"]
         log = self_log(git_wiki_dir)
         assert len(log) == before + 1 and log[0] == "Tag tasks: sort the shed (MCP)"

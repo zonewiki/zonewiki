@@ -197,7 +197,7 @@ def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     page.locator("#modal-filter").fill("scra")
     expect(items.first.locator("a")).to_have_text("Notes")
     page.locator("#modal-filter").fill("tasks")
-    expect(items.first.locator("a")).to_have_attribute("href", "/deck")
+    expect(items.first.locator("a")).to_have_attribute("href", "/tasks")
     page.locator("#modal-filter").fill("")
     page.locator("#modal-unlinked").check()
     expect(page.locator("#modal-page-list .page-list-special")).to_have_count(0)
@@ -213,17 +213,17 @@ def test_phone_reaches_scratch_list_in_one_tap(new_page, wiki):
 
 def test_task_result_opens_the_tasks_page(page, wiki):
     # Regression: with no tasks.md, opening a task from Ctrl+P landed on
-    # /edit/deck, an empty new page. It now opens the built-in /deck, whatever
+    # /edit/deck, an empty new page. It now opens the built-in /tasks, whatever
     # pages embed a task list.
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
-    tid = page.request.post("/api/deck", data={"title": "Renew passport"}).json()["id"]
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    tid = page.request.post("/api/tasks", data={"title": "Renew passport"}).json()["id"]
     page.goto("/page/index")
     page.keyboard.press("Control+p")
     page.locator("#modal-filter").fill("passport")
     card = page.locator("#modal-content-matches .search-result-card").first
     expect(card).to_be_visible()
     card.click()
-    page.wait_for_url(f"**/deck?task={tid}&view=open")
+    page.wait_for_url(f"**/tasks?task={tid}&view=open")
     expect(page.locator(f".task-item[data-id='{tid}']")).to_have_class(
         re.compile(r"\btask-selected\b"))
 
@@ -333,7 +333,7 @@ def test_highlights_start_in_the_linked_section(page, wiki):
 
 
 def test_n_does_not_reach_the_tasks_while_highlighting(page, wiki):
-    wiki.write("tasks", "# Tasks\n\nzebra notes.\n\n[[deck]]\n")
+    wiki.write("tasks", "# Tasks\n\nzebra notes.\n\n[[tasks:]]\n")
     page.goto("/page/tasks?hl=zebra")
     expect(page.locator(".search-hl-bar")).to_contain_text("1 of 1")
     page.locator(".tasks-app").wait_for()

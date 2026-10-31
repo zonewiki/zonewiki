@@ -478,7 +478,7 @@ func searchIndex(rq *Req) *docIndex {
 
 // semanticText: a page as (title, body) for embedding and the section
 // index: the tldr and tags lead, the frontmatter block and the H1 (the
-// title already) are dropped, and so are [[deck …]] directives (markup, not
+// title already) are dropped, and so are [[tasks: …]] directives (markup, not
 // content: pages holding nothing but a task list embed came out as each other's
 // closest match).
 func semanticText(content, slug string) (string, string) {

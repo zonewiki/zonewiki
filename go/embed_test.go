@@ -542,7 +542,7 @@ func TestChunkPage(t *testing.T) {
 func TestSemanticText(t *testing.T) {
 	testWiki(t, nil)
 	// Tasks embeds are markup: pages of only an embed were each other's closest match.
-	_, body := semanticText("# Zone\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[deck]]\n", "leaf")
+	_, body := semanticText("# Zone\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[tasks:]]\n", "leaf")
 	if strings.Contains(strings.ToLower(body), "tasks") || !strings.Contains(body, "Notes  here.") {
 		t.Errorf("task list embeds: %q", body)
 	}

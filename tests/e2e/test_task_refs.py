@@ -12,13 +12,13 @@ from test_usability import wait_until
 
 
 def _task(page, **fields):
-    return page.request.post("/api/deck", data=fields).json()
+    return page.request.post("/api/tasks", data=fields).json()
 
 
 def _tasks_task(wiki, task_id):
     """The task as stored, open or completed (None if neither)."""
     for name in ("tasks.json", "completed.json"):
-        path = wiki.root / "_deck" / name
+        path = wiki.root / "_tasks" / name
         if path.exists():
             for t in json.loads(path.read_text()):
                 if t["id"] == task_id:
@@ -63,9 +63,9 @@ def test_keep_task_chip_comes_back_and_undo_restores_its_dates(page, wiki):
 def test_ticked_chip_keeps_linking_to_the_pages_list(page, wiki):
     # A task in two lists; the page declares the second one A–Z. The chip
     # re-rendered after ticking still links to the page's list.
-    wiki.write("ideas", "# Ideas\n\n[[deck list=presentideas]]\n")
+    wiki.write("ideas", "# Ideas\n\n[[tasks: list=presentideas]]\n")
     t = _task(page, title="Lego", keep=True, tags=["presentideas", "task"])
-    wiki.write("todo", f"# Todo\n\n[[deck list=task]]\n\n[[task:{t['id'][:8]}]]\n")
+    wiki.write("todo", f"# Todo\n\n[[tasks: list=task]]\n\n[[task:{t['id'][:8]}]]\n")
     page.goto("/page/todo")
     link = page.locator(".page-content .task-ref-title")
     expect(link).to_have_attribute("href", re.compile(r"list=task$"))
@@ -103,7 +103,7 @@ def test_format_bar_button_starts_a_task_reference(page, wiki):
 # ── Make task (from the editor) ──────────────────────────────────────────────
 
 def _open_tasks(wiki):
-    path = wiki.root / "_deck" / "tasks.json"
+    path = wiki.root / "_tasks" / "tasks.json"
     return json.loads(path.read_text()) if path.exists() else []
 
 

@@ -14,7 +14,7 @@ Open an issue with the **Bug report** template. It asks for:
 - **How you run it**: `run.sh` with Podman or Docker, or without a
   container; the OS; the browser, and whether it's a phone.
 - **Steps to reproduce**, what you expected and what happened. A few lines of
-  Markdown or a `[[deck …]]` line that shows the problem help most.
+  Markdown or a `[[tasks: …]]` line that shows the problem help most.
 - **The server log** around the error if there was one (`./run.sh logs`).
 
 Leave out passwords, MCP tokens and anything private from your

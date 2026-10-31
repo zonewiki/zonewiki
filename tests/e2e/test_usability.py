@@ -17,7 +17,7 @@ def titles(page):
 
 
 def task(page, title):
-    return next(t for t in page.request.get("/api/deck").json() if t["title"] == title)
+    return next(t for t in page.request.get("/api/tasks").json() if t["title"] == title)
 
 
 def wait_until(page, predicate, timeout_ms=5000):
@@ -28,9 +28,9 @@ def wait_until(page, predicate, timeout_ms=5000):
     assert predicate()
 
 
-def seed_tasks(page, wiki, embed="[[deck]]"):
+def seed_tasks(page, wiki, embed="[[tasks:]]"):
     for title, tags in (("Fix bug", "work"), ("Buy milk", "home"), ("Fix fence", "home,work")):
-        page.request.post("/api/deck", data={"title": title, "tags": tags})
+        page.request.post("/api/tasks", data={"title": title, "tags": tags})
     wiki.write("tasks", f"# Tasks\n\n{embed}\n")
     page.goto("/page/tasks?view=open")
 
@@ -102,7 +102,7 @@ def test_hash_key_starts_a_tag_word(page, wiki):
 
 
 def test_embed_tag_param_lands_in_filter_field(page, wiki):
-    seed_tasks(page, wiki, "[[deck tag=home,work]]")
+    seed_tasks(page, wiki, "[[tasks: tag=home,work]]")
     expect(filter_chips(page)).to_have_text(["#home", "#work"])
     expect(page.locator("#task-filter-search")).to_have_value("")
     expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
@@ -175,9 +175,9 @@ def swipe(page, locator, dx, dy=0, steps=8, release=True):
 
 def phone_tasks(new_page, wiki, view="open", **fields):
     phone = new_page(**TOUCH_PHONE)
-    phone.request.post("/api/deck", data={"title": "Water plants", **fields})
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
-    phone.goto(f"/deck?view={view}")
+    phone.request.post("/api/tasks", data={"title": "Water plants", **fields})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    phone.goto(f"/tasks?view={view}")
     return phone
 
 
@@ -341,8 +341,8 @@ def seed_tags(page, wiki):
     """work on 3 tasks, workshop and wood on 1 each, home on 1."""
     for title, tags in (("A", "work"), ("B", "work"), ("C", "work,workshop"),
                         ("D", "wood"), ("E", "home")):
-        page.request.post("/api/deck", data={"title": title, "tags": tags})
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+        page.request.post("/api/tasks", data={"title": title, "tags": tags})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
 
 
@@ -364,7 +364,7 @@ def test_filter_tab_completes_to_best_match(page, wiki):
 def test_exact_match_comes_first(page, wiki):
     seed_tags(page, wiki)
     for title in ("F", "G", "H", "I"):   # workshop now more used than work
-        page.request.post("/api/deck", data={"title": title, "tags": "workshop"})
+        page.request.post("/api/tasks", data={"title": title, "tags": "workshop"})
     page.reload()
     field = page.locator("#task-filter-search")
     field.click()
@@ -406,7 +406,7 @@ def test_edit_modal_tags_complete_and_chain(page, wiki):
     tags.fill("")
     modal.get_by_role("button", name="Save").click()
     expect(page.locator(".task-item").filter(has_text="Chained")).to_be_visible()
-    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Chained")
+    t = next(t for t in page.request.get("/api/tasks").json() if t["title"] == "Chained")
     assert t["tags"] == ["work", "home"]
 
 
@@ -435,16 +435,16 @@ def test_bulk_remove_suggests_only_tags_of_selected_tasks(page, wiki):
     expect(inp).to_have_count(0)
     # The dialog closes before the request finishes: wait for the card.
     expect(card.locator(".task-tag")).to_have_count(0)
-    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "D")
+    t = next(t for t in page.request.get("/api/tasks").json() if t["title"] == "D")
     assert t["tags"] == []
 
 
 def test_tag_with_space_is_findable_in_filter(page, wiki):
     # Regression: a tag saved as "locallm xxx" never matched "#locallm xxx",
     # since the filter splits on spaces. Tags are now one word each.
-    page.request.post("/api/deck", data={"title": "Try models", "tags": "locallm xxx"})
-    page.request.post("/api/deck", data={"title": "Other"})
-    wiki.write("tasks", "# Tasks\n\n[[deck]]\n")
+    page.request.post("/api/tasks", data={"title": "Try models", "tags": "locallm xxx"})
+    page.request.post("/api/tasks", data={"title": "Other"})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
     field = page.locator("#task-filter-search")
     field.click()
@@ -479,7 +479,7 @@ def test_tags_field_takes_several_tags_at_once(page, wiki):
     expect(tags).to_have_value("c")
     modal.get_by_role("button", name="Save").click()
     expect(page.locator(".task-item").filter(has_text="Several")).to_be_visible()
-    t = next(t for t in page.request.get("/api/deck").json() if t["title"] == "Several")
+    t = next(t for t in page.request.get("/api/tasks").json() if t["title"] == "Several")
     assert t["tags"] == ["alpha", "beta", "gamma", "brandnew", "a", "b", "c"]
 
     # The bulk tag dialog too: a space makes a chip.

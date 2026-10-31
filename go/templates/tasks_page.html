@@ -1,4 +1,4 @@
-{{- /* /deck: every task, or with ?list= that separate list, looking as on
+{{- /* /tasks: every task, or with ?list= that separate list, looking as on
     the page that declares it (home). */ -}}
 {{define "body"}}
 {{.breadcrumb_html}}
@@ -6,7 +6,7 @@
 <article class="page-content">
 {{- if .list_name}}<p class="tasks-list-home">
   {{- with .home}}A separate list, from <a href="{{url "page" .Slug}}">{{.Title}}</a>.
-  {{- else}}No page declares <code>[[deck list={{.list_name}}]]</code>: these are the tasks tagged #{{.list_name}}.{{end -}}
+  {{- else}}No page declares <code>[[tasks: list={{.list_name}}]]</code>: these are the tasks tagged #{{.list_name}}.{{end -}}
 </p>{{end -}}
 {{.tasks_html}}</article>
 {{end}}

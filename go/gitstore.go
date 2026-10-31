@@ -518,7 +518,7 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		}
 		n, err := strconv.Atoi(parts[1])
 		slug, ok := strings.CutSuffix(filepath.ToSlash(parts[0]), ".md")
-		if err == nil && ok && slugs[slug] { // pages only: not _assets/, _deck/, …
+		if err == nil && ok && slugs[slug] { // pages only: not _assets/, _tasks/, …
 			hits = append(hits, GrepHit{slug, n, parts[2]})
 		}
 	}

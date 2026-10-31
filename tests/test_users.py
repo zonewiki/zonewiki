@@ -255,12 +255,12 @@ class TestMakeShared:
         links = "[[private/alice/ideas]] [[private/alice/ideas|Our ideas]] [x](/page/private/alice/ideas) `[[private/alice/ideas]]`\n"
         (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n" + links)
         (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links)
-        mine = alice.post("/api/deck", json={"title": "Think about [[private/alice/ideas]]", "private": True}).get_json()["id"]
+        mine = alice.post("/api/tasks", json={"title": "Think about [[private/alice/ideas]]", "private": True}).get_json()["id"]
         alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "shared-ideas"}, headers=HOST)
         want = "# {}\n\n[[shared-ideas]] [[shared-ideas|Our ideas]] [x](/page/shared-ideas) `[[private/alice/ideas]]`\n"
         assert (git_wiki_dir / "private/alice/diary.md").read_text() == want.format("Diary")
         assert (git_wiki_dir / "plans.md").read_text() == want.format("Plans")
-        titles = {t["id"]: t["title"] for t in alice.get("/api/deck", headers=HOST).get_json()}
+        titles = {t["id"]: t["title"] for t in alice.get("/api/tasks", headers=HOST).get_json()}
         assert titles[mine] == "Think about [[shared-ideas]]"
 
     def test_a_name_taken_comes_back_with_the_error(self, alice, git_wiki_dir):
@@ -338,7 +338,7 @@ class TestModuleMenu:
         (git_wiki_dir / "plans.md").write_text("# Plans\n")
         for url, module in [("/page/private/alice/index", "private"), ("/page/private/alice/diary", "private"),
                             ("/page/_scratch", "scratch"), (f"/page/{note}", "scratch"),
-                            ("/page/plans", "wiki"), ("/deck", "tasks")]:
+                            ("/page/plans", "wiki"), ("/tasks", "tasks")]:
             body = client.get(url, headers=HOST).data.decode()
             assert f'<body data-module="{module}"' in body, url
             crumb, bar, top = self.parts(body)
@@ -512,7 +512,7 @@ class TestAuthors:
     def test_commits_are_by_whoever_made_the_change(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
         client.post("/new", data={"slug": "plans"}, headers=HOST)
-        client.post("/api/deck", json={"title": "Call Sam"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST)
         client.post("/api/scratch", data={"title": "Idea"}, headers=HOST)
         client.post("/api/upload", data={"file": (BytesIO(b"\x89PNG"), "a.png")},
                     content_type="multipart/form-data", headers=HOST)
@@ -544,39 +544,39 @@ class TestAuthors:
 
     def test_comments_name_their_author(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
-        task = client.post("/api/deck", json={"title": "Call Sam"}, headers=HOST).get_json()
-        resp = client.post(f"/api/deck/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
+        task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
+        resp = client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
         [comment] = resp.get_json()["comments"]
         assert comment["by"] == "alice"
-        resp = client.put(f"/api/deck/{task['id']}/comments/{comment['id']}", json={"text": "Called"}, headers=HOST)
+        resp = client.put(f"/api/tasks/{task['id']}/comments/{comment['id']}", json={"text": "Called"}, headers=HOST)
         assert resp.get_json()["comments"][0]["by"] == "alice"   # an edit keeps the author
-        assert '"by": "alice"' in (git_wiki_dir / "_deck" / "tasks.json").read_text()
+        assert '"by": "alice"' in (git_wiki_dir / "_tasks" / "tasks.json").read_text()
         client.post("/logout", headers=HOST)
         text = mcp(client, "alice-token", "search_tasks", query="Sam").get_json()["result"]["content"][0]["text"]
         assert "(alice): Called" in text
 
     def test_task_history_names_who_did_what(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
-        task = client.post("/api/deck", json={"title": "Water plants", "due_date": "2030-01-01",
+        task = client.post("/api/tasks", json={"title": "Water plants", "due_date": "2030-01-01",
                                               "recurrence": {"type": "weekly", "interval": 1}}, headers=HOST).get_json()
-        client.put(f"/api/deck/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
+        client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
         client.post("/logout", headers=HOST)
         login(client, "bob", "bob-pw")
-        done = client.put(f"/api/deck/{task['id']}", json={"completed": True}, headers=HOST).get_json()
+        done = client.put(f"/api/tasks/{task['id']}", json={"completed": True}, headers=HOST).get_json()
         events = [(e["event"], e.get("by")) for e in done["history"]]
         assert events == [("created", "alice"), ("due", "alice"), ("done", "bob")]
-        [spawn] = [t for t in client.get("/api/deck", headers=HOST).get_json() if t["spawned_from"] == task["id"]]
+        [spawn] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["spawned_from"] == task["id"]]
         assert spawn["history"][-1]["event"] == "repeat" and spawn["history"][-1]["by"] == "bob"
         # Undo puts a snapshot back: the authors stay.
-        client.put(f"/api/deck/{task['id']}", json={"completed": False, "history": done["history"][:2]}, headers=HOST)
-        [back] = [t for t in client.get("/api/deck", headers=HOST).get_json() if t["id"] == task["id"]]
+        client.put(f"/api/tasks/{task['id']}", json={"completed": False, "history": done["history"][:2]}, headers=HOST)
+        [back] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["id"] == task["id"]]
         assert [e.get("by") for e in back["history"]][:2] == ["alice", "alice"]
 
     def test_without_users_comments_and_history_have_no_author(self, client, git_wiki_dir):
-        task = client.post("/api/deck", json={"title": "Call Sam"}, headers=HOST).get_json()
-        client.post(f"/api/deck/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
-        client.put(f"/api/deck/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
-        assert '"by"' not in (git_wiki_dir / "_deck" / "tasks.json").read_text()
+        task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
+        client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
+        client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
+        assert '"by"' not in (git_wiki_dir / "_tasks" / "tasks.json").read_text()
         assert "hist-by" not in client.get("/history/index", headers=HOST).data.decode()
 
 

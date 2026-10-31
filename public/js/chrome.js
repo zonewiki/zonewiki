@@ -23,11 +23,11 @@
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Scratch, /deck, the Tasks home page (where the Tasks link goes) and
+  // Scratch, /tasks, the Tasks home page (where the Tasks link goes) and
   // your private home (the Private pill).
   const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
-    .filter(p => !['index', '_scratch', '/deck'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
+    .filter(p => !['index', '_scratch', '/tasks'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
       && (p.url || '').split('?')[0] !== tasksHref)
                             .slice(-maxPrev);
   const homeEl = bc.querySelector('.breadcrumb-home');
@@ -212,7 +212,7 @@ function showCount(el, n) {
 export async function refreshDueBadge() {
   if (!tasksLinks.length) return;
   try {
-    const res = await fetch('/api/deck/due-count');
+    const res = await fetch('/api/tasks/due-count');
     const c = await res.json();
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);

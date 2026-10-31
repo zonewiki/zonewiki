@@ -146,10 +146,10 @@ class TestWritesCommit:
 
     def test_rename_commit_includes_updated_tasks_tasks(self, client, wiki_dir):
         save(client, "old", "# Old\n")
-        client.post("/api/deck", json={"title": "Task [[old]]"}, headers=HOST)
+        client.post("/api/tasks", json={"title": "Task [[old]]"}, headers=HOST)
         client.post("/rename/old", data={"new_name": "new"}, headers=HOST)
         changed = git(wiki_dir, "show", "--name-only", "--format=", "HEAD").split()
-        assert "_deck/tasks.json" in changed
+        assert "_tasks/tasks.json" in changed
         assert is_clean(wiki_dir)
 
     def test_upload_commits(self, client, wiki_dir):
@@ -167,8 +167,8 @@ class TestWritesCommit:
         assert head_sha(wiki_dir) == before
 
     def test_tasks_write_commits_tasks_file(self, client, wiki_dir):
-        client.post("/api/deck", json={"title": "Task"}, headers=HOST)
-        assert "_deck/tasks.json" in git(wiki_dir, "ls-files").splitlines()
+        client.post("/api/tasks", json={"title": "Task"}, headers=HOST)
+        assert "_tasks/tasks.json" in git(wiki_dir, "ls-files").splitlines()
         assert is_clean(wiki_dir)
 
 
@@ -197,9 +197,9 @@ class TestHomePage:
 class TestTasksFolder:
 
     def test_a_new_wiki_gets_the_folder_on_first_write(self, client, wiki_dir):
-        (wiki_dir / "_deck").rmdir()   # as in a wiki without tasks yet
-        client.post("/api/deck", json={"title": "First"}, headers=HOST)
-        assert (wiki_dir / "_deck" / "tasks.json").exists()
+        (wiki_dir / "_tasks").rmdir()   # as in a wiki without tasks yet
+        client.post("/api/tasks", json={"title": "First"}, headers=HOST)
+        assert (wiki_dir / "_tasks" / "tasks.json").exists()
         assert not list(wiki_dir.glob("_deck*.json"))
 
 

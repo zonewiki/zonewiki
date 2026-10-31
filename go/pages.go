@@ -65,7 +65,7 @@ func pathURL(parts ...string) string {
 func isProtected(slug string) bool { return slug == "index" || isPrivateHome(slug) }
 
 // safePath is the page's file when it is inside the wiki and not in a
-// folder iterPages skips (_assets, _deck, .leaf, .git …: no pages there,
+// folder iterPages skips (_assets, _tasks, .leaf, .git …: no pages there,
 // so no route reads or writes a .md file there); "" otherwise.
 func safePath(slug string) string {
 	if strings.HasPrefix(slug, "/") || strings.ContainsRune(slug, 0) {
@@ -459,12 +459,12 @@ type pageMetaEntry struct {
 	embeds  []TasksParams
 }
 
-// pageTasksEmbeds: the params of each [[deck …]] on a page, outside code.
+// pageTasksEmbeds: the params of each [[tasks: …]] on a page, outside code.
 func pageTasksEmbeds(content string) []TasksParams {
 	masked, _ := maskCode(content)
 	var out []TasksParams
 	for _, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
-		out = append(out, parseTasksParams(m[1]))
+		out = append(out, parseTasksParams(embedArgs(m)))
 	}
 	return out
 }
@@ -485,7 +485,7 @@ func embedsLists(embeds []TasksParams) []TaskList {
 	return out
 }
 
-// pageTaskLists: each [[deck list=…]] on a page, outside code.
+// pageTaskLists: each [[tasks: list=…]] on a page, outside code.
 func pageTaskLists(content string) []TaskList { return embedsLists(pageTasksEmbeds(content)) }
 
 func pageMetaEntryOf(p, slug string) pageMetaEntry {
@@ -523,7 +523,7 @@ type TasksHome struct {
 	Params      TasksParams
 }
 
-// taskLists: every list a page user sees declares ([[deck list=<name>]]),
+// taskLists: every list a page user sees declares ([[tasks: list=<name>]]),
 // by name; when several pages declare one, its home is the first A–Z in
 // user's private folder, else the first shared one A–Z. A list declared on
 // a private page is its owner's alone: for others its name is a plain tag.
@@ -560,9 +560,9 @@ func taskList(t *Task, names map[string]TasksHome) string {
 	return ""
 }
 
-// lookupTasksHome: the page with a [[deck … home=1]] embed, user's own
+// lookupTasksHome: the page with a [[tasks: … home=1]] embed, user's own
 // tasks: one in their private folder first, else a shared one (the first
-// slug A–Z when several declare one); nil: the Tasks link goes to /deck.
+// slug A–Z when several declare one); nil: the Tasks link goes to /tasks.
 func lookupTasksHome(user string) *TasksHome {
 	var shared *TasksHome
 	for _, p := range sortedPages() {

@@ -28,7 +28,7 @@ def wiki_dir(tmp_path, monkeypatch):
     """A fresh wiki (just index.md) that the server points at."""
     monkeypatch.setattr(settings, "LEAF_DATA", tmp_path)
     (tmp_path / "_assets").mkdir()
-    (tmp_path / "_deck").mkdir()   # tests write tasks files directly
+    (tmp_path / "_tasks").mkdir()   # tests write tasks files directly
     (tmp_path / "index.md").write_text("# Home\n\nWelcome.\n", encoding="utf-8")
     return tmp_path
 
@@ -65,7 +65,7 @@ def write_page(wiki_dir: Path, slug: str, content: str) -> Path:
 
 def create_task(client, **kwargs):
     """POST a task (title "Test task" unless given); returns the response."""
-    return client.post("/api/deck", json={"title": "Test task", **kwargs})
+    return client.post("/api/tasks", json={"title": "Test task", **kwargs})
 
 
 def content_hash(text: str) -> str:
