@@ -141,11 +141,14 @@ case "${1:-up}" in
       echo "No .env: create one (cp .env.example .env, see README)." >&2
       exit 1
     fi
-    # A container named leaf that compose didn't create (an older run.sh
-    # started it with podman run) would block compose's.
-    if $ENGINE container inspect leaf >/dev/null 2>&1 &&
-       ! $ENGINE container inspect leaf --format '{{json .Config.Labels}}' | grep -q 'compose'; then
-      $ENGINE rm -f leaf >/dev/null
+    # The container from before Leaf was called Zone, named leaf (compose's
+    # project leaf, or an older run.sh's podman run), would hold the port.
+    if $ENGINE container inspect leaf >/dev/null 2>&1; then
+      labels=$($ENGINE container inspect leaf --format '{{json .Config.Labels}}')
+      if ! grep -q 'compose' <<<"$labels" || grep -q '"com.docker.compose.project":"leaf"' <<<"$labels"; then
+        echo "Removing the container leaf, Zone's from before the rename (the wiki stays)."
+        $ENGINE rm -f leaf >/dev/null
+      fi
     fi
     compose up -d --build
     echo "Zone running at http://localhost:5000"
@@ -162,7 +165,7 @@ case "${1:-up}" in
     # against it, in the tools image (Containerfile.tools), one worker per
     # CPU (-n 0: one process). Extra args go to pytest; without a tests/…
     # path the whole suite runs but the browser and tasks-core tests (e2e).
-    image=$(build_image leaf-tools -f Containerfile.tools)
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
     in_image "$image" -- sh -c \
       '(cd go && go vet ./... && go test ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
@@ -176,7 +179,7 @@ case "${1:-up}" in
     # one worker per two CPUs: each runs its own Chromium, and a worker per
     # CPU starves the browsers until timing-sensitive tests fail. -n 0 (or
     # any -n) in the extra args overrides it.
-    image=$(build_image leaf-tools -f Containerfile.tools)
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- sh -c \
       'n=$(( $(nproc) / 2 )); [ "$n" -ge 1 ] || n=1
        python3 -m pytest tests/e2e tests/test_tasks_core.py -v -p no:cacheprovider \
@@ -200,7 +203,7 @@ case "${1:-up}" in
         *) echo "leaks: the index $GIT_INDEX_FILE is outside the repo." >&2; exit 2 ;;
       esac
     fi
-    image=$(build_image leaf-tools -f Containerfile.tools)
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
     in_image "$image" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
       -e GIT_CONFIG_VALUE_0='*' -- \
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
@@ -208,7 +211,7 @@ case "${1:-up}" in
   screenshots)
     # The README's screenshots (docs/screenshots/*.png), from a sample wiki,
     # in the tools image (Playwright).
-    image=$(build_image leaf-tools -f Containerfile.tools)
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
     in_image "$image" --ipc=host -- python3 docs/screenshots/make_screenshots.py
     ;;
   eval)
@@ -222,7 +225,7 @@ case "${1:-up}" in
       exit 1
     fi
     semantic=$(env_val LEAF_SEMANTIC_SEARCH)
-    image=$(build_image leaf -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
+    image=$(build_image zonewiki -f Containerfile --build-arg "LEAF_BUILD=$LEAF_BUILD" \
       --build-arg "LEAF_SEMANTIC_SEARCH=$semantic")
     in_image "$image" -v "$LEAF_DATA:/wiki-data:ro,z" -e LEAF_DATA=/wiki-data \
       -e "LEAF_SEMANTIC_SEARCH=$semantic" -- \
@@ -243,7 +246,7 @@ case "${1:-up}" in
     fi
     # The image as up builds it, its output only when the build fails.
     log=$(mktemp)
-    if ! compose build -q leaf >"$log" 2>&1; then
+    if ! compose build -q zonewiki >"$log" 2>&1; then
       cat "$log" >&2
       rm -f "$log"
       exit 1
@@ -251,7 +254,7 @@ case "${1:-up}" in
     rm -f "$log"
     tty=()
     [[ -t 0 ]] || tty=(-T)
-    compose run --rm --no-deps "${tty[@]}" leaf /app/zonewiki "$@"
+    compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
     echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|user|config]"

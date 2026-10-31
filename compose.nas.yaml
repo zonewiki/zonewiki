@@ -16,15 +16,15 @@
 # container; first of all the names you open Zone by (or LEAF_ALLOW_REMOTE=1
 # in .env), then a login:
 #
-#   docker compose -f compose.nas.yaml run --rm leaf /app/zonewiki config set hosts nas.local
-#   docker compose -f compose.nas.yaml run --rm leaf /app/zonewiki user add alice
+#   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local
+#   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice
 #   TZ=Europe/Vienna
-name: leaf
+name: zonewiki
 
 services:
-  leaf:
-    image: ghcr.io/gklingler/leaf:latest
-    container_name: leaf
+  zonewiki:
+    image: ghcr.io/gklingler/zonewiki:latest
+    container_name: zonewiki
     # Not root: Zone writes the wiki as the folder's owner. No defaults: a
     # wrong guess would show up later as files Zone can't write.
     user: "${LEAF_UID:?set LEAF_UID in .env (id -u of the wiki folder's owner)}:${LEAF_GID:?set LEAF_GID in .env (id -g)}"

@@ -54,7 +54,7 @@ ARG MODEL=jinaai/jina-embeddings-v2-base-de
 ARG MODEL_REVISION=3f9eede875721714945b6a99a3198299243cf2be
 ARG MODEL_ONNX_SHA256=51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0
 ARG MODEL_VOCAB_SHA256=376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7
-RUN mkdir -p /opt/onnxruntime /opt/leaf-model \
+RUN mkdir -p /opt/onnxruntime /opt/zonewiki-model \
  && case "$(echo "$LEAF_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
       ""|0|off|false|no) exit 0 ;; \
       1|on|true|yes) ;; \
@@ -72,12 +72,12 @@ RUN mkdir -p /opt/onnxruntime /opt/leaf-model \
  && echo "$sum  /tmp/ort.tgz" | sha256sum -c - \
  && tar -xzf /tmp/ort.tgz -C /opt/onnxruntime --strip-components=2 --wildcards "*/lib/libonnxruntime.so*" \
  && base="https://huggingface.co/${MODEL}/resolve/${MODEL_REVISION}" \
- && mkdir -p /opt/leaf-model/onnx \
- && curl -sSfL -o /opt/leaf-model/onnx/model.onnx "$base/onnx/model.onnx" \
- && curl -sSfL -o /opt/leaf-model/tokenizer.json "$base/tokenizer.json" \
- && printf '%s  %s\n' "$MODEL_ONNX_SHA256" /opt/leaf-model/onnx/model.onnx \
-      "$MODEL_VOCAB_SHA256" /opt/leaf-model/tokenizer.json | sha256sum -c - \
- && chmod -R a+rX /opt/leaf-model \
+ && mkdir -p /opt/zonewiki-model/onnx \
+ && curl -sSfL -o /opt/zonewiki-model/onnx/model.onnx "$base/onnx/model.onnx" \
+ && curl -sSfL -o /opt/zonewiki-model/tokenizer.json "$base/tokenizer.json" \
+ && printf '%s  %s\n' "$MODEL_ONNX_SHA256" /opt/zonewiki-model/onnx/model.onnx \
+      "$MODEL_VOCAB_SHA256" /opt/zonewiki-model/tokenizer.json | sha256sum -c - \
+ && chmod -R a+rX /opt/zonewiki-model \
  && rm -rf /tmp/ort.tgz /var/lib/apt/lists/*
 
 # ── The image ────────────────────────────────────────────────────────────────
@@ -93,9 +93,9 @@ RUN apt-get update && \
 
 # onnxruntime where the loader finds it, and the model where Zone looks.
 COPY --from=semantic /opt/onnxruntime/ /usr/local/lib/
-COPY --from=semantic /opt/leaf-model/ /opt/leaf-model/
+COPY --from=semantic /opt/zonewiki-model/ /opt/zonewiki-model/
 RUN ldconfig
-ENV LEAF_MODEL_DIR=/opt/leaf-model
+ENV LEAF_MODEL_DIR=/opt/zonewiki-model
 
 WORKDIR /app
 COPY public/ public/

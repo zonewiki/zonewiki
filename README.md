@@ -182,10 +182,13 @@ it; Zone makes it a git repository (if it isn't one) and adds a home page.
 
 **On a NAS or server** (Synology, QNAP, a Raspberry Pi, …), you don't need
 the repository: `compose.nas.yaml` runs the prebuilt image
-`ghcr.io/gklingler/leaf` (amd64 and arm64). Put it next to a `.env` and run
+`ghcr.io/gklingler/zonewiki` (amd64 and arm64). Put it next to a `.env` and run
 `docker compose -f compose.nas.yaml up -d`; Zone is then on port 5080. What
 `.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS
-or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md).
+or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md). Running
+it as Leaf (`ghcr.io/gklingler/leaf`)? That image is updated for one more
+release; to switch, stop the old one (`docker compose down` with the old
+file), then start the new `compose.nas.yaml` with the same `.env`.
 
 Without a container, you need Go 1.27 or newer, a C compiler (for semantic
 search; `CGO_ENABLED=0` builds without it) and git:

@@ -24,6 +24,9 @@ case "$1" in
     while [ "$1" != --iidfile ]; do shift; done
     echo fake-image > "$2" ;;
   create) echo fake-container ;;
+  container)
+    [ -n "$FAKE_LEAF_LABELS" ] || exit 1
+    [ "$4" != --format ] || echo "$FAKE_LEAF_LABELS" ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
 esac
@@ -122,9 +125,9 @@ def test_build_output_is_hidden_and_a_first_build_says_so(sandbox):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert "debconf" not in r.stdout + r.stderr
-    assert "Building the leaf-tools image (first time" in r.stderr
+    assert "Building the zonewiki-tools image (first time" in r.stderr
     (build,) = _engine_calls(log, "build")
-    assert "-t leaf-tools -f Containerfile.tools" in build
+    assert "-t zonewiki-tools -f Containerfile.tools" in build
     (run,) = _engine_calls(log, "run")
     assert " fake-image gitleaks " in run
 
@@ -231,7 +234,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     assert run.endswith("/app/zonewiki eval /wiki-data/_eval/retrieval.json -k 5")
 
 
-def test_user_and_config_run_leaf_in_a_one_off_container(sandbox, tmp_path):
+def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
     """./run.sh user …/config … run the binary through compose, with .env
     and the wiki as up has them; -T when stdin isn't a terminal."""
     repo, env, log = sandbox
@@ -243,8 +246,35 @@ def test_user_and_config_run_leaf_in_a_one_off_container(sandbox, tmp_path):
                            stdin=subprocess.DEVNULL)
         assert r.returncode == 0, r.stderr
         call = [l for l in _engine_calls(log, "compose") if " run " in l][-1]
-        assert call.endswith("run --rm --no-deps -T leaf /app/zonewiki " + " ".join(args))
-        assert [l for l in _engine_calls(log, "compose") if " build -q leaf" in l]
+        assert call.endswith("run --rm --no-deps -T zonewiki /app/zonewiki " + " ".join(args))
+        assert [l for l in _engine_calls(log, "compose") if " build -q zonewiki" in l]
     (repo / ".env").write_text(f"LEAF_DATA={wiki}-missing\n")
     r = subprocess.run(["./run.sh", "user", "list"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No wiki at" in r.stderr
+
+
+@pytest.mark.parametrize("labels,removed", [
+    ('{"com.docker.compose.project":"leaf","com.docker.compose.service":"leaf"}', True),   # compose's, before the rename
+    ('{"io.podman.compose.project":"leaf","com.docker.compose.project":"leaf"}', True),   # podman-compose's
+    ("null", True),                                                                       # an older run.sh's podman run
+    ('{"com.docker.compose.project":"other"}', False),                                    # someone else's
+])
+def test_up_removes_the_container_from_before_the_rename(sandbox, tmp_path, labels, removed):
+    repo, env, log = sandbox
+    (tmp_path / "wiki").mkdir()
+    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\n")
+    env["FAKE_LEAF_LABELS"] = labels
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert ("rm -f leaf" in log.read_text().splitlines()) == removed
+    assert ("Removing the container leaf" in r.stdout) == removed
+    assert [l for l in _engine_calls(log, "compose") if " up -d --build" in l]
+
+
+def test_up_without_an_old_container_removes_nothing(sandbox, tmp_path):
+    repo, env, log = sandbox
+    (tmp_path / "wiki").mkdir()
+    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\n")
+    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "rm -f leaf" not in log.read_text().splitlines()

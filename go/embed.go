@@ -267,7 +267,7 @@ func parseSemanticSpec(value string) (string, error) {
 }
 
 // modelDir: where the model's files are, LEAF_MODEL_DIR (the image's
-// /opt/leaf-model), else a cache folder in the home directory, per revision.
+// /opt/zonewiki-model), else a cache folder in the home directory, per revision.
 func modelDir(getenv func(string) string) string {
 	if d := getenv("LEAF_MODEL_DIR"); d != "" {
 		return d

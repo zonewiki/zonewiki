@@ -3,5 +3,5 @@
 # as you (compose.yaml's user: is your id -u/-g) and the files it writes in
 # the wiki are yours. Docker doesn't know keep-id, hence a file of its own.
 services:
-  leaf:
+  zonewiki:
     userns_mode: keep-id

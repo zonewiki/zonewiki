@@ -1,6 +1,8 @@
 # Tests and a secret scan on every push and pull request; on main (and v*
 # tags) the image is then built for amd64 and arm64 and pushed to GitHub's
-# container registry as ghcr.io/<owner>/leaf, which compose.nas.yaml pulls.
+# container registry as ghcr.io/<owner>/zonewiki, which compose.nas.yaml
+# pulls (and, for one release, as ghcr.io/<owner>/leaf, its name before the
+# rename, which older compose.nas.yaml files pull).
 #
 # The same checks as .forgejo/workflows/ci.yml, on GitHub's runners. No
 # secrets to set up: the image job logs in with the workflow's GITHUB_TOKEN.
@@ -24,7 +26,9 @@ permissions:
 
 env:
   # ghcr.io wants the name in lower case; the owner may not be.
-  IMAGE: ghcr.io/${{ github.repository_owner }}/leaf
+  IMAGE: ghcr.io/${{ github.repository_owner }}/zonewiki
+  # The same image under the name it had before Leaf was called Zone.
+  OLD_IMAGE: ghcr.io/${{ github.repository_owner }}/leaf
 
 jobs:
   checks:
@@ -114,7 +118,8 @@ jobs:
 
   manifest:
     # Both architectures under one name: latest (main), the short commit
-    # hash, and the version on a v* tag (v1.2.0 -> 1.2.0 and 1.2).
+    # hash, and the version on a v* tag (v1.2.0 -> 1.2.0 and 1.2); under the
+    # old name too.
     needs: [image]
     runs-on: ubuntu-26.04
     permissions:
@@ -136,7 +141,9 @@ jobs:
         id: tags
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: |
+            ${{ env.IMAGE }}
+            ${{ env.OLD_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=,format=short

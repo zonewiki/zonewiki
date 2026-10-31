@@ -9,10 +9,10 @@
 #
 # Settings come from .env (see README); used directly, also set
 # LEAF_BIND=0.0.0.0 there for LAN access, and LEAF_DATA as an absolute path.
-name: leaf
+name: zonewiki
 
 services:
-  leaf:
+  zonewiki:
     build:
       context: .
       dockerfile: Containerfile
@@ -21,8 +21,8 @@ services:
         LEAF_BUILD: ${LEAF_BUILD:-unknown}
         # Semantic search: the model and what runs it are baked into the image.
         LEAF_SEMANTIC_SEARCH: ${LEAF_SEMANTIC_SEARCH:-}
-    image: leaf
-    container_name: leaf
+    image: zonewiki
+    container_name: zonewiki
     # Not root: Zone runs as the host user, so the files it writes in the wiki
     # are theirs. run.sh sets your id -u/-g (with rootless podman plus
     # compose.podman.yaml's keep-id, which maps them in unchanged). Used

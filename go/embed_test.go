@@ -406,7 +406,7 @@ func TestSemanticSettings(t *testing.T) {
 	if semanticFromEnv(env(map[string]string{"LEAF_EMBEDDINGS": "fastembed"})) != nil {
 		t.Error("an old name turned it on")
 	}
-	if modelDir(env(map[string]string{"LEAF_MODEL_DIR": "/opt/leaf-model"})) != "/opt/leaf-model" {
+	if modelDir(env(map[string]string{"LEAF_MODEL_DIR": "/opt/zonewiki-model"})) != "/opt/zonewiki-model" {
 		t.Error("LEAF_MODEL_DIR ignored")
 	}
 	if !strings.HasSuffix(modelDir(env(nil)), "/.cache/leaf/jinaai--jina-embeddings-v2-base-de@3f9eede87572") {
