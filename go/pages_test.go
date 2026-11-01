@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -43,15 +45,62 @@ func TestIterPagesSkipsUnderscoreAndHiddenFolders(t *testing.T) {
 
 func TestUpdateReferences(t *testing.T) {
 	testWiki(t, map[string]string{"old-page": "# Old\n\ncontent\n", "referencer": "# Ref\n\n[[old-page]]\n", "no-link": "# No Link\n\nbody\n"})
-	got := updateReferences("old-page", "new-page", "")
+	got, err := updateReferences("old-page", "new-page", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(got, []string{filepath.Join(cfg.Data, "referencer.md")}) {
 		t.Errorf("modified %q", got)
 	}
 	if b, _ := os.ReadFile(filepath.Join(cfg.Data, "referencer.md")); string(b) != "# Ref\n\n[[new-page]]\n" {
 		t.Errorf("referencer %q", b)
 	}
-	if got := updateReferences("no-link", "elsewhere", ""); got != nil {
-		t.Errorf("nothing links to no-link: %q", got)
+	if got, err := updateReferences("no-link", "elsewhere", ""); got != nil || err != nil {
+		t.Errorf("nothing links to no-link: %q, %v", got, err)
+	}
+}
+
+// A file whose links can't be re-pointed (here an unreadable task list)
+// doesn't stop the others, and the caller hears of it.
+func TestUpdateReferencesReportsWhatFailed(t *testing.T) {
+	testWiki(t, map[string]string{"old-page": "# Old\n", "referencer": "# Ref\n\n[[old-page]]\n"})
+	tasks := filepath.Join(cfg.Data, tasksDirName, "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(tasks), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tasks, []byte("{not json"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	got, err := updateReferences("old-page", "new-page", "")
+	if len(got) != 1 {
+		t.Errorf("the page's link: %q", got)
+	}
+	var we *writeError
+	if !errors.As(err, &we) || !strings.Contains(err.Error(), "not every link") {
+		t.Errorf("error: %v", err)
+	}
+	if _, err := rewriteMovedLinks(map[string]string{"old-page": "new-page"}); err == nil {
+		t.Error("rewriteMovedLinks: no error")
+	}
+}
+
+// A folder move that fails part way moves back what it moved.
+func TestMoveFolderFailingMovesBack(t *testing.T) {
+	testWiki(t, map[string]string{"a/one": "# One\n", "a/two": "# Two\n"})
+	// b/two.md is a folder with something in it: the second rename fails.
+	if err := os.MkdirAll(filepath.Join(cfg.Data, "b", "two.md", "x"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := moveFolder("", "a", "b", "Move a/ to b/"); err == nil {
+		t.Fatal("no error")
+	}
+	for _, slug := range []string{"a/one", "a/two"} {
+		if !exists(filepath.Join(cfg.Data, filepath.FromSlash(slug)+".md")) {
+			t.Errorf("%s isn't back", slug)
+		}
+	}
+	if exists(filepath.Join(cfg.Data, "b", "one.md")) {
+		t.Error("b/one.md stayed")
 	}
 }
 

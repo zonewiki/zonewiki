@@ -18,19 +18,9 @@ import (
 func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /private", writesPages(privateRoute))
 	mux.HandleFunc("GET /notes", notesPage)
-	// /page/_scratch: Notes' address while it was called Scratch; its links
-	// and bookmarks still work.
-	mux.HandleFunc("GET /page/_scratch", func(w http.ResponseWriter, r *http.Request) {
-		to := "/notes"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, to, http.StatusFound)
-	})
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
 	mux.HandleFunc("POST /api/notes", writesPages(apiNewNote))
-	mux.HandleFunc("POST /api/scratch", writesPages(apiNewNote)) // what it was called before
 	mux.HandleFunc("GET /edit/{slug...}", editPage)
 	mux.HandleFunc("POST /edit/{slug...}", writesPages(savePage))
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
@@ -47,14 +37,6 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
 	mux.HandleFunc("GET /tasks", tasksPage)
-	// /deck: what Tasks was called before; its links and bookmarks still work.
-	mux.HandleFunc("GET /deck", func(w http.ResponseWriter, r *http.Request) {
-		to := "/tasks"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, to, http.StatusFound)
-	})
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
@@ -81,10 +63,9 @@ func serverError(w http.ResponseWriter, r *http.Request, err error) {
 
 func htmlOf(s string) template.HTML { return template.HTML(s) }
 
-// quote is urllib's quote(s): letters, digits, _.-~ and / stay.
+// quote percent-encodes s for a URL: letters, digits, _.-~ and / stay.
 func quote(s string) string { return pathURL(s)[1:] }
 
-// notesPage: the notes. Its filter runs the search over them
 // apiNewNote: a new note titled by the form's title; answers its slug.
 func apiNewNote(w http.ResponseWriter, r *http.Request) {
 	slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
@@ -95,6 +76,7 @@ func apiNewNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, M{"slug": slug})
 }
 
+// notesPage: the notes. Its filter runs the search over them
 // (js/search.js initNotesFilter); ?q= keeps the query.
 func notesPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
@@ -225,7 +207,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		"link_sections": sections, "outlinks": outlinks(rq, slug, path), "menu": menu})
 }
 
-// intArg is Flask's args.get(name, type=int): ok false when missing or not an int.
+// intArg: a query or form value as an int; ok false when missing or not an int.
 func intArg(v string, present bool) (int, bool) {
 	if !present {
 		return 0, false
@@ -234,7 +216,7 @@ func intArg(v string, present bool) (int, bool) {
 	return n, err == nil
 }
 
-// formInt is Flask's form.get(name, type=int), urlencoded or multipart.
+// formInt: a posted field as an int (intArg), urlencoded or multipart.
 func formInt(r *http.Request, name string) (int, bool) {
 	_ = r.ParseMultipartForm(32 << 20)
 	_, present := r.PostForm[name]

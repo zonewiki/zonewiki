@@ -28,7 +28,7 @@ const version = "1.2.0"
 var environ = zoneEnv(os.Getenv, logf)
 
 // zoneEnv: getenv, where a ZONE_ variable that isn't set is read by its old
-// name, LEAF_…, for one release; warn says once what to call it.
+// name, LEAF_…, until Zone 2.0 (oldnames.go); warn says once what to call it.
 func zoneEnv(getenv func(string) string, warn func(format string, args ...any)) func(string) string {
 	var mu sync.Mutex
 	warned := map[string]bool{}
@@ -43,7 +43,7 @@ func zoneEnv(getenv func(string) string, warn func(format string, args ...any)) 
 			mu.Lock()
 			if !warned[old] {
 				warned[old] = true
-				warn("%s is the name from before Leaf was called Zone: call it %s in .env (the old name still works, for now)", old, name)
+				warn("%s is the name from before Leaf was called Zone: call it %s in .env (the old name works until Zone %s)", old, name, oldNamesUntil)
 			}
 			mu.Unlock()
 		}

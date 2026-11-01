@@ -1,8 +1,8 @@
 // Markdown source text: frontmatter, fenced code, code
 // masking, headings and their anchors, wikilink syntax, sections,
 // task-list checkboxes. Pure functions on strings, no files. Offsets into
-// a text (sections, splices) count characters (runes), as Python's do: the
-// editor sends them back.
+// a text (sections, splices) count characters (runes): the editor sends
+// them back.
 package main
 
 import (
@@ -235,9 +235,10 @@ var (
 	taskDoneOnlyRE = regexp.MustCompile(`<!--d:(` + isoSecond + `)-->`)
 )
 
-// ---- Python's lines ----
+// ---- Lines ----
 
-// splitLines is str.splitlines(keepends=True).
+// splitLines: s's lines, each with its line end, which is any of \n, \r\n,
+// \r, \v, \f, the separators U+001C–U+001E, NEL, U+2028 and U+2029.
 func splitLines(s string) []string {
 	var lines []string
 	start := 0
@@ -806,7 +807,7 @@ func frontmatterText(value string, more []string) string {
 	return strings.TrimSpace(strings.Trim(text, `"'`))
 }
 
-// dedent is textwrap.dedent (Python 3.13+): lines of whitespace only
+// dedent removes the indentation all lines share: lines of whitespace only
 // emptied, and the run of spaces and tabs that the smallest and the largest
 // of the other lines start with taken off every other line.
 func dedent(s string) string {

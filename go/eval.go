@@ -50,7 +50,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: zonewiki eval [-k N] [-new] QUESTIONS.json")
 		fs.PrintDefaults()
 	}
-	// Flags before or after the file, as the Python tool took them.
+	// Flags before or after the file.
 	var files []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -80,7 +80,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 			return fail(err)
 		}
 		if len(stubs) == 0 {
-			fmt.Fprintln(stderr, "No new queries in the log (query-log = yes in .leaf/config turns it on).")
+			fmt.Fprintln(stderr, "No new queries in the log (query-log = yes in .zone/config turns it on).")
 			return 0
 		}
 		lines := make([]string, len(stubs))
@@ -319,7 +319,7 @@ func evalSemanticIndex() *semanticIndex {
 	if x == nil {
 		return nil
 	}
-	dir, err := os.MkdirTemp("", "leaf-eval-")
+	dir, err := os.MkdirTemp("", "zonewiki-eval-")
 	if err != nil {
 		semLog("%v", err)
 		return nil

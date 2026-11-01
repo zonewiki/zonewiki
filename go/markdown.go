@@ -1,5 +1,4 @@
-// Markdown to HTML on goldmark (the Python Zone used markdown-it). Not a
-// copy of markdown-it's HTML: goldmark's own output where Zone doesn't care
+// Markdown to HTML on goldmark: goldmark's own output where Zone doesn't care
 // (footnotes, deflists, entities, URL escaping), Zone's rules where a
 // feature depends on them: checkboxes the page can tick (counted as mdtext
 // counts them), callouts, heading ids that [[Page#Section]] points at, ✎
@@ -34,13 +33,12 @@ type Env struct {
 	Host         string
 }
 
-// typographer: curly quotes, dashes and the ellipsis, as markdown-it's
-// smartquotes and replacements; not « » for << >>.
+// typographer: curly quotes, dashes and the ellipsis; not « » for << >>.
 var typographer = extension.NewTypographer(extension.WithTypographicSubstitutions(
 	extension.TypographicSubstitutions{extension.LeftAngleQuote: []byte("&lt;&lt;"), extension.RightAngleQuote: []byte("&gt;&gt;")}))
 
 // markdown renders src; inline renders it as one paragraph's inline
-// content (markdown-it's renderInline: no headings, lists, quotes …).
+// content (no headings, lists, quotes …).
 func markdown(src string, env *Env, inline bool) string {
 	opts := []goldmark.Option{
 		goldmark.WithExtensions(extension.Table, extension.Strikethrough,
@@ -116,7 +114,7 @@ func (alertTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parse
 
 // taskTransformer: a list item whose first paragraph starts "[ ]", "[x]" or
 // "[X]" and then whitespace and text gets a checkbox. Exactly the lines
-// mdtext._TASK_ITEM_RE counts: ticking the Nth checkbox toggles the Nth
+// taskItemLines (mdtext.go) counts: ticking the Nth checkbox toggles the Nth
 // match in the file. (goldmark's tasklist also takes "- [ ]" alone.)
 type taskTransformer struct{}
 
@@ -156,7 +154,7 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 	slugs := map[string]bool{}
 	var unsafe []ast.Node
 	defer func() {
-		// As markdown-it: such a link is its text.
+		// Such a link is its text.
 		for _, n := range unsafe {
 			parent := n.Parent()
 			for c := n.FirstChild(); c != nil; {
@@ -209,7 +207,7 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 	})
 }
 
-// unsafeLink: a URL markdown-it refuses to link (javascript:, vbscript:,
+// unsafeLink: a URL Zone refuses to link (javascript:, vbscript:,
 // data: but an image's). The page policy wouldn't run a script anyway.
 func unsafeLink(href []byte) bool {
 	h := strings.ToLower(strings.TrimSpace(string(href)))
@@ -272,7 +270,7 @@ func headingTitle(h ast.Node, src []byte) string {
 }
 
 // slugify is mdit_py_plugins.anchors', which mdtext.section_anchor mirrors
-// for [[Page#Section]] (Python's \w is Unicode letters, digits and _).
+// for [[Page#Section]] (\w here: Unicode letters, digits and _).
 var slugStripRE = regexp.MustCompile(`[^\p{L}\p{N}_\x{4e00}-\x{9fff}\- ]`)
 
 func slugify(title string) string {

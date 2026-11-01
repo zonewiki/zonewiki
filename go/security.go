@@ -104,7 +104,7 @@ func isHTTPS(r *http.Request) bool {
 }
 
 // secretKey signs session cookies: one Zone made once and keeps in
-// .leaf/secret_key in the wiki folder (owner-only, kept out of git), so a
+// .zone/secret_key in the wiki folder (owner-only, kept out of git), so a
 // restart doesn't sign everyone out. A wiki folder Zone can't write to gets
 // a new key per start.
 func secretKey(dataDir string) []byte {
@@ -118,7 +118,9 @@ func secretKey(dataDir string) []byte {
 	_, _ = rand.Read(raw)
 	key := []byte(hex.EncodeToString(raw))
 	if os.Mkdir(filepath.Dir(path), 0o777) == nil || isDir(filepath.Dir(path)) {
-		_ = os.WriteFile(path, key, 0o600)
+		if err := os.WriteFile(path, key, 0o600); err != nil {
+			logf("could not keep the session key in %s (%v): everyone signs in again after a restart", path, err)
+		}
 		_ = os.Chmod(path, 0o600) // WriteFile keeps an existing file's mode
 	}
 	return key

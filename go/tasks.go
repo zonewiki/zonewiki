@@ -301,16 +301,6 @@ func taskCounts(rq *Req) TaskCounts {
 // ---- the API ----
 
 func tasksRoutes(mux *http.ServeMux) {
-	// /api/deck/…: what /api/tasks/… was called before Deck was called
-	// Tasks, for clients that still use it: the same route, by its new path.
-	deckAPI := func(w http.ResponseWriter, r *http.Request) {
-		r2 := r.Clone(r.Context())
-		r2.URL.Path = "/api/tasks" + strings.TrimPrefix(r.URL.Path, "/api/deck")
-		r2.URL.RawPath = ""
-		mux.ServeHTTP(w, r2)
-	}
-	mux.HandleFunc("/api/deck", deckAPI)
-	mux.HandleFunc("/api/deck/{rest...}", deckAPI)
 	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
 		return nil
@@ -663,7 +653,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 	return nil
 }
 
-// firstNonEmpty is Python's a or b, of two strings.
+// firstNonEmpty: a, or b when a is empty.
 func firstNonEmpty(a, b string) string {
 	if a != "" {
 		return a

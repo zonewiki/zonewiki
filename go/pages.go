@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -40,8 +41,8 @@ func (rq *Req) who() string {
 	return rq.user
 }
 
-// pathURL is a path in Zone from its parts, each percent-encoded ("/" kept), as
-// urllib's quote(p, safe="/"): letters, digits, _.-~ and / stay.
+// pathURL is a path in Zone from its parts, each percent-encoded: all but
+// letters, digits and _.-~/.
 func pathURL(parts ...string) string {
 	var b strings.Builder
 	for _, p := range parts {
@@ -94,7 +95,7 @@ func relInside(root, p string) (string, bool) {
 	return rel, true
 }
 
-// resolvePath is Path.resolve(): symlinks followed as far as the path exists.
+// resolvePath: p cleaned, its symlinks followed as far as the path exists.
 func resolvePath(p string) string {
 	p = filepath.Clean(p)
 	if r, err := filepath.EvalSymlinks(p); err == nil {
@@ -117,14 +118,14 @@ func isDir(path string) bool {
 	return err == nil && st.IsDir()
 }
 
-// readText is Path.read_text: a file's text, its line ends as "\n".
+// readText: a file's text, its line ends as "\n".
 func readText(p string) (string, error) {
 	b, err := os.ReadFile(p)
 	return newlines(string(b)), err
 }
 
-// newlines: "\r\n" and "\r" as "\n", Python's universal newlines (how it
-// reads files and git's output), so a page saved on Windows reads the same.
+// newlines: "\r\n" and "\r" as "\n" (in files and git's output), so a page
+// saved on Windows reads the same.
 func newlines(s string) string {
 	if !strings.Contains(s, "\r") {
 		return s
@@ -647,7 +648,7 @@ func findBacklinks(slug string) []PageRef {
 
 // mdLinkRewriteRE: a markdown link, the prefix, the href up to any #anchor,
 // ?query or title, and the rest inside the parentheses. Not an image's:
-// Python's (?<!!) is the check in mdLinks.
+// RE2 has no lookbehind (?<!!): mdLinks checks for the "!".
 var mdLinkRewriteRE = regexp.MustCompile(`^(\[[^\]]*\]\()(` + notSpace + `+)([^)]*\))`)
 
 // mdLinkMatch is a markdown link found by mdLinks: its byte range and groups.
@@ -656,8 +657,8 @@ type mdLinkMatch struct {
 	prefix, href, rest string
 }
 
-// mdLinks finds the markdown links (not images) in text as Python's
-// _MD_LINK_REWRITE_RE.finditer does: from each "[" not after "!", leftmost
+// mdLinks finds the markdown links (not images) in text: from each "["
+// not after "!", leftmost
 // first, going on after a match's end.
 func mdLinks(text string) []mdLinkMatch {
 	var out []mdLinkMatch
@@ -794,24 +795,38 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 
 // updateReferences rewrites links to oldSlug in every page and task
 // after a rename (to a section of newSlug: rewritePageLinks); returns the
-// files it changed, for the rename's commit.
-func updateReferences(oldSlug, newSlug, section string) []string {
+// files it changed, for the rename's commit, and what failed (linkErrors).
+func updateReferences(oldSlug, newSlug, section string) ([]string, error) {
 	var modified []string
+	var errs []error
 	for _, p := range iterPages() {
 		content, err := readText(p.Path)
 		if err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		if n := rewritePageLinks(content, oldSlug, newSlug, p.Slug, section); n != content {
-			if writeText(p.Path, n) == nil {
+			if err := writeText(p.Path, n); err != nil {
+				errs = append(errs, err)
+			} else {
 				modified = append(modified, p.Path)
 			}
 		}
 	}
-	changed, _ := renamePageRefs(func(_, text string) string {
+	changed, err := renamePageRefs(func(_, text string) string {
 		return rewritePageLinks(text, oldSlug, newSlug, "", section)
 	})
-	return append(modified, changed...)
+	return append(modified, changed...), linkErrors(append(errs, err))
+}
+
+// linkErrors: what failed while links were re-pointed (nil: nothing), as a
+// writeError: the move itself is done and committed with the links that
+// were, the others still point at the old name.
+func linkErrors(errs []error) error {
+	if err := errors.Join(errs...); err != nil {
+		return writeFailed("moved, but not every link to it could be re-pointed (check_links finds them)", err)
+	}
+	return nil
 }
 
 // sharedStaysShared: a shared page can't be made private (others have
@@ -891,13 +906,15 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 
 // rewriteMovedLinks: after the pages in moves are at their new paths, point
 // the links to them at the new slugs (pages and tasks) and re-base the
-// moved pages' own links. Returns the files that changed.
-func rewriteMovedLinks(moves map[string]string) []string {
+// moved pages' own links. Returns the files that changed, and what failed
+// (linkErrors): a file that can't be written doesn't stop the others.
+func rewriteMovedLinks(moves map[string]string) ([]string, error) {
 	inverse := map[string]string{}
 	for o, n := range moves {
 		inverse[n] = o
 	}
 	var modified []string
+	var errs []error
 	seen := map[string]bool{}
 	add := func(p string) {
 		if !seen[p] {
@@ -912,15 +929,18 @@ func rewriteMovedLinks(moves map[string]string) []string {
 		}
 		content, err := readText(p.Path)
 		if err != nil {
+			errs = append(errs, err)
 			continue
 		}
 		if n := rebaseLinks(content, source, p.Slug, moves); n != content {
-			if writeText(p.Path, n) == nil {
+			if err := writeText(p.Path, n); err != nil {
+				errs = append(errs, err)
+			} else {
 				add(p.Path)
 			}
 		}
 	}
-	changed, _ := renamePageRefs(func(_, text string) string {
+	changed, err := renamePageRefs(func(_, text string) string {
 		for _, o := range sortedKeys(moves) {
 			text = rewritePageLinks(text, o, moves[o], "", "")
 		}
@@ -929,7 +949,7 @@ func rewriteMovedLinks(moves map[string]string) []string {
 	for _, c := range changed {
 		add(c)
 	}
-	return modified
+	return modified, linkErrors(append(errs, err))
 }
 
 // pageFolders: the folders that hold pages, A–Z, for filing a note

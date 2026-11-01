@@ -170,6 +170,9 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 	if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", false, err
 	}
-	refs := updateReferences(slug, target, heading)
-	return anchor, kept, notCommitted(gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...))
+	refs, linkErr := updateReferences(slug, target, heading)
+	if err := notCommitted(gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)); err != nil {
+		return anchor, kept, err
+	}
+	return anchor, kept, linkErr
 }

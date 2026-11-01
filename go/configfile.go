@@ -1,4 +1,4 @@
-// The settings file, .leaf/config in the wiki (docs/spec/users.md,
+// The settings file, .zone/config in the wiki (docs/spec/users.md,
 // docs/spec/deployment.md): the wiki's settings and its users, which Zone
 // reloads when the file changes, so adding a user or changing a password
 // needs no restart. A small INI, read by Zone's own parser:
@@ -13,8 +13,8 @@
 //
 // The environment (.env) holds only what the deployment needs (ZONE_DATA,
 // ZONE_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
-// Zone, pointing to zonewiki config import. The file is in .leaf/, out of
-// safePath's reach; it is committed (the rest of .leaf/ isn't), so its MCP
+// Zone, pointing to zonewiki config import. The file is in .zone/, out of
+// safePath's reach; it is committed (the rest of .zone/ isn't), so its MCP
 // tokens are kept only as hashes, passwords as PBKDF2 hashes.
 package main
 
@@ -47,7 +47,7 @@ func configName() string {
 
 func configPath() string { return statePath("config") }
 
-// configKeys: the keys outside a [user …] section, in the order `leaf
+// configKeys: the keys outside a [user …] section, in the order `zonewiki
 // config check` shows them, with the environment variables that held them
 // until 2026-10 (zonewiki config import reads them; set, they stop Zone).
 var configKeys = []struct{ key, env string }{
@@ -204,7 +204,7 @@ type Settings struct {
 	MCPToken         string           // /mcp's token without users, as kept (tokenMatches); "": /mcp is off
 	Users            map[string]*User // users.go; nil: no users
 	BaseURL          string           // Zone's address as the user's browser knows it
-	QueryLog         bool             // keep search_wiki's queries in .leaf/queries.jsonl
+	QueryLog         bool             // keep search_wiki's queries in .zone/queries.jsonl
 	GitRemote        string
 	Hosts            map[string]bool // names besides localhost, without port, lowercase
 	NoshareTags      map[string]bool
@@ -246,7 +246,7 @@ func staleEnv(getenv func(string) string) error {
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
 		return errors.New("LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it: it " +
-			"keeps its own key in .leaf/secret_key. Delete it from .env (everyone signs in once more).")
+			"keeps its own key in .zone/secret_key. Delete it from .env (everyone signs in once more).")
 	}
 	return nil
 }
@@ -257,7 +257,7 @@ func loadSettings(f *configFile) (*Settings, error) {
 	if f == nil {
 		f = &configFile{top: map[string]configValue{}}
 	}
-	// get: a setting, and how a message names it (".leaf/config line 3:
+	// get: a setting, and how a message names it (".zone/config line 3:
 	// locale = ").
 	get := func(key string) (value, where string, set bool) {
 		v, set := f.top[key]
@@ -573,7 +573,7 @@ func applySettings(old, s *Settings) {
 }
 
 // Writing the file (`zonewiki user`, `zonewiki config`): whole, to a temporary file
-// in .leaf/ renamed over it (a reload never reads half a file), owner-only,
+// in .zone/ renamed over it (a reload never reads half a file), owner-only,
 // keeping the comments and the order of the lines it doesn't change.
 
 // sectionRange: the lines of a section (user "": the top, before the first

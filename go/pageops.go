@@ -350,23 +350,24 @@ func keepPending(path, slug string) (bool, error) {
 		return false, nil
 	}
 	if err := gitCommit(commitAuthorOf(path, ""), "Save "+slug, path); err != nil {
-		return false, commitFailed(fmt.Sprintf("nothing was changed: %s has text not in git yet, which couldn't be committed first", slug), err)
+		return false, writeFailed(fmt.Sprintf("nothing was changed: %s has text not in git yet, which couldn't be committed first", slug), err)
 	}
 	return true, nil
 }
 
-// commitError: a write's own commit failed, or one that had to come first
-// (keepPending), msg saying what that left: a 500 from a route, a tool
-// error the assistant reads from an MCP tool (handleMCP).
-type commitError struct {
+// writeError: a write that failed part way: its own commit failed, or one
+// that had to come first (keepPending), or a rename's links couldn't all be
+// re-pointed; msg says what that left. A 500 from a route, a tool error the
+// assistant reads from an MCP tool (handleMCP).
+type writeError struct {
 	msg string
 	err error
 }
 
-func (e *commitError) Error() string { return e.msg + ": " + e.err.Error() }
-func (e *commitError) Unwrap() error { return e.err }
+func (e *writeError) Error() string { return e.msg + ": " + e.err.Error() }
+func (e *writeError) Unwrap() error { return e.err }
 
-func commitFailed(msg string, err error) error { return &commitError{msg, err} }
+func writeFailed(msg string, err error) error { return &writeError{msg, err} }
 
 // notCommitted: a write's own commit failed (gitCommit): the change is on
 // disk, in the Uncommitted list, but not in the history.
@@ -374,7 +375,7 @@ func notCommitted(err error) error {
 	if err == nil {
 		return nil
 	}
-	return commitFailed("the change is written but not committed", err)
+	return writeFailed("the change is written but not committed", err)
 }
 
 // keepPendingPages: keepPending for a write to many pages: those with
@@ -401,7 +402,7 @@ func keepPendingPages(paths []string, what string) (int, error) {
 	}
 	for _, a := range authors {
 		if err := gitCommit(a, "Save "+what, byAuthor[a]...); err != nil {
-			return 0, commitFailed("nothing was changed: pages with text not in git yet couldn't be committed first", err)
+			return 0, writeFailed("nothing was changed: pages with text not in git yet couldn't be committed first", err)
 		}
 	}
 	return n, nil

@@ -4,7 +4,7 @@
 // an embedding model (embed_onnx.go), and a query is compared against every
 // vector (cosine similarity, brute force). That is plenty fast at wiki
 // scale, so there is no vector database: the vectors live in memory and in
-// a rebuildable cache file, .leaf/index/embeddings.json in the wiki (kept
+// a rebuildable cache file, .zone/index/embeddings.json in the wiki (kept
 // out of git), the same file the Python Zone kept: its cache stays valid.
 //
 // Vectors are content-addressed: a section's vector is keyed by a hash of
@@ -242,7 +242,7 @@ var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + non
 func proseChars(text string) int {
 	n := 0
 	for _, r := range linkishRE.ReplaceAllString(text, " ") {
-		if pyWord(r) {
+		if wordRune(r) {
 			n++
 		}
 	}
@@ -448,7 +448,7 @@ func (p *semPage) countProse() {
 	}
 }
 
-// semCache is the cache file, .leaf/index/embeddings.json.
+// semCache is the cache file, .zone/index/embeddings.json.
 type semCache struct {
 	Version  int                 `json:"version"`
 	Chunking *int                `json:"chunking,omitempty"`
@@ -625,9 +625,9 @@ func (x *semanticIndex) meanOf(p *semPage, vecs map[string][]float32) []float32 
 	return meanVec(vs)
 }
 
-// pyMtime: a file time as Python's st_mtime (a float of seconds), which
-// the cache keeps.
-func pyMtime(t time.Time) float64 {
+// mtimeSeconds: a file time as a float of seconds, as the cache keeps it
+// (st_mtime).
+func mtimeSeconds(t time.Time) float64 {
 	return float64(t.Unix()) + float64(t.Nanosecond())*1e-9
 }
 
@@ -665,7 +665,7 @@ func (x *semanticIndex) doSync() bool {
 		if err != nil {
 			continue
 		}
-		current[p.Slug] = file{p.Path, pyMtime(st.ModTime())}
+		current[p.Slug] = file{p.Path, mtimeSeconds(st.ModTime())}
 		order = append(order, p.Slug)
 	}
 	pages := map[string]*semPage{}

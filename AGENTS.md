@@ -105,6 +105,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (.leaf/ → .zone/, _deck/ → _tasks/)
+│   ├── oldnames.go         # Every old name Zone still answers to (Leaf, Deck, Scratch), listed; the old routes; all go in 2.0
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
 │   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs

@@ -88,7 +88,7 @@ func privateFolder(user string) string {
 // separated), as git names it in the history: a page by its slug, anything
 // else in private/ (a user's uploads and tasks in private/<user>/_assets/
 // and _tasks/ too) like a page there. Zone's own files in .zone/ (the
-// settings file, with its password hashes; .leaf/ an older Zone's) no one
+// settings file, with its password hashes; .leaf/, an older Zone's) no one
 // sees in Zone.
 func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, stateDirName+"/") || strings.HasPrefix(rel, legacyStateDirName+"/") {

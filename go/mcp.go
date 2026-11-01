@@ -178,7 +178,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 		isError := false
 		if err != nil {
 			var te *toolError
-			var ce *commitError
+			var ce *writeError
 			switch {
 			case errors.As(err, &te):
 				text = te.msg

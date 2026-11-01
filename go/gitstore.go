@@ -80,16 +80,24 @@ func gitSetup() {
 		return
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Data, ".git")); err != nil {
-		runGit("init")
+		if r := runGit("init"); r.Code != 0 {
+			logf("git init failed, so there is no history: %s", strings.TrimSpace(r.Stderr))
+			return
+		}
 		setCommitter()
 		// Before the first add: .zone/ holds the session key.
 		excludeState(cfg.Data)
 		gitignore := filepath.Join(cfg.Data, ".gitignore")
 		if _, err := os.Stat(gitignore); err != nil {
-			_ = os.WriteFile(gitignore, nil, 0o666)
+			if err := os.WriteFile(gitignore, nil, 0o666); err != nil {
+				logf("could not create %s: %v", gitignore, err)
+			}
 		}
-		runGit("add", ".")
-		runGit("commit", "--allow-empty", "-m", "Initial import")
+		for _, args := range [][]string{{"add", "."}, {"commit", "--allow-empty", "-m", "Initial import"}} {
+			if r := runGit(args...); r.Code != 0 {
+				logf("git %s failed: %s", args[0], strings.TrimSpace(r.Stderr))
+			}
+		}
 	} else if name := strings.TrimSpace(runGit("config", "user.name").Stdout); name == "" || name == legacyAppName {
 		setCommitter() // none, or still the one from before Leaf was called Zone
 	}
@@ -102,17 +110,22 @@ func setGitRemote() {
 	if remote == "" || !cfg.GitEnabled {
 		return
 	}
+	args := []string{"remote", "add", "origin", remote}
 	if runGit("remote", "get-url", "origin").Code == 0 {
-		runGit("remote", "set-url", "origin", remote)
-	} else {
-		runGit("remote", "add", "origin", remote)
+		args[1] = "set-url"
+	}
+	if r := runGit(args...); r.Code != 0 {
+		logf("could not point origin at git-remote: %s", strings.TrimSpace(r.Stderr))
 	}
 }
 
 // setCommitter: Zone commits as "Zone <zone@localhost>".
 func setCommitter() {
-	runGit("config", "user.email", "zone@localhost")
-	runGit("config", "user.name", "Zone")
+	for _, kv := range [][2]string{{"user.email", "zone@localhost"}, {"user.name", "Zone"}} {
+		if r := runGit("config", kv[0], kv[1]); r.Code != 0 {
+			logf("git config %s failed: %s", kv[0], strings.TrimSpace(r.Stderr))
+		}
+	}
 }
 
 // commitAuthor: who a commit is by, as the history shows it, with users: a
@@ -285,9 +298,12 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 	if err := os.Rename(oldPath, newPath); err != nil {
 		return nil, err
 	}
-	changed := rewriteMovedLinks(map[string]string{slug: newSlug})
+	changed, linkErr := rewriteMovedLinks(map[string]string{slug: newSlug})
 	files := append([]string{oldPath, newPath}, shareUploads(slug, newSlug, newPath)...)
-	return changed, notCommitted(gitCommit(user, message, append(files, changed...)...))
+	if err := notCommitted(gitCommit(user, message, append(files, changed...)...)); err != nil {
+		return changed, err
+	}
+	return changed, linkErr
 }
 
 // moveFolder moves every page in a folder (and its subfolders) to
@@ -308,10 +324,17 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 		}
 		newSlug := newFolder + p.Slug[len(folder):]
 		newPath := filepath.Join(cfg.Data, filepath.FromSlash(newSlug+".md"))
-		if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
-			return nil, nil, err
+		err := os.MkdirAll(filepath.Dir(newPath), 0o777)
+		if err == nil {
+			err = os.Rename(p.Path, newPath)
 		}
-		if err := os.Rename(p.Path, newPath); err != nil {
+		if err != nil {
+			// Nothing moved, as the refusals promise: those moved go back.
+			for i := len(touched) - 2; i >= 0; i -= 2 {
+				if back := os.Rename(touched[i+1], touched[i]); back != nil {
+					logf("moving %s back after a failed folder move: %v", touched[i+1], back)
+				}
+			}
 			return nil, nil, err
 		}
 		moves = append(moves, [2]string{p.Slug, newSlug})
@@ -320,7 +343,7 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 	}
 	// All the files are in place before any link is rewritten, so each
 	// page's links are re-based from where it moved to.
-	changed := rewriteMovedLinks(moved)
+	changed, linkErr := rewriteMovedLinks(moved)
 	for _, m := range moves {
 		touched = append(touched, shareUploads(m[0], m[1], filepath.Join(cfg.Data, filepath.FromSlash(m[1]+".md")))...)
 	}
@@ -344,7 +367,10 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 			still = append(still, p)
 		}
 	}
-	return moves, still, notCommitted(gitCommit(user, message, commit...))
+	if err := notCommitted(gitCommit(user, message, commit...)); err != nil {
+		return moves, still, err
+	}
+	return moves, still, linkErr
 }
 
 var renameBracesRE = regexp.MustCompile(`\{([^{}]*) => ([^{}]*)\}`)

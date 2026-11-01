@@ -24,7 +24,7 @@ import (
 // tasksMu serializes every read-modify-write of the task files: two
 // concurrent task changes would otherwise lose each other's writes. Write
 // paths hold it for the whole read-modify-write-commit; functions named
-// …Locked expect it held (Go's mutex isn't reentrant, Python's RLock was).
+// …Locked expect it held (Go's mutex isn't reentrant).
 var tasksMu sync.Mutex
 
 // The tasks' folder, and what it was called before Deck was called Tasks
@@ -574,7 +574,7 @@ func taskIDsLocked() map[string]bool {
 	return ids
 }
 
-// uuid4 is a random UUID, as Python's str(uuid.uuid4()).
+// uuid4 is a random (version 4) UUID, in its usual 36-character form.
 func uuid4() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)

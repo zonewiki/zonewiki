@@ -34,7 +34,7 @@ func pageLog(user, path string) []GitEntry {
 	return out
 }
 
-// slugAndSha splits "<slug>/<sha>" (Flask's <path:slug>/<sha>).
+// slugAndSha splits "<slug>/<sha>": a slug may hold "/", the sha is the last part.
 func slugAndSha(rest string) (string, string, bool) {
 	i := strings.LastIndex(rest, "/")
 	if i <= 0 || i == len(rest)-1 {

@@ -66,7 +66,7 @@ func commitOthersDraft(user, slug, path string) error {
 	}
 	if author := draftAuthor(path); author != "" && author != user && isUncommitted(path) {
 		if err := gitCommit(author, "Save "+slug, path); err != nil {
-			return commitFailed(fmt.Sprintf("nothing was changed: %s's draft of %s couldn't be committed first", author, slug), err)
+			return writeFailed(fmt.Sprintf("nothing was changed: %s's draft of %s couldn't be committed first", author, slug), err)
 		}
 	}
 	return nil
@@ -113,7 +113,7 @@ func commitOthersDrafts(user string) error {
 			paths[i] = filepath.Join(cfg.Data, filepath.FromSlash(fp))
 		}
 		if err := gitCommit(owner, msg, paths...); err != nil {
-			return commitFailed(fmt.Sprintf("nothing was changed: %s's changes in their private folder couldn't be committed first", owner), err)
+			return writeFailed(fmt.Sprintf("nothing was changed: %s's changes in their private folder couldn't be committed first", owner), err)
 		}
 	}
 	return nil
@@ -332,7 +332,7 @@ func headedSection(content, heading string) (start, end int, ok bool) {
 
 // Leaving a page in conflict: the editor's save on pagehide can't show a
 // banner, and writing over the other's change would lose it. So its text
-// is kept for its user, in .leaf/drafts/<user>/<slug>.json (not a page,
+// is kept for its user, in .zone/drafts/<user>/<slug>.json (not a page,
 // not in git; "_" without users), with the text it started from, and the
 // user's next /edit of the page offers the banner's choices. A save of the
 // page by the user takes it away; after leftDraftDays it goes on its own.

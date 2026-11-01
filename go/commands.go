@@ -1,7 +1,7 @@
 // The settings file's commands (docs/spec/users.md): zonewiki user adds,
 // changes and removes users, zonewiki config checks the settings, sets the
 // wiki's password and token, and moves settings out of the environment.
-// They edit .leaf/config in the wiki ZONE_DATA names, keeping its comments,
+// They edit .zone/config in the wiki ZONE_DATA names, keeping its comments,
 // and refuse a change that would leave settings Zone doesn't start with; a
 // running Zone takes the change within a second and commits it (else Zone
 // at its next start): git stays with the one process. New MCP tokens are
@@ -363,7 +363,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		}
 	}
 	if getenv("LEAF_SECRET_KEY") != "" {
-		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Zone keeps its key in .leaf/secret_key)")
+		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Zone keeps its key in .zone/secret_key)")
 	}
 	if len(moved) == 0 {
 		fmt.Fprintf(stdout, "Nothing to import: the environment sets none of the settings %s holds.\n", configName())

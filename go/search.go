@@ -30,10 +30,10 @@ const (
 	fuzzyWeight  = 0.5
 )
 
-// ---- Python's notion of characters ----
+// ---- Characters ----
 
-// pyWord is Python's [^\W_]: a letter or a number, any script.
-func pyWord(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
+// wordRune: a letter or a number, any script (a word's character, not _).
+func wordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 
 func casefold(s string) string { return cases.Fold().String(s) }
 
@@ -54,7 +54,7 @@ func words(text string) ([]string, []span) {
 	start, i := -1, 0
 	var b strings.Builder
 	for _, r := range text {
-		if pyWord(r) {
+		if wordRune(r) {
 			if start < 0 {
 				start = i
 				b.Reset()
@@ -522,7 +522,7 @@ func (ix *Index) fuzzyVocab() []string {
 
 // expand: query tokens as (term, weight): exact 1.0, prefix 0.8, and when
 // neither hits, close typos 0.5; the best weight per term, in the order
-// terms were first found (Python's dict).
+// terms were first found.
 func (ix *Index) expand(qTokens []string) []weighted {
 	var out []weighted
 	at := map[string]int{}

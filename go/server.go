@@ -185,12 +185,13 @@ func newHandler() http.Handler {
 	pageRoutes(mux)
 	historyRoutes(mux)
 	tasksRoutes(mux)
+	oldNameRoutes(mux)
 	return checks(mux)
 }
 
 // apiHealth: Zone answers, and took its settings file's last change (503
-// with the error if not: Zone runs on the settings from before), for leaf
-// health. It needs no login, and the error may name users: the error
+// with the error if not: Zone runs on the settings from before), for
+// zonewiki health. It needs no login, and the error may name users: the error
 // itself only to whoever may read the wiki, everyone else is pointed to
 // the log.
 func apiHealth(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +217,7 @@ func checks(next http.Handler) http.Handler {
 			return
 		}
 		if dotSegments(r.URL.Path) {
-			// "/page/../x": Flask's routes refused such a slug (400); Go's
+			// "/page/../x": refused (400), never resolved; Go's
 			// router would redirect to the cleaned path instead.
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -551,7 +552,7 @@ func mediaType(name string) string {
 }
 
 // Types Go may not know without the system's mime.types (the container has
-// none), so uploads of them are shown inline, as Python's table has them.
+// none), so uploads of them are shown inline.
 func init() {
 	for ext, t := range map[string]string{
 		".txt": "text/plain; charset=utf-8", ".bmp": "image/bmp", ".ico": "image/vnd.microsoft.icon",
@@ -671,7 +672,7 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.Reader, owner, fi
 	return true
 }
 
-// baseName is a path's last part, as Python's PurePosixPath.name.
+// baseName is a slash-separated path's last part ("" for ".").
 func baseName(p string) string {
 	p = strings.TrimRight(p, "/")
 	if i := strings.LastIndex(p, "/"); i >= 0 {
@@ -683,7 +684,7 @@ func baseName(p string) string {
 	return p
 }
 
-// suffix is a file name's extension, as Python's PurePath.suffix: "" for
+// suffix is a file name's extension: "" for
 // ".bashrc", "." for "name.".
 func suffix(name string) string {
 	i := strings.LastIndex(name, ".")
