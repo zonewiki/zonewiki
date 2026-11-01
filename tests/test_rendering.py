@@ -47,6 +47,18 @@ class TestWikilinks:
         write_page(wiki_dir, "a-b", "# A & B\n")
         assert 'href="/page/a-b"' in preview(client, "[[A & B]]")
 
+    def test_in_a_table_cell(self, client, wiki_dir):
+        # A table splits its rows at |, not at a wikilink's.
+        write_page(wiki_dir, "target", "# Target\n")
+        result = preview(client, "| Page | Note |\n|---|---|\n| [[target|The target]] | x |\n")
+        assert '<td><a href="/page/target" class="wikilink">The target</a></td>' in result
+        assert result.count("<td>") == 2
+
+    def test_not_in_an_html_attribute(self, client, wiki_dir):
+        # Raw HTML is goldmark's: a wikilink in an attribute stays text.
+        result = preview(client, '<span title="[[target]]">t</span>')
+        assert '<span title="[[target]]">t</span>' in result
+
     def test_toc_is_no_directive(self, client):
         # [[toc]] was removed (the side column lists a page's headings): it is
         # an ordinary wikilink now, to a page named toc.

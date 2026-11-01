@@ -14,12 +14,12 @@ import (
 var sharing = &Req{sharing: true}
 
 // prepare is renderMd up to markdown: code masked, task lists and task refs
-// swapped for placeholders, wikilinks, code back.
+// swapped for placeholders, wikilinks' pipes escaped, code back.
 func prepare(text string) (string, []tasksEmbed, []string) {
 	text, stash := mdtext.MaskCode(text)
 	text, embeds := processTasksEmbeds(nil, text, false)
 	text, refs := maskTaskRefs(text)
-	return mdtext.UnmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, "", stash), stash), embeds, refs
+	return mdtext.UnmaskCode(escapeWikilinkPipes(text), stash), embeds, refs
 }
 
 // testWiki points cfg (and settings) at a fresh wiki with these pages (slug → text);
@@ -54,17 +54,55 @@ func TestWikilinks(t *testing.T) {
 		"[[Notes/My Page]]":          `<a href="/page/notes/my-page" class="wikilink">Notes/My Page</a>`,
 		"[[notes/my-page|the page]]": `<a href="/page/notes/my-page" class="wikilink">the page</a>`,
 		"[[Missing <b>]]":            `<a href="/page/missing-b" class="wikilink wikilink-missing">Missing &lt;b&gt;</a>`,
-		"[[index#Über **all** `x`]]": "<a href=\"/page/index#über-all-x\" class=\"wikilink\">index › Über **all** `x`</a>",
+		// A label is a link's text: markdown in it renders.
+		"[[index#Über **all** `x`]]": `<a href="/page/index#über-all-x" class="wikilink">index › Über <strong>all</strong> <code>x</code></a>`,
 		"[[#Here [[x]]]]":            `[[#Here <a href="/page/x" class="wikilink wikilink-missing">x</a>]]`,
 		"[[#Section one]]":           `<a href="#section-one" class="wikilink">Section one</a>`,
 		"[[secret|words stay]]":      `<span class="wikilink-hidden">words stay</span>`,
 		"[[Odd Name]]":               `<a href="/page/Odd%20Name" class="wikilink">Odd Name</a>`,
-		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it&#39;s</a>`,
+		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it's</a>`,
+		"see ![[index]]":             `see !<a href="/page/index" class="wikilink">index</a>`,
+		"*[[index]]*":                `<em><a href="/page/index" class="wikilink">index</a></em>`,
+		// What isn't text keeps its [[…]]: code, math, an HTML attribute.
+		"`[[index]]` $[[x]]$ <span title=\"[[index]]\">t</span>": `<code>[[index]]</code> <span class="math math-inline">[[x]]</span> <span title="[[index]]">t</span>`,
+		"[[a\nb]]": "[[a\nb]]",
 	}
 	for in, want := range cases {
-		if got := processWikilinks(sharing, in, slugs, "", nil); got != want {
+		got := markdown(escapeWikilinkPipes(in), &Env{Wikilink: wikilinker(sharing, slugs, "")}, true)
+		if got != want {
 			t.Errorf("%s:\n got %s\nwant %s", in, got, want)
 		}
+	}
+	// Without Env.Wikilink, a wikilink is its text.
+	if got := markdown("[[index]]", &Env{}, true); got != "[[index]]" {
+		t.Errorf("no Wikilink: %s", got)
+	}
+}
+
+// A table splits its rows at |, not a wikilink's.
+func TestWikilinkInTable(t *testing.T) {
+	testWiki(t, nil)
+	src := "| a | b |\n|---|---|\n| [[index|Home]] | [[x#S|y]] `p\\|q` |\n"
+	got := markdown(escapeWikilinkPipes(src), &Env{Wikilink: wikilinker(nil, map[string]bool{"index": true}, "")}, false)
+	for _, want := range []string{
+		`<td><a href="/page/index" class="wikilink">Home</a></td>`,
+		`<td><a href="/page/x#s" class="wikilink wikilink-missing">y</a> <code>p|q</code></td>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s\nwant %s", got, want)
+		}
+	}
+	if strings.Count(got, "<td>") != 2 {
+		t.Errorf("cells: %s", got)
+	}
+}
+
+// A heading's id has a wikilink's label, as [[Page#Section]] makes it.
+func TestWikilinkInHeading(t *testing.T) {
+	testWiki(t, nil)
+	got := markdown("## See [[index|the **home**]]\n", &Env{Wikilink: wikilinker(nil, map[string]bool{"index": true}, "")}, false)
+	if want := mdtext.SectionAnchor("See [[index|the **home**]]"); !strings.Contains(got, `id="`+want+`"`) || want != "see-the-home" {
+		t.Errorf("%s (want id %s)", got, want)
 	}
 }
 
@@ -73,8 +111,7 @@ func TestPrepareMasksCode(t *testing.T) {
 	testWiki(t, nil)
 	src := "`[[index]]` ``a`[[tasks:]]`b`` [[index]]\n```\n[[tasks:]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
 	text, embeds, refs := prepare(src)
-	want := "`[[index]]` ``a`[[tasks:]]`b`` " + `<a href="/page/index" class="wikilink">index</a>` +
-		"\n```\n[[tasks:]] [[task:abcd1234]]\n```\n````x\n```\n[[index]]\n````\n"
+	want := src
 	if text != want || embeds != nil || refs != nil {
 		t.Errorf("got %q %v %v", text, embeds, refs)
 	}

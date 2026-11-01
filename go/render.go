@@ -16,33 +16,32 @@ import (
 	"zonewiki/internal/mdtext"
 )
 
-// processWikilinks: [[Page]], [[Page|Label]], [[Page#Section]],
-// [[#Section]] as links; to a missing page with class wikilink-missing, to
-// a page hidden in sharing mode as its label only. slugs: the wiki's pages
-// (nil: listed now). from: the page the text is on ("" for none, a task's
-// notes): on one of the user's own private pages a link to a missing page
-// that would be shared is marked (wikilink-shared-new) and carries
-// ?from=private, so the editor it opens warns that the new page is shared and
-// offers it as a private one; on a shared page a link to the user's private
-// page is marked (wikilink-private), since others see it as plain text.
-// stash: mdtext.MaskCode's, when text is masked, so a section's anchor is made
-// from its code as written ([[Page#Run `make` now]]).
-func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, stash []string) string {
+// wikilinker: Env.Wikilink for a render, [[Page]], [[Page|Label]],
+// [[Page#Section]], [[#Section]] as links; to a missing page with class
+// wikilink-missing, to a page hidden in sharing mode as its label only.
+// slugs: the wiki's pages (nil: listed now). from: the page the text is on
+// ("" for none, a task's notes): on one of the user's own private pages a
+// link to a missing page that would be shared is marked
+// (wikilink-shared-new) and carries ?from=private, so the editor it opens
+// warns that the new page is shared and offers it as a private one; on a
+// shared page a link to the user's private page is marked
+// (wikilink-private), since others see it as plain text. A section's
+// anchor is made from its code as written ([[Page#Run `make` now]]).
+func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) (open, label, close string) {
 	if slugs == nil {
 		slugs = rq.slugSet()
 	}
-	return mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
-		page, section, label := mdtext.SplitWikilink(m[2 : len(m)-2])
+	return func(inner string) (string, string, string) {
+		page, section, label := mdtext.SplitWikilink(inner)
 		anchor := ""
 		if section != "" {
-			anchor = "#" + html.EscapeString(mdtext.SectionAnchor(mdtext.UnmaskCode(section, stash)))
+			anchor = "#" + html.EscapeString(mdtext.SectionAnchor(section))
 		}
-		label = html.EscapeString(label)
 		if page == "" {
 			if anchor == "" {
 				anchor = "#"
 			}
-			return `<a href="` + anchor + `" class="wikilink">` + label + `</a>`
+			return `<a href="` + anchor + `" class="wikilink">`, label, `</a>`
 		}
 		slug := page
 		if !slugs[page] {
@@ -50,7 +49,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, 
 		}
 		if hiddenPage(rq, slug) {
 			// Sharing mode: the words stay (they are this page's), the link goes.
-			return `<span class="wikilink-hidden">` + label + `</span>`
+			return `<span class="wikilink-hidden">`, label, `</span>`
 		}
 		css, query, title := "wikilink", "", ""
 		_, targetPrivate := pageOwner(slug)
@@ -65,8 +64,8 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, 
 			css += " wikilink-private"
 			title = ` title="Links to a private page: others see plain text"`
 		}
-		return `<a href="` + pathURL("page", slug) + query + anchor + `" class="` + css + `"` + title + `>` + label + `</a>`
-	})
+		return `<a href="` + pathURL("page", slug) + query + anchor + `" class="` + css + `"` + title + `>`, label, `</a>`
+	}
 }
 
 // RenderOpts: what a page view adds to a render. EditSlug gives each ## and
@@ -93,9 +92,9 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, stash := mdtext.MaskCode(text)
 	text, embeds := processTasksEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
-	text = mdtext.UnmaskCode(processWikilinks(rq, text, nil, o.Page, stash), stash)
+	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
-		HeadingIDs: o.HeadingIDs}
+		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page)}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)
 	if len(embeds) > 0 {
@@ -115,13 +114,13 @@ func requestHost(rq *Req) string {
 // as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
 // without heading ids, which would clash with the page's own.
 func renderNotes(rq *Req, texts []string, inline bool) []string {
-	slugs := rq.slugSet()
+	links := wikilinker(rq, nil, "")
 	out := make([]string, len(texts))
 	for i, text := range texts {
 		text, stash := mdtext.MaskCode(text)
 		text, refs := maskTaskRefs(text)
-		text = mdtext.UnmaskCode(processWikilinks(rq, text, slugs, "", stash), stash)
-		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID}, inline)
+		text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
+		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links}, inline)
 		out[i] = injectTaskRefs(rq, result, refs, nil)
 	}
 	return out
@@ -384,10 +383,10 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	for n := 1; strings.Contains(article, `id="`+hid+`"`); n++ {
 		hid = "sources-" + strconv.Itoa(n)
 	}
-	slugs := rq.slugSet()
+	env := &Env{Host: requestHost(rq), Wikilink: wikilinker(rq, nil, "")}
 	var items strings.Builder
 	for _, s := range sources {
-		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs, "", nil), &Env{Host: requestHost(rq)}, true) + "</li>")
+		items.WriteString("<li>" + markdown(s, env, true) + "</li>")
 	}
 	return `<section class="page-sources"><h2 id="` + hid + `">Sources</h2><ul>` + items.String() + `</ul></section>`
 }

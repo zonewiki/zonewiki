@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	gohtml "html"
 	"regexp"
 	"strings"
 	"sync"
@@ -34,6 +35,9 @@ type Env struct {
 	SectionChips map[string]string
 	Host         string
 	HeadingIDs   headingIDs // what a heading's id becomes
+	// Wikilink: a [[link]]'s HTML around its label, inner what is between
+	// the brackets; nil: wikilinks stay text.
+	Wikilink func(inner string) (open, label, close string)
 }
 
 // headingIDs: how headings carry their ids: as id (a page), as data-pid
@@ -95,7 +99,7 @@ func newMDRenderer(inline bool) *mdRenderer {
 	opts := []goldmark.Option{
 		goldmark.WithExtensions(extension.Table, extension.Strikethrough,
 			extension.NewLinkify(extension.WithLinkifyURLRegexp(urlRE)),
-			extension.Footnote, extension.DefinitionList, typographer, mathExtension{block: !inline}),
+			extension.Footnote, extension.DefinitionList, typographer, mathExtension{block: !inline}, wikilinkExtension{}),
 		goldmark.WithParserOptions(
 			parser.WithParagraphTransformers(
 				util.Prioritized(alertTransformer{}, 100),
@@ -307,6 +311,9 @@ func headingTitle(h ast.Node, src []byte) string {
 			b.Write(n.Value)
 		case *mathInline:
 			b.Write(n.TeX)
+		case *wikilinkNode:
+			_, _, label := mdtext.SplitWikilink(n.Inner)
+			b.WriteString(mdtext.PlainHeading(label))
 		}
 		return ast.WalkContinue, nil
 	})
@@ -346,6 +353,7 @@ func (r *zoneRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(kindCheckbox, r.checkbox)
 	reg.Register(kindMathInline, r.mathInline)
 	reg.Register(kindMathBlock, r.mathBlock)
+	reg.Register(kindWikilink, r.wikilink)
 }
 
 func attr(n ast.Node, name string) string {
@@ -499,4 +507,105 @@ func attrBytes(v any) []byte {
 		return []byte(v)
 	}
 	return []byte(fmt.Sprint(v))
+}
+
+// Wikilinks ([[Page]], [[Page|Label]], [[Page#Section]], [[#Section]]) are
+// an inline of their own, parsed where goldmark parses links, so code spans,
+// math and raw HTML keep theirs as text. A table splits its rows at "|"
+// before inlines are parsed: escapeWikilinkPipes writes a wikilink's "|"
+// as "\|" before the parse, GFM's pipe in a cell, and the parser reads it
+// back.
+
+var kindWikilink = ast.NewNodeKind("ZoneWikilink")
+
+// wikilinkNode: [[Inner]].
+type wikilinkNode struct {
+	ast.BaseInline
+	Inner string
+}
+
+func (n *wikilinkNode) Kind() ast.NodeKind         { return kindWikilink }
+func (n *wikilinkNode) Dump(src []byte, level int) { ast.DumpHelper(n, src, level, nil, nil) }
+
+type wikilinkExtension struct{}
+
+func (wikilinkExtension) Extend(m goldmark.Markdown) {
+	// Before goldmark's links (200), which would take the [ as a link's.
+	m.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(wikilinkParser{}, 190)))
+}
+
+type wikilinkParser struct{}
+
+func (wikilinkParser) Trigger() []byte { return []byte{'[', '!'} }
+
+func (wikilinkParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
+	line, seg := block.PeekLine()
+	if line[0] == '!' {
+		if _, ok := wikilinkAt(line[1:]); !ok {
+			return nil
+		}
+		// The ! is text (an image's would take the [).
+		block.Advance(1)
+		return ast.NewTextSegment(seg.WithStop(seg.Start + 1))
+	}
+	n, ok := wikilinkAt(line)
+	if !ok {
+		return nil
+	}
+	block.Advance(n)
+	return &wikilinkNode{Inner: strings.ReplaceAll(string(line[2:n-2]), `\|`, "|")}
+}
+
+// wikilinkAt: the length of the [[…]] line starts with, as mdtext.WikilinkRE
+// matches one (no bracket inside, on one line).
+func wikilinkAt(line []byte) (int, bool) {
+	if !bytes.HasPrefix(line, []byte("[[")) {
+		return 0, false
+	}
+	end := bytes.Index(line[2:], []byte("]]"))
+	if end <= 0 || bytes.ContainsAny(line[2:2+end], "[]\n") {
+		return 0, false
+	}
+	return 2 + end + 2, true
+}
+
+// escapeWikilinkPipes: text with every wikilink's "|" written "\|", so a
+// table doesn't split a cell at it (code masked: its text stays as it is).
+func escapeWikilinkPipes(text string) string {
+	if !strings.Contains(text, "|") {
+		return text
+	}
+	return mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
+		return strings.ReplaceAll(m, "|", `\|`)
+	})
+}
+
+// wikilink writes a wikilink as Env.Wikilink makes it, its label rendered
+// as a link's text is (emphasis, code, math), or as written without one.
+func (r *zoneRenderer) wikilink(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*wikilinkNode)
+	if r.env == nil || r.env.Wikilink == nil {
+		_, _ = w.WriteString(gohtml.EscapeString("[[" + n.Inner + "]]"))
+		return ast.WalkContinue, nil
+	}
+	open, label, close := r.env.Wikilink(n.Inner)
+	_, _ = w.WriteString(open)
+	_, _ = w.WriteString(renderLabel(label, r.env.Host))
+	_, _ = w.WriteString(close)
+	return ast.WalkContinue, nil
+}
+
+// plainLabelRE: a label with nothing markdown or the typographer would
+// change, written as it is (escaped) without a render.
+var plainLabelRE = regexp.MustCompile("^[^*_\x60~$<>&\\\\'\"!\\[\\]]*$")
+
+// renderLabel: a wikilink's label as inline markdown; its own HTML is text.
+func renderLabel(label, host string) string {
+	if plainLabelRE.MatchString(label) && !strings.Contains(label, "--") && !strings.Contains(label, "...") {
+		return gohtml.EscapeString(label)
+	}
+	return markdown(gohtml.EscapeString(label), &Env{Host: host, HeadingIDs: headingNoID}, true)
 }
