@@ -170,6 +170,26 @@ def test_code_block_and_table(page, wiki):
                                "| Name | Column 2 |\n| --- | --- |\n|  |  |")
 
 
+def test_math_inline_in_text_and_a_block_on_lines(page, wiki):
+    textarea = _edit(page, wiki, "Area x^2 here", 5, 8)
+    _click(page, "math")
+    assert _body(textarea) == "Area $x^2$ here"
+    _click(page, "math")   # a second click unwraps
+    assert _body(textarea) == "Area x^2 here"
+    textarea = _edit(page, wiki, "Text ", 5)
+    _click(page, "math")
+    page.keyboard.type("a+b")
+    assert _body(textarea) == "Text $a+b$"
+    textarea = _edit(page, wiki, "a = b\\\\\nc = d\nText", 0, 13)
+    _click(page, "math")
+    assert _body(textarea) == "$$\na = b\\\\\nc = d\n$$\nText"
+    textarea = _edit(page, wiki, "Text\n\nMore", 5)
+    _click(page, "math")
+    page.keyboard.type("E = mc^2")
+    assert _body(textarea) == "Text\n$$\nE = mc^2\n$$\nMore"
+    expect(page.locator("#editor-preview .math-display .katex")).to_have_count(1)
+
+
 def test_diagram_starts_a_flowchart_or_fences_the_selection(page, wiki):
     textarea = _edit(page, wiki, "Text", 4)
     _click(page, "diagram")

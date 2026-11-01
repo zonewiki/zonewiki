@@ -315,6 +315,22 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     insertBlockAfterLine('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |', 2, 10);
   }
 
+  // Math: a selection on one line (or the cursor in text) as inline `$…$`,
+  // toggling; selected lines, or the cursor on a blank line, as a `$$` block.
+  function insertMath() {
+    const v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
+    const range = selectedLines();
+    const sel = v.slice(s, e);
+    const multiLine = sel.trim().includes('\n');
+    const blankLine = s === e && !range.lines[0].trim();
+    if (!multiLine && !blankLine) {
+      toggleWrap('$');
+      return;
+    }
+    const body = blankLine ? '' : range.lines.join('\n');
+    replaceRange(range.start, range.end, '$$\n' + body + '\n$$', 3, 3 + body.length);
+  }
+
   // A Mermaid diagram: the selected lines fenced as one, or a small
   // flowchart to start from, its edge selected so typing replaces it.
   function insertDiagram() {
@@ -344,6 +360,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     quote: toggleQuote,
     codeblock: insertCodeBlock,
     table: insertTable,
+    math: insertMath,
     diagram: insertDiagram,
     link: insertLink,
     wikilink: wikilinkFormat,
