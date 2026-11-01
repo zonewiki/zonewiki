@@ -1,5 +1,5 @@
 // Zone's web server: one process, its request checks and routes.
-// Run: ZONE_DATA=~/zonewiki zonewiki [-addr :5000] [-public dir]. Also: zonewiki eval
+// Run: ZONE_DATA=~/zonewiki zonewiki [--addr :5000] [--public dir]. Also: zonewiki eval
 // measures retrieval (eval.go), zonewiki health asks a running Zone whether
 // it answers (the container's healthcheck), zonewiki user and zonewiki config edit
 // and check the settings file (commands.go).
@@ -33,12 +33,73 @@ func logf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "Zone: "+format+"\n", args...)
 }
 
+const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER]
+  serve the wiki in ZONE_DATA (http://localhost:5000)
+
+Commands:
+  user COMMAND               the wiki's users (add, passwd, token, remove, list)
+  config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token, import)
+  eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
+  health [ADDR]              whether a Zone running here answers (the container's healthcheck)
+  help                       this text; zonewiki COMMAND --help a command's
+
+Environment:
+  ZONE_DATA                  the wiki's folder (required; it must exist)
+  ZONE_ALLOW_REMOTE          1: answer to every host name, not only localhost (unless hosts is set)
+  ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
+  ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (needs onnxruntime)
+  ZONE_MODEL_DIR             where the semantic model's files are
+  ZONE_BUILD                 the build shown next to the version
+
+Flags:`
+
+// printUsage: the usage text, then the flags.
+func printUsage() {
+	fmt.Fprintln(flag.CommandLine.Output(), usage)
+	printFlags(flag.CommandLine)
+}
+
+// printFlags: fs's flags as --name VALUE and their usage, in a column with
+// the commands' (flag.PrintDefaults would show them with one dash, which
+// works too).
+func printFlags(fs *flag.FlagSet) {
+	fs.VisitAll(func(f *flag.Flag) {
+		value, text := flag.UnquoteUsage(f)
+		name := "--" + f.Name
+		if value != "" {
+			name += " " + strings.ToUpper(value)
+		}
+		if f.DefValue != "" && f.DefValue != "false" {
+			text += " (default " + f.DefValue + ")"
+		}
+		fmt.Fprintf(fs.Output(), "  %-26s %s\n", name, text)
+	})
+}
+
+// isHelp: whether arg asks for a command's usage.
+func isHelp(arg string) bool {
+	return arg == "-h" || arg == "-help" || arg == "--help" || arg == "help"
+}
+
 func main() {
+	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port)")
+	public := flag.String("public", "", "the `folder` of the browser code (default: public/, found from the binary)")
+	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/spec/, for zone_help (default: found from --public)")
+	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
+	flag.Usage = printUsage
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "help":
+			flag.CommandLine.SetOutput(os.Stdout)
+			printUsage()
+			os.Exit(0)
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
+			if len(os.Args) > 2 && isHelp(os.Args[2]) {
+				fmt.Println(healthUsage)
+				os.Exit(0)
+			}
 			os.Exit(health(healthURL(os.Args[2:])))
 		case "user":
 			restore := echoOff()
@@ -52,10 +113,6 @@ func main() {
 			os.Exit(code)
 		}
 	}
-	addr := flag.String("addr", ":5000", "the address to listen on (127.0.0.1:0: a free port)")
-	public := flag.String("public", "", "the folder of the browser code (default: public/, found from the binary)")
-	flag.StringVar(&docsDir, "docs", "", "the folder of README.md and docs/spec/, for zone_help (default: found from -public)")
-	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as JSON (embedtest.go)")
 	flag.Parse()
 	c, s, err := loadConfig(environ)
 	if err != nil {
@@ -81,7 +138,7 @@ func main() {
 	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {
-			fatal(fmt.Errorf("-semantic-test: %w", err))
+			fatal(fmt.Errorf("--semantic-test: %w", err))
 		}
 	} else if semantic = semanticFromEnv(environ); semantic != nil {
 		semantic.start()
@@ -116,8 +173,12 @@ func fatal(err error) {
 	os.Exit(1)
 }
 
+const healthUsage = `Usage: zonewiki health [ADDR]
+  whether the Zone listening on ADDR (its --addr, default :5000) answers on localhost
+  and took its settings file: exit code 0, or 1`
+
 // healthURL: /api/health on localhost at the port of zonewiki health's
-// argument, the -addr Zone listens on (":8080"; default :5000).
+// argument, the --addr Zone listens on (":8080"; default :5000).
 func healthURL(args []string) string {
 	port := "5000"
 	if len(args) > 0 {

@@ -130,9 +130,9 @@ def _flags() -> list[str]:
     """The flags for what a test sets that isn't a setting: Zone's docs
     folder (for zone_help), and the semantic index with the tests' fake
     embedder (tests/semantic.py)."""
-    flags = ["-docs", str(settings.DOCS or "/nonexistent")]
+    flags = ["--docs", str(settings.DOCS or "/nonexistent")]
     if settings.SEMANTIC is not None:
-        flags += ["-semantic-test", json.dumps(settings.SEMANTIC.flag())]
+        flags += ["--semantic-test", json.dumps(settings.SEMANTIC.flag())]
     return flags
 
 
@@ -148,7 +148,7 @@ class GoServer:
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(
-            [str(self.binary), "-addr", addr, "-public", str(REPO / "public"), *self.flags],
+            [str(self.binary), "--addr", addr, "--public", str(REPO / "public"), *self.flags],
             env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log)
         line = self.proc.stdout.readline().decode()
         if " listening on " not in line:

@@ -223,7 +223,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No questions at" in r.stderr
     (wiki / "_eval" / "retrieval.json").write_text("[]")
-    r = subprocess.run(["./run.sh", "eval", "_eval/retrieval.json", "-k", "5"],
+    r = subprocess.run(["./run.sh", "eval", "_eval/retrieval.json", "--k", "5"],
                        cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     (build,) = _engine_calls(log, "build")
@@ -231,7 +231,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     (run,) = _engine_calls(log, "run")
     assert f"-v {wiki}:/wiki-data:ro,z -e ZONE_DATA=/wiki-data" in run
     assert "-e ZONE_SEMANTIC_SEARCH=on " in run
-    assert run.endswith("/app/zonewiki eval /wiki-data/_eval/retrieval.json -k 5")
+    assert run.endswith("/app/zonewiki eval /wiki-data/_eval/retrieval.json --k 5")
 
 
 def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):

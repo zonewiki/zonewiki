@@ -127,7 +127,7 @@ func TestEvalCommand(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "q.json")
 	_ = os.WriteFile(f, []byte(`[{"q": "Mechaniker", "expect": "golf"}, {"q": "push", "expect": "nope"}, {"q": "open"}]`), 0o666)
 	var out, errOut bytes.Buffer
-	if code := evalMain([]string{f, "-k", "3"}, &out, &errOut); code != 0 {
+	if code := evalMain([]string{f, "--k", "3"}, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	expectIn(t, out.String(), "           keyword\nhit@1          1/2\nhit@3          1/2\nMRR           0.50\n",

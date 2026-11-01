@@ -105,10 +105,15 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		fmt.Fprintln(stderr, userUsage)
 		return 2
 	}
+	if isHelp(args[0]) {
+		fmt.Fprintln(stdout, userUsage)
+		return 0
+	}
 	cmd, args := args[0], args[1:]
-	flag := func(name string) bool {
-		found := slices.Contains(args, name)
-		args = slices.DeleteFunc(args, func(a string) bool { return a == name })
+	flag := func(name string) bool { // --name, or -name as Go's flags take it
+		is := func(a string) bool { return a == name || a == name[1:] }
+		found := slices.ContainsFunc(args, is)
+		args = slices.DeleteFunc(args, is)
 		return found
 	}
 	tokenFlag, passwordFlag, openFlag := flag("--mcp-token"), flag("--password"), flag("--open")
@@ -242,6 +247,10 @@ func userLine(name string, token bool) string {
 }
 
 func configMain(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if isHelp(firstOf(args)) {
+		fmt.Fprintln(stdout, configUsage)
+		return 0
+	}
 	wantArgs := map[string]int{"check": 0, "passwd": 0, "token": 0, "import": 0, "set": 2, "unset": 1}
 	if n, ok := wantArgs[firstOf(args)]; !ok || len(args)-1 < n || n < 2 && len(args)-1 != n {
 		fmt.Fprintln(stderr, configUsage)

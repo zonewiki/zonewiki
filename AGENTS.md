@@ -122,7 +122,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── mcptools.go         # The MCP tools that read, and the task tools; mcpwrite.go those that write pages
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
-│   ├── embedtest.go        # The tests' fake embedder (-semantic-test)
+│   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
 └── public/                 # The browser code, served as it is
@@ -169,6 +169,8 @@ Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one with
 ZONE_DATA=~/zonewiki go/zonewiki                 # http://localhost:5000 (finds public/ from the binary)
 ZONE_DATA=~/zonewiki go/zonewiki eval FILE       # measure retrieval
 ```
+
+`zonewiki --help` lists the flags, commands and environment. Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --mcp-token`); one dash works too.
 
 ---
 

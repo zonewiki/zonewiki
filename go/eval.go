@@ -9,12 +9,12 @@
 // anchor in the section's URL) or a task ("task:<id>"); "note" is free text.
 // A question is found at the rank of the first result matching one of its
 // targets, a page matching any of its sections. A question with no targets
-// yet is skipped (counted in the report): paste -new's stubs, fill them in
+// yet is skipped (counted in the report): paste --new's stubs, fill them in
 // over time. The report gives hit@1, hit@3, hit@k and MRR, by keywords
 // alone and, with ZONE_SEMANTIC_SEARCH, hybrid, then the questions that
 // weren't found first in every mode.
 //
-// -new lists the queries search_wiki was asked (the query log, which
+// --new lists the queries search_wiki was asked (the query log, which
 // query-log in the settings file turns on) that FILE doesn't have yet, newest first, as
 // stubs to paste into FILE: "results" is what the search found then, a hint
 // for "expect", not the answer.
@@ -44,16 +44,18 @@ type question struct {
 func evalMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("zonewiki eval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	k := fs.Int("k", 8, "results per question (search_wiki's default: 8)")
+	k := fs.Int("k", 8, "`N` results per question, as search_wiki gives")
 	newOnly := fs.Bool("new", false, "list logged search_wiki queries not in the file yet, as stubs to paste")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: zonewiki eval [-k N] [-new] QUESTIONS.json")
-		fs.PrintDefaults()
+		fmt.Fprintln(stderr, "Usage: zonewiki eval [--k N] [--new] QUESTIONS.json")
+		printFlags(fs)
 	}
 	// Flags before or after the file.
 	var files []string
 	for {
-		if err := fs.Parse(args); err != nil {
+		if err := fs.Parse(args); errors.Is(err, flag.ErrHelp) {
+			return 0
+		} else if err != nil {
 			return 2
 		}
 		if fs.NArg() == 0 {

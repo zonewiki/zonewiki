@@ -204,7 +204,8 @@ ZONE_DATA=~/zonewiki go/zonewiki
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then
 `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe` starts Zone. For semantic search
 outside the container, onnxruntime's library must be where the loader finds
-it (`docs/spec/search.md`).
+it (`docs/spec/search.md`). `zonewiki --help` lists the flags, the commands
+(`user`, `config`, `eval`, `health`; each takes `--help` too) and the environment.
 
 ## Configuration
 

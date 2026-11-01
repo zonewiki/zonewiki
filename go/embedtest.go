@@ -1,4 +1,4 @@
-// The tests' embedder (-semantic-test): tests/semantic.py's fake, which
+// The tests' embedder (--semantic-test): tests/semantic.py's fake, which
 // maps words to a few "concepts", so texts sharing no words can still be
 // similar, deterministically and without a model. tests/goserver.py hands
 // the server its embedder, floors and state as this flag.
@@ -48,7 +48,7 @@ func (e *conceptEmbedder) EmbedQuery(text string) ([]float32, error) {
 	return e.vec(text), nil
 }
 
-// semanticTestSpec is -semantic-test's JSON: the embedder, the index's
+// semanticTestSpec is --semantic-test's JSON: the embedder, the index's
 // floors, and whether the test synced it (then it syncs once before the
 // server listens; there is no worker).
 type semanticTestSpec struct {

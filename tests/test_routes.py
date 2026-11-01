@@ -1701,7 +1701,7 @@ class TestHostHeader:
             settings.ZONE_ALLOW_REMOTE = old
 
     def test_localhost_at_any_port(self, client, monkeypatch):
-        # zonewiki -addr :8080: the browser sends localhost:8080.
+        # zonewiki --addr :8080: the browser sends localhost:8080.
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
         for host in ("localhost:8080", "127.0.0.1:5000", "[::1]:8080", "LOCALHOST", "localhost"):
             assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
@@ -2251,7 +2251,7 @@ class TestVersion:
         env = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
         if wiki is not None:
             env["ZONE_DATA"] = str(wiki)
-        proc = subprocess.Popen([str(binary()), "-addr", "127.0.0.1:0"], env=env, text=True,
+        proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out = proc.stdout.readline()
         if " listening on " in out:
@@ -2279,6 +2279,39 @@ class TestVersion:
         r = self._start(tmp_path)
         assert r.returncode == 0, r.stderr
         assert (tmp_path / "index.md").exists() and (tmp_path / "_assets").is_dir()
+
+
+class TestUsage:
+    """zonewiki --help names every command, the environment and the flags;
+    each command answers --help with its own usage, without a wiki."""
+
+    @staticmethod
+    def _run(*args: str) -> subprocess.CompletedProcess:
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("LEAF_", "ZONE_"))}
+        return subprocess.run([str(binary()), *args], env=env, capture_output=True, text=True,
+                              timeout=60)
+
+    @pytest.mark.parametrize("arg", ["--help", "-h", "help"])
+    def test_zonewiki(self, arg):
+        r = self._run(arg)
+        assert r.returncode == 0, r.stderr
+        out = r.stdout + r.stderr
+        for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ",
+                     "ZONE_DATA", "ZONE_ALLOW_REMOTE", "ZONE_SEMANTIC_SEARCH",
+                     "--addr ADDRESS", "--public FOLDER", "--docs FOLDER", "--semantic-test JSON",
+                     "(default :5000)"):
+            assert word in out, word
+        assert not re.search(r"^ +-[a-z]", out, re.M)   # flags shown with two dashes
+
+    @pytest.mark.parametrize("command", ["user", "config", "eval", "health"])
+    @pytest.mark.parametrize("arg", ["--help", "-h"])
+    def test_command(self, command, arg):
+        r = self._run(command, arg)
+        assert r.returncode == 0, r.stderr
+        assert f"zonewiki {command}" in r.stdout + r.stderr
+        assert "ZONE_DATA isn't set" not in r.stderr
+        assert not re.search(r"^ +-[a-z]", r.stdout + r.stderr, re.M)
+
 
 class TestLocale:
     """LEAF_LOCALE: a BCP 47 tag the browser formats dates with (data-locale)."""

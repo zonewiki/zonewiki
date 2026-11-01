@@ -44,7 +44,7 @@ class FakeIndex:
         self.generation += 1
 
     def flag(self) -> dict:
-        """go/embedtest.go's -semantic-test."""
+        """go/embedtest.go's --semantic-test."""
         e = self.embedder
         return {"name": e.name, "model_name": e.model_name, "concepts": e.concepts, "dim": e.dim,
                 "fail": e.fail, "min_score": self.min_score, "related_min_score": self.related_min_score,

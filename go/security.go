@@ -31,7 +31,7 @@ var now = time.Now
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
 // names in the hosts setting (a reverse proxy's public name), get in, at
-// any port (-addr). ZONE_ALLOW_REMOTE without hosts turns the check off
+// any port (--addr). ZONE_ALLOW_REMOTE without hosts turns the check off
 // (LAN access by IP).
 var allowedHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "[::1]": true}
 

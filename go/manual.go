@@ -14,7 +14,7 @@ import (
 	"zonewiki/internal/textsearch"
 )
 
-// docsDir holds README.md and docs/spec/ (the -docs flag); "" finds them
+// docsDir holds README.md and docs/spec/ (the --docs flag); "" finds them
 // next to the browser code's folder (public/): in the checkout and in the
 // image alike.
 var docsDir string

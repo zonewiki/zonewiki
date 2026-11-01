@@ -381,7 +381,8 @@ func TestUserCommands(t *testing.T) {
 		!strings.Contains(out, "password no longer works") || !strings.Contains(out, "MCP token no longer works") {
 		t.Errorf("first user over the wiki's password: %d %q", code, out)
 	}
-	if code, out, _ := run("", "remove", "carol", "--open"); code != 0 || len(read().Users) != 0 ||
+	// One dash works too, as with the server's flags.
+	if code, out, _ := run("", "remove", "carol", "-open"); code != 0 || len(read().Users) != 0 ||
 		read().Top["password"].Line != 0 || !strings.Contains(out, "next start") {
 		t.Errorf("remove the last, open: %d %q", code, out)
 	}
