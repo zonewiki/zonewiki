@@ -37,6 +37,10 @@ func writesPages(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil {
 			body, err := io.ReadAll(r.Body)
+			if tooLarge(err) {
+				tooLargeError(w, bodyMax)
+				return
+			}
 			if err != nil {
 				badRequestPage(w)
 				return

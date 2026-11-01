@@ -880,7 +880,11 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 // the lists the page declares, so a chip re-rendered alone keeps linking
 // to the page's list (js/page.js rerenderTaskRef).
 func apiPreview(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if tooLarge(err) {
+		tooLargeError(w, bodyMax)
+		return
+	}
 	var lists []string
 	for _, x := range strings.Split(r.URL.Query().Get("lists"), ",") {
 		if n := cleanList(x); n != "" {

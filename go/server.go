@@ -39,7 +39,7 @@ func main() {
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
-			os.Exit(health("http://localhost:5000/api/health"))
+			os.Exit(health(healthURL(os.Args[2:])))
 		case "user":
 			restore := echoOff()
 			code := userMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
@@ -114,6 +114,18 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "Zone:", err)
 	os.Exit(1)
+}
+
+// healthURL: /api/health on localhost at the port of zonewiki health's
+// argument, the -addr Zone listens on (":8080"; default :5000).
+func healthURL(args []string) string {
+	port := "5000"
+	if len(args) > 0 {
+		if _, p, err := net.SplitHostPort(args[0]); err == nil && p != "" {
+			port = p
+		}
+	}
+	return "http://localhost:" + port + "/api/health"
 }
 
 // health: whether Zone answers at url within 5 seconds, its settings file
@@ -212,6 +224,8 @@ func checks(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = &policyWriter{ResponseWriter: w}
 		reloadSettings()
+		beginRequest()
+		defer endRequest()
 		if !hostAllowed(r.Host) {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
@@ -226,6 +240,15 @@ func checks(next http.Handler) http.Handler {
 			http.Error(w, "Cross-site request refused", http.StatusForbidden)
 			return
 		}
+		limit := int64(bodyMax)
+		if r.URL.Path == "/api/upload" {
+			limit = uploadMax
+		}
+		if r.ContentLength > limit {
+			tooLargeError(w, limit)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
 			if !ok {
@@ -239,6 +262,25 @@ func checks(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// A request's body is at most bodyMax (a page, a task, an MCP call), an
+// upload's uploadMax: a bigger one gets 413 before it is read, or, sent
+// without a length, a read error at the limit (tooLarge).
+const (
+	bodyMax   = 16 << 20
+	uploadMax = 100 << 20
+)
+
+// tooLarge: err is a body read past its limit.
+func tooLarge(err error) bool {
+	var e *http.MaxBytesError
+	return errors.As(err, &e)
+}
+
+// tooLargeError answers a body over limit with 413.
+func tooLargeError(w http.ResponseWriter, limit int64) {
+	http.Error(w, fmt.Sprintf("Too large: at most %d MB", limit>>20), http.StatusRequestEntityTooLarge)
 }
 
 // dotSegments: a path with a "." or ".." segment.
@@ -586,6 +628,10 @@ func uploadExt(mimeType string) string {
 
 func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		if tooLarge(err) {
+			tooLargeError(w, uploadMax)
+			return
+		}
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}

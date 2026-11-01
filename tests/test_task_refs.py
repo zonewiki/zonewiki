@@ -2,6 +2,7 @@
 chip, and search, Linked tasks and MCP know them.
 """
 
+import json
 import re
 from datetime import date, timedelta
 
@@ -73,6 +74,25 @@ class TestRendering:
         m = re.search(r'class="task-ref" data-task-id="([^"]+)"', body)
         assert m and m.group(1) != t["id"], "should be the spawned next occurrence, open"
         assert f'⏰ <time class="local-date" datetime="{day(7)}">' in body
+
+    def test_dates_from_the_file_are_escaped(self, client, wiki_dir):
+        # tasks.json is read leniently: a hand edit or a pull can put
+        # anything in a date, which the chip's title must not turn into markup.
+        t = task(client, title="Hand edited", due_date=day(1), start_date=day(2))
+        path = wiki_dir / "_tasks" / "tasks.json"
+        bad = '"><form action="/delete/index"><button>x'
+        data = json.loads(path.read_text(encoding="utf-8"))
+        items = data if isinstance(data, list) else data["tasks"]
+        for item in items:
+            if item["id"] == t["id"]:
+                item["due_date"] = day(1) + bad
+                item["start_date"] = day(2) + bad
+        path.write_text(json.dumps(data), encoding="utf-8")
+        write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
+        body = view(client)
+        assert "Hand edited" in body
+        assert '<form action="/delete/index">' not in body and "<button>x" not in body
+        assert 'title="Due ' + day(1) + '&#34;&gt;&lt;form' in body
 
     def test_badges(self, client, wiki_dir):
         late = task(client, title="Late", due_date=day(-2))

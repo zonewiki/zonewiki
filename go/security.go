@@ -30,16 +30,18 @@ var now = time.Now
 
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
-// names in the hosts setting (a reverse proxy's public name, any port), get
-// in. ZONE_ALLOW_REMOTE without hosts turns the check off (LAN access by IP).
-var allowedHosts = map[string]bool{"localhost:5000": true, "127.0.0.1:5000": true}
+// names in the hosts setting (a reverse proxy's public name), get in, at
+// any port (-addr). ZONE_ALLOW_REMOTE without hosts turns the check off
+// (LAN access by IP).
+var allowedHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "[::1]": true}
 
 func hostAllowed(host string) bool {
 	hosts := settings().Hosts
 	if cfg.AllowRemote && len(hosts) == 0 {
 		return true
 	}
-	return allowedHosts[host] || hosts[hostName(host)]
+	name := hostName(host)
+	return allowedHosts[name] || hosts[name]
 }
 
 // Cross-site request forgery: without it, any page open in the browser could

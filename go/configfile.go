@@ -451,6 +451,54 @@ func reloadSettings() {
 	}
 }
 
+// A request sees one set of settings from its checks to its answer: else
+// one whose session was checked against the users before a change could
+// be judged by the ones after (a switch from users to a password makes
+// private/ an ordinary folder, for a user who no longer has a login). So
+// the checks count the requests running (beginRequest, endRequest), and a
+// reload waits for them to finish (at most drainWait), the requests after
+// it waiting at reloadMu.
+var (
+	flightMu   sync.Mutex
+	flightDone = sync.NewCond(&flightMu)
+	inFlight   int
+	drainWait  = 10 * time.Second
+)
+
+func beginRequest() {
+	flightMu.Lock()
+	inFlight++
+	flightMu.Unlock()
+}
+
+func endRequest() {
+	flightMu.Lock()
+	inFlight--
+	if inFlight == 0 {
+		flightDone.Broadcast()
+	}
+	flightMu.Unlock()
+}
+
+// betweenRequests runs change once no request is running, or after max
+// (false: some still was).
+func betweenRequests(max time.Duration, change func()) bool {
+	timer := time.AfterFunc(max, func() {
+		flightMu.Lock()
+		flightDone.Broadcast()
+		flightMu.Unlock()
+	})
+	defer timer.Stop()
+	deadline := time.Now().Add(max)
+	flightMu.Lock()
+	defer flightMu.Unlock()
+	for inFlight > 0 && time.Now().Before(deadline) {
+		flightDone.Wait()
+	}
+	change()
+	return inFlight == 0
+}
+
 // takeSettings: a changed file's settings, now in effect, and those they
 // replace; nil if the file is as it was or has an error.
 func takeSettings() (old, s *Settings) {
@@ -492,7 +540,9 @@ func takeSettings() (old, s *Settings) {
 		settingsFailed(err)
 		return nil, nil
 	}
-	current.Store(s)
+	if !betweenRequests(drainWait, func() { current.Store(s) }) {
+		logf("a request still running after %s sees the settings change", drainWait)
+	}
 	settingsErr.Store(nil)
 	logf("reloaded %s", configName())
 	warnReadable(path)

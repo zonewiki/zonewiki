@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -199,6 +200,57 @@ func TestReloadSettings(t *testing.T) {
 	reloadSettings()
 	if settings().Locale != "it" {
 		t.Error("looked again too soon")
+	}
+}
+
+// A reload waits for the requests running, so each sees one set of users
+// from its session check to its answer; one that doesn't end holds it up
+// at most drainWait. The checks count every request.
+func TestReloadBetweenRequests(t *testing.T) {
+	path := configWiki(t, "locale = de\n")
+	beginRequest()
+	rewrite(t, path, "locale = fr-CH\n")
+	done := make(chan bool)
+	go func() { reloadSettings(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("reloaded while a request ran")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if settings().Locale != "de" {
+		t.Error("changed while a request ran")
+	}
+	endRequest()
+	<-done
+	if settings().Locale != "fr-CH" {
+		t.Error("not taken after it")
+	}
+
+	oldWait := drainWait
+	drainWait = 50 * time.Millisecond
+	t.Cleanup(func() { drainWait = oldWait })
+	beginRequest()
+	rewrite(t, path, "locale = it\n")
+	reloadSettings()
+	endRequest()
+	if settings().Locale != "it" {
+		t.Error("a request that doesn't end held the reload up for good")
+	}
+
+	running := -1
+	h := checks(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flightMu.Lock()
+		running = inFlight
+		flightMu.Unlock()
+	}))
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Host = "localhost:5000"
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	flightMu.Lock()
+	after := inFlight
+	flightMu.Unlock()
+	if running != 1 || after != 0 {
+		t.Errorf("counted %d while it ran, %d after", running, after)
 	}
 }
 

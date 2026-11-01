@@ -52,7 +52,10 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 // jsonObject is the request's JSON body, which must be an object (any
 // content type: text/plain bodies too).
 func jsonObject(r *http.Request) (jsonObj, error) {
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if tooLarge(err) {
+		return nil, &apiError{http.StatusRequestEntityTooLarge, "Too large: at most " + strconv.Itoa(bodyMax>>20) + " MB"}
+	}
 	o, ok := parseObj(body)
 	if !ok {
 		return nil, badRequest("Request body must be a JSON object")

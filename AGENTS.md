@@ -233,6 +233,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - Every response carries the page policy (`pageCSP`): only Zone's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Zone's code, or the browser tests fail), no framing by other sites, `nosniff`.
+  - Request bodies are capped in the checks (16 MB, an upload 100 MB; 413 above). The settings change only between requests (`betweenRequests`), so a request's session check and access checks see the same users.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
 - `ZONE_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).

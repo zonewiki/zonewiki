@@ -3,6 +3,8 @@ rename with reference updates, conflict detection, and API endpoints."""
 
 import gzip
 import html
+import http.client
+import io
 import json
 import os
 import re
@@ -1689,6 +1691,14 @@ class TestHostHeader:
         finally:
             settings.ZONE_ALLOW_REMOTE = old
 
+    def test_localhost_at_any_port(self, client, monkeypatch):
+        # zonewiki -addr :8080: the browser sends localhost:8080.
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
+        for host in ("localhost:8080", "127.0.0.1:5000", "[::1]:8080", "LOCALHOST", "localhost"):
+            assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
+        for host in ("localhost.evil.example:5000", "127.0.0.2:5000", "evil.example:5000"):
+            assert client.get("/page/index", headers={"Host": host}).status_code == 400, host
+
 
     def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
         monkeypatch.setattr(settings, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
@@ -1698,6 +1708,52 @@ class TestHostHeader:
                 assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
             for host in ("evil.example", "wiki.example.org.evil.example", "192.168.1.5:5000"):
                 assert client.get("/page/index", headers={"Host": host}).status_code == 400, host
+
+# ===========================================================================
+# Request bodies: at most 16 MB, an upload 100 MB
+# ===========================================================================
+
+class TestBodyLimits:
+
+    BIG = b"x" * (16 * 1024 * 1024 + 1)
+
+    def test_too_large_is_refused(self, client, wiki_dir):
+        # Refused on its length, before a byte of it is read.
+        for path in ("/api/preview", "/api/save/index", "/api/tasks", "/mcp", "/new"):
+            status, text = self._raw(client, path, {"Content-Length": str(len(self.BIG))})
+            assert status == 413 and "16 MB" in text, path
+
+    @staticmethod
+    def _raw(client, path, headers, body=None, chunked=False):
+        """A request the test client can't send: chunked, or a length it doesn't send."""
+        server = client.live.ensure()
+        conn = http.client.HTTPConnection(server.host, server.port, timeout=60)
+        try:
+            conn.request("POST", path, body=body, headers={"Host": "localhost:5000", **headers},
+                         encode_chunked=chunked)
+            resp = conn.getresponse()
+            return resp.status, resp.read().decode()
+        finally:
+            conn.close()
+
+    def test_without_a_length_cut_at_the_limit(self, client, wiki_dir):
+        # Chunked, so the server can't refuse before reading.
+        chunks = (b"x" * (1024 * 1024) for _ in range(17))
+        status, _ = self._raw(client, "/api/preview", {"Transfer-Encoding": "chunked"}, chunks, chunked=True)
+        assert status == 413
+
+    def test_upload_up_to_its_own_limit(self, client, wiki_dir):
+        resp = client.post("/api/upload", headers=HOST, content_type="multipart/form-data",
+                           data={"file": (io.BytesIO(self.BIG), "big.bin")})
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        status, text = self._raw(client, "/api/upload", {"Content-Length": str(100 * 1024 * 1024 + 1)})
+        assert status == 413 and "100 MB" in text
+
+    def test_a_page_just_below_saves(self, client, wiki_dir):
+        text = "# Big\n\n" + "word " * 200_000
+        resp = client.post("/api/save/big", data={"content": text}, headers=HOST)
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+
 
 # ===========================================================================
 # Behind an HTTPS proxy: the login cookie, throttling guesses

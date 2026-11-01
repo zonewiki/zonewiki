@@ -267,7 +267,11 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if tooLarge(err) {
+		tooLargeError(w, bodyMax)
+		return
+	}
 	if !json.Valid(body) {
 		writeJSON(w, http.StatusBadRequest, rpcError(nil, -32700, "Parse error"))
 		return

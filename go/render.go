@@ -257,14 +257,14 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 			} else if due == day {
 				state = " due-today"
 			}
-			badges = append(badges, `<span class="task-ref-badge task-ref-due`+state+`" title="Due `+due+`">⏰ `+shortDate(due, day)+`</span>`)
+			badges = append(badges, `<span class="task-ref-badge task-ref-due`+state+`" title="Due `+html.EscapeString(due)+`">⏰ `+shortDate(due, day)+`</span>`)
 		}
 		if start != "" && start >= day {
 			state, label := " start-later", shortDate(start, day)
 			if start == day {
 				state, label = " start-today", "today"
 			}
-			badges = append(badges, `<span class="task-ref-badge task-ref-start`+state+`" title="Start `+start+`">📅 `+label+`</span>`)
+			badges = append(badges, `<span class="task-ref-badge task-ref-start`+state+`" title="Start `+html.EscapeString(start)+`">📅 `+label+`</span>`)
 		}
 		if t.Recurrence != nil {
 			badges = append(badges, `<span class="task-ref-badge" title="Repeats">↻</span>`)
