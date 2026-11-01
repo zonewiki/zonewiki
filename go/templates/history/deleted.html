@@ -1,10 +1,10 @@
 {{- /* Pages deleted in git history, newest deletion first, with Restore. */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}
+{{.BreadcrumbHTML}}
 <header class="page-header"><h1>Deleted Pages</h1></header>
 <article class="page-content">
-{{- if .pages}}<ul class='notes-list'>
-{{- range .pages}}<li><span class="deleted-page-info"><a href="{{url "revision" .Slug}}/{{.Sha}}" class="deleted-page-title">{{.Title}}</a><span class="note-date">{{.Slug}} &middot; {{.Date}}</span></span><form method="post" action="{{url "restore" .Slug}}/{{.Sha}}"><button type="submit" class="btn btn-sm">Restore</button></form></li>{{end -}}
+{{- if .Pages}}<ul class='notes-list'>
+{{- range .Pages}}<li><span class="deleted-page-info"><a href="{{url "revision" .Slug}}/{{.Sha}}" class="deleted-page-title">{{.Title}}</a><span class="note-date">{{.Slug}} &middot; {{.Date}}</span></span><form method="post" action="{{url "restore" .Slug}}/{{.Sha}}"><button type="submit" class="btn btn-sm">Restore</button></form></li>{{end -}}
 </ul>
 {{- else}}<p>No deleted pages in history.</p>{{end -}}
 </article>

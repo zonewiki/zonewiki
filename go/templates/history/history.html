@@ -2,16 +2,16 @@
     page as it is now is marked Current and opens the page itself;
     "Changes" shows what that save changed. */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}
+{{.BreadcrumbHTML}}
 <header class="page-header">
-  <h1>History — {{.page_title}}</h1>
-  {{template "hist_back" (dict "slug" .slug "page_exists" .page_exists "to" "page")}}
+  <h1>History — {{.PageTitle}}</h1>
+  {{template "hist_back" (dict "slug" .Slug "page_exists" .PageExists "to" "page")}}
 </header>
-{{- if .rows}}
+{{- if .Rows}}
 <p class="hist-intro">Every saved version of this page, newest first. Open one to read it, step through older ones or bring it back.</p>
 <ol class="hist-list">
-{{- if .uncommitted}}<li class="hist-row hist-current"><a class="hist-main" href="{{url "page" .slug}}"><span class="hist-when">Now</span><span class="hist-what">Not committed yet</span></a><span class="hist-badge">Current</span></li>{{end -}}
-{{- range .rows}}<li class="hist-row{{if .current}} hist-current{{end}}"><a class="hist-main" href="{{.href}}"><span class="hist-when">{{.e.Time}}<span class="hist-rel">{{.e.Rel}}</span></span><span class="hist-what">{{.label}}{{with .e.Author}}<span class="hist-by"> · {{.}}</span>{{end}}</span><span class="hist-counts">{{template "hist_counts" .e}}</span></a>{{if .current}}<span class="hist-badge">Current</span>{{end}}<a class="hist-changes" href="{{url "diff" $.slug}}/{{.e.Sha}}" title="What this save changed">Changes</a></li>{{end -}}
+{{- if .Uncommitted}}<li class="hist-row hist-current"><a class="hist-main" href="{{url "page" .Slug}}"><span class="hist-when">Now</span><span class="hist-what">Not committed yet</span></a><span class="hist-badge">Current</span></li>{{end -}}
+{{- range .Rows}}<li class="hist-row{{if .Current}} hist-current{{end}}"><a class="hist-main" href="{{.Href}}"><span class="hist-when">{{.E.Time}}<span class="hist-rel">{{.E.Rel}}</span></span><span class="hist-what">{{.Label}}{{with .E.Author}}<span class="hist-by"> · {{.}}</span>{{end}}</span><span class="hist-counts">{{template "hist_counts" .E}}</span></a>{{if .Current}}<span class="hist-badge">Current</span>{{end}}<a class="hist-changes" href="{{url "diff" $.Slug}}/{{.E.Sha}}" title="What this save changed">Changes</a></li>{{end -}}
 </ol>
 {{- else}}
 <p class="hist-empty">No history yet — history is recorded from this point forward.</p>

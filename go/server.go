@@ -378,9 +378,15 @@ func login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, M{
-		"error": errorText, "next_url": r.URL.Query().Get("next"),
-		"users": s.Users != nil, "username": r.PostFormValue("username")})
+	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, &loginView{
+		Error: errorText, NextURL: r.URL.Query().Get("next"), Username: r.PostFormValue("username")})
+}
+
+// loginView: the login form (login.html); the shell says whether it asks
+// for a user name.
+type loginView struct {
+	view
+	Error, NextURL, Username string
 }
 
 // checkLogin: the login form's password is right, for the user it names

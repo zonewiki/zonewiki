@@ -2,10 +2,10 @@
     excerpt is HTML from the search (escaped, <mark>s). */ -}}
 {{define "body"}}
 <div class="search-results">
-  <h1>Search: {{.q}}</h1>
-  {{- if .results}}
-  <p class="search-count">{{if eq (len .results) .limit}}The first {{len .results}} results{{else}}{{len .results}} result{{if ne (len .results) 1}}s{{end}}{{end}}{{if .unlinked}} · unlinked pages only{{end}}</p>
-  {{- range .results}}
+  <h1>Search: {{.Q}}</h1>
+  {{- if .Results}}
+  <p class="search-count">{{if eq (len .Results) .Limit}}The first {{len .Results}} results{{else}}{{len .Results}} result{{if ne (len .Results) 1}}s{{end}}{{end}}{{if .Unlinked}} · unlinked pages only{{end}}</p>
+  {{- range .Results}}
   <div class="search-result-card">
     <a href="{{.href}}">{{.title}}</a>
     <span class="result-meta">{{.meta}}</span>

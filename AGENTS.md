@@ -44,7 +44,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 |---------------------|----------------------------------------------|
 | Server              | Go (`net/http`), one process, one binary (`go/`) |
 | Markdown render     | `goldmark` (server renders to HTML), with Zone's rules (`go/markdown.go`) |
-| HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped; what every page's layout shows is a typed `pageShell` (`.Shell`), a view's data a struct embedding `view` (`pageView`, `editView`; smaller views still a map) |
+| HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped; what every page's layout shows is a typed `pageShell` (`.Shell`), a view's data a struct embedding `view` (`pageView`, `editView`, `historyListView` …; `page()` takes nothing else) |
 | Syntax highlight    | `highlight.js` (vendored in `public/vendor/`, no CDN) |
 | Math, diagrams      | KaTeX and Mermaid, vendored in `public/vendor/`, loaded by a page that has math or a diagram |
 | Styling             | Custom CSS (classless, semantic HTML)        |

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"html/template"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -56,8 +57,72 @@ func deletedPagesView(w http.ResponseWriter, r *http.Request) {
 			pages = append(pages, p)
 		}
 	}
-	page(w, rq, http.StatusOK, "history/deleted.html", "Deleted Pages", shell{}, M{"pages": pages,
-		"breadcrumb_html": buildBreadcrumb(rq, "_deleted", "Deleted Pages", "", "")})
+	page(w, rq, http.StatusOK, "history/deleted.html", "Deleted Pages", shell{}, &deletedListView{Pages: pages,
+		BreadcrumbHTML: buildBreadcrumb(rq, "_deleted", "Deleted Pages", "", "")})
+}
+
+// deletedListView: the pages deleted in git history (history/deleted.html).
+type deletedListView struct {
+	view
+	Pages          []DeletedPage
+	BreadcrumbHTML template.HTML
+}
+
+// historyListView: a page's versions (history/history.html).
+type historyListView struct {
+	view
+	Slug, PageTitle         string
+	PageExists, Uncommitted bool // Uncommitted: the file differs from its last commit
+	Rows                    []historyRow
+	BreadcrumbHTML          template.HTML
+}
+
+// historyRow: a version in the history, Href its revision (the page itself
+// for the current one).
+type historyRow struct {
+	E       GitEntry
+	Label   string
+	Current bool
+	Href    string
+}
+
+// revisionPageView: a page as it was at Sha (history/revision.html).
+type revisionPageView struct {
+	view
+	Slug, Sha, RestoreSha, PageTitle, When string // RestoreSha: Sha's parent for a deletion
+	PageExists, Current                    bool
+	Entries                                []GitEntry
+	I                                      int  // Sha's place in Entries, 0 if HasI is false
+	HasI                                   bool // Sha is in the page's log
+	Back                                   int  // versions back from the page as it is
+	ArticleHTML, BreadcrumbHTML            template.HTML
+}
+
+// diffPageView: what a version changed (history/diff.html).
+type diffPageView struct {
+	view
+	Slug, Sha, PageTitle, When, What string
+	PageExists                       bool
+	Entries                          []GitEntry
+	I                                int
+	HasI                             bool
+	DiffLines                        []diffLine
+	BreadcrumbHTML                   template.HTML
+}
+
+// uncommittedListView: the files changed since their commit (history/uncommitted.html).
+type uncommittedListView struct {
+	view
+	Files          []UncommittedFile
+	BreadcrumbHTML template.HTML
+}
+
+// uncommittedDiffView: a file's changes since its commit (history/diff_uncommitted.html).
+type uncommittedDiffView struct {
+	view
+	PageTitle, Filepath string
+	DiffLines           []diffLine
+	BreadcrumbHTML      template.HTML
 }
 
 func historyView(w http.ResponseWriter, r *http.Request) {
@@ -86,21 +151,21 @@ func historyView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := isCurrent(path, entries)
-	var rows []M
+	var rows []historyRow
 	for i, e := range entries {
 		href := pathURL("revision", slug) + "/" + e.Sha
 		if current && i == 0 {
 			href = pathURL("page", slug)
 		}
-		rows = append(rows, M{"e": e, "label": versionLabel(e, entries), "current": current && i == 0, "href": href})
+		rows = append(rows, historyRow{E: e, Label: versionLabel(e, entries), Current: current && i == 0, Href: href})
 	}
 	bc := buildBreadcrumb(rq, "_deleted", "Deleted Pages", "", "", crumb{title, ""})
 	if pageExists {
 		bc = buildBreadcrumb(rq, slug, title, "", "", crumb{"History", ""})
 	}
-	page(w, rq, http.StatusOK, "history/history.html", "History — "+title, shell{}, M{"slug": slug,
-		"page_title": title, "page_exists": pageExists, "rows": rows, "uncommitted": pageExists && !current,
-		"breadcrumb_html": bc})
+	page(w, rq, http.StatusOK, "history/history.html", "History — "+title, shell{}, &historyListView{Slug: slug,
+		PageTitle: title, PageExists: pageExists, Rows: rows, Uncommitted: pageExists && !current,
+		BreadcrumbHTML: bc})
 }
 
 // versionArg: the page and the version a /revision/ or /diff/ URL names,
@@ -163,10 +228,10 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 			back = i + 1
 		}
 	}
-	page(w, rq, http.StatusOK, "history/revision.html", when+" — "+title, shell{}, M{"slug": slug, "sha": sha,
-		"restore_sha": restoreSha, "page_title": title, "page_exists": pageExists, "entries": entries,
-		"i": max(i, 0), "has_i": i >= 0, "current": current, "when": when, "back": back,
-		"article_html": htmlOf(renderMd(rq, stripH1(content), RenderOpts{})), "breadcrumb_html": bc})
+	page(w, rq, http.StatusOK, "history/revision.html", when+" — "+title, shell{}, &revisionPageView{Slug: slug, Sha: sha,
+		RestoreSha: restoreSha, PageTitle: title, PageExists: pageExists, Entries: entries,
+		I: max(i, 0), HasI: i >= 0, Current: current, When: when, Back: back,
+		ArticleHTML: htmlOf(renderMd(rq, stripH1(content), RenderOpts{})), BreadcrumbHTML: bc})
 }
 
 func diffView(w http.ResponseWriter, r *http.Request) {
@@ -192,9 +257,9 @@ func diffView(w http.ResponseWriter, r *http.Request) {
 	if pageExists {
 		bc = buildBreadcrumb(rq, slug, title, "", "", crumb{"History", pathURL("history", slug)}, crumb{"Changes", ""})
 	}
-	page(w, rq, http.StatusOK, "history/diff.html", "Changes "+when+" — "+title, shell{}, M{"slug": slug, "sha": sha,
-		"page_title": title, "page_exists": pageExists, "entries": entries, "i": max(i, 0), "has_i": i >= 0,
-		"when": when, "what": what, "diff_lines": diffLines(diff), "breadcrumb_html": bc})
+	page(w, rq, http.StatusOK, "history/diff.html", "Changes "+when+" — "+title, shell{}, &diffPageView{Slug: slug, Sha: sha,
+		PageTitle: title, PageExists: pageExists, Entries: entries, I: max(i, 0), HasI: i >= 0,
+		When: when, What: what, DiffLines: diffLines(diff), BreadcrumbHTML: bc})
 }
 
 func restoreRevision(w http.ResponseWriter, r *http.Request) {
@@ -224,8 +289,8 @@ func uncommittedView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	files := visibleUncommitted(rq, uncommittedEntries())
-	page(w, rq, http.StatusOK, "history/uncommitted.html", "Uncommitted Changes", shell{}, M{"files": files,
-		"breadcrumb_html": buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "")})
+	page(w, rq, http.StatusOK, "history/uncommitted.html", "Uncommitted Changes", shell{}, &uncommittedListView{Files: files,
+		BreadcrumbHTML: buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "")})
 }
 
 func diffUncommitted(w http.ResponseWriter, r *http.Request) {
@@ -255,9 +320,9 @@ func diffUncommitted(w http.ResponseWriter, r *http.Request) {
 	}
 	content, _ := readText(path)
 	title := pageTitle(content, slug)
-	page(w, rq, http.StatusOK, "history/diff_uncommitted.html", "Diff — "+title, shell{}, M{"page_title": title,
-		"filepath": rel, "diff_lines": diffLines(text),
-		"breadcrumb_html": buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "",
+	page(w, rq, http.StatusOK, "history/diff_uncommitted.html", "Diff — "+title, shell{}, &uncommittedDiffView{PageTitle: title,
+		Filepath: rel, DiffLines: diffLines(text),
+		BreadcrumbHTML: buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "",
 			crumb{title, "/uncommitted"}, crumb{"Diff", ""})})
 }
 

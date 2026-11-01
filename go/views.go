@@ -279,12 +279,15 @@ type view struct{ Shell *pageShell }
 
 func (v *view) setShell(s *pageShell) { v.Shell = s }
 
+// viewData: a view's data, a struct embedding view (nil: a view that
+// shows only the shell).
+type viewData interface{ setShell(*pageShell) }
+
 // page renders a view (its template) in the page shell. noActions drops
 // the action buttons, new note and search (the login page has nothing to
 // search or write); the editor has its own toolbar instead. wide: a page
-// view with side columns on big screens. data: the view's struct (one that
-// embeds view) or map.
-func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shell, data any) {
+// view with side columns on big screens.
+func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shell, data viewData) {
 	s := settings()
 	sh := &pageShell{
 		Title: title, Editor: o.editor, Wide: o.wide, ShowActions: !o.noActions && !o.editor,
@@ -313,14 +316,10 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	if fields := strings.Fields(cfg.Build); cfg.Build != "unknown" && len(fields) > 0 {
 		sh.Commit, sh.Dirty = fields[0], strings.Contains(cfg.Build, "+dirty")
 	}
-	switch d := data.(type) {
-	case interface{ setShell(*pageShell) }:
-		d.setShell(sh)
-	case M:
-		d["Shell"] = sh
-	case nil:
-		data = M{"Shell": sh}
+	if data == nil {
+		data = &view{}
 	}
+	data.setShell(sh)
 	var buf bytes.Buffer
 	if err := views[name].ExecuteTemplate(&buf, "layout", data); err != nil {
 		logf("rendering %s: %v", name, err)
@@ -362,8 +361,14 @@ func isSignedIn(r *http.Request) bool {
 // hiddenPageView: what a page not for sharing shows in sharing mode:
 // neither its title nor its text.
 func hiddenPageView(w http.ResponseWriter, rq *Req) {
-	page(w, rq, http.StatusOK, "hidden.html", "Hidden page", shell{}, M{
-		"breadcrumb_html": breadcrumb(rq, []crumb{{"Hidden page", ""}}, "", false, "", "")})
+	page(w, rq, http.StatusOK, "hidden.html", "Hidden page", shell{}, &hiddenView{
+		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Hidden page", ""}}, "", false, "", "")})
+}
+
+// hiddenView: a page not for sharing, in sharing mode (hidden.html).
+type hiddenView struct {
+	view
+	BreadcrumbHTML template.HTML
 }
 
 // pageLinks: pages as links.

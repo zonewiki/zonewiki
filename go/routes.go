@@ -80,8 +80,17 @@ func apiNewNote(w http.ResponseWriter, r *http.Request) {
 // (js/search.js initNotesFilter); ?q= keeps the query.
 func notesPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	page(w, rq, http.StatusOK, "notes.html", "Notes", shell{}, M{"notes": listQuicknote(rq),
-		"private": privateFolder(rq.user) != "", "q": r.URL.Query().Get("q"), "breadcrumb_html": breadcrumb(rq, []crumb{{"Notes", ""}}, "/notes", true, "Notes", "")})
+	page(w, rq, http.StatusOK, "notes.html", "Notes", shell{}, &notesView{Notes: listQuicknote(rq),
+		Private: privateFolder(rq.user) != "", Q: r.URL.Query().Get("q"), BreadcrumbHTML: breadcrumb(rq, []crumb{{"Notes", ""}}, "/notes", true, "Notes", "")})
+}
+
+// notesView: the notes (notes.html); Private: they are in the user's folder.
+type notesView struct {
+	view
+	Notes          []Quicknote
+	Private        bool
+	Q              string
+	BreadcrumbHTML template.HTML
 }
 
 var (
@@ -124,8 +133,8 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		// A page deleted in git history offers to come back.
 		if parent, date, ok := lastDeletion(slug); ok {
 			title := deletedTitle(parent, slug)
-			page(w, rq, http.StatusOK, "deleted_page.html", title, shell{}, M{"slug": slug, "sha": parent,
-				"date": date, "breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "")})
+			page(w, rq, http.StatusOK, "deleted_page.html", title, shell{}, &deletedPageView{Slug: slug, Sha: parent,
+				Date: date, BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "")})
 			return
 		}
 		to := pathURL("edit", slug)
@@ -216,6 +225,14 @@ type pageView struct {
 	LinkSections                                                            []M // Backlinks, Linked tasks, Related (linkSections)
 	Outlinks                                                                []M // the right column's Links to
 	Menu                                                                    M   // the ⋯ menu (pageMenu); nil from the uncommitted list
+}
+
+// deletedPageView: a page deleted in git history, Sha the commit before
+// (deleted_page.html).
+type deletedPageView struct {
+	view
+	Slug, Sha, Date string
+	BreadcrumbHTML  template.HTML
 }
 
 // editView: the editor (edit.html).
@@ -821,12 +838,18 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
-	data := M{"heading": heading, "list_name": list, "tasks_html": htmlOf(buildTasksEmbed(rq, params, 0, false, private)),
-		"breadcrumb_html": breadcrumb(rq, crumbs, key, true, title, "")}
-	if home != nil {
-		data["home"] = home
-	}
-	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{}, data)
+	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{}, &tasksPageView{Heading: heading, ListName: list,
+		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private)),
+		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, "")})
+}
+
+// tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
+// list, nil for all tasks or an undeclared list.
+type tasksPageView struct {
+	view
+	Heading, ListName         string
+	Home                      *TasksHome
+	TasksHTML, BreadcrumbHTML template.HTML
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
@@ -963,6 +986,15 @@ func searchPage(w http.ResponseWriter, r *http.Request) {
 	if q != "" {
 		results = doSearch(rq, q, unlinked, searchPageLimit, false)
 	}
-	page(w, rq, http.StatusOK, "search.html", "Search: "+q, shell{}, M{"q": q, "results": results,
-		"unlinked": unlinked, "limit": searchPageLimit})
+	page(w, rq, http.StatusOK, "search.html", "Search: "+q, shell{}, &searchView{Q: q, Results: results,
+		Unlinked: unlinked, Limit: searchPageLimit})
+}
+
+// searchView: /search (search.html); Results as /api/search answers them.
+type searchView struct {
+	view
+	Q        string
+	Results  []M
+	Unlinked bool
+	Limit    int
 }

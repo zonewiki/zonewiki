@@ -1,14 +1,14 @@
 {{- /* Files with uncommitted changes (pages and uploads), each with Diff and
     View when it is a page; Commit All commits each file on its own. */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}
+{{.BreadcrumbHTML}}
 <header class="page-header">
   <h1>Uncommitted Changes</h1>
-  <div class="page-header-actions">{{if .files}}<button type="button" class="btn btn-primary" id="commit-all-btn">Commit All</button>{{end}}</div>
+  <div class="page-header-actions">{{if .Files}}<button type="button" class="btn btn-primary" id="commit-all-btn">Commit All</button>{{end}}</div>
 </header>
-{{- if .files}}
+{{- if .Files}}
 <table class="hist-table"><tbody>
-{{- range .files}}<tr><td class="hist-date">{{.Mtime}}</td><td class="hist-rel">{{.Rel}}</td><td class="hist-msg">{{.Title}}{{if ne .Title .Filepath}}<br><span class="hist-filepath">{{.Filepath}}</span>{{end}}</td><td style="white-space:nowrap">
+{{- range .Files}}<tr><td class="hist-date">{{.Mtime}}</td><td class="hist-rel">{{.Rel}}</td><td class="hist-msg">{{.Title}}{{if ne .Title .Filepath}}<br><span class="hist-filepath">{{.Filepath}}</span>{{end}}</td><td style="white-space:nowrap">
 {{- if .Slug}}<a href="{{url "diff-uncommitted" .Slug}}" class="btn">Diff</a> <a href="{{url "page" .Slug}}?from=uncommitted" class="btn">View</a> {{end -}}
 </td></tr>{{end -}}
 </tbody></table>

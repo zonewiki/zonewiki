@@ -1,12 +1,12 @@
 {{- /* A page's changes since its last commit, and Commit. */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}
+{{.BreadcrumbHTML}}
 <header class="page-header">
-  <h1>Uncommitted Changes — {{.page_title}}</h1>
+  <h1>Uncommitted Changes — {{.PageTitle}}</h1>
   <div class="page-header-actions">
-    {{template "commit_form" (dict "filepath" .filepath "title" .page_title "on_success" "/uncommitted")}}
+    {{template "commit_form" (dict "filepath" .Filepath "title" .PageTitle "on_success" "/uncommitted")}}
     <a href="/uncommitted" class="btn">← Uncommitted</a>
   </div>
 </header>
-<div class="diff-view">{{template "diff" .diff_lines}}</div>
+<div class="diff-view">{{template "diff" .DiffLines}}</div>
 {{end}}

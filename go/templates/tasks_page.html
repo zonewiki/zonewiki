@@ -1,12 +1,12 @@
 {{- /* /tasks: every task, or with ?list= that separate list, looking as on
     the page that declares it (home). */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}
-<header class="page-header"><h1>{{.heading}}</h1></header>
+{{.BreadcrumbHTML}}
+<header class="page-header"><h1>{{.Heading}}</h1></header>
 <article class="page-content">
-{{- if .list_name}}<p class="tasks-list-home">
-  {{- with .home}}A separate list, from <a href="{{url "page" .Slug}}">{{.Title}}</a>.
-  {{- else}}No page declares <code>[[tasks: list={{.list_name}}]]</code>: these are the tasks tagged #{{.list_name}}.{{end -}}
+{{- if .ListName}}<p class="tasks-list-home">
+  {{- with .Home}}A separate list, from <a href="{{url "page" .Slug}}">{{.Title}}</a>.
+  {{- else}}No page declares <code>[[tasks: list={{.ListName}}]]</code>: these are the tasks tagged #{{.ListName}}.{{end -}}
 </p>{{end -}}
-{{.tasks_html}}</article>
+{{.TasksHTML}}</article>
 {{end}}
