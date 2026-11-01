@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"zonewiki/internal/textsearch"
 )
 
 type conceptEmbedder struct {
@@ -21,7 +22,7 @@ func (e *conceptEmbedder) ModelName() string { return e.model }
 
 func (e *conceptEmbedder) vec(text string) []float32 {
 	v := make([]float32, e.dim)
-	for _, w := range tokenize(text) {
+	for _, w := range textsearch.Tokenize(text) {
 		if i, ok := e.concepts[w]; ok {
 			v[i]++
 		}

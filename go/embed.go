@@ -39,6 +39,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/textsearch"
 )
 
 // maxChunkChars: sections longer than this are split at paragraphs. Small
@@ -82,7 +83,7 @@ func splitLong(text string, maxChars int) []string {
 			p = []rune(strings.TrimSpace(string(p[cut:])))
 		}
 		para := string(p)
-		if cur != "" && runeLen(cur)+2+len(p) > maxChars {
+		if cur != "" && textsearch.RuneLen(cur)+2+len(p) > maxChars {
 			pieces = append(pieces, cur)
 			cur = ""
 		}
@@ -242,7 +243,7 @@ var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + non
 func proseChars(text string) int {
 	n := 0
 	for _, r := range linkishRE.ReplaceAllString(text, " ") {
-		if wordRune(r) {
+		if textsearch.WordRune(r) {
 			n++
 		}
 	}

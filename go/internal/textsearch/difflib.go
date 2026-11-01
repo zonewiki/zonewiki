@@ -1,18 +1,18 @@
-package main
+package textsearch
 
 import (
 	"sort"
 	"unicode/utf8"
 )
 
-// closeMatches is difflib.get_close_matches(word, possibilities, n, cutoff):
+// CloseMatches is difflib.get_close_matches(word, possibilities, n, cutoff):
 // the possibilities whose SequenceMatcher ratio against word is at least
 // cutoff, best first, at most n. Equal scores order the larger string
 // first, as Python's nlargest over (score, string) does. Like Python, it
 // skips the full ratio for a possibility whose real_quick_ratio or
 // quick_ratio, upper bounds of it, are below the cutoff: the same matches,
 // found without the expensive part for nearly all of a large vocabulary.
-func closeMatches(word string, possibilities []string, n int, cutoff float64) []string {
+func CloseMatches(word string, possibilities []string, n int, cutoff float64) []string {
 	type scored struct {
 		score float64
 		s     string
@@ -140,4 +140,12 @@ func longestMatch(a, b []rune, b2j map[rune][]int, alo, ahi, blo, bhi int) (int,
 		bestsize++
 	}
 	return besti, bestj, bestsize
+}
+
+// SimilarTo: how similar a text is to b (ratio: 0 to 1), b's index built
+// once for comparing many texts with it.
+func SimilarTo(b string) func(a string) float64 {
+	rb := []rune(b)
+	b2j := buildB2J(rb)
+	return func(a string) float64 { return ratio([]rune(a), rb, b2j) }
 }

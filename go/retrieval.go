@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/textsearch"
 )
 
 // SearchDoc is a page, a page's section or a task as BM25 indexes it.
@@ -62,7 +63,7 @@ func (d *SearchDoc) date() string {
 // hasPhrase: the squashed text, cached on the doc (which lives until its
 // file changes), has the phrase.
 func (d *SearchDoc) hasPhrase(phrase string) bool {
-	d.squashOnce.Do(func() { d.squashed = squash(d.text()) })
+	d.squashOnce.Do(func() { d.squashed = textsearch.Squash(d.text()) })
 	return strings.Contains(d.squashed, phrase)
 }
 
@@ -144,7 +145,7 @@ func perPage[T any](c *pageCache[T], build func(slug, content string, mtime time
 }
 
 func repeatTokens(text string, times int) []string {
-	t := tokenize(text)
+	t := textsearch.Tokenize(text)
 	out := make([]string, 0, len(t)*times)
 	for i := 0; i < times; i++ {
 		out = append(out, t...)
@@ -158,10 +159,10 @@ func repeatTokens(text string, times int) []string {
 // page says.
 func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
 	title := pageTitle(content, slug)
-	text := stripLinkTargets(taskRefsAsTitles(slug, content))
-	tokens := append(tokenize(text), repeatTokens(title, titleWeight)...)
+	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
+	tokens := append(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight)...)
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: pageTags(content), ExcerptText: text, Tokens: append(tokens, tokenize(slug)...)}
+		Tags: pageTags(content), ExcerptText: text, Tokens: append(tokens, textsearch.Tokenize(slug)...)}
 }
 
 var searchDocCache pageCache[*SearchDoc]
@@ -232,10 +233,10 @@ func taskSearchDocs() []*SearchDoc {
 			tags = append(tags, "#"+tag)
 			lowTags = append(lowTags, strings.ToLower(tag))
 		}
-		text := stripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
+		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
 		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
-			Tokens: append(tokenize(text), repeatTokens(plainTaskTitle(title), titleWeight)...),
+			Tokens: append(textsearch.Tokenize(text), repeatTokens(plainTaskTitle(title), textsearch.TitleWeight)...),
 			Task:   t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
 		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
@@ -251,7 +252,7 @@ func taskSearchDocs() []*SearchDoc {
 type docIndex struct {
 	docs []*SearchDoc // the docs it is over, in order
 	byID []*SearchDoc // by the number the index gives them (docs, but for an index with changes)
-	ix   *Index
+	ix   *textsearch.Index
 }
 
 func newDocIndex(docs []*SearchDoc) *docIndex {
@@ -259,7 +260,7 @@ func newDocIndex(docs []*SearchDoc) *docIndex {
 	for i, d := range docs {
 		tokens[i] = d.Tokens
 	}
-	return &docIndex{docs, docs, NewIndex(tokens)}
+	return &docIndex{docs, docs, textsearch.NewIndex(tokens)}
 }
 
 // search: the best `limit` docs for the query text.
@@ -501,14 +502,14 @@ const fuseDepth = 30
 
 // passes: whether a doc takes part in a search, it passes keep (when
 // given) and the query's filters.
-func passes(q *Query, d *SearchDoc, keep func(*SearchDoc) bool) bool {
+func passes(q *textsearch.Query, d *SearchDoc, keep func(*SearchDoc) bool) bool {
 	return (keep == nil || keep(d)) && (!q.HasFilters() || q.Accepts(d.text(), d.Tokens, d.Tags, d.date()))
 }
 
 // phraseFirst: ranked with the docs containing the query as a phrase moved
 // to the front (in BM25 order), including ones the ranking had cut off: a
 // page saying exactly what was typed beats one that has the words apart.
-func phraseFirst(ranked []*SearchDoc, q *Query, x *docIndex, keep func(*SearchDoc) bool) []*SearchDoc {
+func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool) []*SearchDoc {
 	phrase := q.Phrase()
 	if phrase == "" {
 		return ranked
@@ -534,7 +535,7 @@ func phraseFirst(ranked []*SearchDoc, q *Query, x *docIndex, keep func(*SearchDo
 
 // bm25: the best `depth` docs by BM25 for the query's ranking text, among
 // those that pass its filters (and keep, when given).
-func bm25(x *docIndex, q *Query, depth int, keep func(*SearchDoc) bool) []*SearchDoc {
+func bm25(x *docIndex, q *textsearch.Query, depth int, keep func(*SearchDoc) bool) []*SearchDoc {
 	text := q.RankingText()
 	if !q.HasFilters() && keep == nil {
 		return x.search(text, depth)
@@ -546,7 +547,7 @@ func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(doc
 
 // rankedDocs: the `limit` best docs for the query by keywords. Docs that
 // fail the query's filters, or keep when given, take no part.
-func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []*SearchDoc {
+func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []*SearchDoc {
 	if strings.TrimSpace(q.RankingText()) == "" {
 		if len(q.Dates) == 0 {
 			return nil
@@ -593,7 +594,7 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 		return firstN(phraseFirst(ranked, q, x, keep), limit)
 	}
 	meaning := firstN(bySimilarity(pageHits, tHits), depth)
-	return firstN(phraseFirst(Fuse([][]*SearchDoc{ranked, meaning}), q, x, keep), limit)
+	return firstN(phraseFirst(textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x, keep), limit)
 }
 
 // bestSections: for each page in slugs, the section a result should open:
@@ -602,20 +603,20 @@ func rankedDocs(q *Query, x *docIndex, keep func(*SearchDoc) bool, limit int) []
 // meaning, its most similar section. A page matched only by its title gets
 // none (every section would match equally), so its link opens the top of
 // the page.
-func bestSections(rq *Req, q *Query, slugs map[string]bool) map[string]*SearchDoc {
+func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[string]*SearchDoc {
 	text := q.RankingText()
 	x := chunkIndex(rq)
 	ranked := x.searchWhere(text, len(x.docs), func(d *SearchDoc) bool { return !d.isTask() && slugs[d.Slug] })
 	best := map[string]*SearchDoc{}
 	if phrase := q.Phrase(); phrase != "" {
 		for _, d := range ranked {
-			if best[d.Slug] == nil && strings.Contains(squash(d.Heading+"\n"+d.Text), phrase) {
+			if best[d.Slug] == nil && strings.Contains(textsearch.Squash(d.Heading+"\n"+d.Text), phrase) {
 				best[d.Slug] = d
 			}
 		}
 	}
 	for _, d := range ranked {
-		if best[d.Slug] == nil && Matches(d.Heading+"\n"+d.Text, text) {
+		if best[d.Slug] == nil && textsearch.Matches(d.Heading+"\n"+d.Text, text) {
 			best[d.Slug] = d
 		}
 	}
@@ -702,7 +703,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 	if strings.TrimSpace(raw) == "" {
 		return results
 	}
-	q := ParseQuery(raw)
+	q := textsearch.ParseQuery(raw)
 	text := q.RankingText() // what excerpts mark: the words, without operators
 	var tests []func(*SearchDoc) bool
 	if unlinked {
@@ -748,7 +749,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 				excerptOf = strings.TrimSpace(section.Heading + "\n" + section.Text)
 			}
 		}
-		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(Excerpt(excerptOf, text)),
+		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(textsearch.Excerpt(excerptOf, text)),
 			"meta": resultMeta(d, names)}
 		if d.isTask() {
 			r["type"], r["task_id"], r["status"] = "task", d.TaskID, d.Status
@@ -767,7 +768,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		} else {
 			href := pathURL("page", d.Slug)
 			// The page highlights what matched (js/search.js); before the #anchor.
-			if words := MatchedWords(d.ExcerptText, text, 10); len(words) > 0 {
+			if words := textsearch.MatchedWords(d.ExcerptText, text, 10); len(words) > 0 {
 				hl := make([]string, len(words))
 				for i, w := range words {
 					hl[i] = "hl=" + url.QueryEscape(w)
@@ -810,9 +811,9 @@ func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 		sections = []chunkSection{{}}
 	}
 	var chunks []*SearchDoc
-	titleTokens, slugTokens := repeatTokens(title, titleWeight), tokenize(slug)
+	titleTokens, slugTokens := repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug)
 	for _, s := range sections {
-		tokens := append(tokenize(s.Heading+"\n"+s.Body), titleTokens...)
+		tokens := append(textsearch.Tokenize(s.Heading+"\n"+s.Body), titleTokens...)
 		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Heading: s.Heading,
 			Path: s.Path, Text: s.Body, Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
 			Key: chunkKey(title, chunkText(s.Path, s.Body)), Tokens: append(tokens, slugTokens...)})
@@ -845,7 +846,7 @@ func inFolder(slug, folder string) bool {
 // folder, with quicknote only of notes; either way no tasks. Only
 // pages rq may see (nil: Zone itself, which sees all).
 func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*SearchDoc {
-	q := ParseQuery(raw)
+	q := textsearch.ParseQuery(raw)
 	if strings.TrimSpace(q.RankingText()) == "" {
 		return nil
 	}
@@ -884,7 +885,7 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 			tHits = taskHits(text, tasks, fuseDepth)
 		}
 		if hits != nil || tHits != nil {
-			ranked = Fuse([][]*SearchDoc{ranked, firstN(bySimilarity(hits, tHits), fuseDepth)})
+			ranked = textsearch.Fuse([][]*SearchDoc{ranked, firstN(bySimilarity(hits, tHits), fuseDepth)})
 		}
 	}
 	return firstN(phraseFirst(ranked, q, x, keep), limit)

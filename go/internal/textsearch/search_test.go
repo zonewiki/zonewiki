@@ -1,12 +1,12 @@
-package main
+package textsearch
 
 import (
 	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
-	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -39,7 +39,7 @@ func TestFold(t *testing.T) {
 }
 
 func TestTokenize(t *testing.T) {
-	got := tokenize("The Müller's running-dogs [link](http://x.org/page) ![img](a.png) 日本語 x_y")
+	got := Tokenize("The Müller's running-dogs [link](http://x.org/page) ![img](a.png) 日本語 x_y")
 	want := []string{"the", "muller", "s", "run", "dog", "link", "http", "x", "org", "page", "img", "a", "png", "日本語", "x", "y"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q", got)
@@ -52,7 +52,7 @@ func TestCloseMatches(t *testing.T) {
 		"appel": {"appel", "apply", "apple"}, "aple": {"maple", "apple", "ample"}, "applt": {"applet", "apply", "apple"},
 	}
 	for w, ws := range want {
-		if got := closeMatches(w, poss, 3, 0.6); !reflect.DeepEqual(got, ws) {
+		if got := CloseMatches(w, poss, 3, 0.6); !reflect.DeepEqual(got, ws) {
 			t.Errorf("%q: got %q, want %q", w, got, ws)
 		}
 	}
@@ -104,9 +104,9 @@ func TestExcerptAndMatchedWords(t *testing.T) {
 
 func TestSearchRanksTitleAndTypos(t *testing.T) {
 	doc := func(text, title string) []string {
-		toks := tokenize(text)
-		for i := 0; i < titleWeight; i++ {
-			toks = append(toks, tokenize(title)...)
+		toks := Tokenize(text)
+		for i := 0; i < TitleWeight; i++ {
+			toks = append(toks, Tokenize(title)...)
 		}
 		return toks
 	}
@@ -132,9 +132,9 @@ type testDoc struct{ slug, title, text string }
 func ranked(docs []testDoc, query string) []string {
 	var toks [][]string
 	for _, d := range docs {
-		ts := tokenize(d.text)
-		for i := 0; i < titleWeight; i++ {
-			ts = append(ts, tokenize(d.title)...)
+		ts := Tokenize(d.text)
+		for i := 0; i < TitleWeight; i++ {
+			ts = append(ts, Tokenize(d.title)...)
 		}
 		toks = append(toks, ts)
 	}
@@ -170,12 +170,12 @@ func TestStemCollapsesForms(t *testing.T) {
 			t.Errorf("stem(%q) = %q", w, stem(w))
 		}
 	}
-	if got := tokenize("Running Tests, quickly!"); !reflect.DeepEqual(got, []string{"run", "test", "quickly"}) {
-		t.Errorf("tokenize: %q", got)
+	if got := Tokenize("Running Tests, quickly!"); !reflect.DeepEqual(got, []string{"run", "test", "quickly"}) {
+		t.Errorf("Tokenize: %q", got)
 	}
 	// An inflection matches its base at about full weight.
 	var a, b float64
-	toks := [][]string{tokenize("We called him"), tokenize("call me maybe")}
+	toks := [][]string{Tokenize("We called him"), Tokenize("call me maybe")}
 	for _, h := range NewIndex(toks).Search("call", 10) {
 		if h.Doc == 0 {
 			a = h.Score
@@ -196,20 +196,20 @@ func TestStripLinkTargets(t *testing.T) {
 		`[ref]: https://x.org "T"`:                         "[ref]:",
 		"go to https://example.com or [[some page|Label]]": "go to https://example.com or [[some page|Label]]",
 	} {
-		if got := stripLinkTargets(in); got != want {
-			t.Errorf("stripLinkTargets(%q) = %q, want %q", in, got, want)
+		if got := StripLinkTargets(in); got != want {
+			t.Errorf("StripLinkTargets(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestUnicodeWords(t *testing.T) {
-	if got := tokenize("Müller"); !reflect.DeepEqual(got, []string{"muller"}) {
+	if got := Tokenize("Müller"); !reflect.DeepEqual(got, []string{"muller"}) {
 		t.Errorf("Müller: %q", got)
 	}
-	if !reflect.DeepEqual(tokenize("Café MÜLLER"), tokenize("cafe muller")) || !reflect.DeepEqual(tokenize("Straße"), tokenize("strasse")) {
+	if !reflect.DeepEqual(Tokenize("Café MÜLLER"), Tokenize("cafe muller")) || !reflect.DeepEqual(Tokenize("Straße"), Tokenize("strasse")) {
 		t.Error("accents, case and ß fold")
 	}
-	if got := tokenize("foo_bar"); !reflect.DeepEqual(got, []string{"foo", "bar"}) {
+	if got := Tokenize("foo_bar"); !reflect.DeepEqual(got, []string{"foo", "bar"}) {
 		t.Errorf("underscore: %q", got)
 	}
 	docs := []testDoc{{"a", "A", "Notizen zur Größe"}, {"b", "B", "other text"}}
@@ -228,7 +228,7 @@ func TestRanking(t *testing.T) {
 		"vector database", "a")
 	var docs []testDoc
 	for i := 0; i < 5; i++ {
-		docs = append(docs, testDoc{"common" + itoa(i), "Doc " + itoa(i), "the the the the the ordinary text"})
+		docs = append(docs, testDoc{"common" + strconv.Itoa(i), "Doc " + strconv.Itoa(i), "the the the the the ordinary text"})
 	}
 	docs = append(docs, testDoc{"rare", "Doc rare", "the quasar text"})
 	if got := ranked(docs, "the quasar"); got[0] != "rare" {
@@ -325,10 +325,10 @@ func TestQuerySyntax(t *testing.T) {
 		t.Error("a lone - or # is text")
 	}
 	q = ParseQuery(`"Hello  World" -spam #a -#b`)
-	toks := tokenize("hello world eggs")
+	toks := Tokenize("hello world eggs")
 	if !q.Accepts("Héllo world, eggs", toks, []string{"A"}, "") ||
 		q.Accepts("hello there world", toks, []string{"a"}, "") || // no phrase
-		q.Accepts("hello world", tokenize("hello world spams"), []string{"a"}, "") || // excluded stem
+		q.Accepts("hello world", Tokenize("hello world spams"), []string{"a"}, "") || // excluded stem
 		q.Accepts("hello world", toks, nil, "") || // tag missing
 		q.Accepts("hello world", toks, []string{"a", "B"}, "") { // excluded tag
 		t.Error("Accepts")
@@ -402,32 +402,6 @@ func TestWithExtraOnAnEmptyIndex(t *testing.T) {
 	over := NewIndex(nil).WithExtra([][]string{{"quokkaflute", "song"}})
 	if hits := over.Search("quokkaflute", 5); len(hits) != 1 || hits[0].Doc != 0 || math.IsNaN(hits[0].Score) || math.IsInf(hits[0].Score, 0) {
 		t.Errorf("hits %v", hits)
-	}
-}
-
-// Adding users changes which documents are private without a document
-// changing: the cache must not keep the split it made before.
-func TestIndexCacheFollowsTheUsers(t *testing.T) {
-	testWiki(t, nil)
-	docs := []*SearchDoc{
-		{Slug: "plans", Tokens: []string{"plans", "quokkaflute"}},
-		{Slug: "private/alice/diary", Tokens: []string{"diary", "secretword"}},
-	}
-	var c indexCache
-	bob := &Req{user: "bob"}
-	if got := c.get(bob, docs); len(got.docs) != 2 {
-		t.Fatalf("without users everything is shared: %d docs", len(got.docs))
-	}
-	withUsers(t, "alice", "bob")
-	if got := c.get(bob, docs); len(got.docs) != 1 || got.docs[0].Slug != "plans" || got.ix.Search("secretword", 5) != nil {
-		t.Errorf("after users were added bob's index holds %d docs, and finds secretword: %v", len(got.docs), got.ix.Search("secretword", 5))
-	}
-	if got := c.get(&Req{user: "alice"}, docs); len(got.docs) != 2 || len(got.ix.Search("secretword", 5)) != 1 {
-		t.Errorf("alice's own page is missing from her index")
-	}
-	settings().Users = nil
-	if got := c.get(bob, docs); len(got.docs) != 2 {
-		t.Errorf("after the users were removed everything is shared again: %d docs", len(got.docs))
 	}
 }
 
@@ -549,128 +523,20 @@ func TestWithChangesIsAsIfBuiltOverWhatIsLeft(t *testing.T) {
 	}
 }
 
-// Edits, deletions and new pages and tasks, round after round: every
-// viewer's index answers as one built afresh over what they may see, in the
-// same order, whether the cache kept its base and corrected it or built it
-// again.
-func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "alice", "bob")
-	r := rand.New(rand.NewSource(5))
-	words := strings.Fields("apple apples applet banana bananas cherry cherries date fig grape grapes kiwi lemon lime mango melon nectar orange papaya peach pear plum quince raisin")
-	tokens := func() []string {
-		out := make([]string, 3+r.Intn(25))
-		for i := range out {
-			out[i] = words[r.Intn(len(words))]
+func expectIn(t *testing.T, html string, want ...string) {
+	t.Helper()
+	for _, w := range want {
+		if !strings.Contains(html, w) {
+			t.Errorf("missing %q in\n%s", w, html)
 		}
-		return out
-	}
-	serial := 0
-	newDoc := func() *SearchDoc {
-		serial++
-		switch r.Intn(6) {
-		case 0:
-			return &SearchDoc{Slug: fmt.Sprintf("private/alice/a%d", serial), Tokens: tokens()}
-		case 1:
-			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: tokens()}
-		case 2:
-			owner := []string{"", "alice", "bob"}[r.Intn(3)]
-			return &SearchDoc{Slug: tasksDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: tokens()}
-		}
-		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: tokens()}
-	}
-	label := func(d *SearchDoc) string { return d.Slug + "/" + d.TaskID }
-	edited := func(d *SearchDoc) *SearchDoc { // the doc as a changed file would give it: new
-		return &SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: tokens()}
-	}
-	var docs []*SearchDoc
-	for i := 0; i < 240; i++ {
-		docs = append(docs, newDoc())
-		if i > 0 && r.Intn(6) == 0 { // the same words: equal scores, the order decides
-			docs[i].Tokens = docs[i-1].Tokens
-		}
-	}
-	queries := []string{"apple", "banana cherry", "grap", "aple", "bananna", "pech", "zzzz", "kiwi lemon lime", "nectar orange papaya"}
-	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "leaf": nil}
-	var c indexCache
-	rebuilds, corrected := 0, 0
-	var lastBase *docIndex
-	for round := 0; round < 60; round++ {
-		if round > 0 {
-			for k := r.Intn(8); k >= 0; k-- { // a few edits, deletions, additions
-				switch i := r.Intn(len(docs)); r.Intn(3) {
-				case 0:
-					docs[i] = edited(docs[i])
-				case 1:
-					docs = slices.Delete(docs, i, i+1)
-				default:
-					docs = slices.Insert(docs, i, newDoc())
-				}
-			}
-			if round%20 == 0 { // many at once: more than the base is kept for
-				for i := range docs[:len(docs)/3] {
-					docs[i] = edited(docs[i])
-				}
-			}
-		}
-		for name, rq := range viewers {
-			got := c.get(rq, docs)
-			var visible []*SearchDoc
-			for _, d := range docs {
-				if rq == nil || docVisible(rq.user, d) {
-					visible = append(visible, d)
-				}
-			}
-			want := newDocIndex(visible)
-			for _, q := range queries {
-				for _, limit := range []int{4, 1000} {
-					a, b := got.search(q, limit), want.search(q, limit)
-					if len(a) != len(b) {
-						t.Fatalf("round %d %s %q top %d: %d hits, want %d", round, name, q, limit, len(a), len(b))
-					}
-					for i := range a {
-						if a[i] != b[i] {
-							t.Fatalf("round %d %s %q top %d, hit %d: %s, want %s", round, name, q, limit, i, label(a[i]), label(b[i]))
-						}
-					}
-				}
-			}
-			if !slices.Equal(got.docs, visible) {
-				t.Fatalf("round %d %s: the docs differ from what the viewer may see", round, name)
-			}
-		}
-		if c.base != lastBase {
-			rebuilds++
-		} else if len(c.dead)+len(c.delta) > 0 {
-			corrected++
-		}
-		lastBase = c.base
-	}
-	if rebuilds < 3 || corrected < 10 {
-		t.Errorf("the test should use both ways: %d rebuilds, %d rounds with a corrected base", rebuilds, corrected)
 	}
 }
 
-// Users with nothing private of their own are searched with one and the same
-// index, also while it has changes: how many users there are costs nothing.
-func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "alice", "bob", "carol")
-	docs := []*SearchDoc{
-		{Slug: "p1", Tokens: []string{"apple"}}, {Slug: "p2", Tokens: []string{"pear"}},
-		{Slug: "private/alice/a", Tokens: []string{"fig"}},
-	}
-	var c indexCache
-	c.get(&Req{user: "bob"}, docs)
-	docs[1] = &SearchDoc{Slug: "p2", Tokens: []string{"pear", "plum"}} // an edit: the base now has changes
-	bob, carol, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs), c.get(&Req{user: "alice"}, docs)
-	if len(c.dead)+len(c.delta) == 0 {
-		t.Fatal("the base should have changes")
-	}
-	if bob != carol {
-		t.Error("bob and carol have nothing private and should share an index")
-	}
-	if alice == bob || len(alice.docs) != 3 || len(bob.docs) != 2 {
-		t.Errorf("alice has a private page: her index is her own (%d docs), bob's has %d", len(alice.docs), len(bob.docs))
+func expectNot(t *testing.T, html string, unwanted ...string) {
+	t.Helper()
+	for _, u := range unwanted {
+		if strings.Contains(html, u) {
+			t.Errorf("unexpected %q in\n%s", u, html)
+		}
 	}
 }

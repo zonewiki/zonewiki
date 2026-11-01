@@ -1,4 +1,4 @@
-package main
+package textsearch
 
 import (
 	"math/rand"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// closeMatchesNaive: closeMatches without the quick upper bounds.
+// closeMatchesNaive: CloseMatches without the quick upper bounds.
 func closeMatchesNaive(word string, possibilities []string, n int, cutoff float64) []string {
 	b := []rune(word)
 	b2j := buildB2J(b)
@@ -51,9 +51,9 @@ func TestCloseMatchesQuickBoundsChangeNothing(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		w := word()
 		for _, cutoff := range []float64{0.5, 0.8, 0.95} {
-			got, want := closeMatches(w, vocab, 3, cutoff), closeMatchesNaive(w, vocab, 3, cutoff)
+			got, want := CloseMatches(w, vocab, 3, cutoff), closeMatchesNaive(w, vocab, 3, cutoff)
 			if !reflect.DeepEqual(got, want) {
-				t.Fatalf("closeMatches(%q, cutoff %v) = %q, want %q", w, cutoff, got, want)
+				t.Fatalf("CloseMatches(%q, cutoff %v) = %q, want %q", w, cutoff, got, want)
 			}
 		}
 	}

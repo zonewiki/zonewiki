@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/textsearch"
 )
 
 // The semantic index (embed.go), with the tests' fake embedder (as
@@ -573,13 +574,13 @@ func TestSemanticText(t *testing.T) {
 }
 
 func TestFuse(t *testing.T) {
-	if got := Fuse([][]string{{"a", "b"}, {"c", "b"}}); got[0] != "b" {
+	if got := textsearch.Fuse([][]string{{"a", "b"}, {"c", "b"}}); got[0] != "b" {
 		t.Errorf("in both lists wins: %q", got)
 	}
-	if got := Fuse([][]string{{"a"}, {"b"}}); !reflect.DeepEqual(got, []string{"a", "b"}) {
+	if got := textsearch.Fuse([][]string{{"a"}, {"b"}}); !reflect.DeepEqual(got, []string{"a", "b"}) {
 		t.Errorf("ties keep the first list's order: %q", got)
 	}
-	if got := Fuse([][]string{{"a"}, {"a"}}); !reflect.DeepEqual(got, []string{"a"}) {
+	if got := textsearch.Fuse([][]string{{"a"}, {"a"}}); !reflect.DeepEqual(got, []string{"a"}) {
 		t.Errorf("no duplicates: %q", got)
 	}
 }

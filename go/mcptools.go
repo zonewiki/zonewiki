@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"zonewiki/internal/textsearch"
 )
 
 // ── Arguments ───────────────────────────────────────────────────────────────
@@ -329,10 +330,9 @@ func similarPages(slug, title, user string) []PageRef {
 		otherTitle, _ := pageMeta(p.Path, p.Slug)
 		close := false
 		for _, b := range norm(otherTitle, lastPart(p.Slug)) {
-			rb := []rune(b)
-			b2j := buildB2J(rb)
+			similar := textsearch.SimilarTo(b)
 			for _, a := range want {
-				close = close || ratio([]rune(a), rb, b2j) >= 0.8
+				close = close || similar(a) >= 0.8
 			}
 		}
 		if close {
@@ -904,7 +904,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			want[t] = true
 		}
 	}
-	q := ParseQuery(query)
+	q := textsearch.ParseQuery(query)
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
 		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.isOpen() {
@@ -927,7 +927,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			for _, d := range docs {
 				byID[d.TaskID] = d
 			}
-			ranked = Fuse([][]*SearchDoc{ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))})
+			ranked = textsearch.Fuse([][]*SearchDoc{ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))})
 		}
 		docs = ranked
 	} else {
@@ -1141,7 +1141,7 @@ func tagHints(task *Task, user string) string {
 		}
 	}
 	have := taskTagsLower(task)
-	text := ParseQuery(task.Title + " " + task.Description).Text
+	text := textsearch.ParseQuery(task.Title + " " + task.Description).Text
 	counts := map[string]int{}
 	var order []string
 	if strings.TrimSpace(text) != "" {
@@ -1619,7 +1619,7 @@ func checkLinks(args jsonObj, base, user string) (string, error) {
 			if strings.HasPrefix(link, "[[") {
 				name = toSlug(name)
 			}
-			if near := closeMatches(name, all, 1, 0.8); len(near) > 0 {
+			if near := textsearch.CloseMatches(name, all, 1, 0.8); len(near) > 0 {
 				link += " (maybe [[" + near[0] + "]]?)"
 			}
 			links = append(links, link)

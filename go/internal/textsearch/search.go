@@ -5,12 +5,14 @@
 //
 // Offsets into a text (spans, excerpt windows) are counted in runes, as
 // the browser counts characters.
-package main
+package textsearch
 
 import (
 	"html"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -20,8 +22,8 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// titleWeight: title tokens go into a document this many extra times.
-const titleWeight = 3
+// TitleWeight: title tokens go into a document this many extra times.
+const TitleWeight = 3
 
 const (
 	bm25K1       = 1.5
@@ -32,15 +34,15 @@ const (
 
 // ---- Characters ----
 
-// wordRune: a letter or a number, any script (a word's character, not _).
-func wordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
+// WordRune: a letter or a number, any script (a word's character, not _).
+func WordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 
 func casefold(s string) string { return cases.Fold().String(s) }
 
-// squash: folded text with runs of whitespace as one space (phrase checks).
-func squash(text string) string { return strings.Join(strings.Fields(fold(text)), " ") }
+// Squash: folded text with runs of whitespace as one space (phrase checks).
+func Squash(text string) string { return strings.Join(strings.Fields(fold(text)), " ") }
 
-func runeLen(s string) int { return len([]rune(s)) }
+func RuneLen(s string) int { return len([]rune(s)) }
 
 func sliceRunes(r []rune, a, b int) string { return string(r[a:b]) }
 
@@ -54,7 +56,7 @@ func words(text string) ([]string, []span) {
 	start, i := -1, 0
 	var b strings.Builder
 	for _, r := range text {
-		if wordRune(r) {
+		if WordRune(r) {
 			if start < 0 {
 				start = i
 				b.Reset()
@@ -122,13 +124,13 @@ var (
 	linkDefRE    = regexp.MustCompile(`(?m)^( {0,3}\[[^\]]+\]:)\s+\S+.*$`)
 )
 
-// stripLinkTargets: markdown with link and image targets off, link text kept.
-func stripLinkTargets(text string) string {
+// StripLinkTargets: markdown with link and image targets off, link text kept.
+func StripLinkTargets(text string) string {
 	return linkDefRE.ReplaceAllString(linkTargetRE.ReplaceAllString(text, "]"), "$1")
 }
 
-// tokenize: folded, split into words, stemmed.
-func tokenize(text string) []string {
+// Tokenize: folded, split into words, stemmed.
+func Tokenize(text string) []string {
 	ws, _ := words(fold(text))
 	for i, w := range ws {
 		ws[i] = stem(w)
@@ -170,6 +172,9 @@ func queryWords(query string) []string {
 
 // ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates ----
 
+// nonSpaceClass: a character that isn't white space (as mdtext.go's).
+const nonSpaceClass = `[^\s\v\pZ\x{85}]`
+
 var (
 	queryPartRE  = regexp.MustCompile(`(-?)(?:"([^"]+)"|(` + nonSpaceClass + `+))`)
 	dateFilterRE = regexp.MustCompile(`^(?i)(edited|after|before):(\p{Nd}{4}(?:-\p{Nd}{2}(?:-\p{Nd}{2})?)?)$`)
@@ -201,9 +206,9 @@ func ParseQuery(raw string) *Query {
 				continue
 			}
 			if negative {
-				q.ExcludePhrases = append(q.ExcludePhrases, squash(quoted))
+				q.ExcludePhrases = append(q.ExcludePhrases, Squash(quoted))
 			} else {
-				q.Phrases = append(q.Phrases, squash(quoted))
+				q.Phrases = append(q.Phrases, Squash(quoted))
 				phrases = append(phrases, strings.TrimSpace(quoted))
 			}
 			continue
@@ -223,7 +228,7 @@ func ParseQuery(raw string) *Query {
 				tags[tag] = true
 			}
 		} else if negative {
-			for _, t := range tokenize(plain) {
+			for _, t := range Tokenize(plain) {
 				excl[t] = true
 			}
 		} else {
@@ -231,14 +236,14 @@ func ParseQuery(raw string) *Query {
 		}
 	}
 	q.Text = strings.Join(append(phrases, ws...), " ")
-	q.ExcludeStems, q.Tags, q.ExcludeTags = sortedKeys(excl), sortedKeys(tags), sortedKeys(extags)
+	q.ExcludeStems, q.Tags, q.ExcludeTags = slices.Sorted(maps.Keys(excl)), slices.Sorted(maps.Keys(tags)), slices.Sorted(maps.Keys(extags))
 	return q
 }
 
 // Phrase: the query's words as one phrase, when there are two or more.
 func (q *Query) Phrase() string {
 	if len(strings.Fields(q.Text)) >= 2 {
-		return squash(q.Text)
+		return Squash(q.Text)
 	}
 	return ""
 }
@@ -296,7 +301,7 @@ func (q *Query) Accepts(text string, tokens []string, docTags []string, date str
 		}
 	}
 	if len(q.Phrases)+len(q.ExcludePhrases) > 0 {
-		s := squash(text)
+		s := Squash(text)
 		for _, p := range q.Phrases {
 			if !strings.Contains(s, p) {
 				return false
@@ -542,7 +547,7 @@ func (ix *Index) expand(qTokens []string) []weighted {
 			bump(t, 1.0)
 			matched = true
 		}
-		if runeLen(t) >= 3 {
+		if RuneLen(t) >= 3 {
 			for _, vocab := range ix.vocabs() {
 				for i := sort.SearchStrings(vocab, t); i < len(vocab) && strings.HasPrefix(vocab[i], t); i++ {
 					if vocab[i] != t && ix.hasTerm(vocab[i]) {
@@ -552,8 +557,8 @@ func (ix *Index) expand(qTokens []string) []weighted {
 				}
 			}
 		}
-		if !matched && runeLen(t) >= 4 {
-			for _, c := range closeMatches(t, ix.fuzzyVocab(), 3, 0.8) {
+		if !matched && RuneLen(t) >= 4 {
+			for _, c := range CloseMatches(t, ix.fuzzyVocab(), 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
 		}
@@ -718,7 +723,7 @@ func analyzeText(text string) *analyzed {
 	}
 	sort.Strings(a.distinct)
 	for _, s := range a.distinct {
-		n := runeLen(s)
+		n := RuneLen(s)
 		a.byLen[n] = append(a.byLen[n], s)
 	}
 	return a
@@ -757,7 +762,7 @@ func matchSpans(text, query string) []span {
 		if i < len(a.distinct) && a.distinct[i] == t {
 			hits[t] = true
 		}
-		if runeLen(t) >= 3 {
+		if RuneLen(t) >= 3 {
 			for ; i < len(a.distinct) && strings.HasPrefix(a.distinct[i], t); i++ {
 				hits[a.distinct[i]] = true
 			}
@@ -765,7 +770,7 @@ func matchSpans(text, query string) []span {
 	}
 	if len(hits) == 0 {
 		for t := range terms {
-			n := runeLen(t)
+			n := RuneLen(t)
 			if n < 4 {
 				continue
 			}
@@ -773,7 +778,7 @@ func matchSpans(text, query string) []span {
 			for l := (2*n + 2) / 3; l <= 3*n/2; l++ {
 				cands = append(cands, a.byLen[l]...)
 			}
-			for _, c := range closeMatches(t, cands, max(len(cands), 1), 0.8) {
+			for _, c := range CloseMatches(t, cands, max(len(cands), 1), 0.8) {
 				hits[c] = true
 			}
 		}

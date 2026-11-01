@@ -49,7 +49,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Math, diagrams      | KaTeX and Mermaid, vendored in `public/vendor/`, loaded by a page that has math or a diagram |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
-| Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
+| Search              | BM25 in `go/internal/textsearch`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
 | Storage             | Plain `.md` files in `$ZONE_DATA` (tasks in `_tasks/*.json`) |
 | Container           | Compose with Podman or Docker (Ubuntu 26.04 LTS base image) |
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
@@ -83,7 +83,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
-├── go/                     # The server: one package (main), a file per area
+├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
@@ -112,7 +112,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
-│   ├── search.go, difflib.go  # BM25 search ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion
+│   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)

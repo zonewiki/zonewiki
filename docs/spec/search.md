@@ -4,7 +4,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Search
 
-- **Ranking is BM25**, implemented in Go (`go/search.go`, no database; `golang.org/x/text` for case folding and accents). Pages and tasks are scored in **one combined index** so their relevance scores are directly comparable.
+- **Ranking is BM25**, implemented in Go (`go/internal/textsearch`, a package of its own without Zone's state; no database; `golang.org/x/text` for case folding and accents). Pages and tasks are scored in **one combined index** so their relevance scores are directly comparable.
 - `GET /api/search?q=...` collects every page **and** all task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, meta, type? }]`. `meta` (`resultMeta`) is the small line under a result's title in the modal and on `/search`, telling alike titles apart: a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`), a task's list and status (`Tasks › zoo · done 2026-05-01`). `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
 - **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
 - **Exact phrase first** (`Phrase`, `phraseFirst`): a document containing the query's words as a phrase (case, accents and spacing ignored, stopwords included) moves to the front, in BM25 order, even one the ranking had cut off: "alex again" puts the note saying "Alex again" above notes with both words apart. Browser search and `search_wiki` alike; the result opens the section with the phrase (`bestSections`). The squashed text is cached on the doc (`squashed`).

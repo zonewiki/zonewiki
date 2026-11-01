@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"zonewiki/internal/textsearch"
 )
 
 // docsDir holds README.md and docs/spec/ (the -docs flag); "" finds them
@@ -92,7 +93,7 @@ var manualIndex struct {
 	mu   sync.Mutex
 	key  string
 	docs []manualDoc
-	ix   *Index
+	ix   *textsearch.Index
 }
 
 // manualFind: the passages most relevant to the query, best first. The
@@ -118,11 +119,11 @@ func manualFind(query string, limit int) []manualDoc {
 			title := manualTitle(t.name, text)
 			for _, s := range chunkSections(text, manualChunkChars) {
 				docs = append(docs, manualDoc{t.name, title, s.Heading, s.Body})
-				tokens = append(tokens, append(tokenize(s.Heading+"\n"+s.Body),
-					repeatTokens(t.name+" "+title+" "+s.Heading, titleWeight)...))
+				tokens = append(tokens, append(textsearch.Tokenize(s.Heading+"\n"+s.Body),
+					repeatTokens(t.name+" "+title+" "+s.Heading, textsearch.TitleWeight)...))
 			}
 		}
-		manualIndex.key, manualIndex.docs, manualIndex.ix = key.String(), docs, NewIndex(tokens)
+		manualIndex.key, manualIndex.docs, manualIndex.ix = key.String(), docs, textsearch.NewIndex(tokens)
 	}
 	var out []manualDoc
 	for _, h := range manualIndex.ix.Search(query, limit) {
