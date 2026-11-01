@@ -100,7 +100,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	if len(embeds) > 0 {
 		result = injectTasksEmbeds(result, embeds)
 	}
-	return fmHTML + result + renderSourcesHTML(rq, meta.Sources, result)
+	return fmHTML + result + renderSourcesHTML(rq, meta.Sources, result, o.HeadingIDs)
 }
 
 func requestHost(rq *Req) string {
@@ -374,13 +374,15 @@ func renderFrontmatterHTML(meta mdtext.Frontmatter, showTags, showTldr bool) str
 
 // renderSourcesHTML: frontmatter sources as a list at the article's end,
 // each inline markdown, under a ## heading with id "sources" (unless the
-// article has one of that id).
-func renderSourcesHTML(rq *Req, sources []string, article string) string {
+// article has one of that id), carried as ids says (data-pid in a preview).
+func renderSourcesHTML(rq *Req, sources []string, article string, ids headingIDs) string {
 	if len(sources) == 0 {
 		return ""
 	}
+	// Its id as the article's headings have theirs (Env.HeadingIDs).
+	attr := map[headingIDs]string{headingAsID: "id", headingPID: "data-pid"}[ids]
 	hid := "sources"
-	for n := 1; strings.Contains(article, `id="`+hid+`"`); n++ {
+	for n := 1; attr != "" && strings.Contains(article, attr+`="`+hid+`"`); n++ {
 		hid = "sources-" + strconv.Itoa(n)
 	}
 	env := &Env{Host: requestHost(rq), Wikilink: wikilinker(rq, nil, "")}
@@ -388,7 +390,11 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	for _, s := range sources {
 		items.WriteString("<li>" + markdown(s, env, true) + "</li>")
 	}
-	return `<section class="page-sources"><h2 id="` + hid + `">Sources</h2><ul>` + items.String() + `</ul></section>`
+	h2 := "<h2>"
+	if attr != "" {
+		h2 = `<h2 ` + attr + `="` + hid + `">`
+	}
+	return `<section class="page-sources">` + h2 + `Sources</h2><ul>` + items.String() + `</ul></section>`
 }
 
 // taskHref: the link that opens one task in the tasks on tab; year: the

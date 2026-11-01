@@ -359,11 +359,8 @@ func settingsError() string {
 }
 
 func reloadSettings() {
-	// The git work after the lock: the other requests wait only for the
-	// look at the file, not for a commit.
-	if old, s := takeSettings(); s != nil {
-		applySettings(old, s)
-		commitSettings(settingsChange(old, s))
+	if s := takeSettings(); s != nil {
+		betweenRequests(s)
 	}
 }
 
@@ -372,12 +369,14 @@ func reloadSettings() {
 // be judged by the ones after (a switch from users to a password makes
 // private/ an ordinary folder, for a user who no longer has a login). So
 // the checks count the requests running (beginRequest, endRequest), and a
-// reload waits for them to finish (at most drainWait), the requests after
-// it waiting at reloadMu.
+// change takes effect only when none is (betweenRequests): at once if none
+// is, else when the last one ends, at most drainWait later. Until then the
+// requests go on with the settings before, nothing waits for the change.
 var (
 	flightMu   sync.Mutex
 	flightDone = sync.NewCond(&flightMu)
 	inFlight   int
+	waiting    *Settings // a change waiting for the requests running; the newest
 	drainWait  = 10 * time.Second
 )
 
@@ -396,32 +395,73 @@ func endRequest() {
 	flightMu.Unlock()
 }
 
-// betweenRequests runs change once no request is running, or after max
-// (false: some still was).
-func betweenRequests(max time.Duration, change func()) bool {
-	timer := time.AfterFunc(max, func() {
-		flightMu.Lock()
-		flightDone.Broadcast()
-		flightMu.Unlock()
-	})
-	defer timer.Stop()
-	deadline := time.Now().Add(max)
+// betweenRequests puts s in effect once no request is running: now if
+// none is, else from a goroutine that waits (at most drainWait; a request
+// still running then sees the change, as the log says). A change while
+// one waits replaces it.
+func betweenRequests(s *Settings) {
 	flightMu.Lock()
-	defer flightMu.Unlock()
-	for inFlight > 0 && time.Now().Before(deadline) {
-		flightDone.Wait()
+	if inFlight == 0 && waiting == nil {
+		old := current.Swap(s)
+		flightMu.Unlock()
+		tookSettings(old, s)
+		return
 	}
-	change()
-	return inFlight == 0
+	already := waiting != nil
+	waiting = s
+	flightMu.Unlock()
+	if already {
+		return
+	}
+	go func() {
+		timer := time.AfterFunc(drainWait, func() {
+			flightMu.Lock()
+			flightDone.Broadcast()
+			flightMu.Unlock()
+		})
+		defer timer.Stop()
+		deadline := time.Now().Add(drainWait)
+		flightMu.Lock()
+		for inFlight > 0 && time.Now().Before(deadline) {
+			flightDone.Wait()
+		}
+		if inFlight > 0 {
+			logf("a request still running after %s sees the settings change", drainWait)
+		}
+		s := waiting
+		waiting = nil
+		old := current.Swap(s)
+		flightMu.Unlock()
+		tookSettings(old, s)
+	}()
 }
 
-// takeSettings: a changed file's settings, now in effect, and those they
-// replace; nil if the file is as it was or has an error.
-func takeSettings() (old, s *Settings) {
+// tookSettings: what a change in effect does besides (the remote, the
+// noshare cache), and its commit.
+func tookSettings(old, s *Settings) {
+	logf("reloaded %s", configName())
+	applySettings(old, s)
+	commitSettings(settingsChange(old, s))
+}
+
+// latestSettings: the settings in effect, or the change waiting for the
+// requests running.
+func latestSettings() *Settings {
+	flightMu.Lock()
+	defer flightMu.Unlock()
+	if waiting != nil {
+		return waiting
+	}
+	return current.Load()
+}
+
+// takeSettings: a changed file's settings, to put in effect; nil if the
+// file is as it was or has an error.
+func takeSettings() (s *Settings) {
 	reloadMu.Lock()
 	defer reloadMu.Unlock()
 	if time.Since(lastLook) < reloadEvery {
-		return nil, nil
+		return nil
 	}
 	lastLook = time.Now()
 	path := configPath()
@@ -431,22 +471,21 @@ func takeSettings() (old, s *Settings) {
 	}
 	if st == nil && lastStat == nil || st != nil && lastStat != nil && os.SameFile(st, lastStat) &&
 		st.ModTime().Equal(lastStat.ModTime()) && st.Size() == lastStat.Size() {
-		return nil, nil
+		return nil
 	}
 	if st == nil {
 		// Gone (or between an editor's delete and write): keep what Zone
 		// has, as taking it away could open the wiki.
 		lastStat = nil
 		settingsFailed(fmt.Errorf("%s was removed: Zone keeps the settings it had until it is back, or a restart", configName()))
-		return nil, nil
+		return nil
 	}
 	lastStat = st
 	f, err := readConfigFile(path)
 	if err == nil {
 		s, err = loadSettings(f)
 	}
-	old = settings()
-	if err == nil && old.authOn() && !s.authOn() {
+	if old := latestSettings(); err == nil && old.authOn() && !s.authOn() {
 		// The users (or the password) gone: everyone could get in, and
 		// private/ would be an ordinary folder. Only on purpose, a restart.
 		err = fmt.Errorf("%s sets no users and no password now, which leaves the wiki without a login "+
@@ -454,15 +493,11 @@ func takeSettings() (old, s *Settings) {
 	}
 	if err != nil {
 		settingsFailed(err)
-		return nil, nil
-	}
-	if !betweenRequests(drainWait, func() { current.Store(s) }) {
-		logf("a request still running after %s sees the settings change", drainWait)
+		return nil
 	}
 	settingsErr.Store(nil)
-	logf("reloaded %s", configName())
 	warnReadable(path)
-	return old, s
+	return s
 }
 
 // commitSettings commits the settings file, if it is there and changed:

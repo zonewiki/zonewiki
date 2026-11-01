@@ -17,7 +17,7 @@ import (
 )
 
 func pageRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /private", writesPages(privateRoute))
+	mux.HandleFunc("GET /private", privateRoute) // pagesMu only to make the home (privateRoute)
 	mux.HandleFunc("GET /notes", notesPage)
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
@@ -664,7 +664,8 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	if newSlug == "" {
 		newSlug = slug
 	}
-	if _, _, err := renamePageOp(userOf(r), slug, newSlug, ""); err != nil {
+	_, _, err := renamePageOp(userOf(r), slug, newSlug, "")
+	if _, err = partly(err); err != nil {
 		switch pe, ok := refusalOf(err); {
 		case !ok || pe.kind == refusedNotFound || pe.kind == refusedProtected:
 			pageFailed(w, r, err)
@@ -720,6 +721,7 @@ func promotePage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	newSlug, _, err := moveQuicknote(userOf(r), slug, r.PostFormValue("folder"), r.PostFormValue("name"), r.PostFormValue("keep_date") != "", "")
+	_, err = partly(err)
 	if err != nil {
 		quicknoteFailed(w, r, back, err)
 		return
@@ -761,7 +763,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	anchor, _, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
-	if err != nil {
+	if _, err = partly(err); err != nil {
 		quicknoteFailed(w, r, back, err)
 		return
 	}

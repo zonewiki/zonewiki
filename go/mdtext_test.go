@@ -97,6 +97,25 @@ func TestWikilinkInTable(t *testing.T) {
 	}
 }
 
+// Outside a table a wikilink's | stays as written: in raw HTML, an HTML
+// block, code, across a line break.
+func TestWikilinkPipesOnlyInTables(t *testing.T) {
+	testWiki(t, nil)
+	env := &Env{Wikilink: wikilinker(nil, map[string]bool{"page": true}, "")}
+	for src, want := range map[string]string{
+		"<span title=\"[[a|b]]\">t</span>\n": `<span title="[[a|b]]">t</span>`,
+		// An HTML block's text: links, as before; its attributes: as written.
+		"<div title=\"[[page|x]]\">\n[[page|Label]]\n</div>\n": `<div title="[[page|x]]">` + "\n" + `<a href="/page/page" class="wikilink">Label</a>`,
+		"    [[a|b]]\n":                      "<pre><code>[[a|b]]",
+		"[[page|\nLabel]]\n\n| x |\n|---|\n": "[[page|\nLabel]]",
+	} {
+		got := markdown(escapeWikilinkPipes(src), env, false)
+		if !strings.Contains(got, want) || strings.Contains(got, `\|`) {
+			t.Errorf("%q:\n%s\nwant %s", src, got, want)
+		}
+	}
+}
+
 // A heading's id has a wikilink's label, as [[Page#Section]] makes it.
 func TestWikilinkInHeading(t *testing.T) {
 	testWiki(t, nil)

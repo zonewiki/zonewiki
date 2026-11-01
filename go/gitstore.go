@@ -45,10 +45,20 @@ type gitResult struct {
 func runGit(args ...string) gitResult { return runGitFor(gitTimeout, args...) }
 
 func runGitFor(timeout time.Duration, args ...string) gitResult {
+	return runGitIn(timeout, "", args...)
+}
+
+// runGitInput: runGit with input on git's stdin.
+func runGitInput(input string, args ...string) gitResult { return runGitIn(gitTimeout, input, args...) }
+
+func runGitIn(timeout time.Duration, input string, args ...string) gitResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir, cmd.Env = cfg.Data, gitEnv
+	if input != "" {
+		cmd.Stdin = strings.NewReader(input)
+	}
 	// A process git started (a hook, an alias) may hold its output open
 	// after git is killed: stop waiting for it soon after.
 	cmd.WaitDelay = time.Second
@@ -189,6 +199,16 @@ func gitCommit(user, message string, paths ...string) error {
 				candidates = append(candidates, rel)
 			}
 		}
+	}
+	if len(candidates) > 0 {
+		// What .gitignore leaves out (and git doesn't track) stays out: git
+		// add would refuse it (exit 1, 0 when some are).
+		r := runGitInput(strings.Join(candidates, "\x00")+"\x00", "check-ignore", "-z", "--stdin")
+		if r.Code > 1 {
+			return failed("check-ignore", r)
+		}
+		ignored := strings.Split(r.Stdout, "\x00")
+		candidates = slices.DeleteFunc(candidates, func(rel string) bool { return slices.Contains(ignored, rel) })
 	}
 	if len(candidates) == 0 {
 		forgetDrafts(rels...)

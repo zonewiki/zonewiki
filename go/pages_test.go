@@ -76,8 +76,8 @@ func TestUpdateReferencesReportsWhatFailed(t *testing.T) {
 	if len(got) != 1 {
 		t.Errorf("the page's link: %q", got)
 	}
-	var we *writeError
-	if !errors.As(err, &we) || !strings.Contains(err.Error(), "not every link") {
+	var left *linksLeft
+	if !errors.As(err, &left) || !strings.Contains(err.Error(), "not every link") {
 		t.Errorf("error: %v", err)
 	}
 	if _, err := rewriteMovedLinks(map[string]string{"old-page": "new-page"}); err == nil {

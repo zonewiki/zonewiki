@@ -894,14 +894,36 @@ func updateReferences(oldSlug, newSlug, section string) ([]string, error) {
 	return append(modified, changed...), linkErrors(append(errs, err))
 }
 
-// linkErrors: what failed while links were re-pointed (nil: nothing), as a
-// writeError: the move itself is done and committed with the links that
+// linkErrors: what failed while links were re-pointed (nil: nothing), as
+// linksLeft: the move itself is done and committed with the links that
 // were, the others still point at the old name.
 func linkErrors(errs []error) error {
 	if err := errors.Join(errs...); err != nil {
-		return writeFailed("moved, but not every link to it could be re-pointed (check_links finds them)", err)
+		return &linksLeft{err}
 	}
 	return nil
+}
+
+// linksLeft: a move is done, but not every link to it could be re-pointed
+// (a page that can't be read or written). Not a failure: the routes go on
+// as after a move (it is logged), the MCP tools say so (partly).
+type linksLeft struct{ err error }
+
+func (e *linksLeft) Error() string {
+	return "not every link to it could be re-pointed (check_links finds them): " + e.err.Error()
+}
+
+func (e *linksLeft) Unwrap() error { return e.err }
+
+// partly: err without the links a move left (logged, and said in note);
+// the error it is otherwise.
+func partly(err error) (note string, _ error) {
+	var l *linksLeft
+	if errors.As(err, &l) {
+		logf("%v", l)
+		return "\nNote: " + l.Error() + ".", nil
+	}
+	return "", err
 }
 
 // sharedStaysShared: a shared page can't be made private (others have

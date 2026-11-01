@@ -1,10 +1,13 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 )
 
 func withUsers(t *testing.T, names ...string) {
@@ -180,5 +183,31 @@ func TestRefuseMakingPrivate(t *testing.T) {
 	settings().Users = nil
 	if refuseMakingPrivate(map[string]string{"ideas": "private/alice/ideas"}) != "" {
 		t.Error("without users private/ is an ordinary folder")
+	}
+}
+
+// A visit to Private whose home is there doesn't wait for a page write.
+func TestPrivateHomeDoesntWaitForWrites(t *testing.T) {
+	testWiki(t, map[string]string{"private/alice/index": "# Alice\n"})
+	s := *settings()
+	s.Users = map[string]*User{"alice": {Name: "alice"}}
+	current.Store(&s)
+	pagesMu.Lock()
+	defer pagesMu.Unlock()
+	done := make(chan int)
+	go func() {
+		mux := http.NewServeMux()
+		pageRoutes(mux) // as the route is registered
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, withUser(httptest.NewRequest("GET", "/private", nil), "alice"))
+		done <- w.Code
+	}()
+	select {
+	case code := <-done:
+		if code != http.StatusFound {
+			t.Errorf("%d", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waited for pagesMu")
 	}
 }

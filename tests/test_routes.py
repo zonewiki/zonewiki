@@ -413,6 +413,15 @@ class TestPagePreview:
         assert "[[tasks:]]" in data["html"]    # code stays as written
         assert "<h1" not in data["html"]
 
+    def test_sources_heading_has_no_id(self, client, wiki_dir):
+        # The preview sits over a page with its own ids, #sources among them.
+        write_page(wiki_dir, "cited", "---\nsources: [[index]]\n---\n# Cited\n\n## Sources\n\nText.\n")
+        html = client.get("/api/page-preview/cited", headers=HOST).get_json()["html"]
+        assert ' id="' not in html
+        assert '<h2 data-pid="sources">Sources</h2>' in html and '<h2 data-pid="sources-1">Sources</h2>' in html
+        page = client.get("/page/cited", headers=HOST).get_data(as_text=True)
+        assert 'id="sources-1">Sources</h2>' in page
+
     def test_missing_page(self, client, wiki_dir):
         assert client.get("/api/page-preview/nowhere", headers=HOST).status_code == 404
         assert client.get("/api/page-preview/../etc/passwd", headers=HOST).status_code in (400, 404)

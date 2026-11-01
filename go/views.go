@@ -273,9 +273,8 @@ type tasksNew struct {
 	Keep, Today, Private bool
 }
 
-// view: a view's data as a struct (each embeds view), its fields the
-// template's; page sets its Shell. A view still on a map (M) gets the shell
-// as M["Shell"].
+// view: what every view's data embeds, its fields the template's; page
+// sets its Shell (.Shell in the templates).
 type view struct{ Shell *pageShell }
 
 func (v *view) setShell(s *pageShell) { v.Shell = s }

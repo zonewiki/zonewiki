@@ -12,6 +12,7 @@ import (
 	"fmt"
 	gohtml "html"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
@@ -462,8 +463,23 @@ func taskDates(s string) string {
 // as text.
 var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base)(?:[\s/>]|$))`)
 
-// defuseHTML: raw HTML with defusedTagRE's tags as text.
-func defuseHTML(raw []byte) []byte { return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1")) }
+// htmlTagRE: a start tag, its quoted values whole (a ">" in one doesn't
+// end it); srcdocRE: a srcdoc attribute in one. An iframe's srcdoc is a
+// document of its own with the page's origin and policy, written with
+// entities (&lt;form …), which defusedTagRE can't see: it is renamed, so
+// the frame is empty.
+var (
+	htmlTagRE = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
+	srcdocRE  = regexp.MustCompile(`(?i)([\s/"'])srcdoc\b`)
+)
+
+// defuseHTML: raw HTML with defusedTagRE's tags as text and no srcdoc.
+func defuseHTML(raw []byte) []byte {
+	raw = htmlTagRE.ReplaceAllFunc(raw, func(tag []byte) []byte {
+		return srcdocRE.ReplaceAll(tag, []byte("${1}data-defused-srcdoc"))
+	})
+	return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1"))
+}
 
 // rawHTML: inline raw HTML, as goldmark's unsafe renderer writes it, defused.
 func (r *zoneRenderer) rawHTML(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -494,8 +510,33 @@ func (r *zoneRenderer) htmlBlock(w util.BufWriter, source []byte, node ast.Node,
 	if n.HasClosure() {
 		raw = append(raw, n.ClosureLine.Value(source)...)
 	}
-	_, _ = w.Write(defuseHTML(raw))
+	_, _ = w.Write(r.wikilinksInHTML(defuseHTML(raw)))
 	return ast.WalkContinue, nil
+}
+
+// wikilinksInHTML: an HTML block's wikilinks as links, in its text between
+// the tags (goldmark parses no inlines in it), not in a tag's attributes.
+func (r *zoneRenderer) wikilinksInHTML(raw []byte) []byte {
+	if r.env == nil || r.env.Wikilink == nil || !bytes.Contains(raw, []byte("[[")) {
+		return raw
+	}
+	var out []byte
+	last := 0
+	link := func(text []byte) []byte {
+		return mdtext.WikilinkRE.ReplaceAllFunc(text, func(m []byte) []byte {
+			if bytes.ContainsAny(m, "\n") {
+				return m
+			}
+			open, label, close := r.env.Wikilink(string(m[2 : len(m)-2]))
+			return []byte(open + renderLabel(label, r.env.Host) + close)
+		})
+	}
+	for _, tag := range htmlTagRE.FindAllIndex(raw, -1) {
+		out = append(out, link(raw[last:tag[0]])...)
+		out = append(out, raw[tag[0]:tag[1]]...)
+		last = tag[1]
+	}
+	return append(out, link(raw[last:])...)
 }
 
 // attrBytes: an attribute's value as goldmark keeps it ([]byte or string).
@@ -569,16 +610,34 @@ func wikilinkAt(line []byte) (int, bool) {
 	return 2 + end + 2, true
 }
 
-// escapeWikilinkPipes: text with every wikilink's "|" written "\|", so a
-// table doesn't split a cell at it (code masked: its text stays as it is).
+// escapeWikilinkPipes: text with the "|" of every wikilink in a table
+// written "\\|", so the table doesn't split a cell at it (code masked: its
+// text stays as it is). A table is a run of lines without a blank one that
+// has a delimiter row (|---|:--:|); elsewhere a "\\|" would show.
 func escapeWikilinkPipes(text string) string {
-	if !strings.Contains(text, "|") {
+	if !strings.Contains(text, "|") || !strings.Contains(text, "-") {
 		return text
 	}
-	return mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
-		return strings.ReplaceAll(m, "|", `\|`)
-	})
+	lines := strings.SplitAfter(text, "\n")
+	for start := 0; start < len(lines); {
+		end := start
+		for end < len(lines) && strings.TrimSpace(lines[end]) != "" {
+			end++
+		}
+		if slices.ContainsFunc(lines[start:end], func(l string) bool { return tableDelimRE.MatchString(strings.TrimRight(l, "\r\n")) }) {
+			for i := start; i < end; i++ {
+				lines[i] = mdtext.WikilinkRE.ReplaceAllStringFunc(lines[i], func(m string) string {
+					return strings.ReplaceAll(m, "|", `\|`)
+				})
+			}
+		}
+		start = end + 1
+	}
+	return strings.Join(lines, "")
 }
+
+// tableDelimRE: a table's delimiter row, a "|" in it.
+var tableDelimRE = regexp.MustCompile(`^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$`)
 
 // wikilink writes a wikilink as Env.Wikilink makes it, its label rendered
 // as a link's text is (emphasis, code, math), or as written without one.

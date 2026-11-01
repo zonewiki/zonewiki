@@ -288,6 +288,42 @@ class TestCommits:
         assert git(wiki, "diff", "--cached", "--name-only").split() == ["notes.txt"]
 
     @pytest.mark.parametrize("door", DOORS)
+    def test_a_page_git_ignores_is_written_not_committed(self, client, wiki, door):
+        """A folder in .gitignore: its pages are written, not refused."""
+        (wiki / ".gitignore").write_text("journal/\n")
+        git(wiki, "add", ".gitignore")
+        git(wiki, "commit", "-m", "ignore journal")
+        head = git(wiki, "rev-parse", "HEAD")
+        assert create(client, door, "journal/day")
+        assert (wiki / "journal" / "day.md").exists()
+        assert git(wiki, "rev-parse", "HEAD") == head
+        if door == "browser":
+            resp = client.post("/api/save/journal/day", data={"content": "# Day\n\nMore.\n"}, headers=HOST)
+            assert resp.status_code == 200, resp.get_data(as_text=True)
+        else:
+            text, err = mcp(client, "append_to_page", slug="journal/day", content="More.")
+            assert not err, text
+        assert "More." in (wiki / "journal" / "day.md").read_text()
+        assert delete(client, door, "journal/day")
+        assert not (wiki / "journal" / "day.md").exists()
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_rename_with_links_left_is_done(self, client, wiki, door):
+        """A page that can't be read (a dangling link) keeps its links, and the
+        rename is done: no error, the MCP tool says what was left."""
+        commit(wiki, "p", "# P\n")
+        commit(wiki, "ref", "# Ref\n\n[[p]]\n")
+        (wiki / "broken.md").symlink_to(wiki / "nowhere.md")
+        if door == "browser":
+            resp = client.post("/rename/p", data={"new_name": "q"}, headers=HOST)
+            assert resp.status_code == 302 and resp.headers["Location"] == "/page/q"
+        else:
+            text, err = mcp(client, "rename_page", slug="p", new_slug="q")
+            assert not err and "not every link" in text, text
+        assert (wiki / "q.md").exists() and "[[q]]" in (wiki / "ref.md").read_text()
+        assert subjects(wiki)[0].startswith("Rename p to q")
+
+    @pytest.mark.parametrize("door", DOORS)
     def test_a_failed_commit_is_reported(self, client, wiki, door):
         """git can't commit (a stale index.lock): the write says so."""
         commit(wiki, "p", "# P\n")

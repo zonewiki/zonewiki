@@ -202,13 +202,14 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		}
 		pending := pendingNote(target, keptTarget)
 		anchor, kept, err := appendQuicknote(user, slug, target, heading, suffix)
+		left, err := partly(err)
 		if err != nil {
 			return "", toolRefusal(err)
 		}
 		pending = pendingNote(slug, kept) + pending
 		return "Appended note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
 			"the note; links to it now point at that section.\nurl: " + base + pathURL("page", target) + "#" + anchor +
-			"\nfile: " + hostFile(target) + pending, nil
+			"\nfile: " + hostFile(target) + pending + left, nil
 	}
 	keepDate, err := boolArg(args, "keep_date")
 	if err != nil {
@@ -228,10 +229,11 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	moved, kept, err := moveQuicknote(user, slug, folder, name, keepDate, suffix)
+	left, err := partly(err)
 	if err != nil {
 		return "", toolRefusal(err)
 	}
-	pending := pendingNote(slug, kept)
+	pending := pendingNote(slug, kept) + left
 	return "Moved note " + slug + " into the wiki as " + moved + "; links to it were updated. " +
 		"No page links to it yet: add a link where it belongs (edit_page).\n" + pageInfo(moved, base) + pending, nil
 }
@@ -425,6 +427,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 		return "", err
 	}
 	moves, changed, kept, err := moveFolderOp(user, folder, newFolder, suffix)
+	left, err := partly(err)
 	if err != nil {
 		return "", toolRefusal(err)
 	}
@@ -439,7 +442,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if len(moves) > movesShown {
 		out = append(out, fmt.Sprintf("… and %d more", len(moves)-movesShown))
 	}
-	return strings.Join(out, "\n") + pendingPagesNote(kept, folder+"/"), nil
+	return strings.Join(out, "\n") + pendingPagesNote(kept, folder+"/") + left, nil
 }
 
 func renamePageTool(args jsonObj, base, user string) (string, error) {
@@ -476,6 +479,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	changed, kept, err := renamePageOp(user, slug, newS, suffix)
+	left, err := partly(err)
 	if err != nil {
 		return "", toolRefusal(err)
 	}
@@ -483,7 +487,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if len(changed) > 0 {
 		refs = fmt.Sprintf(" Links to it were updated in %d files.", len(changed))
 	}
-	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pendingNote(slug, kept), nil
+	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pendingNote(slug, kept) + left, nil
 }
 
 func deletePageTool(args jsonObj, base, user string) (string, error) {

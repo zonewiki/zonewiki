@@ -53,9 +53,17 @@ func ensurePrivateHome(user string) (string, error) {
 }
 
 // privateRoute: GET /private opens the signed-in user's private home; 404
-// without users (there is nothing private then).
+// without users (there is nothing private then). Only a visit that makes
+// the home takes pagesMu, as a page write: the others don't wait for one.
 func privateRoute(w http.ResponseWriter, r *http.Request) {
-	slug, err := ensurePrivateHome(userOf(r))
+	user := userOf(r)
+	if slug := privateHomeSlug(user); slug != "" && safePath(slug) != "" && exists(safePath(slug)) {
+		http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
+		return
+	}
+	pagesMu.Lock()
+	slug, err := ensurePrivateHome(user)
+	pagesMu.Unlock()
 	if slug == "" && err == nil {
 		http.NotFound(w, r)
 		return

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -145,6 +146,25 @@ func TestRawHTMLDefused(t *testing.T) {
 		`<input class="task-list-item-checkbox" type="checkbox" />`)
 	if notes := markdown("a <form action=/x><button>b</button></form>", &Env{}, true); strings.Contains(notes, "<form ") {
 		t.Errorf("a task's notes (inline): %s", notes)
+	}
+	// An iframe's srcdoc is a document of the page's origin, its form
+	// written as entities: renamed, in every way of writing the attribute.
+	for _, src := range []string{
+		`<iframe srcdoc="&lt;form method=post action=/delete/x&gt;&lt;button&gt;Go&lt;/button&gt;&lt;/form&gt;"></iframe>`,
+		`<iframe title=">" SRCDOC='&lt;form&gt;'></iframe>`,
+		`<iframe/srcdoc="&lt;form&gt;"></iframe>`,
+		"<div>\n<iframe\nsrcdoc=\"&lt;form&gt;\"></iframe>\n</div>\n",
+		`text <iframe srcdoc="&lt;form&gt;"></iframe> inline`,
+	} {
+		got := markdown(src, &Env{}, false)
+		// No tag with a srcdoc (goldmark may also show it as text).
+		if regexp.MustCompile(`(?i)<iframe[^>]*[\s/"']srcdoc`).MatchString(got) || !strings.Contains(got, "srcdoc") {
+			t.Errorf("%s:\n%s", src, got)
+		}
+	}
+	// The word in text stays.
+	if got := markdown("<div>\nthe srcdoc attribute\n</div>\n", &Env{}, false); !strings.Contains(got, "the srcdoc attribute") {
+		t.Errorf("text: %s", got)
 	}
 }
 

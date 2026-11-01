@@ -124,10 +124,11 @@ func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string
 	if err != nil {
 		return "", false, err
 	}
-	if _, err := movePage(user, oldPath, safePath(newSlug), slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
+	_, err = movePage(user, oldPath, safePath(newSlug), slug, newSlug, "Promote "+slug+" to "+newSlug+suffix)
+	if _, ok := err.(*linksLeft); err != nil && !ok {
 		return "", kept, err
 	}
-	return newSlug, kept, nil
+	return newSlug, kept, err // moved, links left or not
 }
 
 var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)

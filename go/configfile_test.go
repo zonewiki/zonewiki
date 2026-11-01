@@ -169,27 +169,40 @@ func TestReloadSettings(t *testing.T) {
 	}
 }
 
-// A reload waits for the requests running, so each sees one set of users
-// from its session check to its answer; one that doesn't end holds it up
-// at most drainWait. The checks count every request.
+// A change takes effect between requests, so each sees one set of users
+// from its session check to its answer: while one runs, the reload returns
+// at once (nothing waits for it) and the change comes when the request
+// ends; a newer change replaces the one waiting; a request that doesn't
+// end holds it up at most drainWait. The checks count every request.
 func TestReloadBetweenRequests(t *testing.T) {
 	path := configWiki(t, "locale = de\n")
+	locale := func(want string) bool {
+		t.Helper()
+		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			if settings().Locale == want {
+				return true
+			}
+		}
+		return false
+	}
 	beginRequest()
 	rewrite(t, path, "locale = fr-CH\n")
 	done := make(chan bool)
 	go func() { reloadSettings(); close(done) }()
 	select {
 	case <-done:
-		t.Fatal("reloaded while a request ran")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
+		t.Fatal("the reload waited for the request")
 	}
+	time.Sleep(50 * time.Millisecond)
 	if settings().Locale != "de" {
 		t.Error("changed while a request ran")
 	}
+	rewrite(t, path, "locale = pt-BR\n")
+	reloadSettings()
 	endRequest()
-	<-done
-	if settings().Locale != "fr-CH" {
-		t.Error("not taken after it")
+	if !locale("pt-BR") {
+		t.Errorf("not taken after it: %s", settings().Locale)
 	}
 
 	oldWait := drainWait
@@ -198,10 +211,10 @@ func TestReloadBetweenRequests(t *testing.T) {
 	beginRequest()
 	rewrite(t, path, "locale = it\n")
 	reloadSettings()
-	endRequest()
-	if settings().Locale != "it" {
+	if !locale("it") {
 		t.Error("a request that doesn't end held the reload up for good")
 	}
+	endRequest()
 
 	running := -1
 	h := checks(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
