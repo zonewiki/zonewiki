@@ -8,6 +8,7 @@ import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
 import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
+import { HIGHLIGHT_CODE, renderFigures } from './js/figures.js';
 import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
 
 // Pure task logic lives in tasks-core.js.
@@ -56,11 +57,13 @@ const renderedHtml = { notes: new Map(), comments: new Map() };
 // Until its HTML is here, a text shows as it is (line breaks kept).
 const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-function highlightCode(html) {
-  if (!window.hljs || !html.includes('<pre')) return html;
+// Code highlighted, math and diagrams rendered (js/figures.js).
+async function highlightCode(html) {
+  if (!html.includes('<pre') && !html.includes('class="math')) return html;
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
-  tpl.content.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  if (window.hljs) tpl.content.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
+  await renderFigures(tpl.content);
   return tpl.innerHTML;
 }
 // The notes and comments of `taskList`, for renderTexts.
@@ -94,7 +97,10 @@ async function renderTexts({ notes = [], comments = [] }) {
         });
         if (!res.ok) return false;
         const out = await res.json();
-        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, highlightCode(out[kind][i])));
+        for (const kind in want) {
+          const htmls = await Promise.all(out[kind].map(highlightCode));
+          want[kind].forEach((t, i) => renderedHtml[kind].set(t, htmls[i]));
+        }
         return true;
       } catch (_) {
         return false;
@@ -2646,7 +2652,9 @@ async function fetchNotesPreview() {
     const res = await fetch('/api/render-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
-    if (res.ok && descTextarea.value.trim() === text) notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
+    if (!res.ok) return;
+    const html = await highlightCode((await res.json()).notes[0]);
+    if (descTextarea.value.trim() === text) notesPreview.innerHTML = html;
   } catch (_) { notesPreview.textContent = 'Could not render the preview'; }
 }
 const previewing = () => !!notesPreview && !notesPreview.hidden;

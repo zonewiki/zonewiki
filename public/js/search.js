@@ -1,6 +1,7 @@
 import { closeOnBackdropClick, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
 import { revealElement } from './fold.js';
+import { renderFigures } from './figures.js';
 
 // ── Search modal ──────────────────────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ async function showModalPreview(item) {
   body.innerHTML = data.html;
   localizeDates(body);
   modalPreview.replaceChildren(title, body);
+  renderFigures(body);
   const marks = markTerms(body, url.searchParams.getAll('hl').filter(Boolean));
   const anchor = url.hash && body.querySelector(`[data-pid="${CSS.escape(decodeURIComponent(url.hash.slice(1)))}"]`);
   const target = anchor || marks[0];
@@ -471,7 +473,7 @@ function markTerms(root, terms) {
   const alternatives = [...terms].sort((a, b) => b.length - a.length).map(escape).join('|');
   const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, 'giu');
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app, .section-folded-label')
+    acceptNode: n => n.parentElement.closest('pre, script, style, .tasks-app, .section-folded-label, .math, .mermaid-diagram')
       ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
   });
   const nodes = [];

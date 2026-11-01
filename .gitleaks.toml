@@ -1,0 +1,10 @@
+# gitleaks (./run.sh leaks, .githooks/pre-commit): its default rules, except
+# that the generic API-key rule skips the vendored third-party code in
+# public/vendor/, whose minified names (keyCount=…) look like keys to it.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored, minified third-party code"
+targetRules = ["generic-api-key"]
+paths = ['''^public/vendor/''']

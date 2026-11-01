@@ -15,7 +15,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | File | Covers |
 |------|--------|
 | `docs/spec/routes.md` | Every route, what each page view includes, side columns on big screens |
-| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
+| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, math and Mermaid diagrams, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
@@ -46,6 +46,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | Markdown render     | `goldmark` (server renders to HTML), with Zone's rules (`go/markdown.go`) |
 | HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped |
 | Syntax highlight    | `highlight.js` (vendored in `public/vendor/`, no CDN) |
+| Math, diagrams      | KaTeX and Mermaid, vendored in `public/vendor/`, loaded by a page that has math or a diagram |
 | Styling             | Custom CSS (classless, semantic HTML)        |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `go/search.go`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
@@ -75,6 +76,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
+├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env.example            # Template for .env: every setting, commented
 ├── .env                    # Your settings (gitignored; copy of .env.example)
@@ -97,6 +99,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
+│   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
@@ -124,14 +127,16 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     ├── style.css           # All styling
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, editor, page, fold, present, oldnames (see Client code in `docs/spec/rendering.md`)
+    │                       #   shortcuts, mdedit, editor, page, figures, fold, present, oldnames (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
     ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app
     ├── favicon.svg         # Browser tab icon
     ├── icon.svg            # Home-screen icon source; icon-192/512.png and apple-touch-icon.png rendered from it
     ├── manifest.json       # Web app manifest (Add to home screen)
     ├── vendor/highlight/   # highlight.js 11.9.0 + github/github-dark themes (vendored, no CDN)
-    └── vendor/gemoji/      # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
+    ├── vendor/gemoji/      # GitHub's emoji names (gemoji 4.1.0, MIT) for `:name` completion
+    ├── vendor/katex/       # KaTeX 0.19.0 (MIT): katex.min.js, katex.min.css, fonts/*.woff2
+    └── vendor/mermaid/     # Mermaid 12.2.0 (MIT): mermaid.min.js
 ```
 
 Page content does not live in the repo tree. It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`), where markdown files sit at the root and uploads live under `_assets/`.
@@ -208,7 +213,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 `go/go.mod`: `github.com/yuin/goldmark` (markdown), `golang.org/x/text` (search's case folding and NFKD), `github.com/yalue/onnxruntime_go` (semantic search). Nothing else; add a dependency only when it clearly pays for itself. **Everything is pinned to an exact version** (`go.sum` checks the modules; the Containerfiles pin Go, onnxruntime, gitleaks and the model by version and SHA-256, `tests/test_image.py` checks that they agree): to update, raise a version, run `./run.sh test` and `./run.sh e2e`, and commit the new pins.
 
 - **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s). Zone must stay a single process: the task lock (`tasksMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose task writes.
-- `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens.
+- `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm. Pages load nothing from other hosts. To update it, replace the three files with a newer release's. Likewise gemoji 4.1.0's `db/emoji.json` (and its LICENSE) in `public/vendor/gemoji/`, fetched by the browser only when emoji completion first opens. KaTeX 0.19.0 and Mermaid 12.2.0 likewise, from their npm packages (`dist/`): KaTeX's `katex.min.js`, `katex.min.css` and `fonts/*.woff2` (browsers take the woff2 the CSS names first) in `public/vendor/katex/`, Mermaid's `mermaid.min.js` (the one-file build that sets `window.mermaid`) in `public/vendor/mermaid/`, each with its LICENSE; a page loads them only when it has math or a diagram (`js/figures.js`). To update, replace those files with a newer release's and run `./run.sh e2e` (`tests/e2e/test_figures.py`).
 - Semantic search needs cgo at build time and onnxruntime's shared library at run time, which the binary loads with `dlopen` when it first embeds: with `ZONE_SEMANTIC_SEARCH` on at build time, the image puts `libonnxruntime.so` (1.31.0, its GitHub release) in `/usr/local/lib` and the model in `/opt/zonewiki-model` (the `Containerfile`'s `semantic` stage, its own layer). Without the library, Zone searches by keywords. Locally: the release's `lib/` on `LD_LIBRARY_PATH`; the model is downloaded on first use.
 - The tests' Python packages (`tests/requirements.txt`: pytest, pytest-xdist, Playwright, werkzeug), pinned too, live only in the tools image.
 

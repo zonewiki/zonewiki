@@ -1,11 +1,13 @@
 import { copyText, localizeDates, putTask, showToast } from './util.js';
 import { toggleCheckboxInTextarea } from './mdedit.js';
+import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
-// ── Syntax highlighting ───────────────────────────────────────────────────────
+// ── Syntax highlighting, math and diagrams ────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-  if (!window.hljs) return;
-  document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  if (window.hljs) document.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
+  const article = document.querySelector('article.page-content');
+  if (article) renderFigures(article);
 });
 
 // ── Dates ─────────────────────────────────────────────────────────────────────

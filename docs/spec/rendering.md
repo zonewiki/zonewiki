@@ -7,7 +7,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`).
 - `viewPage` (`go/routes.go`) reads `<slug>.md`, `renderMd()` (`go/render.go`) converts it to HTML with goldmark (`go/markdown.go`), and `page(…, "view.html", …)` renders it into the page (see Templates). A path with a slug in it is built with `pathURL()`, which percent-encodes it, so a file named with a quote, `#` or space still gets a working link that is safe in an attribute.
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/new-note modals. There is no nav bar (see Modules).
-- `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load.
+- `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load; math and Mermaid diagrams render client-side too (Math and diagrams).
 - **Task notes and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[tasks:]]`, ✎ per section, heading ids). See Notes in `docs/spec/tasks.md`.
 - The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG Z logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
@@ -20,6 +20,14 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ### Sortable tables
 
 Clicking a column header of a table in a page's article sorts its rows: ascending, descending, then back to the file's order (`sortTableBy` in `js/page.js`; Enter/Space on a focused header too). View only: the file is never changed and nothing is remembered. A column whose non-empty cells are all numbers (`tableCellNumber`: `-2`, `9.5`, `1,200`, `50 %`, `€3`) sorts numerically, any other column with a numeric-aware, case-insensitive collator (`item 9` before `item 10`, ISO dates in order). Empty cells go last in both directions. The state is the header's `aria-sort`, which the CSS turns into ▲/▼ (↕ on hover). Only `article.page-content` tables with a header, one body, at least two rows and no merged cells (raw-HTML `colspan`/`rowspan`) are made sortable; the editor preview is not. Clicks are delegated, so presentation slides (cloned from the article) sort too.
+
+### Math and diagrams
+
+Both render in the browser from vendored copies (`public/vendor/katex/`, `public/vendor/mermaid/`; see Dependencies in `AGENTS.md`), nothing from other hosts. `js/figures.js` (`renderFigures`) loads a library the first time a page has something for it, so a page without math or diagrams loads neither (Mermaid is 5 MB). It runs on the page view, the editor's preview, presentation slides, the search dialog's preview, and task notes and comments. Without the library (an error, offline before the first load) the source shows as written.
+
+- **Math** (KaTeX): `$…$` inline, `$$…$$` for display, and a ` ```math ` fence (display). The server (`go/math.go`, a goldmark extension) keeps the TeX as written, so `_`, `*`, `--` and quotes inside it are never emphasis or typography, and writes it escaped into `<span class="math math-inline">`, `<span class="math math-display">` (`$$…$$` in running text) or `<div class="math math-display">`; `renderFigures` renders those (the TeX stays in `data-tex`). Pandoc's rules, so prices stay text: the opening `$` has no space after it, the closing `$` none before it and no digit after it (`$5 and $10`, `$5–$10` are text), and inline math stays on one line. `\$` is a literal dollar, also inside math. A line of only `$$` opens a display block that runs to the next line ending in `$$` (or to the end of the page, as an unclosed fence does); `$$tex$$` alone on its line is one too; a line that only starts with `$$` (`$$100 bills`) is text. Bad TeX shows as written in KaTeX's error colour, its message as the title. One paragraph's inline content (comments) has inline math only.
+- **Diagrams** (Mermaid): a ` ```mermaid ` fence becomes `<div class="mermaid-diagram">` with the SVG (`securityLevel: 'strict'`: no scripts or click handlers from a diagram's text), in Mermaid's `dark` theme when the browser prefers dark. A diagram that doesn't parse keeps its source, with a `.mermaid-error` line under it (`Diagram: <Mermaid's message>`). The SVGs are kept per source and theme (the last 50), so the editor's preview, redrawn as you type, doesn't flash the source.
+- highlight.js leaves these fences alone (`HIGHLIGHT_CODE`), and search highlights skip `.math` and `.mermaid-diagram`.
 
 ### Templates
 
@@ -42,6 +50,7 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 | `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the task app's task notes (formatting bar, completion, snippets, lists, uploads), `taskCheckboxOffsets` |
 | `js/editor.js` | The editor: auto-save, preview, Enter on a wikilink, Make task, rename bar |
 | `js/page.js` | Page view: checkboxes, `[[task:…]]` chips, sortable tables, syntax highlighting, lightbox |
+| `js/figures.js` | `renderFigures`: math (KaTeX) and Mermaid diagrams, loading each library on first use (Math and diagrams) |
 | `js/fold.js` | Folding a page view's sections (`foldAll`, `revealElement`) |
 | `js/present.js` | Presentation mode |
 | `js/oldnames.js` | Imported first: moves what the browser kept under the names from before the renames (`leaf-deck-*`, also under the path `/deck`, `leaf_pres`, `leaf-search-sort`, `leafHistory`) to the new keys (`zone-tasks-*` under `/tasks`, `zone_pres` …), once |

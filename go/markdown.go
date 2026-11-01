@@ -4,7 +4,8 @@
 // feature depends on them: checkboxes the page can tick (counted as mdtext
 // counts them), callouts, heading ids that [[Page#Section]] points at, ✎
 // and ☑ N per section, image width and img-block, external links in a new
-// tab, task-date chips. docs/spec/rendering.md has the differences.
+// tab, task-date chips, math (math.go). docs/spec/rendering.md has the
+// differences.
 package main
 
 import (
@@ -44,7 +45,7 @@ func markdown(src string, env *Env, inline bool) string {
 	opts := []goldmark.Option{
 		goldmark.WithExtensions(extension.Table, extension.Strikethrough,
 			extension.NewLinkify(extension.WithLinkifyURLRegexp(urlRE)),
-			extension.Footnote, extension.DefinitionList, typographer),
+			extension.Footnote, extension.DefinitionList, typographer, mathExtension{block: !inline}),
 		goldmark.WithParserOptions(
 			parser.WithParagraphTransformers(
 				util.Prioritized(alertTransformer{}, 100),
@@ -297,6 +298,8 @@ func (r *zoneRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindHeading, r.heading)
 	reg.Register(ast.KindBlockquote, r.blockquote)
 	reg.Register(kindCheckbox, r.checkbox)
+	reg.Register(kindMathInline, r.mathInline)
+	reg.Register(kindMathBlock, r.mathBlock)
 }
 
 func attr(n ast.Node, name string) string {

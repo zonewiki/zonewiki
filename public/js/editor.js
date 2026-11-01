@@ -2,6 +2,7 @@ import TasksCore from '../tasks-core.js';
 import { openTasksEdit } from '../tasks.js';
 import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
 import { markdownEditor } from './mdedit.js';
+import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 // ── Editor ────────────────────────────────────────────────────────────────────
 
@@ -503,7 +504,8 @@ async function fetchPreview() {
     });
     previewPane.innerHTML = await res.text();
     localizeDates(previewPane);
-    if (window.hljs) previewPane.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+    if (window.hljs) previewPane.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
+    renderFigures(previewPane);
     highlightPreviewBlock(true);
   } catch (_) { /* ignore */ }
 }

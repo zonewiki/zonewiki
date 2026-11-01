@@ -66,6 +66,8 @@ editor; a change on disk shows up immediately.
 - Backlinks, "Linked tasks" (tasks that mention the page) and, with semantic
   search, "Related pages". On wide screens the table of contents sits on the
   left and the links on the right, both following as you scroll.
+- Math (`$e^{i\pi}$`, `$$…$$`) and Mermaid diagrams, rendered in the
+  browser from Zone's own copies of KaTeX and Mermaid, no outside service.
 - Callouts (`> [!WARNING]`), sortable tables, image sizing,
   frontmatter tags, a one-line summary and sources. Fold a long page's
   sections while reading (the chevron by a heading, or `z` for all).
@@ -460,5 +462,6 @@ change gets in.
 
 [AGPL-3.0-or-later](LICENSE). The vendored [highlight.js](https://highlightjs.org) in
 `public/vendor/highlight/` is under its own BSD-3-Clause license; the
-emoji names in `public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji))
-under MIT.
+emoji names in `public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji)),
+[KaTeX](https://katex.org) in `public/vendor/katex/` and
+[Mermaid](https://mermaid.js.org) in `public/vendor/mermaid/` under MIT.

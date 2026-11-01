@@ -672,6 +672,28 @@ main {
    own padding. */
 .page-content pre code.hljs { padding: 0; }
 
+/* Math (KaTeX) and diagrams (Mermaid), js/figures.js: display math and a
+   diagram centred, scrolling sideways when wider than the text. */
+.page-content .math-display {
+  display: block;
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+.page-content .math-display .katex-display { margin: 0; }
+.page-content .mermaid-diagram {
+  margin: 1rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.page-content .mermaid-diagram svg { max-width: 100%; height: auto; }
+.page-content .mermaid-error {
+  margin: -.5rem 0 1rem;
+  color: var(--link-missing);
+  font-size: .8125rem;
+}
+
 /* Images never overflow, are always shrunk to fit */
 .page-content img { max-width: 100%; height: auto; cursor: zoom-in; }
 

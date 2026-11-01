@@ -1,4 +1,5 @@
 import { openLightbox } from './page.js';
+import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 // ── Presentation mode ─────────────────────────────────────────────────────────
 
@@ -66,9 +67,10 @@ import { openLightbox } from './page.js';
     overlay.querySelector('.slide-progress-fill').style.width =
       `${((n + 1) / slides.length) * 100}%`;
     // Re-run syntax highlighting on code blocks inside the new slide
-    body.querySelectorAll('pre code').forEach(block => {
+    body.querySelectorAll(HIGHLIGHT_CODE).forEach(block => {
       if (window.hljs) window.hljs.highlightElement(block);
     });
+    renderFigures(body);
     body.scrollTop = 0;
 
     // Update the edit button href for this slide's section
