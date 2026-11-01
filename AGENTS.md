@@ -142,9 +142,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     └── vendor/mermaid/     # Mermaid 12.2.0 (MIT): mermaid.min.js
 ```
 
-Page content does not live in the repo tree. It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`), where markdown files sit at the root and uploads live under `_assets/`.
-
-Keep the structure flat. Do not add subdirectories under `pages/` unless the user explicitly asks for nested pages.
+Page content does not live in the repo tree. It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`), where markdown files sit at the root and in folders (a folder is part of the slug, see Key Constraints) and uploads live under `_assets/`.
 
 ---
 
