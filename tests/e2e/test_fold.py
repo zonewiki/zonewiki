@@ -1,6 +1,8 @@
 """Folding sections on a page view (js/fold.js): the chevron by each ## and
 ###, fold all, and what unfolds a folded section."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -162,9 +164,9 @@ def test_section_jump_skips_folded_headings(page, wiki):
     page.goto("/page/folds")
     _fold(page, "one")
     page.keyboard.press("]")
-    assert page.url.endswith("#one")
+    expect(page).to_have_url(re.compile(r"#one$"))
     page.keyboard.press("]")
-    assert page.url.endswith("#two")                              # not #detail
+    expect(page).to_have_url(re.compile(r"#two$"))                # not #detail
 
 
 def test_presentation_and_print_show_folded_sections(page, wiki):
