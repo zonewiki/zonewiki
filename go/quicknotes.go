@@ -61,8 +61,7 @@ func createQuicknote(user, title string, content *string, suffix string) (string
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
-	gitCommit(user, "Create "+slug+suffix, path)
-	return slug, nil
+	return slug, notCommitted(gitCommit(user, "Create "+slug+suffix, path))
 }
 
 // notePath: the file of a note user may change.
@@ -101,7 +100,10 @@ func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string
 	if err := checkTarget(user, slug, newSlug); err != nil {
 		return "", false, err
 	}
-	kept := keepPending(oldPath, slug)
+	kept, err := keepPending(oldPath, slug)
+	if err != nil {
+		return "", false, err
+	}
 	if _, err := movePage(user, oldPath, safePath(newSlug), slug, newSlug, "Promote "+slug+" to "+newSlug+suffix); err != nil {
 		return "", kept, err
 	}
@@ -120,7 +122,10 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 	if err != nil {
 		return "", false, err
 	}
-	commitOthersDrafts(user) // the page's, and those whose links to the note follow
+	// The page's, and those whose links to the note follow.
+	if err := commitOthersDrafts(user); err != nil {
+		return "", false, err
+	}
 	// [ ] | would break the wikilinks that now point at the section.
 	heading = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(heading, ""))
 	targetPath := ""
@@ -150,7 +155,9 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 			return "", false, refuse("“" + target + "” already has a section “" + heading + "”")
 		}
 	}
-	kept = keepPending(oldPath, slug)
+	if kept, err = keepPending(oldPath, slug); err != nil {
+		return "", false, err
+	}
 	note, err := readText(oldPath)
 	if err != nil {
 		return "", false, err
@@ -164,6 +171,5 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 		return "", false, err
 	}
 	refs := updateReferences(slug, target, heading)
-	gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)
-	return anchor, kept, nil
+	return anchor, kept, notCommitted(gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...))
 }

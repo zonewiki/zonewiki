@@ -195,7 +195,11 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
 		}
-		pending := pendingNote(target, keepPending(safePath(target), target))
+		keptTarget, err := keepPending(safePath(target), target)
+		if err != nil {
+			return "", err
+		}
+		pending := pendingNote(target, keptTarget)
 		anchor, kept, err := appendQuicknote(user, slug, target, heading, suffix)
 		if err != nil {
 			return "", toolRefusal(err)
@@ -900,13 +904,19 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	what := fmt.Sprintf("%d pages", len(hits))
-	pending := pendingPagesNote(keepPendingPages(paths, what), what)
+	keptPages, err := keepPendingPages(paths, what)
+	if err != nil {
+		return "", err
+	}
+	pending := pendingPagesNote(keptPages, what)
 	for _, h := range hits {
 		if err := writeText(h.path, h.new); err != nil {
 			return "", err
 		}
 	}
-	gitCommit(user, msg, paths...)
+	if err := notCommitted(gitCommit(user, msg, paths...)); err != nil {
+		return "", err
+	}
 	all := slugSet()
 	brokenSet := map[string]bool{}
 	for _, h := range hits {

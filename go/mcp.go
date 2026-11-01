@@ -178,10 +178,16 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 		isError := false
 		if err != nil {
 			var te *toolError
-			if !errors.As(err, &te) {
+			var ce *commitError
+			switch {
+			case errors.As(err, &te):
+				text = te.msg
+			case errors.As(err, &ce):
+				text = ce.Error()
+			default:
 				return nil, err
 			}
-			text, isError = te.msg, true
+			isError = true
 		}
 		return rpcResult(id, toolResult{[]toolContent{{"text", text}}, isError}), nil
 	}

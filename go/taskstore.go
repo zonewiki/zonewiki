@@ -102,10 +102,16 @@ func writeTasks(path string, tasks []*Task) error {
 }
 
 // atomicWrite writes a temp file and renames it into place: a reader sees
-// the whole old file or the whole new one, never a half-written one.
+// the whole old file or the whole new one, never a half-written one, and a
+// crash in the middle leaves the old one. The file keeps its permissions
+// (a new one: 0644).
 func atomicWrite(path, text string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil { // _tasks/ in a new wiki
 		return err
+	}
+	mode := os.FileMode(0o644)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -116,7 +122,7 @@ func atomicWrite(path, text string) error {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Chmod(tmp.Name(), 0o644)
+		err = os.Chmod(tmp.Name(), mode)
 	}
 	if err == nil {
 		err = os.Rename(tmp.Name(), path)

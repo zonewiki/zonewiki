@@ -3,6 +3,7 @@ tool, on the same wiki: the same checks and the same care for text not
 yet in git, whichever door it came through (go/pageops.go)."""
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -231,3 +232,96 @@ def test_a_refused_change_commits_nothing(client, wiki):
     text, err = mcp(client, "edit_page", slug="p", old_string="Not there.", new_string="x")
     assert err and "not found" in text
     assert subjects(wiki) == head and git(wiki, "status", "--porcelain").strip() == "M p.md"
+
+
+class TestOneWriteAtATime:
+    """Writes to pages run one at a time (pagesMu), from the read each
+    decides on to its commit: none loses another's change."""
+
+    def test_concurrent_appends_keep_every_line(self, client, wiki):
+        commit(wiki, "log", "# Log\n")
+        lines = [f"Entry {i}." for i in range(16)]
+        with ThreadPoolExecutor(len(lines)) as pool:
+            results = list(pool.map(lambda line: mcp(client, "append_to_page", slug="log", content=line), lines))
+        assert not any(err for _, err in results), results
+        text = (wiki / "log.md").read_text()
+        assert all(line in text for line in lines), text
+
+    def test_appends_and_ticks_at_once(self, client, wiki):
+        """A ticked checkbox (the browser) and appends (MCP) at once."""
+        commit(wiki, "todo", "# Todo\n\n- [ ] one\n")
+
+        def tick(_):
+            return client.post("/api/toggle-checkbox/todo", data={"idx": "0"}, headers=HOST).status_code
+
+        def append(i):
+            return mcp(client, "append_to_page", slug="todo", content=f"Line {i}.")[1]
+
+        with ThreadPoolExecutor(8) as pool:
+            ticks = [pool.submit(tick, i) for i in range(4)]
+            appends = [pool.submit(append, i) for i in range(8)]
+        assert all(t.result() == 200 for t in ticks)
+        assert not any(a.result() for a in appends)
+        text = (wiki / "todo.md").read_text()
+        assert all(f"Line {i}." in text for i in range(8)), text
+        assert "- [ ] one" in text  # four ticks: unticked again
+
+
+class TestWrites:
+    def test_a_page_keeps_its_permissions(self, client, wiki):
+        """Written atomically (a new file renamed into place), with the mode it had."""
+        commit(wiki, "p", "# P\n")
+        (wiki / "p.md").chmod(0o600)
+        assert not mcp(client, "append_to_page", slug="p", content="More.")[1]
+        assert "More." in (wiki / "p.md").read_text()
+        assert (wiki / "p.md").stat().st_mode & 0o777 == 0o600
+        assert not [f for f in wiki.iterdir() if ".tmp-" in f.name]
+
+
+class TestCommits:
+    def test_only_the_writes_files_go_in(self, client, wiki):
+        """What is staged by hand stays staged, out of Zone's commit."""
+        (wiki / "notes.txt").write_text("by hand\n")
+        git(wiki, "add", "notes.txt")
+        assert create(client, "browser", "fresh")
+        assert git(wiki, "show", "--format=", "--name-only", "HEAD").split() == ["fresh.md"]
+        assert git(wiki, "diff", "--cached", "--name-only").split() == ["notes.txt"]
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_failed_commit_is_reported(self, client, wiki, door):
+        """git can't commit (a stale index.lock): the write says so."""
+        commit(wiki, "p", "# P\n")
+        (wiki / ".git" / "index.lock").write_text("")
+        if door == "browser":
+            resp = client.post("/new", data={"slug": "fresh"}, headers=HOST)
+            assert resp.status_code == 500
+        else:
+            text, err = mcp(client, "append_to_page", slug="p", content="More.")
+            assert err and "not committed" in text, text
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_text_not_in_git_that_cant_be_committed_stops_the_write(self, client, wiki, door):
+        """Deleting it would lose it: nothing is deleted."""
+        commit(wiki, "p", "# P\n\nCommitted.\n")
+        write_page(wiki, "p", "# P\n\nOnly on disk.\n")
+        (wiki / ".git" / "index.lock").write_text("")
+        assert not delete(client, door, "p")
+        assert (wiki / "p.md").read_text() == "# P\n\nOnly on disk.\n"
+
+    def test_drafts_keep_their_author_when_the_commit_fails(self, client, wiki, monkeypatch):
+        """bob's auto-save, committed in his name before alice's write, even
+        after a commit that failed in between."""
+        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", ""), "bob": ("bob-pw", "")})
+        commit(wiki, "p", "# P\n\nv1\n")
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        saved = client.post("/api/save/p", data={"content": "# P\n\nbob's\n"}, headers=HOST)
+        assert saved.status_code == 200
+        lock = wiki / ".git" / "index.lock"
+        lock.write_text("")
+        assert client.post("/edit/p", data={"content": "# P\n\nbob's\n"}, headers=HOST).status_code == 500
+        lock.unlink()
+        client.post("/logout", headers=HOST)
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert client.post("/delete/p", headers=HOST).status_code == 302
+        assert git(wiki, "log", "-2", "--format=%an %s").splitlines() == ["alice Delete p", "bob Save p"]

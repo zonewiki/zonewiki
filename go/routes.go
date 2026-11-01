@@ -16,7 +16,7 @@ import (
 )
 
 func pageRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /private", privateRoute)
+	mux.HandleFunc("GET /private", writesPages(privateRoute))
 	mux.HandleFunc("GET /notes", notesPage)
 	// /page/_scratch: Notes' address while it was called Scratch; its links
 	// and bookmarks still work.
@@ -29,19 +29,19 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
-	mux.HandleFunc("POST /api/notes", apiNewNote)
-	mux.HandleFunc("POST /api/scratch", apiNewNote) // what it was called before
+	mux.HandleFunc("POST /api/notes", writesPages(apiNewNote))
+	mux.HandleFunc("POST /api/scratch", writesPages(apiNewNote)) // what it was called before
 	mux.HandleFunc("GET /edit/{slug...}", editPage)
-	mux.HandleFunc("POST /edit/{slug...}", savePage)
-	mux.HandleFunc("POST /api/save/{slug...}", apiSave)
+	mux.HandleFunc("POST /edit/{slug...}", writesPages(savePage))
+	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, nil)
 	})
-	mux.HandleFunc("POST /new", createPage)
-	mux.HandleFunc("POST /rename/{slug...}", renamePage)
-	mux.HandleFunc("POST /promote/{slug...}", promotePage)
-	mux.HandleFunc("POST /append/{slug...}", appendPage)
-	mux.HandleFunc("POST /delete/{slug...}", deletePage)
+	mux.HandleFunc("POST /new", writesPages(createPage))
+	mux.HandleFunc("POST /rename/{slug...}", writesPages(renamePage))
+	mux.HandleFunc("POST /promote/{slug...}", writesPages(promotePage))
+	mux.HandleFunc("POST /append/{slug...}", writesPages(appendPage))
+	mux.HandleFunc("POST /delete/{slug...}", writesPages(deletePage))
 	mux.HandleFunc("GET /pages", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
@@ -57,7 +57,7 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
-	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", apiToggleCheckbox)
+	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
 	mux.HandleFunc("POST /api/preview", apiPreview)
 	mux.HandleFunc("POST /api/render-notes", apiRenderNotes)
 	mux.HandleFunc("GET /api/pages", func(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +493,10 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if isForce || r.PostFormValue("overwrite") == "1" {
 		// Keep mine: whatever the page holds, but never what was never in git.
-		keepPending(s.path, s.slug)
+		if _, err := keepPending(s.path, s.slug); err != nil {
+			serverError(w, r, err)
+			return
+		}
 	}
 	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, false); err != nil {
 		pageFailed(w, r, err)
@@ -547,17 +550,27 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 		return
 	}
 	user := userOf(r)
-	keepPending(s.path, s.slug) // theirs, if never in git
+	if _, err := keepPending(s.path, s.slug); err != nil { // theirs, if never in git
+		serverError(w, r, err)
+		return
+	}
 	if err := writeText(s.path, mine); err != nil {
 		serverError(w, r, err)
 		return
 	}
-	gitCommit(user, "Set aside an edit of "+s.slug, s.path)
+	if err := gitCommit(user, "Set aside an edit of "+s.slug, s.path); err != nil {
+		// Not in git: putting theirs back would lose it.
+		serverError(w, r, err)
+		return
+	}
 	if err := writeText(s.path, theirs); err != nil {
 		serverError(w, r, err)
 		return
 	}
-	gitCommit(user, "Reload "+s.slug, s.path)
+	if err := gitCommit(user, "Reload "+s.slug, s.path); err != nil {
+		serverError(w, r, err)
+		return
+	}
 	dropDraft(user, s.path)
 	writeJSON(w, http.StatusOK, M{"set_aside": true})
 }

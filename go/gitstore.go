@@ -128,31 +128,85 @@ func commitAuthor(name string) string {
 
 var commitMu sync.Mutex
 
-// gitCommit stages paths (in the wiki) and commits them together, by user
-// (the author; "": Zone itself, or a wiki without users). The committer is
-// always Zone. One at a time (commitMu): another's add between this add
-// and its commit would go into this commit, in this user's name.
-func gitCommit(user, message string, paths ...string) {
+// gitCommit stages paths (in the wiki) and commits them, and only them,
+// together, by user (the author; "": Zone itself, or a wiki without users).
+// The committer is always Zone. One at a time (commitMu): another's add
+// between this add and its commit would go into this commit, in this
+// user's name. Only these paths go in (git commit -- paths): whatever else
+// is staged (a git add by hand on the host) stays staged, out of this
+// commit. A path that is neither on disk nor in git (the old name of a
+// page never committed) has nothing to commit; nothing to commit at all
+// (the files are as committed) is no error. A failure (a stale
+// index.lock, a hook that refuses) is logged and returned: the files stay
+// as written, in the Uncommitted list, and their drafts keep their
+// authors, so a later commit still names them.
+func gitCommit(user, message string, paths ...string) error {
 	if !cfg.GitEnabled {
-		return
+		return nil
 	}
 	commitMu.Lock()
 	defer commitMu.Unlock()
-	args := []string{"add", "--"}
+	failed := func(what string, r gitResult) error {
+		err := fmt.Errorf("git %s for %q failed: %s", what, message, strings.TrimSpace(r.Stderr+" "+r.Stdout))
+		logf("%v", err)
+		return err
+	}
+	var rels, candidates, missing []string
 	for _, p := range paths {
 		rel, ok := wikiRel(p)
-		if !ok {
-			return
+		if !ok || rel == ".." || strings.HasPrefix(rel, "../") {
+			err := fmt.Errorf("commit %q: %s is outside the wiki", message, p)
+			logf("%v", err)
+			return err
 		}
-		args = append(args, rel)
+		rels = append(rels, rel)
+		if exists(p) {
+			candidates = append(candidates, rel)
+		} else {
+			missing = append(missing, rel)
+		}
 	}
-	runGit(args...)
+	if len(missing) > 0 {
+		// A deletion: only of what git has (a file, or a folder's files).
+		r := runGit(append([]string{"--literal-pathspecs", "ls-files", "-z", "--"}, missing...)...)
+		tracked := strings.Split(r.Stdout, "\x00")
+		for _, rel := range missing {
+			if slices.ContainsFunc(tracked, func(f string) bool { return f == rel || strings.HasPrefix(f, rel+"/") }) {
+				candidates = append(candidates, rel)
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		forgetDrafts(rels...)
+		return nil
+	}
+	if r := runGit(append([]string{"--literal-pathspecs", "add", "-A", "--"}, candidates...)...); r.Code != 0 {
+		return failed("add", r)
+	}
+	// What of them changed: the commit's paths.
+	r := runGit(append([]string{"--literal-pathspecs", "diff", "--cached", "--no-renames", "--name-only", "-z", "--"}, candidates...)...)
+	if r.Code != 0 {
+		return failed("diff", r)
+	}
+	var changed []string
+	for _, f := range strings.Split(r.Stdout, "\x00") {
+		if f != "" {
+			changed = append(changed, f)
+		}
+	}
+	if len(changed) == 0 {
+		forgetDrafts(rels...)
+		return nil
+	}
+	args := []string{"--literal-pathspecs", "commit", "-m", message}
 	if user != "" {
-		runGit("commit", "--author", user+" <"+user+"@zone>", "-m", message)
-	} else {
-		runGit("commit", "-m", message)
+		args = append(args, "--author", user+" <"+user+"@zone>")
 	}
-	forgetDrafts(args[2:]...) // committed: no one's draft now
+	if r := runGit(append(append(args, "--"), changed...)...); r.Code != 0 {
+		return failed("commit", r)
+	}
+	forgetDrafts(rels...) // committed: no one's draft now
+	return nil
 }
 
 // excludeState keeps Zone's folder .zone/ out of git (the session key, the
@@ -221,7 +275,10 @@ var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 // and commits the move (by user) with the pages and tasks files whose links
 // changed.
 func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
-	commitOthersDrafts(user) // the page's, and those of the pages whose links follow
+	// The page's, and those of the pages whose links follow.
+	if err := commitOthersDrafts(user); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(newPath), 0o777); err != nil {
 		return nil, err
 	}
@@ -230,8 +287,7 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 	}
 	changed := rewriteMovedLinks(map[string]string{slug: newSlug})
 	files := append([]string{oldPath, newPath}, shareUploads(slug, newSlug, newPath)...)
-	gitCommit(user, message, append(files, changed...)...)
-	return changed, nil
+	return changed, notCommitted(gitCommit(user, message, append(files, changed...)...))
 }
 
 // moveFolder moves every page in a folder (and its subfolders) to
@@ -240,7 +296,9 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 // caller checks that no target exists. Other files in the folder (images…)
 // stay; folders left empty go.
 func moveFolder(user, folder, newFolder, message string) ([][2]string, []string, error) {
-	commitOthersDrafts(user)
+	if err := commitOthersDrafts(user); err != nil {
+		return nil, nil, err
+	}
 	var moves [][2]string
 	var touched []string
 	moved := map[string]string{}
@@ -286,8 +344,7 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 			still = append(still, p)
 		}
 	}
-	gitCommit(user, message, commit...)
-	return moves, still, nil
+	return moves, still, notCommitted(gitCommit(user, message, commit...))
 }
 
 var renameBracesRE = regexp.MustCompile(`\{([^{}]*) => ([^{}]*)\}`)

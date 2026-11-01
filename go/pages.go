@@ -132,12 +132,9 @@ func newlines(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 }
 
-func writeText(p, text string) error {
-	if err := os.MkdirAll(filepath.Dir(p), 0o777); err != nil {
-		return err
-	}
-	return os.WriteFile(p, []byte(text), 0o666)
-}
+// writeText writes a page (its folders made), atomically (atomicWrite):
+// the search, the semantic index's worker and git never read half a page.
+func writeText(p, text string) error { return atomicWrite(p, text) }
 
 // PageFile is a page's file and slug.
 type PageFile struct{ Path, Slug string }

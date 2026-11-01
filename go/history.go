@@ -13,12 +13,12 @@ func historyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /history/{slug...}", historyView)
 	mux.HandleFunc("GET /revision/{rest...}", revisionView)
 	mux.HandleFunc("GET /diff/{rest...}", diffView)
-	mux.HandleFunc("POST /restore/{rest...}", restoreRevision)
+	mux.HandleFunc("POST /restore/{rest...}", writesPages(restoreRevision))
 	mux.HandleFunc("GET /uncommitted", uncommittedView)
 	mux.HandleFunc("GET /diff-uncommitted/{slug...}", diffUncommitted)
 	mux.HandleFunc("GET /api/uncommitted", apiUncommitted)
-	mux.HandleFunc("POST /api/commit-all", apiCommitAll)
-	mux.HandleFunc("POST /api/commit-file", apiCommitFile)
+	mux.HandleFunc("POST /api/commit-all", writesPages(apiCommitAll))
+	mux.HandleFunc("POST /api/commit-file", writesPages(apiCommitFile))
 }
 
 // pageLog: a page's versions (gitLog) user may see: not those from when
@@ -296,7 +296,10 @@ func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 	committed := []string{}
 	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
 		path := filepath.Join(cfg.Data, f.Filepath)
-		gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path)
+		if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path); err != nil {
+			writeJSON(w, http.StatusInternalServerError, M{"error": err.Error(), "committed": len(committed), "files": committed})
+			return
+		}
 		committed = append(committed, f.Filepath)
 	}
 	writeJSON(w, http.StatusOK, M{"committed": len(committed), "files": committed})
@@ -326,6 +329,9 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := filepath.Join(cfg.Data, fp)
-	gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(fp), path)
+	if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(fp), path); err != nil {
+		writeJSON(w, http.StatusInternalServerError, M{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, M{"success": true})
 }

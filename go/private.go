@@ -48,8 +48,7 @@ func ensurePrivateHome(user string) (string, error) {
 	if err := writeText(p, privateHomeText); err != nil {
 		return "", err
 	}
-	gitCommit(user, "Create "+slug, p)
-	return slug, nil
+	return slug, notCommitted(gitCommit(user, "Create "+slug, p))
 }
 
 // privateRoute: GET /private opens the signed-in user's private home; 404

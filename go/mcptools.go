@@ -2068,8 +2068,17 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	if !ok {
 		return "", toolErr("Unknown tool: " + name)
 	}
+	if pageTools[name] {
+		pagesMu.Lock()
+		defer pagesMu.Unlock()
+	}
 	return f(args, base, userOf(r))
 }
+
+// pageTools: the tools that write pages, each run under pagesMu (as the
+// routes that do are, writesPages).
+var pageTools = map[string]bool{"write_page": true, "edit_page": true, "replace_in_pages": true,
+	"append_to_page": true, "file_note": true, "rename_page": true, "delete_page": true, "restore_page": true}
 
 func joinIDs(hits []idScore) string {
 	ids := make([]string, len(hits))

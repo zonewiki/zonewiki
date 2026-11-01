@@ -58,22 +58,26 @@ func forgetDrafts(rels ...string) {
 // the draft someone else saved there is committed in their name ("Save
 // <slug>"), so it is in git under its author whatever user's write does to
 // it, and not in user's commit. One person's own drafts stay uncommitted
-// (no commit per pause in typing). Without users there is one author.
-func commitOthersDraft(user, slug, path string) {
+// (no commit per pause in typing). Without users there is one author. A
+// commit that fails stops the write, as keepPending's does.
+func commitOthersDraft(user, slug, path string) error {
 	if settings().Users == nil {
-		return
+		return nil
 	}
 	if author := draftAuthor(path); author != "" && author != user && isUncommitted(path) {
-		gitCommit(author, "Save "+slug, path)
+		if err := gitCommit(author, "Save "+slug, path); err != nil {
+			return commitFailed(fmt.Sprintf("nothing was changed: %s's draft of %s couldn't be committed first", author, slug), err)
+		}
 	}
+	return nil
 }
 
 // commitOthersDrafts: commitOthersDraft for every page, before a write
 // that may change many (a rename re-pointing links, a folder move, an
 // append): each other user's draft committed in their name first.
-func commitOthersDrafts(user string) {
+func commitOthersDrafts(user string) error {
 	if settings().Users == nil {
-		return
+		return nil
 	}
 	draftsMu.Lock()
 	var rels []string
@@ -85,7 +89,9 @@ func commitOthersDrafts(user string) {
 	draftsMu.Unlock()
 	slices.Sort(rels)
 	for _, rel := range rels {
-		commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel)))
+		if err := commitOthersDraft(user, strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, filepath.FromSlash(rel))); err != nil {
+			return err
+		}
 	}
 	// What Zone didn't see saved (written on disk, or before a restart) has no
 	// known author, but in a private folder the folder says whose it is: one
@@ -106,8 +112,11 @@ func commitOthersDrafts(user string) {
 		for i, fp := range files {
 			paths[i] = filepath.Join(cfg.Data, filepath.FromSlash(fp))
 		}
-		gitCommit(owner, msg, paths...)
+		if err := gitCommit(owner, msg, paths...); err != nil {
+			return commitFailed(fmt.Sprintf("nothing was changed: %s's changes in their private folder couldn't be committed first", owner), err)
+		}
 	}
+	return nil
 }
 
 // commitAuthorOf: whom a commit of path's uncommitted text names: who

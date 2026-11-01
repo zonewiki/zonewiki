@@ -8,14 +8,46 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+// pagesMu: one write to pages at a time, from the reads it decides on (does
+// the page exist, has it changed since the editor loaded it, what text does
+// an edit start from) to its commit, as tasksMu is for the task files: two
+// writes to one page at once would otherwise lose one of them. The doors
+// take it, not the operations, as a route's checks before its operation
+// count too: the routes that write pages through writesPages, the MCP tools
+// that do in callMCPTool (pageTools). Go's mutex isn't reentrant: code
+// under it never takes it again. Lock order: pagesMu, then tasksMu (a
+// rename's links in tasks), then commitMu.
+var pagesMu sync.Mutex
+
+// writesPages runs a route that writes pages under pagesMu. Its body is
+// read first, so a slow client doesn't hold every other write up.
+func writesPages(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				badRequestPage(w)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		pagesMu.Lock()
+		defer pagesMu.Unlock()
+		h(w, r)
+	}
+}
 
 // refusal: why an operation refused, for the route's answer.
 type refusal int
@@ -83,12 +115,13 @@ func deletePageOp(user, slug, suffix string) (kept bool, err error) {
 	if isProtected(slug) {
 		return false, refuseAs(refusedProtected, slug+" is the home page; it can't be deleted")
 	}
-	kept = keepPending(path, slug)
+	if kept, err = keepPending(path, slug); err != nil {
+		return false, err
+	}
 	if err := os.Remove(path); err != nil {
 		return kept, err
 	}
-	gitCommit(user, "Delete "+slug+suffix, path)
-	return kept, nil
+	return kept, notCommitted(gitCommit(user, "Delete "+slug+suffix, path))
 }
 
 // restorePageOp writes the page's text as of version sha (a commit in its
@@ -117,12 +150,13 @@ func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err 
 	if old != nil && *old == content {
 		return old, false, refuseAs(refusedUnchanged, slug+" already reads as version "+short+".")
 	}
-	kept = keepPending(path, slug)
+	if kept, err = keepPending(path, slug); err != nil {
+		return old, false, err
+	}
 	if err := writeText(path, content); err != nil {
 		return old, kept, err
 	}
-	gitCommit(user, "Restore "+slug+" to "+short+suffix, path)
-	return old, kept, nil
+	return old, kept, notCommitted(gitCommit(user, "Restore "+slug+" to "+short+suffix, path))
 }
 
 // createPageOp makes the page slug with content; refused when it
@@ -141,8 +175,7 @@ func createPageOp(user, slug, content, suffix string) error {
 	if err := writeText(path, content); err != nil {
 		return err
 	}
-	gitCommit(user, "Create "+slug+suffix, path)
-	return nil
+	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
 }
 
 // writeDraft writes the editor's text to the page (current: what it holds,
@@ -155,14 +188,16 @@ func writeDraft(user, slug, path string, current *string, text string, commit bo
 	if !canWrite(user, slug) || safePath(slug) != path {
 		return refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
 	}
-	commitOthersDraft(user, slug, path)
+	if err := commitOthersDraft(user, slug, path); err != nil {
+		return err
+	}
 	if current == nil || *current != text {
 		if err := writeText(path, text); err != nil {
 			return err
 		}
 	}
 	if commit {
-		gitCommit(user, "Update "+slug, path)
+		return notCommitted(gitCommit(user, "Update "+slug, path))
 	} else {
 		noteDraft(path, user)
 	}
@@ -185,12 +220,13 @@ func changePageOp(user, slug, action, suffix string, change func(old string) (st
 	if text, err = change(old); err != nil {
 		return old, "", false, err
 	}
-	kept = keepPending(path, slug)
+	if kept, err = keepPending(path, slug); err != nil {
+		return old, "", false, err
+	}
 	if err := writeText(path, text); err != nil {
 		return old, text, kept, err
 	}
-	gitCommit(user, action+" "+slug+suffix, path)
-	return old, text, kept, nil
+	return old, text, kept, notCommitted(gitCommit(user, action+" "+slug+suffix, path))
 }
 
 // checkRename: why user can't rename slug to newSlug, if not; else the
@@ -237,7 +273,9 @@ func renamePageOp(user, slug, newSlug, suffix string) (changed []string, kept bo
 	if err != nil {
 		return nil, false, err
 	}
-	kept = keepPending(path, slug)
+	if kept, err = keepPending(path, slug); err != nil {
+		return nil, false, err
+	}
 	changed, err = movePage(user, path, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug+suffix)
 	return changed, kept, err
 }
@@ -292,7 +330,9 @@ func moveFolderOp(user, folder, newFolder, suffix string) (moves [][2]string, ch
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	kept = keepPendingPages(paths, folder+"/")
+	if kept, err = keepPendingPages(paths, folder+"/"); err != nil {
+		return nil, nil, 0, err
+	}
 	moves, changed, err = moveFolder(user, folder, newFolder, "Move "+folder+"/ to "+newFolder+"/"+suffix)
 	return moves, changed, kept, err
 }
@@ -303,19 +343,44 @@ func moveFolderOp(user, folder, newFolder, suffix string) (moves [][2]string, ch
 // the writer's own draft too: so the write never loses text that was never
 // in git, and its own commit holds only its change. True when it did.
 // (A write that continues the text, an auto-save or a checkbox, commits
-// only another user's draft: commitOthersDraft.)
-func keepPending(path, slug string) bool {
+// only another user's draft: commitOthersDraft.) A commit that fails
+// stops the write: the text would be lost.
+func keepPending(path, slug string) (bool, error) {
 	if path == "" || !exists(path) || !isUncommitted(path) {
-		return false
+		return false, nil
 	}
-	gitCommit(commitAuthorOf(path, ""), "Save "+slug, path)
-	return true
+	if err := gitCommit(commitAuthorOf(path, ""), "Save "+slug, path); err != nil {
+		return false, commitFailed(fmt.Sprintf("nothing was changed: %s has text not in git yet, which couldn't be committed first", slug), err)
+	}
+	return true, nil
+}
+
+// commitError: a write's own commit failed, or one that had to come first
+// (keepPending), msg saying what that left: a 500 from a route, a tool
+// error the assistant reads from an MCP tool (handleMCP).
+type commitError struct {
+	msg string
+	err error
+}
+
+func (e *commitError) Error() string { return e.msg + ": " + e.err.Error() }
+func (e *commitError) Unwrap() error { return e.err }
+
+func commitFailed(msg string, err error) error { return &commitError{msg, err} }
+
+// notCommitted: a write's own commit failed (gitCommit): the change is on
+// disk, in the Uncommitted list, but not in the history.
+func notCommitted(err error) error {
+	if err == nil {
+		return nil
+	}
+	return commitFailed("the change is written but not committed", err)
 }
 
 // keepPendingPages: keepPending for a write to many pages: those with
 // uncommitted changes are committed first, one commit per author, as
-// "Save <what>". Returns how many were.
-func keepPendingPages(paths []string, what string) int {
+// "Save <what>". Returns how many were; a commit that fails stops the write.
+func keepPendingPages(paths []string, what string) (int, error) {
 	pending := map[string]bool{}
 	for _, f := range gitUncommittedFiles() {
 		pending[filepath.Join(cfg.Data, f.Filepath)] = true
@@ -335,9 +400,11 @@ func keepPendingPages(paths []string, what string) int {
 		}
 	}
 	for _, a := range authors {
-		gitCommit(a, "Save "+what, byAuthor[a]...)
+		if err := gitCommit(a, "Save "+what, byAuthor[a]...); err != nil {
+			return 0, commitFailed("nothing was changed: pages with text not in git yet couldn't be committed first", err)
+		}
 	}
-	return n
+	return n, nil
 }
 
 // pendingNote: what a tool's answer says when keepPending committed text
