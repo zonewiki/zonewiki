@@ -170,6 +170,17 @@ def test_code_block_and_table(page, wiki):
                                "| Name | Column 2 |\n| --- | --- |\n|  |  |")
 
 
+def test_diagram_starts_a_flowchart_or_fences_the_selection(page, wiki):
+    textarea = _edit(page, wiki, "Text", 4)
+    _click(page, "diagram")
+    page.keyboard.type("X --> Y")   # the example's edge is selected
+    assert _body(textarea) == "Text\n\n```mermaid\nflowchart LR\n    X --> Y\n```"
+    expect(page.locator("#editor-preview .mermaid-diagram svg")).to_have_count(1)
+    textarea = _edit(page, wiki, "graph TD\n  A --> B\nText", 0, 18)
+    _click(page, "diagram")
+    assert _body(textarea) == "```mermaid\ngraph TD\n  A --> B\n```\nText"
+
+
 def test_button_edit_is_auto_saved(page, wiki):
     textarea = _edit(page, wiki, "word", 0, 4)
     _click(page, "bold")

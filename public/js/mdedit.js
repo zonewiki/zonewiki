@@ -296,9 +296,9 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     replaceRange(range.start, range.end, '```\n' + body + '\n```', 4, 4 + body.length);
   }
 
-  // A two-column table on its own lines after the current one, header
-  // selected so typing names the first column.
-  function insertTable() {
+  // A block on its own lines after the current one (on the current line if
+  // that is blank), selecting [selStart, selEnd) of the block.
+  function insertBlockAfterLine(block, selStart, selEnd) {
     const v = textarea.value;
     let at = v.indexOf('\n', textarea.selectionEnd);
     if (at === -1) at = v.length;
@@ -306,9 +306,30 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     const blankLine = !v.slice(lineStart, at).trim();
     const pos = blankLine ? lineStart : at;
     const before = blankLine ? '' : (v[pos - 1] === '\n' ? '\n' : '\n\n');
-    const table = '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |';
     const end = blankLine ? at : pos;
-    replaceRange(pos, end, before + table, before.length + 2, before.length + 10);
+    replaceRange(pos, end, before + block, before.length + selStart, before.length + selEnd);
+  }
+
+  // A two-column table, header selected so typing names the first column.
+  function insertTable() {
+    insertBlockAfterLine('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |', 2, 10);
+  }
+
+  // A Mermaid diagram: the selected lines fenced as one, or a small
+  // flowchart to start from, its edge selected so typing replaces it.
+  function insertDiagram() {
+    const fence = '```mermaid\n';
+    if (textarea.selectionEnd > textarea.selectionStart) {
+      const range = selectedLines();
+      const body = range.lines.join('\n');
+      if (body.trim()) {
+        replaceRange(range.start, range.end, fence + body + '\n```',
+          fence.length, fence.length + body.length);
+        return;
+      }
+    }
+    const head = fence + 'flowchart LR\n    ', edge = 'A[Start] --> B[End]';
+    insertBlockAfterLine(head + edge + '\n```', head.length, head.length + edge.length);
   }
 
   const FORMATS = {
@@ -323,6 +344,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     quote: toggleQuote,
     codeblock: insertCodeBlock,
     table: insertTable,
+    diagram: insertDiagram,
     link: insertLink,
     wikilink: wikilinkFormat,
     taskref: () => {
