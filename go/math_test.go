@@ -63,10 +63,12 @@ func TestMathInTable(t *testing.T) {
 	expectIn(t, render(t, "Outside $\\|x\\|$\n", Env{}), `<span class="math math-inline">\|x\|</span>`)
 }
 
-// A heading's id keeps its math's TeX, as [[Page#Section]] computes it from
-// the source ($a_1 b_2$ is no emphasis there either).
+// A heading's id keeps its math's TeX and its code's text, as
+// [[Page#Section]] computes it from the source ($a_1 b_2$ and `a_b` are no
+// emphasis there either).
 func TestMathHeadingID(t *testing.T) {
-	for _, h := range []string{"Area $x_1$", "Sum $a_1 + b_2$ here", "Price $5 and $6"} {
+	for _, h := range []string{"Area $x_1$", "Sum $a_1 + b_2$ here", "Price $5 and $6",
+		"Code `$x$` and $y$", "Hello `code` & more", "Run `snake_case_name`", "Pad `` a`b ``"} {
 		want := sectionAnchor(h)
 		expectIn(t, render(t, "## "+h+"\n", Env{}), `<h2 id="`+want+`">`)
 	}

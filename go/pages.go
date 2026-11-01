@@ -422,8 +422,10 @@ const notSpace = `[^)#?\s\v\pZ\x{85}]`
 // anyMdLinkRE: any markdown link's href, for link targets.
 var anyMdLinkRE = regexp.MustCompile(`\[(?:[^\]]*)\]\((` + notSpace + `+)[^)]*\)`)
 
-// pageLinkTargets: every slug a page links to (wikilinks, markdown links).
+// pageLinkTargets: every slug a page links to (wikilinks, markdown links),
+// not in code or math, which show them as text (maskCode).
 func pageLinkTargets(content, slug string) map[string]bool {
+	content, _ = maskCode(content)
 	targets := map[string]bool{}
 	for _, m := range wikilinkRE.FindAllStringSubmatch(content, -1) {
 		if page, _, _ := splitWikilink(m[1]); page != "" {

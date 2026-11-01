@@ -24,7 +24,9 @@ import (
 // ?from=private, so the editor it opens warns that the new page is shared and
 // offers it as a private one; on a shared page a link to the user's private
 // page is marked (wikilink-private), since others see it as plain text.
-func processWikilinks(rq *Req, text string, slugs map[string]bool, from string) string {
+// stash: maskCode's, when text is masked, so a section's anchor is made
+// from its code as written ([[Page#Run `make` now]]).
+func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, stash []string) string {
 	if slugs == nil {
 		slugs = slugSet()
 	}
@@ -32,7 +34,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool, from string) 
 		page, section, label := splitWikilink(m[2 : len(m)-2])
 		anchor := ""
 		if section != "" {
-			anchor = "#" + html.EscapeString(sectionAnchor(section))
+			anchor = "#" + html.EscapeString(sectionAnchor(unmaskCode(section, stash)))
 		}
 		label = html.EscapeString(label)
 		if page == "" {
@@ -89,7 +91,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, stash := maskCode(text)
 	text, embeds := processTasksEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
-	text = unmaskCode(processWikilinks(rq, text, nil, o.Page), stash)
+	text = unmaskCode(processWikilinks(rq, text, nil, o.Page, stash), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq)}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)
@@ -117,7 +119,7 @@ func renderNotes(rq *Req, texts []string, inline bool) []string {
 	for i, text := range texts {
 		text, stash := maskCode(text)
 		text, refs := maskTaskRefs(text)
-		text = unmaskCode(processWikilinks(rq, text, slugs, ""), stash)
+		text = unmaskCode(processWikilinks(rq, text, slugs, "", stash), stash)
 		result := markdown(text, &Env{Host: requestHost(rq)}, inline)
 		out[i] = headingIDAttrRE.ReplaceAllString(injectTaskRefs(rq, result, refs, nil), "$1")
 	}
@@ -384,7 +386,7 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	slugs := slugSet()
 	var items strings.Builder
 	for _, s := range sources {
-		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs, ""), &Env{Host: requestHost(rq)}, true) + "</li>")
+		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs, "", nil), &Env{Host: requestHost(rq)}, true) + "</li>")
 	}
 	return `<section class="page-sources"><h2 id="` + hid + `">Sources</h2><ul>` + items.String() + `</ul></section>`
 }

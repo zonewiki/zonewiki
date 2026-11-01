@@ -33,3 +33,13 @@ def test_heading_with_math_keeps_its_anchor(client, wiki_dir):
     assert '<h2 id="area-x_1">' in page
     link = client.get("/page/l", headers=HOST).get_data(as_text=True)
     assert 'href="/page/h#area-x_1"' in link
+
+
+def test_heading_with_code_keeps_its_anchor(client, wiki_dir):
+    # The page's id and a [[link#…]] to it keep the code's text alike.
+    write_page(wiki_dir, "c", "# C\n\n## Run `snake_case` now\n\ntext\n")
+    write_page(wiki_dir, "d", "# D\n\n[[c#Run `snake_case` now]]\n")
+    page = client.get("/page/c", headers=HOST).get_data(as_text=True)
+    assert '<h2 id="run-snake_case-now">' in page
+    link = client.get("/page/d", headers=HOST).get_data(as_text=True)
+    assert 'href="/page/c#run-snake_case-now"' in link

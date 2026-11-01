@@ -169,10 +169,11 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	// Tasks the page shows inline already aren't repeated under Linked tasks.
 	inline := pageTaskRefs(rq.user, content)
 	// A section a task links to is named as the page's heading says it.
-	masked, _ := maskCode(content)
+	masked, stash := maskCode(content)
 	headingNames := map[string]string{}
 	for _, m := range sectionHeadRE.FindAllStringSubmatch(masked, -1) {
-		headingNames[sectionAnchor(m[1])] = plainHeading(m[1])
+		heading := unmaskCode(m[1], stash)
+		headingNames[sectionAnchor(heading)] = plainHeading(heading)
 	}
 	var tasks []TaskLink
 	for _, t := range findTaskBacklinks(rq.user, slug) {

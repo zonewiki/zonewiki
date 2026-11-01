@@ -2444,6 +2444,15 @@ class TestAppendToPage:
         assert (wiki_dir / f"{QUICKNOTE}.md").exists()
         assert (wiki_dir / "garden.md").read_text(encoding="utf-8") == "# Garden\n\n## Notes (2026-10-08)\n"
 
+    def test_append_refuses_a_heading_with_code_it_has(self, client, wiki_dir):
+        # The page's heading counts with its code as written, not masked.
+        write_page(wiki_dir, QUICKNOTE, "# Notes\n\nx\n")
+        write_page(wiki_dir, "garden", "# Garden\n\n## Run `make` now\n")
+        loc = client.post(f"/append/{QUICKNOTE}", data={"page": "garden", "heading": "Run `make` now"},
+                          headers=HOST).headers["Location"]
+        assert "already has a section" in client.get(loc, headers=HOST).get_data(as_text=True)
+        assert (wiki_dir / "garden.md").read_text(encoding="utf-8") == "# Garden\n\n## Run `make` now\n"
+
     def test_append_only_quicknotes(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")
         write_page(wiki_dir, "other", "# Other\n")
@@ -2543,3 +2552,13 @@ def test_vendored_libraries_are_cached_and_gzipped(client, wiki_dir):
     own = client.get("/public/js/figures.js", headers={**HOST, "Accept-Encoding": "gzip"})
     assert own.status_code == 200 and "Cache-Control" not in own.headers
     assert client.get("/public/vendor/nope.js", headers={**HOST, "Accept-Encoding": "gzip"}).status_code == 404
+
+
+def test_links_in_code_and_math_are_no_backlinks(client, wiki_dir):
+    # They show as text, so they count as no link (and a rename leaves them).
+    write_page(wiki_dir, "target", "# Target\n")
+    write_page(wiki_dir, "code", "# Code\n\n`[[target]]` and\n\n```\n[See](target)\n```\n")
+    write_page(wiki_dir, "maths", "# Maths\n\nThe interval $[[target]]$.\n")
+    write_page(wiki_dir, "linker", "# Linker\n\nSee [[target]].\n")
+    assert backlinks(client, "target") == ["linker"]
+

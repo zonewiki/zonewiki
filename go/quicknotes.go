@@ -144,9 +144,9 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 		return "", false, err
 	}
 	anchor = sectionAnchor(heading)
-	masked, _ := maskCode(pageText)
+	masked, stash := maskCode(pageText) // no headings in code; a heading's own code counts
 	for _, m := range headingTextRE.FindAllStringSubmatch(masked, -1) {
-		if sectionAnchor(m[1]) == anchor {
+		if sectionAnchor(unmaskCode(m[1], stash)) == anchor {
 			return "", false, refuse("“" + target + "” already has a section “" + heading + "”")
 		}
 	}

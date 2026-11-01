@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -171,33 +172,59 @@ func applyRules(text string, rules []rule) string {
 func stripLinks(text string) string { return applyRules(text, stripLinkRules) }
 
 // plainHeading: a heading's text without inline markdown and links, for
-// its anchor. Math stays its TeX, as the render's heading id has it
-// ($a_1$ is no emphasis): masked while the rules run.
+// its anchor. Code and math stay their text, as the render's heading id
+// has them (`a_b` and $a_1$ are no emphasis): masked while the rules run.
 func plainHeading(text string) string {
-	var tex []string
+	var kept []string
 	var masked strings.Builder
 	at := 0
-	for _, s := range inlineMathSpans(text) {
-		masked.WriteString(text[at:s[0]])
-		masked.WriteString("\ue004" + strconv.Itoa(len(tex)) + "\ue005")
-		tex = append(tex, text[s[0]+s[2]:s[1]-s[2]])
-		at = s[1]
+	for _, s := range literalSpans(text) {
+		masked.WriteString(text[at:s.start])
+		masked.WriteString("\ue004" + strconv.Itoa(len(kept)) + "\ue005")
+		kept = append(kept, s.text)
+		at = s.end
 	}
 	masked.WriteString(text[at:])
 	plain := applyRules(stripLinks(masked.String()), plainHeadingRules)
-	if len(tex) > 0 {
-		plain = mathTokenRE.ReplaceAllStringFunc(plain, func(m string) string {
+	if len(kept) > 0 {
+		plain = keptTokenRE.ReplaceAllStringFunc(plain, func(m string) string {
 			i, err := strconv.Atoi(m[3 : len(m)-3])
-			if err != nil || i >= len(tex) {
+			if err != nil || i >= len(kept) {
 				return m
 			}
-			return tex[i]
+			return kept[i]
 		})
 	}
 	return strings.TrimSpace(plain)
 }
 
-var mathTokenRE = regexp.MustCompile("\ue004\\d+\ue005")
+var keptTokenRE = regexp.MustCompile("\ue004\\d+\ue005")
+
+// literalSpan: a code span or inline math in a line, and the text it shows.
+type literalSpan struct {
+	start, end int
+	text       string
+}
+
+// literalSpans: a line's code spans and inline math, in order; a code
+// span's text without its backticks and, as CommonMark has it, one space
+// at each end when both have one, math's its TeX.
+func literalSpans(line string) []literalSpan {
+	var spans []literalSpan
+	for _, c := range inlineCodeSpans(line) {
+		n := runLen(line, c[0])
+		code := line[c[0]+n : c[1]-n]
+		if len(code) > 1 && code[0] == ' ' && code[len(code)-1] == ' ' && strings.Trim(code, " ") != "" {
+			code = code[1 : len(code)-1]
+		}
+		spans = append(spans, literalSpan{c[0], c[1], code})
+	}
+	for _, m := range inlineMathSpans(line) {
+		spans = append(spans, literalSpan{m[0], m[1], line[m[0]+m[2] : m[1]-m[2]]})
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+	return spans
+}
 
 // Task metadata in markdown: - [ ] task <!--t:2026-06-12T18:35:00-->,
 // - [x] task <!--t:2026-06-12T18:35:00 d:2026-06-12T19:00:00-->.

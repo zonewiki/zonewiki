@@ -44,7 +44,7 @@ func TestWikilinks(t *testing.T) {
 		"[[Notes/My Page]]":          `<a href="/page/notes/my-page" class="wikilink">Notes/My Page</a>`,
 		"[[notes/my-page|the page]]": `<a href="/page/notes/my-page" class="wikilink">the page</a>`,
 		"[[Missing <b>]]":            `<a href="/page/missing-b" class="wikilink wikilink-missing">Missing &lt;b&gt;</a>`,
-		"[[index#Über **all** `x`]]": "<a href=\"/page/index#über-all\" class=\"wikilink\">index › Über **all** `x`</a>",
+		"[[index#Über **all** `x`]]": "<a href=\"/page/index#über-all-x\" class=\"wikilink\">index › Über **all** `x`</a>",
 		"[[#Here [[x]]]]":            `[[#Here <a href="/page/x" class="wikilink wikilink-missing">x</a>]]`,
 		"[[#Section one]]":           `<a href="#section-one" class="wikilink">Section one</a>`,
 		"[[secret|words stay]]":      `<span class="wikilink-hidden">words stay</span>`,
@@ -52,7 +52,7 @@ func TestWikilinks(t *testing.T) {
 		"[[it's]]":                   `<a href="/page/it-s" class="wikilink wikilink-missing">it&#39;s</a>`,
 	}
 	for in, want := range cases {
-		if got := processWikilinks(sharing, in, slugs, ""); got != want {
+		if got := processWikilinks(sharing, in, slugs, "", nil); got != want {
 			t.Errorf("%s:\n got %s\nwant %s", in, got, want)
 		}
 	}
@@ -64,7 +64,7 @@ func prepare(text string) (string, []tasksEmbed, []string) {
 	text, stash := maskCode(text)
 	text, embeds := processTasksEmbeds(nil, text, false)
 	text, refs := maskTaskRefs(text)
-	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, ""), stash), embeds, refs
+	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, "", stash), stash), embeds, refs
 }
 
 // Code is masked: [[…]] in it stays as written.
