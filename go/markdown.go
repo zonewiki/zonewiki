@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/yuin/goldmark"
@@ -31,7 +32,19 @@ type Env struct {
 	EditSlug     string
 	SectionChips map[string]string
 	Host         string
+	HeadingIDs   headingIDs // what a heading's id becomes
 }
+
+// headingIDs: how headings carry their ids: as id (a page), as data-pid
+// (the search modal's preview, over a page with its own ids), or not at
+// all (task notes and comments, inside a page).
+type headingIDs int
+
+const (
+	headingAsID headingIDs = iota
+	headingPID
+	headingNoID
+)
 
 // typographer: curly quotes, dashes and the ellipsis; not « » for << >>.
 var typographer = extension.NewTypographer(extension.WithTypographicSubstitutions(
@@ -40,6 +53,44 @@ var typographer = extension.NewTypographer(extension.WithTypographicSubstitution
 // markdown renders src; inline renders it as one paragraph's inline
 // content (no headings, lists, quotes …).
 func markdown(src string, env *Env, inline bool) string {
+	pool := &blockRenderers
+	if inline {
+		pool = &inlineRenderers
+	}
+	m := pool.Get().(*mdRenderer)
+	defer pool.Put(m)
+	m.renderer.sections = 0
+	m.renderer.env, m.transformer.env = env, env
+	var buf bytes.Buffer
+	if err := m.md.Convert([]byte(src), &buf); err != nil {
+		logf("markdown: %v", err)
+	}
+	m.renderer.env, m.transformer.env = nil, nil
+	// Escaped text never holds a "<!--", so only raw HTML's comments match.
+	out := taskDates(buf.String())
+	if inline {
+		out = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(out), "<p>"), "</p>")
+	}
+	return out
+}
+
+// mdRenderer: a goldmark set up with Zone's rules, built once and reused
+// (a sync.Pool each for block and inline rendering): its transformer and
+// renderer are bound to one render's Env at a time, and the renderer
+// counts the sections it has numbered, so a render has one to itself.
+type mdRenderer struct {
+	md          goldmark.Markdown
+	transformer *zoneTransformer
+	renderer    *zoneRenderer
+}
+
+var (
+	blockRenderers  = sync.Pool{New: func() any { return newMDRenderer(false) }}
+	inlineRenderers = sync.Pool{New: func() any { return newMDRenderer(true) }}
+)
+
+func newMDRenderer(inline bool) *mdRenderer {
+	m := &mdRenderer{transformer: &zoneTransformer{}, renderer: &zoneRenderer{}}
 	opts := []goldmark.Option{
 		goldmark.WithExtensions(extension.Table, extension.Strikethrough,
 			extension.NewLinkify(extension.WithLinkifyURLRegexp(urlRE)),
@@ -49,11 +100,11 @@ func markdown(src string, env *Env, inline bool) string {
 				util.Prioritized(alertTransformer{}, 100),
 				util.Prioritized(taskTransformer{}, 200),
 			),
-			parser.WithASTTransformers(util.Prioritized(&zoneTransformer{env: env}, 1000)),
+			parser.WithASTTransformers(util.Prioritized(m.transformer, 1000)),
 		),
 		goldmark.WithRendererOptions(
 			html.WithUnsafe(), html.WithXHTML(),
-			renderer.WithNodeRenderers(util.Prioritized(&zoneRenderer{env: env}, 100)),
+			renderer.WithNodeRenderers(util.Prioritized(m.renderer, 100)),
 		),
 	}
 	if inline {
@@ -63,16 +114,8 @@ func markdown(src string, env *Env, inline bool) string {
 			parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
 		))}, opts...)
 	}
-	var buf bytes.Buffer
-	if err := goldmark.New(opts...).Convert([]byte(src), &buf); err != nil {
-		logf("markdown: %v", err)
-	}
-	// Escaped text never holds a "<!--", so only raw HTML's comments match.
-	out := taskDates(buf.String())
-	if inline {
-		out = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(out), "<p>"), "</p>")
-	}
-	return out
+	m.md = goldmark.New(opts...)
+	return m
 }
 
 // urlRE: goldmark's linkify pattern, but the host needs no dot, so a bare
@@ -322,7 +365,19 @@ func (r *zoneRenderer) heading(w util.BufWriter, src []byte, node ast.Node, ente
 			fmt.Fprintf(w, `<div class="section-header section-header-%s">`, tag)
 		}
 		w.WriteString("<" + tag)
-		html.RenderAttributes(w, n, html.HeadingAttributeFilter)
+		if r.env.HeadingIDs == headingAsID {
+			html.RenderAttributes(w, n, html.HeadingAttributeFilter)
+		} else {
+			id, hasID := n.AttributeString("id")
+			for _, a := range n.Attributes() {
+				if string(a.Name) != "id" && html.HeadingAttributeFilter.Contains(a.Name) {
+					fmt.Fprintf(w, ` %s="%s"`, a.Name, util.EscapeHTML(attrBytes(a.Value)))
+				}
+			}
+			if hasID && r.env.HeadingIDs == headingPID {
+				fmt.Fprintf(w, ` data-pid="%s"`, util.EscapeHTML(attrBytes(id)))
+			}
+		}
 		w.WriteString(">")
 		return ast.WalkContinue, nil
 	}
@@ -432,4 +487,15 @@ func (r *zoneRenderer) htmlBlock(w util.BufWriter, source []byte, node ast.Node,
 	}
 	_, _ = w.Write(defuseHTML(raw))
 	return ast.WalkContinue, nil
+}
+
+// attrBytes: an attribute's value as goldmark keeps it ([]byte or string).
+func attrBytes(v any) []byte {
+	switch v := v.(type) {
+	case []byte:
+		return v
+	case string:
+		return []byte(v)
+	}
+	return []byte(fmt.Sprint(v))
 }

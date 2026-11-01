@@ -77,6 +77,7 @@ type RenderOpts struct {
 	PreferLists        []string
 	EditSlug           string
 	SectionTasks       []TaskLink
+	HeadingIDs         headingIDs // as data-pid in a preview (Env.HeadingIDs)
 }
 
 // renderMd renders a page's markdown.
@@ -92,7 +93,8 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, embeds := processTasksEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
 	text = unmaskCode(processWikilinks(rq, text, nil, o.Page, stash), stash)
-	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq)}
+	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
+		HeadingIDs: o.HeadingIDs}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)
 	if len(embeds) > 0 {
@@ -108,8 +110,6 @@ func requestHost(rq *Req) string {
 	return rq.r.Host
 }
 
-var headingIDAttrRE = regexp.MustCompile(`(<h[1-6])` + `[ \t\n\r\f\v]+id="[^"]*"`)
-
 // renderNotes renders task notes (or, inline, comments: one line each)
 // as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
 // without heading ids, which would clash with the page's own.
@@ -120,8 +120,8 @@ func renderNotes(rq *Req, texts []string, inline bool) []string {
 		text, stash := maskCode(text)
 		text, refs := maskTaskRefs(text)
 		text = unmaskCode(processWikilinks(rq, text, slugs, "", stash), stash)
-		result := markdown(text, &Env{Host: requestHost(rq)}, inline)
-		out[i] = headingIDAttrRE.ReplaceAllString(injectTaskRefs(rq, result, refs, nil), "$1")
+		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID}, inline)
+		out[i] = injectTaskRefs(rq, result, refs, nil)
 	}
 	return out
 }

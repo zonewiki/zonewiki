@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -143,5 +145,33 @@ func TestRawHTMLDefused(t *testing.T) {
 		`<input class="task-list-item-checkbox" type="checkbox" />`)
 	if notes := markdown("a <form action=/x><button>b</button></form>", &Env{}, true); strings.Contains(notes, "<form ") {
 		t.Errorf("a task's notes (inline): %s", notes)
+	}
+}
+
+// Renders at once each keep their own Env and section numbers, though
+// they share pooled goldmark instances.
+func TestConcurrentRendersKeepTheirEnv(t *testing.T) {
+	var wg sync.WaitGroup
+	errs := make(chan string, 64)
+	for i := range 64 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			slug := fmt.Sprintf("p%d", i)
+			html := markdown("## One\n\ntext\n\n## Two\n", &Env{EditSlug: slug}, false)
+			for _, want := range []string{"/edit/" + slug + "?section=1", "/edit/" + slug + "?section=2"} {
+				if !strings.Contains(html, want) {
+					errs <- fmt.Sprintf("%s: no %s in %s", slug, want, html)
+				}
+			}
+			if strings.Count(html, "?section=") != 2 {
+				errs <- slug + ": " + html
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Error(e)
 	}
 }

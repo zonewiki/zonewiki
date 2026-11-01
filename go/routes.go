@@ -85,7 +85,6 @@ func notesPage(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	pidRE         = regexp.MustCompile(`(<h[1-6]\b[^>]*?) id="`)
 	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + spaceClass + `+(.+?)` + spaceClass + `*#*` + spaceClass + `*$`)
 )
 
@@ -106,8 +105,8 @@ func apiPagePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	masked, stash := maskCode(content)
 	masked = tasksRE.ReplaceAllString(masked, "*(tasks)*")
-	out := renderMd(rq, stripH1(unmaskCode(masked, stash)), RenderOpts{})
-	writeJSON(w, http.StatusOK, M{"title": pageTitle(content, slug), "html": pidRE.ReplaceAllString(out, `$1 data-pid="`)})
+	out := renderMd(rq, stripH1(unmaskCode(masked, stash)), RenderOpts{HeadingIDs: headingPID})
+	writeJSON(w, http.StatusOK, M{"title": pageTitle(content, slug), "html": out})
 }
 
 func viewPage(w http.ResponseWriter, r *http.Request) {
