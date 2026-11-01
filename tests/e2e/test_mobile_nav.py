@@ -2,6 +2,7 @@
 status badges on phones, and the compact Plan board."""
 
 import re
+import time
 from datetime import date
 
 from playwright.sync_api import expect
@@ -185,13 +186,16 @@ def _count_trusted_clicks(phone):
 
 def _touch_tap(phone, locator, below=0):
     """A tap with real touch events, near the bottom edge of `locator`, or
-    `below` px under it."""
+    `below` px under it. The events carry their own times, 50ms apart: a
+    busy CI runner can take longer than the bar's 500ms between the two
+    calls, and the bar leaves a press that long to the browser."""
     b = locator.bounding_box()
     y = b["y"] + b["height"] + below if below else b["y"] + b["height"] - 4
     cdp = phone.context.new_cdp_session(phone)
-    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [
+    t = time.time()
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "timestamp": t, "touchPoints": [
         {"x": b["x"] + b["width"] / 2, "y": y}]})
-    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "timestamp": t + 0.05, "touchPoints": []})
 
 
 def test_tab_bar_tap_does_not_leave_its_click_to_the_browser(new_page, wiki):
