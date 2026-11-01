@@ -2029,6 +2029,7 @@ def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     notes = page.locator("#task-edit-desc")
     bar = modal.locator("#task-edit-format")
     expect(bar.locator('[data-fmt="maketask"]')).to_have_count(0)     # the editor's own
+    expect(bar.locator('[data-fmt="tasklist"]')).to_have_count(0)     # notes show no embed
     notes.click()
     page.keyboard.type("make it loud")
     notes.evaluate("ta => ta.setSelectionRange(8, 12)")

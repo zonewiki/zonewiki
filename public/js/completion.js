@@ -140,6 +140,8 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
   function context() {
     const before = ta.value.slice(0, ta.selectionStart);
     const w = before.match(/\[\[([^\][\n]*)$/);
+    // `[[tasks:` embeds a task list: no page to complete there.
+    if (w && /^tasks:/i.test(w[1])) return [null];
     if (w) return tasks && /^task:/i.test(w[1]) ? ['task', w[1].slice(5)] : ['wikilink', w[1]];
     // [label]( then what looks like a page path (no space, no closing paren)
     const m = before.match(/\[[^\]]*\]\(([^()\n]*)$/);

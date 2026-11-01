@@ -348,6 +348,12 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     insertBlockAfterLine(head + edge + '\n```', head.length, head.length + edge.length);
   }
 
+  // A task list: `[[tasks: ]]` on its own line, the cursor where its
+  // params go (list=, tag=, view= …; none embeds all tasks).
+  function insertTaskList() {
+    insertBlockAfterLine('[[tasks: ]]', 9, 9);
+  }
+
   const FORMATS = {
     bold: () => toggleWrap('**'),
     italic: () => toggleWrap('_'),
@@ -370,6 +376,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
       const at = textarea.selectionEnd;
       replaceRange(at, at, '[[task:', 7, 7);
     },
+    tasklist: insertTaskList,
     attach: () => attachInput?.click(),
     ...formats,
   };

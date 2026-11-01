@@ -58,7 +58,7 @@
         </span>
       </div>
       {{- /* The editor's bar, without Make task (js/mdedit.js). */}}
-      {{template "format_bar" (dict "bar_id" (print "task-edit-format" .sfx) "attach_id" (print "task-edit-attach" .sfx) "nomaketask" true)}}
+      {{template "format_bar" (dict "bar_id" (print "task-edit-format" .sfx) "attach_id" (print "task-edit-attach" .sfx) "pageonly" true)}}
       <textarea id="task-edit-desc{{.sfx}}" name="description" rows="12"></textarea>
       <div class="task-notes-preview page-content" id="task-edit-preview{{.sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>

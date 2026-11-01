@@ -1,5 +1,7 @@
 """Editor formatting bar: buttons and Ctrl+B/I/K turn the selection into markdown."""
 
+import re
+
 from playwright.sync_api import expect
 
 from conftest import TOUCH_PHONE
@@ -199,6 +201,20 @@ def test_diagram_starts_a_flowchart_or_fences_the_selection(page, wiki):
     textarea = _edit(page, wiki, "graph TD\n  A --> B\nText", 0, 18)
     _click(page, "diagram")
     assert _body(textarea) == "```mermaid\ngraph TD\n  A --> B\n```\nText"
+
+
+def test_task_list_embeds_the_tasks_with_the_cursor_on_its_params(page, wiki):
+    page.request.post("/api/tasks", data={"title": "Buy milk", "tags": "shop"})
+    textarea = _edit(page, wiki, "Shopping", 8)
+    _click(page, "tasklist")
+    # No page completion inside `[[tasks:`: it is an embed, not a link.
+    expect(page.locator(".wikilink-ac-item")).to_have_count(0)
+    page.keyboard.type("tag=shop view=open")
+    expect(page.locator(".wikilink-ac-item")).to_have_count(0)
+    assert _body(textarea) == "Shopping\n\n[[tasks: tag=shop view=open]]"
+    page.keyboard.press("Control+s")   # Done: to the page
+    page.wait_for_url("**/page/fmt")
+    expect(page.locator(".tasks-app .task-item")).to_have_text([re.compile("Buy milk")])
 
 
 def test_button_edit_is_auto_saved(page, wiki):
