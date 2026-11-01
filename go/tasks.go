@@ -180,7 +180,8 @@ const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
 // a page's embeds); headless hides it but for its edit modal (the editor's
 // Make task, c t on any page), and tasks.js skips its shortcuts. private:
 // a new task here is private (a page in user's own folder).
-func buildTasksEmbed(user string, params TasksParams, instance int, headless, private bool) string {
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool) string {
+	user := rq.who()
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
 	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
@@ -202,7 +203,7 @@ func buildTasksEmbed(user string, params TasksParams, instance int, headless, pr
 			labels[i] = name
 		}
 	}
-	lists := taskLists(user)
+	lists := rq.taskLists()
 	names = sortedKeys(lists)
 	homes := map[string]string{}
 	for _, n := range names {
@@ -244,7 +245,7 @@ func processTasksEmbeds(rq *Req, text string, private bool) (string, []tasksEmbe
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq.who(), parseTasksParams(embedArgs(g)), len(embeds), false, private)})
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, parseTasksParams(embedArgs(g)), len(embeds), false, private)})
 		return ph
 	})
 	return text, embeds
@@ -310,7 +311,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq.user, TasksParams{}, 0, true, rq.homePrivate()))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate()))
 	})
 	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)

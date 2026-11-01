@@ -28,7 +28,7 @@ import (
 // from its code as written ([[Page#Run `make` now]]).
 func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, stash []string) string {
 	if slugs == nil {
-		slugs = slugSet()
+		slugs = rq.slugSet()
 	}
 	return wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
 		page, section, label := splitWikilink(m[2 : len(m)-2])
@@ -114,7 +114,7 @@ var headingIDAttrRE = regexp.MustCompile(`(<h[1-6])` + `[ \t\n\r\f\v]+id="[^"]*"
 // as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
 // without heading ids, which would clash with the page's own.
 func renderNotes(rq *Req, texts []string, inline bool) []string {
-	slugs := slugSet()
+	slugs := rq.slugSet()
 	out := make([]string, len(texts))
 	for i, text := range texts {
 		text, stash := maskCode(text)
@@ -179,7 +179,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 		}
 		html = html[i+4:]
 	}
-	lists := taskLists(rq.who())
+	lists := rq.taskLists()
 	return taskRefTokenRE.ReplaceAllStringFunc(b.String(), func(m string) string {
 		i, err := strconv.Atoi(taskRefTokenRE.FindStringSubmatch(m)[1])
 		if err != nil || i >= len(refs) {
@@ -309,7 +309,7 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 	if len(order) == 0 {
 		return chips
 	}
-	lists := taskLists(rq.who())
+	lists := rq.taskLists()
 	for _, anchor := range order {
 		ts := byAnchor[anchor]
 		var items strings.Builder
@@ -383,7 +383,7 @@ func renderSourcesHTML(rq *Req, sources []string, article string) string {
 	for n := 1; strings.Contains(article, `id="`+hid+`"`); n++ {
 		hid = "sources-" + strconv.Itoa(n)
 	}
-	slugs := slugSet()
+	slugs := rq.slugSet()
 	var items strings.Builder
 	for _, s := range sources {
 		items.WriteString("<li>" + markdown(processWikilinks(rq, s, slugs, "", nil), &Env{Host: requestHost(rq)}, true) + "</li>")

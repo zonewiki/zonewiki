@@ -739,7 +739,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		}
 	}
 	sections := bestSections(rq, q, slugs)
-	names := taskLists(rq.user)
+	names := rq.taskLists()
 	for _, d := range docs {
 		var section *SearchDoc
 		excerptOf := d.ExcerptText

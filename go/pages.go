@@ -11,14 +11,19 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Req is what a response depends on besides the wiki: the request (its
-// sharing mode) and what is looked up once per request.
+// sharing mode) and what is looked up once per request: the wiki's pages
+// (one walk of its folders, however many parts of a page view list them),
+// the task lists and the Tasks home they declare. A request that writes
+// pages and then lists them would see the list from before: none does.
 type Req struct {
 	r        *http.Request
 	user     string // who is asking (userOf): "" without users
@@ -26,6 +31,60 @@ type Req struct {
 	homeDone bool
 	home     *TasksHome
 	counts   *TaskCounts
+	files    []PageFile // iterPages, once
+	sorted   []PageFile // the same, by slug
+	slugs    map[string]bool
+	lists    map[string]TasksHome
+}
+
+// pageFiles: iterPages, once per request (rq nil: listed now).
+func (rq *Req) pageFiles() []PageFile {
+	if rq == nil {
+		return iterPages()
+	}
+	if rq.files == nil {
+		rq.files = iterPages()
+		if rq.files == nil {
+			rq.files = []PageFile{}
+		}
+	}
+	return rq.files
+}
+
+// sortedPageFiles: sortedPages, once per request.
+func (rq *Req) sortedPageFiles() []PageFile {
+	if rq == nil {
+		return sortedPages()
+	}
+	if rq.sorted == nil {
+		rq.sorted = sortPages(slices.Clone(rq.pageFiles()))
+	}
+	return rq.sorted
+}
+
+// slugSet: every page's slug (slugSet), once per request.
+func (rq *Req) slugSet() map[string]bool {
+	if rq == nil {
+		return slugSet()
+	}
+	if rq.slugs == nil {
+		rq.slugs = map[string]bool{}
+		for _, p := range rq.pageFiles() {
+			rq.slugs[p.Slug] = true
+		}
+	}
+	return rq.slugs
+}
+
+// taskLists: taskLists for the user asking, once per request.
+func (rq *Req) taskLists() map[string]TasksHome {
+	if rq == nil {
+		return taskLists("")
+	}
+	if rq.lists == nil {
+		rq.lists = taskListsIn(rq.sortedPageFiles(), rq.user)
+	}
+	return rq.lists
 }
 
 func newReq(r *http.Request) *Req {
@@ -140,9 +199,13 @@ func writeText(p, text string) error { return atomicWrite(p, text) }
 // PageFile is a page's file and slug.
 type PageFile struct{ Path, Slug string }
 
+// pageWalks counts iterPages' walks of the wiki (a test's measure).
+var pageWalks atomic.Int64
+
 // iterPages lists every page, skipping _* folders (assets, the tasks) and
-// hidden ones (.leaf, .git), which it doesn't walk into.
+// hidden ones (.zone, .git), which it doesn't walk into.
 func iterPages() []PageFile {
+	pageWalks.Add(1)
 	var out []PageFile
 	root := cfg.Data
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -164,8 +227,10 @@ func iterPages() []PageFile {
 	return out
 }
 
-func sortedPages() []PageFile {
-	pages := iterPages()
+func sortedPages() []PageFile { return sortPages(iterPages()) }
+
+// sortPages sorts pages by slug, in place.
+func sortPages(pages []PageFile) []PageFile {
 	sort.Slice(pages, func(i, j int) bool { return pages[i].Slug < pages[j].Slug })
 	return pages
 }
@@ -527,9 +592,12 @@ type TasksHome struct {
 // by name; when several pages declare one, its home is the first A–Z in
 // user's private folder, else the first shared one A–Z. A list declared on
 // a private page is its owner's alone: for others its name is a plain tag.
-func taskLists(user string) map[string]TasksHome {
+func taskLists(user string) map[string]TasksHome { return taskListsIn(sortedPages(), user) }
+
+// taskListsIn: taskLists over pages (sorted by slug).
+func taskListsIn(pages []PageFile, user string) map[string]TasksHome {
 	out := map[string]TasksHome{}
-	for _, p := range sortedPages() {
+	for _, p := range pages {
 		if !canSee(user, p.Slug) {
 			continue
 		}
@@ -563,9 +631,12 @@ func taskList(t *Task, names map[string]TasksHome) string {
 // lookupTasksHome: the page with a [[tasks: … home=1]] embed, user's own
 // tasks: one in their private folder first, else a shared one (the first
 // slug A–Z when several declare one); nil: the Tasks link goes to /tasks.
-func lookupTasksHome(user string) *TasksHome {
+func lookupTasksHome(user string) *TasksHome { return lookupTasksHomeIn(sortedPages(), user) }
+
+// lookupTasksHomeIn: lookupTasksHome over pages (sorted by slug).
+func lookupTasksHomeIn(pages []PageFile, user string) *TasksHome {
 	var shared *TasksHome
-	for _, p := range sortedPages() {
+	for _, p := range pages {
 		own := ownPrivate(user, p.Slug)
 		if !canSee(user, p.Slug) || shared != nil && !own {
 			continue
@@ -590,7 +661,7 @@ func (rq *Req) tasksHome() *TasksHome {
 		return lookupTasksHome("")
 	}
 	if !rq.homeDone {
-		rq.home, rq.homeDone = lookupTasksHome(rq.user), true
+		rq.home, rq.homeDone = lookupTasksHomeIn(rq.sortedPageFiles(), rq.user), true
 	}
 	return rq.home
 }
@@ -613,7 +684,7 @@ func (rq *Req) tasksHomeSlug() string {
 // request may see (rq nil: all).
 func allBacklinkCounts(rq *Req) map[string]int {
 	counts := map[string]int{}
-	for _, p := range iterPages() {
+	for _, p := range rq.pageFiles() {
 		if hiddenPage(rq, p.Slug) {
 			continue
 		}
@@ -631,9 +702,12 @@ func allBacklinkCounts(rq *Req) map[string]int {
 type PageRef struct{ Slug, Title string }
 
 // findBacklinks: the pages with a link to slug, A–Z by title.
-func findBacklinks(slug string) []PageRef {
+func findBacklinks(slug string) []PageRef { return findBacklinksIn(iterPages(), slug) }
+
+// findBacklinksIn: findBacklinks among pages.
+func findBacklinksIn(pages []PageFile, slug string) []PageRef {
 	var out []PageRef
-	for _, p := range iterPages() {
+	for _, p := range pages {
 		if p.Slug == slug {
 			continue
 		}

@@ -143,7 +143,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	title := pageTitle(content, slug)
 	var backlinks []PageRef
-	for _, b := range findBacklinks(slug) {
+	for _, b := range findBacklinksIn(rq.pageFiles(), slug) {
 		if !hiddenPage(rq, b.Slug) {
 			backlinks = append(backlinks, b)
 		}
@@ -304,7 +304,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		"private_offer":   privateOffer,
 		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
-		"tasks_html":      htmlOf(buildTasksEmbed(rq.user, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
+		"tasks_html":      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -742,7 +742,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	counts := allBacklinkCounts(rq)
 	pages := []M{}
-	for _, p := range iterPages() {
+	for _, p := range rq.pageFiles() {
 		if hiddenPage(rq, p.Slug) {
 			continue
 		}
@@ -781,7 +781,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/tasks"
 	if list != "" {
-		if declared, ok := taskLists(rq.user)[list]; ok {
+		if declared, ok := rq.taskLists()[list]; ok {
 			params = declared.Params
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
 			home = &TasksHome{Slug: declared.Slug, Title: t}
@@ -793,7 +793,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
-	data := M{"heading": heading, "list_name": list, "tasks_html": htmlOf(buildTasksEmbed(rq.user, params, 0, false, private)),
+	data := M{"heading": heading, "list_name": list, "tasks_html": htmlOf(buildTasksEmbed(rq, params, 0, false, private)),
 		"breadcrumb_html": breadcrumb(rq, crumbs, key, true, title, "")}
 	if home != nil {
 		data["home"] = home

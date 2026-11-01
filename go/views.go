@@ -344,7 +344,7 @@ func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []strin
 		sections = append(sections, M{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(backlinks)})
 	}
 	if len(tasks) > 0 {
-		lists := taskLists(rq.user)
+		lists := rq.taskLists()
 		var links []M
 		for _, t := range tasks {
 			links = append(links, M{"href": taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),
@@ -449,7 +449,7 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 	}
 	if isQuicknote(slug) {
 		var wiki []PageRef
-		for _, p := range iterPages() {
+		for _, p := range rq.pageFiles() {
 			if !isQuicknote(p.Slug) && !hiddenPage(rq, p.Slug) {
 				t, _ := pageMeta(p.Path, p.Slug)
 				wiki = append(wiki, PageRef{p.Slug, t})
