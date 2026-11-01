@@ -10,6 +10,7 @@ import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
 import { HIGHLIGHT_CODE, renderFigures } from './js/figures.js';
 import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { openDatePicker } from './js/datepicker.js';
 import { DATES, LOCALE, attachTagAc, commentStamp, commentWhen, dateOffset, dueDateClass, esc, formatDate, hashWordAtCaret, insertHashTag, isDueNow, noSpacesInTags, noticeFromResponse, placeToast, shortDate, showNotice, startsAfterDeadline, todayStr, urgencyClass } from './js/taskutil.js';
 
 // Pure task logic lives in tasks-core.js.
@@ -127,6 +128,9 @@ function initTasksInstance(appEl) {
 const sfx = appEl.dataset.instance && appEl.dataset.instance !== '0'
   ? '-' + appEl.dataset.instance : '';
 const instanceId = appEl.dataset.instance || '0';
+// The app's state its modules share (js/task*.js), as st.name; what
+// only one part of it uses stays a variable there.
+const st = {};
 
 const listEl = document.getElementById('tasks-list' + sfx);
 const tabsEl = document.getElementById('tasks-tabs' + sfx);
@@ -158,16 +162,16 @@ const headless = appEl.dataset.headless === '1';
 
 if (!listEl) return;
 
-let tasks = [];
+st.tasks = [];
 let completedLoaded = false;
-let activeView = 'focus';
-let draggedId = null;
-let selectedId  = null;
-let selectedIds = new Set();
-let anchorId    = null;
+st.activeView = 'focus';
+st.draggedId = null;
+st.selectedId  = null;
+st.selectedIds = new Set();
+st.anchorId    = null;
 // Selection mode (⋯ → Select; meant for touch, which has no Shift or Ctrl):
 // a tap or click on a card adds or drops it, nothing else on the card reacts.
-let selectMode  = false;
+st.selectMode  = false;
 let completedLimit = 50;
 let undoTimer  = null;
 let undoToastEl = null;
@@ -187,18 +191,18 @@ function clearBoardDropOver() {
   listEl.querySelectorAll('.board-drop-over').forEach(el => el.classList.remove('board-drop-over'));
 }
 listEl.addEventListener('dragover', e => {
-  if (activeView !== 'plan' || !draggedId) return;
+  if (st.activeView !== 'plan' || !st.draggedId) return;
   const div = boardDivider(e.target);
   if (!div || !div.dataset.dropBucket) return;  // non-droppable section
   e.preventDefault();
   if (!div.classList.contains('board-drop-over')) { clearBoardDropOver(); div.classList.add('board-drop-over'); }
 });
 listEl.addEventListener('drop', e => {
-  if (activeView !== 'plan' || !draggedId) return;
+  if (st.activeView !== 'plan' || !st.draggedId) return;
   const div = boardDivider(e.target);
   if (!div || !div.dataset.dropBucket) return;
   e.preventDefault();
-  dropOnBucket(draggedId, div);
+  dropOnBucket(st.draggedId, div);
 });
 // Move a task to a board section: a day sets its start date, Unplanned
 // clears it, and Later asks for a date. A drop on the task's own section
@@ -208,7 +212,7 @@ listEl.addEventListener('drop', e => {
 function dropOnBucket(id, div) {
   clearBoardDropOver();
   const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-  const task = tasks.find(t => t.id === id);
+  const task = st.tasks.find(t => t.id === id);
   const recommit = div.dataset.dropDay === todayStr() && task && TasksCore.isCarried(task, todayStr());
   if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later' && !recommit) return;
   if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
@@ -221,7 +225,7 @@ function dropOnBucket(id, div) {
 
 // Returns whether the task now starts on `day`.
 async function planOnDay(id, day) {
-  const task = tasks.find(t => t.id === id);
+  const task = st.tasks.find(t => t.id === id);
   if (!task || !startsAfterDeadline(task, day)) return updateTask(id, { start_date: day });
   if (!await confirmDeadlineMove(task, day)) return null;
   const old = { start_date: task.start_date ?? null, due_date: task.due_date,
@@ -246,8 +250,8 @@ function toggleNoteCheck(id, idx) {
     if (!res?.ok) { showNotice('Could not save the checkbox'); render(); return; }
     const updated = await res.json();
     await renderTexts(textsOf([updated]));
-    const i = tasks.findIndex(t => t.id === id);
-    if (i !== -1) tasks[i] = updated;
+    const i = st.tasks.findIndex(t => t.id === id);
+    if (i !== -1) st.tasks[i] = updated;
     render();
     refreshOtherInstances(instanceId);
   });
@@ -273,14 +277,14 @@ listEl.addEventListener('click', e => {
 // Touch: the first tap on a card selects it (and expands it in compact
 // view), a tap on the selected card opens the editor (double-click, the
 // desktop gesture, is unreliable on phones). Mouse clicks keep selecting.
-let lastPointerType = 'mouse';
+st.lastPointerType = 'mouse';
 // Whether the press started on the one selected card: the compat mousedown
 // that touch fires before the click selects it, so the click can't tell.
 let pressedSelected = false;
 listEl.addEventListener('pointerdown', e => {
-  lastPointerType = e.pointerType;
+  st.lastPointerType = e.pointerType;
   const pressed = e.target.closest('.task-item');
-  pressedSelected = !!pressed && selectedIds.size === 1 && selectedId === pressed.dataset.id;
+  pressedSelected = !!pressed && st.selectedIds.size === 1 && st.selectedId === pressed.dataset.id;
   // Under a finger a card is not natively draggable: phone browsers (Chrome
   // on Android, iOS Safari) start their own HTML5 drag on a long press, which
   // cancels the touch drag below mid-gesture, so the first drop was lost.
@@ -299,7 +303,7 @@ listEl.addEventListener('click', e => {
 // Selection mode: a tap or click anywhere on a card (its checkbox, a link,
 // a date chip too) adds or drops the card, and does nothing else.
 listEl.addEventListener('click', e => {
-  if (!selectMode) return;
+  if (!st.selectMode) return;
   const card = e.target.closest('.task-item');
   if (!card) return;
   e.preventDefault();
@@ -307,13 +311,13 @@ listEl.addEventListener('click', e => {
   toggleSelection(card.dataset.id);
 }, true);
 listEl.addEventListener('click', e => {
-  if (lastPointerType !== 'touch') return;
+  if (st.lastPointerType !== 'touch') return;
   const card = e.target.closest('.task-item');
   if (!card || e.target.closest('input, button, a, label, .task-clickable-date')) return;
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);
-  if (compact) expandSelected(id);
+  if (st.compact) expandSelected(id);
 });
 
 // Touch drag. Phones do not fire HTML5 drag events reliably, so a long press picks a
@@ -332,8 +336,8 @@ listEl.addEventListener('click', e => {
 // that card, as ⋯ → Select several does; where nothing drags, the press
 // only holds the card for that (holdCard), and moving drops the hold.
 const LONG_PRESS_MS = 350;
-let touchDrop = null;
-let touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swiping, swipe, ghost, grabY, target, raf }
+st.touchDrop = null;
+st.touchDrag = null;  // { item, x, y, x0, y0, timer, active, held, moved, swiping, swipe, ghost, grabY, target, raf }
 // What a swipe does on this task in the current view: { right, left },
 // each 'start' (start today), 'unplan' (clear the start date) or null.
 function swipeActions(task) {
@@ -346,15 +350,15 @@ function swipeActions(task) {
   // On Plan a carried-over task (started earlier, still open) starts today:
   // committing to it again, which takes its "since" badge away.
   const carried = TasksCore.isCarried(task, today) ? 'start' : null;
-  if (activeView === 'open') return { right: start, left: null };
-  if (activeView === 'focus') return { right: null, left: unplan };
-  if (activeView === 'plan') return { right: start || carried, left: unplan };
+  if (st.activeView === 'open') return { right: start, left: null };
+  if (st.activeView === 'focus') return { right: null, left: unplan };
+  if (st.activeView === 'plan') return { right: start || carried, left: unplan };
   return { right: null, left: null };
 }
 const SWIPE_LABELS = { start: '📅 Start today', unplan: '↩ Unplan' };
 function setSwipe(dx) {
-  const item = touchDrag.item;
-  const action = dx > 0 ? touchDrag.swipe.right : touchDrag.swipe.left;
+  const item = st.touchDrag.item;
+  const action = dx > 0 ? st.touchDrag.swipe.right : st.touchDrag.swipe.left;
   if (!action) dx = 0;  // nothing to do this way: the card stays put
   const threshold = Math.min(110, item.offsetWidth * 0.3);
   item.style.transform = `translateX(${dx}px)`;
@@ -378,17 +382,17 @@ const DROP_CLASSES = ['task-drag-over', 'board-drop-over', 'task-drop-before', '
 
 function touchDropTarget(x, y) {
   const el = document.elementFromPoint(x, y);
-  return el && listEl.contains(el) && touchDrop ? touchDrop.target(el) : null;
+  return el && listEl.contains(el) && st.touchDrop ? st.touchDrop.target(el) : null;
 }
 function setTouchTarget(target) {
   // In a sorted list the side of the card under the finger matters too.
-  const sided = target && (typeof touchDrop?.sided === 'function' ? touchDrop.sided(target) : touchDrop?.sided);
+  const sided = target && (typeof st.touchDrop?.sided === 'function' ? st.touchDrop.sided(target) : st.touchDrop?.sided);
   const side = sided && target.classList.contains('task-item')
-    ? dropSide(target, touchDrag.y) : null;
-  if (target === touchDrag.target && side === touchDrag.side) return;
-  touchDrag.target?.classList.remove(...DROP_CLASSES);
-  touchDrag.target = target;
-  touchDrag.side = side;
+    ? dropSide(target, st.touchDrag.y) : null;
+  if (target === st.touchDrag.target && side === st.touchDrag.side) return;
+  st.touchDrag.target?.classList.remove(...DROP_CLASSES);
+  st.touchDrag.target = target;
+  st.touchDrag.side = side;
   if (!target) return;
   target.classList.add(side ? `task-drop-${side}`
     : target.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over');
@@ -396,22 +400,22 @@ function setTouchTarget(target) {
 // A long press where nothing drags: select the card, so the press
 // visibly took; letting go starts selection mode (endTouchDrag).
 function holdCard() {
-  const t = touchDrag;
+  const t = st.touchDrag;
   t.held = true;
-  selectedId = anchorId = t.item.dataset.id;
-  selectedIds = new Set([selectedId]);
+  st.selectedId = st.anchorId = t.item.dataset.id;
+  st.selectedIds = new Set([st.selectedId]);
   updateSelectionClasses();
   navigator.vibrate?.(15);
 }
 function startTouchDrag() {
-  const t = touchDrag, rect = t.item.getBoundingClientRect();
+  const t = st.touchDrag, rect = t.item.getBoundingClientRect();
   t.active = true;
-  draggedId = t.item.dataset.id;
+  st.draggedId = t.item.dataset.id;
   // Picking a card up selects it, as a mouse press does, so the long press
   // visibly took. Not setSelected(): its scrollIntoView would move the page
   // under the finger.
-  selectedId = anchorId = draggedId;
-  selectedIds = new Set([draggedId]);
+  st.selectedId = st.anchorId = st.draggedId;
+  st.selectedIds = new Set([st.draggedId]);
   updateSelectionClasses();
   t.item.classList.add('task-dragging');
   t.grabY = t.y - rect.top;
@@ -425,19 +429,19 @@ function startTouchDrag() {
   // off screen can still be reached.
   const edge = 70;
   const step = () => {
-    if (!touchDrag?.active) return;
-    const dy = touchDrag.y < edge ? -12 : touchDrag.y > window.innerHeight - edge ? 12 : 0;
+    if (!st.touchDrag?.active) return;
+    const dy = st.touchDrag.y < edge ? -12 : st.touchDrag.y > window.innerHeight - edge ? 12 : 0;
     if (dy) {
       window.scrollBy(0, dy);
-      setTouchTarget(touchDropTarget(touchDrag.x, touchDrag.y));
+      setTouchTarget(touchDropTarget(st.touchDrag.x, st.touchDrag.y));
     }
-    touchDrag.raf = requestAnimationFrame(step);
+    st.touchDrag.raf = requestAnimationFrame(step);
   };
   t.raf = requestAnimationFrame(step);
 }
 function endTouchDrag(drop) {
-  const t = touchDrag;
-  touchDrag = null;
+  const t = st.touchDrag;
+  st.touchDrag = null;
   if (!t) return;
   clearTimeout(t.timer);
   if (t.swiping) {
@@ -458,44 +462,44 @@ function endTouchDrag(drop) {
     t.item.classList.remove('task-dragging');
     const target = t.target;
     target?.classList.remove(...DROP_CLASSES);
-    if (drop && !select && target && touchDrop) touchDrop.drop(target, t.side);
-    draggedId = null;
+    if (drop && !select && target && st.touchDrop) st.touchDrop.drop(target, t.side);
+    st.draggedId = null;
   }
   if (select) enterSelectMode(t.item.dataset.id);
 }
 listEl.addEventListener('touchstart', e => {
   endTouchDrag(false);
-  if (e.touches.length !== 1 || selectMode) return;   // selecting: no drags, no swipes
+  if (e.touches.length !== 1 || st.selectMode) return;   // selecting: no drags, no swipes
   const item = e.target.closest('.task-item');
   // A date chip may start a swipe or drag (it sits on the first line, where
   // a thumb starts one); a mere tap on it still opens its date picker.
   if (!item || e.target.closest('input, button, a')) return;
-  const canDrag = !!touchDrop && item.matches('[data-drag]');
-  const swipe = swipeActions(tasks.find(t => t.id === item.dataset.id));
+  const canDrag = !!st.touchDrop && item.matches('[data-drag]');
+  const swipe = swipeActions(st.tasks.find(t => t.id === item.dataset.id));
   const canSwipe = !!(swipe.right || swipe.left);
   const p = e.touches[0];
-  touchDrag = { item, x: p.clientX, y: p.clientY, x0: p.clientX, y0: p.clientY,
+  st.touchDrag = { item, x: p.clientX, y: p.clientY, x0: p.clientX, y0: p.clientY,
                 active: false, held: false, moved: false, swiping: false, canSwipe, swipe, target: null,
                 timer: setTimeout(canDrag ? startTouchDrag : holdCard, LONG_PRESS_MS) };
 }, { passive: true });
 listEl.addEventListener('touchmove', e => {
-  if (!touchDrag) return;
+  if (!st.touchDrag) return;
   const p = e.touches[0];
-  const dx = p.clientX - touchDrag.x, dy = p.clientY - touchDrag.y;
-  if (touchDrag.swiping) {
+  const dx = p.clientX - st.touchDrag.x, dy = p.clientY - st.touchDrag.y;
+  if (st.touchDrag.swiping) {
     e.preventDefault();
     setSwipe(dx);
     return;
   }
-  if (touchDrag.held) {
+  if (st.touchDrag.held) {
     if (Math.hypot(dx, dy) > 10) endTouchDrag(false);  // moved after all: no selection mode
     return;
   }
-  if (!touchDrag.active) {
+  if (!st.touchDrag.active) {
     const sideways = Math.abs(dx) > 1.5 * Math.abs(dy);
-    if (touchDrag.canSwipe && sideways && Math.abs(dx) > 10) {
-      clearTimeout(touchDrag.timer);
-      touchDrag.swiping = true;
+    if (st.touchDrag.canSwipe && sideways && Math.abs(dx) > 10) {
+      clearTimeout(st.touchDrag.timer);
+      st.touchDrag.swiping = true;
       e.preventDefault();
       setSwipe(dx);
     } else if (!sideways && Math.hypot(dx, dy) > 10) {
@@ -504,15 +508,15 @@ listEl.addEventListener('touchmove', e => {
     return;
   }
   e.preventDefault();  // the finger is carrying a card, not scrolling the page
-  if (Math.hypot(p.clientX - touchDrag.x0, p.clientY - touchDrag.y0) > 10) touchDrag.moved = true;
-  touchDrag.x = p.clientX;
-  touchDrag.y = p.clientY;
-  touchDrag.ghost.style.top = (p.clientY - touchDrag.grabY) + 'px';
+  if (Math.hypot(p.clientX - st.touchDrag.x0, p.clientY - st.touchDrag.y0) > 10) st.touchDrag.moved = true;
+  st.touchDrag.x = p.clientX;
+  st.touchDrag.y = p.clientY;
+  st.touchDrag.ghost.style.top = (p.clientY - st.touchDrag.grabY) + 'px';
   setTouchTarget(touchDropTarget(p.clientX, p.clientY));
 }, { passive: false });
 listEl.addEventListener('touchend', e => {
   // A finished drag or swipe must not also count as a tap (which opens the editor).
-  if (touchDrag?.active || touchDrag?.held || touchDrag?.swiping) e.preventDefault();
+  if (st.touchDrag?.active || st.touchDrag?.held || st.touchDrag?.swiping) e.preventDefault();
   endTouchDrag(true);
 });
 listEl.addEventListener('touchcancel', () => endTouchDrag(false));
@@ -520,9 +524,9 @@ listEl.addEventListener('touchcancel', () => endTouchDrag(false));
 // Right-click on a card (mouse): the ⋯ menu, at the pointer. A link in the
 // card keeps the browser's own menu (open in a new tab …).
 listEl.addEventListener('contextmenu', e => {
-  if (touchDrag) { e.preventDefault(); return; }
+  if (st.touchDrag) { e.preventDefault(); return; }
   const card = e.target.closest('.task-item');
-  if (!card || lastPointerType === 'touch' || e.target.closest('a, input, textarea')) return;
+  if (!card || st.lastPointerType === 'touch' || e.target.closest('a, input, textarea')) return;
   e.preventDefault();
   if (!inSelection(card.dataset.id)) setSelected(card.dataset.id);
   openTaskMenu(card.dataset.id, card, { x: e.clientX, y: e.clientY });
@@ -606,8 +610,8 @@ function toggleFold(id) {
 }
 // Unfold the Plan section task `id` sits in; true when that changed anything.
 function unfoldFor(id) {
-  const task = tasks.find(t => t.id === id);
-  if (activeView !== 'plan' || !task) return false;
+  const task = st.tasks.find(t => t.id === id);
+  if (st.activeView !== 'plan' || !task) return false;
   const fid = foldId(TasksCore.bucketKey(task, todayStr()));
   if (!folded.delete(fid)) return false;
   saveFolded();
@@ -626,16 +630,16 @@ const sortKey = () => 'zone-tasks-sort:' + [location.pathname, appEl?.dataset.in
 let sortModes = {};   // view → 'due' | 'created'; missing: manual
 try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
 // The shown tab's sort, when not the manual order.
-const activeSort = () => (activeView === 'open' || activeView === 'plan') && SORTS[sortModes[activeView]]
-  ? sortModes[activeView] : null;
+const activeSort = () => (st.activeView === 'open' || st.activeView === 'plan') && SORTS[sortModes[st.activeView]]
+  ? sortModes[st.activeView] : null;
 function applySort() {
   if (!sortSel) return;
-  sortSel.hidden = activeView !== 'open' && activeView !== 'plan';
+  sortSel.hidden = st.activeView !== 'open' && st.activeView !== 'plan';
   sortSel.value = activeSort() || 'manual';
 }
 function setSort(mode) {
-  if (activeView !== 'open' && activeView !== 'plan') return;
-  if (SORTS[mode]) sortModes[activeView] = mode; else delete sortModes[activeView];
+  if (st.activeView !== 'open' && st.activeView !== 'plan') return;
+  if (SORTS[mode]) sortModes[st.activeView] = mode; else delete sortModes[st.activeView];
   try { localStorage.setItem(sortKey(), JSON.stringify(sortModes)); } catch (_) {}
   applySort();
   render();
@@ -662,30 +666,30 @@ function openGroup() {
 }
 function applyGroup() {
   if (!planSwitch) return;
-  planSwitch.hidden = !isOpenTab(activeView);
-  planSwitch.setAttribute('aria-checked', String(activeView === 'plan'));
+  planSwitch.hidden = !isOpenTab(st.activeView);
+  planSwitch.setAttribute('aria-checked', String(st.activeView === 'plan'));
 }
 function setGroup(group) {
-  if (!isOpenTab(activeView)) return;
+  if (!isOpenTab(st.activeView)) return;
   try { localStorage.setItem(groupKey(), group); } catch (_) {}
   switchTab(group === 'list' ? 'open' : 'plan');
 }
-planSwitch?.addEventListener('click', () => setGroup(activeView === 'plan' ? 'list' : 'days'));
+planSwitch?.addEventListener('click', () => setGroup(st.activeView === 'plan' ? 'list' : 'days'));
 // The view a tab opens: Open its remembered grouping (unless already on
 // one of them: a click on the active tab changes nothing).
-const tabView = tab => tab === 'open' && !isOpenTab(activeView) ? openGroup() : tab;
+const tabView = tab => tab === 'open' && !isOpenTab(st.activeView) ? openGroup() : tab;
 
-let compact = false;   // the shown tab's (applyCompact)
+st.compact = false;   // the shown tab's (applyCompact)
 function applyCompact(view) {
   if (view) {
-    compact = compactFor(view);
-    expandedId = null;
+    st.compact = compactFor(view);
+    st.expandedId = null;
     detailsOpen = detailsMode = false;
   }
-  appEl?.classList.toggle('tasks-compact', compact);
-  densityBtn?.setAttribute('aria-pressed', String(compact));
+  appEl?.classList.toggle('tasks-compact', st.compact);
+  densityBtn?.setAttribute('aria-pressed', String(st.compact));
   if (densityBtn) {
-    const label = compact ? 'Full cards' : 'One line per task';
+    const label = st.compact ? 'Full cards' : 'One line per task';
     densityBtn.title = `${label} (v)`;
     densityBtn.setAttribute('aria-label', label);
   }
@@ -700,7 +704,7 @@ function applyCompact(view) {
 // selection moves on (detailsMode): the next selected task shows its
 // details too, until they are closed. Enter opens the modal, as on full
 // cards.
-let expandedId = null;
+st.expandedId = null;
 let detailsOpen = false;
 let detailsMode = false;
 // The expand button of a compact line with details: a chevron, turned up
@@ -721,11 +725,11 @@ function titleCut(id) {
 // Whether the task has details a compact line hides: notes or comments.
 const hasDetails = id => !!cardEl(id)?.querySelector('.task-desc, .task-card-comments');
 function setExpanded(id, details = false) {
-  expandedId = id;
+  st.expandedId = id;
   detailsOpen = !!id && details;
   listEl?.querySelectorAll('.task-item').forEach(el => {
     const on = el.dataset.id === id;
-    if (!on && el.classList.contains('task-expanded') && pressedCard && el !== pressedCard) collapseLater(el);
+    if (!on && el.classList.contains('task-expanded') && st.pressedCard && el !== st.pressedCard) collapseLater(el);
     else {
       el.classList.toggle('task-expanded', on);
       el.classList.toggle('task-details', on && detailsOpen);
@@ -734,10 +738,10 @@ function setExpanded(id, details = false) {
   });
 }
 // 📝, 💬 or →/←: open or close a compact task's details, selecting it.
-function toggleDetails(id, open = !(expandedId === id && detailsOpen)) {
-  if (!compact || !hasDetails(id)) return false;
+function toggleDetails(id, open = !(st.expandedId === id && detailsOpen)) {
+  if (!st.compact || !hasDetails(id)) return false;
   detailsMode = open;
-  if (selectedIds.size !== 1 || selectedId !== id) setSelected(id);
+  if (st.selectedIds.size !== 1 || st.selectedId !== id) setSelected(id);
   // Closing keeps the whole title (a short one looks the same as its line).
   setExpanded(id, open);
   return true;
@@ -754,7 +758,7 @@ function expandSelected(id) {
 // card below it up under the pointer, so a double-click's second click hit
 // another card; a card above closes the same way, for one behaviour.
 const COLLAPSE_DELAY_MS = 400;
-let pressedCard = null;
+st.pressedCard = null;
 let collapsing = null;   // { el, timer }
 function collapseLater(el) {
   if (collapsing?.el === el) return;   // already waiting (the press runs setExpanded twice, a double-click two presses)
@@ -766,7 +770,7 @@ function finishCollapse() {
   const { el, timer } = collapsing;
   collapsing = null;
   clearTimeout(timer);
-  if (!el.isConnected || el.dataset.id === expandedId) return;
+  if (!el.isConnected || el.dataset.id === st.expandedId) return;
   const from = el.offsetHeight;
   el.classList.remove('task-expanded', 'task-details');
   el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', 'false');
@@ -777,10 +781,10 @@ function finishCollapse() {
   }
 }
 function toggleCompact() {
-  expandedId = null;
+  st.expandedId = null;
   detailsOpen = detailsMode = false;
-  compact = !compact;
-  try { localStorage.setItem(densityKey(activeView), compact ? '1' : '0'); } catch (_) {}
+  st.compact = !st.compact;
+  try { localStorage.setItem(densityKey(st.activeView), st.compact ? '1' : '0'); } catch (_) {}
   applyCompact();
 }
 densityBtn?.addEventListener('click', toggleCompact);
@@ -810,7 +814,7 @@ const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl
 // The year Completed shows: '' is this year, an earlier one ('2025', from
 // ?year= or the year switcher) comes from that year's archive.
 const thisYear = String(new Date().getFullYear());
-let completedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
+st.completedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
   ? urlParams.get('year') : '';
 let completedYears = [];   // years Completed can show (/api/tasks/completed-years)
 
@@ -867,11 +871,11 @@ async function fetchTasks() {
   const res = await fetch('/api/tasks');
   const fetched = (await res.json()).filter(inScope);
   await renderTexts(textsOf(fetched));
-  tasks = fetched;
+  st.tasks = fetched;
   tasksGen++;
   completedLoaded = false;
   render();
-  if (activeView === 'completed') fetchCompleted();
+  if (st.activeView === 'completed') fetchCompleted();
   refreshCompletedCount();
 }
 
@@ -890,7 +894,7 @@ async function refreshCompletedCount() {
 // pull in changes made by another embed on the same page.
 async function refresh() {
   await fetchTasks();
-  if (activeView === 'completed') await fetchCompleted();
+  if (st.activeView === 'completed') await fetchCompleted();
 }
 
 let completedLoading = null;
@@ -909,13 +913,13 @@ async function loadCompleted() {
   loadCompletedYears();
   do {
     gen = tasksGen;
-    const res = await fetch('/api/tasks/completed' + (completedYear ? `?year=${completedYear}` : ''));
+    const res = await fetch('/api/tasks/completed' + (st.completedYear ? `?year=${st.completedYear}` : ''));
     completed = (await res.json()).filter(inScope);
     await renderTexts(textsOf(completed));
   } while (gen !== tasksGen);
-  const existingIds = new Set(tasks.map(t => t.id));
+  const existingIds = new Set(st.tasks.map(t => t.id));
   for (const t of completed) {
-    if (!existingIds.has(t.id)) tasks.push(t);
+    if (!existingIds.has(t.id)) st.tasks.push(t);
   }
   completedLoaded = true;
   render();
@@ -924,7 +928,7 @@ async function loadCompleted() {
 async function loadCompletedYears() {
   try {
     const res = await fetch('/api/tasks/completed-years' + scopeQuery());
-    if (res.ok) { completedYears = (await res.json()).years; if (activeView === 'completed') render(); }
+    if (res.ok) { completedYears = (await res.json()).years; if (st.activeView === 'completed') render(); }
   } catch (_) {}
 }
 
@@ -933,12 +937,12 @@ async function loadCompletedYears() {
 // year's. tasksGen tells a load in flight that its year is gone.
 function setCompletedYear(year) {
   year = year === thisYear ? '' : year;
-  if (year === completedYear) return;
-  completedYear = year;
-  tasks = tasks.filter(t => !t.completed_at);
+  if (year === st.completedYear) return;
+  st.completedYear = year;
+  st.tasks = st.tasks.filter(t => !t.completed_at);
   tasksGen++;
   completedLoaded = false;
-  if (activeView === 'completed') fetchCompleted();
+  if (st.activeView === 'completed') fetchCompleted();
   render();
 }
 
@@ -952,7 +956,7 @@ async function createTask(data) {
     const task = await res.json();
     await renderTexts(textsOf([task]));
     const msg = leftViewMessage(null, task);
-    if (inScope(task)) tasks.push(task);
+    if (inScope(task)) st.tasks.push(task);
     if (msg && !headless) showNotice(msg);
     render();
     refreshDueBadge(); refreshCompletedCount();
@@ -972,12 +976,12 @@ async function updateTask(id, data) {
   if (res.ok) {
     const updated = await res.json();
     await renderTexts(textsOf([updated]));
-    const idx = tasks.findIndex(t => t.id === id);
+    const idx = st.tasks.findIndex(t => t.id === id);
     if (idx !== -1) {
-      const before = tasks[idx];
+      const before = st.tasks[idx];
       const msg = leftViewMessage(before, updated);
-      if (inScope(updated)) tasks[idx] = updated;
-      else tasks.splice(idx, 1);
+      if (inScope(updated)) st.tasks[idx] = updated;
+      else st.tasks.splice(idx, 1);
       if (msg) offerUndoLeave(msg, [[id, editSnapshot(before)]]);
     }
     // Completion/skip/reopen of a recurring task spawns or removes an
@@ -1050,7 +1054,7 @@ function offerUndoLeave(msg, restores) {
 async function deleteTask(id) {
   const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
   if (res.ok) {
-    tasks = tasks.filter(t => t.id !== id);
+    st.tasks = st.tasks.filter(t => t.id !== id);
     render();
     refreshDueBadge(); refreshCompletedCount();
     refreshOtherInstances(instanceId);
@@ -1065,7 +1069,7 @@ async function deleteTasks(ids) {
   });
   if (res.ok) {
     const idSet = new Set(ids);
-    tasks = tasks.filter(t => !idSet.has(t.id));
+    st.tasks = st.tasks.filter(t => !idSet.has(t.id));
     render();
     refreshDueBadge(); refreshCompletedCount();
     refreshOtherInstances(instanceId);
@@ -1083,7 +1087,7 @@ function beginComplete(id, li) {
     li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (li) li.classList.add('task-completing-out');
     setTimeout(async () => {
-      const task = tasks.find(t => t.id === id);
+      const task = st.tasks.find(t => t.id === id);
       const before = task?.keep && keepSnapshot(task);
       if (before) dismissUndo();
       const done = await updateTask(id, { completed: true });
@@ -1139,7 +1143,7 @@ async function afterBatchWrite() {
 // replaces what the undone change logged), so the log shows no trace of it.
 // An undo that moves a date back also sends the old recurrence, so the
 // series keeps its day of month (moving a date re-anchors it).
-const oldHistory = id => tasks.find(t => t.id === id)?.history || [];
+const oldHistory = id => st.tasks.find(t => t.id === id)?.history || [];
 
 function markWontDo(id) {
   const history = oldHistory(id);
@@ -1154,7 +1158,7 @@ function skipOccurrence(id) {
 }
 
 function setStart(id, startDate) {
-  const task = tasks.find(t => t.id === id);
+  const task = st.tasks.find(t => t.id === id);
   if (startsAfterDeadline(task, startDate)) return planOnDay(id, startDate);
   const prev = task?.start_date ?? null;
   const recurrence = task?.recurrence ?? null;
@@ -1168,9 +1172,9 @@ function setStart(id, startDate) {
 // every field). beforeDelete runs after confirmation.
 async function deleteWithUndo(ids, beforeDelete) {
   const count = ids.length;
-  const title = count === 1 ? plainTitle(tasks.find(t => t.id === ids[0])?.title) : '';
+  const title = count === 1 ? plainTitle(st.tasks.find(t => t.id === ids[0])?.title) : '';
   if (!await confirmDelete(title, count)) return;
-  const snapshot = ids.map(id => tasks.find(t => t.id === id)).filter(Boolean);
+  const snapshot = ids.map(id => st.tasks.find(t => t.id === id)).filter(Boolean);
   beforeDelete?.();
   dismissUndo();
   await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
@@ -1189,15 +1193,15 @@ async function deleteWithUndo(ids, beforeDelete) {
 // double-click and keyboard shortcuts don't exist on a phone. Renders as a
 // popover at the button on desktop and as a bottom sheet on narrow screens.
 
-let taskMenu = null;
+st.taskMenu = null;
 
 function closeTaskMenu() {
-  if (!taskMenu) return;
-  taskMenu.backdrop.remove();
-  taskMenu.el.remove();
-  document.removeEventListener('keydown', taskMenu.onKey, true);
-  taskMenu.anchor?.focus({ preventScroll: true });
-  taskMenu = null;
+  if (!st.taskMenu) return;
+  st.taskMenu.backdrop.remove();
+  st.taskMenu.el.remove();
+  document.removeEventListener('keydown', st.taskMenu.onKey, true);
+  st.taskMenu.anchor?.focus({ preventScroll: true });
+  st.taskMenu = null;
 }
 
 // `at` ({x, y}, a right-click): the menu opens there instead of at the
@@ -1206,17 +1210,17 @@ function closeTaskMenu() {
 function openTaskMenu(id, anchor, at) {
   closeTaskMenu();
   if (inSelection(id)) {
-    const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
+    const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.completed_at);
     const items = [
       ['tag', 'Tag…'],
       !allDone && ['today', 'Start today'],
       ['done', allDone ? 'Reopen' : 'Done'],
       ['delete', 'Delete…', 'danger'],
     ].filter(Boolean);
-    showMenu(`${selectedIds.size} tasks`, items, action => runSelectionAction(action), anchor, at);
+    showMenu(`${st.selectedIds.size} tasks`, items, action => runSelectionAction(action), anchor, at);
     return;
   }
-  const task = tasks.find(t => t.id === id);
+  const task = st.tasks.find(t => t.id === id);
   if (!task) return;
   const items = task.completed_at ? [
     ['edit', 'Edit…'],
@@ -1284,7 +1288,7 @@ function showMenu(title, items, run, anchor, at) {
   };
   document.addEventListener('keydown', onKey, true);
   backdrop.addEventListener('click', closeTaskMenu);
-  taskMenu = { el, backdrop, anchor, onKey };
+  st.taskMenu = { el, backdrop, anchor, onKey };
   el.querySelector('button')?.focus({ preventScroll: true });
 
   el.addEventListener('click', e => {
@@ -1326,7 +1330,7 @@ function taskHref(task) {
   const params = new URLSearchParams({ task: task.id, view: task.completed_at ? 'completed' : 'open' });
   const list = taskList(task);
   if (list) params.set('list', list);
-  if (task.completed_at && completedYear) params.set('year', completedYear);
+  if (task.completed_at && st.completedYear) params.set('year', st.completedYear);
   return `/tasks?${params}`;
 }
 
@@ -1390,21 +1394,21 @@ function confirmModal(dialog, okBtn, cancelBtn) {
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
   const today = todayStr();
-  let filtered = tasks;
+  let filtered = st.tasks;
 
   // Filter field: text search plus '#tag' words (TasksCore.parseFilter).
   const f = parseFilter(query);
   if (f.text || f.tagGroups.length || f.excludeTags.length) filtered = filtered.filter(t => matchesFilter(t, f));
 
   // Tab filter
-  if (activeView === 'focus') {
+  if (st.activeView === 'focus') {
     filtered = filtered.filter(t => !t.completed_at && isFocus(t, today));
-  } else if (activeView === 'plan') {
+  } else if (st.activeView === 'plan') {
     // Plan is a day board: show all open tasks grouped by start date; tasks
     // without one go to the Unplanned section so they can be dragged into
     // the week (TasksCore.boardBuckets).
     filtered = filtered.filter(t => !t.completed_at);
-  } else if (activeView === 'completed') {
+  } else if (st.activeView === 'completed') {
     filtered = filtered.filter(t => !!t.completed_at);
   } else {
     // Open: every open task. Tasks still waiting for a day are the Plan
@@ -1437,12 +1441,12 @@ const SECTIONS = {
 const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
 // Every task in the manual order, including ones the view or filter hides.
 function manualOrderIds(s) {
-  return tasks.filter(t => !t.completed_at && t[s.field] != null)
+  return st.tasks.filter(t => !t.completed_at && t[s.field] != null)
     .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
 }
 function sectionList() {
-  const s = SECTIONS[activeView];
-  const byId = new Map(tasks.map(t => [t.id, t]));
+  const s = SECTIONS[st.activeView];
+  const byId = new Map(st.tasks.map(t => [t.id, t]));
   const ids = visibleItems().map(el => el.dataset.id);
   const manual = ids.filter(id => byId.get(id)[s.field] != null);
   const fixed = ids.filter(id => byId.get(id)[s.field] == null);
@@ -1450,7 +1454,7 @@ function sectionList() {
 }
 // Save a rearranged sectionList() in which the tasks `moved` changed place
 // (TasksCore.placeInOrder: every other task keeps its place, hidden ones too).
-function applySectionList(list, moved, s = SECTIONS[activeView]) {
+function applySectionList(list, moved, s = SECTIONS[st.activeView]) {
   const cut = list.indexOf(sectionKey(s.bottom));
   saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
 }
@@ -1461,7 +1465,7 @@ function saveOrder(s, order) {
   const kept = new Set(order);
   const removed = old.filter(id => !kept.has(id));
   if (!removed.length && order.join() === old.join()) return;
-  const byId = new Map(tasks.map(t => [t.id, t]));
+  const byId = new Map(st.tasks.map(t => [t.id, t]));
   order.forEach((id, i) => { byId.get(id)[s.field] = i; });
   removed.forEach(id => { byId.get(id)[s.field] = null; });
   postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
@@ -1485,7 +1489,7 @@ function planSectionIds(div) {
 // #sorted is the section's share of the manual order (applySectionList):
 // a task moved there is ranked, one moved above it leaves the order.
 function planSectionList(div) {
-  const byId = new Map(tasks.map(t => [t.id, t]));
+  const byId = new Map(st.tasks.map(t => [t.id, t]));
   const ids = planSectionIds(div);
   return [sectionKey('unsorted'), ...ids.filter(id => byId.get(id)?.sort_order == null),
           sectionKey('sorted'), ...ids.filter(id => byId.get(id)?.sort_order != null)];
@@ -1495,22 +1499,22 @@ function planSectionList(div) {
 // heading's slot, so dropping on the Sorted heading puts it first there).
 function sectionDrop(key, side) {
   const list = sectionList();
-  const from = list.indexOf(draggedId), at = list.indexOf(key);
+  const from = list.indexOf(st.draggedId), at = list.indexOf(key);
   if (from === -1 || at === -1 || from === at) return;
   list.splice(from, 1);
   const to = side ? list.indexOf(key) + (side === 'after' ? 1 : 0) : at;
-  list.splice(to, 0, draggedId);
-  applySectionList(list, [draggedId]);
+  list.splice(to, 0, st.draggedId);
+  applySectionList(list, [st.draggedId]);
 }
 // Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
 // slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
 // can't move within it; moving down takes them straight across the heading.
-function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[activeView]) {
-  const byId = new Map(tasks.map(t => [t.id, t]));
-  const idxs = list.map((id, i) => selectedIds.has(id) ? i : -1).filter(i => i >= 0);
+function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[st.activeView]) {
+  const byId = new Map(st.tasks.map(t => [t.id, t]));
+  const idxs = list.map((id, i) => st.selectedIds.has(id) ? i : -1).filter(i => i >= 0);
   if (!idxs.length) return;
   const group = idxs.map(i => list[i]);
-  const rest = list.filter(id => !selectedIds.has(id));
+  const rest = list.filter(id => !st.selectedIds.has(id));
   if (group.every(id => byId.get(id)[s.field] == null)) {
     if (direction === 'up') return;  // away from the manual order
     rest.splice(rest.indexOf(sectionKey(s.bottom)) + 1, 0, ...group);
@@ -1533,7 +1537,7 @@ function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[activeView
 // drops.
 function sectionHTML(zone, label, count) {
   const empty = count ? '' : ' board-day--empty';
-  if (activeView === 'focus') {
+  if (st.activeView === 'focus') {
     return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
       `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
   }
@@ -1542,7 +1546,7 @@ function sectionHTML(zone, label, count) {
 }
 
 function sortTasks(tasksArr) {
-  const fixed = TAB_SORT[activeView];
+  const fixed = TAB_SORT[st.activeView];
   return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
 }
 
@@ -1558,7 +1562,7 @@ function sortTasks(tasksArr) {
 
 function openBulkTagModal(ids, removing = false) {
   const idSet = new Set(ids);
-  const chosen = tasks.filter(t => idSet.has(t.id));
+  const chosen = st.tasks.filter(t => idSet.has(t.id));
   if (!chosen.length) return;
   const count = chosen.length;
   const rows = selectionTags(chosen);
@@ -1629,7 +1633,7 @@ function openBulkTagModal(ids, removing = false) {
       // Adding: any tag in use, but not one every selected task has already.
       const have = new Set([...chips.words(), ...rows.filter(r => states[r.tag] === 'all').map(r => r.tag)]
         .map(t => t.toLowerCase()));
-      const counts = tagCounts(tasks);
+      const counts = tagCounts(st.tasks);
       for (const tag of Object.keys(counts)) if (have.has(tag.toLowerCase())) delete counts[tag];
       return rankTags(w.partial, counts);
     },
@@ -1665,7 +1669,7 @@ function openBulkTagModal(ids, removing = false) {
 
   dlg.showModal();
   // On a phone with tags to tick, the keyboard waits until the field is tapped.
-  if (!(lastPointerType === 'touch' && rows.length)) input.focus();
+  if (!(st.lastPointerType === 'touch' && rows.length)) input.focus();
   else dlg.querySelector('.bulk-tag-row')?.focus({ preventScroll: true });
 }
 
@@ -1674,7 +1678,7 @@ function openBulkTagModal(ids, removing = false) {
 // out of this view (another list, the filter) say where they went.
 async function bulkTag(ids, add, remove) {
   const idSet = new Set(ids);
-  const before = new Map(tasks.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
+  const before = new Map(st.tasks.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
   dismissUndo();
   let res;
   try {
@@ -1690,11 +1694,11 @@ async function bulkTag(ids, add, remove) {
   const changed = updated.filter(u => !sameTags(before.get(u.id)?.tags, u.tags));
   const gone = [];
   for (const u of updated) {
-    const idx = tasks.findIndex(t => t.id === u.id);
+    const idx = st.tasks.findIndex(t => t.id === u.id);
     if (idx === -1) continue;
-    const msg = leftViewMessage(tasks[idx], u);
-    if (inScope(u)) tasks[idx] = u;
-    else tasks.splice(idx, 1);
+    const msg = leftViewMessage(st.tasks[idx], u);
+    if (inScope(u)) st.tasks[idx] = u;
+    else st.tasks.splice(idx, 1);
     if (msg) gone.push({ msg, list: !inScope(u) && taskList(u) });
   }
   render();
@@ -1723,40 +1727,40 @@ async function bulkTag(ids, add, remove) {
 
 function updateSelectionClasses() {
   listEl.querySelectorAll('.task-item').forEach(el => {
-    el.classList.toggle('task-selected', selectedIds.has(el.dataset.id));
+    el.classList.toggle('task-selected', st.selectedIds.has(el.dataset.id));
   });
   // Several selected, none, or another one: the expanded task closes.
-  if (expandedId && (selectedIds.size !== 1 || expandedId !== selectedId)) setExpanded(null);
+  if (st.expandedId && (st.selectedIds.size !== 1 || st.expandedId !== st.selectedId)) setExpanded(null);
   syncSelBar();
 }
 
 // Whether `id` is one of several selected tasks.
-const inSelection = id => selectedIds.size > 1 && selectedIds.has(id);
+const inSelection = id => st.selectedIds.size > 1 && st.selectedIds.has(id);
 
 function toggleSelection(id) {
-  if (selectedIds.has(id)) {
-    selectedIds.delete(id);
-    if (selectedId === id) selectedId = selectedIds.size ? [...selectedIds].at(-1) : null;
+  if (st.selectedIds.has(id)) {
+    st.selectedIds.delete(id);
+    if (st.selectedId === id) st.selectedId = st.selectedIds.size ? [...st.selectedIds].at(-1) : null;
   } else {
-    selectedIds.add(id);
-    selectedId = id;
+    st.selectedIds.add(id);
+    st.selectedId = id;
   }
-  anchorId = id;   // a Shift+click next extends from here
+  st.anchorId = id;   // a Shift+click next extends from here
   updateSelectionClasses();
 }
 
 function selectAllVisible() {
   const ids = visibleItems().map(el => el.dataset.id);
   if (!ids.length) return;
-  selectedIds = new Set(ids);
-  if (!selectedIds.has(selectedId)) selectedId = ids[0];
-  anchorId = selectedId;
+  st.selectedIds = new Set(ids);
+  if (!st.selectedIds.has(st.selectedId)) st.selectedId = ids[0];
+  st.anchorId = st.selectedId;
   updateSelectionClasses();
 }
 
 function clearSelection() {
-  selectedId = anchorId = null;
-  selectedIds = new Set();
+  st.selectedId = st.anchorId = null;
+  st.selectedIds = new Set();
   updateSelectionClasses();
 }
 
@@ -1765,41 +1769,41 @@ function clearSelection() {
 // back gesture): entering adds a history entry, so back leaves the mode,
 // not the page.
 function enterSelectMode(id) {
-  selectMode = true;
+  st.selectMode = true;
   appEl.classList.add('tasks-selecting');
-  selectedId = anchorId = id;
-  selectedIds = new Set([id]);
+  st.selectedId = st.anchorId = id;
+  st.selectedIds = new Set([id]);
   updateSelectionClasses();
   try { history.pushState({ ...history.state, tasksSelect: instanceId }, ''); } catch (_) {}
 }
 function exitSelectMode() {
-  if (!selectMode) { clearSelection(); return; }
-  selectMode = false;
+  if (!st.selectMode) { clearSelection(); return; }
+  st.selectMode = false;
   appEl.classList.remove('tasks-selecting');
   clearSelection();
   if (history.state?.tasksSelect === instanceId) history.back();
 }
-window.addEventListener('popstate', () => { if (selectMode) exitSelectMode(); });
+window.addEventListener('popstate', () => { if (st.selectMode) exitSelectMode(); });
 
 // The selection bar: while several tasks are selected (on a page with
 // several task lists, only the active one's), how many, and what to do to all.
 // Today goes when every selected task is completed, and Done says Reopen.
 function syncSelBar() {
   if (!selBar) return;
-  const show = (selectMode || selectedIds.size > 1) &&
+  const show = (st.selectMode || st.selectedIds.size > 1) &&
     (tasksInstances.length < 2 || activeTasksInstance === instanceId);
   selBar.hidden = !show;
   if (!show) return;
-  const allDone = tasks.filter(t => selectedIds.has(t.id)).every(t => t.completed_at);
+  const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.completed_at);
   selBar.querySelector('.tasks-selbar-count').textContent =
-    selectedIds.size ? `${selectedIds.size} selected` : 'Tap tasks to select';
-  selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !selectedIds.size; });
+    st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
+  selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !st.selectedIds.size; });
   selBar.querySelector('[data-sel="today"]').hidden = allDone;
   const done = selBar.querySelector('[data-sel="done"]');
   done.textContent = allDone ? 'Reopen' : 'Done';
   done.title = allDone ? 'Reopen the selected tasks (Space)' : 'Complete the selected tasks (Space)';
   selBar.querySelector('[data-sel="all"]').disabled =
-    visibleItems().every(el => selectedIds.has(el.dataset.id));
+    visibleItems().every(el => st.selectedIds.has(el.dataset.id));
 }
 selBar?.addEventListener('click', e => {
   const action = e.target.closest('[data-sel]')?.dataset.sel;
@@ -1808,7 +1812,7 @@ selBar?.addEventListener('click', e => {
 
 // What the selection bar and a selected card's ⋯ menu do to every selected task.
 function runSelectionAction(action) {
-  const ids = [...selectedIds];
+  const ids = [...st.selectedIds];
   switch (action) {
     case 'all':    selectAllVisible(); break;
     case 'clear':  exitSelectMode(); break;
@@ -1846,7 +1850,7 @@ function startToday(ids) {
 // is set. One task alone goes through setStart, which does the same.
 async function startOn(ids, day) {
   const idSet = new Set(ids);
-  const before = tasks.filter(t => idSet.has(t.id) && !t.completed_at && (t.start_date ?? null) !== day);
+  const before = st.tasks.filter(t => idSet.has(t.id) && !t.completed_at && (t.start_date ?? null) !== day);
   if (before.length === 1) return setStart(before[0].id, day);
   const asks = before.filter(t => startsAfterDeadline(t, day));
   const plain = before.filter(t => !asks.includes(t));
@@ -1868,9 +1872,9 @@ async function startOn(ids, day) {
 // an undo. Keep tasks stay open when completed; undo restores their fields
 // instead of reopening them from Completed.
 async function completeMany(ids) {
-  const completing = ids.some(id => { const t = tasks.find(tk => tk.id === id); return t && !t.completed_at; });
+  const completing = ids.some(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.completed_at; });
   const kept = completing
-    ? ids.map(id => tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
+    ? ids.map(id => st.tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
          .map(t => [t.id, keepSnapshot(t)])
     : [];
   dismissUndo();
@@ -1886,17 +1890,17 @@ async function completeMany(ids) {
 }
 
 function setSelected(id) {
-  selectedId = id;
-  anchorId   = id;
-  selectedIds = new Set(id ? [id] : []);
+  st.selectedId = id;
+  st.anchorId   = id;
+  st.selectedIds = new Set(id ? [id] : []);
   updateSelectionClasses();
   // Compact: the selected task shows its whole title. On touch the tap
   // handler does it, since the compat mousedown selects without the click.
   // Selecting the expanded task again keeps its details as they are.
-  if (compact && id && lastPointerType !== 'touch' && id !== expandedId) expandSelected(id);
+  if (st.compact && id && st.lastPointerType !== 'touch' && id !== st.expandedId) expandSelected(id);
   // A pressed card is in view; scrolling an expanded one into view would
   // move it from under the pointer.
-  if (id && !pressedCard) {
+  if (id && !st.pressedCard) {
     const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     if (el) el.scrollIntoView({ block: 'nearest' });
   }
@@ -1904,13 +1908,13 @@ function setSelected(id) {
 
 function extendSelection(id) {
   if (!id) return;
-  selectedId = id;
+  st.selectedId = id;
   const items = visibleItems();
-  const aIdx = anchorId ? items.findIndex(el => el.dataset.id === anchorId) : 0;
+  const aIdx = st.anchorId ? items.findIndex(el => el.dataset.id === st.anchorId) : 0;
   const bIdx = items.findIndex(el => el.dataset.id === id);
   if (bIdx === -1) return;
   const [lo, hi] = aIdx <= bIdx ? [aIdx, bIdx] : [bIdx, aIdx];
-  selectedIds = new Set(items.slice(lo, hi + 1).map(el => el.dataset.id));
+  st.selectedIds = new Set(items.slice(lo, hi + 1).map(el => el.dataset.id));
   updateSelectionClasses();
   const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
   if (el) el.scrollIntoView({ block: 'nearest' });
@@ -1927,163 +1931,6 @@ function boardBuckets(list) {
   return TasksCore.boardBuckets(list, todayStr(), activeSort(), DATES);
 }
 
-// Custom in-page calendar popup, anchored at `anchor`. Calls cb with the
-// chosen YYYY-MM-DD, or null if the user clicks Clear. Dismissing without a
-// choice (Escape / outside click) never calls cb. We build our own calendar
-// instead of <input type=date> because Firefox's native picker fires `change`
-// on month navigation, committing a date before the user picks a day.
-// `min` (YYYY-MM-DD) restricts the earliest selectable date.
-// `parent` is where the popup is appended — defaults to document.body, but
-// callers inside a <dialog> (the edit modal) must pass the dialog element so
-// the popup renders in the same top layer instead of behind the modal.
-function openDatePicker(current, cb, anchor, min, parent = document.body) {
-  // Only one picker at a time.
-  document.querySelectorAll('.tasks-datepicker').forEach(el => el.remove());
-
-  const WEEK_START = TasksCore.weekStart(LOCALE);
-  const WEEKDAYS = TasksCore.weekdayNames(LOCALE, WEEK_START);
-  const today = todayStr();
-  // View month starts on the current value, else today.
-  const anchorDate = new Date((current || today) + 'T00:00:00');
-  let viewY = anchorDate.getFullYear();
-  let viewM = anchorDate.getMonth();
-
-  const pop = document.createElement('div');
-  pop.className = 'tasks-datepicker';
-  const r = anchor ? anchor.getBoundingClientRect() : { left: 20, top: 16, bottom: 20 };
-  // A transformed parent makes position:fixed resolve against its box rather
-  // than the viewport; offset by its rect then. (The edit modal is no longer
-  // transformed, so normally this is 0,0.)
-  const pr = (parent && parent !== document.body && getComputedStyle(parent).transform !== 'none')
-    ? parent.getBoundingClientRect() : { left: 0, top: 0 };
-  pop.style.cssText = 'position:fixed;z-index:1000;';
-  parent.appendChild(pop);
-
-  // Keep the calendar on screen. Runs after every draw(): the size is only
-  // known once the month is rendered, and a 6-week month is a row taller.
-  // Prefer below the anchor, else above it, else pinned inside the window;
-  // horizontally left-aligned with the anchor but never past either edge.
-  function place() {
-    const w = pop.offsetWidth, h = pop.offsetHeight;
-    const vw = window.innerWidth, vh = window.innerHeight, m = 4;
-    let top = r.bottom + m;
-    if (top + h > vh - m) top = r.top - m - h >= m ? r.top - m - h : Math.max(m, vh - m - h);
-    const left = Math.max(m, Math.min(r.left, vw - m - w));
-    pop.style.top = `${Math.round(top - pr.top)}px`;
-    pop.style.left = `${Math.round(left - pr.left)}px`;
-  }
-
-  let done = false;
-  function cleanup() {
-    if (done) return;
-    done = true;
-    pop.remove();
-    document.removeEventListener('keydown', onKey, true);
-    document.removeEventListener('pointerdown', onOutside, true);
-  }
-  function commit(val) { const c = cb; cleanup(); c(val); }
-  function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); cleanup(); } }
-  // A press outside only closes the picker, with mouse and touch alike: its
-  // mouse events and click are swallowed, so it can't also select or open
-  // another card, tick its checkbox or press a button (like a native menu).
-  function onOutside(e) {
-    if (pop.contains(e.target) || e.target === anchor) return;
-    cleanup();
-    swallowNextClick();
-  }
-
-  // One-tap shortcuts, counted from today (not from the current value):
-  // today, tomorrow, in two days, next Monday, in a week. Short labels, so
-  // all five fit on one row; the tooltip says what each means and the day.
-  const now = new Date();
-  const QUICK = [
-    ['Today', 0, 'Today'], ['Tmrw', 1, 'Tomorrow'], ['+2d', 2, 'In 2 days'],
-    ['Mon', (8 - now.getDay()) % 7 || 7, 'Next Monday'], ['+1w', 7, 'In a week'],
-  ];
-  const quickHtml = QUICK.map(([label, days, name]) => {
-    const ds = dateOffset(days);
-    const off = min && ds < min;
-    return `<button type="button" class="dp-quick-btn${ds === current ? ' dp-selected' : ''}" data-date="${ds}"` +
-      `${off ? ' disabled' : ''} title="${esc(name + ': ' + TasksCore.longDayLabel(ds, DATES))}"` +
-      ` aria-label="${esc(name)}">${label}</button>`;
-  }).join('');
-
-  function draw() {
-    const first = new Date(viewY, viewM, 1);
-    // Blank cells before the 1st, counted from the locale's first weekday.
-    const lead = (first.getDay() - WEEK_START + 7) % 7;
-    const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
-
-    let cells = '';
-    for (let i = 0; i < lead; i++) cells += '<span class="dp-day dp-blank"></span>';
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ds = `${viewY}-${String(viewM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const cls = ['dp-day'];
-      if (ds === current) cls.push('dp-selected');
-      if (ds === today) cls.push('dp-today');
-      const disabled = min && ds < min;
-      if (disabled) cls.push('dp-disabled');
-      cells += `<button type="button" class="${cls.join(' ')}"${disabled ? ' disabled' : ''} data-date="${ds}">${d}</button>`;
-    }
-
-    pop.innerHTML =
-      `<div class="dp-quick">${quickHtml}</div>` +
-      `<div class="dp-head">` +
-        `<button type="button" class="dp-nav" data-nav="-1">‹</button>` +
-        `<span class="dp-title">${esc(TasksCore.monthTitle(viewY, viewM, LOCALE))}</span>` +
-        `<button type="button" class="dp-nav" data-nav="1">›</button>` +
-      `</div>` +
-      `<div class="dp-weekdays">${WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>` +
-      `<div class="dp-grid">${cells}</div>` +
-      `<div class="dp-foot">` +
-        `<button type="button" class="dp-clear-btn">Clear</button>` +
-      `</div>`;
-    place();
-  }
-
-  pop.addEventListener('click', e => {
-    const nav = e.target.closest('[data-nav]');
-    if (nav) {
-      viewM += Number(nav.dataset.nav);
-      if (viewM < 0) { viewM = 11; viewY--; }
-      else if (viewM > 11) { viewM = 0; viewY++; }
-      draw();
-      return;
-    }
-    if (e.target.classList.contains('dp-clear-btn')) { commit(null); return; }
-    const day = e.target.closest('.dp-day[data-date], .dp-quick-btn');
-    if (day && !day.disabled) commit(day.dataset.date);
-  });
-
-  draw();
-  document.addEventListener('keydown', onKey, true);
-  // Defer outside-click wiring so the opening click doesn't immediately close it.
-  setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
-}
-
-// Swallow the mouse events and the click of the current press (mousedown
-// selects a card; touch fires its mouse events with the click). Dropped at
-// the click, the next press or after a second, since a scroll or a drag
-// ends without any click.
-const SWALLOWED = ['mousedown', 'mouseup', 'click'];
-function swallowNextClick() {
-  const swallow = e => {
-    e.preventDefault();  // mousedown's default would focus a field
-    e.stopPropagation();
-    if (e.type === 'click') stop();
-  };
-  const stop = () => {
-    SWALLOWED.forEach(t => document.removeEventListener(t, swallow, true));
-    document.removeEventListener('pointerdown', onNextPress, true);
-    clearTimeout(timer);
-  };
-  const onNextPress = () => stop();
-  SWALLOWED.forEach(t => document.addEventListener(t, swallow, true));
-  // Registered after this press has finished dispatching.
-  setTimeout(() => document.addEventListener('pointerdown', onNextPress, true), 0);
-  const timer = setTimeout(stop, 1000);
-}
-
 // The HTML of a note or comment (renderedHtml). One not rendered yet (a
 // task another task list app or the MCP just changed) shows as plain text, is
 // fetched, and the list and the modal's comments redrawn when it is here.
@@ -2098,7 +1945,7 @@ function htmlOf(kind, text) {
       missingTexts = null;
       if (!await renderTexts(want)) return;
       render();
-      if (modal.open && commentsTaskId) renderComments(tasks.find(t => t.id === commentsTaskId));
+      if (modal.open && st.commentsTaskId) renderComments(st.tasks.find(t => t.id === st.commentsTaskId));
     });
   }
   missingTexts[kind].push(text);
@@ -2116,9 +1963,9 @@ function render() {
   // task has no section of its own: it keeps its place in the order, and
   // its urgency colour marks it.
   let orderedTasks, newTasks = [];
-  if (activeView === 'open' && activeSort()) {
+  if (st.activeView === 'open' && activeSort()) {
     orderedTasks = [...filtered].reverse().sort(SORTS[activeSort()]);
-  } else if (SECTIONS[activeView]) {
+  } else if (SECTIONS[st.activeView]) {
     // TasksCore.byOpenOrder, which the Plan board uses too. Reversed first,
     // so tasks created in the same second (created_at has no finer
     // resolution) keep newest-first.
@@ -2129,10 +1976,10 @@ function render() {
     orderedTasks = sortTasks(filtered);
   }
 
-  if (activeView !== 'plan' &&
+  if (st.activeView !== 'plan' &&
       orderedTasks.length === 0 && newTasks.length === 0) {
-    if (selectedIds.size) clearSelection();
-    if (activeView === 'focus') {
+    if (st.selectedIds.size) clearSelection();
+    if (st.activeView === 'focus') {
       listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
         '<button type="button" class="btn btn-sm" data-goto-tab="plan">Plan your day</button></li>';
       listEl.querySelector('[data-goto-tab]').addEventListener('click', () => switchTab('plan'));
@@ -2142,7 +1989,7 @@ function render() {
     return;
   }
 
-  const taskHTML = (task, draggable = !!SECTIONS[activeView], extraClass = '') => {
+  const taskHTML = (task, draggable = !!SECTIONS[st.activeView], extraClass = '') => {
     // A task ticked but not yet done stays ticked when another completion
     // re-renders the list.
     const pending = pendingCompletions.has(task.id);
@@ -2222,11 +2069,11 @@ function render() {
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
     // Compact lines with details get the expand button (CSS hides it on
     // full cards, which show them).
-    const detailsShown = compact && task.id === expandedId && detailsOpen;
+    const detailsShown = st.compact && task.id === st.expandedId && detailsOpen;
     const expandBtn = descHtml || commentsHtml
       ? `<button type="button" class="task-expand-btn" data-id="${task.id}" aria-expanded="${detailsShown}" aria-label="Notes and comments" title="Notes and comments (l / h)">${EXPAND_ICON}</button>` : '';
     return `
-      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${compact && task.id === expandedId ? ' task-expanded' + (detailsOpen ? ' task-details' : '') : ''}" data-id="${task.id}" ${dragAttr}>
+      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (detailsOpen ? ' task-details' : '') : ''}" data-id="${task.id}" ${dragAttr}>
         <label class="task-checkbox">
           <input type="checkbox" ${checked} data-id="${task.id}">
         </label>
@@ -2244,7 +2091,7 @@ function render() {
   let truncated = false;
 
   // Upcoming day board: one section per day, dividers double as drop targets.
-  if (activeView === 'plan') {
+  if (st.activeView === 'plan') {
     const filtering = userFiltering();
     const today = todayStr();
     html = boardBuckets(filtered).map(s => {
@@ -2307,7 +2154,7 @@ function render() {
     return;
   }
 
-  if (activeView === 'focus') {
+  if (st.activeView === 'focus') {
     const inFocus = orderedTasks.length + newTasks.length;
     if (LIMIT && inFocus >= LIMIT) {
       html += `<li class="focus-stale-bar focus-over-limit">` +
@@ -2315,9 +2162,9 @@ function render() {
     }
   }
   // No tab is highlighted in Completed, so the list says where you are.
-  if (activeView === 'completed') {
+  if (st.activeView === 'completed') {
     // Earlier years (the yearly archives) are one click away.
-    const shown = completedYear || thisYear;
+    const shown = st.completedYear || thisYear;
     const years = completedYears.includes(shown) ? completedYears : [...completedYears, shown].sort().reverse();
     const yearBtns = years.length > 1
       ? `<span class="completed-years">${years.map(y =>
@@ -2327,14 +2174,14 @@ function render() {
   }
   // Limit completed tab display
   let displayTasks = orderedTasks;
-  if (activeView === 'completed' && orderedTasks.length > completedLimit) {
+  if (st.activeView === 'completed' && orderedTasks.length > completedLimit) {
     displayTasks = orderedTasks.slice(0, completedLimit);
     truncated = true;
   }
   // Open sorted: by deadline the tasks with one, then those without, each
   // under a heading; newest first under one. Not drop targets: nothing
   // drags here.
-  if (activeView === 'open' && activeSort()) {
+  if (st.activeView === 'open' && activeSort()) {
     const heading = (label, n) => n ? `<li class="board-day-divider sort-heading">` +
       `<span class="board-day-label">${label}</span><span class="board-day-count">${n}</span></li>` : '';
     const group = (label, tasks) => heading(label, tasks.length) + tasks.map(t => taskHTML(t, false)).join('');
@@ -2345,7 +2192,7 @@ function render() {
   }
   // Open and Focus: both sections always have a heading, even when empty,
   // because the heading is where a task is dropped to enter an empty section.
-  else if (SECTIONS[activeView]) {
+  else if (SECTIONS[st.activeView]) {
     html += sectionHTML('unsorted', 'Unsorted', newTasks.length);
     html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
     html += sectionHTML('sorted', 'Sorted', orderedTasks.length);
@@ -2403,7 +2250,7 @@ function render() {
     cb.addEventListener('change', e => {
       const id = e.target.dataset.id;
       const completed = e.target.checked;
-      const task = tasks.find(t => t.id === id);
+      const task = st.tasks.find(t => t.id === id);
       if (completed) {
         beginComplete(id, e.target.closest('.task-item'));
       } else if (!cancelPendingComplete(id)) {
@@ -2418,7 +2265,7 @@ function render() {
       e.stopPropagation();
       const id = el.dataset.id;
       const field = el.dataset.field;
-      const task = tasks.find(t => t.id === id);
+      const task = st.tasks.find(t => t.id === id);
       if (!task) return;
       openDatePicker(task[field] || '', d => {
         if (field === 'start_date' && startsAfterDeadline(task, d)) planOnDay(id, d);
@@ -2441,7 +2288,7 @@ function render() {
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('dblclick', e => {
       // Touch: two taps select and open (the tap handler), never more.
-      if (lastPointerType === 'touch' || selectMode) return;
+      if (st.lastPointerType === 'touch' || st.selectMode) return;
       if (e.target.closest('input, button, a, label, .task-clickable-date')) return;
       window.getSelection()?.removeAllRanges();
       openEditModal(el.dataset.id);
@@ -2449,22 +2296,22 @@ function render() {
   });
 
   // Drag and drop
-  touchDrop = null;
-  if (activeView === 'plan') {
+  st.touchDrop = null;
+  if (st.activeView === 'plan') {
     setupBoardDragAndDrop();
-  } else if (SECTIONS[activeView] && !activeSort()) {
+  } else if (SECTIONS[st.activeView] && !activeSort()) {
     setupDragAndDrop();
   }
 
   // Restore or clear selection after re-render
-  if (selectedIds.size) {
+  if (st.selectedIds.size) {
     const visSet = new Set(visibleItems().map(el => el.dataset.id));
-    selectedIds = new Set([...selectedIds].filter(id => visSet.has(id)));
-    if (!visSet.has(selectedId)) selectedId = selectedIds.size ? [...selectedIds][0] : null;
-    if (!visSet.has(anchorId))   anchorId = selectedId;
+    st.selectedIds = new Set([...st.selectedIds].filter(id => visSet.has(id)));
+    if (!visSet.has(st.selectedId)) st.selectedId = st.selectedIds.size ? [...st.selectedIds][0] : null;
+    if (!visSet.has(st.anchorId))   st.anchorId = st.selectedId;
     updateSelectionClasses();
-    if (selectedId) {
-      const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(selectedId)}"]`);
+    if (st.selectedId) {
+      const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(st.selectedId)}"]`);
       if (el) el.scrollIntoView({ block: 'nearest' });
     }
   }
@@ -2474,14 +2321,14 @@ function render() {
   // A right-click on a selected card keeps the selection for its menu.
   listEl.querySelectorAll('.task-item').forEach(el => {
     el.addEventListener('mousedown', e => {
-      if (selectMode || e.target.closest('input, button, a, .task-checkbox')) return;   // selecting: the click toggles
+      if (st.selectMode || e.target.closest('input, button, a, .task-checkbox')) return;   // selecting: the click toggles
       const id = el.dataset.id;
-      if (e.button !== 0 && selectedIds.has(id)) return;
-      if (e.shiftKey && selectedId) { e.preventDefault(); extendSelection(id); }
+      if (e.button !== 0 && st.selectedIds.has(id)) return;
+      if (e.shiftKey && st.selectedId) { e.preventDefault(); extendSelection(id); }
       else if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleSelection(id); }
       else {
-        pressedCard = el;
-        try { setSelected(id); } finally { pressedCard = null; }
+        st.pressedCard = el;
+        try { setSelected(id); } finally { st.pressedCard = null; }
       }
     });
   });
@@ -2611,15 +2458,15 @@ function syncCompletedLink() {
   if (!completedLink) return;
   let matches = null;
   const f = parseFilter(filterQuery());
-  const filtering = activeView !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
+  const filtering = st.activeView !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
   if (filtering) {
     if (!completedLoaded) { fetchCompleted(); }
     else {
-      matches = tasks.filter(t => t.completed_at && matchesFilter(t, f)).length;
+      matches = st.tasks.filter(t => t.completed_at && matchesFilter(t, f)).length;
     }
   }
   completedLink.classList.toggle('has-matches', matches > 0);
-  completedLink.textContent = activeView === 'completed' ? `← Back to ${tabLabel(lastTab)}`
+  completedLink.textContent = st.activeView === 'completed' ? `← Back to ${tabLabel(lastTab)}`
     : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
     : matches === 0 ? '✓ No matches in Completed →'
     : filtering ? '✓ Completed →'
@@ -2638,14 +2485,14 @@ function markActiveTab(view) {
 
 function switchTab(view) {
   if (!VIEWS.includes(view)) return;
-  if (selectMode) exitSelectMode();
+  if (st.selectMode) exitSelectMode();
   if (view !== 'completed') lastTab = view;
-  activeView = view;
+  st.activeView = view;
   applyCompact(view);
   applySort();
   applyGroup();
   // Back from an earlier year: the other views count this year's matches.
-  if (view !== 'completed' && completedYear) setCompletedYear('');
+  if (view !== 'completed' && st.completedYear) setCompletedYear('');
   markActiveTab(view);   // Completed has no tab: none is marked
   syncCompletedLink();
   // Keyboard focus follows the active view (Tab-cycling from a focused tab
@@ -2653,8 +2500,8 @@ function switchTab(view) {
   if (tabsEl.contains(document.activeElement)) {
     tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.focus();
   }
-  saveActiveTab(activeView);
-  if (activeView === 'completed') fetchCompleted();
+  saveActiveTab(st.activeView);
+  if (st.activeView === 'completed') fetchCompleted();
   render();
 }
 
@@ -2663,8 +2510,8 @@ tabsEl.addEventListener('click', e => {
   if (btn) switchTab(tabView(btn.dataset.view));
 });
 completedLink?.addEventListener('click', () => {
-  switchTab(activeView === 'completed' ? lastTab : 'completed');
-  if (activeView === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
+  switchTab(st.activeView === 'completed' ? lastTab : 'completed');
+  if (st.activeView === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
 });
 
 // The filter: its chips (completed tag words) plus the text typed after them.
@@ -2855,7 +2702,7 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
   },
   suggest: w => {
     const committed = editChips.words().map(t => t.toLowerCase());
-    const counts = tagCounts(tasks);
+    const counts = tagCounts(st.tasks);
     for (const tag of Object.keys(counts)) if (committed.includes(tag.toLowerCase())) delete counts[tag];
     return rankTags(w.partial, counts);
   },
@@ -2870,7 +2717,7 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
 // same suggestions, from every tag in use.
 if (titleInput) attachTagAc(titleInput, {
   word: () => document.getElementById('task-edit-id' + sfx).value ? null : hashWordAtCaret(titleInput),
-  suggest: w => rankTags(w.partial, tagCounts(tasks), w.partial ? 8 : 12),
+  suggest: w => rankTags(w.partial, tagCounts(st.tasks), w.partial ? 8 : 12),
   accept: (tag, w) => { insertHashTag(titleInput, tag, w); syncQuickPreview(); },
 });
 
@@ -2979,9 +2826,9 @@ function renderHistory(task) {
 const commentsBox = document.getElementById('task-edit-comments' + sfx);
 const commentInput = document.getElementById('task-edit-comment' + sfx);
 const commentList = document.getElementById('task-edit-comment-list' + sfx);
-let commentsTaskId = null;
+st.commentsTaskId = null;
 function renderComments(task) {
-  commentsTaskId = task?.id || null;
+  st.commentsTaskId = task?.id || null;
   commentsBox.hidden = !task;
   if (!task) return;
   const comments = task.comments || [];
@@ -3003,9 +2850,9 @@ async function commentWrite(url, method, body) {
   if (!res.ok) { await noticeFromResponse(res, 'Comment not saved'); return null; }
   const updated = await res.json();
   await renderTexts(textsOf([updated]));
-  const idx = tasks.findIndex(t => t.id === updated.id);
-  if (idx !== -1) tasks[idx] = updated;
-  if (commentsTaskId === updated.id && modal.open) renderComments(updated);
+  const idx = st.tasks.findIndex(t => t.id === updated.id);
+  if (idx !== -1) st.tasks[idx] = updated;
+  if (st.commentsTaskId === updated.id && modal.open) renderComments(updated);
   render();
   refreshOtherInstances(instanceId);
   return updated;
@@ -3013,9 +2860,9 @@ async function commentWrite(url, method, body) {
 const commentsUrl = id => `/api/tasks/${encodeURIComponent(id)}/comments`;
 async function addComment() {
   const text = commentInput.value.trim();
-  if (!text || !commentsTaskId) return;
+  if (!text || !st.commentsTaskId) return;
   commentInput.disabled = true;
-  const ok = await commentWrite(commentsUrl(commentsTaskId), 'POST', { text });
+  const ok = await commentWrite(commentsUrl(st.commentsTaskId), 'POST', { text });
   commentInput.disabled = false;
   if (ok) commentInput.value = '';
   commentInput.focus();
@@ -3029,9 +2876,9 @@ document.getElementById('task-edit-comment-add' + sfx).addEventListener('click',
 commentList.addEventListener('click', e => {
   const btn = e.target.closest('[data-comment-action]');
   const li = btn?.closest('[data-comment]');
-  if (!li || !commentsTaskId) return;
-  const taskId = commentsTaskId, cid = li.dataset.comment;
-  const task = tasks.find(t => t.id === taskId);
+  if (!li || !st.commentsTaskId) return;
+  const taskId = st.commentsTaskId, cid = li.dataset.comment;
+  const task = st.tasks.find(t => t.id === taskId);
   const comment = task?.comments?.find(c => c.id === cid);
   if (!comment) return;
   if (btn.dataset.commentAction === 'delete') {
@@ -3039,7 +2886,7 @@ commentList.addEventListener('click', e => {
     dismissUndo();
     commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'DELETE').then(ok => {
       if (ok) showUndo('Comment deleted', () => updateTask(taskId, { comments: before }).then(t => {
-        if (t && commentsTaskId === taskId && modal.open) renderComments(t);
+        if (t && st.commentsTaskId === taskId && modal.open) renderComments(t);
       }));
     });
     return;
@@ -3063,7 +2910,7 @@ commentList.addEventListener('click', e => {
     if (save && text && text !== comment.text) {
       if (await commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'PUT', { text })) return;
     }
-    renderComments(tasks.find(t => t.id === taskId));
+    renderComments(st.tasks.find(t => t.id === taskId));
   };
   input.addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); finish(true); }
@@ -3081,7 +2928,7 @@ commentList.addEventListener('click', e => {
 // onCreated gets them all (a null where creating failed, then it stops).
 let onCreated = null;
 function openEditModal(taskId, opts) {
-  const task = taskId ? tasks.find(t => t.id === taskId) : null;
+  const task = taskId ? st.tasks.find(t => t.id === taskId) : null;
   const defaultTags = opts?.tags || '';
   const givenTags = !!opts && 'tags' in opts;
   onCreated = !task && opts?.onCreated || null;
@@ -3092,7 +2939,7 @@ function openEditModal(taskId, opts) {
   setNotesPreview(false, false);
   document.getElementById('task-edit-due' + sfx).value = task ? task.due_date || '' : '';
   document.getElementById('task-edit-start' + sfx).value = task ? task.start_date || ''
-    : opts && 'start_date' in opts ? opts.start_date || '' : (activeView === 'focus' ? dateOffset(0) : '');
+    : opts && 'start_date' in opts ? opts.start_date || '' : (st.activeView === 'focus' ? dateOffset(0) : '');
   const startTags = task ? task.tags || []
     : givenTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : filterDefaultTags();
   editChips.set(startTags, true);
@@ -3324,8 +3171,8 @@ function setupBoardDragAndDrop() {
   async function executeBoardItemDrop(target, side) {
     const label = !target.classList.contains('task-item');   // a Sorted label
     const targetId = label ? null : target.dataset.id;
-    if (!draggedId || targetId === draggedId) return;
-    const id = draggedId;
+    if (!st.draggedId || targetId === st.draggedId) return;
+    const id = st.draggedId;
     const draggedEl = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
     const draggedDiv = draggedEl && boardDivider(draggedEl);
     const targetDiv = boardDivider(target);
@@ -3346,23 +3193,23 @@ function setupBoardDragAndDrop() {
   }
   const SORTED_LABEL = '.plan-subdivider[data-sub="sorted"]';
 
-  touchDrop = {
+  st.touchDrop = {
     sided: t => t.classList.contains('task-item') && orderedCard(t),
     target: el => {
       const item = el.closest('.task-item');
-      if (item) return item.dataset.id === draggedId ? null : item;
+      if (item) return item.dataset.id === st.draggedId ? null : item;
       const label = el.closest(SORTED_LABEL);
       if (label) return label;
       const div = boardDivider(el);
       return div && div.dataset.dropBucket ? div : null;
     },
     drop: (target, side) => target.classList.contains('task-item') || target.matches(SORTED_LABEL)
-      ? executeBoardItemDrop(target, side) : dropOnBucket(draggedId, target),
+      ? executeBoardItemDrop(target, side) : dropOnBucket(st.draggedId, target),
   };
 
   listEl.querySelectorAll(SORTED_LABEL).forEach(label => {
     label.addEventListener('dragover', e => {
-      if (!draggedId) return;
+      if (!st.draggedId) return;
       e.preventDefault();
       e.stopPropagation();  // not the section's highlight: this is a place in it
       clearBoardDropOver();
@@ -3380,24 +3227,24 @@ function setupBoardDragAndDrop() {
   listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
     item.addEventListener('dragstart', e => {
       // Touch has its own long-press drag (see touchDrop); selecting, nothing drags.
-      if (lastPointerType === 'touch' || selectMode) { e.preventDefault(); return; }
-      draggedId = item.dataset.id;
+      if (st.lastPointerType === 'touch' || st.selectMode) { e.preventDefault(); return; }
+      st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('task-dragging');
-      draggedId = null;
+      st.draggedId = null;
       clearBoardDropOver();
       listEl.querySelectorAll('.task-drag-over, .task-drop-before, .task-drop-after')
         .forEach(el => el.classList.remove('task-drag-over', 'task-drop-before', 'task-drop-after'));
     });
     item.addEventListener('dragover', e => {
-      if (!draggedId) return;
+      if (!st.draggedId) return;
       e.preventDefault();
       e.stopPropagation();  // suppress list-level bucket-highlight when over a task item
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id === draggedId) return;
+      if (item.dataset.id === st.draggedId) return;
       if (!orderedCard(item)) { item.classList.add('task-drag-over'); return; }
       clearBoardDropOver();
       const side = dropSide(item, e.clientY);
@@ -3417,15 +3264,15 @@ function setupBoardDragAndDrop() {
 const DIVIDER_TARGETS = '.list-section';
 function setupDragAndDrop() {
   function executeDrop(targetId, side) {
-    if (!draggedId || targetId === draggedId) return;
+    if (!st.draggedId || targetId === st.draggedId) return;
     sectionDrop(targetId, side);
   }
   const dropOnDivider = div => executeDrop(sectionKey(div.dataset.section));
-  touchDrop = {
+  st.touchDrop = {
     sided: true,
     target: el => {
       const item = el.closest('.task-item[data-drag]');
-      if (item) return item.dataset.id === draggedId ? null : item;
+      if (item) return item.dataset.id === st.draggedId ? null : item;
       return el.closest(DIVIDER_TARGETS);
     },
     drop: (target, side) => target.classList.contains('task-item')
@@ -3437,20 +3284,20 @@ function setupDragAndDrop() {
     .forEach(el => el.classList.remove(...DROP_CLASSES));
   items.forEach(item => {
     item.addEventListener('dragstart', e => {
-      if (lastPointerType === 'touch' || selectMode) { e.preventDefault(); return; }
-      draggedId = item.dataset.id;
+      if (st.lastPointerType === 'touch' || st.selectMode) { e.preventDefault(); return; }
+      st.draggedId = item.dataset.id;
       item.classList.add('task-dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
     item.addEventListener('dragend', () => {
       item.classList.remove('task-dragging');
-      draggedId = null;
+      st.draggedId = null;
       clearDropOver();
     });
     item.addEventListener('dragover', e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (item.dataset.id === draggedId) return;
+      if (item.dataset.id === st.draggedId) return;
       const side = dropSide(item, e.clientY);
       item.classList.toggle('task-drop-before', side === 'before');
       item.classList.toggle('task-drop-after', side === 'after');
@@ -3485,15 +3332,15 @@ function setupDragAndDrop() {
 // ── Keyboard navigation ────────────────────────────────────────────────────
 
 function reorderSelected(direction) {
-  if (!selectedIds.size) return;
+  if (!st.selectedIds.size) return;
   if (activeSort()) showNotice(`Sorted ${SORT_TITLES[activeSort()]}: press o until Manual to reorder`);
-  else if (SECTIONS[activeView]) sectionKeyMove(direction);
-  else if (activeView === 'plan') planKeyMove(direction);
+  else if (SECTIONS[st.activeView]) sectionKeyMove(direction);
+  else if (st.activeView === 'plan') planKeyMove(direction);
 }
 // Plan: Ctrl+Shift+↑/↓ moves the selection one place within its day or
 // Later, never out of it (moving to another day is 1–7 and dragging).
 function planKeyMove(direction) {
-  const els = [...selectedIds].map(id => listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
+  const els = [...st.selectedIds].map(id => listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
   if (els.some(el => !el)) return;
   const div = boardDivider(els[0]);
   if (!div?.dataset.ordered || els.some(el => boardDivider(el) !== div)) return;
@@ -3507,7 +3354,7 @@ document.addEventListener('keydown', async e => {
   // The second key of g … / c … is the page's (the t of c t, g t)
   if (keyPrefix.key) return;
   // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
-  if (taskMenu) return;
+  if (st.taskMenu) return;
 
   // Ctrl+Z undo — works everywhere except inside the edit modal
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
@@ -3543,11 +3390,11 @@ document.addEventListener('keydown', async e => {
   if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;
 
   const items = visibleItems();
-  const currentIdx = selectedId ? items.findIndex(el => el.dataset.id === selectedId) : -1;
+  const currentIdx = st.selectedId ? items.findIndex(el => el.dataset.id === st.selectedId) : -1;
 
   // Ctrl/Cmd+A with a task selected: every task shown (with the filter, the
   // ones it leaves). Without a selection it stays the page's select all.
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a' && selectedId) {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a' && st.selectedId) {
     e.preventDefault();
     selectAllVisible();
     return;
@@ -3555,9 +3402,9 @@ document.addEventListener('keydown', async e => {
 
   // The menu key or Shift+F10: the selected task's ⋯ menu (with a mouse
   // there is no ⋯ button; right-click opens it too)
-  if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && selectedId) {
-    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(selectedId)}"]`);
-    if (el) { e.preventDefault(); openTaskMenu(selectedId, el); }
+  if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && st.selectedId) {
+    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(st.selectedId)}"]`);
+    if (el) { e.preventDefault(); openTaskMenu(st.selectedId, el); }
     return;
   }
 
@@ -3569,14 +3416,14 @@ document.addEventListener('keydown', async e => {
   }
 
   // 'd' toggles the Open tab's Plan switch (by start date / one list)
-  if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && isOpenTab(activeView)) {
+  if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && isOpenTab(st.activeView)) {
     e.preventDefault();
-    setGroup(activeView === 'open' ? 'days' : 'list');
+    setGroup(st.activeView === 'open' ? 'days' : 'list');
     return;
   }
 
   // 'o' cycles the Open tab's order: manual, by deadline, newest first
-  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (activeView === 'open' || activeView === 'plan')) {
+  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (st.activeView === 'open' || st.activeView === 'plan')) {
     e.preventDefault();
     cycleSort();
     return;
@@ -3590,9 +3437,9 @@ document.addEventListener('keydown', async e => {
   }
 
   // 'f' / 'F' — start selected task today / tomorrow
-  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && selectedId) {
+  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
     e.preventDefault();
-    const task = tasks.find(t => t.id === selectedId);
+    const task = st.tasks.find(t => t.id === st.selectedId);
     if (task && !task.completed_at) {
       const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
       if (task.start_date !== target && startsAfterDeadline(task, target)) planOnDay(task.id, target);
@@ -3603,10 +3450,10 @@ document.addEventListener('keydown', async e => {
 
   // 1–7 start the selected tasks on that day of the Plan board (1 today,
   // 2 tomorrow … 7 six days ahead), 0 unplans them; on every tab
-  if (/^[0-7]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && selectedIds.size) {
+  if (/^[0-7]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedIds.size) {
     e.preventDefault();
     const n = Number(e.key);
-    startOn([...selectedIds], n ? dateOffset(n - 1) : null);
+    startOn([...st.selectedIds], n ? dateOffset(n - 1) : null);
     return;
   }
 
@@ -3616,7 +3463,7 @@ document.addEventListener('keydown', async e => {
     // Only the tabs: Completed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
     const views = tabButtons().map(b => b.dataset.view);
-    const i = views.indexOf(activeView === 'plan' ? 'open' : activeView);
+    const i = views.indexOf(st.activeView === 'plan' ? 'open' : st.activeView);
     const n = views.length;
     switchTab(tabView(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]));
     return;
@@ -3644,17 +3491,17 @@ document.addEventListener('keydown', async e => {
   } else if (e.key === 'ArrowUp' || e.key === 'k') {
     e.preventDefault();
     setSelected(items[currentIdx > 0 ? currentIdx - 1 : items.length - 1].dataset.id);
-  } else if (e.key === ' ' && selectedId) {
+  } else if (e.key === ' ' && st.selectedId) {
     e.preventDefault();
-    if (selectedIds.size > 1) {
+    if (st.selectedIds.size > 1) {
       // Bulk complete/uncomplete; the selection moves on to the next task.
-      const ids = [...selectedIds];
-      const next = items.find((el, i) => i > currentIdx && !selectedIds.has(el.dataset.id))
-                || items.find(el => !selectedIds.has(el.dataset.id));
+      const ids = [...st.selectedIds];
+      const next = items.find((el, i) => i > currentIdx && !st.selectedIds.has(el.dataset.id))
+                || items.find(el => !st.selectedIds.has(el.dataset.id));
       setSelected(next?.dataset.id || null);
       await completeMany(ids);
     } else {
-      const task = tasks.find(t => t.id === selectedId);
+      const task = st.tasks.find(t => t.id === st.selectedId);
       if (!task) return;
       const completing = !task.completed_at;
       if (completing) {
@@ -3670,29 +3517,29 @@ document.addEventListener('keydown', async e => {
       }
     }
   } else if (['ArrowRight', 'l', 'ArrowLeft', 'h'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey &&
-             selectedIds.size === 1 && compact) {
+             st.selectedIds.size === 1 && st.compact) {
     // → / l open the selected line's details, ← / h close them (vim's hjkl).
-    if (toggleDetails(selectedId, e.key === 'ArrowRight' || e.key === 'l')) e.preventDefault();
-  } else if (e.key === 'Enter' && selectedId) {
+    if (toggleDetails(st.selectedId, e.key === 'ArrowRight' || e.key === 'l')) e.preventDefault();
+  } else if (e.key === 'Enter' && st.selectedId) {
     e.preventDefault();
-    openEditModal(selectedId);
-  } else if (e.key === 'Delete' && selectedIds.size) {
+    openEditModal(st.selectedId);
+  } else if (e.key === 'Delete' && st.selectedIds.size) {
     e.preventDefault();
-    await deleteWithUndo([...selectedIds], () => {
+    await deleteWithUndo([...st.selectedIds], () => {
       // Move the selection to the next surviving card
-      const next = items.find(el => !selectedIds.has(el.dataset.id) &&
+      const next = items.find(el => !st.selectedIds.has(el.dataset.id) &&
                      items.indexOf(el) > currentIdx)
-                || items.find(el => !selectedIds.has(el.dataset.id));
-      selectedId = next?.dataset.id || null;
-      selectedIds = new Set(selectedId ? [selectedId] : []);
-      anchorId = selectedId;
+                || items.find(el => !st.selectedIds.has(el.dataset.id));
+      st.selectedId = next?.dataset.id || null;
+      st.selectedIds = new Set(st.selectedId ? [st.selectedId] : []);
+      st.anchorId = st.selectedId;
     });
-  } else if ((e.key === 't' || e.key === 'T') && selectedIds.size) {
+  } else if ((e.key === 't' || e.key === 'T') && st.selectedIds.size) {
     e.preventDefault();
-    const ids = [...selectedIds];
+    const ids = [...st.selectedIds];
     const removing = e.key === 'T';
     openBulkTagModal(ids, removing);
-  } else if (e.key === 'Escape' && (expandedId || detailsMode) && !selectMode) {
+  } else if (e.key === 'Escape' && (st.expandedId || detailsMode) && !st.selectMode) {
     detailsMode = false;
     setExpanded(null);   // collapse first; the next Esc clears the selection
   } else if (e.key === 'Escape') {
@@ -3707,7 +3554,7 @@ document.addEventListener('keydown', async e => {
 // the middle of something the re-render would destroy: a drag or swipe, a
 // completion's grace period, the ⋯ menu or the editor.
 function refreshIfIdle() {
-  const busy = draggedId || touchDrag || pendingCompletions.size || taskMenu || modal.open || deadlineModal.open;
+  const busy = st.draggedId || st.touchDrag || pendingCompletions.size || st.taskMenu || modal.open || deadlineModal.open;
   if (!busy) refresh();
 }
 tasksInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });
@@ -3729,12 +3576,12 @@ if (filterSearch) {
 // always opens on its configured tab; a plain [[tasks:]] remembers the tab the
 // user last clicked across refreshes within the same browser tab. A name that
 // isn't one of VIEWS is passed over.
-activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
-if (activeView !== 'completed') lastTab = activeView;
-applyCompact(activeView);
+st.activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
+if (st.activeView !== 'completed') lastTab = st.activeView;
+applyCompact(st.activeView);
 applySort();
 applyGroup();
-markActiveTab(activeView);
+markActiveTab(st.activeView);
 syncCompletedLink();
 
 // ?task=<id> (search results, a page's "Linked tasks"): show exactly that
@@ -3743,7 +3590,7 @@ syncCompletedLink();
 // contain a #word the filter field would read as a tag.
 const initTaskId = urlParams.get('task') || '';
 function revealTask(id) {
-  if (!tasks.some(t => t.id === id)) {
+  if (!st.tasks.some(t => t.id === id)) {
     // Deleted (or in another list). One notice per page.
     if (instanceId === '0') showNotice('That task is no longer in your tasks.');
     return;
@@ -3762,7 +3609,7 @@ function flashTask(el) {
 }
 
 fetchTasks().then(async () => {
-  if (activeView === 'completed') await fetchCompleted();
+  if (st.activeView === 'completed') await fetchCompleted();
   if (initTaskId) revealTask(initTaskId);
 });
 
