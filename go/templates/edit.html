@@ -5,65 +5,65 @@
 {{define "body"}}
 <div class="editor-wrap">
   <div class="editor-pane">
-    {{.breadcrumb_html}}
+    {{.BreadcrumbHTML}}
     {{- /* A new page from a link on a private page would be shared: say so,
         and say how to make it private (js/editor.js dismisses the note). */}}
-    {{- if .private_offer}}
+    {{- if .PrivateOffer}}
     <div class="shared-new-banner" id="shared-new-banner" role="note">
-      <span>🌐 This new page is shared: everyone who uses the wiki will see it. For a private page, link to <code>{{.private_offer}}</code> instead.</span>
+      <span>🌐 This new page is shared: everyone who uses the wiki will see it. For a private page, link to <code>{{.PrivateOffer}}</code> instead.</span>
       <span class="conflict-actions"><button type="button" class="btn btn-small" id="shared-new-keep">Keep shared</button></span>
     </div>
     {{- end}}
     <div class="editor-toolbar">
-      <span class="slug-label" title="{{.slug}}">{{.slug}}</span>
+      <span class="slug-label" title="{{.Slug}}">{{.Slug}}</span>
       <span id="save-dot" class="save-dot">●</span>
       <span id="merge-note" class="merge-note" role="status" hidden></span>
       <button type="button" class="btn mobile-only" id="mobile-preview-btn">Preview</button>
       <button type="submit" form="editor-form" class="btn btn-primary">Done</button>
       {{- /* Phones: Rename and Delete fold into a ⋯ menu so Preview and Done
           keep the toolbar; on wider screens .editor-more is display:contents. */}}
-      {{- if or .can_rename .can_delete}}
+      {{- if or .CanRename .CanDelete}}
       <button type="button" class="btn mobile-only" id="editor-more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="editor-more" title="More actions">⋯</button>
       {{- end}}
       <span class="editor-more" id="editor-more">
-        {{- if .can_rename}}<button type="button" class="btn" id="rename-toggle">Rename…</button>{{end -}}
-        {{- if .can_delete}}<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{{.page_title}}" data-git="{{if .git}}1{{end}}">Delete</button>{{end -}}
+        {{- if .CanRename}}<button type="button" class="btn" id="rename-toggle">Rename…</button>{{end -}}
+        {{- if .CanDelete}}<button type="submit" form="delete-form" class="btn btn-danger" id="delete-btn" data-title="{{.PageTitle}}" data-git="{{if .Git}}1{{end}}">Delete</button>{{end -}}
       </span>
     </div>
-    {{- if .can_delete}}
-    <form id="delete-form" method="post" action="{{url "delete" .slug}}" style="display:none"></form>
+    {{- if .CanDelete}}
+    <form id="delete-form" method="post" action="{{url "delete" .Slug}}" style="display:none"></form>
     {{- end}}
-    {{- if .can_rename}}
-    <div class="rename-bar{{if not .rename_error}} hidden{{end}}" id="rename-bar">
-      <form method="post" action="{{url "rename" .slug}}" class="rename-form">
+    {{- if .CanRename}}
+    <div class="rename-bar{{if not .RenameError}} hidden{{end}}" id="rename-bar">
+      <form method="post" action="{{url "rename" .Slug}}" class="rename-form">
         <label>New name</label>
-        <input type="text" name="new_name" id="rename-input" value="{{or .rename_name .slug}}" autocomplete="off">
+        <input type="text" name="new_name" id="rename-input" value="{{or .RenameName .Slug}}" autocomplete="off">
         <button type="submit" class="btn btn-primary">Rename</button>
         <button type="button" class="btn" id="rename-cancel">Cancel</button>
-        {{template "error" (dict "message" .rename_error "tag" "span")}}
+        {{template "error" (dict "message" .RenameError "tag" "span")}}
       </form>
     </div>
     {{- end}}
-    {{- with .paste}}{{template "paste_hint" .}}{{end}}
-    {{- with .left_draft}}
+    {{- with .Paste}}{{template "paste_hint" .}}{{end}}
+    {{- with .LeftDraft}}
     {{- /* Changes the user left here in conflict (merge.go leftDraft):
         editor.js offers the conflict banner's choices for them. */}}
-    <div id="left-draft" hidden data-at="{{.at}}">
-      <textarea id="left-draft-content" tabindex="-1">{{.content}}</textarea>
-      {{- with .conflict}}<textarea id="left-draft-conflict" tabindex="-1">{{.}}</textarea>{{end}}
+    <div id="left-draft" hidden data-at="{{.At}}">
+      <textarea id="left-draft-content" tabindex="-1">{{.Content}}</textarea>
+      {{- with .Conflict}}<textarea id="left-draft-conflict" tabindex="-1">{{.}}</textarea>{{end}}
     </div>
     {{- end}}
     {{template "format_bar" (dict)}}
-    <form id="editor-form" method="post" action="{{url "edit" .slug}}">
+    <form id="editor-form" method="post" action="{{url "edit" .Slug}}">
       {{- /* The file's hash, for conflict detection (whole page and section edits). */}}
-      <input type="hidden" name="file_hash" id="section-file-hash" value="{{.file_hash}}">
-      {{- if .has_section}}
-      <input type="hidden" name="start_char" id="section-start-char" value="{{.start_char}}">
-      <input type="hidden" name="end_char" id="section-end-char" value="{{.end_char}}">
-      <input type="hidden" name="section_idx" id="section-idx" value="{{.section}}">
+      <input type="hidden" name="file_hash" id="section-file-hash" value="{{.FileHash}}">
+      {{- if .HasSection}}
+      <input type="hidden" name="start_char" id="section-start-char" value="{{.StartChar}}">
+      <input type="hidden" name="end_char" id="section-end-char" value="{{.EndChar}}">
+      <input type="hidden" name="section_idx" id="section-idx" value="{{.Section}}">
       {{- end}}
-      <textarea id="editor-textarea" name="content" data-cursor="{{if .only_title}}end{{end}}"
-                spellcheck="false" autocorrect="off" autocapitalize="off">{{.content}}</textarea>
+      <textarea id="editor-textarea" name="content" data-cursor="{{if .OnlyTitle}}end{{end}}"
+                spellcheck="false" autocorrect="off" autocapitalize="off">{{.Content}}</textarea>
     </form>
   </div>
   <div class="preview-pane">
@@ -73,5 +73,5 @@
 </div>
 {{- /* A hidden task app: Make task (js/editor.js) opens its edit modal, and
     uses the task app's quick-add parser (tasks-core.js) for several lines at once. */}}
-{{.tasks_html}}
+{{.TasksHTML}}
 {{end}}

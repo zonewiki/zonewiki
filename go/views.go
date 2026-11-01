@@ -243,47 +243,86 @@ func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query str
 	return breadcrumb(rq, append(crumbs, extra...), slug, true, title, right)
 }
 
-// page renders a view (its template) in the page shell. actionButtons false
-// drops the action buttons, new note and search (the login page has nothing
-// to search or write); the editor has its own toolbar instead. wide: a page
-// view with side columns on big screens.
-func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shell, data M) {
+// pageShell: what every page's layout shows (templates/layout.html and the
+// partials it calls with it: shortcuts, top_actions, action_bar), the same
+// for every view. Templates reach it as .Shell.
+type pageShell struct {
+	Title              string // the window's title, and a view's heading
+	Editor, Wide       bool   // the editor's page; a page view's side columns
+	ShowActions        bool   // new note, new task, search (not on the login page, nor in the editor)
+	BadgeInForm        bool   // the remote badge in the view's form (the login page), not the corner
+	Module             string // the module the page is in (currentModule); "" in the editor
+	TasksNew           *tasksNew
+	ModuleLinks        []M // the module switcher's and the action bar's links (moduleLinks)
+	Sharing, Users     bool
+	Semantic           string // semanticStatus
+	AppName, Version   string
+	Build              string
+	Commit             string // the build's commit, "" when unknown
+	Dirty, AllowRemote bool
+	Locale, DateFormat string
+	SignOut            bool   // signed in, so Sign out is offered
+	User               string // who is signed in, with users
+}
+
+// tasksNew: how a new task from any page (c t, New task) starts, as the
+// Tasks home makes them.
+type tasksNew struct {
+	Tags                 string
+	Keep, Today, Private bool
+}
+
+// view: a view's data as a struct (each embeds view), its fields the
+// template's; page sets its Shell. A view still on a map (M) gets the shell
+// as M["Shell"].
+type view struct{ Shell *pageShell }
+
+func (v *view) setShell(s *pageShell) { v.Shell = s }
+
+// page renders a view (its template) in the page shell. noActions drops
+// the action buttons, new note and search (the login page has nothing to
+// search or write); the editor has its own toolbar instead. wide: a page
+// view with side columns on big screens. data: the view's struct (one that
+// embeds view) or map.
+func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shell, data any) {
 	s := settings()
-	ctx := M{
-		"title": title, "editor": o.editor, "wide": o.wide,
-		"show_actions": !o.noActions && !o.editor,
-		"module":       "", "tasks_new": nil,
-		"sharing":  rq.sharing,
-		"semantic": semanticStatus(), "app_name": appName, "version": version, "build": cfg.Build,
-		"allow_remote": cfg.AllowRemote, "locale": s.Locale, "date_format": s.DateFormat,
+	sh := &pageShell{
+		Title: title, Editor: o.editor, Wide: o.wide, ShowActions: !o.noActions && !o.editor,
+		BadgeInForm: o.badgeInForm, Sharing: rq.sharing, Semantic: semanticStatus(),
+		AppName: appName, Version: version, Build: cfg.Build, AllowRemote: cfg.AllowRemote,
+		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		"sign_out": s.authOn() && isSignedIn(rq.r), "user": rq.user, "users": s.Users != nil,
+		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil,
 	}
 	if !o.editor {
-		ctx["module"] = currentModule(rq)
+		sh.Module = currentModule(rq)
 	}
 	if !o.noActions {
 		if home := rq.tasksHome(); home != nil {
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
 			v := embedView(home.Params)
-			ctx["tasks_new"] = M{"tags": strings.Join(newTaskTags(home.Params), ","),
-				"keep": isTrue(home.Params.Get("keep")), "today": v == "" || v == "focus", "private": rq.homePrivate()}
+			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(home.Params), ","),
+				Keep: isTrue(home.Params.Get("keep")), Today: v == "" || v == "focus", Private: rq.homePrivate()}
 		}
 	}
-	if ctx["show_actions"] == true {
-		ctx["module_links"] = moduleLinks(rq)
+	if sh.ShowActions {
+		sh.ModuleLinks = moduleLinks(rq)
 	}
 	// The build's commit, shown in the corner: "abc1234 2026-09-26 12:00 +dirty".
 	if fields := strings.Fields(cfg.Build); cfg.Build != "unknown" && len(fields) > 0 {
-		ctx["commit"] = fields[0]
-		ctx["dirty"] = strings.Contains(cfg.Build, "+dirty")
+		sh.Commit, sh.Dirty = fields[0], strings.Contains(cfg.Build, "+dirty")
 	}
-	for k, v := range data {
-		ctx[k] = v
+	switch d := data.(type) {
+	case interface{ setShell(*pageShell) }:
+		d.setShell(sh)
+	case M:
+		d["Shell"] = sh
+	case nil:
+		data = M{"Shell": sh}
 	}
 	var buf bytes.Buffer
-	if err := views[name].ExecuteTemplate(&buf, "layout", ctx); err != nil {
+	if err := views[name].ExecuteTemplate(&buf, "layout", data); err != nil {
 		logf("rendering %s: %v", name, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -294,7 +333,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 }
 
 // shell: how a view sits in the page shell.
-type shell struct{ editor, noActions, wide bool }
+type shell struct{ editor, noActions, wide, badgeInForm bool }
 
 // sharingCookie, and what it was called before Leaf was called Zone (the
 // browser drops that one when it next sets sharing mode).

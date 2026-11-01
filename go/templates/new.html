@@ -5,7 +5,7 @@
   <label for="page-name">Page name</label>
   <input type="text" id="page-name" name="slug"
          placeholder="e.g. My New Page" autofocus required>
-  {{- with .user}}
+  {{- with .Shell.User}}
   <label class="promote-check"><input type="checkbox" name="private" value="1"> Private: in private/{{.}}/, only you see it</label>
   {{- end}}
   <button type="submit" class="btn btn-primary">Create</button>

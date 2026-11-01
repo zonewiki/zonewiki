@@ -11,8 +11,8 @@
   <button type="button" class="top-new-note" aria-label="New note" title="New note (c n)">{{template "icon_new_note"}}</button>
   <button type="button" class="top-task" aria-label="Add a task" title="Add a task (c t)">{{template "icon_new_task"}}</button>
   <button type="button" class="top-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="top-search-label" aria-hidden="true">Search</span><kbd class="top-search-key" aria-hidden="true">Ctrl P</kbd></button>
-  {{- range .module_links}}{{if .menu}}
-  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.user}}: account menu" title="{{$.user}}"><span aria-hidden="true">{{initial $.user}}</span></button>
+  {{- range .ModuleLinks}}{{if .menu}}
+  <button type="button" class="top-user module-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="{{$.User}}: account menu" title="{{$.User}}"><span aria-hidden="true">{{initial $.User}}</span></button>
   {{- end}}{{end}}
 </div>
 {{- end}}

@@ -1,15 +1,16 @@
 {{- /* Every view's page: head, the dialogs the client code opens (search, new
     note, shortcuts, paste link, upload conflict), the status
     badges, the top actions (desktop) and the action bar (phones). Views
-    define the body block (views.go, page). */ -}}
+    define the body block (views.go, page); what every page shows is
+    .Shell (pageShell). */ -}}
 {{define "layout" -}}
 <!DOCTYPE html>
-<html lang="en"{{if .sharing}} class="sharing"{{end}}>
+<html lang="en"{{if .Shell.Sharing}} class="sharing"{{end}}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-  <meta name="generator" content="{{.app_name}} {{.version}}">
-  <title>{{.title}} — {{.app_name}}</title>
+  <meta name="generator" content="{{.Shell.AppName}} {{.Shell.Version}}">
+  <title>{{.Shell.Title}} — {{.Shell.AppName}}</title>
   <link rel="icon" href="/public/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/public/manifest.json">
   <link rel="apple-touch-icon" href="/public/apple-touch-icon.png">
@@ -21,22 +22,22 @@
   <script type="module" src="/public/zonewiki.js"></script>
 </head>
 <body
-  {{- if .editor}} class="editor-page"{{end}}
-  {{- if .module}} data-module="{{.module}}"{{end}}
-  {{- /* How dates read and the week starts (LEAF_LOCALE, LEAF_DATE_FORMAT;
-      tasks-core.js). */}}
+  {{- if .Shell.Editor}} class="editor-page"{{end}}
+  {{- if .Shell.Module}} data-module="{{.Shell.Module}}"{{end}}
+  {{- /* How dates read and the week starts (locale, date-format in the
+      settings file; tasks-core.js). */}}
   {{- /* With users, private/ holds their private pages (js/completion.js). */}}
-  {{- if .users}} data-users="1"{{end}}
-  {{- if .locale}} data-locale="{{.locale}}"{{end}}
-  {{- if .date_format}} data-date-format="{{.date_format}}"{{end}}
+  {{- if .Shell.Users}} data-users="1"{{end}}
+  {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
+  {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the
       Tasks home gives them, are keep tasks if it makes them, start
       today when its "+ New" would, and are private when it is in the
       user's private folder (js/actions.js openHomeTask). */}}
-  {{- with .tasks_new}} data-tasks-tags="{{.tags}}"
-    {{- if .keep}} data-tasks-keep="1"{{end}}
-    {{- if .today}} data-tasks-today="1"{{end}}
-    {{- if .private}} data-tasks-private="1"{{end}}
+  {{- with .Shell.TasksNew}} data-tasks-tags="{{.Tags}}"
+    {{- if .Keep}} data-tasks-keep="1"{{end}}
+    {{- if .Today}} data-tasks-today="1"{{end}}
+    {{- if .Private}} data-tasks-private="1"{{end}}
   {{- end}}>
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">
@@ -52,7 +53,7 @@
       </label>
       {{- /* Whether content matches are found by meaning too; js/search.js
           words it and keeps it current from /api/search's X-Zone-Semantic. */}}
-      <span id="search-mode" class="search-mode" data-state="{{.semantic}}"></span>
+      <span id="search-mode" class="search-mode" data-state="{{.Shell.Semantic}}"></span>
     </div>
     <div class="modal-results">
       <ul id="modal-page-list" class="page-list"></ul>
@@ -61,8 +62,8 @@
     <div id="modal-preview" class="search-preview" aria-live="polite"></div>
   </dialog>
   <dialog id="modal" class="modal">
-    <p class="modal-label">New {{if .user}}private {{end}}note</p>
-    {{- if .user}}<p class="modal-desc">Only you see it, until you move it to the wiki.</p>{{end}}
+    <p class="modal-label">New {{if .Shell.User}}private {{end}}note</p>
+    {{- if .Shell.User}}<p class="modal-desc">Only you see it, until you move it to the wiki.</p>{{end}}
     <form id="new-note-form">
       <input type="text" id="new-note-title" placeholder="Title…" autocomplete="off" spellcheck="false">
       <div class="modal-actions">
@@ -71,7 +72,7 @@
       </div>
     </form>
   </dialog>
-  {{template "shortcuts" .}}
+  {{template "shortcuts" .Shell}}
   <dialog id="url-name-modal" class="modal">
     <p class="modal-label">Paste link</p>
     <code id="url-name-href" class="url-name-href"></code>
@@ -90,10 +91,10 @@
       <button type="button" class="btn" id="upload-conflict-cancel">Cancel</button>
     </div>
   </dialog>
-  <main{{if .wide}} class="wide"{{end}}>
+  <main{{if .Shell.Wide}} class="wide"{{end}}>
   {{- /* The login page shows it in its form instead (badge_in_form): it has
       no breadcrumb row for it to sit beside. */}}
-  {{- if and .allow_remote (not .badge_in_form)}}
+  {{- if and .Shell.AllowRemote (not .Shell.BadgeInForm)}}
   <div class="remote-badge" title="Remote access enabled">🌐</div>
   {{- end}}
   <div class="top-badges">
@@ -101,17 +102,17 @@
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
       <span id="uncommitted-count">0</span>
     </a>
-    {{- if .sign_out}}
-    <form method="post" action="/logout" class="signout-form{{if .user}} signout-user-menu{{end}}">{{with .user}}<span class="signout-user" title="Signed in as {{.}}">{{.}}</span>{{end}}<button class="btn" type="submit">Sign out</button></form>
+    {{- if .Shell.SignOut}}
+    <form method="post" action="/logout" class="signout-form{{if .Shell.User}} signout-user-menu{{end}}">{{with .Shell.User}}<span class="signout-user" title="Signed in as {{.}}">{{.}}</span>{{end}}<button class="btn" type="submit">Sign out</button></form>
     {{- end}}
   </div>
-  {{- if .show_actions}}{{template "top_actions" .}}{{end}}
+  {{- if .Shell.ShowActions}}{{template "top_actions" .Shell}}{{end}}
   {{- block "body" .}}{{end}}
   </main>
-  {{- if .show_actions}}{{template "action_bar" .}}{{end}}
+  {{- if .Shell.ShowActions}}{{template "action_bar" .Shell}}{{end}}
   {{- /* Version and the commit it was built from, quietly in the corner; the
       full build (commit date, +dirty) on hover and in the ? modal. */}}
-  <div class="zone-build"{{with .commit}} title="Build {{text $.build}}"{{end}}>{{.app_name}} {{.version}}{{with .commit}} · {{text .}}{{if $.dirty}}+dirty{{end}}{{end}}</div>
+  <div class="zone-build"{{with .Shell.Commit}} title="Build {{text $.Shell.Build}}"{{end}}>{{.Shell.AppName}} {{.Shell.Version}}{{with .Shell.Commit}} · {{text .}}{{if $.Shell.Dirty}}+dirty{{end}}{{end}}</div>
 </body>
 </html>
 {{end}}

@@ -1,7 +1,7 @@
 {{- /* A page that was deleted: when, and a button to bring it back. */ -}}
 {{define "body"}}
 {{.breadcrumb_html}}
-<header class="page-header"><h1>{{.title}}</h1></header>
+<header class="page-header"><h1>{{.Shell.Title}}</h1></header>
 <article class="page-content">
 <p>This page was deleted on {{.date}}.</p>
 <form method="post" action="{{url "restore" .slug}}/{{.sha}}">

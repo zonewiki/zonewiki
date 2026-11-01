@@ -336,8 +336,8 @@ func login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true}, M{
-		"error": errorText, "next_url": r.URL.Query().Get("next"), "badge_in_form": true,
+	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, M{
+		"error": errorText, "next_url": r.URL.Query().Get("next"),
 		"users": s.Users != nil, "username": r.PostFormValue("username")})
 }
 

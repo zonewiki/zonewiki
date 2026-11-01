@@ -3,38 +3,38 @@
     right, both sides sticky (style.css, Side columns). The right column
     copies the sections smaller screens show at the page's end. */ -}}
 {{define "body"}}
-{{.breadcrumb_html}}{{.delete_dialog_html}}
+{{.BreadcrumbHTML}}{{.DeleteDialogHTML}}
 <div class="page-grid">
-{{template "rail_toc" .rail_toc_html}}
+{{template "rail_toc" .RailTocHTML}}
 <div class="page-col">
 <header class="page-header">
-  <h1>{{.title}}{{if .private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}</h1>
+  <h1>{{.Title}}{{if .Private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}</h1>
   <div class="page-header-actions">
-  {{- if .from_uncommitted}}
-    {{template "commit_form" (dict "filepath" (print .slug ".md") "title" .title "on_success" "/uncommitted")}}
+  {{- if .FromUncommitted}}
+    {{template "commit_form" (dict "filepath" (print .Slug ".md") "title" .Title "on_success" "/uncommitted")}}
     <a href="/uncommitted" class="btn">← Uncommitted</a>
   {{- else}}
-    <a href="{{url "edit" .slug}}" class="btn">Edit</a>
+    <a href="{{url "edit" .Slug}}" class="btn">Edit</a>
     {{template "menu_button"}}
   {{- end}}
   </div>
 </header>
-{{.meta_row_html}}
+{{.MetaRowHTML}}
 {{- /* A key per checkbox line: a tick from this view finds its item even
     after the page changed (apiToggleCheckbox). */}}
-<article class="page-content" data-task-keys="{{.task_keys}}">
-  {{.article_html}}
+<article class="page-content" data-task-keys="{{.TaskKeys}}">
+  {{.ArticleHTML}}
 </article>
-<div class="page-foot">{{template "link_sections" (dict "sections" .link_sections)}}</div>
+<div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>
 </div>
 <aside class="rail rail-context" aria-label="Links">
-{{- if not .from_uncommitted}}
+{{- if not .FromUncommitted}}
 {{- /* The page's actions again, shown once the header has scrolled away (js/chrome.js). */ -}}
-<div class="rail-actions" hidden><a href="{{url "edit" .slug}}" class="btn">Edit</a>{{template "menu_button"}}</div>
+<div class="rail-actions" hidden><a href="{{url "edit" .Slug}}" class="btn">Edit</a>{{template "menu_button"}}</div>
 {{- end}}
-{{- template "link_sections" (dict "sections" .link_sections "copy" true)}}
-{{- if .outlinks}}{{template "link_section" (dict "id" "outlinks" "heading" "Links to" "links" .outlinks "copy" true)}}{{end -}}
+{{- template "link_sections" (dict "sections" .LinkSections "copy" true)}}
+{{- if .Outlinks}}{{template "link_section" (dict "id" "outlinks" "heading" "Links to" "links" .Outlinks "copy" true)}}{{end -}}
 </aside>
 </div>
-{{- with .menu}}{{template "page_menu" .}}{{end}}
+{{- with .Menu}}{{template "page_menu" .}}{{end}}
 {{end}}

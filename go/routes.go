@@ -200,12 +200,44 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			EditSlug: slug, SectionTasks: tasks}))
 	}
 	_, private := pageOwner(slug)
-	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, M{"slug": slug, "from_uncommitted": fromUncommitted, "private": private,
-		"task_keys":       strings.Join(taskLineKeys(content), ","),
-		"breadcrumb_html": bc, "delete_dialog_html": buildDeleteDialog(slug, title),
-		"rail_toc_html": railTocItems(string(article)), "meta_row_html": metaRow, "article_html": article,
-		"link_sections": sections, "outlinks": outlinks(rq, slug, path), "menu": menu})
+	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
+		FromUncommitted: fromUncommitted, Private: private, TaskKeys: strings.Join(taskLineKeys(content), ","),
+		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
+		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
+
+// pageView: a page's view (view.html).
+type pageView struct {
+	view
+	Title, Slug                                                             string
+	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
+	Private                                                                 bool   // in a private folder (the lock)
+	TaskKeys                                                                string // a key per checkbox line (taskLineKeys), comma-separated
+	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
+	LinkSections                                                            []M // Backlinks, Linked tasks, Related (linkSections)
+	Outlinks                                                                []M // the right column's Links to
+	Menu                                                                    M   // the ⋯ menu (pageMenu); nil from the uncommitted list
+}
+
+// editView: the editor (edit.html).
+type editView struct {
+	view
+	Slug, PageTitle, Content    string
+	OnlyTitle                   bool // nothing but the title yet: the cursor starts after it
+	HasSection                  bool // one section (Section, its range StartChar–EndChar)
+	Section, StartChar, EndChar int
+	FileHash                    string // the file's hash for conflict detection, whole page or section
+	CanRename, CanDelete        bool
+	Git                         bool
+	RenameError, RenameName     string
+	PrivateOffer                string // a new shared page from a private one: the private slug to link instead
+	LeftDraft                   *leftDraftView
+	Paste                       M // after Move to wiki (pasteHint)
+	BreadcrumbHTML, TasksHTML   template.HTML
+}
+
+// leftDraftView: changes the user left here in conflict, offered again.
+type leftDraftView struct{ Content, At, Conflict string }
 
 // intArg: a query or form value as an int; ok false when missing or not an int.
 func intArg(v string, present bool) (int, bool) {
@@ -254,7 +286,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	section, hasSection := intArg(q.Get("section"), q.Has("section"))
 	// Changes the user left here in conflict: offered on the whole page.
-	var left M
+	var left *leftDraftView
 	if d, ok := draftLeft(rq.user, path); ok && !isNew && d.Content == content {
 		dropDraft(rq.user, path) // the page holds it now: nothing to offer
 	} else if ok && !isNew {
@@ -262,10 +294,10 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
 			return
 		}
-		left = M{"content": d.Content, "at": d.At.Format("2006-01-02 15:04")}
+		left = &leftDraftView{Content: d.Content, At: d.At.Format("2006-01-02 15:04")}
 		if d.Base != "" {
 			if merged, _, err := mergeText(d.Base, content, d.Content, "theirs"); err == nil {
-				left["conflict"] = merged
+				left.Conflict = merged
 			}
 		}
 	}
@@ -294,17 +326,14 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	if hasSection {
 		extra = crumb{"§ " + strconv.Itoa(section), ""}
 	}
-	page(w, rq, http.StatusOK, "edit.html", "Edit — "+title, shell{editor: true}, M{"slug": slug,
-		"page_title": title, "content": content, "is_new": isNew, "only_title": onlyTitle,
-		"has_section": hasSection, "section": section, "start_char": start, "end_char": end,
-		// The file's hash for conflict detection, whole page or section.
-		"file_hash": fileHash, "can_rename": editable && !isProtected(slug), "can_delete": editable && !isProtected(slug),
-		"git": cfg.GitEnabled, "rename_error": q.Get("rename_error"), "left_draft": left,
-		"rename_name":     q.Get("rename_name"),
-		"private_offer":   privateOffer,
-		"paste":           pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
-		"breadcrumb_html": buildBreadcrumb(rq, slug, title, "", "", extra),
-		"tasks_html":      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
+	page(w, rq, http.StatusOK, "edit.html", "Edit — "+title, shell{editor: true}, &editView{Slug: slug,
+		PageTitle: title, Content: content, OnlyTitle: onlyTitle,
+		HasSection: hasSection, Section: section, StartChar: start, EndChar: end, FileHash: fileHash,
+		CanRename: editable && !isProtected(slug), CanDelete: editable && !isProtected(slug),
+		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
+		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
+		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
+		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
