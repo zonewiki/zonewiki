@@ -171,10 +171,33 @@ func applyRules(text string, rules []rule) string {
 func stripLinks(text string) string { return applyRules(text, stripLinkRules) }
 
 // plainHeading: a heading's text without inline markdown and links, for
-// its anchor.
+// its anchor. Math stays its TeX, as the render's heading id has it
+// ($a_1$ is no emphasis): masked while the rules run.
 func plainHeading(text string) string {
-	return strings.TrimSpace(applyRules(stripLinks(text), plainHeadingRules))
+	var tex []string
+	var masked strings.Builder
+	at := 0
+	for _, s := range inlineMathSpans(text) {
+		masked.WriteString(text[at:s[0]])
+		masked.WriteString("\ue004" + strconv.Itoa(len(tex)) + "\ue005")
+		tex = append(tex, text[s[0]+s[2]:s[1]-s[2]])
+		at = s[1]
+	}
+	masked.WriteString(text[at:])
+	plain := applyRules(stripLinks(masked.String()), plainHeadingRules)
+	if len(tex) > 0 {
+		plain = mathTokenRE.ReplaceAllStringFunc(plain, func(m string) string {
+			i, err := strconv.Atoi(m[3 : len(m)-3])
+			if err != nil || i >= len(tex) {
+				return m
+			}
+			return tex[i]
+		})
+	}
+	return strings.TrimSpace(plain)
 }
+
+var mathTokenRE = regexp.MustCompile("\ue004\\d+\ue005")
 
 // Task metadata in markdown: - [ ] task <!--t:2026-06-12T18:35:00-->,
 // - [x] task <!--t:2026-06-12T18:35:00 d:2026-06-12T19:00:00-->.
@@ -227,11 +250,13 @@ func lineBody(line string) string {
 
 type fencedLine struct {
 	line    string
-	inFence bool // a fence line (``` / ~~~) or one between two
+	inFence bool // a fence line (``` / ~~~ / $$) or one between two
 }
 
 // fencedLines is iter_fenced_lines: a closing fence has the opening one's
-// character, at least as many.
+// character, at least as many. Display math counts as a fence too, as
+// math.go parses it: from a $$ line to a line ending in $$, or $$tex$$ on
+// its own line.
 func fencedLines(lines []string) []fencedLine {
 	out := make([]fencedLine, len(lines))
 	inFence, marker := false, ""
@@ -241,11 +266,18 @@ func fencedLines(lines []string) []fencedLine {
 			if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "~~~") {
 				inFence = true
 				marker = strings.Repeat(s[:1], len(s)-len(strings.TrimLeft(s, s[:1])))
+			} else if opens, whole := mathFence(line); opens {
+				inFence, marker = true, "$$"
+			} else if whole {
+				out[i] = fencedLine{line, true}
+				continue
 			}
 			out[i] = fencedLine{line, inFence}
 			continue
 		}
-		if strings.HasPrefix(s, marker) && strings.TrimRight(s, marker[:1]) == "" {
+		if marker == "$$" {
+			inFence = !mathFenceEnd(line)
+		} else if strings.HasPrefix(s, marker) && strings.TrimRight(s, marker[:1]) == "" {
 			inFence = false
 		}
 		out[i] = fencedLine{line, true}
@@ -253,8 +285,9 @@ func fencedLines(lines []string) []fencedLine {
 	return out
 }
 
-// maskCode swaps fenced code and inline code spans for <i>, so
-// [[…]] in code is never rewritten; unmaskCode puts them back. Text that
+// maskCode swaps fenced code, inline code spans, display math and inline
+// math with a [[ in it (math.go) for <i>, so [[…]] in them is
+// never rewritten (math in a link's text stays, for the link); unmaskCode puts them back. Text that
 // looks like a token is stashed too, so it comes back as written.
 func maskCode(text string) (string, []string) {
 	var stash []string
@@ -298,6 +331,18 @@ func maskInlineCode(line string, token func(string) string) string {
 			out.WriteString(token(line[i : i+n]))
 			i += n
 			continue
+		}
+		if line[i] == '\\' && i+1 < len(line) && line[i+1] == '$' {
+			out.WriteString(line[i : i+2])
+			i += 2
+			continue
+		}
+		if line[i] == '$' {
+			if n, _ := inlineMath(line[i:]); n > 0 && strings.Contains(line[i:i+n], "[[") {
+				out.WriteString(token(line[i : i+n]))
+				i += n
+				continue
+			}
 		}
 		if line[i] != '`' {
 			out.WriteByte(line[i])

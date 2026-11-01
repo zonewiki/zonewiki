@@ -1,6 +1,6 @@
 // ── Math and diagrams ─────────────────────────────────────────────────────────
-// The server leaves math as TeX in .math elements (go/math.go) and a
-// ```mermaid or ```math fence as a code block; renderFigures(root) renders
+// The server leaves math as TeX in .math elements (go/math.go, ```math
+// fences too) and a ```mermaid fence as a code block; renderFigures(root) renders
 // them in the browser with KaTeX and Mermaid (vendored in public/vendor/,
 // nothing from other hosts). Each library loads the first time a page has
 // something for it. Without them (offline, an error) the source shows as
@@ -10,7 +10,7 @@ const KATEX = '/public/vendor/katex/';
 const MERMAID = '/public/vendor/mermaid/mermaid.min.js';
 
 // The code blocks highlight.js colours: not the ones rendered here.
-export const HIGHLIGHT_CODE = 'pre code:not(.language-mermaid):not(.language-math)';
+export const HIGHLIGHT_CODE = 'pre code:not(.language-mermaid)';
 
 const loading = new Map();
 function loadScript(src) {
@@ -26,40 +26,69 @@ function loadScript(src) {
   return loading.get(src);
 }
 
+// KaTeX's script and its stylesheet: the math renders once both are here,
+// so it takes its height once, not again when the styles arrive.
+function loadStyle(href) {
+  if (!loading.has(href)) {
+    loading.set(href, new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.onload = resolve;
+      link.onerror = () => { loading.delete(href); link.remove(); reject(new Error(`could not load ${href}`)); };
+      document.head.append(link);
+    }));
+  }
+  return loading.get(href);
+}
+
 function loadKatex() {
-  if (!document.querySelector(`link[href="${KATEX}katex.min.css"]`)) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = KATEX + 'katex.min.css';
-    document.head.append(link);
-  }
-  return loadScript(KATEX + 'katex.min.js');
+  return Promise.all([loadStyle(KATEX + 'katex.min.css'), loadScript(KATEX + 'katex.min.js')]);
 }
 
-// Render the math and diagrams in root (an element or a template's
-// content); what is rendered already is skipped, so it is safe to call
-// again on the same content.
-export async function renderFigures(root) {
-  await Promise.all([renderMath(root), renderDiagrams(root)]);
+// Render the math and diagrams in root; what is rendered already is
+// skipped, so it is safe to call again on the same content. anchor() is
+// what the reader was sent to (a #section, a search highlight), if
+// anything: a figure rendering above it changes the height there, so the
+// scroll moves with it and it stays in view.
+export async function renderFigures(root, anchor) {
+  await Promise.all([renderMath(root, anchor), renderDiagrams(root, anchor)]);
 }
 
-async function renderMath(root) {
-  // A ```math fence is display math.
-  for (const code of root.querySelectorAll('pre > code.language-math')) {
-    const div = document.createElement('div');
-    div.className = 'math math-display';
-    div.textContent = code.textContent;
-    code.parentElement.replaceWith(div);
+// Run swap() keeping anchor()'s element where it is on screen, when it is
+// in view (scrolled away from it, the reader is left where they are).
+function keepInPlace(anchor, swap) {
+  const el = anchor?.();
+  if (!el) { swap(); return; }
+  const scroller = scrollerOf(el);
+  const box = scroller === window ? { top: 0, bottom: innerHeight } : scroller.getBoundingClientRect();
+  const top = el.getBoundingClientRect().top;
+  swap();
+  if (!el.isConnected || top < box.top || top > box.bottom) return;
+  const dy = el.getBoundingClientRect().top - top;
+  if (dy) scroller.scrollBy(0, dy);
+}
+
+function scrollerOf(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const overflow = getComputedStyle(p).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && p.scrollHeight > p.clientHeight) return p;
   }
+  return window;
+}
+
+async function renderMath(root, anchor) {
   const els = [...root.querySelectorAll('.math:not([data-tex])')];
   if (!els.length) return;
   try { await loadKatex(); } catch (_) { return; }
-  for (const el of els) {
-    const tex = el.textContent;
-    el.dataset.tex = tex;
-    // An error shows the TeX in red with KaTeX's message as its title.
-    window.katex.render(tex, el, { displayMode: el.classList.contains('math-display'), throwOnError: false });
-  }
+  keepInPlace(anchor, () => {
+    for (const el of els) {
+      const tex = el.textContent;
+      el.dataset.tex = tex;
+      // An error shows the TeX in red with KaTeX's message as its title.
+      window.katex.render(tex, el, { displayMode: el.classList.contains('math-display'), throwOnError: false });
+    }
+  });
 }
 
 // The SVG of each diagram drawn, by theme and source, so the editor's
@@ -67,7 +96,7 @@ async function renderMath(root) {
 const svgs = new Map();
 let diagrams = 0;
 
-async function renderDiagrams(root) {
+async function renderDiagrams(root, anchor) {
   const codes = [...root.querySelectorAll('pre > code.language-mermaid')];
   if (!codes.length) return;
   try { await loadScript(MERMAID); } catch (_) { return; }
@@ -100,6 +129,6 @@ async function renderDiagrams(root) {
     div.className = 'mermaid-diagram';
     div.dataset.source = src;
     div.innerHTML = svg;
-    pre.replaceWith(div);
+    keepInPlace(anchor, () => pre.replaceWith(div));
   }
 }

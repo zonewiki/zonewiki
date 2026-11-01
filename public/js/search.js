@@ -134,13 +134,13 @@ async function showModalPreview(item) {
   body.innerHTML = data.html;
   localizeDates(body);
   modalPreview.replaceChildren(title, body);
-  renderFigures(body);
   const marks = markTerms(body, url.searchParams.getAll('hl').filter(Boolean));
   const anchor = url.hash && body.querySelector(`[data-pid="${CSS.escape(decodeURIComponent(url.hash.slice(1)))}"]`);
   const target = anchor || marks[0];
   modalPreview.scrollTop = target
     ? target.getBoundingClientRect().top - modalPreview.getBoundingClientRect().top + modalPreview.scrollTop - 12
     : 0;
+  renderFigures(body, () => target);
 }
 
 modalFilter?.addEventListener('input', applyModalControls);

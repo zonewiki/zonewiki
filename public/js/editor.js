@@ -1,7 +1,7 @@
 import TasksCore from '../tasks-core.js';
 import { openTasksEdit } from '../tasks.js';
 import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
-import { markdownEditor } from './mdedit.js';
+import { markdownEditor, mathFence, mathFenceEnd } from './mdedit.js';
 import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 // ── Editor ────────────────────────────────────────────────────────────────────
@@ -528,11 +528,27 @@ function highlightPreviewBlock(force) {
   //  - blank line ends the current block
   //  - ATX headings (# …) always occupy their own block, regardless of surrounding blank lines
   //  - fenced code blocks (``` / ~~~) are one block regardless of their interior content
+  //  - display math ($$ … $$, $$tex$$ on its line) is one block of its own (mathFence)
   let blockIdx = -1;
   let inBlock = false;
   let inFence = false;
+  let inMath = false;
   for (let i = 0; i <= cursorLine; i++) {
     const trimmed = lines[i].trim();
+
+    if (inMath) {
+      if (mathFenceEnd(lines[i])) inMath = false;
+      continue;
+    }
+    if (!inFence) {
+      const { opens, whole } = mathFence(lines[i]);
+      if (opens || whole) {
+        blockIdx++;
+        inBlock = false;
+        inMath = opens;
+        continue;
+      }
+    }
 
     // Fenced code block toggle
     if (!inFence && (trimmed.startsWith('```') || trimmed.startsWith('~~~'))) {
@@ -562,7 +578,8 @@ function highlightPreviewBlock(force) {
 
   const blockEls = previewPane.querySelectorAll(
     ':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, ' +
-    ':scope > pre, :scope > ul, :scope > ol, :scope > blockquote, :scope > hr, :scope > table'
+    ':scope > pre, :scope > ul, :scope > ol, :scope > blockquote, :scope > hr, :scope > table, ' +
+    ':scope > div.math-display, :scope > div.mermaid-diagram'
   );
   blockEls.forEach(el => el.classList.remove('preview-hl'));
   if (blockIdx >= 0 && blockIdx < blockEls.length) {

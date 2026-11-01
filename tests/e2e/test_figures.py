@@ -91,3 +91,65 @@ def test_presentation_shows_figures(page, wiki):
     expect(overlay.locator(".katex-display")).to_be_visible()
     page.keyboard.press("ArrowRight")
     expect(overlay.locator(".mermaid-diagram svg")).to_be_visible()
+
+
+MATH_BOXES = "# Boxes\n\n- [ ] first\n\n$$\n- [ ] not a box\n## not a heading\n$$\n\n- [ ] second\n"
+
+
+def test_display_math_is_no_checkbox_or_heading(page, wiki):
+    # The preview's checkboxes and the page's agree with the source: a box
+    # inside $$ is none, so the second box ticks "second".
+    wiki.write("boxes", MATH_BOXES)
+    page.goto("/edit/boxes")
+    boxes = page.locator("#editor-preview .task-list-item-checkbox")
+    expect(boxes).to_have_count(2)
+    boxes.nth(1).click()
+    expect(page.locator("#editor-textarea")).to_have_value(MATH_BOXES.replace("- [ ] second", "- [x] second"))
+    # The page view's (the server counts them).
+    wiki.write("boxes2", MATH_BOXES)
+    page.goto("/page/boxes2")
+    expect(page.locator(".page-content h2")).to_have_count(0)
+    box = page.locator(".page-content .task-list-item-checkbox").nth(1)
+    box.click()
+    expect(box).to_be_checked()
+    page.wait_for_load_state("networkidle")
+    assert wiki.read("boxes2").startswith(MATH_BOXES.replace("- [ ] second", "- [x] second").rstrip("\n"))
+
+
+def test_preview_marks_the_block_after_display_math(page, wiki):
+    text = "# Doc\n\nIntro\n\n$$\na\n\nb\n$$\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\nAfter para\n"
+    wiki.write("doc", text)
+    page.goto("/edit/doc")
+    preview = page.locator("#editor-preview")
+    expect(preview.locator(".mermaid-diagram svg")).to_have_count(1)
+    page.locator("#editor-textarea").evaluate(
+        "(t, at) => { t.focus(); t.setSelectionRange(at, at); document.dispatchEvent(new Event('selectionchange')); }",
+        text.index("After para"))
+    expect(preview.locator(".preview-hl")).to_have_text("After para")
+
+
+def test_math_in_the_side_toc(new_page, wiki):
+    wiki.write("toc", "# Toc\n\n## Energy $E=mc^2$\n\ntext\n\n## Two\n\ntext\n\n## Three\n\ntext\n")
+    page = new_page(viewport={"width": 1600, "height": 900})
+    page.goto("/page/toc")
+    expect(page.locator(".rail-toc .math .katex")).to_have_count(1)
+    expect(page.locator("article h2 .katex")).to_have_count(1)
+
+
+def test_a_section_link_stays_in_view_as_figures_render(page, wiki):
+    filler = "Some text that fills the page.\n\n" * 6
+    wiki.write("long", "# Long\n\n```mermaid\nflowchart TD\n  A --> B --> C --> D --> E\n```\n\n$$\n\\sum_{i=1}^n \\frac{1}{i^2}\n$$\n\n"
+               + filler + "## Target\n\n" + filler * 6)
+    page.goto("/page/long#target")
+    expect(page.locator("article .mermaid-diagram svg")).to_have_count(1)
+    expect(page.locator("article .katex-display")).to_have_count(1)
+    top = page.locator("#target").evaluate("h => h.getBoundingClientRect().top")
+    assert 0 <= top < 200, top
+
+
+def test_task_comments_render_math(page, wiki):
+    tid = page.request.post("/api/tasks", data={"title": "Proof"}).json()["id"]
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "since $a^2 \\ge 0$"})
+    page.goto("/tasks?view=open")
+    card = page.locator(".task-item").filter(has=page.get_by_text("Proof", exact=True))
+    expect(card.locator(".task-card-comments .katex")).to_have_count(1)

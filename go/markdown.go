@@ -263,6 +263,8 @@ func headingTitle(h ast.Node, src []byte) string {
 			b.Write(v)
 		case *ast.String:
 			b.Write(n.Value)
+		case *mathInline:
+			b.Write(n.TeX)
 		}
 		return ast.WalkContinue, nil
 	})

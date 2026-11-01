@@ -57,13 +57,14 @@ const renderedHtml = { notes: new Map(), comments: new Map() };
 // Until its HTML is here, a text shows as it is (line breaks kept).
 const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-// Code highlighted, math and diagrams rendered (js/figures.js).
-async function highlightCode(html) {
-  if (!html.includes('<pre') && !html.includes('class="math')) return html;
+// Math and diagrams are not kept rendered: renderFigures draws them in
+// the live list after each draw (from its caches, so without a flash), and
+// a library that failed to load is tried again then.
+function highlightCode(html) {
+  if (!window.hljs || !html.includes('<pre')) return html;
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
-  if (window.hljs) tpl.content.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
-  await renderFigures(tpl.content);
+  tpl.content.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
   return tpl.innerHTML;
 }
 // The notes and comments of `taskList`, for renderTexts.
@@ -97,10 +98,7 @@ async function renderTexts({ notes = [], comments = [] }) {
         });
         if (!res.ok) return false;
         const out = await res.json();
-        for (const kind in want) {
-          const htmls = await Promise.all(out[kind].map(highlightCode));
-          want[kind].forEach((t, i) => renderedHtml[kind].set(t, htmls[i]));
-        }
+        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, highlightCode(out[kind][i])));
         return true;
       } catch (_) {
         return false;
@@ -2395,6 +2393,7 @@ function render() {
       return header + body;
     }).join('');
     listEl.innerHTML = html;
+    renderFigures(listEl);
     wireListHandlers();
     return;
   }
@@ -2447,6 +2446,7 @@ function render() {
     html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - completedLimit} remaining)</button></li>`;
   }
   listEl.innerHTML = html;
+  renderFigures(listEl);
   wireListHandlers();
 
   function wireListHandlers() {
@@ -2652,9 +2652,10 @@ async function fetchNotesPreview() {
     const res = await fetch('/api/render-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
-    if (!res.ok) return;
-    const html = await highlightCode((await res.json()).notes[0]);
-    if (descTextarea.value.trim() === text) notesPreview.innerHTML = html;
+    if (res.ok && descTextarea.value.trim() === text) {
+      notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
+      renderFigures(notesPreview);
+    }
   } catch (_) { notesPreview.textContent = 'Could not render the preview'; }
 }
 const previewing = () => !!notesPreview && !notesPreview.hidden;
@@ -3210,6 +3211,7 @@ function renderComments(task) {
     `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
     `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button>` +
     '</li>').join('');
+  renderFigures(commentList);
 }
 // A comment route answered with the task: take it in and redraw.
 async function commentWrite(url, method, body) {

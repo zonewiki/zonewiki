@@ -413,13 +413,25 @@ function expandSnippet(textarea) {
   return false;
 }
 
+// ── Display math ──────────────────────────────────────────────────────────────
+
+// A $$ line as go/math.go reads it: one that opens display math (only $$,
+// up to three spaces before it), or one that is display math by itself
+// ($$tex$$). The math runs to a line ending in $$ (mathFenceEnd).
+export function mathFence(line) {
+  if (/^( {4}| {0,3}\t)/.test(line)) return { opens: false, whole: false };
+  const t = line.trim();
+  return { opens: t === '$$', whole: t.length > 4 && t.startsWith('$$') && t.endsWith('$$') };
+}
+export const mathFenceEnd = line => line.trimEnd().endsWith('$$');
+
 // ── Checkboxes in a preview ───────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
 // in rendered order. Mirrors mdtext.py's _task_item_lines/_TASK_ITEM_RE: only
-// list items whose text starts with the box produce a checkbox, fenced code
-// and (in a page, `frontmatter`) a leading frontmatter block are skipped — so
-// the Nth rendered checkbox is the Nth offset here.
+// list items whose text starts with the box produce a checkbox, fenced code,
+// display math and (in a page, `frontmatter`) a leading frontmatter block
+// are skipped — so the Nth rendered checkbox is the Nth offset here.
 const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
 
 export function taskCheckboxOffsets(text, frontmatter = true) {
@@ -434,11 +446,18 @@ export function taskCheckboxOffsets(text, frontmatter = true) {
   lines.forEach((line, i) => {
     const t = line.trim();
     const run = t.length - t.replace(/^(`+|~+)/, '').length;  // leading fence chars
-    if (fence) {
+    const math = fence ? {} : mathFence(line);
+    if (fence === '$$') {
+      if (mathFenceEnd(line)) fence = null;
+    } else if (fence) {
       // Closing fence: same char, at least as long, nothing else on the line
       if (t[0] === fence[0] && run >= fence.length && run === t.length) fence = null;
     } else if (run >= 3) {
       fence = t.slice(0, run);
+    } else if (math.opens) {
+      fence = '$$';
+    } else if (math.whole) {
+      // display math by itself: no checkbox
     } else if (i >= start) {
       const m = TASK_ITEM_RE.exec(line);
       if (m) offsets.push(pos + m[1].length);

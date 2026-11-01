@@ -1,6 +1,7 @@
 """Tests for Zone HTTP routes — page view/edit/save, search, upload, auth,
 rename with reference updates, conflict detection, and API endpoints."""
 
+import gzip
 import html
 import json
 import os
@@ -2527,3 +2528,18 @@ class TestRenamePageMkdir:
 # e.g. [Ivo](ivo-petrenko) — not a wikilink, not a .md link
 # ===========================================================================
 
+
+def test_vendored_libraries_are_cached_and_gzipped(client, wiki_dir):
+    path = "/public/vendor/mermaid/mermaid.min.js"
+    raw = (Path(__file__).parent.parent / "public/vendor/mermaid/mermaid.min.js").read_bytes()
+    r = client.get(path, headers={**HOST, "Accept-Encoding": "br, gzip;q=0.8"})
+    assert r.headers["Content-Encoding"] == "gzip"
+    assert r.headers["Content-Type"].startswith("text/javascript")
+    assert "max-age=86400" in r.headers["Cache-Control"] and r.headers["Vary"] == "Accept-Encoding"
+    assert len(r.data) < len(raw) / 2 and gzip.decompress(r.data) == raw
+    plain = client.get(path, headers={**HOST, "Accept-Encoding": "gzip;q=0"})
+    assert "Content-Encoding" not in plain.headers and plain.data == raw
+    # Zone's own code isn't kept: it changes with every edit.
+    own = client.get("/public/js/figures.js", headers={**HOST, "Accept-Encoding": "gzip"})
+    assert own.status_code == 200 and "Cache-Control" not in own.headers
+    assert client.get("/public/vendor/nope.js", headers={**HOST, "Accept-Encoding": "gzip"}).status_code == 404

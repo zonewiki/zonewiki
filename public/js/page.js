@@ -6,8 +6,13 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   if (window.hljs) document.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
-  const article = document.querySelector('article.page-content');
-  if (article) renderFigures(article);
+  // What the reader was sent to stays where it is while figures above it render.
+  const target = () => {
+    const mark = document.querySelector('mark.search-hl.current');
+    try { return mark || (location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)))); }
+    catch (_) { return null; }   // a hash that isn't URI-encoded
+  };
+  for (const root of document.querySelectorAll('article.page-content, .rail-toc')) renderFigures(root, target);
 });
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
