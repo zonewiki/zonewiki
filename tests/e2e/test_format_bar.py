@@ -253,3 +253,14 @@ def test_bar_sits_close_above_the_textarea(page, wiki):
     bar = page.locator("#format-bar .fmt-btn").first.bounding_box()
     ta = page.locator("#editor-textarea").bounding_box()
     assert 0 <= ta["y"] - (bar["y"] + bar["height"]) <= 6
+
+
+def test_whole_bar_fits_beside_the_preview_on_a_laptop(new_page, wiki):
+    # Regression: at 1280px the editor (half the window, the preview beside
+    # it) was too narrow for every button; the last ones had to be scrolled to.
+    wiki.write("fmt", "# Fmt\n")
+    page = new_page(viewport={"width": 1280, "height": 800})
+    page.goto("/edit/fmt")
+    bar = page.locator("#format-bar")
+    assert bar.evaluate("b => b.scrollWidth <= b.clientWidth")
+    expect(page.locator('#format-bar [data-fmt="wikilink"]')).to_have_text("[[]]")

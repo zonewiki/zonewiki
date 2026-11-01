@@ -1579,7 +1579,7 @@ body.editor-page main {
 .format-bar {
   display: flex;
   align-items: center;
-  gap: .15rem;
+  gap: .1rem;
   padding: .35rem .75rem 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -1591,9 +1591,9 @@ body.editor-page main {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  min-width: 2rem;
+  min-width: 1.8rem;
   height: 2rem;
-  padding: 0 .4rem;
+  padding: 0 .2rem;
   border: 1px solid transparent;
   border-radius: 6px;
   background: none;
@@ -1606,7 +1606,7 @@ body.editor-page main {
 .fmt-btn:hover { color: var(--fg); background: var(--nav-bg); border-color: var(--border); }
 .fmt-btn:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
 .fmt-wiki { font-family: var(--mono); font-size: .75rem; letter-spacing: -.05em; }
-.fmt-sep { flex-shrink: 0; width: 1px; height: 1.1rem; margin: 0 .3rem; background: var(--border); }
+.fmt-sep { flex-shrink: 0; width: 1px; height: 1.1rem; margin: 0 .2rem; background: var(--border); }
 @media (pointer: coarse) {
   .fmt-btn { min-width: 2.6rem; height: 2.6rem; }
 }
