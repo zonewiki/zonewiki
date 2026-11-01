@@ -209,7 +209,8 @@ class TestDisabledAttributeStripping:
         assert "The account is disabled today." in preview(client, "The account is disabled today.\n")
 
     def test_disabled_attribute_in_raw_html_elsewhere_survives(self, client):
-        assert "<button disabled>" in preview(client, '<button disabled>x</button>\n')
+        # Not a <button>: a page's buttons show as text (TestRawHTMLDefused, go/markdown_test.go).
+        assert '<span class="x" disabled>' in preview(client, '<span class="x" disabled>x</span>\n')
 
     def test_task_checkbox_is_still_enabled(self, client):
         html = preview(client, "- [ ] task\n")

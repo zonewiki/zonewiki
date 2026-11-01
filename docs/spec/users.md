@@ -44,6 +44,7 @@ password = pbkdf2-sha256:600000:<salt>:<hash>
 | `date-format` | `iso`: dates as `YYYY-MM-DD` | the locale's |
 | `query-log` | `yes`: keep `search_wiki`'s queries in `.zone/queries.jsonl` (`docs/spec/search.md`) | no |
 | `semantic-min-score` | How similar a passage must be to be a semantic hit, -1 to 1 (`searchFloor`, `docs/spec/search.md`) | the model's floor |
+| `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, IP addresses or networks (`172.17.0.1, 10.0.0.0/8`), for the throttle on wrong passwords (`clientKey`, `docs/spec/security.md`); empty: none | loopback (`127.0.0.0/8, ::1`) |
 
 - **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password` and `mcp-token` (`configKeys`, `userKeys`). `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Errors name their line** (`.zone/config line 3: "pasword" isn't a setting Zone knows.`), and Zone won't start on one: a key it doesn't know (a typo shouldn't leave Zone on a default), a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false), a section other than `[user NAME]`, a user's key outside a section or the wiki's inside one, a key or a section given twice, a line that isn't `key = value`, `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown). Messages never repeat a password or token.

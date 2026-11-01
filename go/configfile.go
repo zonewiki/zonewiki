@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,7 +54,7 @@ var configKeys = []struct{ key, env string }{
 	{"password", "LEAF_PASSWORD"}, {"mcp-token", "LEAF_MCP_TOKEN"}, {"hosts", "LEAF_HOSTS"},
 	{"base-url", "LEAF_BASE_URL"}, {"git-remote", "LEAF_GIT_REMOTE"}, {"noshare", "LEAF_NOSHARE"},
 	{"locale", "LEAF_LOCALE"}, {"date-format", "LEAF_DATE_FORMAT"}, {"query-log", "LEAF_QUERY_LOG"},
-	{"semantic-min-score", "LEAF_SEMANTIC_MIN_SCORE"},
+	{"semantic-min-score", "LEAF_SEMANTIC_MIN_SCORE"}, {"trusted-proxies", ""},
 }
 
 // userKeys: the keys of a [user …] section.
@@ -208,9 +209,10 @@ type Settings struct {
 	Hosts            map[string]bool // names besides localhost, without port, lowercase
 	NoshareTags      map[string]bool
 	NoshareFolder    []string
-	Locale           string   // a BCP 47 tag for the browser's Intl
-	DateFormat       string   // "" or "iso"
-	SemanticMinScore *float64 // the semantic search's floor; nil: the model's
+	Locale           string         // a BCP 47 tag for the browser's Intl
+	DateFormat       string         // "" or "iso"
+	SemanticMinScore *float64       // the semantic search's floor; nil: the model's
+	TrustedProxies   []netip.Prefix // whose X-Forwarded-For names the client (clientKey); unset: loopback
 }
 
 // authOn: the wiki has a login gate, a password or users.
@@ -308,6 +310,26 @@ func loadSettings(f *configFile) (*Settings, error) {
 			return nil, fmt.Errorf("%s%s isn't a similarity between -1 and 1 (e.g. 0.4).", where, score)
 		}
 		s.SemanticMinScore = &f
+	}
+	proxies, where, set := get("trusted-proxies")
+	if !set {
+		proxies = "127.0.0.0/8, ::1"
+	}
+	for _, p := range strings.Split(proxies, ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(p)
+		if !strings.Contains(p, "/") {
+			var addr netip.Addr
+			if addr, err = netip.ParseAddr(p); err == nil {
+				prefix = netip.PrefixFrom(addr, addr.BitLen())
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s%s isn't an IP address or a network (e.g. 172.17.0.1 or 172.16.0.0/12).", where, p)
+		}
+		s.TrustedProxies = append(s.TrustedProxies, prefix.Masked())
 	}
 	var err error
 	if s.Users, err = fileUsers(f); err != nil {
@@ -519,6 +541,7 @@ func settingsChange(old, s *Settings) string {
 		{"locale", old.Locale != s.Locale}, {"date-format", old.DateFormat != s.DateFormat},
 		{"query-log", old.QueryLog != s.QueryLog},
 		{"semantic-min-score", !sameFloat(old.SemanticMinScore, s.SemanticMinScore)},
+		{"trusted-proxies", !slices.Equal(old.TrustedProxies, s.TrustedProxies)},
 	} {
 		if c.changed {
 			changes = append(changes, c.key)

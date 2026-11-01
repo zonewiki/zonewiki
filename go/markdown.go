@@ -289,8 +289,8 @@ func uniqueSlug(slug string, seen map[string]bool) string {
 	return u
 }
 
-// zoneRenderer: headings (✎, ☑ N), callouts, checkboxes; goldmark's
-// renderers do the rest.
+// zoneRenderer: headings (✎, ☑ N), callouts, checkboxes, a page's raw
+// HTML (defuseHTML); goldmark's renderers do the rest.
 type zoneRenderer struct {
 	env      *Env
 	sections int
@@ -298,6 +298,8 @@ type zoneRenderer struct {
 
 func (r *zoneRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindHeading, r.heading)
+	reg.Register(ast.KindRawHTML, r.rawHTML)
+	reg.Register(ast.KindHTMLBlock, r.htmlBlock)
 	reg.Register(ast.KindBlockquote, r.blockquote)
 	reg.Register(kindCheckbox, r.checkbox)
 	reg.Register(kindMathInline, r.mathInline)
@@ -383,4 +385,53 @@ func taskDates(s string) string {
 	return taskDoneOnlyRE.ReplaceAllStringFunc(s, func(m string) string {
 		return chip("done", "Done", taskDoneOnlyRE.FindStringSubmatch(m)[1])
 	})
+}
+
+// defusedTagRE: the start of a tag that makes a form or submits one, or
+// that changes what the page is (a refresh to elsewhere, a base for its
+// links). A page's raw HTML is rendered as written, but these would work
+// as Zone's own: script-src keeps a page's scripts from running and
+// form-action keeps its forms from posting elsewhere, but a form posting to
+// Zone itself (<form method=post action="/delete/…">, a <button
+// formaction=…> or <button form=…> using one of Zone's own forms) is
+// same-origin, so the Origin check lets it through, and one click on a page
+// another user (or an assistant that read a prompt injection) wrote would
+// delete or overwrite the viewer's pages. Their "<" is escaped, so they show
+// as text.
+var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base)(?:[\s/>]|$))`)
+
+// defuseHTML: raw HTML with defusedTagRE's tags as text.
+func defuseHTML(raw []byte) []byte { return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1")) }
+
+// rawHTML: inline raw HTML, as goldmark's unsafe renderer writes it, defused.
+func (r *zoneRenderer) rawHTML(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		segs := node.(*ast.RawHTML).Segments
+		var raw []byte
+		for i := 0; i < segs.Len(); i++ {
+			seg := segs.At(i)
+			raw = append(raw, seg.Value(source)...)
+		}
+		_, _ = w.Write(defuseHTML(raw))
+	}
+	return ast.WalkSkipChildren, nil
+}
+
+// htmlBlock: an HTML block, as goldmark's unsafe renderer writes it, defused
+// as a whole (a tag may span its lines).
+func (r *zoneRenderer) htmlBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.HTMLBlock)
+	var raw []byte
+	for i := 0; i < n.Lines().Len(); i++ {
+		line := n.Lines().At(i)
+		raw = append(raw, line.Value(source)...)
+	}
+	if n.HasClosure() {
+		raw = append(raw, n.ClosureLine.Value(source)...)
+	}
+	_, _ = w.Write(defuseHTML(raw))
+	return ast.WalkContinue, nil
 }

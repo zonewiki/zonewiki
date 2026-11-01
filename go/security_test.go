@@ -68,11 +68,30 @@ func TestQuietClientsAreForgotten(t *testing.T) {
 }
 
 func TestClientKey(t *testing.T) {
+	configWiki(t, "")
 	for _, c := range []struct{ remote, forwarded, want string }{
-		{"8.8.8.8:1234", "10.0.0.1", "8.8.8.8"},          // a client on the internet can't pick its own key
-		{"10.0.0.2:1234", "1.1.1.1, 9.9.9.9", "9.9.9.9"}, // a proxy: the last entry is the one it added
+		{"8.8.8.8:1234", "10.0.0.1", "8.8.8.8"},           // a client on the internet can't pick its own key
+		{"10.0.0.2:1234", "1.1.1.1", "10.0.0.2"},          // nor one on the LAN: no proxy of the settings'
+		{"127.0.0.1:1234", "1.1.1.1, 9.9.9.9", "9.9.9.9"}, // a proxy: the last entry is the one it added
 		{"127.0.0.1:1234", "", "127.0.0.1"},
 		{"[::1]:1234", "203.0.113.9", "203.0.113.9"},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = c.remote
+		if c.forwarded != "" {
+			r.Header.Set("X-Forwarded-For", c.forwarded)
+		}
+		if got := clientKey(r); got != c.want {
+			t.Errorf("%v: %q", c, got)
+		}
+	}
+	// A proxy in a container network, and one in front of it.
+	configWiki(t, "trusted-proxies = 172.16.0.0/12, 192.168.1.5\n")
+	for _, c := range []struct{ remote, forwarded, want string }{
+		{"172.17.0.1:1234", "203.0.113.9", "203.0.113.9"},
+		{"172.17.0.1:1234", "6.6.6.6, 203.0.113.9, 192.168.1.5", "203.0.113.9"},
+		{"127.0.0.1:1234", "203.0.113.9", "127.0.0.1"}, // loopback isn't trusted once the setting is
+		{"10.0.0.2:1234", "1.1.1.1", "10.0.0.2"},
 	} {
 		r := httptest.NewRequest("GET", "/", nil)
 		r.RemoteAddr = c.remote

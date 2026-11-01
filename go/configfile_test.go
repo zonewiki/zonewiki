@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -587,5 +588,24 @@ func TestSettingsChange(t *testing.T) {
 	}
 	if got := settingsChange(old, old); got != "Change settings" {
 		t.Errorf("%q", got)
+	}
+}
+
+func TestTrustedProxies(t *testing.T) {
+	configWiki(t, "")
+	if got := fmt.Sprint(settings().TrustedProxies); got != "[127.0.0.0/8 ::1/128]" {
+		t.Errorf("default: %s", got)
+	}
+	configWiki(t, "trusted-proxies = 172.17.0.1, 10.1.2.3/8\n")
+	if got := fmt.Sprint(settings().TrustedProxies); got != "[172.17.0.1/32 10.0.0.0/8]" {
+		t.Errorf("set: %s", got)
+	}
+	configWiki(t, "trusted-proxies =\n")
+	if len(settings().TrustedProxies) != 0 {
+		t.Errorf("empty: none trusted, not %v", settings().TrustedProxies)
+	}
+	f := &configFile{top: map[string]configValue{"trusted-proxies": {value: "my-proxy", line: 3}}}
+	if _, err := loadSettings(f); err == nil || !strings.Contains(err.Error(), "line 3: trusted-proxies = my-proxy isn't an IP address") {
+		t.Errorf("a name: %v", err)
 	}
 }

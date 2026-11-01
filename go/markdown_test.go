@@ -128,3 +128,20 @@ func TestInline(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// A page's raw HTML can't make or submit a form, nor refresh or re-base
+// the page: those tags show as text; the rest stays as written, and Zone's
+// own checkboxes are inputs still.
+func TestRawHTMLDefused(t *testing.T) {
+	html := render(t, "<form method=\"post\" action=\"/delete/x\">\n<button>Go</button>\n</form>\n\n"+
+		"Inline <button formaction=\"/delete/y\" form=\"page-menu\">click</button> and <INPUT type=submit>.\n\n"+
+		"<meta http-equiv=\"refresh\" content=\"0; url=https://evil.example\">\n\n"+
+		"<div class=\"note\">kept <b>bold</b> <formula>x</formula></div>\n\n- [ ] mine\n", Env{})
+	expectNot(t, html, "<form ", "<button", "<INPUT", "<meta", "</form>", "</button>")
+	expectIn(t, html, "&lt;form method", "&lt;button>Go&lt;/button>", "&lt;/form>", "&lt;button formaction",
+		"&lt;INPUT type=submit>", "&lt;meta http-equiv", `<div class="note">kept <b>bold</b> <formula>x</formula></div>`,
+		`<input class="task-list-item-checkbox" type="checkbox" />`)
+	if notes := markdown("a <form action=/x><button>b</button></form>", &Env{}, true); strings.Contains(notes, "<form ") {
+		t.Errorf("a task's notes (inline): %s", notes)
+	}
+}

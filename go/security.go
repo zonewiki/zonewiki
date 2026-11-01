@@ -16,6 +16,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -234,26 +235,74 @@ func sameSecret(given, secret string) bool {
 }
 
 // clientKey is who is guessing, for the throttle: the client's address.
-// Behind a reverse proxy (the request comes from a loopback or private
-// address) that is the address the proxy saw and appended last to
-// X-Forwarded-For, so clients aren't all one.
+// Behind a reverse proxy every request comes from the proxy, so a trusted
+// one (trusted-proxies in the settings file; unset: loopback) names the
+// client in X-Forwarded-For: the last entry not itself a trusted proxy,
+// which a proxy appended (entries before it are the client's to make up).
+// Anyone else's X-Forwarded-For is ignored: a client on the LAN could
+// otherwise send a new one with every guess and never be throttled.
 func clientKey(r *http.Request) string {
-	addr, _, err := net.SplitHostPort(r.RemoteAddr)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		addr = r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	var forwarded []string
-	for _, a := range strings.Split(r.Header.Get("X-Forwarded-For"), ",") {
-		if a = strings.TrimSpace(a); a != "" {
-			forwarded = append(forwarded, a)
+	header := r.Header.Get("X-Forwarded-For")
+	peer, err := netip.ParseAddr(host)
+	if err != nil || header == "" {
+		return host
+	}
+	if !trustedProxy(peer) {
+		untrustedForwarder(peer)
+		return host
+	}
+	key := host
+	parts := strings.Split(header, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		a := strings.TrimSpace(parts[i])
+		if a == "" {
+			continue
+		}
+		key = a
+		if addr, err := netip.ParseAddr(a); err != nil || !trustedProxy(addr) {
+			break
 		}
 	}
-	ip := net.ParseIP(addr)
-	local := ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified())
-	if len(forwarded) > 0 && local {
-		return forwarded[len(forwarded)-1]
+	return key
+}
+
+// trustedProxy: addr is a proxy whose X-Forwarded-For counts.
+func trustedProxy(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	for _, p := range settings().TrustedProxies {
+		if p.Contains(addr) {
+			return true
+		}
 	}
-	return addr
+	return false
+}
+
+// forwarders: the untrusted peers that sent X-Forwarded-For, said once each.
+var forwarders = struct {
+	sync.Mutex
+	seen map[netip.Addr]bool
+}{seen: map[netip.Addr]bool{}}
+
+// untrustedForwarder: a peer not in trusted-proxies sent X-Forwarded-For;
+// one on a private network is likely a reverse proxy left out, so the log
+// says, once, how to trust it (its clients count as one meanwhile).
+func untrustedForwarder(peer netip.Addr) {
+	if !peer.IsPrivate() && !peer.IsLoopback() {
+		return
+	}
+	forwarders.Lock()
+	defer forwarders.Unlock()
+	if forwarders.seen[peer] || len(forwarders.seen) > 100 {
+		return
+	}
+	forwarders.seen[peer] = true
+	logf("requests from %s carry X-Forwarded-For, which Zone ignores from it: if %s is your reverse proxy, "+
+		"add it to trusted-proxies in %s (zonewiki config set trusted-proxies %s), so its clients are told apart "+
+		"when wrong passwords are throttled", peer, peer, configName(), peer)
 }
 
 // Throttle slows a guesser of passwords (and MCP tokens) down: after free
