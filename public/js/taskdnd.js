@@ -176,7 +176,5 @@ function setupDragAndDrop() {
   });
 }
 
-// ── Keyboard navigation ────────────────────────────────────────────────────
-
 return { setupBoardDragAndDrop, setupDragAndDrop };
 }

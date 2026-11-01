@@ -208,10 +208,5 @@ function confirmModal(dialog, okBtn, cancelBtn) {
   });
 }
 
-// ── Filtering ──────────────────────────────────────────────────────────────
-
-// `query` defaults to the filter field; the tag autocomplete passes the
-// field minus the word being typed.
-
 return { openTaskMenu, headerTasksMenu, postReorder, confirmDelete, confirmDeadlineMove };
 }

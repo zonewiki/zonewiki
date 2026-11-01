@@ -574,7 +574,5 @@ app.deleteBtn.addEventListener('click', () => {
   app.deleteWithUndo([id]);
 });
 
-// ── Drag and Drop ──────────────────────────────────────────────────────────
-
 return { cleanTag, chipsOnSeparators, renderComments, openEditModal };
 }

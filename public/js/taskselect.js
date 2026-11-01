@@ -385,7 +385,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-// ── Rendering ──────────────────────────────────────────────────────────────
-
 return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }
