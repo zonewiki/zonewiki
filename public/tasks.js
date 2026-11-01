@@ -10,14 +10,11 @@ import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
 import { openLightbox } from './js/page.js';
 import { HIGHLIGHT_CODE, renderFigures } from './js/figures.js';
 import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { DATES, LOCALE, attachTagAc, commentStamp, commentWhen, dateOffset, dueDateClass, esc, formatDate, hashWordAtCaret, insertHashTag, isDueNow, noSpacesInTags, noticeFromResponse, placeToast, shortDate, showNotice, startsAfterDeadline, todayStr, urgencyClass } from './js/taskutil.js';
 
 // Pure task logic lives in tasks-core.js.
 const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = TasksCore;
 
-// How dates read and the week starts: the locale setting (empty: US
-// English) and date-format = iso (YYYY-MM-DD), see tasks-core.js.
-const DATES = TasksCore.dateSettings(document.body.dataset);
-const LOCALE = DATES.locale;
 
 // Track which instance owns keyboard focus (only one at a time)
 let activeTasksInstance = null;
@@ -220,20 +217,6 @@ function dropOnBucket(id, div) {
     openDatePicker('', d => { if (d) planOnDay(id, d); }, div, dateOffset(7));
   }
   else if (div.dataset.dropDay) planOnDay(id, div.dataset.dropDay);
-}
-
-// Start a task on `day` from the board (and the quick ways below). A day
-// after its deadline asks to move the deadline along; cancelling changes
-// nothing. Undo restores both.
-// A start date after the deadline is usually a slip, so setting one asks
-// whether the deadline moves too (confirmDeadlineMove), on the board and
-// everywhere else a start date is set (setStart, the 📅 picker, f/F, 1–7). The
-// exception: an overdue task started today, the normal way to catch up on a
-// missed deadline.
-function startsAfterDeadline(task, day) {
-  if (!day || !task?.due_date || day <= task.due_date) return false;
-  const today = todayStr();
-  return !(task.due_date < today && day === today);
 }
 
 // Returns whether the task now starts on `day`.
@@ -846,17 +829,6 @@ function dismissUndo() {
   pendingUndoFn = null;
 }
 
-// A toast goes into an open modal dialog if there is one: in <body> it
-// would sit under the dialog (top layer) and its Undo couldn't be clicked.
-// It moves back to <body> when the dialog closes.
-function placeToast(el) {
-  const dialog = document.querySelector('dialog[open]');
-  (dialog || document.body).appendChild(el);
-  dialog?.addEventListener('close', () => {
-    if (el.isConnected) document.body.appendChild(el);
-  }, { once: true });
-}
-
 // An action that writes first and arms its undo after the response calls
 // dismissUndo() before the write: until its own undo is armed, Ctrl+Z (or
 // the old toast's button) would otherwise undo the action before it.
@@ -883,24 +855,6 @@ function triggerUndo() {
   const fn = pendingUndoFn;
   dismissUndo();
   fn();
-}
-
-// Plain auto-dismissing toast (no undo button) — for server-rejected writes.
-function showNotice(msg) {
-  const el = document.createElement('div');
-  el.className = 'raw-toast task-undo-toast';
-  el.textContent = msg;
-  placeToast(el);
-  setTimeout(() => el.remove(), 4000);
-}
-
-async function noticeFromResponse(res, fallback) {
-  try {
-    const body = await res.json();
-    showNotice(body.error || fallback);
-  } catch (_) {
-    showNotice(fallback);
-  }
 }
 
 // ── API ────────────────────────────────────────────────────────────────────
@@ -1432,10 +1386,6 @@ function confirmModal(dialog, okBtn, cancelBtn) {
 
 // ── Filtering ──────────────────────────────────────────────────────────────
 
-function todayStr() {
-  return dateToStr(new Date());
-}
-
 // `query` defaults to the filter field; the tag autocomplete passes the
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
@@ -1472,10 +1422,6 @@ function filterTasks(query = filterQuery()) {
 const TAB_SORT = {
   completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
 };
-
-function isDueNow(t, today) {
-  return !!t.due_date && t.due_date <= today;
-}
 
 // Open and Focus share one manual order, sort_order: Focus is Open
 // filtered to what is in Focus, so both have the same two sections under a
@@ -1975,43 +1921,6 @@ function visibleItems() {
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((d - today) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff === -1) return 'Yesterday';
-  return dateStr;
-}
-
-// "Sep 21" (plus the year when it isn't this year), for "since …" labels.
-function shortDate(dateStr) {
-  return TasksCore.shortDate(dateStr, todayStr(), DATES);
-}
-
-function dueDateClass(task) {
-  if (!task.due_date || task.completed_at) return '';
-  const today = todayStr();
-  if (task.due_date < today) return 'task-overdue';
-  if (task.due_date === today) return 'task-due-today';
-  return '';
-}
-
-function urgencyClass(task) {
-  if (!task.due_date || task.completed_at) return '';
-  const diff = Math.round(
-    (new Date(task.due_date + 'T00:00:00') - new Date(todayStr() + 'T00:00:00')) / 86400000
-  );
-  if (diff < 0)  return 'task-urg-overdue';
-  if (diff === 0) return 'task-urg-today';
-  if (diff <= 2)  return 'task-urg-soon';
-  if (diff <= 7)  return 'task-urg-upcoming';
-  return '';
-}
 
 // Day-board grouping lives in TasksCore; bind it to the current date here.
 function boardBuckets(list) {
@@ -2579,15 +2488,6 @@ function render() {
   }  // end wireListHandlers
 }
 
-// String-based escape (mirrors he() in js/util.js); also escapes quotes, since esc
-// output lands in attribute values. No DOM allocation — this runs many times
-// per task per render.
-function esc(str) {
-  return String(str)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 // A link to another site opens in a new tab (as render.py _is_external
 // marks them in pages); a full URL to Zone itself stays.
 const extAttrs = href => {
@@ -2878,117 +2778,6 @@ function chipField(input, { label = w => w, onChange, locked = [], listWord = ()
 }
 
 // ── Tag autocomplete ───────────────────────────────────────────────────────
-// One dropdown for every place a tag is typed: the filter field (#tag), the
-// edit modal's Tags field, a new task's title (#tag shorthand) and the bulk
-// tag dialog. The best match (TasksCore.rankTags) is highlighted from the
-// start, so Tab or Enter completes a half-typed tag to it; ↑/↓ pick another,
-// Esc closes (and keeps what was typed). Each field supplies:
-//   word()          the tag being typed at the caret, or null
-//   suggest(word)   tags to offer, best first
-//   accept(tag, w)  write the chosen tag into the field
-//   onEnter()       optional: Enter also does this after completing
-function attachTagAc(input, { word, suggest, accept, onEnter }) {
-  let el = null, idx = 0, tags = [];
-  const hide = () => { el?.remove(); el = null; tags = []; };
-  function highlight(i) {
-    idx = i;
-    el?.querySelectorAll('.tag-ac-item').forEach((it, j) => it.classList.toggle('selected', j === idx));
-  }
-  function choose(i) {
-    const w = word();
-    if (w && tags[i] != null) accept(tags[i], w);
-    hide();
-  }
-  function show() {
-    const w = document.activeElement === input ? word() : null;
-    const next = w ? suggest(w) : [];
-    hide();
-    if (!next.length) return;
-    tags = next;
-    el = document.createElement('div');
-    el.className = 'tag-ac-dropdown';
-    tags.forEach((tag, i) => {
-      const item = document.createElement('div');
-      item.className = 'tag-ac-item';
-      item.textContent = '#' + tag;
-      item.addEventListener('mouseenter', () => highlight(i));
-      item.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
-      el.appendChild(item);
-    });
-    // Inside the field's parent (not <body>): in the edit modal the dropdown
-    // must be in the dialog's top layer to be visible at all.
-    // A chip field's dropdown hangs under the whole box, not the input.
-    const anchor = input.closest('.chip-input') || input;
-    const parent = anchor.parentElement;
-    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-    el.style.top = anchor.offsetTop + anchor.offsetHeight + 'px';
-    el.style.left = anchor.offsetLeft + 'px';
-    el.style.width = anchor.offsetWidth + 'px';
-    parent.appendChild(el);
-    highlight(0);
-  }
-  // Capture phase: runs before the field's own key handlers, which must not
-  // see a key the dropdown used (Enter submitting, Esc closing the dialog).
-  input.addEventListener('keydown', e => {
-    if (!el) return;
-    const used = () => { e.preventDefault(); e.stopImmediatePropagation(); };
-    if (e.key === 'ArrowDown') { used(); highlight((idx + 1) % tags.length); }
-    else if (e.key === 'ArrowUp') { used(); highlight((idx - 1 + tags.length) % tags.length); }
-    else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-      used(); choose(idx);
-      if (e.key === 'Enter') onEnter?.();
-    }
-    else if (e.key === 'Escape') { used(); hide(); }
-  }, true);
-  input.addEventListener('input', show);
-  input.addEventListener('click', show);
-  input.addEventListener('blur', () => setTimeout(hide, 150));
-  return { hide, isOpen: () => !!el };
-}
-
-// Keep spaces out of a tag-only field as it is typed (sanitizeTagInput).
-// On `input`, not keydown: that also covers paste and phone keyboards,
-// which often report no key for a space. Registered before attachTagAc's
-// own input listener, so suggestions see the cleaned value.
-function noSpacesInTags(input, list) {
-  input.addEventListener('input', e => {
-    // Deleting never adds a space, and cleaning after it would undo the
-    // deletion (Backspace on "work, " re-added the space after the comma).
-    if (e.isComposing || e.inputType?.startsWith('delete')) return;
-    const { value, caret } = sanitizeTagInput(input.value, input.selectionStart, list);
-    if (value === input.value) return;
-    input.value = value;
-    input.setSelectionRange(caret, caret);
-  });
-}
-
-// The word under the caret, if it starts with '#' (or '-#', an exclusion:
-// the word then starts after the '-'). Inside an OR word (#a|b) only the
-// part after the last pipe is being completed.
-function hashWordAtCaret(input) {
-  const val = input.value;
-  const caret = input.selectionStart ?? val.length;
-  let start = val.lastIndexOf(' ', caret - 1) + 1;
-  if (val.startsWith('-#', start) && caret > start) start++;
-  let end = val.indexOf(' ', caret);
-  if (end < 0) end = val.length;
-  const w = val.slice(start, end);
-  if (!w.startsWith('#')) return null;
-  const pipe = w.lastIndexOf('|', caret - start - 1);
-  const partStart = pipe >= 0 ? start + pipe + 1 : start;
-  return { start, end, partStart, partial: val.slice(partStart, end).replace(/^#/, '') };
-}
-
-// Replace that word (or its OR part) with "#tag " and put the caret after it.
-function insertHashTag(input, tag, w) {
-  const val = input.value;
-  const after = val.slice(w.end);
-  const insert = (w.partStart === w.start ? '#' : '') + tag + (after.startsWith(' ') ? '' : ' ');
-  input.value = val.slice(0, w.partStart) + insert + after;
-  const caret = w.partStart + insert.length;
-  input.focus();
-  input.setSelectionRange(caret, caret);
-}
 
 // Filter field: tags of the tasks the *other* tag words leave visible in
 // this tab, minus those already used. Free text is ignored: it is usually
@@ -3191,14 +2980,6 @@ const commentsBox = document.getElementById('task-edit-comments' + sfx);
 const commentInput = document.getElementById('task-edit-comment' + sfx);
 const commentList = document.getElementById('task-edit-comment-list' + sfx);
 let commentsTaskId = null;
-function commentWhen(at) {
-  return `${shortDate(at.slice(0, 10))} ${at.slice(11, 16)}`;
-}
-// When, and with users who: "12 Mar 09:30 · alice" (a comment, or a
-// History entry).
-function commentStamp(c) {
-  return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
-}
 function renderComments(task) {
   commentsTaskId = task?.id || null;
   commentsBox.hidden = !task;
@@ -3340,12 +3121,6 @@ function openEditModal(taskId, opts) {
   (task && opts?.focusComment ? commentInput : batchTitles ? editTagsInput : titleInput).focus();
 }
 
-// Relative-date helpers (used by card rendering and focus defaults).
-function dateOffset(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return dateToStr(d);
-}
 // Every N / From done are only meaningful with a repeat type — disable them
 // (rather than hide, which would shift the row) when Repeat is "—".
 function syncRecFields() {
