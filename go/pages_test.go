@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"zonewiki/internal/mdtext"
 )
 
 // The wiki's pages (pages.go): listing, safe paths, link targets and
@@ -113,8 +114,8 @@ func TestPlainTaskTitle(t *testing.T) {
 		"read [x](https://e.x) today": "read x today", // a pasted URL with its name: the label
 		"[](https://e.x)":             "https://e.x",
 	} {
-		if got := plainTaskTitle(in); got != want {
-			t.Errorf("plainTaskTitle(%q) = %q, want %q", in, got, want)
+		if got := mdtext.PlainTaskTitle(in); got != want {
+			t.Errorf("mdtext.PlainTaskTitle(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

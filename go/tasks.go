@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // apiError is a refused request: status and the reason tasks.js shows.
@@ -793,7 +794,7 @@ func toggleNoteCheck(user, id string, idx int) (*Task, error) {
 		return nil, err
 	}
 	text := t.Description
-	toggled := toggleNthCheckbox(text, idx, false)
+	toggled := mdtext.ToggleNthCheckbox(text, idx, false, now())
 	if toggled == text {
 		return t, nil
 	}

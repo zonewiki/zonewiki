@@ -172,7 +172,7 @@ func queryWords(query string) []string {
 
 // ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates ----
 
-// nonSpaceClass: a character that isn't white space (as mdtext.go's).
+// nonSpaceClass: a character that isn't white space (as package mdtext's).
 const nonSpaceClass = `[^\s\v\pZ\x{85}]`
 
 var (

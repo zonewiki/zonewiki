@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"zonewiki/internal/mdtext"
 )
 
 // processWikilinks: [[Page]], [[Page|Label]], [[Page#Section]],
@@ -24,17 +25,17 @@ import (
 // ?from=private, so the editor it opens warns that the new page is shared and
 // offers it as a private one; on a shared page a link to the user's private
 // page is marked (wikilink-private), since others see it as plain text.
-// stash: maskCode's, when text is masked, so a section's anchor is made
+// stash: mdtext.MaskCode's, when text is masked, so a section's anchor is made
 // from its code as written ([[Page#Run `make` now]]).
 func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, stash []string) string {
 	if slugs == nil {
 		slugs = rq.slugSet()
 	}
-	return wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
-		page, section, label := splitWikilink(m[2 : len(m)-2])
+	return mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
+		page, section, label := mdtext.SplitWikilink(m[2 : len(m)-2])
 		anchor := ""
 		if section != "" {
-			anchor = "#" + html.EscapeString(sectionAnchor(unmaskCode(section, stash)))
+			anchor = "#" + html.EscapeString(mdtext.SectionAnchor(mdtext.UnmaskCode(section, stash)))
 		}
 		label = html.EscapeString(label)
 		if page == "" {
@@ -45,7 +46,7 @@ func processWikilinks(rq *Req, text string, slugs map[string]bool, from string, 
 		}
 		slug := page
 		if !slugs[page] {
-			slug = toSlug(page)
+			slug = mdtext.ToSlug(page)
 		}
 		if hiddenPage(rq, slug) {
 			// Sharing mode: the words stay (they are this page's), the link goes.
@@ -82,17 +83,17 @@ type RenderOpts struct {
 
 // renderMd renders a page's markdown.
 func renderMd(rq *Req, text string, o RenderOpts) string {
-	meta, text := parseFrontmatter(text)
+	meta, text := mdtext.ParseFrontmatter(text)
 	var prefer []string
 	for _, l := range pageTaskLists(text) {
 		prefer = append(prefer, l.Name)
 	}
 	prefer = append(prefer, o.PreferLists...)
 	fmHTML := renderFrontmatterHTML(meta, !o.HideTags, !o.HideTldr)
-	text, stash := maskCode(text)
+	text, stash := mdtext.MaskCode(text)
 	text, embeds := processTasksEmbeds(rq, text, o.Page != "" && ownPrivate(rq.who(), o.Page))
 	text, refs := maskTaskRefs(text)
-	text = unmaskCode(processWikilinks(rq, text, nil, o.Page, stash), stash)
+	text = mdtext.UnmaskCode(processWikilinks(rq, text, nil, o.Page, stash), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
 		HeadingIDs: o.HeadingIDs}
 	result := markdown(text, env, false)
@@ -117,9 +118,9 @@ func renderNotes(rq *Req, texts []string, inline bool) []string {
 	slugs := rq.slugSet()
 	out := make([]string, len(texts))
 	for i, text := range texts {
-		text, stash := maskCode(text)
+		text, stash := mdtext.MaskCode(text)
 		text, refs := maskTaskRefs(text)
-		text = unmaskCode(processWikilinks(rq, text, slugs, "", stash), stash)
+		text = mdtext.UnmaskCode(processWikilinks(rq, text, slugs, "", stash), stash)
 		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID}, inline)
 		out[i] = injectTaskRefs(rq, result, refs, nil)
 	}
@@ -134,7 +135,7 @@ var (
 	taskRefTokenRE  = regexp.MustCompile("(\\d+)")
 	taskRefMaskedRE = regexp.MustCompile("(\\d+)|" + `\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	// A reference alone in a list item is a row of its own.
-	taskRefItemRE = regexp.MustCompile(`^(?:` + spaceClass + `|<p>)*` + "\\d+" + `(?:` + spaceClass + `|</p>)*</li>`)
+	taskRefItemRE = regexp.MustCompile(`^(?:` + mdtext.SpaceClass + `|<p>)*` + "\\d+" + `(?:` + mdtext.SpaceClass + `|</p>)*</li>`)
 )
 
 func maskTaskRefs(text string) (string, []string) {
@@ -233,7 +234,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 	if t == nil {
 		return `<span class="task-ref task-ref-missing" title="No task with id ` + html.EscapeString(ref) + `">task ` + html.EscapeString(ref) + `?</span>`
 	}
-	title := html.EscapeString(plainTaskTitle(t.Title))
+	title := html.EscapeString(mdtext.PlainTaskTitle(t.Title))
 	done, wont := !t.isOpen(), t.WontDo
 	list := linkList(t, prefer, lists)
 	href := html.EscapeString(taskLink(t, list))
@@ -316,7 +317,7 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 		for _, t := range ts {
 			fmt.Fprintf(&items, `<li><a href="%s">%s</a></li>`,
 				html.EscapeString(taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), "")),
-				html.EscapeString(plainTaskTitle(t.Title)))
+				html.EscapeString(mdtext.PlainTaskTitle(t.Title)))
 		}
 		s := ""
 		if len(ts) > 1 {
@@ -353,7 +354,7 @@ func renderTagsPillsHTML(tags []string) string {
 
 // renderFrontmatterHTML: tags and tldr as a collapsed block (the page view
 // shows both in its meta row instead).
-func renderFrontmatterHTML(meta Frontmatter, showTags, showTldr bool) string {
+func renderFrontmatterHTML(meta mdtext.Frontmatter, showTags, showTldr bool) string {
 	if len(meta.Tags) == 0 && meta.Tldr == "" && len(meta.Sources) == 0 {
 		return ""
 	}

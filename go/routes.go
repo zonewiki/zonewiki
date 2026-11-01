@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"zonewiki/internal/mdtext"
 )
 
 func pageRoutes(mux *http.ServeMux) {
@@ -94,7 +95,7 @@ type notesView struct {
 }
 
 var (
-	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + spaceClass + `+(.+?)` + spaceClass + `*#*` + spaceClass + `*$`)
+	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + mdtext.SpaceClass + `+(.+?)` + mdtext.SpaceClass + `*#*` + mdtext.SpaceClass + `*$`)
 )
 
 // apiPagePreview: a page for the search modal's preview pane, {title, html}:
@@ -112,10 +113,10 @@ func apiPagePreview(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	masked, stash := maskCode(content)
+	masked, stash := mdtext.MaskCode(content)
 	masked = tasksRE.ReplaceAllString(masked, "*(tasks)*")
-	out := renderMd(rq, stripH1(unmaskCode(masked, stash)), RenderOpts{HeadingIDs: headingPID})
-	writeJSON(w, http.StatusOK, M{"title": pageTitle(content, slug), "html": out})
+	out := renderMd(rq, mdtext.StripH1(mdtext.UnmaskCode(masked, stash)), RenderOpts{HeadingIDs: headingPID})
+	writeJSON(w, http.StatusOK, M{"title": mdtext.PageTitle(content, slug), "html": out})
 }
 
 func viewPage(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +150,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, r, err)
 		return
 	}
-	title := pageTitle(content, slug)
+	title := mdtext.PageTitle(content, slug)
 	var backlinks []PageRef
 	for _, b := range findBacklinksIn(rq.pageFiles(), slug) {
 		if !hiddenPage(rq, b.Slug) {
@@ -159,11 +160,11 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	// Tasks the page shows inline already aren't repeated under Linked tasks.
 	inline := pageTaskRefs(rq.user, content)
 	// A section a task links to is named as the page's heading says it.
-	masked, stash := maskCode(content)
+	masked, stash := mdtext.MaskCode(content)
 	headingNames := map[string]string{}
 	for _, m := range sectionHeadRE.FindAllStringSubmatch(masked, -1) {
-		heading := unmaskCode(m[1], stash)
-		headingNames[sectionAnchor(heading)] = plainHeading(heading)
+		heading := mdtext.UnmaskCode(m[1], stash)
+		headingNames[mdtext.SectionAnchor(heading)] = mdtext.PlainHeading(heading)
 	}
 	var tasks []TaskLink
 	for _, t := range findTaskBacklinks(rq.user, slug) {
@@ -191,7 +192,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	var menu M
 	if fromUncommitted {
 		bc = buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", chip, "", crumb{title, ""})
-		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{Page: slug}))
+		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug}))
 	} else {
 		qs := ""
 		if r.URL.RawQuery != "" {
@@ -201,15 +202,15 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"))
 		changed, commit := lastChanged(slug, path, title)
-		meta, _ := parseFrontmatter(content)
+		meta, _ := mdtext.ParseFrontmatter(content)
 		metaRow = macro("meta_row", M{"tags_html": htmlOf(renderTagsPillsHTML(meta.Tags)), "tldr": meta.Tldr,
 			"changed": changed, "commit": commit})
-		article = htmlOf(renderMd(rq, stripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
+		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionTasks: tasks}))
 	}
 	_, private := pageOwner(slug)
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
-		FromUncommitted: fromUncommitted, Private: private, TaskKeys: strings.Join(taskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: private, TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -220,7 +221,7 @@ type pageView struct {
 	Title, Slug                                                             string
 	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
 	Private                                                                 bool   // in a private folder (the lock)
-	TaskKeys                                                                string // a key per checkbox line (taskLineKeys), comma-separated
+	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
 	LinkSections                                                            []M // Backlinks, Linked tasks, Related (linkSections)
 	Outlinks                                                                []M // the right column's Links to
@@ -286,7 +287,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	var content, title string
 	isNew := !exists(path)
 	if isNew {
-		title = slugDisplayName(slug)
+		title = mdtext.SlugDisplayName(slug)
 		content = "# " + title + "\n\n"
 	} else {
 		var err error
@@ -294,7 +295,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 			serverError(w, r, err)
 			return
 		}
-		title = pageTitle(content, slug)
+		title = mdtext.PageTitle(content, slug)
 	}
 	if !isNew {
 		keepGivenBase(content) // what a later save from this editor is merged from
@@ -319,9 +320,9 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	}
 	fileHash, start, end := "", 0, 0
 	if hasSection && !isNew {
-		if s, e, ok := sectionCharRange(content, section); ok {
-			fileHash, start, end = contentHash(content), s, e
-			content = strings.TrimRight(runeSlice(content, s, e), "\n")
+		if s, e, ok := mdtext.SectionCharRange(content, section); ok {
+			fileHash, start, end = mdtext.ContentHash(content), s, e
+			content = strings.TrimRight(mdtext.RuneSlice(content, s, e), "\n")
 		} else {
 			hasSection = false // an invalid index: the whole page
 		}
@@ -331,7 +332,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	// starts after it, ready for the body.
 	onlyTitle := !hasSection && onlyTitleRE.MatchString(content)
 	if !isNew && !hasSection {
-		fileHash = contentHash(content)
+		fileHash = mdtext.ContentHash(content)
 	}
 	// A new page from a link on a private page: shared, unless made private.
 	privateOffer := ""
@@ -405,7 +406,7 @@ func readEditorSave(w http.ResponseWriter, r *http.Request) (*editorSave, bool) 
 
 // changedSince: the page changed since the editor loaded it (whole-page edits).
 func (s *editorSave) changedSince() bool {
-	return s.fileHash != "" && s.current != nil && contentHash(*s.current) != s.fileHash
+	return s.fileHash != "" && s.current != nil && mdtext.ContentHash(*s.current) != s.fileHash
 }
 
 func savePage(w http.ResponseWriter, r *http.Request) {
@@ -418,7 +419,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 	var changed bool
 	if s.section {
 		var spliced string
-		if spliced, _, _, _, ok = spliceSection(s.current, s.fileHash, s.start, s.end, content); ok {
+		if spliced, _, _, _, ok = mdtext.SpliceSection(s.current, s.fileHash, s.start, s.end, content); ok {
 			content = spliced
 		}
 		changed = !ok
@@ -463,7 +464,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		m, ok := mergeSave(s, userOf(r))
 		if ok && m.clean && r.PostFormValue("merge") == "1" {
 			merged, content = &m, m.content
-			newHash, newStart, newEnd = contentHash(content), m.start, m.end
+			newHash, newStart, newEnd = mdtext.ContentHash(content), m.start, m.end
 			return false
 		}
 		answer := M{"error": "file_changed"}
@@ -501,14 +502,14 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		start, end, ok := sectionCharRange(*s.current, force)
+		start, end, ok := mdtext.SectionCharRange(*s.current, force)
 		if !ok {
 			badRequestPage(w)
 			return
 		}
-		content, newHash, newStart, newEnd, _ = spliceSection(s.current, contentHash(*s.current), start, end, s.text)
+		content, newHash, newStart, newEnd, _ = mdtext.SpliceSection(s.current, mdtext.ContentHash(*s.current), start, end, s.text)
 	case s.section:
-		if content, newHash, newStart, newEnd, ok = spliceSection(s.current, s.fileHash, s.start, s.end, s.text); !ok && conflict() {
+		if content, newHash, newStart, newEnd, ok = mdtext.SpliceSection(s.current, s.fileHash, s.start, s.end, s.text); !ok && conflict() {
 			return
 		}
 	default:
@@ -539,7 +540,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		text := content
 		answer := M{"file_hash": newHash, "merged": true, "by": merged.by, "sent_hash": merged.sentHash}
 		if s.section {
-			text = strings.TrimRight(runeSlice(content, newStart, newEnd), "\n")
+			text = strings.TrimRight(mdtext.RuneSlice(content, newStart, newEnd), "\n")
 			answer["start_char"], answer["end_char"] = newStart, newEnd
 			answer["sent_start"], answer["sent_end"] = merged.sentStart, merged.sentEnd
 		}
@@ -550,7 +551,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	default:
 		// Also for a save without a hash (a new page's first, Keep mine):
 		// the editor's next save then goes from what this one wrote.
-		writeJSON(w, http.StatusOK, M{"file_hash": contentHash(content)})
+		writeJSON(w, http.StatusOK, M{"file_hash": mdtext.ContentHash(content)})
 	}
 }
 
@@ -565,12 +566,12 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 	}
 	theirs, mine := *s.current, s.text
 	if section >= 1 {
-		start, end, ok := sectionCharRange(theirs, section)
+		start, end, ok := mdtext.SectionCharRange(theirs, section)
 		if !ok {
 			badRequestPage(w)
 			return
 		}
-		mine, _, _, _, _ = spliceSection(&theirs, contentHash(theirs), start, end, s.text)
+		mine, _, _, _, _ = mdtext.SpliceSection(&theirs, mdtext.ContentHash(theirs), start, end, s.text)
 	}
 	if !cfg.GitEnabled || mine == theirs {
 		writeJSON(w, http.StatusOK, M{"set_aside": false})
@@ -613,10 +614,10 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 		var ok bool
 		switch idx, hasIdx := formInt(r, "section_idx"); {
 		case base != "":
-			whole, _, _, _, ok = spliceSection(&base, s.fileHash, s.start, s.end, s.text)
+			whole, _, _, _, ok = mdtext.SpliceSection(&base, s.fileHash, s.start, s.end, s.text)
 		case hasIdx && s.current != nil:
-			if start, end, valid := sectionCharRange(*s.current, idx); valid {
-				whole, _, _, _, ok = spliceSection(s.current, contentHash(*s.current), start, end, s.text)
+			if start, end, valid := mdtext.SectionCharRange(*s.current, idx); valid {
+				whole, _, _, _, ok = mdtext.SpliceSection(s.current, mdtext.ContentHash(*s.current), start, end, s.text)
 			}
 		}
 		if !ok {
@@ -631,7 +632,7 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 // the page in the user's private folder.
 func createPage(w http.ResponseWriter, r *http.Request) {
 	raw := r.PostFormValue("slug")
-	slug := toSlug(raw)
+	slug := mdtext.ToSlug(raw)
 	if own := privateFolder(userOf(r)); own != "" && slug != "" && r.PostFormValue("private") == "1" &&
 		!strings.HasPrefix(slug, own+"/") {
 		slug = own + "/" + slug
@@ -641,7 +642,7 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A page by that name is there already: it opens in the editor.
-	if err := createPageOp(userOf(r), slug, "# "+titleWords(strings.TrimSpace(raw))+"\n\n", ""); err != nil {
+	if err := createPageOp(userOf(r), slug, "# "+mdtext.TitleWords(strings.TrimSpace(raw))+"\n\n", ""); err != nil {
 		if pe, ok := refusalOf(err); !ok || pe.kind != refusedExists {
 			pageFailed(w, r, err)
 			return
@@ -658,8 +659,8 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("from") == "page" {
 		back = pathURL("page", slug)
 	}
-	// toSlug keeps underscores, so note timestamps survive a rename.
-	newSlug := toSlug(strings.TrimSpace(r.PostFormValue("new_name")))
+	// mdtext.ToSlug keeps underscores, so note timestamps survive a rename.
+	newSlug := mdtext.ToSlug(strings.TrimSpace(r.PostFormValue("new_name")))
 	if newSlug == "" {
 		newSlug = slug
 	}
@@ -873,7 +874,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	// there once. Checked on every tick: a view that ticked an item found
 	// elsewhere still counts its items as it did.
 	if key := r.PostFormValue("key"); key != "" {
-		keys := taskLineKeys(content)
+		keys := mdtext.TaskLineKeys(content)
 		if idx >= len(keys) || keys[idx] != key {
 			idx = -1
 			for i, k := range keys {
@@ -891,12 +892,12 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	toggled := toggleNthCheckbox(content, idx, true)
+	toggled := mdtext.ToggleNthCheckbox(content, idx, true, now())
 	if err := writeDraft(userOf(r), r.PathValue("slug"), path, &content, toggled, false); err != nil {
 		pageFailed(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, M{"file_hash": contentHash(toggled)})
+	writeJSON(w, http.StatusOK, M{"file_hash": mdtext.ContentHash(toggled)})
 }
 
 // apiPreview renders posted markdown (the editor's live preview); ?lists=

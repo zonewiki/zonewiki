@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"zonewiki/internal/mdtext"
 )
 
 // $…$ and $$…$$ keep their TeX as written, escaped, in a .math element.
@@ -69,11 +70,11 @@ func TestMathInTable(t *testing.T) {
 func TestMathHeadingID(t *testing.T) {
 	for _, h := range []string{"Area $x_1$", "Sum $a_1 + b_2$ here", "Price $5 and $6",
 		"Code `$x$` and $y$", "Hello `code` & more", "Run `snake_case_name`", "Pad `` a`b ``"} {
-		want := sectionAnchor(h)
+		want := mdtext.SectionAnchor(h)
 		expectIn(t, render(t, "## "+h+"\n", Env{}), `<h2 id="`+want+`">`)
 	}
-	if got := sectionAnchor("Sum $a_1 + b_2$ here"); got != "sum-a_1--b_2-here" {
-		t.Errorf("sectionAnchor = %q", got)
+	if got := mdtext.SectionAnchor("Sum $a_1 + b_2$ here"); got != "sum-a_1--b_2-here" {
+		t.Errorf("mdtext.SectionAnchor = %q", got)
 	}
 }
 
@@ -81,10 +82,10 @@ func TestMathHeadingID(t *testing.T) {
 // item or a setext underline inside it is no section and no checkbox.
 func TestMathBlockIsAFence(t *testing.T) {
 	text := "# T\n\n## One\n\n$$\n## not a heading\n- [ ] not a task\nx\n---\n$$\n\n$$- [ ] y$$\n\n- [ ] real\n\n## Two\n"
-	if got := len(splitSections(text)); got != 3 { // the intro, One, Two
-		t.Errorf("%d sections, want 3: %q", got, splitSections(text))
+	if got := len(mdtext.SplitSections(text)); got != 3 { // the intro, One, Two
+		t.Errorf("%d sections, want 3: %q", got, mdtext.SplitSections(text))
 	}
-	if got := len(taskItemLines(splitLines(text), false)); got != 1 {
+	if got := len(mdtext.TaskItemLines(mdtext.SplitLines(text), false)); got != 1 {
 		t.Errorf("%d task lines, want 1", got)
 	}
 	html := render(t, text, Env{})
@@ -95,24 +96,24 @@ func TestMathBlockIsAFence(t *testing.T) {
 		t.Errorf("%d checkboxes, want 1:\n%s", n, html)
 	}
 	// Unclosed: the rest of the page is math, to both.
-	if got, want := len(splitSections("## A\n\n$$\n## B\n")), len(splitSections("## A\n")); got != want {
+	if got, want := len(mdtext.SplitSections("## A\n\n$$\n## B\n")), len(mdtext.SplitSections("## A\n")); got != want {
 		t.Errorf("unclosed $$: %d sections, want %d", got, want)
 	}
 }
 
 // Math with a [[ in it is masked as code is, so no [[…]] in it is rewritten.
 func TestMathMasked(t *testing.T) {
-	masked, stash := maskCode("see $[[e]]$, $$[[f]]$$ and [[g]], \\$[[h]] $ x\n$$\n[[i]]\n$$\n")
+	masked, stash := mdtext.MaskCode("see $[[e]]$, $$[[f]]$$ and [[g]], \\$[[h]] $ x\n$$\n[[i]]\n$$\n")
 	expectNot(t, masked, "[[e]]", "[[f]]", "[[i]]")
 	expectIn(t, masked, "[[g]]", "[[h]]")
-	if unmaskCode(masked, stash) != "see $[[e]]$, $$[[f]]$$ and [[g]], \\$[[h]] $ x\n$$\n[[i]]\n$$\n" {
+	if mdtext.UnmaskCode(masked, stash) != "see $[[e]]$, $$[[f]]$$ and [[g]], \\$[[h]] $ x\n$$\n[[i]]\n$$\n" {
 		t.Error("unmask doesn't give the text back")
 	}
 	// Math without [[ needs no mask, and a link's own math stays in the link.
-	if masked, _ := maskCode("$x$ and [[h#Area $x_1$]]"); masked != "$x$ and [[h#Area $x_1$]]" {
+	if masked, _ := mdtext.MaskCode("$x$ and [[h#Area $x_1$]]"); masked != "$x$ and [[h#Area $x_1$]]" {
 		t.Errorf("masked %q", masked)
 	}
-	if got := inlineMathSpans("`$a$` $b$ \\$c$ $d$"); len(got) != 2 || got[0] != [3]int{6, 9, 1} {
-		t.Errorf("inlineMathSpans = %v", got)
+	if got := mdtext.InlineMathSpans("`$a$` $b$ \\$c$ $d$"); len(got) != 2 || got[0] != [3]int{6, 9, 1} {
+		t.Errorf("mdtext.InlineMathSpans = %v", got)
 	}
 }

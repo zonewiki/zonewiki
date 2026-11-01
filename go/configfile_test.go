@@ -10,42 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/settingsfile"
 )
-
-func TestParseConfig(t *testing.T) {
-	f, err := parseConfig("\ufeff# Zone\r\nlocale = de-AT\n  # indented comment\nnoshare = #noshare, people/\n\n" +
-		"[user alice]\npassword = h=1\nmcp-token=  tok  \n[ user   mary-ann ]\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f.top["locale"] != (configValue{"de-AT", 2}) || f.top["noshare"].value != "#noshare, people/" {
-		t.Errorf("top %v", f.top)
-	}
-	if len(f.users) != 2 || f.users[0].name != "alice" || f.users[0].values["password"].value != "h=1" ||
-		f.users[0].values["mcp-token"].value != "tok" || f.users[1].name != "mary-ann" || f.users[1].line != 9 {
-		t.Errorf("users %+v", f.users)
-	}
-	for text, want := range map[string]string{
-		"locale = de\npasword = x":           "line 2: \"pasword\" isn't a setting",
-		"[group admins]":                     "line 1: [group admins] isn't a section",
-		"[user Alice]":                       "line 1: \"Alice\" isn't a user name",
-		"[user]":                             "line 1: \"\" isn't a user name",
-		"[user a]\n[user a]":                 "line 2: [user a] is there twice (line 1)",
-		"locale = de\nlocale = en":           "line 2: locale is set twice (line 1)",
-		"just words":                         "line 1: not a setting",
-		"= x":                                "line 1: not a setting",
-		"[user a]\nlocale = de":              "line 2: \"locale\" isn't a user's setting",
-		"[user a]\npassword = x\npassword=y": "line 3: password is set twice (line 2)",
-	} {
-		if _, err := parseConfig(text); err == nil || !strings.Contains(err.Error(), want) ||
-			!strings.HasPrefix(err.Error(), configName()+" ") {
-			t.Errorf("%q: %v, want %q", text, err, want)
-		}
-	}
-	if f, err := parseConfig(""); err != nil || len(f.lines) != 0 || len(f.users) != 0 {
-		t.Errorf("empty: %v %+v", err, f)
-	}
-}
 
 func TestLoadSettingsFromFile(t *testing.T) {
 	hash := hashPassword("pw")
@@ -113,7 +79,7 @@ func configWiki(t *testing.T, text string) string {
 	testWiki(t, nil)
 	path := configPath()
 	if text != "" {
-		if err := writeConfig(path, text); err != nil {
+		if err := settingsfile.Write(path, text); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -136,7 +102,7 @@ func configWiki(t *testing.T, text string) string {
 // looks at both).
 func rewrite(t *testing.T, path, text string) {
 	t.Helper()
-	if err := writeConfig(path, text); err != nil {
+	if err := settingsfile.Write(path, text); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -298,64 +264,6 @@ func TestReloadClearsNoshare(t *testing.T) {
 	}
 }
 
-func TestConfigFileEdits(t *testing.T) {
-	f, _ := parseConfig("# Zone's settings\n# more\n\nlocale = de\n\n# Alice, admin\n[user alice]\npassword = a\n\n" +
-		"# Bob\n[user bob]\npassword = b\n")
-	f.set("", "hosts", "x")
-	f.set("", "locale", "en")
-	f.set("alice", "mcp-token", "t")
-	f.set("bob", "password", "b2")
-	f.set("carol", "password", "c")
-	want := "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Alice, admin\n[user alice]\npassword = a\n" +
-		"mcp-token = t\n\n# Bob\n[user bob]\npassword = b2\n\n[user carol]\npassword = c\n"
-	if f.text() != want {
-		t.Fatalf("set:\n%s\nwant:\n%s", f.text(), want)
-	}
-	f.removeUser("alice")
-	f.removeUser("carol")
-	f.removeUser("nobody")
-	want = "# Zone's settings\n# more\n\nlocale = en\nhosts = x\n\n# Bob\n[user bob]\npassword = b2\n"
-	if f.text() != want {
-		t.Fatalf("remove:\n%s\nwant:\n%s", f.text(), want)
-	}
-	f, _ = parseConfig("# Zone\n[user a]\npassword = x\n")
-	if f.removeUser("a"); f.text() != "# Zone\n" {
-		t.Errorf("the file's own comment went: %q", f.text())
-	}
-	f, _ = parseConfig("# Zone\n\n[user a]\npassword = x\n")
-	if f.set("", "locale", "de"); f.text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
-		t.Errorf("before the users: %q", f.text())
-	}
-	f, _ = parseConfig("# Zone\n[user a]\npassword = x\n")
-	if f.set("", "locale", "de"); f.text() != "# Zone\nlocale = de\n\n[user a]\npassword = x\n" {
-		t.Errorf("before the users: %q", f.text())
-	}
-	// Into a file of comments only: below them.
-	f, _ = parseConfig("# Zone\n\n# end\n")
-	f.set("", "locale", "de")
-	if f.text() != "# Zone\nlocale = de\n\n# end\n" {
-		t.Errorf("%q", f.text())
-	}
-}
-
-func TestWriteConfig(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".zone", "config")
-	if err := writeConfig(path, "locale = de\n"); err != nil {
-		t.Fatal(err)
-	}
-	_ = os.Chmod(path, 0o644)
-	if err := writeConfig(path, "locale = en\n"); err != nil {
-		t.Fatal(err)
-	}
-	st, _ := os.Stat(path)
-	b, _ := os.ReadFile(path)
-	entries, _ := os.ReadDir(filepath.Dir(path))
-	if st.Mode().Perm() != 0o600 || string(b) != "locale = en\n" || len(entries) != 1 {
-		t.Errorf("%o %q %d files", st.Mode().Perm(), b, len(entries))
-	}
-}
-
 func TestUserCommands(t *testing.T) {
 	wiki := t.TempDir()
 	env := map[string]string{"ZONE_DATA": wiki}
@@ -366,7 +274,7 @@ func TestUserCommands(t *testing.T) {
 		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
 		return code, out.String(), errs.String()
 	}
-	read := func() *configFile {
+	read := func() *settingsfile.File {
 		t.Helper()
 		f, err := readConfigFile(filepath.Join(wiki, ".zone", "config"))
 		if err != nil || f == nil {
@@ -382,37 +290,37 @@ func TestUserCommands(t *testing.T) {
 		t.Fatalf("add: %d %q %q", code, out, errs)
 	}
 	f := read()
-	if !strings.HasPrefix(f.lines[0], "# ") || f.lines[1] != "" || f.lines[2] != "[user alice]" || !checkPassword("s3cret", f.user("alice").values["password"].value) {
-		t.Fatalf("%q", f.text())
+	if !strings.HasPrefix(f.Lines[0], "# ") || f.Lines[1] != "" || f.Lines[2] != "[user alice]" || !checkPassword("s3cret", f.User("alice").Values["password"].Value) {
+		t.Fatalf("%q", f.Text())
 	}
 	if st, _ := os.Stat(filepath.Join(wiki, ".zone", "config")); st.Mode().Perm() != 0o600 {
 		t.Errorf("mode %o", st.Mode().Perm())
 	}
 	code, out, _ = run("pw\npw\n", "add", "bob", "--mcp-token")
-	token := f.user("bob")
+	token := f.User("bob")
 	f = read()
-	if token = f.user("bob"); code != 0 || token == nil ||
-		token.values["mcp-token"].value != hashToken(lastWord(out)) || len(lastWord(out)) != 64 {
+	if token = f.User("bob"); code != 0 || token == nil ||
+		token.Values["mcp-token"].Value != hashToken(lastWord(out)) || len(lastWord(out)) != 64 {
 		t.Fatalf("add with a token: %d %q", code, out)
 	}
-	old := token.values["mcp-token"].value
-	if code, out, _ = run("", "token", "bob"); code != 0 || read().user("bob").values["mcp-token"].value == old ||
-		read().user("bob").values["mcp-token"].value != hashToken(lastWord(out)) {
+	old := token.Values["mcp-token"].Value
+	if code, out, _ = run("", "token", "bob"); code != 0 || read().User("bob").Values["mcp-token"].Value == old ||
+		read().User("bob").Values["mcp-token"].Value != hashToken(lastWord(out)) {
 		t.Errorf("token: %d %q", code, out)
 	}
 	if code, _, _ = run("new\nnew\n", "passwd", "alice"); code != 0 ||
-		!checkPassword("new", read().user("alice").values["password"].value) {
+		!checkPassword("new", read().User("alice").Values["password"].Value) {
 		t.Error("passwd")
 	}
 	if code, out, _ = run("", "list"); code != 0 || out != "  alice\n  bob (MCP token)\n" {
 		t.Errorf("list: %q", out)
 	}
 	_ = os.MkdirAll(filepath.Join(wiki, "private", "bob"), 0o777)
-	if code, out, _ = run("", "remove", "bob"); code != 0 || read().user("bob") != nil ||
+	if code, out, _ = run("", "remove", "bob"); code != 0 || read().User("bob") != nil ||
 		!strings.Contains(out, "private/bob/") {
 		t.Errorf("remove: %d %q", code, out)
 	}
-	before := read().text()
+	before := read().Text()
 	for _, c := range []struct {
 		input string
 		args  []string
@@ -433,35 +341,35 @@ func TestUserCommands(t *testing.T) {
 	}
 	// A change Zone wouldn't start with is refused, the file left as it was.
 	path := filepath.Join(wiki, ".zone", "config")
-	_ = writeConfig(path, before+"[user dave]\n")
+	_ = settingsfile.Write(path, before+"[user dave]\n")
 	if code, _, errs := run("pw\npw\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {
 		t.Errorf("with a broken section: %d %q", code, errs)
 	}
 	if got := readFile(t, path); got != before+"[user dave]\n" {
 		t.Error("a refused command changed the file")
 	}
-	_ = writeConfig(path, before)
+	_ = settingsfile.Write(path, before)
 	// The last user goes only with the wiki's password instead, or with no login.
 	if code, _, errs := run("", "remove", "alice"); code == 0 || !strings.Contains(errs, "last user") ||
-		read().user("alice") == nil {
+		read().User("alice") == nil {
 		t.Errorf("remove the last: %d %q", code, errs)
 	}
 	if code, out, _ := run("wiki\nwiki\n", "remove", "alice", "--password"); code != 0 ||
-		len(read().users) != 0 || !checkPassword("wiki", read().top["password"].value) ||
+		len(read().Users) != 0 || !checkPassword("wiki", read().Top["password"].Value) ||
 		!strings.Contains(out, "password signs in") {
 		t.Errorf("remove the last, with a password: %d %q", code, out)
 	}
 	// The first user replaces the wiki's password and token.
 	f = read()
-	f.set("", "mcp-token", hashToken("t"))
-	_ = writeConfig(path, f.text())
-	if code, out, _ := run("pw\npw\n", "add", "carol"); code != 0 || read().top["password"].line != 0 ||
-		read().top["mcp-token"].line != 0 || read().user("carol") == nil ||
+	f.Set("", "mcp-token", hashToken("t"))
+	_ = settingsfile.Write(path, f.Text())
+	if code, out, _ := run("pw\npw\n", "add", "carol"); code != 0 || read().Top["password"].Line != 0 ||
+		read().Top["mcp-token"].Line != 0 || read().User("carol") == nil ||
 		!strings.Contains(out, "password no longer works") || !strings.Contains(out, "MCP token no longer works") {
 		t.Errorf("first user over the wiki's password: %d %q", code, out)
 	}
-	if code, out, _ := run("", "remove", "carol", "--open"); code != 0 || len(read().users) != 0 ||
-		read().top["password"].line != 0 || !strings.Contains(out, "next start") {
+	if code, out, _ := run("", "remove", "carol", "--open"); code != 0 || len(read().Users) != 0 ||
+		read().Top["password"].Line != 0 || !strings.Contains(out, "next start") {
 		t.Errorf("remove the last, open: %d %q", code, out)
 	}
 	for _, args := range [][]string{{"remove", "x", "--password", "--open"}, {"add", "x", "--open"}} {
@@ -493,10 +401,10 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatalf("import: %d %q %q", code, out, errs)
 	}
 	f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config"))
-	if f.top["locale"].value != "de-AT" || f.top["hosts"].value != "nas.local" ||
-		f.user("alice").values["mcp-token"].value != hashToken("s3cret-tok") ||
-		f.user("mary-ann").values["password"].value != hash {
-		t.Fatalf("%s", f.text())
+	if f.Top["locale"].Value != "de-AT" || f.Top["hosts"].Value != "nas.local" ||
+		f.User("alice").Values["mcp-token"].Value != hashToken("s3cret-tok") ||
+		f.User("mary-ann").Values["password"].Value != hash {
+		t.Fatalf("%s", f.Text())
 	}
 	env = map[string]string{"ZONE_DATA": wiki, "ZONE_ALLOW_REMOTE": "1"}
 	code, out, _ = run("", "check")
@@ -518,8 +426,8 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatal(errs)
 	}
 	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if !checkPassword("secret", f.top["password"].value) || f.top["mcp-token"].value != hashToken("tok") {
-		t.Errorf("%s", f.text())
+	if !checkPassword("secret", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken("tok") {
+		t.Errorf("%s", f.Text())
 	}
 	env = map[string]string{"ZONE_DATA": wiki2}
 	if code, out, errs := run("new\nnew\n", "passwd"); code != 0 || !strings.Contains(out, "Changed the wiki's password") {
@@ -527,8 +435,8 @@ func TestConfigCommands(t *testing.T) {
 	}
 	code, out, _ = run("", "token")
 	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if code != 0 || !checkPassword("new", f.top["password"].value) || f.top["mcp-token"].value != hashToken(lastWord(out)) {
-		t.Errorf("passwd, token: %q %s", out, f.text())
+	if code != 0 || !checkPassword("new", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken(lastWord(out)) {
+		t.Errorf("passwd, token: %q %s", out, f.Text())
 	}
 	if code, _, errs := run("", "set", "hosts", "nas.local,", "wiki.example.org"); code != 0 {
 		t.Fatal(errs)
@@ -537,15 +445,15 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatal(errs)
 	}
 	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if f.top["hosts"].value != "nas.local, wiki.example.org" || f.top["locale"].value != "de-AT" {
-		t.Errorf("set: %s", f.text())
+	if f.Top["hosts"].Value != "nas.local, wiki.example.org" || f.Top["locale"].Value != "de-AT" {
+		t.Errorf("set: %s", f.Text())
 	}
 	if code, _, errs := run("", "unset", "locale"); code != 0 {
 		t.Fatal(errs)
 	}
 	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if _, ok := f.top["locale"]; ok || f.top["hosts"].value == "" {
-		t.Errorf("unset: %s", f.text())
+	if _, ok := f.Top["locale"]; ok || f.Top["hosts"].Value == "" {
+		t.Errorf("unset: %s", f.Text())
 	}
 	for _, c := range [][]string{{"set", "locale", "de_AT"}, {"set", "pasword", "x"}, {"set", "password", "x"},
 		{"set", "mcp-token", "x"}, {"set", "base-url", "http://x\n[user eve]\npassword = x"}} {
@@ -554,16 +462,16 @@ func TestConfigCommands(t *testing.T) {
 		}
 	}
 	// The password and token are unset like the others (no login, /mcp off).
-	f.set("", "password", hashPassword("pw"))
-	f.set("", "mcp-token", hashToken("t"))
-	_ = writeConfig(filepath.Join(wiki2, ".zone", "config"), f.text())
+	f.Set("", "password", hashPassword("pw"))
+	f.Set("", "mcp-token", hashToken("t"))
+	_ = settingsfile.Write(filepath.Join(wiki2, ".zone", "config"), f.Text())
 	code, out, errs = run("", "unset", "password")
 	if code2, _, _ := run("", "unset", "mcp-token"); code != 0 || code2 != 0 || !strings.Contains(out, "no login") {
 		t.Errorf("unset password, token: %d %d %q", code, code2, errs)
 	}
-	if f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config")); f.top["password"].line != 0 ||
-		f.top["mcp-token"].line != 0 {
-		t.Errorf("unset password, token: %s", f.text())
+	if f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config")); f.Top["password"].Line != 0 ||
+		f.Top["mcp-token"].Line != 0 {
+		t.Errorf("unset password, token: %s", f.Text())
 	}
 	for _, c := range [][]string{{"bogus"}, {}, {"set", "locale"}, {"unset"}, {"check", "x"}} {
 		if code, _, errs := run("", c...); code != 2 || !strings.Contains(errs, "Usage") {
@@ -576,13 +484,13 @@ func TestConfigCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.set("", "locale", "fr")
+	f.Set("", "locale", "fr")
 	rewrite(t, filepath.Join(wiki2, ".zone", "config"), "locale = it\n")
 	if err := saveConfig(f); err == nil || !strings.Contains(err.Error(), "changed while this command ran") {
 		t.Errorf("changed meanwhile: %v", err)
 	}
-	if f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config")); f.top["locale"].value != "it" {
-		t.Errorf("overwritten: %s", f.text())
+	if f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config")); f.Top["locale"].Value != "it" {
+		t.Errorf("overwritten: %s", f.Text())
 	}
 	_ = os.WriteFile(filepath.Join(wiki2, ".zone", "config"), []byte("x\n"), 0o600)
 	if code, _, errs := run("", "check"); code != 1 || !strings.Contains(errs, "line 1") {
@@ -656,7 +564,7 @@ func TestTrustedProxies(t *testing.T) {
 	if len(settings().TrustedProxies) != 0 {
 		t.Errorf("empty: none trusted, not %v", settings().TrustedProxies)
 	}
-	f := &configFile{top: map[string]configValue{"trusted-proxies": {value: "my-proxy", line: 3}}}
+	f := &settingsfile.File{Top: map[string]settingsfile.Value{"trusted-proxies": {Value: "my-proxy", Line: 3}}}
 	if _, err := loadSettings(f); err == nil || !strings.Contains(err.Error(), "line 3: trusted-proxies = my-proxy isn't an IP address") {
 		t.Errorf("a name: %v", err)
 	}

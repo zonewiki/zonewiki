@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"zonewiki/internal/settingsfile"
 )
 
 const userUsage = `Usage: zonewiki user COMMAND
@@ -45,7 +46,7 @@ func newToken() string {
 }
 
 // openConfig: the wiki (cfg) and its settings file (empty if there is none).
-func openConfig(getenv func(string) string) (*configFile, error) {
+func openConfig(getenv func(string) string) (*settingsfile.File, error) {
 	c, err := loadWiki(getenv)
 	if err != nil {
 		return nil, err
@@ -53,22 +54,22 @@ func openConfig(getenv func(string) string) (*configFile, error) {
 	cfg = c
 	f, err := readConfigFile(configPath())
 	if f == nil && err == nil {
-		f = &configFile{top: map[string]configValue{}}
+		f = settingsfile.Empty()
 	}
 	return f, err
 }
 
 // saveConfig writes f, if the settings it makes are good.
-func saveConfig(f *configFile) error {
-	if len(f.lines) == 0 || !strings.HasPrefix(strings.TrimSpace(f.lines[0]), "#") {
+func saveConfig(f *settingsfile.File) error {
+	if len(f.Lines) == 0 || !strings.HasPrefix(strings.TrimSpace(f.Lines[0]), "#") {
 		header := []string{"# Zone's settings and users (docs/spec/users.md). " +
 			"Zone reloads this file when it changes."}
-		if len(f.lines) > 0 && strings.TrimSpace(f.lines[0]) != "" {
+		if len(f.Lines) > 0 && strings.TrimSpace(f.Lines[0]) != "" {
 			header = append(header, "")
 		}
-		f.lines = append(header, f.lines...)
+		f.Lines = append(header, f.Lines...)
 	}
-	parsed, err := parseConfig(f.text())
+	parsed, err := parseConfig(f.Text())
 	if err == nil {
 		_, err = loadSettings(parsed)
 	}
@@ -89,10 +90,10 @@ func saveConfig(f *configFile) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if string(b) != f.read {
+	if string(b) != f.Read {
 		return fmt.Errorf("not changed: %s changed while this command ran. Run it again.", configName())
 	}
-	return writeConfig(configPath(), f.text())
+	return settingsfile.Write(configPath(), f.Text())
 }
 
 func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -125,11 +126,11 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return fail("%v", err)
 	}
 	if cmd == "list" {
-		if len(f.users) == 0 {
+		if len(f.Users) == 0 {
 			fmt.Fprintln(stdout, "No users. Add one with: zonewiki user add NAME")
 		}
-		for _, u := range f.users {
-			fmt.Fprintln(stdout, userLine(u.name, u.values["mcp-token"].value != ""))
+		for _, u := range f.Users {
+			fmt.Fprintln(stdout, userLine(u.Name, u.Values["mcp-token"].Value != ""))
 		}
 		return 0
 	}
@@ -137,7 +138,7 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 	if !userNameRE.MatchString(name) {
 		return fail("%q isn't a user name. Use lowercase letters, digits and hyphens (e.g. alice, mary-ann).", name)
 	}
-	exists := f.user(name) != nil
+	exists := f.User(name) != nil
 	switch {
 	case cmd == "add" && exists:
 		return fail("%s is a user already. Change the password with: zonewiki user passwd %s", name, name)
@@ -150,20 +151,20 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		if !ok {
 			return 1
 		}
-		f.set(name, "password", hashPassword(password))
+		f.Set(name, "password", hashPassword(password))
 		// The first user: the wiki's own password and token give way (with
 		// users each has their own).
 		var replaced []string
 		for _, key := range []string{"password", "mcp-token"} {
-			if _, ok := f.top[key]; ok && cmd == "add" {
-				f.unset("", key)
+			if _, ok := f.Top[key]; ok && cmd == "add" {
+				f.Unset("", key)
 				replaced = append(replaced, key)
 			}
 		}
 		var token string
 		if tokenFlag {
 			token = newToken()
-			f.set(name, "mcp-token", hashToken(token))
+			f.Set(name, "mcp-token", hashToken(token))
 		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
@@ -185,13 +186,13 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		}
 	case "token":
 		token := newToken()
-		f.set(name, "mcp-token", hashToken(token))
+		f.Set(name, "mcp-token", hashToken(token))
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
 		fmt.Fprintf(stdout, "%s's new MCP token (shown only now; the old one no longer works): %s\n", name, token)
 	case "remove":
-		last := len(f.users) == 1
+		last := len(f.Users) == 1
 		switch {
 		case last && !passwordFlag && !openFlag:
 			return fail("%s is the last user. Without users the wiki has no login and private/ is an "+
@@ -200,13 +201,13 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		case !last && (passwordFlag || openFlag):
 			return fail("--password and --open are for the last user; there are others.")
 		}
-		f.removeUser(name)
+		f.RemoveUser(name)
 		if passwordFlag {
 			password, ok := askPassword(stdin, stderr)
 			if !ok {
 				return 1
 			}
-			f.set("", "password", hashPassword(password))
+			f.Set("", "password", hashPassword(password))
 		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
@@ -279,19 +280,19 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			if strings.ContainsAny(value, "\r\n") {
 				return fail("a value is one line.")
 			}
-			f.set("", key, value)
+			f.Set("", key, value)
 		} else {
-			f.unset("", key)
+			f.Unset("", key)
 		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
-		if args[0] == "unset" && key == "password" && len(f.users) == 0 {
+		if args[0] == "unset" && key == "password" && len(f.Users) == 0 {
 			fmt.Fprintln(stdout, "The wiki has no login now. A running Zone takes this only at its next "+
 				"start (restart it).")
 		}
 	case "passwd", "token":
-		if len(f.users) > 0 {
+		if len(f.Users) > 0 {
 			return fail("with users, each has their own: zonewiki user %s NAME", args[0])
 		}
 		if args[0] == "passwd" {
@@ -299,7 +300,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			if !ok {
 				return 1
 			}
-			f.set("", "password", hashPassword(password))
+			f.Set("", "password", hashPassword(password))
 			if err := saveConfig(f); err != nil {
 				return fail("%v", err)
 			}
@@ -307,7 +308,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return 0
 		}
 		token := newToken()
-		f.set("", "mcp-token", hashToken(token))
+		f.Set("", "mcp-token", hashToken(token))
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
@@ -329,7 +330,7 @@ func firstOf(args []string) string {
 // read them until 2026-10, into the file: a plain LEAF_PASSWORD and the MCP
 // tokens as their hashes (the clients keep their tokens), LEAF_USERS and
 // each user's LEAF_USER_<NAME>_… as sections.
-func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writer) int {
+func importEnv(f *settingsfile.File, getenv func(string) string, stdout, stderr io.Writer) int {
 	var moved []string
 	for _, k := range configKeys {
 		value := strings.TrimSpace(getenv(k.env))
@@ -342,7 +343,7 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		case "mcp-token":
 			value = hashToken(value)
 		}
-		f.set("", k.key, value)
+		f.Set("", k.key, value)
 		moved = append(moved, k.env)
 	}
 	if strings.TrimSpace(getenv("LEAF_USERS")) != "" {
@@ -354,10 +355,10 @@ func importEnv(f *configFile, getenv func(string) string, stdout, stderr io.Writ
 		moved = append(moved, "LEAF_USERS")
 		for _, u := range users {
 			env := "LEAF_USER_" + strings.ToUpper(strings.ReplaceAll(u.Name, "-", "_"))
-			f.set(u.Name, "password", u.PasswordHash)
+			f.Set(u.Name, "password", u.PasswordHash)
 			moved = append(moved, env+"_PASSWORD")
 			if u.MCPToken != "" {
-				f.set(u.Name, "mcp-token", hashToken(u.MCPToken))
+				f.Set(u.Name, "mcp-token", hashToken(u.MCPToken))
 				moved = append(moved, env+"_MCP_TOKEN")
 			}
 		}
@@ -413,11 +414,11 @@ func envUsers(getenv func(string) string) ([]*User, error) {
 
 // showSettings prints the settings in effect and where each comes from,
 // hashes masked.
-func showSettings(w io.Writer, f *configFile, s *Settings) {
+func showSettings(w io.Writer, f *settingsfile.File, s *Settings) {
 	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName())
 	for _, k := range configKeys {
-		v, set := f.top[k.key]
-		value, from := v.value, fmt.Sprintf("line %d", v.line)
+		v, set := f.Top[k.key]
+		value, from := v.Value, fmt.Sprintf("line %d", v.Line)
 		if !set {
 			value, from = "", "default"
 		}

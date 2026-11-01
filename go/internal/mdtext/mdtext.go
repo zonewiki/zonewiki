@@ -1,9 +1,9 @@
-// Markdown source text: frontmatter, fenced code, code
-// masking, headings and their anchors, wikilink syntax, sections,
-// task-list checkboxes. Pure functions on strings, no files. Offsets into
-// a text (sections, splices) count characters (runes): the editor sends
-// them back.
-package main
+// Package mdtext is markdown source text: frontmatter, fenced code, code
+// and math masking, headings and their anchors, wikilink syntax, sections,
+// task-list checkboxes, slugs. Pure functions on strings, no files and no
+// Zone state. Offsets into a text (sections, splices) count characters
+// (runes): the editor sends them back.
+package mdtext
 
 import (
 	"crypto/sha256"
@@ -12,28 +12,29 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
 // Whitespace in a pattern, as unicode.IsSpace counts it (RE2's \s is
-// ASCII only, without \v): spaceClass and its negation nonSpaceClass.
+// ASCII only, without \v): SpaceClass and its negation NonSpaceClass.
 const (
-	spaceClass    = `[\s\v\pZ\x{85}]`
-	nonSpaceClass = `[^\s\v\pZ\x{85}]`
+	SpaceClass    = `[\s\v\pZ\x{85}]`
+	NonSpaceClass = `[^\s\v\pZ\x{85}]`
 )
 
-var wikilinkRE = regexp.MustCompile(`\[\[([^\[\]]+)\]\]`)
+var WikilinkRE = regexp.MustCompile(`\[\[([^\[\]]+)\]\]`)
 
-// slugDisplayName is a title from a slug ("my-page" → "My Page").
-func slugDisplayName(slug string) string {
-	return titleWords(strings.ReplaceAll(slug[strings.LastIndex(slug, "/")+1:], "-", " "))
+// SlugDisplayName is a title from a slug ("my-page" → "My Page").
+func SlugDisplayName(slug string) string {
+	return TitleWords(strings.ReplaceAll(slug[strings.LastIndex(slug, "/")+1:], "-", " "))
 }
 
-// titleWords: s with each word's first letter in upper (title) case, the
+// TitleWords: s with each word's first letter in upper (title) case, the
 // rest as written ("my page" → "My Page", "my_notes" → "My_Notes", "it's
 // 2nd" → "It's 2nd").
-func titleWords(s string) string {
+func TitleWords(s string) string {
 	var b strings.Builder
 	start := true
 	for _, r := range s {
@@ -48,9 +49,9 @@ func titleWords(s string) string {
 
 var toSlugRE = regexp.MustCompile(`[^a-z0-9_]+`)
 
-// toSlug slugifies a name, keeping "/" between folders: each part
+// ToSlug slugifies a name, keeping "/" between folders: each part
 // lowercased, runs of other characters a hyphen.
-func toSlug(name string) string {
+func ToSlug(name string) string {
 	var parts []string
 	for _, part := range strings.Split(strings.TrimSpace(name), "/") {
 		s := strings.Trim(toSlugRE.ReplaceAllString(strings.ToLower(strings.TrimSpace(part)), "-"), "-")
@@ -61,39 +62,20 @@ func toSlug(name string) string {
 	return strings.Join(parts, "/")
 }
 
-// quicknoteRE: a note's slug, at the wiki's top level or at the top
-// of a user's private folder (isQuicknote checks the user); the first group
-// is its timestamp.
-var quicknoteRE = regexp.MustCompile(`^(?:` + privateDir + `/[a-z0-9-]+/)?(\d{4}-\d{2}-\d{2}_` +
-	`\d{2}-\d{2}-\d{2})_(.+)$`)
-
-// isQuicknote: slug is a note: at the top level, or (with users) at
-// the top of a user's private folder.
-func isQuicknote(slug string) bool {
-	if !quicknoteRE.MatchString(slug) {
-		return false
-	}
-	if !strings.HasPrefix(slug, privateDir+"/") {
-		return true
-	}
-	owner, _ := pageOwner(slug)
-	return owner != ""
-}
-
-// pageTitle is the first "# " heading in the file (not in frontmatter or
+// PageTitle is the first "# " heading in the file (not in frontmatter or
 // fenced code: a shell comment in an example never becomes the title), else
 // a title from the slug.
-func pageTitle(content, slug string) string {
-	lines := splitLines(content)
+func PageTitle(content, slug string) string {
+	lines := SplitLines(content)
 	start := bodyStart(lines)
-	for i, l := range fencedLines(lines) {
-		if i >= start && !l.inFence {
-			if title, ok := h1Text(lineBody(l.line)); ok {
+	for i, l := range FencedLines(lines) {
+		if i >= start && !l.InFence {
+			if title, ok := h1Text(LineBody(l.Line)); ok {
 				return title
 			}
 		}
 	}
-	return slugDisplayName(slug)
+	return SlugDisplayName(slug)
 }
 
 // h1Text: the text of "# Title" (^#[ \t]+(\S.*)$), stripped.
@@ -111,10 +93,10 @@ func h1Text(line string) (string, bool) {
 	return strings.TrimSpace(rest), true
 }
 
-// splitWikilink: a wikilink's inside as page, section, label: `Page`,
+// SplitWikilink: a wikilink's inside as page, section, label: `Page`,
 // `Page|Label`, `Page#Section`, `Page#Section|Label`, `#Section`. The label
 // is the page, "Page › Section", or the section alone, unless given.
-func splitWikilink(inner string) (page, section, label string) {
+func SplitWikilink(inner string) (page, section, label string) {
 	target, label, bar := strings.Cut(inner, "|")
 	page, section, _ = strings.Cut(target, "#")
 	page, section = strings.TrimSpace(page), strings.TrimSpace(section)
@@ -131,12 +113,12 @@ func splitWikilink(inner string) (page, section, label string) {
 	return page, section, strings.TrimSpace(label)
 }
 
-// sectionAnchor is the heading id a wikilink's #Section points at.
-func sectionAnchor(section string) string { return headingID(plainHeading(section)) }
+// SectionAnchor is the heading id a wikilink's #Section points at.
+func SectionAnchor(section string) string { return HeadingID(PlainHeading(section)) }
 
 var headingIDRE = regexp.MustCompile(`[^\p{L}\p{N}_\- ]+`)
 
-func headingID(text string) string {
+func HeadingID(text string) string {
 	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(headingIDRE.ReplaceAllString(text, ""))), " ", "-")
 }
 
@@ -171,10 +153,10 @@ func applyRules(text string, rules []rule) string {
 // stripLinks: wikilinks and markdown links as their label text.
 func stripLinks(text string) string { return applyRules(text, stripLinkRules) }
 
-// plainHeading: a heading's text without inline markdown and links, for
+// PlainHeading: a heading's text without inline markdown and links, for
 // its anchor. Code and math stay their text, as the render's heading id
 // has them (`a_b` and $a_1$ are no emphasis): masked while the rules run.
-func plainHeading(text string) string {
+func PlainHeading(text string) string {
 	var kept []string
 	var masked strings.Builder
 	at := 0
@@ -211,7 +193,7 @@ type literalSpan struct {
 // at each end when both have one, math's its TeX.
 func literalSpans(line string) []literalSpan {
 	var spans []literalSpan
-	for _, c := range inlineCodeSpans(line) {
+	for _, c := range InlineCodeSpans(line) {
 		n := runLen(line, c[0])
 		code := line[c[0]+n : c[1]-n]
 		if len(code) > 1 && code[0] == ' ' && code[len(code)-1] == ' ' && strings.Trim(code, " ") != "" {
@@ -219,7 +201,7 @@ func literalSpans(line string) []literalSpan {
 		}
 		spans = append(spans, literalSpan{c[0], c[1], code})
 	}
-	for _, m := range inlineMathSpans(line) {
+	for _, m := range InlineMathSpans(line) {
 		spans = append(spans, literalSpan{m[0], m[1], line[m[0]+m[2] : m[1]-m[2]]})
 	}
 	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
@@ -231,15 +213,15 @@ func literalSpans(line string) []literalSpan {
 const isoSecond = `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`
 
 var (
-	taskMetaSrcRE  = regexp.MustCompile(`<!--t:(` + isoSecond + `)(?:` + spaceClass + `+d:(` + isoSecond + `))?-->`)
-	taskDoneOnlyRE = regexp.MustCompile(`<!--d:(` + isoSecond + `)-->`)
+	TaskMetaSrcRE  = regexp.MustCompile(`<!--t:(` + isoSecond + `)(?:` + SpaceClass + `+d:(` + isoSecond + `))?-->`)
+	TaskDoneOnlyRE = regexp.MustCompile(`<!--d:(` + isoSecond + `)-->`)
 )
 
 // ---- Lines ----
 
-// splitLines: s's lines, each with its line end, which is any of \n, \r\n,
+// SplitLines: s's lines, each with its line end, which is any of \n, \r\n,
 // \r, \v, \f, the separators U+001C–U+001E, NEL, U+2028 and U+2029.
-func splitLines(s string) []string {
+func SplitLines(s string) []string {
 	var lines []string
 	start := 0
 	for i := 0; i < len(s); {
@@ -264,8 +246,8 @@ func splitLines(s string) []string {
 	return lines
 }
 
-// lineBody is a line from splitLines without its line break.
-func lineBody(line string) string {
+// LineBody is a line from SplitLines without its line break.
+func LineBody(line string) string {
 	for _, br := range []string{"\r\n", "\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\u0085", " ", " "} {
 		if strings.HasSuffix(line, br) {
 			return line[:len(line)-len(br)]
@@ -276,17 +258,17 @@ func lineBody(line string) string {
 
 // ---- fenced code and masking ----
 
-type fencedLine struct {
-	line    string
-	inFence bool // a fence line (``` / ~~~ / $$) or one between two
+type FencedLine struct {
+	Line    string
+	InFence bool // a fence line (``` / ~~~ / $$) or one between two
 }
 
-// fencedLines is iter_fenced_lines: a closing fence has the opening one's
+// FencedLines is iter_fenced_lines: a closing fence has the opening one's
 // character, at least as many. Display math counts as a fence too, as
 // math.go parses it: from a $$ line to a line ending in $$, or $$tex$$ on
 // its own line.
-func fencedLines(lines []string) []fencedLine {
-	out := make([]fencedLine, len(lines))
+func FencedLines(lines []string) []FencedLine {
+	out := make([]FencedLine, len(lines))
 	inFence, marker := false, ""
 	for i, line := range lines {
 		s := strings.TrimSpace(line)
@@ -294,42 +276,42 @@ func fencedLines(lines []string) []fencedLine {
 			if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "~~~") {
 				inFence = true
 				marker = strings.Repeat(s[:1], len(s)-len(strings.TrimLeft(s, s[:1])))
-			} else if opens, whole := mathFence(line); opens {
+			} else if opens, whole := MathFence(line); opens {
 				inFence, marker = true, "$$"
 			} else if whole {
-				out[i] = fencedLine{line, true}
+				out[i] = FencedLine{line, true}
 				continue
 			}
-			out[i] = fencedLine{line, inFence}
+			out[i] = FencedLine{line, inFence}
 			continue
 		}
 		if marker == "$$" {
-			inFence = !mathFenceEnd(line)
+			inFence = !MathFenceEnd(line)
 		} else if strings.HasPrefix(s, marker) && strings.TrimRight(s, marker[:1]) == "" {
 			inFence = false
 		}
-		out[i] = fencedLine{line, true}
+		out[i] = FencedLine{line, true}
 	}
 	return out
 }
 
-// maskCode swaps fenced code, inline code spans, display math and inline
+// MaskCode swaps fenced code, inline code spans, display math and inline
 // math with a [[ in it (math.go) for <i>, so [[…]] in them is
-// never rewritten (math in a link's text stays, for the link); unmaskCode puts them back. Text that
+// never rewritten (math in a link's text stays, for the link); UnmaskCode puts them back. Text that
 // looks like a token is stashed too, so it comes back as written.
-func maskCode(text string) (string, []string) {
+func MaskCode(text string) (string, []string) {
 	var stash []string
 	token := func(s string) string {
 		stash = append(stash, s)
 		return "" + strconv.Itoa(len(stash)-1) + ""
 	}
 	var out strings.Builder
-	for _, l := range fencedLines(splitLines(text)) {
-		if l.inFence {
-			body := strings.TrimRight(l.line, "\n")
-			out.WriteString(token(body) + l.line[len(body):])
+	for _, l := range FencedLines(SplitLines(text)) {
+		if l.InFence {
+			body := strings.TrimRight(l.Line, "\n")
+			out.WriteString(token(body) + l.Line[len(body):])
 		} else {
-			out.WriteString(maskInlineCode(l.line, token))
+			out.WriteString(maskInlineCode(l.Line, token))
 		}
 	}
 	return out.String(), stash
@@ -337,7 +319,7 @@ func maskCode(text string) (string, []string) {
 
 var maskTokenRE = regexp.MustCompile("(\\d+)")
 
-func unmaskCode(text string, stash []string) string {
+func UnmaskCode(text string, stash []string) string {
 	return maskTokenRE.ReplaceAllStringFunc(text, func(m string) string {
 		i, err := strconv.Atoi(maskTokenRE.FindStringSubmatch(m)[1])
 		if err != nil || i >= len(stash) {
@@ -366,7 +348,7 @@ func maskInlineCode(line string, token func(string) string) string {
 			continue
 		}
 		if line[i] == '$' {
-			if n, _ := inlineMath(line[i:]); n > 0 && strings.Contains(line[i:i+n], "[[") {
+			if n, _ := InlineMath(line[i:]); n > 0 && strings.Contains(line[i:i+n], "[[") {
 				out.WriteString(token(line[i : i+n]))
 				i += n
 				continue
@@ -390,8 +372,8 @@ func maskInlineCode(line string, token func(string) string) string {
 	return out.String()
 }
 
-// inlineCodeSpans: the byte ranges of a line's inline code, as maskInlineCode finds them.
-func inlineCodeSpans(line string) [][2]int {
+// InlineCodeSpans: the byte ranges of a line's inline code, as maskInlineCode finds them.
+func InlineCodeSpans(line string) [][2]int {
 	var spans [][2]int
 	for i := 0; i < len(line); {
 		if line[i] != '`' {
@@ -481,114 +463,114 @@ func taskItem(line string) (start, end int, ok bool) {
 	return m[2], m[3], true
 }
 
-type taskLine struct{ index, start, end int }
+type TaskLine struct{ Index, Start, End int }
 
-// taskItemLines: every checkbox line, skipping fenced code and, in a page
+// TaskItemLines: every checkbox line, skipping fenced code and, in a page
 // (frontmatter), a leading frontmatter block.
-func taskItemLines(lines []string, frontmatter bool) []taskLine {
+func TaskItemLines(lines []string, frontmatter bool) []TaskLine {
 	start := 0
 	if frontmatter {
 		start = bodyStart(lines)
 	}
-	var found []taskLine
-	for i, l := range fencedLines(lines) {
-		if i < start || l.inFence {
+	var found []TaskLine
+	for i, l := range FencedLines(lines) {
+		if i < start || l.InFence {
 			continue
 		}
-		if s, e, ok := taskItem(l.line); ok {
-			found = append(found, taskLine{i, s, e})
+		if s, e, ok := taskItem(l.Line); ok {
+			found = append(found, TaskLine{i, s, e})
 		}
 	}
 	return found
 }
 
-// taskLineKeys: a key per task-list item of a page, in rendered order:
+// TaskLineKeys: a key per task-list item of a page, in rendered order:
 // its line without the checkbox's mark and the tick's stamps, hashed
 // short. A tick from a page view loaded before the page changed finds its
 // item by it (apiToggleCheckbox), also once it has been ticked.
-func taskLineKeys(content string) []string {
-	lines := splitLines(content)
+func TaskLineKeys(content string) []string {
+	lines := SplitLines(content)
 	var keys []string
-	for _, it := range taskItemLines(lines, true) {
-		body := strings.TrimRight(lines[it.index], "\n")
-		body = body[:it.start] + " " + body[it.end:]
-		body = taskDoneOnlyRE.ReplaceAllString(taskMetaSrcRE.ReplaceAllString(body, ""), "")
-		keys = append(keys, contentHash(strings.TrimSpace(body))[:8])
+	for _, it := range TaskItemLines(lines, true) {
+		body := strings.TrimRight(lines[it.Index], "\n")
+		body = body[:it.Start] + " " + body[it.End:]
+		body = TaskDoneOnlyRE.ReplaceAllString(TaskMetaSrcRE.ReplaceAllString(body, ""), "")
+		keys = append(keys, ContentHash(strings.TrimSpace(body))[:8])
 	}
 	return keys
 }
 
-// toggleNthCheckbox ticks or unticks the Nth checkbox (0-based, in rendered
-// order), recording when it was done. A task's notes have no
+// ToggleNthCheckbox ticks or unticks the Nth checkbox (0-based, in rendered
+// order), recording when it was done (at). A task's notes have no
 // frontmatter (frontmatter false): a leading --- block there is text.
-func toggleNthCheckbox(content string, idx int, frontmatter bool) string {
-	lines := splitLines(content)
-	items := taskItemLines(lines, frontmatter)
+func ToggleNthCheckbox(content string, idx int, frontmatter bool, at time.Time) string {
+	lines := SplitLines(content)
+	items := TaskItemLines(lines, frontmatter)
 	if idx >= len(items) {
 		return content
 	}
 	it := items[idx]
-	line := lines[it.index]
+	line := lines[it.Index]
 	body := strings.TrimRight(line, "\n")
 	eol := line[len(body):]
 	if eol != "" {
 		eol = "\n"
 	}
-	checking := body[it.start:it.end] == " "
+	checking := body[it.Start:it.End] == " "
 	mark := " "
 	if checking {
 		mark = "x"
 	}
-	body = body[:it.start] + mark + body[it.end:]
-	stamp := now().Format("2006-01-02T15:04:05")
-	meta := taskMetaSrcRE.FindStringSubmatchIndex(body)
+	body = body[:it.Start] + mark + body[it.End:]
+	stamp := at.Format("2006-01-02T15:04:05")
+	meta := TaskMetaSrcRE.FindStringSubmatchIndex(body)
 	if checking {
 		if meta != nil {
 			body = body[:meta[0]] + "<!--t:" + body[meta[2]:meta[3]] + " d:" + stamp + "-->" + body[meta[1]:]
-		} else if done := taskDoneOnlyRE.FindStringIndex(body); done != nil {
+		} else if done := TaskDoneOnlyRE.FindStringIndex(body); done != nil {
 			body = body[:done[0]] + "<!--d:" + stamp + "-->" + body[done[1]:]
 		} else {
-			body = trimRightSpace(body) + " <!--d:" + stamp + "-->"
+			body = TrimRightSpace(body) + " <!--d:" + stamp + "-->"
 		}
 	} else if meta != nil {
 		body = body[:meta[0]] + "<!--t:" + body[meta[2]:meta[3]] + "-->" + body[meta[1]:]
 	} else {
-		body = trimRightSpace(taskDoneOnlyRE.ReplaceAllString(body, ""))
+		body = TrimRightSpace(TaskDoneOnlyRE.ReplaceAllString(body, ""))
 	}
-	lines[it.index] = body + eol
+	lines[it.Index] = body + eol
 	return strings.Join(lines, "")
 }
 
-// trimRightSpace: s without trailing whitespace.
-func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
+// TrimRightSpace: s without trailing whitespace.
+func TrimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
 // ---- sections ----
 
 var (
 	atxSectionRE  = regexp.MustCompile(`^ {0,3}#{2,3} `)
-	listItemRE    = regexp.MustCompile(`^[-*+]` + spaceClass)
-	listItemIndRE = regexp.MustCompile(`^[ \t]{0,3}[-*+]` + spaceClass)
+	listItemRE    = regexp.MustCompile(`^[-*+]` + SpaceClass)
+	listItemIndRE = regexp.MustCompile(`^[ \t]{0,3}[-*+]` + SpaceClass)
 )
 
-// splitSections splits at ## and ### headings outside fenced code (ATX with
+// SplitSections splits at ## and ### headings outside fenced code (ATX with
 // up to 3 leading spaces, and setext h2: a text line, then dashes):
 // [preamble, section1, section2, …].
-func splitSections(content string) []string {
-	lines := splitLines(content)
+func SplitSections(content string) []string {
+	lines := SplitLines(content)
 	var headings []int
 	prevText := -1 // for setext h2
-	for i, l := range fencedLines(lines) {
-		stripped := strings.TrimSpace(l.line)
+	for i, l := range FencedLines(lines) {
+		stripped := strings.TrimSpace(l.Line)
 		switch {
-		case l.inFence:
+		case l.InFence:
 			prevText = -1
-		case atxSectionRE.MatchString(l.line):
+		case atxSectionRE.MatchString(l.Line):
 			headings = append(headings, i)
 			prevText = -1
 		case stripped != "" && strings.Trim(stripped, "-=") == "":
 			// A setext underline (--- h2, === h1) or a thematic break; a
 			// list item's "- " is neither.
-			isListItem := listItemRE.MatchString(l.line)
+			isListItem := listItemRE.MatchString(l.Line)
 			prevIsList := prevText >= 0 && listItemIndRE.MatchString(lines[prevText])
 			if strings.Trim(stripped, "-") == "" && prevText >= 0 && !isListItem && !prevIsList {
 				headings = append(headings, prevText)
@@ -614,16 +596,16 @@ func splitSections(content string) []string {
 	return sections
 }
 
-// contentHash is a short hex hash of text, for change detection.
-func contentHash(text string) string {
+// ContentHash is a short hex hash of text, for change detection.
+func ContentHash(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// sectionCharRange: the start and end (characters) of section idx (1-based;
+// SectionCharRange: the start and end (characters) of section idx (1-based;
 // 0, the preamble, is no section); ok false for an invalid index.
-func sectionCharRange(content string, idx int) (start, end int, ok bool) {
-	sections := splitSections(content)
+func SectionCharRange(content string, idx int) (start, end int, ok bool) {
+	sections := SplitSections(content)
 	if idx < 1 || idx > len(sections)-1 {
 		return 0, 0, false
 	}
@@ -633,18 +615,18 @@ func sectionCharRange(content string, idx int) (start, end int, ok bool) {
 	return start, start + utf8.RuneCountInString(sections[idx]), true
 }
 
-// runeSlice is s[a:b] in characters.
-func runeSlice(s string, a, b int) string {
+// RuneSlice is s[a:b] in characters.
+func RuneSlice(s string, a, b int) string {
 	r := []rune(s)
 	return string(r[a:b])
 }
 
-// spliceSection replaces content[start:end] (characters), guarded by a
+// SpliceSection replaces content[start:end] (characters), guarded by a
 // hash check; ok false when the file is gone (nil), changed, or the range
 // is off. The range's trailing line breaks stay, so the next heading isn't
 // glued onto the new text.
-func spliceSection(full *string, fileHash string, start, end int, newContent string) (merged, hash string, newStart, newEnd int, ok bool) {
-	if full == nil || contentHash(*full) != fileHash {
+func SpliceSection(full *string, fileHash string, start, end int, newContent string) (merged, hash string, newStart, newEnd int, ok bool) {
+	if full == nil || ContentHash(*full) != fileHash {
 		return "", "", 0, 0, false
 	}
 	r := []rune(*full)
@@ -655,14 +637,14 @@ func spliceSection(full *string, fileHash string, start, end int, newContent str
 	trailing := orig[len(strings.TrimRight(orig, "\n")):]
 	replacement := strings.TrimRight(newContent, "\n") + trailing
 	merged = string(r[:start]) + replacement + string(r[end:])
-	return merged, contentHash(merged), start, start + utf8.RuneCountInString(replacement), true
+	return merged, ContentHash(merged), start, start + utf8.RuneCountInString(replacement), true
 }
 
-var h1LineRE = regexp.MustCompile(`^#` + spaceClass + `+`)
+var h1LineRE = regexp.MustCompile(`^#` + SpaceClass + `+`)
 
-// stripH1 removes the first H1 line, so it isn't shown twice under the
+// StripH1 removes the first H1 line, so it isn't shown twice under the
 // page header.
-func stripH1(content string) string {
+func StripH1(content string) string {
 	lines := strings.Split(content, "\n")
 	for i := bodyStart(lines); i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) != "" {
@@ -701,16 +683,16 @@ type Frontmatter struct {
 }
 
 var (
-	fmItemRE  = regexp.MustCompile(`^` + spaceClass + `*-` + spaceClass + `+(.*?)` + spaceClass + `*$`)
+	fmItemRE  = regexp.MustCompile(`^` + SpaceClass + `*-` + SpaceClass + `+(.*?)` + SpaceClass + `*$`)
 	fmValueRE = regexp.MustCompile(`(?:\[[^\]]*\]|\([^)]*\)|[^,])+`)
 	fmBlockRE = regexp.MustCompile(`^([>|])[+-]?\d?[+-]?$`)
 	fmParaRE  = regexp.MustCompile(`\n[ \t]*\n`)
 )
 
-// parseFrontmatter: a leading --- block's tags, tldr and sources, and the
+// ParseFrontmatter: a leading --- block's tags, tldr and sources, and the
 // content without the block (and one blank line after it). Without a block
 // (or one never closed) the content is as it was.
-func parseFrontmatter(content string) (Frontmatter, string) {
+func ParseFrontmatter(content string) (Frontmatter, string) {
 	var meta Frontmatter
 	lines := strings.Split(content, "\n")
 	end := frontmatterEnd(lines)
@@ -788,7 +770,7 @@ func frontmatterValues(value string) []string {
 func frontmatterText(value string, more []string) string {
 	block := fmBlockRE.FindStringSubmatch(value)
 	if block != nil && block[1] == "|" {
-		return strings.Trim(dedent(strings.Join(more, "\n")), "\n")
+		return strings.Trim(Dedent(strings.Join(more, "\n")), "\n")
 	}
 	lines := more
 	if block == nil {
@@ -807,10 +789,10 @@ func frontmatterText(value string, more []string) string {
 	return strings.TrimSpace(strings.Trim(text, `"'`))
 }
 
-// dedent removes the indentation all lines share: lines of whitespace only
+// Dedent removes the indentation all lines share: lines of whitespace only
 // emptied, and the run of spaces and tabs that the smallest and the largest
 // of the other lines start with taken off every other line.
-func dedent(s string) string {
+func Dedent(s string) string {
 	lines := strings.Split(s, "\n")
 	blank := func(l string) bool { return strings.TrimSpace(l) == "" }
 	lo, hi, first := "", "", true
@@ -840,9 +822,9 @@ func dedent(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// pageTags: a page's frontmatter tags, lowercased, for #tag queries.
-func pageTags(content string) []string {
-	meta, _ := parseFrontmatter(content)
+// PageTags: a page's frontmatter tags, lowercased, for #tag queries.
+func PageTags(content string) []string {
+	meta, _ := ParseFrontmatter(content)
 	out := make([]string, len(meta.Tags))
 	for i, t := range meta.Tags {
 		out[i] = strings.ToLower(t)
@@ -850,10 +832,10 @@ func pageTags(content string) []string {
 	return out
 }
 
-// addFrontmatterTags adds the tags content's frontmatter lacks (case
+// AddFrontmatterTags adds the tags content's frontmatter lacks (case
 // ignored) to its `tags:`, adding the line, or the block, when there is none.
-func addFrontmatterTags(content string, tags []string) string {
-	meta, _ := parseFrontmatter(content)
+func AddFrontmatterTags(content string, tags []string) string {
+	meta, _ := ParseFrontmatter(content)
 	have := map[string]bool{}
 	for _, h := range meta.Tags {
 		have[strings.ToLower(h)] = true
@@ -892,11 +874,11 @@ func addFrontmatterTags(content string, tags []string) string {
 
 var plainMdRE = regexp.MustCompile(`\[([^\[\]]*)\]\(([^()\s]+)\)`)
 
-// plainTaskTitle: a task title with its links reduced to their labels, as
+// PlainTaskTitle: a task title with its links reduced to their labels, as
 // tasks.js plainTitle does (for a title inside one link: no nested <a>).
-func plainTaskTitle(title string) string {
-	title = wikilinkRE.ReplaceAllStringFunc(title, func(m string) string {
-		_, _, label := splitWikilink(m[2 : len(m)-2])
+func PlainTaskTitle(title string) string {
+	title = WikilinkRE.ReplaceAllStringFunc(title, func(m string) string {
+		_, _, label := SplitWikilink(m[2 : len(m)-2])
 		return label
 	})
 	return plainMdRE.ReplaceAllStringFunc(title, func(m string) string {
@@ -908,12 +890,12 @@ func plainTaskTitle(title string) string {
 	})
 }
 
-// promotedSlug: where a note moved to the wiki goes, `folder/name`,
+// PromotedSlug: where a note moved to the wiki goes, `folder/name`,
 // with `date_` before the name when the date is kept. The name makes no
-// folders of its own (a / in it is a hyphen). Mirrored by promotedSlug in
+// folders of its own (a / in it is a hyphen). Mirrored by PromotedSlug in
 // js/pagemenu.js.
-func promotedSlug(folder, name, date string) string {
-	name = toSlug(strings.ReplaceAll(name, "/", "-"))
+func PromotedSlug(folder, name, date string) string {
+	name = ToSlug(strings.ReplaceAll(name, "/", "-"))
 	if name == "" {
 		return ""
 	}
@@ -921,7 +903,7 @@ func promotedSlug(folder, name, date string) string {
 		name = date + "_" + name
 	}
 	var parts []string
-	for _, p := range []string{toSlug(folder), name} {
+	for _, p := range []string{ToSlug(folder), name} {
 		if p != "" {
 			parts = append(parts, p)
 		}
@@ -929,12 +911,12 @@ func promotedSlug(folder, name, date string) string {
 	return strings.Join(parts, "/")
 }
 
-var wikilinkBreakers = regexp.MustCompile(`[\[\]|]`)
+var WikilinkBreakers = regexp.MustCompile(`[\[\]|]`)
 
-// pageWikilink is `[[slug|label]]`, with what would break a wikilink taken
+// PageWikilink is `[[slug|label]]`, with what would break a wikilink taken
 // out of the label. Mirrored by the Move to wiki dialog in js/pagemenu.js.
-func pageWikilink(slug, label string) string {
-	label = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(label, ""))
+func PageWikilink(slug, label string) string {
+	label = strings.TrimSpace(WikilinkBreakers.ReplaceAllString(label, ""))
 	if label == "" {
 		label = slug
 	}
@@ -943,25 +925,25 @@ func pageWikilink(slug, label string) string {
 
 var headingLevelRE = regexp.MustCompile(`^(#{1,6})[ \t]`)
 
-// noteAsSection: a note's text as a `## heading` section of another
+// NoteAsSection: a note's text as a `## heading` section of another
 // page, and its frontmatter tags. Its title goes (the heading replaces it),
 // a tldr becomes an italic first paragraph, its headings move down so the
 // highest is a ###, its sources become a list at the end.
-func noteAsSection(content, heading string) (string, []string) {
-	meta, body := parseFrontmatter(content)
-	lines := strings.Split(strings.Trim(stripH1(body), "\n"), "\n")
+func NoteAsSection(content, heading string) (string, []string) {
+	meta, body := ParseFrontmatter(content)
+	lines := strings.Split(strings.Trim(StripH1(body), "\n"), "\n")
 	minLevel := 0
-	for _, l := range fencedLines(lines) {
-		if m := headingLevelRE.FindStringSubmatch(l.line); m != nil && !l.inFence {
+	for _, l := range FencedLines(lines) {
+		if m := headingLevelRE.FindStringSubmatch(l.Line); m != nil && !l.InFence {
 			if minLevel == 0 || len(m[1]) < minLevel {
 				minLevel = len(m[1])
 			}
 		}
 	}
 	if shift := max(0, 3-minLevel); minLevel > 0 && shift > 0 {
-		for i, l := range fencedLines(lines) {
-			if m := headingLevelRE.FindStringSubmatch(l.line); m != nil && !l.inFence {
-				lines[i] = strings.Repeat("#", min(6, len(m[1])+shift)) + l.line[len(m[1]):]
+		for i, l := range FencedLines(lines) {
+			if m := headingLevelRE.FindStringSubmatch(l.Line); m != nil && !l.InFence {
+				lines[i] = strings.Repeat("#", min(6, len(m[1])+shift)) + l.Line[len(m[1]):]
 			}
 		}
 	}
@@ -986,4 +968,90 @@ func noteAsSection(content, heading string) (string, []string) {
 		parts = append(parts, "Sources:\n\n"+strings.Join(items, "\n"))
 	}
 	return strings.Join(parts, "\n\n") + "\n", meta.Tags
+}
+
+// Math, as the parser (math.go) finds it: FencedLines counts a $$ block
+// as a fence, MaskCode masks inline math as it masks code.
+
+// InlineMath: the length of the $…$ or $$…$$ at the start of s and of its
+// delimiter; 0, 0 when s doesn't start with one. Pandoc's rules, so prices
+// stay text: the opening $ has no space after it, the closing $ none before
+// it and no digit after it ("$5 and $10", "$5–$10" are no math); $$…$$
+// needs only its closing $$. On one line; a backslash keeps the next
+// character from closing it (\$).
+func InlineMath(s string) (n, open int) {
+	open = 1
+	if len(s) > 1 && s[1] == '$' {
+		open = 2
+	}
+	body := s[open:]
+	if len(body) == 0 || isSpaceByte(body[0]) || body[0] == '$' {
+		return 0, 0
+	}
+	for i := 0; i < len(body); i++ {
+		switch body[i] {
+		case '\\':
+			i++
+		case '\n', '\r':
+			return 0, 0
+		case '$':
+			if open == 2 {
+				if i+1 >= len(body) || body[i+1] != '$' {
+					continue
+				}
+			} else if isSpaceByte(body[i-1]) || i+1 < len(body) && body[i+1] >= '0' && body[i+1] <= '9' {
+				continue
+			}
+			return open + i + open, open
+		}
+	}
+	return 0, 0
+}
+
+// InlineMathSpans: where a line's inline math is, [start, end, delimiter
+// length], as the parser finds it: not in code, not at an escaped \$.
+func InlineMathSpans(line string) [][3]int {
+	var spans [][3]int
+	code := InlineCodeSpans(line)
+	for i := 0; i < len(line); i++ {
+		if len(code) > 0 && i >= code[0][0] {
+			i = code[0][1] - 1
+			code = code[1:]
+			continue
+		}
+		switch line[i] {
+		case '\\':
+			i++
+		case '$':
+			if n, open := InlineMath(line[i:]); n > 0 {
+				spans = append(spans, [3]int{i, i + n, open})
+				i += n - 1
+				for len(code) > 0 && code[0][0] < i {
+					code = code[1:]
+				}
+			}
+		}
+	}
+	return spans
+}
+
+func isSpaceByte(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }
+
+// MathFence: a $$ line that opens display math (only $$, up to three
+// spaces before it), or one that is display math by itself ($$tex$$);
+// the parser and mdtext.FencedLines both go by it.
+func MathFence(line string) (opens, whole bool) {
+	if strings.HasPrefix(line, "    ") || strings.HasPrefix(strings.TrimLeft(line, " "), "\t") {
+		return false, false
+	}
+	s := strings.TrimSpace(line)
+	if s == "$$" {
+		return true, false
+	}
+	return false, len(s) > 4 && strings.HasPrefix(s, "$$") && strings.HasSuffix(s, "$$")
+}
+
+// MathFenceEnd: a line that closes display math (it ends in $$).
+func MathFenceEnd(line string) bool {
+	return strings.HasSuffix(strings.TrimRight(line, " \t\r\n"), "$$")
 }

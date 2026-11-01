@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"zonewiki/internal/mdtext"
 )
 
 func mergeWiki(t *testing.T) {
@@ -58,26 +59,26 @@ func TestBases(t *testing.T) {
 	t.Cleanup(func() { baseCount, baseBytes = oldCount, oldBytes })
 	baseCount, baseBytes = 3, 100
 	a := keepBase("a")
-	if got, ok := baseText(a); !ok || got != "a" || a != contentHash("a") {
+	if got, ok := baseText(a); !ok || got != "a" || a != mdtext.ContentHash("a") {
 		t.Fatal("kept")
 	}
 	keepBase("b")
 	keepBase("c")
 	keepBase("a") // the most recent again
 	keepBase("d") // b goes, the oldest
-	if _, ok := baseText(contentHash("b")); ok {
+	if _, ok := baseText(mdtext.ContentHash("b")); ok {
 		t.Error("b kept past the count")
 	}
 	for _, s := range []string{"a", "c", "d"} {
-		if _, ok := baseText(contentHash(s)); !ok {
+		if _, ok := baseText(mdtext.ContentHash(s)); !ok {
 			t.Errorf("%s gone", s)
 		}
 	}
 	keepBase(strings.Repeat("x", 100)) // past the bytes: all but it go
-	if _, ok := baseText(contentHash("d")); ok {
+	if _, ok := baseText(mdtext.ContentHash("d")); ok {
 		t.Error("kept past the bytes")
 	}
-	if _, ok := baseText(contentHash(strings.Repeat("x", 100))); !ok {
+	if _, ok := baseText(mdtext.ContentHash(strings.Repeat("x", 100))); !ok {
 		t.Error("the newest gone")
 	}
 	if _, ok := baseText("0123456789abcdef"); ok {

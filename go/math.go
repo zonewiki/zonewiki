@@ -2,15 +2,16 @@
 // kept as written (no emphasis, typographer or escapes inside it) and goes
 // out as text in a .math element, which js/figures.js renders with KaTeX
 // in the browser; without it, the TeX shows as written. A ```math fence is
-// display math too. mdtext.go agrees on what is math: fencedLines counts a
-// $$ block as a fence (sections, checkboxes), maskCode masks math with a
-// [[ in it as it masks code (no wikilinks in it), plainHeading keeps its
+// display math too. Package mdtext holds what is math in a text (InlineMath, MathFence),
+// so it agrees with the parser: mdtext.FencedLines counts a
+// $$ block as a fence (sections, checkboxes), mdtext.MaskCode masks math with a
+// [[ in it as it masks code (no wikilinks in it), mdtext.PlainHeading keeps its
 // TeX (anchors).
 package main
 
 import (
 	"bytes"
-	"strings"
+	"zonewiki/internal/mdtext"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -58,75 +59,13 @@ func (e mathExtension) Extend(m goldmark.Markdown) {
 	}
 }
 
-// inlineMath: the length of the $…$ or $$…$$ at the start of s and of its
-// delimiter; 0, 0 when s doesn't start with one. Pandoc's rules, so prices
-// stay text: the opening $ has no space after it, the closing $ none before
-// it and no digit after it ("$5 and $10", "$5–$10" are no math); $$…$$
-// needs only its closing $$. On one line; a backslash keeps the next
-// character from closing it (\$).
-func inlineMath(s string) (n, open int) {
-	open = 1
-	if len(s) > 1 && s[1] == '$' {
-		open = 2
-	}
-	body := s[open:]
-	if len(body) == 0 || isSpaceByte(body[0]) || body[0] == '$' {
-		return 0, 0
-	}
-	for i := 0; i < len(body); i++ {
-		switch body[i] {
-		case '\\':
-			i++
-		case '\n', '\r':
-			return 0, 0
-		case '$':
-			if open == 2 {
-				if i+1 >= len(body) || body[i+1] != '$' {
-					continue
-				}
-			} else if isSpaceByte(body[i-1]) || i+1 < len(body) && body[i+1] >= '0' && body[i+1] <= '9' {
-				continue
-			}
-			return open + i + open, open
-		}
-	}
-	return 0, 0
-}
-
-// inlineMathSpans: where a line's inline math is, [start, end, delimiter
-// length], as the parser finds it: not in code, not at an escaped \$.
-func inlineMathSpans(line string) [][3]int {
-	var spans [][3]int
-	code := inlineCodeSpans(line)
-	for i := 0; i < len(line); i++ {
-		if len(code) > 0 && i >= code[0][0] {
-			i = code[0][1] - 1
-			code = code[1:]
-			continue
-		}
-		switch line[i] {
-		case '\\':
-			i++
-		case '$':
-			if n, open := inlineMath(line[i:]); n > 0 {
-				spans = append(spans, [3]int{i, i + n, open})
-				i += n - 1
-				for len(code) > 0 && code[0][0] < i {
-					code = code[1:]
-				}
-			}
-		}
-	}
-	return spans
-}
-
 type mathInlineParser struct{}
 
 func (mathInlineParser) Trigger() []byte { return []byte{'$'} }
 
 func (mathInlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
 	line, _ := block.PeekLine()
-	n, open := inlineMath(string(line))
+	n, open := mdtext.InlineMath(string(line))
 	if n == 0 {
 		return nil
 	}
@@ -142,27 +81,6 @@ func (mathInlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Cont
 	return &mathInline{TeX: tex, Display: open == 2}
 }
 
-func isSpaceByte(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }
-
-// mathFence: a $$ line that opens display math (only $$, up to three
-// spaces before it), or one that is display math by itself ($$tex$$);
-// the parser and fencedLines both go by it.
-func mathFence(line string) (opens, whole bool) {
-	if strings.HasPrefix(line, "    ") || strings.HasPrefix(strings.TrimLeft(line, " "), "\t") {
-		return false, false
-	}
-	s := strings.TrimSpace(line)
-	if s == "$$" {
-		return true, false
-	}
-	return false, len(s) > 4 && strings.HasPrefix(s, "$$") && strings.HasSuffix(s, "$$")
-}
-
-// mathFenceEnd: a line that closes display math (it ends in $$).
-func mathFenceEnd(line string) bool {
-	return strings.HasSuffix(strings.TrimRight(line, " \t\r\n"), "$$")
-}
-
 // mathBlockParser: a line of only $$ (up to three spaces before it) opens
 // display math, which runs to a line ending in $$ (or the end, as an
 // unclosed fence does); $$tex$$ alone on its line is display math in one.
@@ -173,7 +91,7 @@ func (mathBlockParser) Trigger() []byte { return []byte{'$'} }
 
 func (mathBlockParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	line, seg := reader.PeekLine()
-	opens, whole := mathFence(string(line))
+	opens, whole := mdtext.MathFence(string(line))
 	if !opens && !whole {
 		return nil, parser.NoChildren
 	}
@@ -192,7 +110,7 @@ func (mathBlockParser) Continue(node ast.Node, reader text.Reader, pc parser.Con
 		return parser.Close
 	}
 	line, seg := reader.PeekLine()
-	if mathFenceEnd(string(line)) {
+	if mdtext.MathFenceEnd(string(line)) {
 		trimmed := bytes.TrimRight(line, " \t\r\n")
 		if before := bytes.TrimSpace(trimmed[:len(trimmed)-2]); len(before) > 0 {
 			node.Lines().Append(text.NewSegment(seg.Start, seg.Start+len(trimmed)-2))

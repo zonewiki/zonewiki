@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // Req is what a response depends on besides the wiki: the request (its
@@ -334,7 +335,7 @@ func isNoshare(slug string) bool {
 	}
 	hidden := false
 	if text, err := readText(p); err == nil {
-		meta, _ := parseFrontmatter(text)
+		meta, _ := mdtext.ParseFrontmatter(text)
 		for _, t := range meta.Tags {
 			if s.NoshareTags[strings.ToLower(t)] {
 				hidden = true
@@ -382,7 +383,7 @@ func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
 // pageTaskRefs: the ids of the tasks a page refers to with [[task:…]],
 // those user sees.
 func pageTaskRefs(user, content string) map[string]bool {
-	masked, _ := maskCode(content)
+	masked, _ := mdtext.MaskCode(content)
 	var refs []string
 	for _, m := range taskRefRE.FindAllStringSubmatch(masked, -1) {
 		refs = append(refs, strings.ToLower(m[1]))
@@ -486,13 +487,13 @@ const notSpace = `[^)#?\s\v\pZ\x{85}]`
 var anyMdLinkRE = regexp.MustCompile(`\[(?:[^\]]*)\]\((` + notSpace + `+)[^)]*\)`)
 
 // pageLinkTargets: every slug a page links to (wikilinks, markdown links),
-// not in code or math, which show them as text (maskCode).
+// not in code or math, which show them as text (mdtext.MaskCode).
 func pageLinkTargets(content, slug string) map[string]bool {
-	content, _ = maskCode(content)
+	content, _ = mdtext.MaskCode(content)
 	targets := map[string]bool{}
-	for _, m := range wikilinkRE.FindAllStringSubmatch(content, -1) {
-		if page, _, _ := splitWikilink(m[1]); page != "" {
-			targets[toSlug(page)] = true
+	for _, m := range mdtext.WikilinkRE.FindAllStringSubmatch(content, -1) {
+		if page, _, _ := mdtext.SplitWikilink(m[1]); page != "" {
+			targets[mdtext.ToSlug(page)] = true
 		}
 	}
 	for _, m := range anyMdLinkRE.FindAllStringSubmatch(content, -1) {
@@ -526,7 +527,7 @@ type pageMetaEntry struct {
 
 // pageTasksEmbeds: the params of each [[tasks: …]] on a page, outside code.
 func pageTasksEmbeds(content string) []TasksParams {
-	masked, _ := maskCode(content)
+	masked, _ := mdtext.MaskCode(content)
 	var out []TasksParams
 	for _, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
 		out = append(out, parseTasksParams(embedArgs(m)))
@@ -556,7 +557,7 @@ func pageTaskLists(content string) []TaskList { return embedsLists(pageTasksEmbe
 func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	st, err := os.Stat(p)
 	if err != nil {
-		return pageMetaEntry{title: slugDisplayName(slug), targets: map[string]bool{}}
+		return pageMetaEntry{title: mdtext.SlugDisplayName(slug), targets: map[string]bool{}}
 	}
 	metaMu.Lock()
 	cached, ok := metaCache[slug]
@@ -566,10 +567,10 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	}
 	b, err := os.ReadFile(p)
 	if err != nil {
-		return pageMetaEntry{title: slugDisplayName(slug), targets: map[string]bool{}}
+		return pageMetaEntry{title: mdtext.SlugDisplayName(slug), targets: map[string]bool{}}
 	}
 	content := newlines(strings.ToValidUTF8(string(b), "�"))
-	entry := pageMetaEntry{st.ModTime(), pageTitle(content, slug), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
+	entry := pageMetaEntry{st.ModTime(), mdtext.PageTitle(content, slug), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
 	metaMu.Lock()
 	metaCache[slug] = entry
 	metaMu.Unlock()
@@ -776,7 +777,7 @@ func replaceMdLinks(text string, fn func(m mdLinkMatch) string) string {
 // anchors, folders (a trailing /), files (another extension) and Zone's own
 // _folders and views are not checked.
 func mdLinkMisses(content, slug string, slugs map[string]bool) map[string]string {
-	text, _ := maskCode(content)
+	text, _ := mdtext.MaskCode(content)
 	misses := map[string]string{}
 	for _, m := range mdLinks(text) {
 		href := m.href
@@ -830,10 +831,10 @@ func relPath(target, start string) string {
 // their style, anchor and title; relative hrefs are recomputed from
 // source's folder. Code is left alone.
 func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
-	text, stash := maskCode(text)
-	text = wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
+	text, stash := mdtext.MaskCode(text)
+	text = mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
 		l := parseWikilink(m)
-		if page := strings.TrimSpace(l.page); page == "" || page != oldSlug && toSlug(l.page) != oldSlug {
+		if page := strings.TrimSpace(l.page); page == "" || page != oldSlug && mdtext.ToSlug(l.page) != oldSlug {
 			return m
 		}
 		l.page = newSlug
@@ -845,7 +846,7 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 	sourceDir := posixDir(source)
 	anchor := ""
 	if section != "" {
-		anchor = "#" + sectionAnchor(section)
+		anchor = "#" + mdtext.SectionAnchor(section)
 	}
 	text = replaceMdLinks(text, func(m mdLinkMatch) string {
 		rest := m.rest
@@ -864,7 +865,7 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 		}
 		return m.prefix + relHref(newSlug, sourceDir, isMd) + rest
 	})
-	return unmaskCode(text, stash)
+	return mdtext.UnmaskCode(text, stash)
 }
 
 // updateReferences rewrites links to oldSlug in every page and task
@@ -940,13 +941,13 @@ func refuseMakingPrivate(moves map[string]string) string {
 // Every relative link still reaches the same page or file from where the
 // page is now; wikilinks name pages, so only their targets change.
 func rebaseLinks(text, source, newSource string, moves map[string]string) string {
-	text, stash := maskCode(text)
-	text = wikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
+	text, stash := mdtext.MaskCode(text)
+	text = mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
 		l := parseWikilink(m)
 		key := strings.TrimSpace(l.page)
 		old := key
 		if _, ok := moves[key]; !ok {
-			old = toSlug(key)
+			old = mdtext.ToSlug(key)
 		}
 		if _, ok := moves[old]; key == "" || !ok {
 			return m
@@ -975,7 +976,7 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 		}
 		return m.prefix + relHref(newTarget, sourceDir, isMd) + m.rest
 	})
-	return unmaskCode(text, stash)
+	return mdtext.UnmaskCode(text, stash)
 }
 
 // rewriteMovedLinks: after the pages in moves are at their new paths, point
@@ -1054,7 +1055,7 @@ func pageFromInput(raw string) string {
 			return raw
 		}
 	}
-	return toSlug(raw)
+	return mdtext.ToSlug(raw)
 }
 
 func fmtDate(t time.Time) string { return t.Local().Format("2006-01-02") }

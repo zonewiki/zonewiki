@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/settingsfile"
 )
 
 // clock replaces now for a test.
@@ -233,7 +234,7 @@ func TestLoadConfig(t *testing.T) {
 		return func(k string) string { return m[k] }
 	}
 	file := func(text string) {
-		if err := writeConfig(filepath.Join(wiki, ".zone", "config"), text); err != nil {
+		if err := settingsfile.Write(filepath.Join(wiki, ".zone", "config"), text); err != nil {
 			t.Fatal(err)
 		}
 	}

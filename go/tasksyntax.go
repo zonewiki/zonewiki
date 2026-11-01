@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
-var spaceRunRE = regexp.MustCompile(spaceClass + `+`)
+var spaceRunRE = regexp.MustCompile(mdtext.SpaceClass + `+`)
 
 // cleanTags: tags as the filter can match them: one word each (whitespace
 // inside becomes "-"), no leading "#", no empties, no case-insensitive
@@ -40,7 +41,7 @@ var (
 	// is how a page wrote it before Deck was called Tasks.
 	// is how a page wrote it before Deck was called Tasks. embedArgs reads
 	// the params from either.
-	tasksRE   = regexp.MustCompile(`(?i)\[\[(?:tasks:` + spaceClass + `*([^\]]*)|deck(?:` + spaceClass + `+([^\]]*))?)\]\]`)
+	tasksRE   = regexp.MustCompile(`(?i)\[\[(?:tasks:` + mdtext.SpaceClass + `*([^\]]*)|deck(?:` + mdtext.SpaceClass + `+([^\]]*))?)\]\]`)
 	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )

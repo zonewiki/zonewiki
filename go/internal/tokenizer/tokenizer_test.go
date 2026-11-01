@@ -1,4 +1,4 @@
-package main
+package tokenizer
 
 import (
 	"os"
@@ -14,7 +14,7 @@ func loadTok(t *testing.T) *Tokenizer {
 	if dir == "" {
 		t.Skip("ZONE_MODEL_DIR not set")
 	}
-	tok, err := LoadTokenizer(dir+"/tokenizer.json", maxTokens)
+	tok, err := Load(dir+"/tokenizer.json", 512)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,6 +23,9 @@ func loadTok(t *testing.T) *Tokenizer {
 
 func TestEncode(t *testing.T) {
 	tok := loadTok(t)
+	if id, ok := tok.ID("<pad>"); !ok || id != 1 {
+		t.Errorf("<pad> = %d %v", id, ok)
+	}
 	for text, want := range map[string][]int{
 		"Hello world":      {0, 17964, 1568, 2},
 		"it's they're":     {0, 272, 507, 713, 1634, 2},

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"zonewiki/internal/mdtext"
 )
 
 func historyRoutes(mux *http.ServeMux) {
@@ -140,10 +141,10 @@ func historyView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageExists := exists(path)
-	title := slugDisplayName(slug)
+	title := mdtext.SlugDisplayName(slug)
 	if pageExists {
 		text, _ := readText(path)
-		title = pageTitle(text, slug)
+		title = mdtext.PageTitle(text, slug)
 	}
 	entries := pageLog(rq.user, path)
 	if len(entries) == 0 && !pageExists {
@@ -209,7 +210,7 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	title := pageTitle(content, slug)
+	title := mdtext.PageTitle(content, slug)
 	pageExists := exists(path)
 	current := isCurrent(path, entries)
 	when := runePrefix(sha, 7)
@@ -231,7 +232,7 @@ func revisionView(w http.ResponseWriter, r *http.Request) {
 	page(w, rq, http.StatusOK, "history/revision.html", when+" — "+title, shell{}, &revisionPageView{Slug: slug, Sha: sha,
 		RestoreSha: restoreSha, PageTitle: title, PageExists: pageExists, Entries: entries,
 		I: max(i, 0), HasI: i >= 0, Current: current, When: when, Back: back,
-		ArticleHTML: htmlOf(renderMd(rq, stripH1(content), RenderOpts{})), BreadcrumbHTML: bc})
+		ArticleHTML: htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{})), BreadcrumbHTML: bc})
 }
 
 func diffView(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +248,7 @@ func diffView(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	title := slugDisplayName(slug)
+	title := mdtext.SlugDisplayName(slug)
 	pageExists := exists(path)
 	when, what := runePrefix(sha, 7), ""
 	if i >= 0 {
@@ -319,7 +320,7 @@ func diffUncommitted(w http.ResponseWriter, r *http.Request) {
 		text = "(no changes)"
 	}
 	content, _ := readText(path)
-	title := pageTitle(content, slug)
+	title := mdtext.PageTitle(content, slug)
 	page(w, rq, http.StatusOK, "history/diff_uncommitted.html", "Diff — "+title, shell{}, &uncommittedDiffView{PageTitle: title,
 		Filepath: rel, DiffLines: diffLines(text),
 		BreadcrumbHTML: buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", "", "",

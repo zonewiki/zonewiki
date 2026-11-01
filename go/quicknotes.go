@@ -11,7 +11,27 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"zonewiki/internal/mdtext"
 )
+
+// quicknoteRE: a note's slug, at the wiki's top level or at the top
+// of a user's private folder (isQuicknote checks the user); the first group
+// is its timestamp.
+var quicknoteRE = regexp.MustCompile(`^(?:` + privateDir + `/[a-z0-9-]+/)?(\d{4}-\d{2}-\d{2}_` +
+	`\d{2}-\d{2}-\d{2})_(.+)$`)
+
+// isQuicknote: slug is a note: at the top level, or (with users) at
+// the top of a user's private folder.
+func isQuicknote(slug string) bool {
+	if !quicknoteRE.MatchString(slug) {
+		return false
+	}
+	if !strings.HasPrefix(slug, privateDir+"/") {
+		return true
+	}
+	owner, _ := pageOwner(slug)
+	return owner != ""
+}
 
 // noteDate: the day a note was created (YYYY-MM-DD).
 func noteDate(slug string) string {
@@ -34,7 +54,7 @@ func createQuicknote(user, title string, content *string, suffix string) (string
 	if title = strings.TrimSpace(title); title == "" {
 		title = "Untitled"
 	}
-	name := toSlug(strings.ReplaceAll(title, "/", "-"))
+	name := mdtext.ToSlug(strings.ReplaceAll(title, "/", "-"))
 	if name == "" {
 		name = "untitled"
 	}
@@ -89,7 +109,7 @@ func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string
 	if keepDate {
 		date = noteDate(slug)
 	}
-	newSlug := promotedSlug(folder, name, date)
+	newSlug := mdtext.PromotedSlug(folder, name, date)
 	if newSlug == "" {
 		return "", false, refuse("Give the page a name")
 	}
@@ -127,7 +147,7 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 		return "", false, err
 	}
 	// [ ] | would break the wikilinks that now point at the section.
-	heading = strings.TrimSpace(wikilinkBreakers.ReplaceAllString(heading, ""))
+	heading = strings.TrimSpace(mdtext.WikilinkBreakers.ReplaceAllString(heading, ""))
 	targetPath := ""
 	if target != "" && canWrite(user, target) {
 		targetPath = safePath(target)
@@ -148,10 +168,10 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 	if err != nil {
 		return "", false, err
 	}
-	anchor = sectionAnchor(heading)
-	masked, stash := maskCode(pageText) // no headings in code; a heading's own code counts
+	anchor = mdtext.SectionAnchor(heading)
+	masked, stash := mdtext.MaskCode(pageText) // no headings in code; a heading's own code counts
 	for _, m := range headingTextRE.FindAllStringSubmatch(masked, -1) {
-		if sectionAnchor(unmaskCode(m[1], stash)) == anchor {
+		if mdtext.SectionAnchor(mdtext.UnmaskCode(m[1], stash)) == anchor {
 			return "", false, refuse("“" + target + "” already has a section “" + heading + "”")
 		}
 	}
@@ -162,8 +182,8 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 	if err != nil {
 		return "", false, err
 	}
-	section, tags := noteAsSection(note, heading)
-	pageText = addFrontmatterTags(pageText, tags)
+	section, tags := mdtext.NoteAsSection(note, heading)
+	pageText = mdtext.AddFrontmatterTags(pageText, tags)
 	if err := writeText(targetPath, trimNewlines(pageText)+"\n\n"+section); err != nil {
 		return "", false, err
 	}

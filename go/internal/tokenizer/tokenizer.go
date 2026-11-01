@@ -1,9 +1,10 @@
 // The tokenizer of Zone's embedding model (jina-embeddings-v2-base-de) in
 // Go: what Hugging Face's `tokenizers` does with its tokenizer.json, which
 // is a byte-level BPE (GPT-2's), no normalizer, RoBERTa's <s> … </s>
-// around the text, at most 512 tokens (embed.MAX_TOKENS). Only what this
-// file uses is here; Tokenizer refuses a tokenizer.json that wants more.
-package main
+// around the text, at most maxLen tokens (Load's; Zone's maxTokens, 512).
+// Only what this model uses is here; Load refuses a tokenizer.json that
+// wants more.
+package tokenizer
 
 import (
 	"encoding/json"
@@ -61,7 +62,7 @@ type Tokenizer struct {
 	cache map[string][]int
 }
 
-func LoadTokenizer(path string, maxLen int) (*Tokenizer, error) {
+func Load(path string, maxLen int) (*Tokenizer, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -276,4 +277,10 @@ func (t *Tokenizer) bpe(piece string) []int {
 	t.cache[piece] = ids
 	t.mu.Unlock()
 	return ids
+}
+
+// ID: a token's id in the vocabulary ("<pad>"), false if it has none.
+func (t *Tokenizer) ID(token string) (int, bool) {
+	id, ok := t.vocab[token]
+	return id, ok
 }

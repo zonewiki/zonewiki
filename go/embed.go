@@ -39,6 +39,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
 
@@ -49,9 +50,9 @@ const maxChunkChars = 800
 
 var (
 	// An ATX heading: its #s and its text (manual.go reads the docs' with it too).
-	chunkHeadingRE = regexp.MustCompile(`^(#{1,6})` + spaceClass + `+(.*?)` + spaceClass + `*#*` + spaceClass + `*$`)
+	chunkHeadingRE = regexp.MustCompile(`^(#{1,6})` + mdtext.SpaceClass + `+(.*?)` + mdtext.SpaceClass + `*#*` + mdtext.SpaceClass + `*$`)
 	chunkLinkRE    = regexp.MustCompile(`(!?\[[^\]]*\])\([^)]*\)`)
-	paragraphRE    = regexp.MustCompile(`\n` + spaceClass + `*\n`)
+	paragraphRE    = regexp.MustCompile(`\n` + mdtext.SpaceClass + `*\n`)
 )
 
 // splitLong: text cut at blank lines into pieces of at most maxChars
@@ -119,11 +120,11 @@ type headingLevel struct {
 // their text kept.
 func chunkSections(text string, maxChars int) []chunkSection {
 	sections := [][]string{{}}
-	for _, l := range fencedLines(strings.Split(text, "\n")) {
-		if !l.inFence && chunkHeadingRE.MatchString(l.line) {
+	for _, l := range mdtext.FencedLines(strings.Split(text, "\n")) {
+		if !l.InFence && chunkHeadingRE.MatchString(l.Line) {
 			sections = append(sections, []string{})
 		}
-		sections[len(sections)-1] = append(sections[len(sections)-1], l.line)
+		sections[len(sections)-1] = append(sections[len(sections)-1], l.Line)
 	}
 	var chunks []chunkSection
 	var parents []headingLevel // the open headings above
@@ -237,7 +238,7 @@ const (
 
 // What doesn't count as prose: [[wikilinks]], [labels] (chunks keep a
 // link's label, its target is already gone), image alts, and bare URLs.
-var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + nonSpaceClass + `+|www\.` + nonSpaceClass + `+`)
+var linkishRE = regexp.MustCompile(`\[\[[^\]]*\]\]|!?\[[^\]]*\]|https?://` + mdtext.NonSpaceClass + `+|www\.` + mdtext.NonSpaceClass + `+`)
 
 // proseChars: letters and digits in text outside links (relatedMinChars).
 func proseChars(text string) int {

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
 
@@ -85,7 +86,7 @@ func taskRefsAsTitles(slug, content string) string {
 	tasks := resolveTaskRefs(owner, refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
-			return plainTaskTitle(t.Title)
+			return mdtext.PlainTaskTitle(t.Title)
 		}
 		return ""
 	})
@@ -158,11 +159,11 @@ func repeatTokens(text string, times int) []string {
 // found by its file and folder names too without those outranking what the
 // page says.
 func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
-	title := pageTitle(content, slug)
+	title := mdtext.PageTitle(content, slug)
 	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
 	tokens := append(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight)...)
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: pageTags(content), ExcerptText: text, Tokens: append(tokens, textsearch.Tokenize(slug)...)}
+		Tags: mdtext.PageTags(content), ExcerptText: text, Tokens: append(tokens, textsearch.Tokenize(slug)...)}
 }
 
 var searchDocCache pageCache[*SearchDoc]
@@ -235,8 +236,8 @@ func taskSearchDocs() []*SearchDoc {
 		}
 		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
-		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + plainTaskTitle(title), ExcerptText: text,
-			Tokens: append(textsearch.Tokenize(text), repeatTokens(plainTaskTitle(title), textsearch.TitleWeight)...),
+		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + mdtext.PlainTaskTitle(title), ExcerptText: text,
+			Tokens: append(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight)...),
 			Task:   t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
 		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
@@ -483,18 +484,18 @@ func searchIndex(rq *Req) *docIndex {
 // content: pages holding nothing but a task list embed came out as each other's
 // closest match).
 func semanticText(content, slug string) (string, string) {
-	meta, body := parseFrontmatter(taskRefsAsTitles(slug, content))
+	meta, body := mdtext.ParseFrontmatter(taskRefsAsTitles(slug, content))
 	var lead []string
 	for _, s := range []string{meta.Tldr, strings.Join(meta.Tags, " ")} {
 		if s != "" {
 			lead = append(lead, s)
 		}
 	}
-	body = tasksRE.ReplaceAllString(stripH1(body), "")
+	body = tasksRE.ReplaceAllString(mdtext.StripH1(body), "")
 	if len(lead) > 0 {
 		body = strings.Join(lead, "\n") + "\n\n" + body
 	}
-	return pageTitle(content, slug), body
+	return mdtext.PageTitle(content, slug), body
 }
 
 // fuseDepth: how deep each ranking goes into the fusion (semantic search).
@@ -799,13 +800,13 @@ func sectionAnchorOf(heading string, level int) string {
 	if heading == "" || level > 3 {
 		return ""
 	}
-	return "#" + headingID(plainHeading(heading))
+	return "#" + mdtext.HeadingID(mdtext.PlainHeading(heading))
 }
 
 // pageChunks: a page's sections (chunkSections) as BM25 documents.
 func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 	title, body := semanticText(content, slug)
-	tags := pageTags(content)
+	tags := mdtext.PageTags(content)
 	sections := chunkSections(body, maxChunkChars)
 	if len(sections) == 0 {
 		sections = []chunkSection{{}}

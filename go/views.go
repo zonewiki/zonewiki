@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"zonewiki/internal/mdtext"
 )
 
 //go:embed templates
@@ -88,8 +89,8 @@ type diffLine struct{ Class, Text string }
 func diffLines(diff string) []diffLine {
 	var lines []diffLine
 	inHeader := false
-	for _, l := range splitLines(diff) {
-		line := lineBody(l)
+	for _, l := range mdtext.SplitLines(diff) {
+		line := mdtext.LineBody(l)
 		if strings.HasPrefix(line, "diff --git ") {
 			inHeader = true
 		}
@@ -233,7 +234,7 @@ func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query str
 	parts := strings.Split(slug, "/")
 	var crumbs []crumb
 	for i, part := range parts[:len(parts)-1] {
-		crumbs = append(crumbs, crumb{titleWords(strings.ReplaceAll(part, "-", " ")), pathURL("page", strings.Join(parts[:i+1], "/"))})
+		crumbs = append(crumbs, crumb{mdtext.TitleWords(strings.ReplaceAll(part, "-", " ")), pathURL("page", strings.Join(parts[:i+1], "/"))})
 	}
 	href := ""
 	if len(extra) > 0 || query != "" {
@@ -392,7 +393,7 @@ func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []strin
 		var links []M
 		for _, t := range tasks {
 			links = append(links, M{"href": taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),
-				"title": plainTaskTitle(t.Title), "section": t.Section, "anchor": t.Anchor})
+				"title": mdtext.PlainTaskTitle(t.Title), "section": t.Section, "anchor": t.Anchor})
 		}
 		sections = append(sections, M{"id": "task-backlinks", "heading": "Linked tasks", "links": links})
 	}
@@ -472,7 +473,7 @@ func pasteHint(rq *Req, slug string, copied bool) M {
 		return nil
 	}
 	text, _ := readText(p)
-	return M{"link": pageWikilink(slug, pageTitle(text, slug)), "copied": copied}
+	return M{"link": mdtext.PageWikilink(slug, mdtext.PageTitle(text, slug)), "copied": copied}
 }
 
 // buildDeleteDialog: the page view's delete confirmation; none for the home page.

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"zonewiki/internal/mdtext"
 )
 
 func unixNano(n int64) time.Time { return time.Unix(0, n) }
@@ -64,7 +65,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	} else {
 		var kept bool
 		old, content, kept, err = changePageOp(user, slug, "Update", suffix, func(old string) (string, error) {
-			if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != contentHash(old) {
+			if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != mdtext.ContentHash(old) {
 				merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
 				return mergeWrite(slug, path, old, content, baseHash, user)
 			}
@@ -79,7 +80,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if existing != "" {
 		out = "Replaced page " + slug + "." + merged + "\n" + pageInfo(slug, base)
 	} else {
-		similar := similarPages(slug, pageTitle(content, slug), user)
+		similar := similarPages(slug, mdtext.PageTitle(content, slug), user)
 		named := map[string]bool{}
 		if len(similar) > 0 {
 			out += "\nNote: pages with similar names exist; if this one repeats one of them, " +
@@ -106,12 +107,12 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 		return "", err
 	}
 	name = strings.TrimSpace(name)
-	title := pageTitle(content, "")
+	title := mdtext.PageTitle(content, "")
 	if strings.TrimSpace(title) == "" && name == "" {
 		return "", toolErr("Give the note a title: start content with '# Title', or set slug.")
 	}
 	if strings.TrimSpace(title) == "" { // the title goes under the frontmatter, if any
-		_, body := parseFrontmatter(content)
+		_, body := mdtext.ParseFrontmatter(content)
 		content = content[:len(content)-len(body)] + "# " + name + "\n\n" + strings.TrimLeftFunc(body, unicode.IsSpace)
 	}
 	// Notes sit at the wiki's root, with users in the user's
@@ -190,7 +191,7 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			heading = appendHeading(slug, pageTitle(text, slug))
+			heading = appendHeading(slug, mdtext.PageTitle(text, slug))
 		}
 		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
@@ -221,7 +222,7 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 	if keepDate {
 		date = noteDate(slug)
 	}
-	if s := promotedSlug(folder, name, date); s != "" {
+	if s := mdtext.PromotedSlug(folder, name, date); s != "" {
 		if err := checkGuides(args, []string{s}, user); err != nil {
 			return "", err
 		}
@@ -330,7 +331,7 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 // appendAt: content with addition at the end of the section under heading;
 // ok false when the page has no such heading.
 func appendAt(content, addition, heading string) (string, bool) {
-	lines := splitLines(content)
+	lines := mdtext.SplitLines(content)
 	_, end, ok := sectionLines(lines, heading)
 	if !ok {
 		return "", false
@@ -589,15 +590,15 @@ func replaceLines(content string, re *regexp.Regexp, repl func(body string, m []
 	includeCode bool) (string, []changedLine, error) {
 	var out strings.Builder
 	var changed []changedLine
-	for i, l := range fencedLines(splitLines(content)) {
-		body := strings.TrimRight(l.line, "\r\n")
-		if l.inFence && !includeCode {
-			out.WriteString(l.line)
+	for i, l := range mdtext.FencedLines(mdtext.SplitLines(content)) {
+		body := strings.TrimRight(l.Line, "\r\n")
+		if l.InFence && !includeCode {
+			out.WriteString(l.Line)
 			continue
 		}
 		var code [][2]int
 		if !includeCode {
-			code = inlineCodeSpans(body)
+			code = mdtext.InlineCodeSpans(body)
 		}
 		var b strings.Builder
 		last, n := 0, 0
@@ -621,7 +622,7 @@ func replaceLines(content string, re *regexp.Regexp, repl func(body string, m []
 		if n > 0 && b.String() != body {
 			changed = append(changed, changedLine{i + 1, body, b.String(), n})
 		}
-		out.WriteString(b.String() + l.line[len(body):])
+		out.WriteString(b.String() + l.Line[len(body):])
 	}
 	return out.String(), changed, nil
 }

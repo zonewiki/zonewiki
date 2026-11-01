@@ -87,7 +87,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
-│   ├── configfile.go       # The settings file .zone/config: its parser, Settings (settings(), reloaded when the file changes), the line edits
+│   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
@@ -96,7 +96,6 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, refusals (pageError), text not yet in git kept
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
-│   ├── mdtext.go           # Markdown source text: frontmatter, fences, code masking, headings, sections, checkboxes
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
@@ -113,10 +112,12 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
 │   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go)
+│   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, sections, checkboxes, slugs)
+│   ├── internal/settingsfile/  # Package settingsfile: the settings file's format (the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
+│   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
-│   ├── tokenizer.go        # The model's tokenizer
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcptools.go         # The MCP tools that read, and the task tools; mcpwrite.go those that write pages
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help

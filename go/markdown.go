@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"zonewiki/internal/mdtext"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -157,7 +158,7 @@ func (alertTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parse
 
 // taskTransformer: a list item whose first paragraph starts "[ ]", "[x]" or
 // "[X]" and then whitespace and text gets a checkbox. Exactly the lines
-// taskItemLines (mdtext.go) counts: ticking the Nth checkbox toggles the Nth
+// mdtext.TaskItemLines counts: ticking the Nth checkbox toggles the Nth
 // match in the file. (goldmark's tasklist also takes "- [ ]" alone.)
 type taskTransformer struct{}
 
@@ -422,21 +423,21 @@ func (r *zoneRenderer) checkbox(w util.BufWriter, src []byte, node ast.Node, ent
 	return ast.WalkContinue, nil
 }
 
-// Task metadata comments (taskMetaSrcRE, taskDoneOnlyRE) as date chips.
+// Task metadata comments (mdtext.TaskMetaSrcRE, mdtext.TaskDoneOnlyRE) as date chips.
 func taskDates(s string) string {
 	chip := func(kind, title, d string) string {
 		return fmt.Sprintf(`<span class="task-date task-date-%s" title="%s %s">%s</span>`, kind, title, d, runePrefix(d, 10))
 	}
-	s = taskMetaSrcRE.ReplaceAllStringFunc(s, func(m string) string {
-		g := taskMetaSrcRE.FindStringSubmatch(m)
+	s = mdtext.TaskMetaSrcRE.ReplaceAllStringFunc(s, func(m string) string {
+		g := mdtext.TaskMetaSrcRE.FindStringSubmatch(m)
 		out := chip("created", "Created", g[1])
 		if g[2] != "" {
 			out += chip("done", "Done", g[2])
 		}
 		return out
 	})
-	return taskDoneOnlyRE.ReplaceAllStringFunc(s, func(m string) string {
-		return chip("done", "Done", taskDoneOnlyRE.FindStringSubmatch(m)[1])
+	return mdtext.TaskDoneOnlyRE.ReplaceAllStringFunc(s, func(m string) string {
+		return chip("done", "Done", mdtext.TaskDoneOnlyRE.FindStringSubmatch(m)[1])
 	})
 }
 

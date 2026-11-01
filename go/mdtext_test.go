@@ -7,7 +7,20 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"zonewiki/internal/mdtext"
+	"zonewiki/internal/settingsfile"
 )
+
+var sharing = &Req{sharing: true}
+
+// prepare is renderMd up to markdown: code masked, task lists and task refs
+// swapped for placeholders, wikilinks, code back.
+func prepare(text string) (string, []tasksEmbed, []string) {
+	text, stash := mdtext.MaskCode(text)
+	text, embeds := processTasksEmbeds(nil, text, false)
+	text, refs := maskTaskRefs(text)
+	return mdtext.UnmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, "", stash), stash), embeds, refs
+}
 
 // testWiki points cfg (and settings) at a fresh wiki with these pages (slug → text);
 // pages under secret/ are not for sharing.
@@ -21,7 +34,7 @@ func testWiki(t *testing.T, pages map[string]string) {
 			t.Fatal(err)
 		}
 	}
-	if err := writeConfig(filepath.Join(dir, ".zone", "config"), "noshare = #noshare, secret/\n"); err != nil {
+	if err := settingsfile.Write(filepath.Join(dir, ".zone", "config"), "noshare = #noshare, secret/\n"); err != nil {
 		t.Fatal(err)
 	}
 	c, s, err := loadConfig(func(k string) string { return map[string]string{"ZONE_DATA": dir}[k] })
@@ -34,9 +47,6 @@ func testWiki(t *testing.T, pages map[string]string) {
 	current.Store(s)
 	t.Cleanup(func() { cfg = old; current.Store(oldSettings) })
 }
-
-var sharing = &Req{sharing: true}
-
 func TestWikilinks(t *testing.T) {
 	testWiki(t, nil)
 	slugs := map[string]bool{"index": true, "notes/my-page": true, "secret": true, "Odd Name": true}
@@ -58,15 +68,6 @@ func TestWikilinks(t *testing.T) {
 	}
 }
 
-// prepare is renderMd up to markdown: code masked, task lists and task refs
-// swapped for placeholders, wikilinks, code back.
-func prepare(text string) (string, []tasksEmbed, []string) {
-	text, stash := maskCode(text)
-	text, embeds := processTasksEmbeds(nil, text, false)
-	text, refs := maskTaskRefs(text)
-	return unmaskCode(processWikilinks(nil, text, map[string]bool{"index": true}, "", stash), stash), embeds, refs
-}
-
 // Code is masked: [[…]] in it stays as written.
 func TestPrepareMasksCode(t *testing.T) {
 	testWiki(t, nil)
@@ -78,7 +79,6 @@ func TestPrepareMasksCode(t *testing.T) {
 		t.Errorf("got %q %v %v", text, embeds, refs)
 	}
 }
-
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
 	text, embeds, refs := prepare("[[tasks:]] [[DECK list=work]] [[task:ABCD-1234]]\u00a0[[deck\u00a0view=x]]")
@@ -105,109 +105,30 @@ func TestTextLikeTokens(t *testing.T) {
 	}
 }
 
-func TestFrontmatter(t *testing.T) {
-	src := strings.Join([]string{
-		"---",
-		"tags: [a, \"b c\"]",
-		"sources:",
-		"  - [label, with comma](https://x.org)",
-		"  - '[[page|a, b]]'",
-		"tldr: >-",
-		"  folded",
-		"  lines",
-		"",
-		"  para",
-		"title: ignored",
-		"---",
-		"",
-		"# Body",
-	}, "\n")
-	meta, body := parseFrontmatter(src)
-	want := Frontmatter{Tags: []string{"a", "b c"}, Sources: []string{"[label, with comma](https://x.org)", "[[page|a, b]]"},
-		Tldr: "folded lines\npara"}
-	if !reflect.DeepEqual(meta, want) || body != "# Body" {
-		t.Errorf("got %+v %q", meta, body)
-	}
-	meta, _ = parseFrontmatter("---\ntldr: |\n    one\n      two\n---\n")
-	if meta.Tldr != "one\n  two" {
-		t.Errorf("literal tldr %q", meta.Tldr)
-	}
-	meta, _ = parseFrontmatter("---\ntldr: \"plain\n  goes on\"\n---\n")
-	if meta.Tldr != "plain goes on" {
-		t.Errorf("plain tldr %q", meta.Tldr)
-	}
-	// No closing fence: no frontmatter, the text unchanged.
-	if meta, body := parseFrontmatter("---\ntags: a\n"); meta.Tags != nil || body != "---\ntags: a\n" {
-		t.Errorf("unclosed: %+v %q", meta, body)
-	}
-}
-
-func TestSplitLines(t *testing.T) {
-	got := splitLines("a\nb\r\nc\rd\u2028e\x1cf")
-	want := []string{"a\n", "b\r\n", "c\r", "d\u2028", "e\x1c", "f"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %q", got)
-	}
-}
-
-func TestToSlug(t *testing.T) {
-	for in, want := range map[string]string{" Notes / My Page! ": "notes/my-page", "Ärger": "rger", "a//b": "a/b"} {
-		if got := toSlug(in); got != want {
-			t.Errorf("%q: got %q, want %q", in, got, want)
-		}
-	}
-}
-
-// Lines of whitespace only (\r, tabs …) are blank to dedent.
-func TestDedent(t *testing.T) {
-	for in, want := range map[string]string{
-		"    literal\n      more\n ": "literal\n  more\n",
-		"    a\n\r\n  b\n \t":        "  a\n\nb\n",
-	} {
-		if got := dedent(in); got != want {
-			t.Errorf("%q: got %q, want %q", in, got, want)
-		}
-	}
-}
-
-// Sections and their offsets count characters, as the editor does.
-func TestSectionsCountCharacters(t *testing.T) {
-	text := "# Ü\n\nä\n## Zwei\nö\n### Drei\nx\n"
-	start, end, ok := sectionCharRange(text, 1)
-	if !ok || start != 7 || end != 17 || runeSlice(text, start, end) != "## Zwei\nö\n" {
-		t.Fatalf("%d %d %v", start, end, ok)
-	}
-	merged, _, s, e, ok := spliceSection(&text, contentHash(text), start, end, "## Zwei\nneu")
-	if !ok || merged != "# Ü\n\nä\n## Zwei\nneu\n### Drei\nx\n" || s != 7 || e != 19 {
-		t.Fatalf("%q %d %d", merged, s, e)
-	}
-}
-
 // The Nth checkbox is the Nth task line, frontmatter and code aside.
 // A checkbox line's key stays when it is ticked and unticked (stamps and
 // all), and differs from another line's.
 func TestTaskLineKeys(t *testing.T) {
 	text := "---\n- [ ] not one\n---\n- [ ] a\n```\n- [ ] code\n```\n> - [x] b <!--t:2026-01-01T10:00:00 d:2026-01-02T10:00:00-->\n- [ ] c\n"
-	keys := taskLineKeys(text)
+	keys := mdtext.TaskLineKeys(text)
 	if len(keys) != 3 || keys[0] == keys[1] || keys[1] == keys[2] || len(keys[0]) != 8 {
 		t.Fatalf("%v", keys)
 	}
 	for i := range keys {
-		ticked := taskLineKeys(toggleNthCheckbox(text, i, true))
+		ticked := mdtext.TaskLineKeys(mdtext.ToggleNthCheckbox(text, i, true, now()))
 		if !slices.Equal(ticked, keys) {
 			t.Errorf("toggling %d: %v, was %v", i, ticked, keys)
 		}
 	}
 }
-
 func TestToggleNthCheckbox(t *testing.T) {
 	text := "---\n- [ ] not one\n---\n- [ ] a\n```\n- [ ] code\n```\n> - [x] b <!--t:2026-01-01T10:00:00 d:2026-01-02T10:00:00-->\n- [ ]\n"
-	got := toggleNthCheckbox(text, 1, true)
+	got := mdtext.ToggleNthCheckbox(text, 1, true, now())
 	if !strings.Contains(got, "> - [ ] b <!--t:2026-01-01T10:00:00-->\n") {
 		t.Errorf("untick: %q", got)
 	}
-	got = toggleNthCheckbox(text, 0, true)
-	if !strings.Contains(got, "- [x] a <!--d:") || toggleNthCheckbox(text, 2, true) != text {
+	got = mdtext.ToggleNthCheckbox(text, 0, true, now())
+	if !strings.Contains(got, "- [x] a <!--d:") || mdtext.ToggleNthCheckbox(text, 2, true, now()) != text {
 		t.Errorf("tick: %q", got)
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
 
@@ -156,7 +157,7 @@ func plural(n int, word string) string {
 // Remote"); "" when none, or when user may not see it.
 func mcpPageSlug(raw, user string) string {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
-	for _, slug := range []string{raw, toSlug(raw)} {
+	for _, slug := range []string{raw, mdtext.ToSlug(raw)} {
 		if slug == "" {
 			continue
 		}
@@ -219,7 +220,7 @@ func existingPage(args jsonObj, name, user string) (string, string, error) {
 // user's own folder.
 func newSlug(raw, user string) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
-	slug := toSlug(raw)
+	slug := mdtext.ToSlug(raw)
 	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
 		return "", toolErr(strconv.Quote(raw) + " is not a usable page name")
 	}
@@ -237,12 +238,12 @@ func newSlug(raw, user string) (string, error) {
 // else slugified) and the markdown links (mdLinkMisses). Each link as
 // written → the name or slug it was meant for, to suggest a near match.
 func missingLinks(content string, slugs map[string]bool, slug, user string) map[string]string {
-	masked, _ := maskCode(content)
+	masked, _ := mdtext.MaskCode(content)
 	masked = taskRefRE.ReplaceAllString(tasksRE.ReplaceAllString(masked, ""), "")
 	missing := map[string]string{}
-	for _, m := range wikilinkRE.FindAllStringSubmatch(masked, -1) {
-		name, _, _ := splitWikilink(m[1])
-		if name != "" && !slugs[name] && !slugs[toSlug(name)] {
+	for _, m := range mdtext.WikilinkRE.FindAllStringSubmatch(masked, -1) {
+		name, _, _ := mdtext.SplitWikilink(m[1])
+		if name != "" && !slugs[name] && !slugs[mdtext.ToSlug(name)] {
 			missing["[["+name+"]]"] = name
 		}
 	}
@@ -252,7 +253,7 @@ func missingLinks(content string, slugs map[string]bool, slug, user string) map[
 	// A link into a private folder that isn't user's is never reported, whether
 	// or not the page is there: "no such page" would tell which ones exist.
 	for k, v := range missing {
-		if !canSee(user, toSlug(v)) {
+		if !canSee(user, mdtext.ToSlug(v)) {
 			delete(missing, k)
 		}
 	}
@@ -387,7 +388,7 @@ var guideFiles = map[string]bool{"agents.md": true, "claude.md": true}
 
 // A line "@other.md" in a guide stands for that file's text (Claude Code's
 // import), relative to the guide's folder, nested this deep at most.
-var importRE = regexp.MustCompile(`^@(` + nonSpaceClass + `+\.md)$`)
+var importRE = regexp.MustCompile(`^@(` + mdtext.NonSpaceClass + `+\.md)$`)
 
 const importDepth = 3
 
@@ -413,8 +414,8 @@ func guideText(path, user string, seen map[string]bool, depth int) string {
 	}
 	root := resolvePath(cfg.Data)
 	var out []string
-	for _, line := range splitLines(text) {
-		line = lineBody(line)
+	for _, line := range mdtext.SplitLines(text) {
+		line = mdtext.LineBody(line)
 		if m := importRE.FindStringSubmatch(strings.TrimSpace(line)); m != nil && depth < importDepth {
 			target := resolvePath(filepath.Join(filepath.Dir(path), m[1]))
 			if rel, ok := relInside(root, target); ok {
@@ -560,7 +561,7 @@ func guidedFolders(user string) [][2]string {
 		}
 		for _, g := range folderGuides(page, user) {
 			if guideFolder(g.slug) == folder {
-				title := cutRunes(pageTitle(g.text, ""), 60, "")
+				title := cutRunes(mdtext.PageTitle(g.text, ""), 60, "")
 				if title == "" {
 					title = g.slug
 				}
@@ -722,18 +723,18 @@ func headingMatch(line string) (int, string, bool) {
 // text compared without markup and case), from the heading to before the
 // next heading of the same or a higher level, subsections included.
 func sectionLines(lines []string, heading string) (int, int, bool) {
-	want := strings.ToLower(plainHeading(strings.TrimSpace(strings.TrimLeft(heading, "#"))))
+	want := strings.ToLower(mdtext.PlainHeading(strings.TrimSpace(strings.TrimLeft(heading, "#"))))
 	start, level, end := -1, 0, len(lines)
-	for i, l := range fencedLines(lines) {
-		if l.inFence {
+	for i, l := range mdtext.FencedLines(lines) {
+		if l.InFence {
 			continue
 		}
-		n, text, ok := headingMatch(l.line)
+		n, text, ok := headingMatch(l.Line)
 		if !ok {
 			continue
 		}
 		if start < 0 {
-			if strings.ToLower(plainHeading(text)) == want {
+			if strings.ToLower(mdtext.PlainHeading(text)) == want {
 				start, level = i, n
 			}
 		} else if n <= level {
@@ -747,13 +748,13 @@ func sectionLines(lines []string, heading string) (int, int, bool) {
 // noHeading: the error for a heading the page doesn't have, naming those
 // it has.
 func noHeading(slug, content, heading string) string {
-	lines := splitLines(content)
+	lines := mdtext.SplitLines(content)
 	for i := range lines {
-		lines[i] = lineBody(lines[i])
+		lines[i] = mdtext.LineBody(lines[i])
 	}
 	var names []string
-	for _, l := range fencedLines(lines) {
-		if _, text, ok := headingMatch(l.line); ok && !l.inFence {
+	for _, l := range mdtext.FencedLines(lines) {
+		if _, text, ok := headingMatch(l.Line); ok && !l.InFence {
 			names = append(names, strconv.Quote(text))
 		}
 	}
@@ -847,7 +848,7 @@ func mcpTaskText(t *Task, base, user string) string {
 // mcpTaskRefs: for read_page, what each [[task:…]] on the page stands for,
 // since the raw markdown holds only the id.
 func mcpTaskRefs(content, base, user string) string {
-	masked, _ := maskCode(content)
+	masked, _ := mdtext.MaskCode(content)
 	var refs []string
 	seen := map[string]bool{}
 	for _, m := range taskRefRE.FindAllStringSubmatch(masked, -1) {
@@ -1179,7 +1180,7 @@ func tagHints(task *Task, user string) string {
 	}
 	for _, p := range visiblePages(user) {
 		if content, err := readPageText(p.Path); err == nil {
-			for _, t := range pageTags(content) {
+			for _, t := range mdtext.PageTags(content) {
 				used[t] = true
 			}
 		}
@@ -1486,7 +1487,7 @@ func readPage(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	if heading = strings.TrimSpace(heading); heading != "" {
-		lines := splitLines(content)
+		lines := mdtext.SplitLines(content)
 		start, end, ok := sectionLines(lines, heading)
 		if !ok {
 			return "", toolErr(noHeading(slug, content, heading) + " Leave out heading for the whole page.")
@@ -1617,7 +1618,7 @@ func checkLinks(args jsonObj, base, user string) (string, error) {
 		for _, link := range sortedKeys(missing) {
 			name := missing[link]
 			if strings.HasPrefix(link, "[[") {
-				name = toSlug(name)
+				name = mdtext.ToSlug(name)
 			}
 			if near := textsearch.CloseMatches(name, all, 1, 0.8); len(near) > 0 {
 				link += " (maybe [[" + near[0] + "]]?)"
@@ -1862,7 +1863,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 			continue
 		}
 		seen := map[string]bool{}
-		for _, t := range pageTags(content) {
+		for _, t := range mdtext.PageTags(content) {
 			if !seen[t] {
 				seen[t] = true
 				count(t, 0)
@@ -1935,7 +1936,7 @@ func zoneHelp(args jsonObj, base, user string) (string, error) {
 		if heading == "" {
 			return "topic: " + topic + "\n\n" + text, nil
 		}
-		lines := splitLines(text)
+		lines := mdtext.SplitLines(text)
 		start, end, ok := sectionLines(lines, heading)
 		if !ok {
 			return "", toolErr(noHeading(topic, text, heading) + " Leave out heading for the whole doc.")

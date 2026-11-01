@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
 
@@ -70,8 +71,8 @@ type docHeading struct {
 // manualHeadings: a doc's headings, those in code fences left out.
 func manualHeadings(text string) []docHeading {
 	var out []docHeading
-	for _, l := range fencedLines(strings.Split(text, "\n")) {
-		if m := chunkHeadingRE.FindStringSubmatch(l.line); m != nil && !l.inFence {
+	for _, l := range mdtext.FencedLines(strings.Split(text, "\n")) {
+		if m := chunkHeadingRE.FindStringSubmatch(l.Line); m != nil && !l.InFence {
 			out = append(out, docHeading{len(m[1]), m[2]})
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"math"
 	"path/filepath"
 	"sync"
+	"zonewiki/internal/tokenizer"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -33,7 +34,7 @@ type onnxEmbedder struct {
 	folder string
 
 	mu      sync.Mutex // guards loading
-	tok     *Tokenizer
+	tok     *tokenizer.Tokenizer
 	session *ort.DynamicAdvancedSession
 	pad     int
 }
@@ -69,11 +70,11 @@ func (e *onnxEmbedder) load() error {
 			return err
 		}
 	}
-	tok, err := LoadTokenizer(filepath.Join(e.folder, "tokenizer.json"), maxTokens)
+	tok, err := tokenizer.Load(filepath.Join(e.folder, "tokenizer.json"), maxTokens)
 	if err != nil {
 		return err
 	}
-	pad, ok := tok.vocab["<pad>"]
+	pad, ok := tok.ID("<pad>")
 	if !ok {
 		return fmt.Errorf("%s: no <pad> token", e.folder)
 	}

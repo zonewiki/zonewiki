@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // A git that hangs (a stale lock, a slow disk) must not hold its request
@@ -425,8 +426,8 @@ func gitLog(path string, max int) []GitEntry {
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
 			Msg: parts[5], Path: rel}
-		for _, line := range splitLines(stats) {
-			cols := strings.SplitN(lineBody(line), "\t", 3)
+		for _, line := range mdtext.SplitLines(stats) {
+			cols := strings.SplitN(mdtext.LineBody(line), "\t", 3)
 			if len(cols) == 3 {
 				if n, err := strconv.Atoi(cols[0]); err == nil {
 					e.Added += n
@@ -482,8 +483,8 @@ func gitLogAll(since, under string, limit int, see func(path string) bool) []Log
 				continue
 			}
 			e := LogEntry{Sha: parts[0], Time: parts[1], Author: commitAuthor(parts[2]), Msg: parts[3]}
-			for _, n := range splitLines(names) {
-				if n = lineBody(n); strings.TrimSpace(n) != "" && (see == nil || see(n)) {
+			for _, n := range mdtext.SplitLines(names) {
+				if n = mdtext.LineBody(n); strings.TrimSpace(n) != "" && (see == nil || see(n)) {
 					e.Files = append(e.Files, n)
 				}
 			}
@@ -558,8 +559,8 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 			if err != nil {
 				continue
 			}
-			for n, line := range splitLines(strings.ToValidUTF8(text, "\uFFFD")) {
-				line = lineBody(line)
+			for n, line := range mdtext.SplitLines(strings.ToValidUTF8(text, "\uFFFD")) {
+				line = mdtext.LineBody(line)
 				hay := line
 				if ignoreCase {
 					hay = strings.ToLower(line)
@@ -605,8 +606,8 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		}
 		return nil, &grepError{msg}
 	}
-	for _, row := range splitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
-		parts := strings.SplitN(lineBody(row), "\x00", 3)
+	for _, row := range mdtext.SplitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
+		parts := strings.SplitN(mdtext.LineBody(row), "\x00", 3)
 		if len(parts) != 3 {
 			continue
 		}
@@ -728,9 +729,9 @@ func uncommittedEntries() []UncommittedFile {
 		if strings.HasSuffix(f.Filepath, ".md") && !strings.HasPrefix(f.Filepath, "_assets") {
 			f.Slug = strings.TrimSuffix(f.Filepath, ".md")
 			if text, err := readText(filepath.Join(cfg.Data, f.Filepath)); err == nil {
-				f.Title = pageTitle(text, f.Slug)
+				f.Title = mdtext.PageTitle(text, f.Slug)
 			} else {
-				f.Title = slugDisplayName(f.Slug)
+				f.Title = mdtext.SlugDisplayName(f.Slug)
 			}
 			files[i] = f
 		}
@@ -754,8 +755,8 @@ func listDeletedPages() []DeletedPage {
 	seen := map[string]bool{}
 	var out []DeletedPage
 	var sha, parent, date string
-	for _, raw := range splitLines(r.Stdout) {
-		line := trimRightSpace(raw)
+	for _, raw := range mdtext.SplitLines(r.Stdout) {
+		line := mdtext.TrimRightSpace(raw)
 		if line == "" {
 			continue
 		}
@@ -806,9 +807,9 @@ func lastDeletion(slug string) (parent, date string, ok bool) {
 // deletedTitle: a deleted page's title as its last version (at parent) has it.
 func deletedTitle(parent, slug string) string {
 	if r := runGit("show", parent+":"+slug+".md"); r.Code == 0 {
-		return pageTitle(r.Stdout, slug)
+		return mdtext.PageTitle(r.Stdout, slug)
 	}
-	return slugDisplayName(slug)
+	return mdtext.SlugDisplayName(slug)
 }
 
 var (

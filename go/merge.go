@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // drafts: a page's file, as git names it (wikiRel) → the user whose save
@@ -128,7 +129,7 @@ func commitAuthorOf(path, fallback string) string {
 	return fallback
 }
 
-// Bases: the texts behind recent file hashes (contentHash), so a save that
+// Bases: the texts behind recent file hashes (mdtext.ContentHash), so a save that
 // sends an older hash can be merged from the text it started from. Two
 // lists, so a busy page's auto-saves don't push out the text an idle
 // editor started from: the texts handed out (/edit, read_page, a
@@ -151,7 +152,7 @@ var (
 
 // keep: text as a base for later merges; returns its hash.
 func (l *baseList) keep(text string) string {
-	hash := contentHash(text)
+	hash := mdtext.ContentHash(text)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if _, ok := l.texts[hash]; ok {
@@ -266,7 +267,7 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 	mine := s.text
 	if s.section {
 		var spliced bool
-		if mine, _, m.sentStart, m.sentEnd, spliced = spliceSection(&base, s.fileHash, s.start, s.end, s.text); !spliced {
+		if mine, _, m.sentStart, m.sentEnd, spliced = mdtext.SpliceSection(&base, s.fileHash, s.start, s.end, s.text); !spliced {
 			return m, false
 		}
 	}
@@ -318,11 +319,11 @@ func firstLine(text string) string {
 func headedSection(content, heading string) (start, end int, ok bool) {
 	found := 0
 	for i := 1; ; i++ {
-		s, e, valid := sectionCharRange(content, i)
+		s, e, valid := mdtext.SectionCharRange(content, i)
 		if !valid {
 			break
 		}
-		if firstLine(runeSlice(content, s, e)) == heading {
+		if firstLine(mdtext.RuneSlice(content, s, e)) == heading {
 			start, end = s, e
 			found++
 		}

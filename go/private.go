@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"zonewiki/internal/mdtext"
 )
 
 // privateHomeText is what a new private home holds.
@@ -123,7 +124,7 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 		return nil
 	}
 	var written []string
-	masked, stash := maskCode(text)
+	masked, stash := mdtext.MaskCode(text)
 	masked = ownUploadRE.ReplaceAllStringFunc(masked, func(m string) string {
 		sub := ownUploadRE.FindStringSubmatch(m)
 		if sub[1] != owner {
@@ -154,7 +155,7 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 		return uploadURL("", filepath.Base(dest))
 	})
 	if len(written) > 0 || masked != text {
-		if n := unmaskCode(masked, stash); n != text && writeText(newPath, n) == nil {
+		if n := mdtext.UnmaskCode(masked, stash); n != text && writeText(newPath, n) == nil {
 			written = append(written, newPath)
 		}
 	}

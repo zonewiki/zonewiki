@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // tasksMu serializes every read-modify-write of the task files: two
@@ -954,13 +955,13 @@ func findTaskBacklinks(user, slug string) []TaskLink {
 		}
 		text := t.Title + "\n" + t.Description
 		found, section, anchor := false, "", ""
-		for _, m := range wikilinkRE.FindAllStringSubmatch(text, -1) {
+		for _, m := range mdtext.WikilinkRE.FindAllStringSubmatch(text, -1) {
 			l := parseWikilink(m[0])
 			page, sec := strings.TrimSpace(l.page), strings.TrimSpace(l.section)
-			if page != "" && (page == slug || toSlug(page) == slug) {
+			if page != "" && (page == slug || mdtext.ToSlug(page) == slug) {
 				found = true
 				if sec != "" && section == "" {
-					section, anchor = sec, sectionAnchor(sec)
+					section, anchor = sec, mdtext.SectionAnchor(sec)
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // The answers of the Python Zone (until 2026-10) on every string in Zone's
@@ -61,18 +62,18 @@ func TestGolden(t *testing.T) {
 		var text string
 		_ = json.Unmarshal(c["text"], &text)
 		slug := "folder/sub/page"
-		sections := splitSections(text)
+		sections := mdtext.SplitSections(text)
 		check("split_sections", text, sections, c["split_sections"])
 		var ranges []any
 		for i := 0; i <= len(sections); i++ {
-			if s, e, ok := sectionCharRange(text, i); ok {
+			if s, e, ok := mdtext.SectionCharRange(text, i); ok {
 				ranges = append(ranges, []int{s, e})
 			} else {
 				ranges = append(ranges, nil)
 			}
 		}
 		check("section_char_range", text, ranges, c["section_char_range"])
-		meta, body := parseFrontmatter(text)
+		meta, body := mdtext.ParseFrontmatter(text)
 		m := map[string]any{}
 		if meta.Tags != nil {
 			m["tags"] = meta.Tags
@@ -84,26 +85,26 @@ func TestGolden(t *testing.T) {
 			m["sources"] = meta.Sources
 		}
 		check("parse_frontmatter", text, []any{m, body}, c["parse_frontmatter"])
-		masked, stash := maskCode(text)
+		masked, stash := mdtext.MaskCode(text)
 		if stash == nil {
 			stash = []string{}
 		}
 		check("mask_code", text, []any{masked, stash}, c["mask_code"])
-		check("page_title", text, pageTitle(text, "some-slug"), c["page_title"])
-		check("strip_h1", text, stripH1(text), c["strip_h1"])
+		check("page_title", text, mdtext.PageTitle(text, "some-slug"), c["page_title"])
+		check("strip_h1", text, mdtext.StripH1(text), c["strip_h1"])
 		var toggles, notes []string
 		for i := range 4 {
-			toggles = append(toggles, toggleNthCheckbox(text, i, true))
+			toggles = append(toggles, mdtext.ToggleNthCheckbox(text, i, true, now()))
 		}
 		for i := range 2 {
-			notes = append(notes, toggleNthCheckbox(text, i, false))
+			notes = append(notes, mdtext.ToggleNthCheckbox(text, i, false, now()))
 		}
 		check("toggle", text, toggles, c["toggle"])
 		check("toggle_notes", text, notes, c["toggle_notes"])
-		check("to_slug", text, toSlug(text), c["to_slug"])
-		check("section_anchor", text, sectionAnchor(text), c["section_anchor"])
-		check("plain_task_title", text, plainTaskTitle(text), c["plain_task_title"])
-		check("slug_display_name", text, slugDisplayName(text), c["slug_display_name"])
+		check("to_slug", text, mdtext.ToSlug(text), c["to_slug"])
+		check("section_anchor", text, mdtext.SectionAnchor(text), c["section_anchor"])
+		check("plain_task_title", text, mdtext.PlainTaskTitle(text), c["plain_task_title"])
+		check("slug_display_name", text, mdtext.SlugDisplayName(text), c["slug_display_name"])
 		targets := []string{}
 		for s := range pageLinkTargets(text, slug) {
 			targets = append(targets, s)
@@ -114,14 +115,14 @@ func TestGolden(t *testing.T) {
 		check("rewrite_page_links", text, rewritePageLinks(text, "folder/a", "other/b", slug, ""), c["rewrite_page_links"])
 		check("rewrite_to_section", text, rewritePageLinks(text, "x", "y", slug, "New Heading"), c["rewrite_to_section"])
 		check("rebase_links", text, rebaseLinks(text, slug, "moved/page", map[string]string{"folder/a": "z/a"}), c["rebase_links"])
-		check("add_frontmatter_tags", text, addFrontmatterTags(text, []string{"new", "A"}), c["add_frontmatter_tags"])
-		section, tags := noteAsSection(text, "Heading")
+		check("add_frontmatter_tags", text, mdtext.AddFrontmatterTags(text, []string{"new", "A"}), c["add_frontmatter_tags"])
+		section, tags := mdtext.NoteAsSection(text, "Heading")
 		if tags == nil {
 			tags = []string{}
 		}
 		check("note_as_section", text, []any{section, tags}, c["note_as_section"])
-		check("promoted_slug", text, promotedSlug("Folder X", text, "2026-01-02"), c["promoted_slug"])
-		check("page_wikilink", text, pageWikilink("s", text), c["page_wikilink"])
+		check("promoted_slug", text, mdtext.PromotedSlug("Folder X", text, "2026-01-02"), c["promoted_slug"])
+		check("page_wikilink", text, mdtext.PageWikilink("s", text), c["page_wikilink"])
 		check("is_scratch", text, isQuicknote(text), c["is_scratch"]) // the golden data's name for it
 		check("clean_tags", text, cleanTags([]string{text, "#" + text}), c["clean_tags"])
 		check("clean_list", text, nilIfEmpty(cleanList(text)), c["clean_list"])
