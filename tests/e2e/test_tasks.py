@@ -185,6 +185,33 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     expect(card(page, "Due today")).to_have_class(re.compile(r"\btask-urg-today\b"))
 
 
+def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
+    # A place of the tasks opens with the switcher: the Tasks home, the
+    # lists, All; its counts follow the task app's writes.
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "start_date": date.today().isoformat()})
+    page.goto("/page/shop")
+    places = page.locator(".tasks-places .tasks-place")
+    expect(places.locator(".tasks-place-label")).to_have_text(["My tasks", "shop", "All"])
+    shop = places.and_(page.locator("[data-place='list:shop']"))
+    expect(shop).to_have_attribute("aria-current", "page")
+    expect(shop.locator(".module-focus")).to_have_text("1")
+    # One row, above the task app's tabs.
+    boxes = [b.bounding_box() for b in places.all()]
+    assert all(abs(b["y"] - boxes[0]["y"]) < 1 for b in boxes)
+    assert boxes[0]["y"] + boxes[0]["height"] <= page.locator("#tasks-tabs").bounding_box()["y"]
+    card(page, "Milk").locator("input[type=checkbox]").check()
+    # After the checkbox's ~5 s grace period.
+    expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
+    places.filter(has_text="All").click()
+    page.wait_for_url(re.compile(r"/tasks$"))
+    expect(page.locator(".tasks-place[aria-current]")).to_have_text("All")
+    page.locator(".tasks-place", has_text="My tasks").click()
+    page.wait_for_url("**/page/tasks")
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "home")
+
+
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     # /tasks is one built-in main tasks, whatever embeds the wiki's pages have.
     wiki.write("tasks", "# Tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")

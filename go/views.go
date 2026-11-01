@@ -114,9 +114,10 @@ func diffLines(diff string) []diffLine {
 // notes. Every view names the one it belongs to (<body data-module>:
 // "private" for a page in your private folder); the matching links are
 // aria-current, and js/actions.js makes "New" create that module's kind.
-// With users the switcher has two groups (the third field, 0 and 1): Wiki and
-// Tasks, then Private and Notes; without users one.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"tasks", "Tasks", "/tasks"}, {"private", "Private", "/private"}, {"notes", "Notes", "/notes"}}
+// With users the switcher has two groups by kind, the pages (Wiki, Private)
+// and your tools (Tasks, Notes); Private and Notes carry a lock, as only you
+// see them. Without users one group.
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"private", "Private", "/private"}, {"tasks", "Tasks", "/tasks"}, {"notes", "Notes", "/notes"}}
 
 // taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js taskCountsTitle builds the same).
@@ -148,9 +149,10 @@ func (rq *Req) taskCounts() TaskCounts {
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
-// view's, the Tasks's counts, the group it is shown in). With users Private
-// comes before Notes in a group of its own and the list ends with the user
-// menu ("menu": who is signed in, Sign out; the desktop's user button).
+// view's, the Tasks's counts, the group it is shown in, whether only you see
+// it). With users Private follows Wiki, Tasks and Notes are a group of their
+// own, and the list ends with the user menu ("menu": who is signed in, Sign
+// out; the desktop's user button).
 func moduleLinks(rq *Req) []M {
 	current := currentModule(rq)
 	users := privateFolder(rq.who()) != ""
@@ -160,7 +162,7 @@ func moduleLinks(rq *Req) []M {
 			continue
 		}
 		group := 0
-		if users && (m[0] == "private" || m[0] == "notes") {
+		if users && (m[0] == "tasks" || m[0] == "notes") {
 			group = 1
 		}
 		href := m[2]
@@ -170,7 +172,8 @@ func moduleLinks(rq *Req) []M {
 				href = pathURL("page", home)
 			}
 		}
-		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group}
+		own := users && (m[0] == "private" || m[0] == "notes")
+		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group, "own": own}
 		if m[0] == "tasks" {
 			link["counts"] = rq.taskCounts()
 		}

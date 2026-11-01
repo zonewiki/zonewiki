@@ -1,8 +1,15 @@
 {{- /* The task app (tasks.go buildTasksEmbed): a [[tasks: …]] embed, /tasks, or
     hidden (headless) for the edit modal alone (the editor's Make task, c t
     on any page). Its params reach tasks.js as data-init-* attributes; ids
-    get a -<n> suffix (sfx) after a page's first embed. */ -}}
+    get a -<n> suffix (sfx) after a page's first embed. On a place of the
+    tasks (the Tasks home, a list's home, /tasks) the list switcher opens it:
+    the places (taskPlaces), each with its counts (js/chrome.js refreshes
+    them), the current one aria-current. */ -}}
 {{define "tasks_embed" -}}
+{{- with .places}}<nav class="tasks-places" aria-label="Task lists">
+{{- range .}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{- end}}</nav>{{end}}
 <div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .home}} data-home="1"{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">

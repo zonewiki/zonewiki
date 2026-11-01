@@ -7,10 +7,10 @@
 {{- end}}
 
 {{- /* The root of every breadcrumb: the Z logo with "Wiki" (the home page),
-    then Tasks and Notes; with users Wiki and Tasks, then Private and Notes,
-    each group a pill of its own (.module-group). Phones and the editor show
-    the logo only (style.css). The trail code in js/chrome.js keeps it as the
-    first crumb. */}}
+    then Tasks and Notes; with users Wiki and Private, then Tasks and Notes,
+    each group a pill of its own (.module-group), Private and Notes with a
+    lock (only you see them). Phones and the editor show the logo only
+    (style.css). The trail code in js/chrome.js keeps it as the first crumb. */}}
 {{define "module_switch" -}}
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
 {{- $open := -1 -}}
@@ -18,10 +18,10 @@
 {{- if .menu -}}
 {{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
-{{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{if eq .group 1}}<span class="module-lock" role="img" aria-label="Only you see Private and Notes" title="Only you see Private and Notes">{{template "icon_lock"}}</span>{{end}}{{$open = .group}}{{end -}}
-<a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}
+{{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .group}}{{end -}}
+<a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .own}} title="{{.label}}: only you see it"{{end}}{{if .current}} aria-current="page"{{end}}
 {{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
-<span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+{{if .own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 {{- if ge $open 0}}</span>{{end -}}
@@ -50,7 +50,7 @@
 {{- /* the user button is the desktop's (top_actions) */ -}}
 {{- else -}}
 {{- if ne .group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .group}}{{end -}}
-<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "notes") (eq .group 1)}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "notes") .own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>

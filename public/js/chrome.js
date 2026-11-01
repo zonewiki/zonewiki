@@ -182,8 +182,10 @@
 
 // The server renders the counts into the page (no change of width after it
 // has painted); refreshDueBadge keeps them current: every minute, when the
-// tab comes back, and after tasks writes (tasks.js).
+// tab comes back, and after tasks writes (tasks.js). The task list
+// switcher's places (.tasks-place) carry counts too, refreshed with them.
 const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]');
+const places = document.querySelectorAll('.tasks-place[data-place]');
 
 // Same as views.py's _task_counts_title.
 function taskCountsTitle({ focus, overdue, today }) {
@@ -203,12 +205,17 @@ function showCount(el, n) {
 export async function refreshDueBadge() {
   if (!tasksLinks.length) return;
   try {
-    const res = await fetch('/api/tasks/due-count');
+    const res = await fetch(places.length ? '/api/tasks/due-count?places=1' : '/api/tasks/due-count');
     const c = await res.json();
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);
       showCount(a.querySelector('.module-focus'), c.focus);
       a.title = taskCountsTitle(c);
+    });
+    places.forEach(a => {
+      const p = c.places?.[a.dataset.place];
+      showCount(a.querySelector('.module-due'), p ? p.count : 0);
+      showCount(a.querySelector('.module-focus'), p ? p.focus : 0);
     });
   } catch (e) {}
 }

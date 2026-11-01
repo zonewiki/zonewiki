@@ -1024,8 +1024,8 @@ main {
 }
 .breadcrumb a { color: var(--muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--link); }
-/* The breadcrumb's root is the module switcher (home_link() in server.py):
-   the Z logo with Wiki, then Notes and Tasks. It is a control, not part
+/* The breadcrumb's root is the module switcher (modules.html): the Z logo
+   with Wiki, then Tasks and Notes (with users Wiki · Private | Tasks · Notes). It is a control, not part
    of the trail: a pill group with the current module shaded, and a thin
    vertical divider (the first separator) between it and the pages. Phones
    and the editor show the logo only, followed by a plain "›". */
@@ -1040,8 +1040,8 @@ main {
     display: inline-flex; align-items: center; padding: 2px;
     border: 1px solid var(--border); border-radius: 999px;
   }
-  /* The lock at the start of Private · Notes: only you see these. */
-  .module-lock { display: inline-flex; align-items: center; padding: 0 .1rem 0 .5rem; color: var(--muted); }
+  /* The lock before Private and Notes: only you see these. */
+  .module-lock { display: inline-flex; align-items: center; margin-right: -.15rem; color: var(--muted); }
   /* A fixed height with the content centred, the label's box trimmed to its
      capitals: the letters sit in the middle whatever the font's metrics
      (padding tuned for one font, Segoe UI, put them high with another).
@@ -2121,6 +2121,26 @@ body.editor-page main {
     --green-text: #56d364;
   }
 }
+
+/* The task list switcher (tasks_embed.html .tasks-places): above the task
+   app on a place of the tasks, a row of pills, one per place (the Tasks
+   home, the lists A–Z, All), the current one shaded as in the module
+   switcher; private ones with a lock. Wraps on a narrow screen. */
+.tasks-places { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .7rem; }
+/* Two classes: above .page-content a, which the embed sits in. */
+.tasks-places .tasks-place {
+  display: inline-flex; align-items: center; gap: .3rem;
+  height: 1.75rem; padding: 0 .7rem; border: 1px solid var(--border); border-radius: 999px;
+  color: var(--muted); text-decoration: none; font-size: .9rem; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.tasks-places .tasks-place:hover { background: var(--btn-bg); color: var(--fg); text-decoration: none; }
+.tasks-places .tasks-place[aria-current] {
+  background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); color: var(--fg); font-weight: 600;
+}
+.tasks-place .module-counts { margin-left: 0; }
+.tasks-place-lock { display: inline-flex; }
+@media (pointer: coarse) { .tasks-places .tasks-place { height: 2.25rem; } }
 
 /* Single compact header band: tabs on the left, filters + sort + New on the
    right. Wraps to a second line only when the viewport can't fit both. */

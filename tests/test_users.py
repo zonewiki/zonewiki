@@ -280,9 +280,10 @@ class TestMakeShared:
 
 
 class TestModuleMenu:
-    """With users the switcher has two pills, Wiki · Tasks and Private · Notes,
-    and a user menu (who, Sign out) behind the user button; without them one
-    pill with Notes third."""
+    """With users the switcher has two pills by kind, Wiki · Private (pages)
+    and Tasks · Notes (tools), Private and Notes with a lock, and a user menu
+    (who, Sign out) behind the user button; without them one pill with Notes
+    third."""
 
     @staticmethod
     def parts(body):
@@ -291,23 +292,24 @@ class TestModuleMenu:
         bar = body.split('<nav class="action-buttons"', 1)[1].split("</nav>", 1)[0]
         return crumb, bar, top
 
-    def test_private_and_quicknote_are_a_group_of_their_own(self, client, users):
+    def test_pages_and_tools_are_a_group_each(self, client, users):
         login(client, "alice", "alice-pw")
         body = client.get("/page/index", headers=HOST).data.decode()
         crumb, bar, top = self.parts(body)
         groups = re.findall(r'<span class="module-group">(.*?)</span>(?=<span class="module-group">|</nav>|$)', crumb + "</nav>", re.S)
-        assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "tasks"], ["private", "notes"]]
-        assert 'href="/private"' in groups[1] and 'href="/notes"' in groups[1]
-        # A lock opens the second pill: only you see Private and Notes.
-        assert groups[1].startswith('<span class="module-lock"') and 'title="Only you see Private and Notes"' in groups[1]
-        assert "module-lock" not in groups[0]
+        assert [re.findall(r'data-module="(\w+)"', g) for g in groups] == [["wiki", "private"], ["tasks", "notes"]]
+        assert 'href="/private"' in groups[0] and 'href="/notes"' in groups[1]
+        # A lock in Private and in Notes: only you see them; not in Wiki or Tasks.
+        links = dict(re.findall(r'data-module="(\w+)"(.*?)</a>', crumb, re.S))
+        assert [k for k, v in links.items() if "module-lock" in v] == ["private", "notes"]
+        assert 'title="Private: only you see it"' in crumb and 'title="Notes: only you see it"' in crumb
         # The phone's bar: the four modules with a divider between the groups, then the actions.
-        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Tasks", "Private", "Notes", "Note", "Task", "Search"]
+        assert re.findall(r'class="action-label"[^>]*>(\w+)<', bar) == ["Wiki", "Private", "Tasks", "Notes", "Note", "Task", "Search"]
         assert bar.count('class="action-sep"') == 3
         # Notes' tab carries a lock (Private's icon is one); no other tab does.
         assert bar.count('class="action-lock"') == 1
         assert bar.index('data-module="notes"') < bar.index('class="action-lock"') < bar.index('class="action-label"', bar.index('data-module="notes"'))
-        assert bar.index('data-module="tasks"') < bar.index('class="action-sep"') < bar.index('data-module="private"')
+        assert bar.index('data-module="private"') < bar.index('class="action-sep"') < bar.index('data-module="tasks"')
         assert "module-menu-btn" not in bar and "module-menu-btn" not in crumb
         # Desktop: the user button after Search opens the menu: who and Sign out only.
         assert top.index("top-search") < top.index('class="top-user module-menu-btn"')
@@ -316,6 +318,24 @@ class TestModuleMenu:
         menu = body.split('class="module-menu page-menu"', 1)[1].split("</div></div>", 1)[0]
         assert 'href=' not in menu
         assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
+
+    def test_a_private_list_is_in_its_users_switcher_alone(self, client, wiki_dir, users):
+        # The task list switcher lists a list declared in your folder with a
+        # lock; another user doesn't see it at all.
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=shop]]\n", encoding="utf-8")
+        (wiki_dir / "private/alice").mkdir(parents=True)
+        (wiki_dir / "private/alice/gifts.md").write_text("# Gifts\n\n[[tasks: list=gifts]]\n", encoding="utf-8")
+        login(client, "alice", "alice-pw")
+        nav = client.get("/tasks", headers=HOST).data.decode().split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        entries = dict(re.findall(r'data-place="([^"]+)"(.*?)</a>', nav, re.S))
+        assert list(entries) == ["list:gifts", "list:shop", "all"]
+        assert "tasks-place-lock" in entries["list:gifts"] and "only you see it" in entries["list:gifts"]
+        assert "tasks-place-lock" not in entries["list:shop"]
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        body = client.get("/tasks", headers=HOST).data.decode()
+        assert 'data-place="list:shop"' in body and "gifts" not in body
+        assert "gifts" not in str(client.get("/api/tasks/due-count?places=1").get_json())
 
     def test_an_empty_quicknote_says_it_is_private(self, client, users):
         login(client, "alice", "alice-pw")

@@ -116,7 +116,7 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), comments as a
   dated status log, a history of every date change, and undo for completing
   and deleting.
-- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`).
+- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your Tasks home, the lists and all tasks.
 - Your own task list on a page of yours, which the Tasks module then opens, with
   an optional limit on how much is in Focus:
   `[[tasks: view=focus limit=8 home=1]]`.

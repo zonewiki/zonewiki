@@ -184,7 +184,7 @@ const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
 // a page's embeds); headless hides it but for its edit modal (the editor's
 // Make task, c t on any page), and tasks.js skips its shortcuts. private:
 // a new task here is private (a page in user's own folder).
-func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool) string {
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool, place string) string {
 	user := rq.who()
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
@@ -222,10 +222,18 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	if isTrue(params.Get("keep")) {
 		keep = "1"
 	}
+	// place: the switcher, this place current (a key no place has: none).
+	var places []TaskPlace
+	if place != "" {
+		places = rq.taskPlaces()
+		for i := range places {
+			places[i].Current = places[i].Key == place
+		}
+	}
 	var b bytes.Buffer
 	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
 		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": embedView(params),
-		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
+		"places": places, "limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
 		// keep=1: new tasks here are keep tasks; home=1: the user's own tasks.
 		"keep": keep, "home": isTrue(params.Get("home")),
 		// With users, the modal's Private box; ticked for a new task here.
@@ -242,17 +250,42 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 type tasksEmbed struct{ placeholder, html string }
 
 // processTasksEmbeds swaps each [[tasks: …]] for a placeholder; the embeds'
-// HTML replaces them after rendering (injectTasksEmbeds). private: the page
-// is in rq's user's own folder.
-func processTasksEmbeds(rq *Req, text string, private bool) (string, []tasksEmbed) {
+// HTML replaces them after rendering (injectTasksEmbeds). page: the page
+// rendered ("" none); in rq's user's own folder its embeds make private
+// tasks. The first embed that makes the page a place of the tasks (the
+// Tasks home's home=1, the list= of a list whose home it is) gets the list
+// switcher.
+func processTasksEmbeds(rq *Req, text, page string) (string, []tasksEmbed) {
+	private := page != "" && ownPrivate(rq.who(), page)
 	var embeds []tasksEmbed
+	placed := false
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
+		params := parseTasksParams(embedArgs(g))
+		place := ""
+		if page != "" && !placed {
+			place = rq.embedPlace(params, page)
+			placed = place != ""
+		}
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, parseTasksParams(embedArgs(g)), len(embeds), false, private)})
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, params, len(embeds), false, private, place)})
 		return ph
 	})
 	return text, embeds
+}
+
+// embedPlace: the place (TaskPlace's key) an embed with params on page is,
+// or "" when it is none: a view on a page, not where its tasks live.
+func (rq *Req) embedPlace(params TasksParams, page string) string {
+	if isTrue(params.Get("home")) && page == rq.tasksHomeSlug() {
+		return "home"
+	}
+	if l := cleanList(params.Get("list")); l != "" {
+		if h, ok := rq.taskLists()[l]; ok && h.Slug == page {
+			return rq.placeKey(l)
+		}
+	}
+	return ""
 }
 
 // injectTasksEmbeds: the last first, as _1 is a prefix of _10.
@@ -278,14 +311,19 @@ type TaskCounts struct {
 // and of those how many are overdue or due today; of the Tasks home's view
 // (its list= and tag=) when a page declares one.
 func taskCounts(rq *Req) TaskCounts {
-	day := isoDay(today())
 	var params TasksParams
 	if h := rq.tasksHome(); h != nil {
 		params = h.Params
 	}
+	return countTasks(openTasks(rq.who()), params)
+}
+
+// countTasks: taskCounts of the open tasks a view with params shows.
+func countTasks(tasks []*Task, params TasksParams) TaskCounts {
+	day := isoDay(today())
 	scope, tag := cleanList(params.Get("list")), params.Get("tag")
 	var c TaskCounts
-	for _, t := range openTasks(rq.who()) {
+	for _, t := range tasks {
 		if !inScope(t, scope) || !tagParamMatches(t, tag) {
 			continue
 		}
@@ -303,6 +341,61 @@ func taskCounts(rq *Req) TaskCounts {
 	return c
 }
 
+// TaskPlace is an entry of the task list switcher (tasks_embed.html): the
+// Tasks home, a list a page declares, or all tasks. Key names it for the
+// counts' refresh (js/chrome.js): "home", "list:<name>", "all".
+type TaskPlace struct {
+	Key, Label, Title, Href string
+	Private, Current        bool
+	Counts                  TaskCounts
+}
+
+// placeKey: the switcher's key of a list; a list whose home is the Tasks
+// home is the home.
+func (rq *Req) placeKey(list string) string {
+	if h, ok := rq.taskLists()[list]; ok && h.Slug == rq.tasksHomeSlug() {
+		return "home"
+	}
+	return "list:" + list
+}
+
+// taskPlaces: where the user's tasks are, for the switcher: the Tasks home,
+// each list a page declares (A–Z; one whose home is the Tasks home is that
+// home), and all tasks, each with its counts; in sharing mode not a list
+// whose page is not for sharing. Nil when there is nothing to switch
+// between (no home, no list).
+func (rq *Req) taskPlaces() []TaskPlace {
+	user := rq.who()
+	home, lists := rq.tasksHome(), rq.taskLists()
+	var out []TaskPlace
+	tasks := openTasks(user)
+	if home != nil {
+		out = append(out, TaskPlace{Key: "home", Label: firstNonEmpty(home.Title, home.Slug), Title: "Your Tasks home",
+			Href: pathURL("page", home.Slug), Private: ownPrivate(user, home.Slug), Counts: countTasks(tasks, home.Params)})
+	}
+	for _, name := range sortedKeys(lists) {
+		l := lists[name]
+		if home != nil && l.Slug == home.Slug || hiddenPage(rq, l.Slug) {
+			continue
+		}
+		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List: " + firstNonEmpty(l.Title, l.Slug),
+			Href: pathURL("page", l.Slug), Private: ownPrivate(user, l.Slug), Counts: countTasks(tasks, l.Params.With("list", name))})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(tasks, TasksParams{})})
+}
+
+// placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).
+func (rq *Req) placeCounts() map[string]TaskCounts {
+	out := map[string]TaskCounts{}
+	for _, p := range rq.taskPlaces() {
+		out[p.Key] = p.Counts
+	}
+	return out
+}
+
 // ---- the API ----
 
 func tasksRoutes(mux *http.ServeMux) {
@@ -315,7 +408,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate()))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate(), ""))
 	})
 	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
@@ -340,7 +433,14 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/due-count", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, taskCounts(newReq(r)))
+		// ?places=1: also each place's counts, for the list switcher.
+		rq := newReq(r)
+		if r.URL.Query().Get("places") == "" {
+			writeJSON(w, http.StatusOK, taskCounts(rq))
+			return
+		}
+		c := taskCounts(rq)
+		writeJSON(w, http.StatusOK, map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()})
 	})
 	mux.HandleFunc("POST /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)

@@ -350,7 +350,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
-		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
+		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -841,8 +841,12 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
+	place := "all"
+	if list != "" {
+		place = rq.placeKey(list)
+	}
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{}, &tasksPageView{Heading: heading, ListName: list,
-		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private)),
+		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private, place)),
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, "")})
 }
 

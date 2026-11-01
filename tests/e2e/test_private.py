@@ -61,14 +61,19 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     expect(menu).to_be_hidden()
 
 
-def test_private_and_quicknote_are_pills_in_a_group_of_their_own(alice):
+def test_pages_and_tools_are_a_pill_each(alice):
+    # Wiki · Private (the pages), Tasks · Notes (the tools); a lock in
+    # Private and in Notes, as only you see them.
     alice.goto("/page/index")
     groups = alice.locator(".breadcrumb .module-group")
     expect(groups).to_have_count(2)
-    expect(groups.nth(0).locator(".module-label")).to_have_text(["Wiki", "Tasks"])
-    expect(groups.nth(1).locator(".module-label")).to_have_text(["Private", "Notes"])
-    expect(groups.nth(1).locator(".module-lock")).to_be_visible()
-    expect(groups.nth(0).locator(".module-lock")).to_have_count(0)
+    expect(groups.nth(0).locator(".module-label")).to_have_text(["Wiki", "Private"])
+    expect(groups.nth(1).locator(".module-label")).to_have_text(["Tasks", "Notes"])
+    links = alice.locator(".breadcrumb .module-link")
+    for key in ("private", "notes"):
+        expect(links.and_(alice.locator(f"[data-module={key}]")).locator(".module-lock")).to_be_visible()
+    for key in ("wiki", "tasks"):
+        expect(links.and_(alice.locator(f"[data-module={key}]")).locator(".module-lock")).to_have_count(0)
     g0, g1 = groups.nth(0).bounding_box(), groups.nth(1).bounding_box()
     assert g0["x"] + g0["width"] < g1["x"] and abs(g0["y"] - g1["y"]) < 1   # two pills in a row
     expect(alice.locator(".top-user")).not_to_have_attribute("aria-current", "page")
@@ -113,7 +118,7 @@ def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
     items = bar.locator(".action-module, button")
-    expect(items).to_have_text(["Wiki", "Tasks", "Private", "Notes", "Note", "Task", "Search"])
+    expect(items).to_have_text(["Wiki", "Private", "Tasks", "Notes", "Note", "Task", "Search"])
     assert all(i.bounding_box()["width"] >= 40 for i in items.all())
     # Notes' icon carries a small lock, inside its tab and clear of the label.
     tab, lock = bar.locator("[data-module=notes]"), bar.locator(".action-lock")
@@ -313,9 +318,9 @@ _PILL_LABEL_GAPS = """() => [...document.querySelectorAll('.module-switch .modul
 
 def test_the_pills_labels_are_vertically_centred(alice):
     # Regression: padding tuned for Windows' Segoe UI (more below than above)
-    # put Wiki, Tasks, Private and Notes high in their pills with other fonts.
+    # put Wiki, Private, Tasks and Notes high in their pills with other fonts.
     alice.goto("/page/index")
     rows = alice.evaluate(_PILL_LABEL_GAPS)
-    assert [r[0] for r in rows] == ["Wiki", "Tasks", "Private", "Notes"]
+    assert [r[0] for r in rows] == ["Wiki", "Private", "Tasks", "Notes"]
     for label, above, below in rows:
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"

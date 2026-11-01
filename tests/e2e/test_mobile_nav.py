@@ -442,7 +442,7 @@ def test_the_keys_from_before_the_rename_still_work(page, wiki):
 
 # ── Module switcher on desktop ───────────────────────────────────────────────
 # The breadcrumb starts with the modules: Wiki (with the logo), Tasks, Notes
-# (with users two pills: Wiki · Tasks and Private · Notes).
+# (with users two pills: Wiki · Private and Tasks · Notes).
 
 def test_desktop_breadcrumb_switches_modules(page, wiki):
     wiki.write("garden", "# Garden\n\nBeds.\n")

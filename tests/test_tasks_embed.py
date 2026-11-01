@@ -2,8 +2,9 @@
 field tasks no longer have. Its params' parsing has a Go test."""
 
 import re
+from datetime import date
 
-from tests.conftest import create_task, preview, write_page
+from tests.conftest import HOST, create_task, preview, write_page
 
 
 # ── Rendering ───────────────────────────────────────────────────────────────────
@@ -203,3 +204,106 @@ class TestPageViewLink:
         assert 'id="task-edit-lead"' in html
         assert "defer_days" not in html and "focus_date" not in html
         assert "rec-anchor" not in html
+
+
+# ── The list switcher ───────────────────────────────────────────────────────────
+
+
+def places(html):
+    """The list switcher's places: (key, label, current) each, [] without one."""
+    if 'class="tasks-places"' not in html:
+        return []
+    nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+    return [(k, label, cur == ' aria-current="page"') for k, cur, label in re.findall(
+        r'data-place="([^"]+)"[^>]*?( aria-current="page")?>.*?<span class="tasks-place-label">([^<]*)</span>', nav, re.S)]
+
+
+class TestListSwitcher:
+    """A place of the tasks (the Tasks home, a list's home, /tasks) opens with
+    the list switcher: the home, the lists A–Z, All."""
+
+    @staticmethod
+    def wiki(wiki_dir):
+        write_page(wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n")
+        write_page(wiki_dir, "gifts", "# Gifts\n\n[[tasks: list=gifts]]\n")
+
+    def get(self, client, url):
+        return client.get(url, headers=HOST).get_data(as_text=True)
+
+    def test_nothing_to_switch_between_shows_no_switcher(self, client, wiki_dir):
+        write_page(wiki_dir, "work", "# Work\n\n[[tasks: tag=work]]\n")
+        assert places(self.get(client, "/tasks")) == []
+        assert places(self.get(client, "/page/work")) == []
+
+    def test_the_home_the_lists_and_all(self, client, wiki_dir):
+        self.wiki(wiki_dir)
+        html = self.get(client, "/page/tasks")
+        # The home's own list (task) is the home, not an entry of its own.
+        assert places(html) == [("home", "My tasks", True), ("list:gifts", "gifts", False),
+                                ("list:shop", "shop", False), ("all", "All", False)]
+        nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        assert 'href="/page/tasks"' in nav and 'href="/page/shop"' in nav and 'href="/tasks"' in nav
+        assert 'title="List: Shopping"' in nav and 'title="Your Tasks home"' in nav
+        assert "tasks-place-lock" not in nav   # without users nothing is private
+        # It opens the task app: before it, once.
+        assert html.count('class="tasks-places"') == 1
+        assert html.index('class="tasks-places"') < html.index('class="tasks-app"')
+
+    def test_a_list_home_and_tasks_mark_their_place(self, client, wiki_dir):
+        self.wiki(wiki_dir)
+        current = lambda url: [k for k, _, cur in places(self.get(client, url)) if cur]
+        assert current("/page/shop") == ["list:shop"]
+        assert current("/tasks") == ["all"]
+        assert current("/tasks?list=gifts") == ["list:gifts"]
+        assert current("/tasks?list=task") == ["home"]
+        # A tag no page declares: the switcher, nothing current.
+        html = self.get(client, "/tasks?list=nothing")
+        assert places(html) and current("/tasks?list=nothing") == []
+
+    def test_a_view_on_a_page_is_no_place(self, client, wiki_dir):
+        # A list's embed on a page that isn't its home, a tag= view, a second
+        # embed of a home: views, not places, so no switcher.
+        self.wiki(wiki_dir)
+        write_page(wiki_dir, "zz-more", "# More\n\n[[tasks: list=shop]]\n\n[[tasks: tag=urgent]]\n")
+        assert places(self.get(client, "/page/zz-more")) == []
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n\n[[tasks: list=shop view=open]]\n")
+        assert self.get(client, "/page/shop").count('class="tasks-places"') == 1
+        # A page with home=1 that isn't the home (the first A–Z is).
+        write_page(wiki_dir, "zz-home", "# Other home\n\n[[tasks: home=1]]\n")
+        assert places(self.get(client, "/page/zz-home")) == []
+
+    def test_the_editors_preview_shows_it_as_the_page_will(self, client, wiki_dir):
+        self.wiki(wiki_dir)
+        html = client.post("/api/preview?page=shop", data=b"[[tasks: list=shop]]\n", headers=HOST).get_data(as_text=True)
+        assert [k for k, _, cur in places(html) if cur] == ["list:shop"]
+        assert places(preview(client, "[[tasks: list=shop]]\n")) == []   # no page: no place
+
+    def test_each_place_has_its_counts(self, client, wiki_dir):
+        self.wiki(wiki_dir)
+        today = date.today().isoformat()
+        create_task(client, title="Milk", tags=["shop"], start_date=today)
+        create_task(client, title="Bread", tags=["shop"], due_date=today)
+        create_task(client, title="Report", tags=["task"], due_date=today)
+        create_task(client, title="Elsewhere", start_date=today)
+        nav = self.get(client, "/page/shop").split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        counts = dict(re.findall(r'data-place="([^"]+)".*?<span class="module-counts">(.*?)</span></a>', nav, re.S))
+        due = lambda k: re.search(r'class="module-due"[^>]*>(\d*)<', counts[k]).group(1)
+        focus = lambda k: re.search(r'class="module-focus"[^>]*>(\d*)<', counts[k]).group(1)
+        assert (due("list:shop"), focus("list:shop")) == ("1", "2")
+        assert (due("home"), focus("home")) == ("1", "1")
+        assert (due("list:gifts"), focus("list:gifts")) == ("", "")
+        assert (due("all"), focus("all")) == ("2", "4")
+        # js/chrome.js refreshes them from the due count's places.
+        data = client.get("/api/tasks/due-count?places=1").get_json()
+        assert data["count"] == 1 and data["focus"] == 1   # the home's, as before
+        assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
+            "home": (1, 1), "list:shop": (1, 2), "list:gifts": (0, 0), "all": (2, 4)}
+        assert "places" not in client.get("/api/tasks/due-count").get_json()
+
+    def test_sharing_mode_leaves_out_a_list_not_for_sharing(self, client, wiki_dir):
+        self.wiki(wiki_dir)
+        write_page(wiki_dir, "gifts", "---\ntags: noshare\n---\n# Gifts\n\n[[tasks: list=gifts]]\n")
+        assert "list:gifts" in [k for k, _, _ in places(self.get(client, "/tasks"))]
+        client.set_cookie("zone-sharing", "1")
+        assert "list:gifts" not in [k for k, _, _ in places(self.get(client, "/tasks"))]
