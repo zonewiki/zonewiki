@@ -28,10 +28,6 @@
 <div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>
 </div>
 <aside class="rail rail-context" aria-label="Links">
-{{- if not .FromUncommitted}}
-{{- /* The page's actions again, shown once the header has scrolled away (js/chrome.js). */ -}}
-<div class="rail-actions" hidden><a href="{{url "edit" .Slug}}" class="btn">Edit</a>{{template "menu_button"}}</div>
-{{- end}}
 {{- template "link_sections" (dict "sections" .LinkSections "copy" true)}}
 {{- if .Outlinks}}{{template "link_section" (dict "id" "outlinks" "heading" "Links to" "links" .Outlinks "copy" true)}}{{end -}}
 </aside>

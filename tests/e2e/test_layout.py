@@ -533,32 +533,22 @@ def test_back_to_top_in_the_left_column(new_page, wiki):
     expect(top).to_be_hidden()
 
 
-def test_page_actions_in_the_right_column_once_scrolled(new_page, wiki):
+def test_page_actions_stay_in_the_header_when_scrolled(new_page, wiki):
+    # Regression: a copy of Edit and ⋯ showed at the top of the right column
+    # once the header's scrolled away. They stay where they are, in the
+    # header, and scroll away with it.
     _side_wiki(wiki)
     page = new_page(viewport=BIG)
     page.goto("/page/release")
-    box = page.locator(".rail-actions")
-    expect(box).to_be_hidden()                      # the header's are in view
+    actions = page.locator(".page-header-actions")
+    before = actions.bounding_box()
     page.evaluate("window.scrollTo(0, 1500)")
-    expect(box).to_be_visible()
-    expect(box.get_by_role("link", name="Edit")).to_have_attribute("href", "/edit/release")
-    box.get_by_role("button", name="More actions").click()
-    menu = page.locator("#page-menu")
-    expect(menu).to_be_visible()
-    # Under the column's ⋯, not the header's (scrolled out of view).
-    btn = box.get_by_role("button", name="More actions").bounding_box()
-    assert menu.bounding_box()["y"] >= btn["y"] + btn["height"]
-    menu.get_by_role("menuitem", name="Present").click()
-    expect(page.locator(".presentation-overlay")).to_be_visible()
-    page.keyboard.press("Escape")
-    # A page without ## headings has no presentation: no Present there either.
-    wiki.write("flat", "# Flat\n\n" + "Text. " * 2000)
-    page.goto("/page/flat")
-    page.evaluate("window.scrollTo(0, 3000)")
-    expect(box).to_be_visible()
-    box.get_by_role("button", name="More actions").click()
-    expect(menu.get_by_role("menuitem", name="Rename…")).to_be_visible()
-    expect(menu.get_by_role("menuitem", name="Present")).to_be_hidden()
+    scrolled = page.evaluate("window.scrollY")
+    assert scrolled > before["y"] + before["height"]    # the header is out of view
+    after = actions.bounding_box()
+    assert after["x"] == before["x"] and after["y"] == before["y"] - scrolled
+    expect(page.locator(".rail-context").get_by_role("link", name="Edit")).to_have_count(0)
+    expect(page.locator(".page-menu-btn")).to_have_count(1)
 
 
 def test_page_menu(page, wiki):

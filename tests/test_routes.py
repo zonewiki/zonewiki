@@ -375,17 +375,16 @@ class TestViewPage:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert '<aside class="rail rail-left"><a class="rail-top" href="#" hidden>↑ Back to top</a></aside>' in body
         right = body.split('<aside class="rail rail-context" aria-label="Links">', 1)[1].split("</aside>", 1)[0]
-        assert right.startswith('<div class="rail-actions" hidden><a href="/edit/garden" class="btn">Edit</a>')
         assert "<section" not in right
 
     def test_page_actions_menu(self, client, wiki_dir):
         # The header has Edit and a ⋯ menu (Present, History with git,
-        # Rename…, Delete…); the right column the same two.
+        # Rename…, Delete…), and only the header: the right column has no copy.
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         header = body.split('<div class="page-header-actions">', 1)[1].split("</div>", 1)[0]
         assert '<a href="/edit/garden" class="btn">Edit</a>' in header
-        assert body.count('class="btn page-menu-btn"') == 2
+        assert body.count('class="btn page-menu-btn"') == 1
         menu = body.split('<div class="page-menu" id="page-menu"', 1)[1].split("</div>", 1)[0]
         assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Rename…", "Delete…"]
         assert 'id="page-rename-dialog"' in body and 'id="page-delete-dialog"' in body

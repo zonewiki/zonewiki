@@ -143,15 +143,6 @@
   mark();
 }());
 
-// The page's actions at the top of the right column, once the header's
-// have scrolled out of view.
-(function () {
-  const box = document.querySelector('.rail-actions');
-  const header = document.querySelector('.page-header-actions');
-  if (!box || !header) return;
-  new IntersectionObserver(([entry]) => { box.hidden = entry.isIntersecting; }).observe(header);
-}());
-
 // "Back to top" under the left column's TOC, once the page has scrolled a
 // screen down.
 (function () {
