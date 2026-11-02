@@ -342,7 +342,7 @@ def test_new_task_falls_back_to_the_home_page(page, wiki):
     page.route("**/api/tasks/headless", lambda route: route.fulfill(status=500, body="no"))
     page.goto("/page/garden")
     page.locator(".top-task").click()
-    page.wait_for_url(re.compile(r"/page/tasks(\?.*)?$"))
+    page.wait_for_url(re.compile(r"/tasks\?list=task&new=1$"))
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
 
 
@@ -401,7 +401,7 @@ def test_g_t_goes_to_the_home_tasks(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
-    page.wait_for_url("**/page/tasks")
+    page.wait_for_url(re.compile(r"/tasks\?list=task$"))   # the home's list
     wiki.write("tasks", "# My tasks\n\n[[tasks: list=task]]\n")   # no home any more
     page.goto("/page/garden")
     page.keyboard.press("g")
@@ -517,9 +517,10 @@ def test_task_counts_follow_tasks_changes(page, wiki):
 
 
 def test_tasks_home_page_is_the_tasks_module(page, wiki):
-    # [[tasks: … home=1]]: your own tasks. The Tasks links go there, it counts
-    # as the Tasks module, New task adds one in its embed (with its list tag),
-    # and it is no stop in the navigation trail.
+    # [[tasks: … home=1]]: your own tasks. The Tasks links go to its list,
+    # which counts as the Tasks module, New task adds one in its embed (with
+    # its list tag), and neither it nor the home page is a stop in the
+    # navigation trail.
     wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": date.today().isoformat()})
@@ -528,15 +529,17 @@ def test_tasks_home_page_is_the_tasks_module(page, wiki):
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("1")   # the #task list's only
     tasks.click()
-    page.wait_for_url("**/page/tasks")
+    page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(tasks).to_have_attribute("aria-current", "page")
     page.locator(".top-task").click()
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
     page.keyboard.press("Escape")
+    page.goto("/page/tasks")
+    expect(tasks).to_have_attribute("aria-current", "page")
     page.goto("/page/garden")
-    expect(page.locator(".breadcrumb > a")).to_have_count(0)   # no "My tasks" stop
+    expect(page.locator(".breadcrumb > a")).to_have_count(0)   # no "task" or "My tasks" stop
 
 
 def test_editor_breadcrumb_keeps_only_the_logo(page, wiki):

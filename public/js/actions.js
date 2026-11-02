@@ -26,7 +26,8 @@ export async function openHomeTask() {
     try {
       await loadHeadlessTasks();
     } catch (err) {
-      window.location.href = tasksHomeHref() + '?new=1';
+      const href = tasksHomeHref();
+      window.location.href = href + (href.includes('?') ? '&' : '?') + 'new=1';
       return;
     }
     opts.onCreated = task => {
@@ -50,7 +51,8 @@ function loadHeadlessTasks() {
   return headlessTasks;
 }
 
-// Where the Tasks module links go: the Tasks home page, else /tasks.
+// Where the Tasks module links go: the Tasks home's list (/tasks?list=), a
+// home without a list's page, else /tasks.
 export const tasksHomeHref = () =>
   document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 

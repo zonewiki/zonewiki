@@ -10,6 +10,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -148,6 +149,19 @@ func (rq *Req) taskCounts() TaskCounts {
 	return *rq.counts
 }
 
+// tasksHomeHref: where the Tasks links go: the Tasks home's list, as the
+// list switcher opens it (/tasks?list=); a home declaring no list, its page;
+// without a home, /tasks.
+func (rq *Req) tasksHomeHref() string {
+	if l := rq.homeList(); l != "" {
+		return "/tasks?list=" + url.QueryEscape(l)
+	}
+	if home := rq.tasksHomeSlug(); home != "" {
+		return pathURL("page", home)
+	}
+	return "/tasks"
+}
+
 // moduleLinks: the module links (where each goes, whether it is the current
 // view's, the Tasks's counts, the group it is shown in, whether only you see
 // it). With users Private follows Wiki, Tasks and Notes are a group of their
@@ -166,16 +180,15 @@ func moduleLinks(rq *Req) []M {
 			group = 1
 		}
 		href := m[2]
-		// The Tasks link goes to the Tasks home page when a page declares one.
 		if m[0] == "tasks" {
-			if home := rq.tasksHomeSlug(); home != "" {
-				href = pathURL("page", home)
-			}
+			href = rq.tasksHomeHref()
 		}
 		own := users && (m[0] == "private" || m[0] == "notes")
 		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group, "own": own}
 		if m[0] == "tasks" {
 			link["counts"] = rq.taskCounts()
+			// The Tasks home page, no stop in the navigation trail (js/chrome.js).
+			link["home_page"] = rq.tasksHomeSlug()
 		}
 		out = append(out, link)
 	}

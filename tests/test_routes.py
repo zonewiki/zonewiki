@@ -102,13 +102,17 @@ class TestViewPage:
         assert self._tasks_links(body) == ["/tasks", "/tasks"]   # switcher, bar
         assert '<body data-module="wiki">' in body
 
-    def test_tasks_home_page_is_where_the_tasks_links_go(self, client, wiki_dir):
+    def test_tasks_home_is_where_the_tasks_links_go(self, client, wiki_dir):
         # [[tasks: … home=1]] makes that page your own tasks: the Tasks module
-        # links go there, and the page belongs to the Tasks module.
+        # links go to its list, as the list switcher opens it, and the page
+        # belongs to the Tasks module.
         write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus home=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body) == ["/page/tasks", "/page/tasks"]
+        assert self._tasks_links(body) == ["/tasks?list=task", "/tasks?list=task"]
+        assert 'data-home-page="tasks"' in body   # no stop in the trail (js/chrome.js)
+        lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
+        assert 'data-init-view="focus"' in lv and 'data-home="1"' in lv and '<body data-module="tasks"' in lv
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in home
         assert 'data-home="1"' in home   # the embed New clicks
@@ -120,7 +124,7 @@ class TestViewPage:
         write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x home=yes]]\n")
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks: home=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body)[0] == "/page/mmm"
+        assert self._tasks_links(body)[0] == "/page/mmm"   # no list: its page
         # Removing the declaration ends it at once.
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks:]]\n")
         os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))

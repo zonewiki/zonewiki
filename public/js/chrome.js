@@ -23,12 +23,13 @@
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Notes, /tasks, the Tasks home page (where the Tasks link goes) and
-  // your private home (the Private pill).
+  // Notes, /tasks, the Tasks home page and where the Tasks link goes (the
+  // home's list, /tasks?list=), and your private home (the Private pill).
   const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
+  const tasksHome = bc.querySelector('.module-link[data-module="tasks"]')?.dataset.homePage;
   const intermediates = hist.slice(0, -1)
-    .filter(p => !['index', '/notes', '/tasks'].includes(p.slug) && !/^private\/[^/]+\/index$/.test(p.slug)
-      && (p.url || '').split('?')[0] !== tasksHref)
+    .filter(p => !['index', '/notes', '/tasks', tasksHref, tasksHome].includes(p.slug)
+      && !/^private\/[^/]+\/index$/.test(p.slug) && (p.url || '').split('?')[0] !== tasksHref)
                             .slice(-maxPrev);
   const homeEl = bc.querySelector('.breadcrumb-home');
   if (!intermediates.length || !homeEl) return ready();

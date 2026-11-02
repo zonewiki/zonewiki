@@ -186,7 +186,7 @@ A task with `keep: true` is never archived: ticking it off means "done for now, 
 
 ### Keyboard shortcuts
 
-- **g a**: go to `/tasks`, all tasks (`g d` before the rename, still working for one release); **g t**: go to the Tasks home
+- **g a**: go to `/tasks`, all tasks (`g d` before the rename, still working for one release); **g t**: go where the Tasks link goes (the Tasks home's list)
 - **v**: one line per task / full cards (see Compact)
 - **→** / **l**, **←** / **h** (compact): open / close the selected task's notes and comments; open, they stay open as j/k move on (see Compact)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
