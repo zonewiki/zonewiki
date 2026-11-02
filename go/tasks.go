@@ -279,11 +279,14 @@ func processTasksEmbeds(rq *Req, text, page string) (string, []tasksEmbed) {
 // or "" when it is none: a view on a page, not where its tasks live.
 func (rq *Req) embedPlace(params TasksParams, page string) string {
 	if isTrue(params.Get("home")) && page == rq.tasksHomeSlug() {
+		if l := rq.homeList(); l != "" {
+			return "list:" + l
+		}
 		return "home"
 	}
 	if l := cleanList(params.Get("list")); l != "" {
 		if h, ok := rq.taskLists()[l]; ok && h.Slug == page {
-			return rq.placeKey(l)
+			return "list:" + l
 		}
 	}
 	return ""
@@ -342,45 +345,50 @@ func countTasks(tasks []*Task, params TasksParams) TaskCounts {
 	return c
 }
 
-// TaskPlace is an entry of the task list switcher (tasks_embed.html): the
-// Tasks home, a list a page declares, or all tasks. Key names it for the
-// counts' refresh (js/chrome.js): "home", "list:<name>", "all".
+// TaskPlace is an entry of the task list switcher (tasks_embed.html): a
+// list, all tasks, or a Tasks home without a list. Key names it for the
+// counts' refresh (js/chrome.js): "list:<name>", "all", "home".
 type TaskPlace struct {
 	Key, Label, Title, Href string
 	Private, Current        bool
 	Counts                  TaskCounts
 }
 
-// placeKey: the switcher's key of a list; a list whose home is the Tasks
-// home is the home.
-func (rq *Req) placeKey(list string) string {
-	if h, ok := rq.taskLists()[list]; ok && h.Slug == rq.tasksHomeSlug() {
-		return "home"
+// homeList: the list the Tasks home's embed declares ("" none).
+func (rq *Req) homeList() string {
+	if h := rq.tasksHome(); h != nil {
+		return cleanList(h.Params.Get("list"))
 	}
-	return "list:" + list
+	return ""
 }
 
-// taskPlaces: where the user's tasks are, for the switcher: the Tasks home
-// (its page), each list a page declares (A–Z, at /tasks?list=, which shows
-// it with its home's params and the pages that embed it; one whose home is
-// the Tasks home is that home), and all tasks, each with its counts; in sharing mode not a list
-// whose page is not for sharing. Nil when there is nothing to switch
-// between (no home, no list).
+// taskPlaces: where the user's tasks are, for the switcher, each named by
+// its list, not by a page that embeds it: the Tasks home's list first (its
+// view's params and counts, wherever else it is declared), then each list a
+// page declares A–Z, each at /tasks?list= (the list with its params and the
+// pages that embed it), and all tasks, each with its counts; in sharing
+// mode not a list whose page is not for sharing. A Tasks home declaring no
+// list is "Home", at its page. Nil when there is nothing to switch between
+// (no home, no list).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
-	home, lists := rq.tasksHome(), rq.taskLists()
+	home, lists, homeList := rq.tasksHome(), rq.taskLists(), rq.homeList()
 	var out []TaskPlace
 	tasks := openTasks(user)
-	if home != nil {
-		out = append(out, TaskPlace{Key: "home", Label: firstNonEmpty(home.Title, home.Slug), Title: "Your Tasks home",
+	switch {
+	case homeList != "":
+		out = append(out, TaskPlace{Key: "list:" + homeList, Label: homeList, Title: "Your tasks (the Tasks home's list)",
+			Href: "/tasks?list=" + url.QueryEscape(homeList), Private: ownPrivate(user, home.Slug), Counts: countTasks(tasks, home.Params)})
+	case home != nil:
+		out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your Tasks home",
 			Href: pathURL("page", home.Slug), Private: ownPrivate(user, home.Slug), Counts: countTasks(tasks, home.Params)})
 	}
 	for _, name := range sortedKeys(lists) {
 		l := lists[name]
-		if home != nil && l.Slug == home.Slug || hiddenPage(rq, l.Slug) {
+		if name == homeList || hiddenPage(rq, l.Slug) {
 			continue
 		}
-		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List: " + firstNonEmpty(l.Title, l.Slug),
+		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List #" + name,
 			Href: "/tasks?list=" + url.QueryEscape(name), Private: ownPrivate(user, l.Slug), Counts: countTasks(tasks, l.Params.With("list", name))})
 	}
 	if len(out) == 0 {

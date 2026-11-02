@@ -186,14 +186,14 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
 
 
 def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
-    # A place of the tasks opens with the switcher: the Tasks home, the
-    # lists, All; its counts follow the task app's writes.
+    # A place of the tasks opens with the switcher: the lists by name (the
+    # Tasks home's first), All; its counts follow the task app's writes.
     wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
     wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "start_date": date.today().isoformat()})
     page.goto("/page/shop")
     places = page.locator(".tasks-places .tasks-place")
-    expect(places.locator(".tasks-place-label")).to_have_text(["My tasks", "shop", "All"])
+    expect(places.locator(".tasks-place-label")).to_have_text(["task", "shop", "All"])
     shop = places.and_(page.locator("[data-place='list:shop']"))
     expect(shop).to_have_attribute("aria-current", "page")
     expect(shop.locator(".module-focus")).to_have_text("1")
@@ -205,8 +205,8 @@ def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
     # After the checkbox's ~5 s grace period.
     expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
     # A list opens at /tasks?list=, its view, with the pages embedding it.
-    page.locator(".tasks-place", has_text="My tasks").click()
-    page.wait_for_url("**/page/tasks")
+    page.locator(".tasks-place", has_text="task").first.click()
+    page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     page.locator(".tasks-place", has_text="shop").click()
     page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:shop")
@@ -215,9 +215,8 @@ def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
     places.filter(has_text="All").click()
     page.wait_for_url(re.compile(r"/tasks$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_text("All")
-    page.locator(".tasks-place", has_text="My tasks").click()
-    page.wait_for_url("**/page/tasks")
-    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "home")
+    page.goto("/page/tasks")
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
 
 
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):

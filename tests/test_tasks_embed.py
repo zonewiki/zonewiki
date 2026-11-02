@@ -239,14 +239,14 @@ class TestListSwitcher:
     def test_the_home_the_lists_and_all(self, client, wiki_dir):
         self.wiki(wiki_dir)
         html = self.get(client, "/page/tasks")
-        # The home's own list (task) is the home, not an entry of its own.
-        assert places(html) == [("home", "My tasks", True), ("list:gifts", "gifts", False),
+        # Lists by their names, not their pages': the home's first.
+        assert places(html) == [("list:task", "task", True), ("list:gifts", "gifts", False),
                                 ("list:shop", "shop", False), ("all", "All", False)]
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
-        # The home opens its page; a list /tasks?list= (its home's view, and
-        # the pages that embed it).
-        assert 'href="/page/tasks"' in nav and 'href="/tasks?list=shop"' in nav and 'href="/tasks"' in nav
-        assert 'title="List: Shopping"' in nav and 'title="Your Tasks home"' in nav
+        # A list opens at /tasks?list= (its home's view, and the pages that
+        # embed it), the home's too.
+        assert re.findall(r'href="([^"]+)"', nav) == ["/tasks?list=task", "/tasks?list=gifts", "/tasks?list=shop", "/tasks"]
+        assert 'title="List #shop"' in nav and 'title="Your tasks (the Tasks home&#39;s list)"' in nav
         assert "tasks-place-lock" not in nav   # without users nothing is private
         # It opens the task app: before it, once.
         assert html.count('class="tasks-places"') == 1
@@ -258,10 +258,33 @@ class TestListSwitcher:
         assert current("/page/shop") == ["list:shop"]
         assert current("/tasks") == ["all"]
         assert current("/tasks?list=gifts") == ["list:gifts"]
-        assert current("/tasks?list=task") == ["home"]
+        assert current("/tasks?list=task") == ["list:task"]
+        assert current("/page/tasks") == ["list:task"]
         # A tag no page declares: the switcher, nothing current.
         html = self.get(client, "/tasks?list=nothing")
         assert places(html) and current("/tasks?list=nothing") == []
+
+    def test_the_homes_list_declared_elsewhere_too_is_one_place(self, client, wiki_dir):
+        # Another page declaring the home's list (here first A–Z, so the
+        # list's home): still one pill, named by the list, with the Tasks
+        # home's view; no page title in the switcher or on /tasks?list=.
+        self.wiki(wiki_dir)
+        write_page(wiki_dir, "aaa-scratch", "# Scratch\n\n[[tasks: list=task]]\n")
+        html = self.get(client, "/page/tasks")
+        assert [k for k, _, _ in places(html)] == ["list:task", "list:gifts", "list:shop", "all"]
+        html = self.get(client, "/tasks?list=task")
+        assert [k for k, _, cur in places(html) if cur] == ["list:task"]
+        assert 'data-init-view="focus"' in html   # the Tasks home's view=focus
+        assert "A separate list" not in html and "tasks-list-home" not in html
+        foot = html.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'<li><a href="([^"]+)">', foot) == ["/page/tasks", "/page/aaa-scratch"]
+
+    def test_a_home_without_a_list_is_home(self, client, wiki_dir):
+        write_page(wiki_dir, "tasks", "# My tasks\n\n[[tasks: tag=me home=1]]\n")
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop]]\n")
+        html = self.get(client, "/page/tasks")
+        assert places(html) == [("home", "Home", True), ("list:shop", "shop", False), ("all", "All", False)]
+        assert 'data-place="home" title="Your Tasks home"' in html and 'href="/page/tasks" class="tasks-place"' in html
 
     def test_a_view_on_a_page_is_no_place(self, client, wiki_dir):
         # A list's embed on a page that isn't its home, a tag= view, a second
@@ -293,14 +316,14 @@ class TestListSwitcher:
         due = lambda k: re.search(r'class="module-due"[^>]*>(\d*)<', counts[k]).group(1)
         focus = lambda k: re.search(r'class="module-focus"[^>]*>(\d*)<', counts[k]).group(1)
         assert (due("list:shop"), focus("list:shop")) == ("1", "2")
-        assert (due("home"), focus("home")) == ("1", "1")
+        assert (due("list:task"), focus("list:task")) == ("1", "1")
         assert (due("list:gifts"), focus("list:gifts")) == ("", "")
         assert (due("all"), focus("all")) == ("2", "4")
         # js/chrome.js refreshes them from the due count's places.
         data = client.get("/api/tasks/due-count?places=1").get_json()
         assert data["count"] == 1 and data["focus"] == 1   # the home's, as before
         assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
-            "home": (1, 1), "list:shop": (1, 2), "list:gifts": (0, 0), "all": (2, 4)}
+            "list:task": (1, 1), "list:shop": (1, 2), "list:gifts": (0, 0), "all": (2, 4)}
         assert "places" not in client.get("/api/tasks/due-count").get_json()
 
     def test_sharing_mode_leaves_out_a_list_not_for_sharing(self, client, wiki_dir):

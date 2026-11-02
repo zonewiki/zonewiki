@@ -836,6 +836,11 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
 			home = &TasksHome{Slug: declared.Slug, Title: t}
 		}
+		// The Tasks home's list looks as on the Tasks home, wherever else
+		// it is declared.
+		if h := rq.tasksHome(); h != nil && list == rq.homeList() {
+			params, home = h.Params, h
+		}
 		params = params.With("list", list)
 		title, heading = list+" · Tasks", list
 		// Backlinks: the pages that embed the list, as a page's are.
@@ -850,7 +855,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	private := home != nil && ownPrivate(rq.user, home.Slug)
 	place := "all"
 	if list != "" {
-		place = rq.placeKey(list)
+		place = "list:" + list
 	}
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
 		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private, place)), LinkSections: sections,
