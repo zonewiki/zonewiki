@@ -71,7 +71,7 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
     # Her tasks: her own home and a list of hers, and her tasks.
-    (w / "private/alice/deck.md").write_text(f"# My tasks {SECRET}\n\n[[tasks: home=1 list=secretlist]]\n")
+    (w / "private/alice/deck.md").write_text(f"# My tasks {SECRET}\n\n[[tasks: pin=1 list=secretlist]]\n")
     tasks = w / "private/alice/_tasks"
     tasks.mkdir(parents=True)
     this_year = __import__("datetime").date.today().year

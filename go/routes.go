@@ -836,8 +836,9 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
 			home = &TasksHome{Slug: declared.Slug, Title: t}
 		}
-		// A home list looks as on its home page, wherever else it is declared.
-		if h := rq.homeFor(list); h != nil {
+		// A pinned list looks as its pinned embed shows it, wherever else it
+		// is declared.
+		if h := rq.pinnedFor(list); h != nil {
 			params, home = h.Params, h
 		}
 		params = params.With("list", list)
@@ -857,16 +858,16 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	place := "all"
 	if list != "" {
 		place = "list:" + list
-	} else if r.URL.Query().Get("home") != "" {
-		// ?home=1: the home lists together, each as on its page; with one
-		// home or none, where the Tasks link goes.
-		homes := rq.tasksHomes()
-		if len(homes) < 2 {
-			http.Redirect(w, r, rq.tasksHomeHref(), http.StatusFound)
+	} else if r.URL.Query().Get("pinned") != "" {
+		// ?pinned=1: the pinned lists as one task app; with one pin or
+		// none, where the Tasks link goes.
+		pinned := rq.pinnedLists()
+		if len(pinned) < 2 {
+			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
 			return
 		}
-		place, title, heading, crumbs, key = "home", "Home", "Home", []crumb{{"Tasks", "/tasks"}, {"Home", ""}}, "/tasks?home=1"
-		tasksHTML = homeListsHTML(rq, homes)
+		place, title, heading, crumbs, key = "pinned", "Pinned", "Pinned", []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}, "/tasks?pinned=1"
+		tasksHTML = buildTasksEmbed(rq, rq.pinnedView(), 0, false, rq.defaultPrivate())
 	}
 	places := rq.taskPlaces()
 	for i := range places {
@@ -877,25 +878,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
 
-// homeListsHTML: the home lists one under the other, each under its name
-// ("List: <name>"; a home declaring no list, its page's title) with the
-// params of its home=1 embed.
-func homeListsHTML(rq *Req, homes []TasksHome) string {
-	var b strings.Builder
-	for i, h := range homes {
-		name := firstNonEmpty(h.Title, h.Slug)
-		if l := cleanList(h.Params.Get("list")); l != "" {
-			name = "List: " + l
-		}
-		b.WriteString(`<section class="tasks-home-list"><h2>` + template.HTMLEscapeString(name) + "</h2>\n")
-		b.WriteString(buildTasksEmbed(rq, h.Params, i, false, ownPrivate(rq.user, h.Slug)))
-		b.WriteString("</section>\n")
-	}
-	return b.String()
-}
-
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
-// list, nil for all tasks, the home lists or an undeclared list; Places: the
+// list, nil for all tasks, the pinned lists or an undeclared list; Places: the
 // list switcher; LinkSections: a list's Backlinks (with them the page has a
 // page view's columns).
 type tasksPageView struct {

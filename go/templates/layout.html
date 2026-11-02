@@ -31,9 +31,9 @@
   {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
   {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the
-      Tasks home gives them, are keep tasks if it makes them, start
+      default list (the first pinned one) gives them, are keep tasks if it makes them, start
       today when its "+ New" would, and are private when it is in the
-      user's private folder (js/actions.js openHomeTask). */}}
+      user's private folder (js/actions.js openDefaultTask). */}}
   {{- with .Shell.TasksNew}} data-tasks-tags="{{.Tags}}"
     {{- if .Keep}} data-tasks-keep="1"{{end}}
     {{- if .Today}} data-tasks-today="1"{{end}}

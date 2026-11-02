@@ -122,7 +122,7 @@ def test_note_creates_a_quicknote(new_page, wiki):
 
 
 def test_task_adds_a_task_to_your_tasks_from_the_wiki(new_page, wiki):
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/index")
     phone.locator(".action-task").tap()
@@ -300,7 +300,7 @@ def test_top_actions_open_quicknote_and_search(page, wiki):
 # ── New task: the Tasks home decides ────────────────────────────────────────
 # The New task button and c t give a new task the Tasks home's tags.
 
-def _home(wiki, embed="[[tasks: list=task view=focus home=1]]"):
+def _home(wiki, embed="[[tasks: list=task view=focus pin=1]]"):
     wiki.write("tasks", f"# My tasks\n\n{embed}\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
 
@@ -330,7 +330,7 @@ def test_new_task_button_stays_on_the_page(page, wiki):
 
 
 def test_new_task_start_follows_the_homes_view(page, wiki):
-    _home(wiki, "[[tasks: list=task view=open home=1]]")
+    _home(wiki, "[[tasks: list=task view=open pin=1]]")
     page.goto("/page/garden")
     page.locator(".top-task").click()
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-start]")).to_have_value("")
@@ -359,7 +359,7 @@ def test_new_task_button_on_the_home_page(page, wiki):
 def test_new_task_on_another_tasks_gets_the_homes_tags(page, wiki):
     # A page with another task list (here /tasks, every task): the modal opens
     # there, but with the home's tags and keep, not that task list's filter.
-    _home(wiki, "[[tasks: list=shop keep=1 home=1]]")
+    _home(wiki, "[[tasks: list=shop keep=1 pin=1]]")
     page.goto("/tasks?tag=garden")
     page.locator(".top-task").click()
     modal = page.locator(".task-edit-modal[open]")
@@ -384,7 +384,7 @@ def test_new_task_without_a_home_has_no_tags(page, wiki):
 def test_c_t_in_the_editor_tags_like_the_home(page, wiki):
     # The editor has a hidden tasks: the modal opens right there. (Not the
     # old fixed #task: c t once always tagged that.)
-    _home(wiki, "[[tasks: list=work home=1]]")
+    _home(wiki, "[[tasks: list=work pin=1]]")
     page.goto("/edit/garden")
     page.locator("#editor-textarea").evaluate("el => el.blur()")
     page.keyboard.press("c")
@@ -517,11 +517,11 @@ def test_task_counts_follow_tasks_changes(page, wiki):
 
 
 def test_tasks_home_page_is_the_tasks_module(page, wiki):
-    # [[tasks: … home=1]]: your own tasks. The Tasks links go to its list,
+    # [[tasks: … pin=1]]: your own tasks. The Tasks links go to its list,
     # which counts as the Tasks module, New task adds one in its embed (with
     # its list tag), and neither it nor the home page is a stop in the
     # navigation trail.
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": date.today().isoformat()})
     page.request.post("/api/tasks", data={"title": "Pay rent", "tags": "task", "due_date": date.today().isoformat()})

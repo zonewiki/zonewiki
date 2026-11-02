@@ -4,21 +4,22 @@ import { openSearchModal } from './search.js';
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-// A new task in the Tasks home, from any page (c t, the New task button).
-// On the home page its own "+ New" (so the view's tags and dates apply);
-// where a task list app is loaded (an embed, the editor's hidden one) its edit
-// modal, with the tags and keep the home gives new tasks (the server puts
-// them on <body>: data-tasks-tags, data-tasks-keep; none without a home);
-// elsewhere the home page (or /tasks) opens with the modal.
+// A new task in the default list (the first pinned one), from any page (c t,
+// the New task button). On a page with a pinned list its own "+ New" (so
+// the view's tags and dates apply); where a task list app is loaded (an
+// embed, the editor's hidden one) its edit modal, with the tags and keep
+// the default list gives new tasks (the server puts them on <body>:
+// data-tasks-tags, data-tasks-keep; none without a pin); elsewhere where
+// the Tasks link goes (or /tasks) opens with the modal.
 // A page without a task list app loads a hidden one first (/api/tasks/headless,
 // started by tasks.js's initTaskApps), so you stay on the page; a toast says
-// where the task went. Should that fail, the home page opens instead.
-export async function openHomeTask() {
-  const homeAdd = document.querySelector('.tasks-app[data-home]:not([data-headless]) [id^="task-add-btn"]');
-  if (homeAdd) { homeAdd.click(); return; }
+// where the task went. Should that fail, where the Tasks link goes opens instead.
+export async function openDefaultTask() {
+  const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
+  if (pinnedAdd) { pinnedAdd.click(); return; }
   const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate } = document.body.dataset;
-  // The start date as the home's "+ New" gives it (today on Focus); without
-  // a home, as /tasks's Focus does.
+  // The start date as the default list's "+ New" gives it (today on Focus);
+  // without a pin, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
   const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1',
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
@@ -26,7 +27,7 @@ export async function openHomeTask() {
     try {
       await loadHeadlessTasks();
     } catch (err) {
-      const href = tasksHomeHref();
+      const href = tasksLinkHref();
       window.location.href = href + (href.includes('?') ? '&' : '?') + 'new=1';
       return;
     }
@@ -51,9 +52,9 @@ function loadHeadlessTasks() {
   return headlessTasks;
 }
 
-// Where the Tasks module links go: the Tasks home's list (/tasks?list=), a
-// home without a list's page, else /tasks.
-export const tasksHomeHref = () =>
+// Where the Tasks module links go: the pinned lists (/tasks?pinned=1, or one
+// at /tasks?list=; a pin without a list its page), else /tasks.
+export const tasksLinkHref = () =>
   document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 
 // ── New note modal ───────────────────────────────────────────────────────────────
@@ -88,17 +89,17 @@ newNoteForm?.addEventListener('submit', async e => {
 // ── Action bar ───────────────────────────────────────────────────────────────
 // The phone's actions, as the desktop's top actions: a new note, a
 // new task and Search (Ctrl+P). In the tasks the new task comes from its own
-// "+ New" (so the view's tags and dates apply; on the Tasks home page the
-// home embed's), elsewhere it goes to your tasks (openHomeTask).
+// "+ New" (so the view's tags and dates apply; on a page with a pinned list
+// the pinned embed's), elsewhere it goes to your tasks (openDefaultTask).
 
 const tasksAddButton = () =>
-  document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
+  document.querySelector('.tasks-app[data-pinned] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
 document.querySelector('.action-new-note')?.addEventListener('click', openNewNote);
 document.querySelector('.action-task')?.addEventListener('click', () => {
   const add = document.body.dataset.module === 'tasks' && tasksAddButton();
-  if (add) add.click(); else openHomeTask();
+  if (add) add.click(); else openDefaultTask();
 });
 document.querySelector('.action-search')?.addEventListener('click', openSearchModal);
 
@@ -181,7 +182,7 @@ sharingBtn?.addEventListener('click', toggleSharing);
 syncSharingButton();
 // The desktop's buttons at the top right (views.py top_actions_html).
 document.querySelector('.top-new-note')?.addEventListener('click', openNewNote);
-document.querySelector('.top-task')?.addEventListener('click', openHomeTask);
+document.querySelector('.top-task')?.addEventListener('click', openDefaultTask);
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
 // The search pill names its shortcut; on a Mac that is ⌘P.
 if (/Mac|iPhone|iPad/.test(navigator.platform)) {

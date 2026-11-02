@@ -13,6 +13,8 @@
 //     ~/.cache/leaf (modelDir).
 //   - Deck → Tasks: _deck/ moved to _tasks/ (migrate.go; tasksDir reads
 //     _deck/ while there is no _tasks/); /deck and /api/deck/… (below).
+//   - Tasks home → pinned lists: [[tasks: … home=1]] pins as pin=1 does
+//     (pinnedParam).
 //   - Scratch → Notes: /page/_scratch and POST /api/scratch (below),
 //     ?scratch=1 on /api/search (apiSearch), the MCP tool file_scratch_note
 //     (mcpToolAliases).

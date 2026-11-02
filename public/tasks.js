@@ -638,9 +638,9 @@ function scopeQuery() {
 // ?view= / [[tasks: view=…]] pick the tab.
 const urlView = urlParams.get('view') || '';   // explicit per-navigation override
 const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
-// ?new=1 opens the new-task modal in one embed: the Tasks home if the
-// page has it (as the New buttons do), else the first.
-const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
+// ?new=1 opens the new-task modal in one embed: a pinned one if the page
+// has it (as the New buttons do), else the first.
+const newTarget = document.querySelector('.tasks-app[data-pinned]:not([data-headless])')
   || document.querySelector('.tasks-app:not([data-headless])');
 const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl === newTarget);
 // The year Completed shows: '' is this year, an earlier one ('2025', from
@@ -1459,8 +1459,14 @@ if (filterSearch) attachTagAc(filterSearch, {
 });
 // A new task starts with the tags the filter requires (single-tag words;
 // an OR word doesn't say which one), so it shows up in the current view.
+// [[tasks: new=a,b]] (the Pinned view: the default list's tags) gives new
+// tasks those tags in place of the embed's own filter words.
+const newTags = (appEl?.dataset.newTags || '').split(',').filter(Boolean);
 function filterDefaultTags() {
-  return parseFilter(filterQuery()).tagGroups.filter(g => g.length === 1).map(g => g[0]);
+  const locked = new Set(newTags.length ? embedFilterWords.map(w => w.toLowerCase()) : []);
+  const own = (filterChips?.words() || []).filter(w => !locked.has(w.toLowerCase()));
+  const query = newTags.length ? [...own, filterSearch?.value || ''].join(' ') : filterQuery();
+  return [...newTags, ...parseFilter(query).tagGroups.filter(g => g.length === 1).map(g => g[0])];
 }
 
 Object.assign(app, initTaskModal(app));

@@ -3,7 +3,7 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .home}} data-home="1"{{end}}>
+<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .pinned}} data-pinned="1"{{end}}{{with .new_tags}} data-new-tags="{{.}}"{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .labels 0}}</button>
@@ -43,6 +43,8 @@
       <label for="task-edit-title{{.sfx}}">Title</label>
       <input type="text" id="task-edit-title{{.sfx}}" name="title" required autocomplete="off">
       <div class="task-quick-preview" id="task-edit-quick{{.sfx}}" hidden></div>
+      {{- /* A new task: where it goes (js/taskmodal.js syncTarget). */}}
+      <p class="task-edit-target" id="task-edit-target{{.sfx}}" aria-live="polite" hidden></p>
     </div>
     <div class="task-field task-edit-batch" id="task-edit-batch{{.sfx}}" style="display:none">
       <label id="task-edit-batch-label{{.sfx}}">Tasks</label>

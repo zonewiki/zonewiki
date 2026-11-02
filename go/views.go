@@ -149,22 +149,21 @@ func (rq *Req) taskCounts() TaskCounts {
 	return *rq.counts
 }
 
-// tasksHomeHref: where the Tasks links go: the home lists, as the list
-// switcher opens them: several together (/tasks?home=1), one at
-// /tasks?list=, a single home declaring no list its page; without a home,
-// /tasks.
-func (rq *Req) tasksHomeHref() string {
-	homes := rq.tasksHomes()
+// tasksLinkHref: where the Tasks links go: the pinned lists, as the list
+// switcher opens them: several as one (/tasks?pinned=1), one at
+// /tasks?list=, a single pin without a list its page; none pinned, /tasks.
+func (rq *Req) tasksLinkHref() string {
+	pinned := rq.pinnedLists()
 	switch {
-	case len(homes) > 1:
-		return "/tasks?home=1"
-	case len(homes) == 0:
+	case len(pinned) > 1:
+		return "/tasks?pinned=1"
+	case len(pinned) == 0:
 		return "/tasks"
 	}
-	if l := cleanList(homes[0].Params.Get("list")); l != "" {
+	if l := cleanList(pinned[0].Params.Get("list")); l != "" {
 		return "/tasks?list=" + url.QueryEscape(l)
 	}
-	return pathURL("page", homes[0].Slug)
+	return pathURL("page", pinned[0].Slug)
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
@@ -186,18 +185,18 @@ func moduleLinks(rq *Req) []M {
 		}
 		href := m[2]
 		if m[0] == "tasks" {
-			href = rq.tasksHomeHref()
+			href = rq.tasksLinkHref()
 		}
 		own := users && (m[0] == "private" || m[0] == "notes")
 		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group, "own": own}
 		if m[0] == "tasks" {
 			link["counts"] = rq.taskCounts()
-			// The home lists' pages, no stops in the navigation trail (js/chrome.js).
+			// The pinned lists' pages, no stops in the navigation trail (js/chrome.js).
 			var slugs []string
-			for _, h := range rq.tasksHomes() {
+			for _, h := range rq.pinnedLists() {
 				slugs = append(slugs, h.Slug)
 			}
-			link["home_pages"] = strings.Join(slugs, " ")
+			link["pinned_pages"] = strings.Join(slugs, " ")
 		}
 		out = append(out, link)
 	}
@@ -229,7 +228,7 @@ func currentModule(rq *Req) string {
 	if m != nil && isQuicknote(m[1]) {
 		return "notes"
 	}
-	if strings.HasPrefix(p, "/page/") && m != nil && rq.isHomePage(m[1]) {
+	if strings.HasPrefix(p, "/page/") && m != nil && rq.isPinnedPage(m[1]) {
 		return "tasks"
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {
@@ -292,7 +291,7 @@ type pageShell struct {
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
-// Tasks home makes them.
+// default list makes them.
 type tasksNew struct {
 	Tags                 string
 	Keep, Today, Private bool
@@ -326,12 +325,12 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		sh.Module = currentModule(rq)
 	}
 	if !o.noActions {
-		if home := rq.tasksHome(); home != nil {
+		if def := rq.defaultList(); def != nil {
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
-			v := embedView(home.Params)
-			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(home.Params), ","),
-				Keep: isTrue(home.Params.Get("keep")), Today: v == "" || v == "focus", Private: rq.homePrivate()}
+			v := embedView(def.Params)
+			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(def.Params), ","),
+				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus", Private: rq.defaultPrivate()}
 		}
 	}
 	if sh.ShowActions {

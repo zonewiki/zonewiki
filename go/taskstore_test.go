@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -279,21 +280,22 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	}
 }
 
-// The Tasks home and the lists are per user: a home in your private folder
-// wins over a shared one; a list declared on a private page is its owner's.
-func TestTasksHomeAndListsPerUser(t *testing.T) {
+// Pins and lists are per user: a pin in your private folder comes before a
+// shared one (the default list); a list declared on a private page is its
+// owner's.
+func TestPinsAndListsPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
-		"tasks":               "# Tasks\n\n[[tasks: home=1]]\n",
-		"private/alice/mine":  "# Mine\n\n[[tasks: home=1 list=secret]]\n",
+		"tasks":               "# Tasks\n\n[[tasks: pin=1]]\n",
+		"private/alice/mine":  "# Mine\n\n[[tasks: pin=1 list=secret]]\n",
 		"private/bob/nothing": "# Nothing\n",
 	})
 	withUsers(t, "alice", "bob")
-	if h := lookupTasksHome("alice"); h == nil || h.Slug != "private/alice/mine" {
-		t.Errorf("alice's home %+v", h)
+	if h := lookupDefaultList("alice"); h == nil || h.Slug != "private/alice/mine" {
+		t.Errorf("alice's default list %+v", h)
 	}
 	for _, u := range []string{"bob", ""} {
-		if h := lookupTasksHome(u); h == nil || h.Slug != "tasks" {
-			t.Errorf("%q's home %+v", u, h)
+		if h := lookupDefaultList(u); h == nil || h.Slug != "tasks" {
+			t.Errorf("%q's default list %+v", u, h)
 		}
 	}
 	if _, ok := taskLists("alice")["secret"]; !ok {
@@ -417,5 +419,30 @@ func TestTasksDirFallsBackToTheOldFolder(t *testing.T) {
 		if got := tasksDir(owner); got != filepath.Join(base, tasksDirName) {
 			t.Errorf("tasksDir(%q) = %s with both", owner, got)
 		}
+	}
+}
+
+// The pinned lists: pin=default first, then by name (not by page); a list
+// pinned twice once; home=1 still pins. The Pinned view shows any of them
+// and gives new tasks the default list's tags.
+func TestPinnedListsAndTheirView(t *testing.T) {
+	testWiki(t, map[string]string{
+		"a-shop":  "# Shop\n\n[[tasks: list=shop keep=1 pin=1]]\n",
+		"b-work":  "# Work\n\n[[tasks: list=work tag=office view=focus pin=default]]\n",
+		"c-again": "# Again\n\n[[tasks: list=shop pin=1]]\n",
+		"d-old":   "# Old\n\n[[tasks: tag=me home=1]]\n",
+		"e-code":  "# Code\n\n```\n[[tasks: list=nope pin=1]]\n```\n",
+	})
+	var names []string
+	for _, h := range lookupPinnedIn(sortedPages(), "") {
+		names = append(names, pinnedName(h)+"@"+h.Slug)
+	}
+	if want := []string{"work@b-work", "Old@d-old", "shop@a-shop"}; !slices.Equal(names, want) {
+		t.Errorf("pinned %v, want %v", names, want)
+	}
+	rq := &Req{}
+	v := rq.pinnedView()
+	if v.Get("tag") != "work|me|shop" || v.Get("list") != "" || v.Get("new") != "work,office" || v.Get("view") != "focus" {
+		t.Errorf("pinned view tag=%q list=%q new=%q view=%q", v.Get("tag"), v.Get("list"), v.Get("new"), v.Get("view"))
 	}
 }

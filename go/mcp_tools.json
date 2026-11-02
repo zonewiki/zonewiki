@@ -155,7 +155,7 @@
     "orphans": {
      "type": "boolean",
      "default": false,
-     "description": "Only pages no other page links to (the home page, the Tasks home and notes aside): candidates to link from somewhere."
+     "description": "Only pages no other page links to (the home page, the default task list's page and notes aside): candidates to link from somewhere."
     },
     "notes": {
      "type": "boolean",
@@ -760,7 +760,7 @@
     },
     "private": {
      "type": "boolean",
-     "description": "With users: seen by the user alone. Default: private if their Tasks home is in their private folder."
+     "description": "With users: seen by the user alone. Default: private if their default task list (the first they pin) is in their private folder."
     },
     "summary": {
      "type": "string",

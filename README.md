@@ -116,10 +116,10 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), comments as a
   dated status log, a history of every date change, and undo for completing
   and deleting.
-- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your Tasks home, the lists and all tasks.
+- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your pinned lists, the other lists and all tasks.
 - Your own task list on a page of yours, which the Tasks module then opens, with
   an optional limit on how much is in Focus:
-  `[[tasks: view=focus limit=8 home=1]]`.
+  `[[tasks: view=focus limit=8 pin=1]]`.
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks. (Tasks used to be called Deck:
@@ -152,7 +152,7 @@ Done tasks go to a yearly archive. Beyond that:
 - **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
-  (a **Private** box on the task, 🔒 on its card) and their own Tasks home.
+  (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
   Everything else is shared. See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

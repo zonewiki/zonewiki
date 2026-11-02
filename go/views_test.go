@@ -20,7 +20,7 @@ func TestInitialFunc(t *testing.T) {
 func TestPageViewWalksOnce(t *testing.T) {
 	testWiki(t, map[string]string{
 		"index": "# Home\n", "a": "# A\n\n[[b]] [[missing]]\n\n[[tasks: list=work]]\n",
-		"b": "# B\n\n[[a]]\n", "todo": "# Todo\n\n[[tasks: home=1]]\n",
+		"b": "# B\n\n[[a]]\n", "todo": "# Todo\n\n[[tasks: pin=1]]\n",
 	})
 	srv := httptest.NewServer(newHandler())
 	defer srv.Close()

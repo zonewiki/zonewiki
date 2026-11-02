@@ -188,7 +188,7 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
 def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     # /tasks opens with the switcher above the heading: the lists by name
     # (the Tasks home's first), All; its counts follow the task app's writes.
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "start_date": date.today().isoformat()})
     page.goto("/tasks?list=shop")
@@ -220,11 +220,12 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(page.locator(".tasks-places")).to_have_count(0)
 
 
-def test_tasks_link_shows_every_home_list_together(page, wiki):
-    # Two lists marked home=1: the Tasks link opens both on one page, counts
-    # both, and the switcher marks them with a house.
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus home=1]]\n")
+def test_tasks_link_shows_the_pinned_lists_as_one(page, wiki):
+    # Two pinned lists: the Tasks link opens them as one task app, counts
+    # both, and the switcher marks them with a pin. A new task there goes to
+    # the default list (pin=default), and the dialog says so.
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
     wiki.write("garden", "# Garden\n")
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": today})
@@ -233,15 +234,29 @@ def test_tasks_link_shows_every_home_list_together(page, wiki):
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("2")
     tasks.click()
-    page.wait_for_url(re.compile(r"/tasks\?home=1$"))
+    page.wait_for_url(re.compile(r"/tasks\?pinned=1$"))
     expect(tasks).to_have_attribute("aria-current", "page")
-    expect(page.locator("h1")).to_have_text("Home")
-    expect(page.locator(".tasks-home-list h2")).to_have_text(["List: shop", "List: task"])
-    expect(page.locator(".tasks-app")).to_have_count(2)
-    expect(card(page, "Milk")).to_be_visible()
+    expect(page.locator("h1")).to_have_text("Pinned")
+    expect(page.locator(".tasks-app")).to_have_count(1)
     expect(card(page, "Report")).to_be_visible()
-    expect(page.locator(".tasks-place:has(.tasks-place-home) .tasks-place-label")).to_have_text(["Home", "shop", "task"])
-    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "home")
+    expect(card(page, "Milk")).to_be_visible()
+    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["Pinned", "task", "shop"])
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "pinned")
+    page.locator("#task-add-btn").click()
+    modal = page.locator(".task-edit-modal[open]")
+    target = modal.locator(".task-edit-target")
+    expect(target).to_have_text("Adds to the list #task.")
+    # The target follows the tags: swap #task for #shop.
+    modal.locator(".tag-chip", has_text="task").locator("button").click()
+    expect(target).to_have_text("Adds to no list (tags only).")
+    modal.locator("[id^=task-edit-tags]").fill("shop,")
+    expect(target).to_have_text("Adds to the list #shop.")
+    modal.locator("[id^=task-edit-title]").fill("Eggs")
+    modal.locator("[id^=task-edit-title]").press("Enter")
+    expect(card(page, "Eggs")).to_be_visible()
+    # Editing a task: no target line.
+    card(page, "Eggs").dblclick()
+    expect(page.locator(".task-edit-modal[open] .task-edit-target")).to_be_hidden()
 
 
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
@@ -1904,7 +1919,7 @@ def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
     # (location, not the tag), so Private is not ticked.
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    wiki.write("team", "# Team\n\n[[tasks: list=task home=1]]\n")
+    wiki.write("team", "# Team\n\n[[tasks: list=task pin=1]]\n")
     wiki.write("private/alice/mine", "# Mine\n\n[[tasks: list=task]]\n")
     wiki.write("garden", "# Garden\n")
     page.goto("/page/garden")
@@ -2688,7 +2703,7 @@ def test_new_param_opens_one_modal_on_a_page_with_several_taskss(page, wiki):
     # Regression: the first embed always took ?new=1 (and removed it from
     # the URL), even on a page with the Tasks home further down. The home
     # embed opens it, as the New buttons do, else the first one.
-    wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n\n[[tasks: list=task home=1]]\n")
+    wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n\n[[tasks: list=task pin=1]]\n")
     page.goto("/page/lists?new=1")
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_have_count(1)

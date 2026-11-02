@@ -96,7 +96,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, refusals (pageError), text not yet in git kept
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
-│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the Tasks home
+│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the pinned lists
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources

@@ -546,7 +546,7 @@ class TestListPages:
     def test_orphans(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]]\n")
         write_page(pages, "2026-10-08_14-03-11_idea", "# Idea\n")       # a note
-        write_page(pages, "tasks", "# Tasks\n\n[[tasks: home=1]]\n")     # the Tasks home
+        write_page(pages, "tasks", "# Tasks\n\n[[tasks: pin=1]]\n")     # the default list
         text, err = call(client, "list_pages", orphans=True)
         assert not err and text.startswith("Pages no other page links to")
         assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote"]
@@ -1598,7 +1598,7 @@ class TestCreateTask:
 
     def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
         # The home tasks shows list=task: a task without the tag wasn't in it.
-        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task tag=work view=focus home=1]]\n")
+        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task tag=work view=focus pin=1]]\n")
         write_page(wiki_dir, "shop", "[[tasks: list=groceries]]\n")
         assert "tags: #task #work" in call(client, "create_task", title="Report")[0]
         assert "tags: #task #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]

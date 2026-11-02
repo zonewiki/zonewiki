@@ -227,8 +227,9 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
 		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": embedView(params),
 		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
-		// keep=1: new tasks here are keep tasks; home=1: the user's own tasks.
-		"keep": keep, "home": isTrue(params.Get("home")),
+		// keep=1: new tasks here are keep tasks; pin=1: a pinned list (its New
+		// is the one New task clicks on its page); new=: new tasks' tags.
+		"keep": keep, "pinned": pinnedParam(params), "new_tags": strings.Join(cleanTags(strings.Split(params.Get("new"), ",")), ","),
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
 		"private_folder": privateFolder(user),
@@ -278,19 +279,36 @@ type TaskCounts struct {
 }
 
 // taskCounts: the open tasks in Focus (started, or due today or earlier)
-// and of those how many are overdue or due today; of the home lists' views
-// (their list= and tag=; a task in two counts once) when pages declare
-// some, else of every task.
+// and of those how many are overdue or due today; of the pinned lists
+// (pinnedView) when pages pin some, else of every task.
 func taskCounts(rq *Req) TaskCounts {
-	return countTasks(openTasks(rq.who()), homesParams(rq.tasksHomes())...)
+	tasks := openTasks(rq.who())
+	if len(rq.pinnedLists()) == 0 {
+		return countTasks(tasks)
+	}
+	return countTasks(tasks, rq.pinnedView())
 }
 
-func homesParams(homes []TasksHome) []TasksParams {
-	var out []TasksParams
-	for _, h := range homes {
-		out = append(out, h.Params)
+// pinnedView: the params of the view of the pinned lists: one list's own;
+// several as one task app, the default list's params showing the tasks of
+// any of them (tag=a|b: each list, or a list-less pin's single tag; other
+// pins can't be written so and are left out), new tasks getting the default
+// list's tags (new=).
+func (rq *Req) pinnedView() TasksParams {
+	pinned := rq.pinnedLists()
+	if len(pinned) == 1 {
+		return pinned[0].Params
 	}
-	return out
+	var words []string
+	for _, h := range pinned {
+		if l := cleanList(h.Params.Get("list")); l != "" {
+			words = append(words, l)
+		} else if tag := strings.TrimSpace(h.Params.Get("tag")); tag != "" && !strings.ContainsAny(tag, "|,-") {
+			words = append(words, strings.ToLower(strings.TrimLeft(tag, "#")))
+		}
+	}
+	def := pinned[0].Params
+	return def.With("list", "").With("tag", strings.Join(words, "|")).With("new", strings.Join(newTaskTags(def), ","))
 }
 
 // countTasks: taskCounts of the open tasks the views with params show
@@ -325,49 +343,49 @@ func countTasks(tasks []*Task, params ...TasksParams) TaskCounts {
 }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
-// list, all tasks, or Home (the home lists together, or a single home
-// declaring no list). Key names it for the counts' refresh (js/chrome.js):
-// "list:<name>", "all", "home". Home: a home list, or Home (⌂).
+// list, all tasks, or Pinned (the pinned lists together, or a single pin
+// without a list). Key names it for the counts' refresh (js/chrome.js):
+// "list:<name>", "all", "pinned". Pinned: a pinned list, or Pinned.
 type TaskPlace struct {
-	Key, Label, Title, Href string
-	Home, Private, Current  bool
-	Counts                  TaskCounts
+	Key, Label, Title, Href  string
+	Pinned, Private, Current bool
+	Counts                   TaskCounts
 }
 
 // taskPlaces: where the user's tasks are, for the switcher, each list named
-// by its name, not by a page that embeds it: with several home lists Home
-// (all of them, /tasks?home=1), then the home lists (⌂, their views'
-// params and counts, wherever else they are declared), then each other list
-// a page declares A–Z, each at /tasks?list= (the list with its params and
-// the pages that embed it), and all tasks, each with its counts; in sharing
-// mode not a list whose page is not for sharing. A single home declaring no
-// list is "Home", at its page. Nil when there is nothing to switch between
-// (no home, no list).
+// by its name, not by a page that embeds it: with several pinned lists
+// Pinned (all of them as one, /tasks?pinned=1), then the pinned lists
+// (their embeds' params and counts, wherever else they are declared), then
+// each other list a page declares A–Z, each at /tasks?list= (the list with
+// its params and the pages that embed it), and all tasks, each with its
+// counts; in sharing mode not a list whose page is not for sharing. A
+// single pin without a list is "Pinned", at its page. Nil when there is
+// nothing to switch between (no pin, no list).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
-	homes, lists := rq.tasksHomes(), rq.taskLists()
+	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	var out []TaskPlace
 	tasks := openTasks(user)
-	if len(homes) > 1 {
-		out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your home lists, together", Href: "/tasks?home=1",
-			Home: true, Counts: countTasks(tasks, homesParams(homes)...)})
+	if len(pinned) > 1 {
+		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
+			Pinned: true, Counts: countTasks(tasks, rq.pinnedView())})
 	}
-	isHome := map[string]bool{}
-	for _, h := range homes {
+	isPinned := map[string]bool{}
+	for _, h := range pinned {
 		l := cleanList(h.Params.Get("list"))
 		switch {
 		case l != "":
-			isHome[l] = true
-			out = append(out, TaskPlace{Key: "list:" + l, Label: l, Title: "Home list #" + l, Href: "/tasks?list=" + url.QueryEscape(l),
-				Home: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
-		case len(homes) == 1:
-			out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your Tasks home", Href: pathURL("page", h.Slug),
-				Home: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+			isPinned[l] = true
+			out = append(out, TaskPlace{Key: "list:" + l, Label: l, Title: "Pinned list #" + l, Href: "/tasks?list=" + url.QueryEscape(l),
+				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+		case len(pinned) == 1:
+			out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned tasks", Href: pathURL("page", h.Slug),
+				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
 		}
 	}
 	for _, name := range sortedKeys(lists) {
 		l := lists[name]
-		if isHome[name] || hiddenPage(rq, l.Slug) {
+		if isPinned[name] || hiddenPage(rq, l.Slug) {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List #" + name,
@@ -396,11 +414,11 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	// A hidden task app, for a page without one that wants its edit modal
-	// (js/actions.js openHomeTask: c t, the New task button).
+	// (js/actions.js openDefaultTask: c t, the New task button).
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate()))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate()))
 	})
 	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)

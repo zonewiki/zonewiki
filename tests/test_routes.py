@@ -102,31 +102,32 @@ class TestViewPage:
         assert self._tasks_links(body) == ["/tasks", "/tasks"]   # switcher, bar
         assert '<body data-module="wiki">' in body
 
-    def test_tasks_home_is_where_the_tasks_links_go(self, client, wiki_dir):
-        # [[tasks: … home=1]] makes that page your own tasks: the Tasks module
-        # links go to its list, as the list switcher opens it, and the page
+    def test_a_pinned_list_is_where_the_tasks_links_go(self, client, wiki_dir):
+        # [[tasks: … pin=1]] pins that list, your own tasks: the Tasks module
+        # links go to it, as the list switcher opens it, and its page
         # belongs to the Tasks module.
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body) == ["/tasks?list=task", "/tasks?list=task"]
-        assert 'data-home-pages="tasks"' in body   # no stop in the trail (js/chrome.js)
+        assert 'data-pinned-pages="tasks"' in body   # no stop in the trail (js/chrome.js)
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
-        assert 'data-init-view="focus"' in lv and 'data-home="1"' in lv and '<body data-module="tasks"' in lv
+        assert 'data-init-view="focus"' in lv and 'data-pinned="1"' in lv and '<body data-module="tasks"' in lv
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in home
-        assert 'data-home="1"' in home   # the embed New clicks
+        assert 'data-pinned="1"' in home   # the embed New clicks
         # /tasks stays the view of every task, in the Tasks module.
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
-    def test_tasks_home_ignores_code_and_several_homes_go_together(self, client, wiki_dir):
-        write_page(wiki_dir, "aaa", "# A\n\n```\n[[tasks: home=1]]\n```\n")
-        write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x home=yes]]\n")
+    def test_pins_ignore_code_and_several_go_together(self, client, wiki_dir):
+        # home=, pin='s name before 2026-11, still pins.
+        write_page(wiki_dir, "aaa", "# A\n\n```\n[[tasks: pin=1]]\n```\n")
+        write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x pin=yes]]\n")
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks: home=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body)[0] == "/tasks?home=1"   # both, together
-        assert 'data-home-pages="mmm zzz"' in body
-        # Removing a declaration ends it at once: one home left, with no list: its page.
+        assert self._tasks_links(body)[0] == "/tasks?pinned=1"   # both, as one
+        assert 'data-pinned-pages="mmm zzz"' in body
+        # Removing a pin ends it at once: one left, with no list: its page.
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks:]]\n")
         os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
@@ -183,12 +184,12 @@ class TestViewPage:
         write_page(wiki_dir, "my-page", "# My Page\n")
         body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
         assert "data-tasks-tags" not in body and "data-tasks-keep" not in body   # no home: no tags
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=Task tag=work,-mary home=1 keep=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=Task tag=work,-mary pin=1 keep=1]]\n")
         for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
             assert 'data-tasks-tags="task,work"' in tag and 'data-tasks-keep="1"' in tag, url
             assert 'data-tasks-today="1"' in tag, url   # the default view, Focus: start today
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=open home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=open pin=1]]\n")
         tag = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
         assert 'data-tasks-tags="task"' in tag and "data-tasks-today" not in tag and "data-tasks-keep" not in tag
 
@@ -2129,9 +2130,9 @@ class TestTasksPage:
             client.post("/api/tasks", json={"title": title, "tags": tags, "due_date": today}, headers=HOST)
         count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"]
         assert count() == 4   # no home: every task
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task pin=1]]\n")
         assert count() == 2   # the home's list
-        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task tag=-waiting home=1]]\n")
+        write_page(wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task tag=-waiting pin=1]]\n")
         os.utime(wiki_dir / "tasks.md", (2_000_000_000, 2_000_000_000))
         assert count() == 1   # and its tag filter
 

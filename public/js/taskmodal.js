@@ -93,7 +93,7 @@ function chipsOnSeparators(input, chips) {
   });
 }
 const editChips = editTagsInput && app.chipField(editTagsInput, {
-  label: t => '#' + t, listWord: t => app.listSet.has(t.toLowerCase()) });
+  label: t => '#' + t, listWord: t => app.listSet.has(t.toLowerCase()), onChange: () => syncTarget() });
 if (editTagsInput) {
   chipsOnSeparators(editTagsInput, editChips);
   // Enter with no suggestion open (the dropdown takes it first when one
@@ -205,6 +205,22 @@ function syncPrivateNote() {
   if (share) app.privateNote.textContent = 'Everyone who uses the wiki will see and change this task.';
 }
 app.privateCb?.addEventListener('change', syncPrivateNote);
+
+// Where a new task goes, under its title: the list its tags put it in (the
+// first A–Z that is a list, as the server files it), or none, and whether
+// it is private; it follows the Tags field and the Private box.
+const targetEl = document.getElementById('task-edit-target' + app.sfx);
+function syncTarget() {
+  if (!targetEl) return;
+  const isNew = !document.getElementById('task-edit-id' + app.sfx).value && !batchTitles;
+  targetEl.hidden = !isNew;
+  if (!isNew) return;
+  const list = editTags().map(t => t.toLowerCase()).filter(t => app.listSet.has(t)).sort()[0];
+  const where = list ? `Adds to the list #${list}` : 'Adds to no list (tags only)';
+  targetEl.textContent = where + (app.privateCb?.checked ? ', private' : '') + '.';
+}
+app.privateCb?.addEventListener('change', syncTarget);
+editTagsInput?.addEventListener('input', syncTarget);
 app.titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
@@ -378,6 +394,7 @@ function openEditModal(taskId, opts) {
   const recFromCb = document.getElementById('task-edit-rec-from' + app.sfx);
   if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
   syncRecFields();
+  syncTarget();
   app.deleteBtn.style.display = task ? '' : 'none';
   syncDates('open');
   app.modal.showModal();

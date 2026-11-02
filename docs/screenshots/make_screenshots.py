@@ -132,7 +132,7 @@ A slow, forgiving loaf: mix in the evening, bake the next morning.
 - *A Pattern Language*, Christopher Alexander
 - [[Projects/Garden shed]] links: *The Backyard Builder*
 """,
-    "tasks": "# Tasks\n\n[[tasks: view=focus home=1]]\n",
+    "tasks": "# Tasks\n\n[[tasks: view=focus pin=1]]\n",
 }
 
 TASKS = [

@@ -1199,7 +1199,7 @@ func tagHints(task *Task, user string) string {
 	return out
 }
 
-// homeTags: a new task's tags, the Tasks home's new-task tags (its list, its
+// homeTags: a new task's tags, the default list's new-task tags (its list, its
 // single tags, as its "+ New" and c t give them) before the ones given, so
 // the task shows in user's tasks. Not when the given tags already name a
 // declared list: the task is filed there.
@@ -1211,7 +1211,7 @@ func homeTags(tags json.RawMessage, user string) json.RawMessage {
 	if !ok && !isNull(tags) {
 		return tags // createTask refuses it
 	}
-	home := lookupTasksHome(user)
+	home := lookupDefaultList(user)
 	if home == nil {
 		return tags
 	}
@@ -1234,8 +1234,8 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	data["tags"] = homeTags(data["tags"], user)
-	// As c t in the browser: private when the user's Tasks home is theirs alone.
-	if h := lookupTasksHome(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
+	// As c t in the browser: private when the user's default list is theirs alone.
+	if h := lookupDefaultList(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
 		data.set("private", true)
 	}
 	msg, err := commitMsg("Create task", args)
@@ -1501,7 +1501,7 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	return head + "\n" + content + mcpTaskRefs(content, base, user) + mcpPageLinks(slug, content, user), nil
 }
 
-// isOrphan: no other page links to it. The home page, the Tasks home and
+// isOrphan: no other page links to it. The home page, the default list's page and
 // notes are reached otherwise (the module switcher), and the guide
 // is read by the assistant, so they never are.
 func isOrphan(slug string, counts map[string]int, home string) bool {
@@ -1527,7 +1527,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	}
 	counts := allBacklinkCounts(&Req{user: user})
 	home := ""
-	if h := lookupTasksHome(user); h != nil {
+	if h := lookupDefaultList(user); h != nil {
 		home = h.Slug
 	}
 	type row struct {
