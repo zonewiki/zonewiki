@@ -2125,7 +2125,7 @@ body.editor-page main {
 /* The task list switcher (tasks_page.html .tasks-places): on /tasks, above
    the heading, a row of pills, one per list (the Tasks home's first, the
    others A–Z, All), the current one shaded as in the module switcher;
-   private ones with a lock. Wraps on a narrow screen. */
+   home lists with a house, private ones with a lock. Wraps on a narrow screen. */
 .tasks-places { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 1.1rem; }
 .tasks-places .tasks-place {
   display: inline-flex; align-items: center; gap: .3rem;
@@ -2138,7 +2138,9 @@ body.editor-page main {
   background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); color: var(--fg); font-weight: 600;
 }
 .tasks-place .module-counts { margin-left: 0; }
-.tasks-place-lock { display: inline-flex; }
+.tasks-place-lock, .tasks-place-home { display: inline-flex; }
+/* ?home=1: the home lists one under the other. */
+.tasks-home-list + .tasks-home-list { margin-top: 2rem; }
 @media (pointer: coarse) { .tasks-places .tasks-place { height: 2.25rem; } }
 
 /* Single compact header band: tabs on the left, filters + sort + New on the

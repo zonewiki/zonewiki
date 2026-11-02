@@ -19,7 +19,7 @@
 {{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
 {{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .group}}{{end -}}
-<a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .home_page}} data-home-page="{{.}}"{{end}}{{with .counts}} title="{{.Title}}"{{end}}{{if .own}} title="{{.label}}: only you see it"{{end}}{{if .current}} aria-current="page"{{end}}
+<a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .home_pages}} data-home-pages="{{.}}"{{end}}{{with .counts}} title="{{.Title}}"{{end}}{{if .own}} title="{{.label}}: only you see it"{{end}}{{if .current}} aria-current="page"{{end}}
 {{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
 {{if .own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}

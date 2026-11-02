@@ -836,9 +836,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
 			home = &TasksHome{Slug: declared.Slug, Title: t}
 		}
-		// The Tasks home's list looks as on the Tasks home, wherever else
-		// it is declared.
-		if h := rq.tasksHome(); h != nil && list == rq.homeList() {
+		// A home list looks as on its home page, wherever else it is declared.
+		if h := rq.homeFor(list); h != nil {
 			params, home = h.Params, h
 		}
 		params = params.With("list", list)
@@ -853,24 +852,52 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
+	tasksHTML := buildTasksEmbed(rq, params, 0, false, private)
 	// The list switcher, this list (or All) current.
 	place := "all"
 	if list != "" {
 		place = "list:" + list
+	} else if r.URL.Query().Get("home") != "" {
+		// ?home=1: the home lists together, each as on its page; with one
+		// home or none, where the Tasks link goes.
+		homes := rq.tasksHomes()
+		if len(homes) < 2 {
+			http.Redirect(w, r, rq.tasksHomeHref(), http.StatusFound)
+			return
+		}
+		place, title, heading, crumbs, key = "home", "Home", "Home", []crumb{{"Tasks", "/tasks"}, {"Home", ""}}, "/tasks?home=1"
+		tasksHTML = homeListsHTML(rq, homes)
 	}
 	places := rq.taskPlaces()
 	for i := range places {
 		places[i].Current = places[i].Key == place
 	}
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
-		Home: home, Places: places, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private)), LinkSections: sections,
+		Home: home, Places: places, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
 
+// homeListsHTML: the home lists one under the other, each under its name
+// ("List: <name>"; a home declaring no list, its page's title) with the
+// params of its home=1 embed.
+func homeListsHTML(rq *Req, homes []TasksHome) string {
+	var b strings.Builder
+	for i, h := range homes {
+		name := firstNonEmpty(h.Title, h.Slug)
+		if l := cleanList(h.Params.Get("list")); l != "" {
+			name = "List: " + l
+		}
+		b.WriteString(`<section class="tasks-home-list"><h2>` + template.HTMLEscapeString(name) + "</h2>\n")
+		b.WriteString(buildTasksEmbed(rq, h.Params, i, false, ownPrivate(rq.user, h.Slug)))
+		b.WriteString("</section>\n")
+	}
+	return b.String()
+}
+
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
-// list, nil for all tasks or an undeclared list; Places: the list switcher;
-// LinkSections: a list's
-// Backlinks (with them the page has a page view's columns).
+// list, nil for all tasks, the home lists or an undeclared list; Places: the
+// list switcher; LinkSections: a list's Backlinks (with them the page has a
+// page view's columns).
 type tasksPageView struct {
 	view
 	Heading, ListName         string

@@ -246,7 +246,9 @@ class TestListSwitcher:
                                 ("list:shop", "shop", True), ("all", "All", False)]
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'href="([^"]+)"', nav) == ["/tasks?list=task", "/tasks?list=gifts", "/tasks?list=shop", "/tasks"]
-        assert 'title="List #shop"' in nav and 'title="Your tasks (the Tasks home&#39;s list)"' in nav
+        assert 'title="List #shop"' in nav and 'title="Home list #task"' in nav
+        # The home list marked with a house; the others not.
+        assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-home")', nav) == ["list:task"]
         assert "tasks-place-lock" not in nav   # without users nothing is private
         # Above the heading, which names the list.
         assert html.count('class="tasks-places"') == 1
@@ -291,6 +293,39 @@ class TestListSwitcher:
         html = self.get(client, "/tasks")
         assert places(html) == [("home", "Home", False), ("list:shop", "shop", False), ("all", "All", True)]
         assert 'href="/page/tasks" class="tasks-place" data-place="home" title="Your Tasks home"' in html
+
+    def test_several_home_lists_show_together(self, client, wiki_dir):
+        # Two home=1 lists: a Home pill first (the Tasks link's target),
+        # both lists after it with a house, and /tasks?home=1 shows both,
+        # each with its own embed's params. The Tasks link counts both.
+        self.wiki(wiki_dir)
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1 home=1]]\n")
+        today = date.today().isoformat()
+        create_task(client, title="Milk", tags=["shop"], due_date=today)
+        create_task(client, title="Report", tags=["task"], start_date=today)
+        create_task(client, title="Both", tags=["task", "shop"], due_date=today)
+        create_task(client, title="Gift", tags=["gifts"], due_date=today)
+        html = self.get(client, "/tasks?home=1")
+        # The home lists in their pages' order (shop's page before tasks').
+        assert places(html) == [("home", "Home", True), ("list:shop", "shop", False), ("list:task", "task", False),
+                                ("list:gifts", "gifts", False), ("all", "All", False)]
+        nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-home")', nav) == ["home", "list:shop", "list:task"]
+        assert "<h1>Home</h1>" in html
+        assert re.findall(r'<section class="tasks-home-list"><h2>([^<]*)</h2>', html) == ["List: shop", "List: task"]
+        assert 'id="tasks-app" data-init-tag="" data-init-list="shop"' in html and 'data-init-keep="1"' in html
+        assert 'id="tasks-app-1" data-init-tag="" data-init-list="task"' in html and 'data-init-view="focus"' in html
+        # The Tasks link goes there and counts the home lists, a task in both once.
+        body = self.get(client, "/page/index")
+        assert 'href="/tasks?home=1" class="module-link" data-module="tasks" data-home-pages="shop tasks"' in body
+        data = client.get("/api/tasks/due-count?places=1").get_json()
+        assert (data["count"], data["focus"]) == (2, 3)
+        assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
+            "home": (2, 3), "list:task": (1, 2), "list:shop": (2, 2), "list:gifts": (1, 1), "all": (3, 4)}
+        # With one home, ?home=1 goes where the Tasks link does.
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n")
+        resp = client.get("/tasks?home=1", headers=HOST)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/tasks?list=task"
 
     def test_each_place_has_its_counts(self, client, wiki_dir):
         self.wiki(wiki_dir)

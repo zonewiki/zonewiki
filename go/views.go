@@ -149,17 +149,22 @@ func (rq *Req) taskCounts() TaskCounts {
 	return *rq.counts
 }
 
-// tasksHomeHref: where the Tasks links go: the Tasks home's list, as the
-// list switcher opens it (/tasks?list=); a home declaring no list, its page;
-// without a home, /tasks.
+// tasksHomeHref: where the Tasks links go: the home lists, as the list
+// switcher opens them: several together (/tasks?home=1), one at
+// /tasks?list=, a single home declaring no list its page; without a home,
+// /tasks.
 func (rq *Req) tasksHomeHref() string {
-	if l := rq.homeList(); l != "" {
+	homes := rq.tasksHomes()
+	switch {
+	case len(homes) > 1:
+		return "/tasks?home=1"
+	case len(homes) == 0:
+		return "/tasks"
+	}
+	if l := cleanList(homes[0].Params.Get("list")); l != "" {
 		return "/tasks?list=" + url.QueryEscape(l)
 	}
-	if home := rq.tasksHomeSlug(); home != "" {
-		return pathURL("page", home)
-	}
-	return "/tasks"
+	return pathURL("page", homes[0].Slug)
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
@@ -187,8 +192,12 @@ func moduleLinks(rq *Req) []M {
 		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group, "own": own}
 		if m[0] == "tasks" {
 			link["counts"] = rq.taskCounts()
-			// The Tasks home page, no stop in the navigation trail (js/chrome.js).
-			link["home_page"] = rq.tasksHomeSlug()
+			// The home lists' pages, no stops in the navigation trail (js/chrome.js).
+			var slugs []string
+			for _, h := range rq.tasksHomes() {
+				slugs = append(slugs, h.Slug)
+			}
+			link["home_pages"] = strings.Join(slugs, " ")
 		}
 		out = append(out, link)
 	}
@@ -220,7 +229,7 @@ func currentModule(rq *Req) string {
 	if m != nil && isQuicknote(m[1]) {
 		return "notes"
 	}
-	if strings.HasPrefix(p, "/page/") && m != nil && m[1] == rq.tasksHomeSlug() {
+	if strings.HasPrefix(p, "/page/") && m != nil && rq.isHomePage(m[1]) {
 		return "tasks"
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {

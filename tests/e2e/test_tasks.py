@@ -220,6 +220,30 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(page.locator(".tasks-places")).to_have_count(0)
 
 
+def test_tasks_link_shows_every_home_list_together(page, wiki):
+    # Two lists marked home=1: the Tasks link opens both on one page, counts
+    # both, and the switcher marks them with a house.
+    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus home=1]]\n")
+    wiki.write("garden", "# Garden\n")
+    today = date.today().isoformat()
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": today})
+    page.request.post("/api/tasks", data={"title": "Report", "tags": "task", "due_date": today})
+    page.goto("/page/garden")
+    tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
+    expect(tasks.locator(".module-due")).to_have_text("2")
+    tasks.click()
+    page.wait_for_url(re.compile(r"/tasks\?home=1$"))
+    expect(tasks).to_have_attribute("aria-current", "page")
+    expect(page.locator("h1")).to_have_text("Home")
+    expect(page.locator(".tasks-home-list h2")).to_have_text(["List: shop", "List: task"])
+    expect(page.locator(".tasks-app")).to_have_count(2)
+    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Report")).to_be_visible()
+    expect(page.locator(".tasks-place:has(.tasks-place-home) .tasks-place-label")).to_have_text(["Home", "shop", "task"])
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "home")
+
+
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     # /tasks is one built-in main tasks, whatever embeds the wiki's pages have.
     wiki.write("tasks", "# Tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")

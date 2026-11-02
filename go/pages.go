@@ -30,7 +30,7 @@ type Req struct {
 	user     string // who is asking (userOf): "" without users
 	sharing  bool
 	homeDone bool
-	home     *TasksHome
+	homes    []TasksHome // the home lists (lookupTasksHomes), once
 	counts   *TaskCounts
 	files    []PageFile // iterPages, once
 	sorted   []PageFile // the same, by slug
@@ -649,42 +649,88 @@ func taskList(t *Task, names map[string]TasksHome) string {
 	return ""
 }
 
-// lookupTasksHome: the page with a [[tasks: … home=1]] embed, user's own
-// tasks: one in their private folder first, else a shared one (the first
-// slug A–Z when several declare one); nil: the Tasks link goes to /tasks.
-func lookupTasksHome(user string) *TasksHome { return lookupTasksHomeIn(sortedPages(), user) }
+// lookupTasksHome: the Tasks home, the first of user's home lists
+// (lookupTasksHomes): where New task and c t put a task; nil: no home.
+func lookupTasksHome(user string) *TasksHome {
+	return firstHome(lookupTasksHomesIn(sortedPages(), user))
+}
 
-// lookupTasksHomeIn: lookupTasksHome over pages (sorted by slug).
-func lookupTasksHomeIn(pages []PageFile, user string) *TasksHome {
-	var shared *TasksHome
+func firstHome(homes []TasksHome) *TasksHome {
+	if len(homes) == 0 {
+		return nil
+	}
+	return &homes[0]
+}
+
+// lookupTasksHomesIn: the home lists, each [[tasks: … home=1]] embed on a
+// page user sees (pages sorted by slug): those in user's private folder
+// first, then the shared ones, each A–Z by slug and in the page's order;
+// a list declared home twice counts once (the first). The Tasks link shows
+// them, and counts their tasks.
+func lookupTasksHomesIn(pages []PageFile, user string) []TasksHome {
+	var own, shared []TasksHome
 	for _, p := range pages {
-		own := ownPrivate(user, p.Slug)
-		if !canSee(user, p.Slug) || shared != nil && !own {
+		if !canSee(user, p.Slug) {
 			continue
 		}
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, params := range e.embeds {
-			if isTrue(params.Get("home")) {
-				if own {
-					return &TasksHome{p.Slug, e.title, params}
-				}
-				shared = &TasksHome{p.Slug, e.title, params}
-				break
+			if !isTrue(params.Get("home")) {
+				continue
+			}
+			if ownPrivate(user, p.Slug) {
+				own = append(own, TasksHome{p.Slug, e.title, params})
+			} else {
+				shared = append(shared, TasksHome{p.Slug, e.title, params})
 			}
 		}
 	}
-	return shared
+	var out []TasksHome
+	seen := map[string]bool{}
+	for _, h := range append(own, shared...) {
+		if l := cleanList(h.Params.Get("list")); l != "" {
+			if seen[l] {
+				continue
+			}
+			seen[l] = true
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
-// tasksHome is lookupTasksHome, once per request.
-func (rq *Req) tasksHome() *TasksHome {
+// tasksHomes is lookupTasksHomesIn, once per request.
+func (rq *Req) tasksHomes() []TasksHome {
 	if rq == nil {
-		return lookupTasksHome("")
+		return lookupTasksHomesIn(sortedPages(), "")
 	}
 	if !rq.homeDone {
-		rq.home, rq.homeDone = lookupTasksHomeIn(rq.sortedPageFiles(), rq.user), true
+		rq.homes, rq.homeDone = lookupTasksHomesIn(rq.sortedPageFiles(), rq.user), true
 	}
-	return rq.home
+	return rq.homes
+}
+
+// tasksHome: the Tasks home (the first home list), once per request.
+func (rq *Req) tasksHome() *TasksHome { return firstHome(rq.tasksHomes()) }
+
+// homeFor: the home list named list, nil when it is none.
+func (rq *Req) homeFor(list string) *TasksHome {
+	for _, h := range rq.tasksHomes() {
+		if list != "" && cleanList(h.Params.Get("list")) == list {
+			return &h
+		}
+	}
+	return nil
+}
+
+// isHomePage: a page with a home list (it counts as the Tasks module's).
+func (rq *Req) isHomePage(slug string) bool {
+	for _, h := range rq.tasksHomes() {
+		if h.Slug == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // homePrivate: the Tasks home is in the user's own folder, so a task from

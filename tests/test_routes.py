@@ -110,7 +110,7 @@ class TestViewPage:
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body) == ["/tasks?list=task", "/tasks?list=task"]
-        assert 'data-home-page="tasks"' in body   # no stop in the trail (js/chrome.js)
+        assert 'data-home-pages="tasks"' in body   # no stop in the trail (js/chrome.js)
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
         assert 'data-init-view="focus"' in lv and 'data-home="1"' in lv and '<body data-module="tasks"' in lv
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
@@ -119,13 +119,14 @@ class TestViewPage:
         # /tasks stays the view of every task, in the Tasks module.
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
-    def test_tasks_home_ignores_code_and_first_page_wins(self, client, wiki_dir):
+    def test_tasks_home_ignores_code_and_several_homes_go_together(self, client, wiki_dir):
         write_page(wiki_dir, "aaa", "# A\n\n```\n[[tasks: home=1]]\n```\n")
         write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x home=yes]]\n")
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks: home=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body)[0] == "/page/mmm"   # no list: its page
-        # Removing the declaration ends it at once.
+        assert self._tasks_links(body)[0] == "/tasks?home=1"   # both, together
+        assert 'data-home-pages="mmm zzz"' in body
+        # Removing a declaration ends it at once: one home left, with no list: its page.
         write_page(wiki_dir, "mmm", "# M\n\n[[tasks:]]\n")
         os.utime(wiki_dir / "mmm.md", (2_000_000_000, 2_000_000_000))
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)

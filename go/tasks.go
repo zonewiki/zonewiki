@@ -278,23 +278,36 @@ type TaskCounts struct {
 }
 
 // taskCounts: the open tasks in Focus (started, or due today or earlier)
-// and of those how many are overdue or due today; of the Tasks home's view
-// (its list= and tag=) when a page declares one.
+// and of those how many are overdue or due today; of the home lists' views
+// (their list= and tag=; a task in two counts once) when pages declare
+// some, else of every task.
 func taskCounts(rq *Req) TaskCounts {
-	var params TasksParams
-	if h := rq.tasksHome(); h != nil {
-		params = h.Params
-	}
-	return countTasks(openTasks(rq.who()), params)
+	return countTasks(openTasks(rq.who()), homesParams(rq.tasksHomes())...)
 }
 
-// countTasks: taskCounts of the open tasks a view with params shows.
-func countTasks(tasks []*Task, params TasksParams) TaskCounts {
+func homesParams(homes []TasksHome) []TasksParams {
+	var out []TasksParams
+	for _, h := range homes {
+		out = append(out, h.Params)
+	}
+	return out
+}
+
+// countTasks: taskCounts of the open tasks the views with params show
+// (any of them; none: every task).
+func countTasks(tasks []*Task, params ...TasksParams) TaskCounts {
 	day := isoDay(today())
-	scope, tag := cleanList(params.Get("list")), params.Get("tag")
+	shows := func(t *Task) bool {
+		for _, p := range params {
+			if inScope(t, cleanList(p.Get("list"))) && tagParamMatches(t, p.Get("tag")) {
+				return true
+			}
+		}
+		return len(params) == 0
+	}
 	var c TaskCounts
 	for _, t := range tasks {
-		if !inScope(t, scope) || !tagParamMatches(t, tag) {
+		if !shows(t) {
 			continue
 		}
 		due, start := t.DueDate, t.StartDate
@@ -312,46 +325,49 @@ func countTasks(tasks []*Task, params TasksParams) TaskCounts {
 }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
-// list, all tasks, or a Tasks home without a list. Key names it for the
-// counts' refresh (js/chrome.js): "list:<name>", "all", "home".
+// list, all tasks, or Home (the home lists together, or a single home
+// declaring no list). Key names it for the counts' refresh (js/chrome.js):
+// "list:<name>", "all", "home". Home: a home list, or Home (⌂).
 type TaskPlace struct {
 	Key, Label, Title, Href string
-	Private, Current        bool
+	Home, Private, Current  bool
 	Counts                  TaskCounts
 }
 
-// homeList: the list the Tasks home's embed declares ("" none).
-func (rq *Req) homeList() string {
-	if h := rq.tasksHome(); h != nil {
-		return cleanList(h.Params.Get("list"))
-	}
-	return ""
-}
-
-// taskPlaces: where the user's tasks are, for the switcher, each named by
-// its list, not by a page that embeds it: the Tasks home's list first (its
-// view's params and counts, wherever else it is declared), then each list a
-// page declares A–Z, each at /tasks?list= (the list with its params and the
-// pages that embed it), and all tasks, each with its counts; in sharing
-// mode not a list whose page is not for sharing. A Tasks home declaring no
+// taskPlaces: where the user's tasks are, for the switcher, each list named
+// by its name, not by a page that embeds it: with several home lists Home
+// (all of them, /tasks?home=1), then the home lists (⌂, their views'
+// params and counts, wherever else they are declared), then each other list
+// a page declares A–Z, each at /tasks?list= (the list with its params and
+// the pages that embed it), and all tasks, each with its counts; in sharing
+// mode not a list whose page is not for sharing. A single home declaring no
 // list is "Home", at its page. Nil when there is nothing to switch between
 // (no home, no list).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
-	home, lists, homeList := rq.tasksHome(), rq.taskLists(), rq.homeList()
+	homes, lists := rq.tasksHomes(), rq.taskLists()
 	var out []TaskPlace
 	tasks := openTasks(user)
-	switch {
-	case homeList != "":
-		out = append(out, TaskPlace{Key: "list:" + homeList, Label: homeList, Title: "Your tasks (the Tasks home's list)",
-			Href: "/tasks?list=" + url.QueryEscape(homeList), Private: ownPrivate(user, home.Slug), Counts: countTasks(tasks, home.Params)})
-	case home != nil:
-		out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your Tasks home",
-			Href: pathURL("page", home.Slug), Private: ownPrivate(user, home.Slug), Counts: countTasks(tasks, home.Params)})
+	if len(homes) > 1 {
+		out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your home lists, together", Href: "/tasks?home=1",
+			Home: true, Counts: countTasks(tasks, homesParams(homes)...)})
+	}
+	isHome := map[string]bool{}
+	for _, h := range homes {
+		l := cleanList(h.Params.Get("list"))
+		switch {
+		case l != "":
+			isHome[l] = true
+			out = append(out, TaskPlace{Key: "list:" + l, Label: l, Title: "Home list #" + l, Href: "/tasks?list=" + url.QueryEscape(l),
+				Home: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+		case len(homes) == 1:
+			out = append(out, TaskPlace{Key: "home", Label: "Home", Title: "Your Tasks home", Href: pathURL("page", h.Slug),
+				Home: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+		}
 	}
 	for _, name := range sortedKeys(lists) {
 		l := lists[name]
-		if name == homeList || hiddenPage(rq, l.Slug) {
+		if isHome[name] || hiddenPage(rq, l.Slug) {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List #" + name,
@@ -360,7 +376,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	if len(out) == 0 {
 		return nil
 	}
-	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(tasks, TasksParams{})})
+	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(tasks)})
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).

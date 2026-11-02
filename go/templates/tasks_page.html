@@ -1,8 +1,8 @@
 {{- /* /tasks: every task, or with ?list= that separate list, looking as on
     the page that declares it (home; the Tasks home for its own list). The
     list switcher first, above the heading: the places (taskPlaces), each
-    with its counts (js/chrome.js refreshes them), the current one
-    aria-current. A list's Backlinks (the pages that embed it) as on a page
+    with its counts (js/chrome.js refreshes them), home lists with a house,
+    the current one aria-current. ?home=1: the home lists together. A list's Backlinks (the pages that embed it) as on a page
     view: at the end, on big screens in the right column. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -23,6 +23,7 @@
 {{define "tasks_main"}}
 {{- with .Places}}<nav class="tasks-places" aria-label="Task lists">
 {{- range .}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Home}}<span class="tasks-place-home" aria-hidden="true">{{template "icon_home"}}</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}</nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}</h1></header>
