@@ -613,6 +613,26 @@ func taskListsIn(pages []PageFile, user string) map[string]TasksHome {
 	return out
 }
 
+// listPages: the pages with an embed of the list name that the request may
+// show, A–Z by title (the Backlinks of /tasks?list=).
+func (rq *Req) listPages(name string) []PageRef {
+	var out []PageRef
+	for _, p := range rq.pageFiles() {
+		if hiddenPage(rq, p.Slug) {
+			continue
+		}
+		e := pageMetaEntryOf(p.Path, p.Slug)
+		for _, l := range embedsLists(e.embeds) {
+			if l.Name == name {
+				out = append(out, PageRef{p.Slug, e.title})
+				break
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title) })
+	return out
+}
+
 // taskList: the list a task belongs to: the first (A–Z) of its tags a page
 // declares as a list (names: taskLists), or "".
 func taskList(t *Task, names map[string]TasksHome) string {

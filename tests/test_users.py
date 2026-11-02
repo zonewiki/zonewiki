@@ -335,6 +335,10 @@ class TestModuleMenu:
         login(client, "bob", "bob-pw")
         body = client.get("/tasks", headers=HOST).data.decode()
         assert 'data-place="list:shop"' in body and "gifts" not in body
+        # alice's page embedding a shared list is no Backlink of it for bob.
+        (wiki_dir / "private/alice/errands.md").write_text("# Errands\n\n[[tasks: list=shop]]\n", encoding="utf-8")
+        body = client.get("/tasks?list=shop", headers=HOST).data.decode()
+        assert 'href="/page/shop"' in body and "errands" not in body
         assert "gifts" not in str(client.get("/api/tasks/due-count?places=1").get_json())
 
     def test_an_empty_quicknote_says_it_is_private(self, client, users):

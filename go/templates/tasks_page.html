@@ -1,7 +1,24 @@
 {{- /* /tasks: every task, or with ?list= that separate list, looking as on
-    the page that declares it (home). */ -}}
+    the page that declares it (home). A list's Backlinks (the pages that
+    embed it) as on a page view: at the end, on big screens in the right
+    column. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+{{- if .LinkSections}}
+<div class="page-grid">
+{{template "rail_toc" ""}}
+<div class="page-col">
+{{template "tasks_main" .}}
+<div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>
+</div>
+<aside class="rail rail-context" aria-label="Links">{{template "link_sections" (dict "sections" .LinkSections "copy" true)}}</aside>
+</div>
+{{- else}}
+{{template "tasks_main" .}}
+{{- end}}
+{{end}}
+
+{{define "tasks_main"}}
 <header class="page-header"><h1>{{.Heading}}</h1></header>
 <article class="page-content">
 {{- if .ListName}}<p class="tasks-list-home">
@@ -9,4 +26,4 @@
   {{- else}}No page declares <code>[[tasks: list={{.ListName}}]]</code>: these are the tasks tagged #{{.ListName}}.{{end -}}
 </p>{{end -}}
 {{.TasksHTML}}</article>
-{{end}}
+{{- end}}

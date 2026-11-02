@@ -825,6 +825,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	list := cleanList(r.URL.Query().Get("list"))
 	params, title, heading := TasksParams{}, "Tasks", "Tasks"
 	var home *TasksHome
+	var sections []M
+	var chip template.HTML
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/tasks"
@@ -836,6 +838,11 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 		params = params.With("list", list)
 		title, heading = list+" · Tasks", list
+		// Backlinks: the pages that embed the list, as a page's are.
+		if pages := rq.listPages(list); len(pages) > 0 {
+			sections = []M{{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(pages)}}
+			chip = macro("backlinks_chip", pageLinks(pages))
+		}
 		crumbs = []crumb{{"Tasks", "/tasks"}, {list, ""}}
 		key += "?list=" + list
 	}
@@ -845,17 +852,19 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	if list != "" {
 		place = rq.placeKey(list)
 	}
-	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{}, &tasksPageView{Heading: heading, ListName: list,
-		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private, place)),
-		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, "")})
+	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
+		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private, place)), LinkSections: sections,
+		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
 
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
-// list, nil for all tasks or an undeclared list.
+// list, nil for all tasks or an undeclared list; LinkSections: a list's
+// Backlinks (with them the page has a page view's columns).
 type tasksPageView struct {
 	view
 	Heading, ListName         string
 	Home                      *TasksHome
+	LinkSections              []M
 	TasksHTML, BreadcrumbHTML template.HTML
 }
 

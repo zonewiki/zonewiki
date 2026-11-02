@@ -204,6 +204,14 @@ def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
     card(page, "Milk").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
     expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
+    # A list opens at /tasks?list=, its view, with the pages embedding it.
+    page.locator(".tasks-place", has_text="My tasks").click()
+    page.wait_for_url("**/page/tasks")
+    page.locator(".tasks-place", has_text="shop").click()
+    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:shop")
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
     places.filter(has_text="All").click()
     page.wait_for_url(re.compile(r"/tasks$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_text("All")

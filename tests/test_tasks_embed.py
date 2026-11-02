@@ -243,7 +243,9 @@ class TestListSwitcher:
         assert places(html) == [("home", "My tasks", True), ("list:gifts", "gifts", False),
                                 ("list:shop", "shop", False), ("all", "All", False)]
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
-        assert 'href="/page/tasks"' in nav and 'href="/page/shop"' in nav and 'href="/tasks"' in nav
+        # The home opens its page; a list /tasks?list= (its home's view, and
+        # the pages that embed it).
+        assert 'href="/page/tasks"' in nav and 'href="/tasks?list=shop"' in nav and 'href="/tasks"' in nav
         assert 'title="List: Shopping"' in nav and 'title="Your Tasks home"' in nav
         assert "tasks-place-lock" not in nav   # without users nothing is private
         # It opens the task app: before it, once.
@@ -307,3 +309,37 @@ class TestListSwitcher:
         assert "list:gifts" in [k for k, _, _ in places(self.get(client, "/tasks"))]
         client.set_cookie("zone-sharing", "1")
         assert "list:gifts" not in [k for k, _, _ in places(self.get(client, "/tasks"))]
+
+
+class TestListBacklinks:
+    """/tasks?list= lists the pages that embed the list as its Backlinks."""
+
+    def test_the_pages_embedding_a_list(self, client, wiki_dir):
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n")
+        write_page(wiki_dir, "kitchen", "# Kitchen\n\n[[tasks: list=Shop view=open]]\n")
+        write_page(wiki_dir, "code", "# Code\n\n```\n[[tasks: list=shop]]\n```\n")
+        write_page(wiki_dir, "work", "# Work\n\n[[tasks: tag=shop]]\n")
+        write_page(wiki_dir, "links", "# Links\n\n[[shop]]\n")
+        html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+        foot = html.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        assert 'id="backlinks"' in foot
+        assert re.findall(r'<li><a href="([^"]+)">([^<]*)</a>', foot) == [("/page/kitchen", "Kitchen"), ("/page/shop", "Shopping")]
+        # The right column's copy and the breadcrumb's chip, as on a page.
+        assert 'class="rail rail-context"' in html and 'data-id="backlinks"' in html
+        assert '<a href="#backlinks" class="bl-count">← 2</a>' in html
+        assert '<main class="wide">' in html
+
+    def test_no_list_no_backlinks(self, client, wiki_dir):
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop]]\n")
+        for url in ("/tasks", "/tasks?list=nothing"):
+            html = client.get(url, headers=HOST).get_data(as_text=True)
+            assert 'id="backlinks"' not in html and "bl-count" not in html, url
+
+    def test_sharing_mode_leaves_out_a_page_not_for_sharing(self, client, wiki_dir):
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop]]\n")
+        # zz-: not the list's home (the first A–Z), only a page embedding it.
+        write_page(wiki_dir, "zz-secret", "---\ntags: noshare\n---\n# Secret\n\n[[tasks: list=shop]]\n")
+        assert "/page/zz-secret" in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+        client.set_cookie("zone-sharing", "1")
+        html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+        assert "/page/zz-secret" not in html and "/page/shop" in html

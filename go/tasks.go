@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -359,9 +360,10 @@ func (rq *Req) placeKey(list string) string {
 	return "list:" + list
 }
 
-// taskPlaces: where the user's tasks are, for the switcher: the Tasks home,
-// each list a page declares (A–Z; one whose home is the Tasks home is that
-// home), and all tasks, each with its counts; in sharing mode not a list
+// taskPlaces: where the user's tasks are, for the switcher: the Tasks home
+// (its page), each list a page declares (A–Z, at /tasks?list=, which shows
+// it with its home's params and the pages that embed it; one whose home is
+// the Tasks home is that home), and all tasks, each with its counts; in sharing mode not a list
 // whose page is not for sharing. Nil when there is nothing to switch
 // between (no home, no list).
 func (rq *Req) taskPlaces() []TaskPlace {
@@ -379,7 +381,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List: " + firstNonEmpty(l.Title, l.Slug),
-			Href: pathURL("page", l.Slug), Private: ownPrivate(user, l.Slug), Counts: countTasks(tasks, l.Params.With("list", name))})
+			Href: "/tasks?list=" + url.QueryEscape(name), Private: ownPrivate(user, l.Slug), Counts: countTasks(tasks, l.Params.With("list", name))})
 	}
 	if len(out) == 0 {
 		return nil
