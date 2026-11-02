@@ -292,7 +292,7 @@ main {
     mask-image: linear-gradient(to bottom, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
   }
   .page-col { min-width: 0; container-type: inline-size; }
-  .page-col > :is(.page-header, .page-meta-wrapper, .page-tldr, .page-content) {
+  .page-col > :is(.tasks-places, .page-header, .page-meta-wrapper, .page-tldr, .page-content) {
     max-width: 46rem; margin-inline: auto;
   }
   .page-foot { display: none; }
@@ -2122,12 +2122,11 @@ body.editor-page main {
   }
 }
 
-/* The task list switcher (tasks_embed.html .tasks-places): above the task
-   app on a place of the tasks, a row of pills, one per place (the Tasks
-   home, the lists A–Z, All), the current one shaded as in the module
-   switcher; private ones with a lock. Wraps on a narrow screen. */
-.tasks-places { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 .7rem; }
-/* Two classes: above .page-content a, which the embed sits in. */
+/* The task list switcher (tasks_page.html .tasks-places): on /tasks, above
+   the heading, a row of pills, one per list (the Tasks home's first, the
+   others A–Z, All), the current one shaded as in the module switcher;
+   private ones with a lock. Wraps on a narrow screen. */
+.tasks-places { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 1.1rem; }
 .tasks-places .tasks-place {
   display: inline-flex; align-items: center; gap: .3rem;
   height: 1.75rem; padding: 0 .7rem; border: 1px solid var(--border); border-radius: 999px;

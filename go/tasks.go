@@ -185,7 +185,7 @@ const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
 // a page's embeds); headless hides it but for its edit modal (the editor's
 // Make task, c t on any page), and tasks.js skips its shortcuts. private:
 // a new task here is private (a page in user's own folder).
-func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool, place string) string {
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool) string {
 	user := rq.who()
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
@@ -223,18 +223,10 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	if isTrue(params.Get("keep")) {
 		keep = "1"
 	}
-	// place: the switcher, this place current (a key no place has: none).
-	var places []TaskPlace
-	if place != "" {
-		places = rq.taskPlaces()
-		for i := range places {
-			places[i].Current = places[i].Key == place
-		}
-	}
 	var b bytes.Buffer
 	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
 		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": embedView(params),
-		"places": places, "limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
+		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
 		// keep=1: new tasks here are keep tasks; home=1: the user's own tasks.
 		"keep": keep, "home": isTrue(params.Get("home")),
 		// With users, the modal's Private box; ticked for a new task here.
@@ -253,43 +245,17 @@ type tasksEmbed struct{ placeholder, html string }
 // processTasksEmbeds swaps each [[tasks: …]] for a placeholder; the embeds'
 // HTML replaces them after rendering (injectTasksEmbeds). page: the page
 // rendered ("" none); in rq's user's own folder its embeds make private
-// tasks. The first embed that makes the page a place of the tasks (the
-// Tasks home's home=1, the list= of a list whose home it is) gets the list
-// switcher.
+// tasks.
 func processTasksEmbeds(rq *Req, text, page string) (string, []tasksEmbed) {
 	private := page != "" && ownPrivate(rq.who(), page)
 	var embeds []tasksEmbed
-	placed := false
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
-		params := parseTasksParams(embedArgs(g))
-		place := ""
-		if page != "" && !placed {
-			place = rq.embedPlace(params, page)
-			placed = place != ""
-		}
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, params, len(embeds), false, private, place)})
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, parseTasksParams(embedArgs(g)), len(embeds), false, private)})
 		return ph
 	})
 	return text, embeds
-}
-
-// embedPlace: the place (TaskPlace's key) an embed with params on page is,
-// or "" when it is none: a view on a page, not where its tasks live.
-func (rq *Req) embedPlace(params TasksParams, page string) string {
-	if isTrue(params.Get("home")) && page == rq.tasksHomeSlug() {
-		if l := rq.homeList(); l != "" {
-			return "list:" + l
-		}
-		return "home"
-	}
-	if l := cleanList(params.Get("list")); l != "" {
-		if h, ok := rq.taskLists()[l]; ok && h.Slug == page {
-			return "list:" + l
-		}
-	}
-	return ""
 }
 
 // injectTasksEmbeds: the last first, as _1 is a prefix of _10.
@@ -345,7 +311,7 @@ func countTasks(tasks []*Task, params TasksParams) TaskCounts {
 	return c
 }
 
-// TaskPlace is an entry of the task list switcher (tasks_embed.html): a
+// TaskPlace is an entry of the task list switcher (tasks_page.html): a
 // list, all tasks, or a Tasks home without a list. Key names it for the
 // counts' refresh (js/chrome.js): "list:<name>", "all", "home".
 type TaskPlace struct {
@@ -418,7 +384,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate(), ""))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.homePrivate()))
 	})
 	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)

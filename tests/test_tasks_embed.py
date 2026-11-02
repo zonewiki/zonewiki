@@ -219,8 +219,8 @@ def places(html):
 
 
 class TestListSwitcher:
-    """A place of the tasks (the Tasks home, a list's home, /tasks) opens with
-    the list switcher: the home, the lists A–Z, All."""
+    """/tasks opens with the list switcher, above its heading: the Tasks
+    home's list, the other lists A–Z, All; pages that embed a list show none."""
 
     @staticmethod
     def wiki(wiki_dir):
@@ -231,49 +231,55 @@ class TestListSwitcher:
     def get(self, client, url):
         return client.get(url, headers=HOST).get_data(as_text=True)
 
+    def current(self, client, url):
+        return [k for k, _, cur in places(self.get(client, url)) if cur]
+
     def test_nothing_to_switch_between_shows_no_switcher(self, client, wiki_dir):
         write_page(wiki_dir, "work", "# Work\n\n[[tasks: tag=work]]\n")
         assert places(self.get(client, "/tasks")) == []
-        assert places(self.get(client, "/page/work")) == []
 
-    def test_the_home_the_lists_and_all(self, client, wiki_dir):
+    def test_the_lists_and_all_above_the_heading(self, client, wiki_dir):
         self.wiki(wiki_dir)
-        html = self.get(client, "/page/tasks")
+        html = self.get(client, "/tasks?list=shop")
         # Lists by their names, not their pages': the home's first.
-        assert places(html) == [("list:task", "task", True), ("list:gifts", "gifts", False),
-                                ("list:shop", "shop", False), ("all", "All", False)]
+        assert places(html) == [("list:task", "task", False), ("list:gifts", "gifts", False),
+                                ("list:shop", "shop", True), ("all", "All", False)]
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
-        # A list opens at /tasks?list= (its home's view, and the pages that
-        # embed it), the home's too.
         assert re.findall(r'href="([^"]+)"', nav) == ["/tasks?list=task", "/tasks?list=gifts", "/tasks?list=shop", "/tasks"]
         assert 'title="List #shop"' in nav and 'title="Your tasks (the Tasks home&#39;s list)"' in nav
         assert "tasks-place-lock" not in nav   # without users nothing is private
-        # It opens the task app: before it, once.
+        # Above the heading, which names the list.
         assert html.count('class="tasks-places"') == 1
-        assert html.index('class="tasks-places"') < html.index('class="tasks-app"')
+        assert html.index('class="tasks-places"') < html.index("<h1>List: shop</h1>") < html.index('class="tasks-app"')
+        assert "<title>List: shop" in html
 
-    def test_a_list_home_and_tasks_mark_their_place(self, client, wiki_dir):
+    def test_all_tasks_and_the_homes_list(self, client, wiki_dir):
         self.wiki(wiki_dir)
-        current = lambda url: [k for k, _, cur in places(self.get(client, url)) if cur]
-        assert current("/page/shop") == ["list:shop"]
-        assert current("/tasks") == ["all"]
-        assert current("/tasks?list=gifts") == ["list:gifts"]
-        assert current("/tasks?list=task") == ["list:task"]
-        assert current("/page/tasks") == ["list:task"]
+        assert self.current(client, "/tasks") == ["all"]
+        assert "<h1>All tasks</h1>" in self.get(client, "/tasks")
+        assert self.current(client, "/tasks?list=task") == ["list:task"]
         # A tag no page declares: the switcher, nothing current.
         html = self.get(client, "/tasks?list=nothing")
-        assert places(html) and current("/tasks?list=nothing") == []
+        assert places(html) and self.current(client, "/tasks?list=nothing") == []
+        assert "<h1>List: nothing</h1>" in html and "No page declares" in html
+
+    def test_pages_show_no_switcher(self, client, wiki_dir):
+        # A page that embeds a list shows the list; the switcher is /tasks's.
+        self.wiki(wiki_dir)
+        for slug in ("tasks", "shop"):
+            assert places(self.get(client, f"/page/{slug}")) == [], slug
+        html = client.post("/api/preview?page=shop", data=b"[[tasks: list=shop]]\n", headers=HOST).get_data(as_text=True)
+        assert places(html) == []
 
     def test_the_homes_list_declared_elsewhere_too_is_one_place(self, client, wiki_dir):
         # Another page declaring the home's list (here first A–Z, so the
         # list's home): still one pill, named by the list, with the Tasks
-        # home's view; no page title in the switcher or on /tasks?list=.
+        # home's view; no page title on /tasks?list=.
         self.wiki(wiki_dir)
         write_page(wiki_dir, "aaa-scratch", "# Scratch\n\n[[tasks: list=task]]\n")
-        html = self.get(client, "/page/tasks")
-        assert [k for k, _, _ in places(html)] == ["list:task", "list:gifts", "list:shop", "all"]
         html = self.get(client, "/tasks?list=task")
-        assert [k for k, _, cur in places(html) if cur] == ["list:task"]
+        assert [k for k, _, _ in places(html)] == ["list:task", "list:gifts", "list:shop", "all"]
+        assert self.current(client, "/tasks?list=task") == ["list:task"]
         assert 'data-init-view="focus"' in html   # the Tasks home's view=focus
         assert "A separate list" not in html and "tasks-list-home" not in html
         foot = html.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
@@ -282,27 +288,9 @@ class TestListSwitcher:
     def test_a_home_without_a_list_is_home(self, client, wiki_dir):
         write_page(wiki_dir, "tasks", "# My tasks\n\n[[tasks: tag=me home=1]]\n")
         write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop]]\n")
-        html = self.get(client, "/page/tasks")
-        assert places(html) == [("home", "Home", True), ("list:shop", "shop", False), ("all", "All", False)]
-        assert 'data-place="home" title="Your Tasks home"' in html and 'href="/page/tasks" class="tasks-place"' in html
-
-    def test_a_view_on_a_page_is_no_place(self, client, wiki_dir):
-        # A list's embed on a page that isn't its home, a tag= view, a second
-        # embed of a home: views, not places, so no switcher.
-        self.wiki(wiki_dir)
-        write_page(wiki_dir, "zz-more", "# More\n\n[[tasks: list=shop]]\n\n[[tasks: tag=urgent]]\n")
-        assert places(self.get(client, "/page/zz-more")) == []
-        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n\n[[tasks: list=shop view=open]]\n")
-        assert self.get(client, "/page/shop").count('class="tasks-places"') == 1
-        # A page with home=1 that isn't the home (the first A–Z is).
-        write_page(wiki_dir, "zz-home", "# Other home\n\n[[tasks: home=1]]\n")
-        assert places(self.get(client, "/page/zz-home")) == []
-
-    def test_the_editors_preview_shows_it_as_the_page_will(self, client, wiki_dir):
-        self.wiki(wiki_dir)
-        html = client.post("/api/preview?page=shop", data=b"[[tasks: list=shop]]\n", headers=HOST).get_data(as_text=True)
-        assert [k for k, _, cur in places(html) if cur] == ["list:shop"]
-        assert places(preview(client, "[[tasks: list=shop]]\n")) == []   # no page: no place
+        html = self.get(client, "/tasks")
+        assert places(html) == [("home", "Home", False), ("list:shop", "shop", False), ("all", "All", True)]
+        assert 'href="/page/tasks" class="tasks-place" data-place="home" title="Your Tasks home"' in html
 
     def test_each_place_has_its_counts(self, client, wiki_dir):
         self.wiki(wiki_dir)
@@ -311,7 +299,7 @@ class TestListSwitcher:
         create_task(client, title="Bread", tags=["shop"], due_date=today)
         create_task(client, title="Report", tags=["task"], due_date=today)
         create_task(client, title="Elsewhere", start_date=today)
-        nav = self.get(client, "/page/shop").split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        nav = self.get(client, "/tasks").split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         counts = dict(re.findall(r'data-place="([^"]+)".*?<span class="module-counts">(.*?)</span></a>', nav, re.S))
         due = lambda k: re.search(r'class="module-due"[^>]*>(\d*)<', counts[k]).group(1)
         focus = lambda k: re.search(r'class="module-focus"[^>]*>(\d*)<', counts[k]).group(1)

@@ -2087,7 +2087,7 @@ class TestTasksPage:
         assert 'data-init-list=""' in body
         assert 'data-init-tag=""' in body
         assert 'data-init-view=""' in body   # ?view= / session / Today decide
-        assert "<h1>Tasks</h1>" in body
+        assert "<h1>All tasks</h1>" in body
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a task list.md) are ordinary pages now.
@@ -2101,7 +2101,7 @@ class TestTasksPage:
         body = self.get(client, "?list=Groceries&task=abc")
         assert 'data-init-list="groceries"' in body
         assert '<a href="/tasks">Tasks</a>' in body
-        assert "<h1>groceries</h1>" in body
+        assert "<h1>List: groceries</h1>" in body
 
     def test_list_name_escaped(self, client, wiki_dir):
         body = self.get(client, "?list=<b>x")

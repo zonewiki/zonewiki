@@ -185,38 +185,39 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     expect(card(page, "Due today")).to_have_class(re.compile(r"\btask-urg-today\b"))
 
 
-def test_list_switcher_goes_between_the_places_and_keeps_its_counts(page, wiki):
-    # A place of the tasks opens with the switcher: the lists by name (the
-    # Tasks home's first), All; its counts follow the task app's writes.
+def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
+    # /tasks opens with the switcher above the heading: the lists by name
+    # (the Tasks home's first), All; its counts follow the task app's writes.
     wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus home=1]]\n")
     wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "start_date": date.today().isoformat()})
-    page.goto("/page/shop")
+    page.goto("/tasks?list=shop")
     places = page.locator(".tasks-places .tasks-place")
     expect(places.locator(".tasks-place-label")).to_have_text(["task", "shop", "All"])
     shop = places.and_(page.locator("[data-place='list:shop']"))
     expect(shop).to_have_attribute("aria-current", "page")
     expect(shop.locator(".module-focus")).to_have_text("1")
-    # One row, above the task app's tabs.
+    expect(page.locator("h1")).to_have_text("List: shop")
+    expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
+    # One row, above the heading.
     boxes = [b.bounding_box() for b in places.all()]
     assert all(abs(b["y"] - boxes[0]["y"]) < 1 for b in boxes)
-    assert boxes[0]["y"] + boxes[0]["height"] <= page.locator("#tasks-tabs").bounding_box()["y"]
+    assert boxes[0]["y"] + boxes[0]["height"] <= page.locator("h1").bounding_box()["y"]
     card(page, "Milk").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
     expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
-    # A list opens at /tasks?list=, its view, with the pages embedding it.
-    page.locator(".tasks-place", has_text="task").first.click()
+    places.filter(has_text="task").first.click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
-    page.locator(".tasks-place", has_text="shop").click()
-    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
-    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:shop")
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
-    expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
-    places.filter(has_text="All").click()
+    page.locator(".tasks-place", has_text="All").click()
     page.wait_for_url(re.compile(r"/tasks$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_text("All")
-    page.goto("/page/tasks")
-    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
+    expect(page.locator("h1")).to_have_text("All tasks")
+    # A page embedding a list shows the list, no switcher.
+    page.goto("/page/shop")
+    expect(card(page, "Milk")).to_have_count(0)
+    expect(page.locator(".tasks-places")).to_have_count(0)
 
 
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
@@ -232,7 +233,7 @@ def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     expect(card(page, "Milk")).to_be_visible()     # list tasks too: it's every task
 
     page.goto("/tasks?list=groceries&view=open")
-    expect(page.locator("h1")).to_have_text("groceries")
+    expect(page.locator("h1")).to_have_text("List: groceries")
     expect(card(page, "Milk")).to_be_visible()
     expect(card(page, "Untagged")).to_have_count(0)
 

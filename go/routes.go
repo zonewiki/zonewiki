@@ -350,7 +350,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
-		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))})
+		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -823,7 +823,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 func tasksPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	list := cleanList(r.URL.Query().Get("list"))
-	params, title, heading := TasksParams{}, "Tasks", "Tasks"
+	params, title, heading := TasksParams{}, "Tasks", "All tasks"
 	var home *TasksHome
 	var sections []M
 	var chip template.HTML
@@ -842,7 +842,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			params, home = h.Params, h
 		}
 		params = params.With("list", list)
-		title, heading = list+" · Tasks", list
+		title, heading = "List: "+list, "List: "+list
 		// Backlinks: the pages that embed the list, as a page's are.
 		if pages := rq.listPages(list); len(pages) > 0 {
 			sections = []M{{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(pages)}}
@@ -853,22 +853,29 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
+	// The list switcher, this list (or All) current.
 	place := "all"
 	if list != "" {
 		place = "list:" + list
 	}
+	places := rq.taskPlaces()
+	for i := range places {
+		places[i].Current = places[i].Key == place
+	}
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
-		Home: home, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private, place)), LinkSections: sections,
+		Home: home, Places: places, TasksHTML: htmlOf(buildTasksEmbed(rq, params, 0, false, private)), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
 
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
-// list, nil for all tasks or an undeclared list; LinkSections: a list's
+// list, nil for all tasks or an undeclared list; Places: the list switcher;
+// LinkSections: a list's
 // Backlinks (with them the page has a page view's columns).
 type tasksPageView struct {
 	view
 	Heading, ListName         string
 	Home                      *TasksHome
+	Places                    []TaskPlace
 	LinkSections              []M
 	TasksHTML, BreadcrumbHTML template.HTML
 }
