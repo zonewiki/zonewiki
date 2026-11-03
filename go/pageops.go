@@ -62,6 +62,7 @@ const (
 	refusedExists                   // a page by the new name is there already
 	refusedProtected                // the home page: never deleted or renamed
 	refusedUnchanged                // the page already is what the write would make it
+	refusedFull                     // the wiki would hold more than storage-max: 507 (checkRoom)
 )
 
 // pageError: an operation refused, with a message for the user.
@@ -91,6 +92,8 @@ func pageFailed(w http.ResponseWriter, r *http.Request, err error) {
 		serverError(w, r, err)
 	case pe.kind == refusedNotFound:
 		http.NotFound(w, r)
+	case pe.kind == refusedFull:
+		http.Error(w, pe.msg, http.StatusInsufficientStorage)
 	default:
 		badRequestPage(w)
 	}
@@ -125,6 +128,7 @@ func deletePageOp(user, slug, suffix string) (kept bool, err error) {
 	if err := os.Remove(path); err != nil {
 		return kept, err
 	}
+	forgetUsage()
 	return kept, notCommitted(gitCommit(user, "Delete "+slug+suffix, path))
 }
 
@@ -176,9 +180,13 @@ func createPageOp(user, slug, content, suffix string) error {
 	case exists(path):
 		return refuseAs(refusedExists, "A page named "+strconv.Quote(slug)+" already exists")
 	}
+	if err := checkRoom(int64(len(content))); err != nil {
+		return err
+	}
 	if err := writeText(path, content); err != nil {
 		return err
 	}
+	added(int64(len(content)))
 	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
 }
 
@@ -187,10 +195,16 @@ func createPageOp(user, slug, content, suffix string) error {
 // ticked checkbox stays a draft, not committed; Done's save (commit)
 // commits it as "Update <slug>", also when only the file was dirty.
 // Either continues the writer's text, so only another user's draft there
-// is committed first (commitOthersDraft), not the writer's own.
+// is committed first (commitOthersDraft), not the writer's own. A page's
+// first save makes it, so it needs room (checkRoom); an edit never does.
 func writeDraft(user, slug, path string, current *string, text string, commit bool) error {
 	if !canWrite(user, slug) || safePath(slug) != path {
 		return refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+	}
+	if current == nil {
+		if err := checkRoom(int64(len(text))); err != nil {
+			return err
+		}
 	}
 	if err := commitOthersDraft(user, slug, path); err != nil {
 		return err
@@ -198,6 +212,9 @@ func writeDraft(user, slug, path string, current *string, text string, commit bo
 	if current == nil || *current != text {
 		if err := writeText(path, text); err != nil {
 			return err
+		}
+		if current == nil {
+			added(int64(len(text)))
 		}
 	}
 	if commit {

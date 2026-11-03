@@ -1768,6 +1768,91 @@ class TestBodyLimits:
         resp = client.post("/api/save/big", data={"content": text}, headers=HOST)
         assert resp.status_code == 200, resp.get_data(as_text=True)
 
+    def test_upload_max_sets_an_uploads_limit(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "upload-max = 1KB\n")
+        resp = client.post("/api/upload", headers=HOST, content_type="multipart/form-data",
+                           data={"file": (io.BytesIO(b"x" * 2000), "big.bin")})
+        assert resp.status_code == 413 and "at most 1 KB" in resp.get_data(as_text=True)
+        assert not (wiki_dir / "_assets" / "big.bin").exists()
+        # Go reads a small body before it answers: sent, though refused on its length.
+        status, text = self._raw(client, "/api/upload", {"Content-Length": "2000"}, b"x" * 2000)
+        assert status == 413 and "at most 1 KB" in text
+        resp = client.post("/api/upload", headers=HOST, content_type="multipart/form-data",
+                           data={"file": (io.BytesIO(b"x" * 500), "small.bin")})
+        assert resp.status_code == 200
+        # The other requests keep theirs.
+        assert client.post("/api/preview", data={"content": "x" * 5000}, headers=HOST).status_code == 200
+
+
+# ===========================================================================
+# storage-max: how much the wiki may hold (go/storage.go)
+# ===========================================================================
+
+class TestStorageMax:
+    """The browser's own ways to make something new (both doors' page
+    writes: tests/test_page_writes.py)."""
+
+    @pytest.fixture()
+    def full(self, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+        # 9.3 KB of the 10 KB: index.md, p and this.
+        (wiki_dir / "_assets" / "big.bin").write_bytes(b"x" * 9500)
+        write_page(wiki_dir, "p", "# P\n")
+        return wiki_dir
+
+    @staticmethod
+    def upload(client, data, name, **form):
+        return client.post("/api/upload", headers=HOST, content_type="multipart/form-data",
+                           data={"file": (io.BytesIO(data), name), **form})
+
+    def test_an_upload_that_doesnt_fit(self, client, full):
+        resp = self.upload(client, b"x" * 2000, "photo.png")
+        assert resp.status_code == 507
+        assert "The wiki is full:" in resp.get_data(as_text=True)
+        assert not (full / "_assets" / "photo.png").exists()
+        assert self.upload(client, b"x" * 500, "small.png").status_code == 200
+        # Replacing a file adds only what it grows by.
+        assert self.upload(client, b"y" * 9600, "big.bin", overwrite="1").status_code == 200
+        assert (full / "_assets" / "big.bin").read_bytes() == b"y" * 9600
+
+    def test_a_smaller_file_replaces_one_in_a_full_wiki(self, client, full):
+        (full / "_assets" / "more.bin").write_bytes(b"x" * 1000)
+        assert self.upload(client, b"x" * 10, "photo.png").status_code == 507
+        assert self.upload(client, b"y" * 100, "more.bin", overwrite="1").status_code == 200
+        assert (full / "_assets" / "more.bin").read_bytes() == b"y" * 100
+
+    def test_uploads_in_a_row_count(self, client, full):
+        """Each counts at once, not at the next walk."""
+        assert self.upload(client, b"x" * 300, "a.png").status_code == 200
+        assert self.upload(client, b"x" * 300, "b.png").status_code == 200
+        assert self.upload(client, b"x" * 300, "c.png").status_code == 507
+
+    def test_no_editor_for_a_new_page(self, client, full):
+        (full / "_assets" / "more.bin").write_bytes(b"x" * 1000)
+        resp = client.get("/edit/new-page", headers=HOST)
+        assert resp.status_code == 507 and "The wiki is full:" in resp.get_data(as_text=True)
+        assert client.get("/edit/p", headers=HOST).status_code == 200
+
+    def test_no_auto_save_makes_a_page(self, client, full):
+        (full / "_assets" / "more.bin").write_bytes(b"x" * 1000)
+        assert client.post("/api/save/new-page", data={"content": "# New\n"}, headers=HOST).status_code == 507
+        assert not (full / "new-page.md").exists()
+        resp = client.post("/api/save/p", data={"content": "# P\n\n" + "word " * 1000}, headers=HOST)
+        assert resp.status_code == 200
+
+    def test_git_and_zones_folder_dont_count(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+        (wiki_dir / ".git").mkdir(exist_ok=True)
+        (wiki_dir / ".git" / "big.pack").write_bytes(b"x" * 50_000)
+        (wiki_dir / ".zone").mkdir(exist_ok=True)
+        (wiki_dir / ".zone" / "cache").write_bytes(b"x" * 50_000)
+        assert self.upload(client, b"x" * 2000, "photo.png").status_code == 200
+
+    def test_unset_no_limit(self, client, wiki_dir):
+        (wiki_dir / "_assets" / "big.bin").write_bytes(b"x" * 200_000)
+        assert self.upload(client, b"x" * 2000, "photo.png").status_code == 200
+        assert client.get("/edit/new-page", headers=HOST).status_code == 200
+
 
 # ===========================================================================
 # Behind an HTTPS proxy: the login cookie, throttling guesses

@@ -253,6 +253,8 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `query-log` | `yes`: keep the queries AI clients send to `search_wiki` in `.zone/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
 | `trusted-proxies` | Your reverse proxy's address (or network), when it doesn't connect from localhost (e.g. `172.17.0.1` for a proxy on the host of a container): Zone then tells its clients apart when it slows down wrong passwords |
+| `upload-max` | The biggest file an upload may be, e.g. `25MB` (default: `100MB`) |
+| `storage-max` | How much the wiki may hold, e.g. `5GB` (default: no limit). Counts your pages and files, not their git history; when full, new pages, notes and uploads are refused until you delete something, while edits to pages always save |
 
 A typo in the file keeps the settings Zone has and shows up in its log. Up
 to 2026-10 these were `LEAF_…` variables in `.env`; Zone now refuses to

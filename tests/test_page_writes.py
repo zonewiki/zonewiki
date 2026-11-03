@@ -267,6 +267,67 @@ class TestOneWriteAtATime:
         assert "- [ ] one" in text  # four ticks: unticked again
 
 
+@pytest.fixture()
+def full(wiki, monkeypatch):
+    """A wiki holding more than its storage-max (go/storage.go)."""
+    monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+    (wiki / "_assets").mkdir(exist_ok=True)
+    (wiki / "_assets" / "big.bin").write_bytes(b"x" * 20_000)
+    return wiki
+
+
+def note(client, door, title, token=TOKEN):
+    if door == "browser":
+        return client.post("/api/notes", data={"title": title}, headers=HOST).status_code == 200
+    return not mcp(client, "write_page", token, note=True, content=f"# {title}\n")[1]
+
+
+@pytest.mark.parametrize("door", DOORS)
+class TestWikiFull:
+    """storage-max: nothing new once the wiki would hold more; an edit, a
+    restore, a rename or a delete still goes through, so typed text is never
+    refused and there is always a way to make room."""
+
+    def test_nothing_new(self, client, full, door):
+        client.get("/", headers=HOST)   # started: its settings committed
+        head = subjects(full)
+        assert not create(client, door, "new-page")
+        assert not note(client, door, "Idea")
+        assert not (full / "new-page.md").exists() and not list(full.glob("*idea*"))
+        assert subjects(full) == head
+
+    def test_the_refusal_says_why(self, client, full, door):
+        if door == "browser":
+            resp = client.post("/new", data={"slug": "new-page"}, headers=HOST)
+            assert resp.status_code == 507
+            text = resp.get_data(as_text=True)
+        else:
+            text, is_error = mcp(client, "write_page", slug="new-page", content="# New\n")
+            assert is_error
+        assert "The wiki is full:" in text and "of 10 KB used" in text and "Delete pages or files" in text
+
+    def test_edits_restores_renames_and_deletes_go_through(self, client, full, door):
+        v1 = commit(full, "p", "# P\n\nv1\n")
+        commit(full, "p", "# P\n\nv2\n")
+        if door == "browser":
+            resp = client.post("/edit/p", data={"content": "# P\n\n" + "more " * 1000}, headers=HOST)
+            assert resp.status_code == 302
+        else:
+            assert not mcp(client, "append_to_page", slug="p", content="more " * 1000)[1]
+        assert "more more" in (full / "p.md").read_text()
+        assert restore(client, door, "p", v1)
+        assert rename(client, door, "p", "q")
+        assert delete(client, door, "q")
+
+    def test_room_again_once_deleted(self, client, full, door):
+        """A delete through Zone counts at once (one on disk within seconds)."""
+        commit(full, "big", "# Big\n\n" + "x" * 20_000)
+        assert not create(client, door, "new-page")
+        (full / "_assets" / "big.bin").unlink()
+        assert delete(client, door, "big")
+        assert create(client, door, "new-page")
+
+
 class TestWrites:
     def test_a_page_keeps_its_permissions(self, client, wiki):
         """Written atomically (a new file renamed into place), with the mode it had."""

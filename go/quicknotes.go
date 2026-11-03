@@ -78,9 +78,13 @@ func createQuicknote(user, title string, content *string, suffix string) (string
 	if content != nil {
 		text = trimNewlines(*content) + "\n"
 	}
+	if err := checkRoom(int64(len(text))); err != nil {
+		return "", err
+	}
 	if err := writeText(path, text); err != nil {
 		return "", err
 	}
+	added(int64(len(text)))
 	return slug, notCommitted(gitCommit(user, "Create "+slug+suffix, path))
 }
 

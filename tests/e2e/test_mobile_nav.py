@@ -102,6 +102,22 @@ def test_phone_tab_bar_marks_and_opens_modules(new_page, wiki):
     expect(tab("notes")).to_have_attribute("aria-current", "page")
 
 
+def test_no_note_in_a_full_wiki(page, wiki, monkeypatch):
+    """storage-max: the note isn't made, and an alert says why."""
+    monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+    (wiki.root / "_assets").mkdir(exist_ok=True)
+    (wiki.root / "_assets" / "big.bin").write_bytes(b"x" * 20_000)
+    page.goto("/page/index")
+    page.keyboard.press("c")
+    page.keyboard.press("n")
+    page.locator("#new-note-title").fill("Idea")
+    with page.expect_event("dialog") as dialog:
+        page.locator("#new-note-title").press("Enter")
+    assert "The wiki is full:" in dialog.value.message
+    dialog.value.accept()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+
+
 def test_note_creates_a_quicknote(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     # In every module, the wiki too: Note always means a note.

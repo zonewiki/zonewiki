@@ -70,6 +70,10 @@ func quote(s string) string { return pathURL(s)[1:] }
 // apiNewNote: a new note titled by the form's title; answers its slug.
 func apiNewNote(w http.ResponseWriter, r *http.Request) {
 	slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
+	if pe, ok := refusalOf(err); ok && pe.kind == refusedFull {
+		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+		return
+	}
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -289,6 +293,11 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	if isNew {
 		title = mdtext.SlugDisplayName(slug)
 		content = "# " + title + "\n\n"
+		// Full: refused before anything is typed, not at its first save.
+		if err := checkRoom(int64(len(content))); err != nil {
+			pageFailed(w, r, err)
+			return
+		}
 	} else {
 		var err error
 		if content, err = readText(path); err != nil {

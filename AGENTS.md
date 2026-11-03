@@ -88,6 +88,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
+│   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
 │   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: password hashes, sign-in, the password prompt
@@ -235,7 +236,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - Every response carries the page policy (`pageCSP`): only Zone's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Zone's code, or the browser tests fail), no framing by other sites, `nosniff`.
-  - Request bodies are capped in the checks (16 MB, an upload 100 MB; 413 above). The settings change only while no request runs (`betweenRequests`; requests don't wait for it), so a request's session check and access checks see the same users.
+  - Request bodies are capped in the checks (16 MB, an upload 100 MB or the settings' `upload-max`; 413 above). What the wiki may hold is `storage-max` (`go/storage.go`): past it nothing new is made (uploads, new pages and notes: 507), but an edit, a delete or a rename always goes through. The settings change only while no request runs (`betweenRequests`; requests don't wait for it), so a request's session check and access checks see the same users.
   - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
 - `ZONE_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).

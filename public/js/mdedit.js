@@ -114,6 +114,8 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
         if (choice) await uploadFileAtCursor(file, choice.name, choice.overwrite);
         return;
       }
+      // Too large (413) or the wiki full (507): the server says why.
+      if (res.status === 413 || res.status === 507) alert(await res.text());
       if (!res.ok) throw new Error();
       const { url } = await res.json();
       const md = isImage ? `![${name}](${url})` : `[${name}](${url})`;

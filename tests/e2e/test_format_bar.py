@@ -234,6 +234,20 @@ def test_attach_uploads_and_inserts_a_link(page, wiki):
     assert (wiki.root / "_assets" / "notes.txt").read_bytes() == b"hello"
 
 
+def test_a_refused_upload_says_why(page, wiki, monkeypatch):
+    """Over upload-max (413) or with the wiki full (507): the placeholder
+    goes and an alert gives the server's message."""
+    monkeypatch.setattr(settings, "CONFIG_FILE", "upload-max = 1KB\n")
+    textarea = _edit(page, wiki, "File: ", 6)
+    with page.expect_event("dialog") as dialog:
+        page.locator("#fmt-attach-input").set_input_files(
+            {"name": "big.bin", "mimeType": "application/octet-stream", "buffer": b"x" * 2000})
+    assert "Too large: at most 1 KB" in dialog.value.message
+    dialog.value.accept()
+    expect(textarea).to_have_value("# Fmt\n\nFile: ")
+    assert not (wiki.root / "_assets" / "big.bin").exists()
+
+
 def test_attach_to_a_private_page_keeps_the_file_private(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})

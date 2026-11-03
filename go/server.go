@@ -303,7 +303,7 @@ func checks(next http.Handler) http.Handler {
 		}
 		limit := int64(bodyMax)
 		if r.URL.Path == "/api/upload" {
-			limit = uploadMax
+			limit = settings().uploadMax()
 		}
 		if r.ContentLength > limit {
 			tooLargeError(w, limit)
@@ -326,12 +326,10 @@ func checks(next http.Handler) http.Handler {
 }
 
 // A request's body is at most bodyMax (a page, a task, an MCP call), an
-// upload's uploadMax: a bigger one gets 413 before it is read, or, sent
-// without a length, a read error at the limit (tooLarge).
-const (
-	bodyMax   = 16 << 20
-	uploadMax = 100 << 20
-)
+// upload's upload-max (100 MB unless set; Settings.uploadMax): a bigger one
+// gets 413 before it is read, or, sent without a length, a read error at
+// the limit (tooLarge).
+const bodyMax = 16 << 20
 
 // tooLarge: err is a body read past its limit.
 func tooLarge(err error) bool {
@@ -341,7 +339,7 @@ func tooLarge(err error) bool {
 
 // tooLargeError answers a body over limit with 413.
 func tooLargeError(w http.ResponseWriter, limit int64) {
-	http.Error(w, fmt.Sprintf("Too large: at most %d MB", limit>>20), http.StatusRequestEntityTooLarge)
+	http.Error(w, "Too large: at most "+formatSize(limit), http.StatusRequestEntityTooLarge)
 }
 
 // dotSegments: a path with a "." or ".." segment.
@@ -696,7 +694,7 @@ func uploadExt(mimeType string) string {
 func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		if tooLarge(err) {
-			tooLargeError(w, uploadMax)
+			tooLargeError(w, settings().uploadMax())
 			return
 		}
 		http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -757,10 +755,24 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 var uploadMu sync.Mutex
 
 // saveUpload writes an upload to owner's uploads (uploadDir) and commits it.
-func saveUpload(w http.ResponseWriter, r *http.Request, src io.Reader, owner, filename string) bool {
+func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner, filename string) bool {
 	dest := filepath.Join(uploadDir(owner), filename)
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
+	// What it adds: its size, less the file's it replaces.
+	size, _ := src.Seek(0, io.SeekEnd)
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		serverError(w, r, err)
+		return false
+	}
+	if st, err := os.Stat(dest); err == nil {
+		size -= st.Size()
+	}
+	if err := checkRoom(size); err != nil {
+		pe, _ := refusalOf(err)
+		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+		return false
+	}
 	err := os.MkdirAll(filepath.Dir(dest), 0o777)
 	var out *os.File
 	if err == nil {
@@ -781,6 +793,7 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.Reader, owner, fi
 	if owner != "" {
 		name = privateDir + "/" + owner + "/_assets/" + filename
 	}
+	added(size)
 	gitCommit(userOf(r), "Upload "+name, dest)
 	return true
 }

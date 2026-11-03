@@ -81,6 +81,7 @@ newNoteForm?.addEventListener('submit', async e => {
   data.append('title', title);
   try {
     const res = await fetch('/api/notes', { method: 'POST', body: data });
+    if (res.status === 507) { alert(await res.text()); return; }   // the wiki is full
     const { slug } = await res.json();
     window.location.href = `/edit/${slug}`;
   } catch (_) {}
