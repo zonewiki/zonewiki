@@ -40,12 +40,13 @@ func TestPageTitle(t *testing.T) {
 
 func TestStripH1(t *testing.T) {
 	for in, want := range map[string]string{
-		"# Title\n\nBody text.\n":           "\nBody text.\n",
-		"## Section\n\nBody.\n":             "## Section\n\nBody.\n",
-		"# First\n\n# Second\n\nBody.\n":    "\n# Second\n\nBody.\n",
-		"":                                  "",
-		"Just text.\n":                      "Just text.\n",
-		"---\ntags: a\n---\n\nBody only.\n": "---\ntags: a\n---\n\nBody only.\n",
+		"# Title\n\nBody text.\n":                    "\nBody text.\n",
+		"## Section\n\nBody.\n":                      "## Section\n\nBody.\n",
+		"# First\n\n# Second\n\nBody.\n":             "\n# Second\n\nBody.\n",
+		"":                                           "",
+		"# T\n---\nnot frontmatter\n---\n":           "\n---\nnot frontmatter\n---\n",
+		"Just text.\n":                               "Just text.\n",
+		"---\ntags: a\n---\n\nBody only.\n":          "---\ntags: a\n---\n\nBody only.\n",
 		"---\ntags: a, b\n---\n\n# Title\n\nBody.\n": "---\ntags: a, b\n---\n\n\nBody.\n",
 	} {
 		if got := StripH1(in); got != want {
@@ -156,6 +157,22 @@ func TestAddFrontmatterTags(t *testing.T) {
 	} {
 		if got := AddFrontmatterTags(c.in, c.tags); got != c.want {
 			t.Errorf("AddFrontmatterTags(%q, %q) = %q, want %q", c.in, c.tags, got, c.want)
+		}
+	}
+}
+
+// ```x``` opens no fence, as the parser reads it: a fence's info has no backtick.
+func TestInlineCodeAtALinesStartIsNoFence(t *testing.T) {
+	text := "```x``` y\n\n# Title\n\n- [ ] box\n"
+	if got := PageTitle(text, "slug"); got != "Title" {
+		t.Errorf("title %q", got)
+	}
+	if got := len(TaskItemLines(SplitLines(text), false)); got != 1 {
+		t.Errorf("%d task lines", got)
+	}
+	for line, inFence := range map[string]bool{"```": true, "``` go": true, "```` x`": false, "```a`b": false, "~~~ a`b": true, "``": false} {
+		if got := FencedLines([]string{line + "\n"})[0].InFence; got != inFence {
+			t.Errorf("%q: in a fence %v", line, got)
 		}
 	}
 }

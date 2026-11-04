@@ -100,6 +100,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the pinned lists
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
+│   ├── sections.go         # Headings and sections as the parser finds them, for the ✎s, the editor, the MCP tools and search (pageHeadings, pageSections, findSection)
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
@@ -113,7 +114,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
 │   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go)
-│   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, sections, checkboxes, slugs)
+│   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format (the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log

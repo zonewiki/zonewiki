@@ -239,3 +239,30 @@ def test_replace_changed_lines(page, wiki, old, new):
         return t.value;
     }""", [old, new])
     assert got == new
+
+
+def section_clash(page, wiki, theirs):
+    """An editor on ## Two, then the page changed to theirs, the same lines too."""
+    wiki.write("plans", PAGE)
+    page.goto("/edit/plans?section=2")
+    wiki.write("plans", theirs)
+    type_after(page, " Mine.", "Second.")
+    banner = page.locator(".conflict-banner")
+    expect(banner).to_be_visible()
+    return banner
+
+
+def test_keep_mine_finds_its_section_after_one_was_added_above(page, wiki):
+    theirs = PAGE.replace("## One", "## New\n\nNew.\n\n## One").replace("Second.", "Second, theirs.")
+    banner = section_clash(page, wiki, theirs)
+    banner.get_by_role("button", name="Keep mine").click()
+    expect(banner).to_have_count(0)
+    assert wiki.read("plans") == theirs.replace("Second, theirs.", "Second. Mine.")
+
+
+def test_keep_mine_writes_nothing_when_its_section_is_gone(page, wiki):
+    theirs = PAGE.replace("## Two\n\nSecond.", "## Renamed\n\nSecond, theirs.")
+    banner = section_clash(page, wiki, theirs)
+    banner.get_by_role("button", name="Keep mine").click()
+    expect(banner).to_contain_text("nothing was overwritten")
+    assert wiki.read("plans") == theirs

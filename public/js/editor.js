@@ -1,7 +1,7 @@
 import TasksCore from '../tasks-core.js';
 import { openTasksEdit } from '../tasks.js';
 import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
-import { markdownEditor, mathFence, mathFenceEnd } from './mdedit.js';
+import { markdownEditor, mathFence, mathFenceEnd, opensCodeFence } from './mdedit.js';
 import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 // ── Editor ────────────────────────────────────────────────────────────────────
@@ -173,6 +173,8 @@ if (textarea && previewPane) {
   const sectionHashEl = document.getElementById('section-file-hash');
   const sectionStartEl = document.getElementById('section-start-char');
   const sectionEndEl = document.getElementById('section-end-char');
+  const sectionIdxEl = document.getElementById('section-idx');
+  const sectionHeadingEl = document.getElementById('section-heading');
   const isSectionEdit = !!sectionStartEl;
   let autoSaveTimer = null;
   let lastSavedContent = textarea.value;
@@ -194,8 +196,22 @@ if (textarea && previewPane) {
   // and offered on the next visit (the server's leftDraft).
   function appendLeavingFields(data) {
     data.append('leaving', '1');
-    const sectionIdxEl = document.getElementById('section-idx');
-    if (isSectionEdit && sectionIdxEl) data.append('section_idx', sectionIdxEl.value);
+    appendSectionFields(data, 'section_idx');
+  }
+
+  // Which section a save outside the hash guard is for: its number, under the
+  // field's name, and its heading, by which the server finds it (a whole
+  // page's save has neither).
+  function appendSectionFields(data, numberField) {
+    if (!isSectionEdit) return;
+    data.append(numberField, sectionIdxEl.value);
+    data.append('section_heading', sectionHeadingEl.value);
+  }
+
+  // The section's heading line as the page has it after a save: by it the
+  // server finds the section if the page has changed around it.
+  function noteSavedHeading(content) {
+    if (sectionHeadingEl) sectionHeadingEl.value = content.split('\n', 1)[0].trimEnd();
   }
 
   function setHash(hash, start, end) {
@@ -227,6 +243,7 @@ if (textarea && previewPane) {
   async function saved(res, content) {
     const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
     if (json?.merged) return takeMerged(json, content);
+    noteSavedHeading(content);
     lastSavedContent = content;
     if (textarea.value === content) saveDot.classList.remove('unsaved');
     if (json) setHash(json.file_hash, json.start_char, json.end_char);
@@ -331,8 +348,7 @@ if (textarea && previewPane) {
       const data = new FormData();
       data.append('content', info.left ? info.left.content : textarea.value);
       data.append('set_aside', '1');
-      const sectionIdxEl = document.getElementById('section-idx');
-      if (isSectionEdit && sectionIdxEl) data.append('force_section', sectionIdxEl.value);
+      appendSectionFields(data, 'force_section');
       try {
         const res = await queueSave(() => fetch(autoSaveUrl, { method: 'POST', body: data }));
         if (!res.ok) return;
@@ -352,15 +368,10 @@ if (textarea && previewPane) {
     });
     document.getElementById('conflict-overwrite').addEventListener('click', async () => {
       if (info.left) replaceChangedLines(textarea, info.left.content);
-      const sectionIdxEl = document.getElementById('section-idx');
       const data = new FormData();
       data.append('content', textarea.value);
       data.append('overwrite', '1');   // what the page holds and was never in git is committed first
-      if (isSectionEdit && sectionIdxEl) {
-        // Section edit: force-splice into current file by section index
-        data.append('force_section', sectionIdxEl.value);
-      }
-      // Full-file edit: no file_hash, no section fields → plain overwrite
+      appendSectionFields(data, 'force_section');   // a whole page: no fields, a plain overwrite
       try {
         const content = textarea.value;
         const res = await queueSave(() => fetch(autoSaveUrl, { method: 'POST', body: data }));
@@ -371,6 +382,9 @@ if (textarea && previewPane) {
           if (fromDone) {
             editorForm.submit();
           }
+        } else if (res.status === 409) {
+          msg.textContent = '\u26a0 This section isn\u2019t in the page as it was any more, so nothing was overwritten. '
+            + 'Reload theirs keeps your text in the page\u2019s history.';
         }
       } catch { /* ignore */ }
     });
@@ -551,7 +565,7 @@ function highlightPreviewBlock(force) {
     }
 
     // Fenced code block toggle
-    if (!inFence && (trimmed.startsWith('```') || trimmed.startsWith('~~~'))) {
+    if (!inFence && opensCodeFence(trimmed)) {
       inFence = true;
       if (!inBlock) { blockIdx++; inBlock = true; }
       continue;

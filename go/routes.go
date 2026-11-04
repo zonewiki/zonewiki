@@ -98,10 +98,6 @@ type notesView struct {
 	BreadcrumbHTML template.HTML
 }
 
-var (
-	sectionHeadRE = regexp.MustCompile(`(?m)^#{2,3}` + mdtext.SpaceClass + `+(.+?)` + mdtext.SpaceClass + `*#*` + mdtext.SpaceClass + `*$`)
-)
-
 // apiPagePreview: a page for the search modal's preview pane, {title, html}:
 // heading ids become data-pid (the page underneath has its own), tasks
 // embeds are left out.
@@ -164,11 +160,12 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	// Tasks the page shows inline already aren't repeated under Linked tasks.
 	inline := pageTaskRefs(rq.user, content)
 	// A section a task links to is named as the page's heading says it.
-	masked, stash := mdtext.MaskCode(content)
+	headings := pageHeadings(content)
 	headingNames := map[string]string{}
-	for _, m := range sectionHeadRE.FindAllStringSubmatch(masked, -1) {
-		heading := mdtext.UnmaskCode(m[1], stash)
-		headingNames[mdtext.SectionAnchor(heading)] = mdtext.PlainHeading(heading)
+	for _, h := range headings {
+		if h.startsSection() {
+			headingNames[mdtext.SectionAnchor(h.text)] = mdtext.PlainHeading(h.text)
+		}
 	}
 	var tasks []TaskLink
 	for _, t := range findTaskBacklinks(rq.user, slug) {
@@ -210,7 +207,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		metaRow = macro("meta_row", M{"tags_html": htmlOf(renderTagsPillsHTML(meta.Tags)), "tldr": meta.Tldr,
 			"changed": changed, "commit": commit})
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
-			EditSlug: slug, SectionTasks: tasks}))
+			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
 	_, private := pageOwner(slug)
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
@@ -245,8 +242,9 @@ type editView struct {
 	view
 	Slug, PageTitle, Content    string
 	OnlyTitle                   bool // nothing but the title yet: the cursor starts after it
-	HasSection                  bool // one section (Section, its range StartChar–EndChar)
+	HasSection                  bool // one section (Section, its heading line, its range StartChar–EndChar)
 	Section, StartChar, EndChar int
+	SectionHeading              string
 	FileHash                    string // the file's hash for conflict detection, whole page or section
 	CanRename, CanDelete        bool
 	Git                         bool
@@ -327,13 +325,22 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	fileHash, start, end := "", 0, 0
+	fileHash, start, end, heading := "", 0, 0, ""
 	if hasSection && !isNew {
-		if s, e, ok := mdtext.SectionCharRange(content, section); ok {
-			fileHash, start, end = mdtext.ContentHash(content), s, e
-			content = strings.TrimRight(mdtext.RuneSlice(content, s, e), "\n")
+		s, e, ok := 0, 0, false
+		if key := q.Get("h"); key != "" {
+			// A ✎ from a page view older than the page: the section it was
+			// on, wherever that is by now.
+			section, s, e, ok = findSection(content, section, key)
 		} else {
-			hasSection = false // an invalid index: the whole page
+			s, e, ok = sectionRange(content, section)
+		}
+		if ok {
+			fileHash, start, end = mdtext.ContentHash(content), s, e
+			content = strings.TrimRight(mdtext.RuneSlice(content, s, e), "\r\n")
+			heading = firstLine(content)
+		} else {
+			hasSection = false // no such section: the whole page
 		}
 	}
 	editable := !isNew && !hasSection // a whole existing page
@@ -354,7 +361,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	}
 	page(w, rq, http.StatusOK, "edit.html", "Edit — "+title, shell{editor: true}, &editView{Slug: slug,
 		PageTitle: title, Content: content, OnlyTitle: onlyTitle,
-		HasSection: hasSection, Section: section, StartChar: start, EndChar: end, FileHash: fileHash,
+		HasSection: hasSection, Section: section, SectionHeading: heading, StartChar: start, EndChar: end, FileHash: fileHash,
 		CanRename: editable && !isProtected(slug), CanDelete: editable && !isProtected(slug),
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
@@ -454,7 +461,8 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiSave: the editor's auto-save (no commit): a whole page, a section
-// (guarded by the file's hash), or force_section (spliced by index). A
+// (guarded by the file's hash), or force_section (spliced where the section
+// with section_heading is now, refused if that can't be told). A
 // save onto a file that changed since is merged when the editor takes a
 // merged answer (merge=1: it puts the merged text into its textarea) and
 // the lines don't clash; else 409.
@@ -506,14 +514,15 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case isForce:
-		// Spliced by its index in the file as it is now, without the hash guard.
+		// Into the file as it is now, without the hash guard: the section
+		// the editor was on, found by its heading, or nothing is written.
 		if s.current == nil {
 			http.NotFound(w, r)
 			return
 		}
-		start, end, ok := mdtext.SectionCharRange(*s.current, force)
+		_, start, end, ok := findSection(*s.current, force, headingKey(r.PostFormValue("section_heading")))
 		if !ok {
-			badRequestPage(w)
+			writeJSON(w, http.StatusConflict, M{"error": "section_gone", "file_hash": keepGivenBase(*s.current)})
 			return
 		}
 		content, newHash, newStart, newEnd, _ = mdtext.SpliceSection(s.current, mdtext.ContentHash(*s.current), start, end, s.text)
@@ -575,12 +584,9 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 	}
 	theirs, mine := *s.current, s.text
 	if section >= 1 {
-		start, end, ok := mdtext.SectionCharRange(theirs, section)
-		if !ok {
-			badRequestPage(w)
-			return
-		}
-		mine, _, _, _, _ = mdtext.SpliceSection(&theirs, mdtext.ContentHash(theirs), start, end, s.text)
+		// Only for the page's history, so a section that can't be told loses
+		// nothing: the text is added at the end there.
+		mine, _ = spliceIntoPage(theirs, section, r.PostFormValue("section_heading"), s.text)
 	}
 	if !cfg.GitEnabled || mine == theirs {
 		writeJSON(w, http.StatusOK, M{"set_aside": false})
@@ -625,9 +631,9 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 		case base != "":
 			whole, _, _, _, ok = mdtext.SpliceSection(&base, s.fileHash, s.start, s.end, s.text)
 		case hasIdx && s.current != nil:
-			if start, end, valid := mdtext.SectionCharRange(*s.current, idx); valid {
-				whole, _, _, _, ok = mdtext.SpliceSection(s.current, mdtext.ContentHash(*s.current), start, end, s.text)
-			}
+			// A section that can't be told: at the end, for the banner's choices.
+			whole, _ = spliceIntoPage(*s.current, idx, r.PostFormValue("section_heading"), s.text)
+			ok = true
 		}
 		if !ok {
 			return

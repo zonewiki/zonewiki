@@ -95,7 +95,7 @@ function emojiMatches(query, onLoad) {
 
 // Inside code (a fence above the caret, or an open ` on its line): no emoji.
 function inCode(before) {
-  const fences = (before.match(/^ {0,3}(```|~~~)/gm) || []).length;
+  const fences = (before.match(/^ {0,3}(`{3,}[^`\n]*$|~~~)/gm) || []).length;
   const line = before.slice(before.lastIndexOf('\n') + 1);
   return fences % 2 === 1 || (line.match(/`/g) || []).length % 2 === 1;
 }

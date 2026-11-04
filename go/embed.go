@@ -50,9 +50,8 @@ const maxChunkChars = 800
 
 var (
 	// An ATX heading: its #s and its text (manual.go reads the docs' with it too).
-	chunkHeadingRE = regexp.MustCompile(`^(#{1,6})` + mdtext.SpaceClass + `+(.*?)` + mdtext.SpaceClass + `*#*` + mdtext.SpaceClass + `*$`)
-	chunkLinkRE    = regexp.MustCompile(`(!?\[[^\]]*\])\([^)]*\)`)
-	paragraphRE    = regexp.MustCompile(`\n` + mdtext.SpaceClass + `*\n`)
+	chunkLinkRE = regexp.MustCompile(`(!?\[[^\]]*\])\([^)]*\)`)
+	paragraphRE = regexp.MustCompile(`\n` + mdtext.SpaceClass + `*\n`)
 )
 
 // splitLong: text cut at blank lines into pieces of at most maxChars
@@ -115,34 +114,32 @@ type headingLevel struct {
 	text  string
 }
 
-// chunkSections: a page body cut into sections at its headings (outside
-// code fences), long sections further at paragraphs; link targets dropped,
-// their text kept.
+// chunkSections: a page body (no frontmatter) cut into sections at its
+// headings, as the parser finds them, long sections further at paragraphs;
+// link targets dropped, their text kept.
 func chunkSections(text string, maxChars int) []chunkSection {
-	sections := [][]string{{}}
-	for _, l := range mdtext.FencedLines(strings.Split(text, "\n")) {
-		if !l.InFence && chunkHeadingRE.MatchString(l.Line) {
-			sections = append(sections, []string{})
+	headings := headingsIn(text)
+	textUntil := func(i int) int {
+		if i < len(headings) {
+			return headings[i].start
 		}
-		sections[len(sections)-1] = append(sections[len(sections)-1], l.Line)
+		return len(text)
 	}
 	var chunks []chunkSection
 	var parents []headingLevel // the open headings above
-	for _, lines := range sections {
-		heading, level := "", 0
-		if len(lines) > 0 {
-			if m := chunkHeadingRE.FindStringSubmatch(lines[0]); m != nil {
-				heading, level = m[2], len(m[1])
-				lines = lines[1:]
-				var kept []headingLevel
-				for _, p := range parents {
-					if p.level < level {
-						kept = append(kept, p)
-					}
+	for i := -1; i < len(headings); i++ {
+		heading, level, from := "", 0, 0
+		if i >= 0 {
+			heading, level, from = headings[i].text, headings[i].level, headings[i].body
+			var kept []headingLevel
+			for _, p := range parents {
+				if p.level < level {
+					kept = append(kept, p)
 				}
-				parents = append(kept, headingLevel{level, heading})
 			}
+			parents = append(kept, headingLevel{level, heading})
 		}
+		section := text[from:textUntil(i+1)]
 		path := ""
 		if heading != "" {
 			names := make([]string, len(parents))
@@ -151,7 +148,7 @@ func chunkSections(text string, maxChars int) []chunkSection {
 			}
 			path = strings.Join(names, " › ")
 		}
-		body := strings.TrimSpace(chunkLinkRE.ReplaceAllString(strings.Join(lines, "\n"), "${1}"))
+		body := strings.TrimSpace(chunkLinkRE.ReplaceAllString(section, "${1}"))
 		if body == "" {
 			continue
 		}

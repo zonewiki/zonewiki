@@ -61,6 +61,7 @@
       <input type="hidden" name="start_char" id="section-start-char" value="{{.StartChar}}">
       <input type="hidden" name="end_char" id="section-end-char" value="{{.EndChar}}">
       <input type="hidden" name="section_idx" id="section-idx" value="{{.Section}}">
+      <input type="hidden" name="section_heading" id="section-heading" value="{{.SectionHeading}}">
       {{- end}}
       <textarea id="editor-textarea" name="content" data-cursor="{{if .OnlyTitle}}end{{end}}"
                 spellcheck="false" autocorrect="off" autocapitalize="off">{{.Content}}</textarea>

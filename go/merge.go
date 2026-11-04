@@ -281,7 +281,7 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 		return m, false
 	}
 	if s.section && m.clean {
-		if m.start, m.end, ok = headedSection(m.content, firstLine(s.text)); !ok {
+		if _, m.start, m.end, ok = findSection(m.content, 0, headingKey(firstLine(s.text))); !ok {
 			return m, false
 		}
 	}
@@ -311,24 +311,7 @@ func otherAuthor(path, user string) string {
 
 func firstLine(text string) string {
 	line, _, _ := strings.Cut(text, "\n")
-	return strings.TrimRight(line, " \t")
-}
-
-// headedSection: the range (characters) of the one section of content
-// whose heading line is heading; ok false if none or several.
-func headedSection(content, heading string) (start, end int, ok bool) {
-	found := 0
-	for i := 1; ; i++ {
-		s, e, valid := mdtext.SectionCharRange(content, i)
-		if !valid {
-			break
-		}
-		if firstLine(mdtext.RuneSlice(content, s, e)) == heading {
-			start, end = s, e
-			found++
-		}
-	}
-	return start, end, found == 1 && heading != ""
+	return strings.TrimRight(line, " \t\r")
 }
 
 // Leaving a page in conflict: the editor's save on pagehide can't show a

@@ -82,8 +82,8 @@ func TestMathHeadingID(t *testing.T) {
 // item or a setext underline inside it is no section and no checkbox.
 func TestMathBlockIsAFence(t *testing.T) {
 	text := "# T\n\n## One\n\n$$\n## not a heading\n- [ ] not a task\nx\n---\n$$\n\n$$- [ ] y$$\n\n- [ ] real\n\n## Two\n"
-	if got := len(mdtext.SplitSections(text)); got != 3 { // the intro, One, Two
-		t.Errorf("%d sections, want 3: %q", got, mdtext.SplitSections(text))
+	if got := len(pageSections(text)); got != 3 { // the intro, One, Two
+		t.Errorf("%d sections, want 3: %q", got, pageSections(text))
 	}
 	if got := len(mdtext.TaskItemLines(mdtext.SplitLines(text), false)); got != 1 {
 		t.Errorf("%d task lines, want 1", got)
@@ -96,7 +96,7 @@ func TestMathBlockIsAFence(t *testing.T) {
 		t.Errorf("%d checkboxes, want 1:\n%s", n, html)
 	}
 	// Unclosed: the rest of the page is math, to both.
-	if got, want := len(mdtext.SplitSections("## A\n\n$$\n## B\n")), len(mdtext.SplitSections("## A\n")); got != want {
+	if got, want := len(pageSections("## A\n\n$$\n## B\n")), len(pageSections("## A\n")); got != want {
 		t.Errorf("unclosed $$: %d sections, want %d", got, want)
 	}
 }

@@ -22,7 +22,7 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
     // Open first slide with the page H1 — intro slide has no specific section
     let current = document.createElement('div');
     current.className = 'slide-body page-content';
-    current.dataset.sectionN = '';
+    current.dataset.editHref = '';
     const pageH1 = document.querySelector('.page-header h1');
     if (pageH1) {
       const h = document.createElement('h1');
@@ -42,10 +42,9 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
         if (current.children.length) groups.push(current);
         current = document.createElement('div');
         current.className = 'slide-body page-content';
-        // Extract section number from the embedded section-edit-btn link
+        // The slide's edit button is the section's ✎
         const editLink = node.querySelector('.section-edit-btn');
-        const m = editLink && editLink.getAttribute('href').match(/[?&]section=(\d+)/);
-        current.dataset.sectionN = m ? m[1] : '';
+        current.dataset.editHref = editLink ? editLink.getAttribute('href') : '';
       }
       current.appendChild(clone);
     }
@@ -75,8 +74,7 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
     // Update the edit button href for this slide's section
     const slug = window.location.pathname.replace(/^\/page\//, '');
-    const sectionN = slides[n].dataset.sectionN;
-    const editHref = sectionN ? `/edit/${slug}?section=${sectionN}` : `/edit/${slug}`;
+    const editHref = slides[n].dataset.editHref || `/edit/${slug}`;
     const presEditBtn = overlay.querySelector('.pres-edit-btn');
     if (presEditBtn) presEditBtn.href = editHref;
 

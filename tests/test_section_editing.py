@@ -2,6 +2,11 @@
 editor, saving it into the page, conflicts, auto-save's anchors. How pages
 split into sections and the splicing have Go tests (go/sections_test.go)."""
 
+import html
+import re
+
+import pytest
+
 from tests.conftest import HOST, content_hash, content_hash, section_fields, write_page
 
 
@@ -345,6 +350,7 @@ class TestForceSectionSave:
         resp = client.post("/api/save/fs1", data={
             "content": "## A\n\nnew a\n",
             "force_section": "1",
+            "section_heading": "## A",
         }, headers=HOST)
         assert resp.status_code == 200
         saved = page.read_text(encoding="utf-8")
@@ -361,6 +367,7 @@ class TestForceSectionSave:
         resp = client.post("/api/save/fs-glue", data={
             "content": "## A\n\nnew a",
             "force_section": "1",
+            "section_heading": "## A",
         }, headers=HOST)
         assert resp.status_code == 200
         saved = page.read_text(encoding="utf-8")
@@ -374,6 +381,7 @@ class TestForceSectionSave:
         resp = client.post("/api/save/fs2", data={
             "content": "## A\n\nlonger body\n",
             "force_section": "1",
+            "section_heading": "## A",
         }, headers=HOST)
         assert resp.status_code == 200
         data = resp.get_json()
@@ -391,6 +399,7 @@ class TestForceSectionSave:
         resp = client.post("/api/save/fs3", data={
             "content": "## S2\n\nnew s2\n",
             "force_section": "2",
+            "section_heading": "## S2",
         }, headers=HOST)
         assert resp.status_code == 200
         saved = page.read_text(encoding="utf-8")
@@ -398,13 +407,35 @@ class TestForceSectionSave:
         assert "new s2" in saved, "S2 not updated!"
         assert "s3 extended" in saved, "S3 lost!"
 
-    def test_force_section_invalid_index_returns_400(self, client, wiki_dir):
-        write_page(wiki_dir, "fs4", "pre\n\n## A\n\na\n")
-        resp = client.post("/api/save/fs4", data={
-            "content": "## X\n\nx\n",
-            "force_section": "99",
+    def test_force_section_never_lands_on_another_section(self, client, wiki_dir):
+        """A section added above moves the numbers: the text goes where its
+        heading is now, not over what has its old number."""
+        page = write_page(wiki_dir, "fs-moved", "## New\n\nn\n\n## A\n\na\n\n## B\n\nb\n")
+        resp = client.post("/api/save/fs-moved", data={
+            "content": "## B\n\nmine", "force_section": "2", "section_heading": "## B",
         }, headers=HOST)
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert page.read_text(encoding="utf-8") == "## New\n\nn\n\n## A\n\na\n\n## B\n\nmine\n"
+
+    @pytest.mark.parametrize("posted", [
+        {"force_section": "1", "section_heading": "## Gone"},   # no such heading
+        {"force_section": "3", "section_heading": "## Twin"},   # several, none at its number
+        {"force_section": "1"},                                 # an editor that doesn't say
+        {"force_section": "99", "section_heading": "## Gone"},
+    ])
+    def test_force_section_refused_when_it_cant_be_told(self, client, wiki_dir, posted):
+        text = "## A\n\na\n\n## Twin\n\nb\n\n## C\n\nc\n\n## Twin\n\nd\n"
+        page = write_page(wiki_dir, "fs4", text)
+        resp = client.post("/api/save/fs4", data={"content": "## X\n\nx\n", **posted}, headers=HOST)
+        assert resp.status_code == 409 and resp.get_json()["error"] == "section_gone"
+        assert page.read_text(encoding="utf-8") == text
+
+    def test_force_section_picks_the_twin_at_its_number(self, client, wiki_dir):
+        page = write_page(wiki_dir, "fs-twin", "## Twin\n\na\n\n## Twin\n\nb\n")
+        client.post("/api/save/fs-twin", data={
+            "content": "## Twin\n\nmine", "force_section": "2", "section_heading": "## Twin",
+        }, headers=HOST)
+        assert page.read_text(encoding="utf-8") == "## Twin\n\na\n\n## Twin\n\nmine\n"
 
     def test_force_section_zero_does_full_file_write(self, client, wiki_dir):
         """force_section=0 is below the valid range and falls through to a
@@ -426,6 +457,7 @@ class TestForceSectionSave:
         resp = client.post("/api/save/fs6", data={
             "content": "## A\n\nforced a\n",
             "force_section": "1",
+            "section_heading": "## A",
         }, headers=HOST)
         assert resp.status_code == 200
         anchors = resp.get_json()
@@ -533,7 +565,7 @@ class TestFullFileConflict:
 # (lines followed by a line of dashes: "Title\n------")
 # ===========================================================================
 
-class TestSplitSectionsSetextHeadings:
+class TestSetextSections:
 
     def test_setext_section_edit_route_uses_correct_index(self, client, wiki_dir):
         """Regression: clicking a setext-section's edit button must load that section,
@@ -572,7 +604,7 @@ class TestSplitSectionsSetextHeadings:
 # Bug: indented ATX headings (up to 3 leading spaces) weren't sections
 # ===========================================================================
 
-class TestSplitSectionsIndentedHeadings:
+class TestIndentedSections:
 
     def test_indented_section_save_does_not_drop(self, client, wiki_dir):
         """Indented ATX heading: edit must reach the correct section."""
@@ -585,3 +617,90 @@ class TestSplitSectionsIndentedHeadings:
         saved = page.read_text(encoding="utf-8")
         assert "UPDATED body a" in saved, "Edit was silently dropped"
         assert "body b" in saved
+
+
+# ===========================================================================
+# Each ✎ opens the section of its own heading
+# ===========================================================================
+
+class TestPencilOpensItsSection:
+
+    def check(self, client, wiki_dir, slug, text, heads):
+        """The page's ✎s, in order, open a section starting at each of heads."""
+        write_page(wiki_dir, slug, text)
+        page = client.get(f"/page/{slug}", headers=HOST).get_data(as_text=True)
+        edits = re.findall(rf'href="/edit/{slug}\?section=(\d+)&amp;h=', page)
+        assert edits == [str(i + 1) for i in range(len(heads))]
+        for i, head in enumerate(heads):
+            fields = section_fields(client, slug, i + 1)
+            assert text[int(fields["start_char"]):].startswith(head)
+
+    def test_page_with_frontmatter(self, client, wiki_dir):
+        # Tags and a tldr close with ---, which isn't the tldr's setext underline.
+        self.check(client, wiki_dir, "fm", (
+            "---\ntags: work, training\ntldr: Notes per session.\n---\n\n# Notes\n\n"
+            "- break out:\n  - someone\n\n"
+            "## Session 1\n\n### First\n\n- a\n\n\n"
+            "## Session 2\n\n### Reflection\n\ntext\n\n### Breakout\n\n-\n"
+        ), ["## Session 1", "### First", "## Session 2", "### Reflection", "### Breakout"])
+
+    def test_saving_a_section_leaves_the_frontmatter(self, client, wiki_dir):
+        text = "---\ntags: a\ntldr: b\n---\n\n# T\n\n## One\n\none\n\n## Two\n\ntwo\n"
+        write_page(wiki_dir, "fmsave", text)
+        fields = section_fields(client, "fmsave", 2)
+        fields["content"] = "## Two\n\nnew"
+        resp = client.post("/edit/fmsave", data=fields, headers=HOST)
+        assert resp.status_code in (200, 302)
+        assert (wiki_dir / "fmsave.md").read_text() == text.replace("two\n", "new\n")
+
+    def test_what_only_looks_like_a_heading(self, client, wiki_dir):
+        self.check(client, wiki_dir, "looks", (
+            "## One\n\n<!--\n## Hidden\n-->\n\n<div>\n## Inside\n</div>\n\n"
+            "1. first\n---\n\n## Two\n"
+        ), ["## One", "## Two"])
+
+    def test_heading_in_a_quote_or_list_is_no_section(self, client, wiki_dir):
+        self.check(client, wiki_dir, "nested", (
+            "## One\n\n> ## Quoted\n\n- ## Listed\n\n## Two\n"
+        ), ["## One", "## Two"])
+
+    def test_headings_a_line_based_reading_misses(self, client, wiki_dir):
+        self.check(client, wiki_dir, "missed", (
+            "## One\n\n##\ttab\n\nFirst line\nsecond line\n---\n\n## Two\n"
+        ), ["## One", "##\ttab", "First line", "## Two"])
+
+    def test_rule_under_the_title_is_no_frontmatter(self, client, wiki_dir):
+        # Without the title's line, --- … --- would read as frontmatter and
+        # the text between them would not show.
+        text = "# T\n---\n\n## One\n\nkept\n\n---\n\n## Two\n"
+        self.check(client, wiki_dir, "rule", text, ["## One", "## Two"])
+        assert "kept" in client.get("/page/rule", headers=HOST).get_data(as_text=True)
+
+
+class TestStalePencil:
+    """A ✎ from a page view loaded before the page changed."""
+
+    def link(self, client, slug, n):
+        page = client.get(f"/page/{slug}", headers=HOST).get_data(as_text=True)
+        hrefs = re.findall(rf'href="(/edit/{slug}\?section=\d+&amp;h=[0-9a-f]+)"', page)
+        return html.unescape(hrefs[n - 1])
+
+    def test_finds_its_section_after_one_was_added_above(self, client, wiki_dir):
+        page = write_page(wiki_dir, "st", "## A\n\nbody a\n\n## B\n\nbody b\n")
+        href = self.link(client, "st", 2)
+        page.write_text("## New\n\nbody n\n\n## A\n\nbody a\n\n## B\n\nbody b\n")
+        body = client.get(href, headers=HOST).get_data(as_text=True)
+        assert "body b" in body and "body a" not in body and 'id="section-idx" value="3"' in body
+        assert 'id="section-heading" value="## B"' in body
+
+    def test_opens_the_whole_page_when_its_section_is_gone(self, client, wiki_dir):
+        page = write_page(wiki_dir, "st2", "## A\n\nbody a\n\n## B\n\nbody b\n")
+        href = self.link(client, "st2", 2)
+        page.write_text("## A\n\nbody a\n\n## C\n\nbody c\n")
+        body = client.get(href, headers=HOST).get_data(as_text=True)
+        assert "body a" in body and "body c" in body and 'id="section-idx"' not in body
+
+    def test_keeps_its_number_among_twins(self, client, wiki_dir):
+        write_page(wiki_dir, "st3", "## Twin\n\nbody a\n\n## Twin\n\nbody b\n")
+        body = client.get(self.link(client, "st3", 2), headers=HOST).get_data(as_text=True)
+        assert "body b" in body and "body a" not in body

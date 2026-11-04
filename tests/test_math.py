@@ -20,7 +20,7 @@ def test_sections_after_display_math(client, wiki_dir):
     text = "# P\n\n## One\n\n$$\n## not a heading\n$$\n\n## Two\n\ntwo body\n"
     write_page(wiki_dir, "p", text)
     page = client.get("/page/p", headers=HOST).get_data(as_text=True)
-    edits = re.findall(r'href="/edit/p\?section=(\d+)"', page)
+    edits = re.findall(r'href="/edit/p\?section=(\d+)&amp;h=', page)
     assert edits == ["1", "2"]
     fields = section_fields(client, "p", 2)
     assert text[int(fields["start_char"]):].startswith("## Two")

@@ -730,6 +730,15 @@ class TestMergeOnSave:
         kept = json.loads((git_wiki_dir / ".zone/drafts/_/plans.json").read_text())
         assert kept["content"] == self.PAGE.replace("Second.", "Second, B.") and kept["base"] == self.PAGE
 
+    def test_reload_theirs_keeps_a_section_whose_heading_is_gone(self, client, page):
+        theirs = self.PAGE.replace("## Two", "## Renamed")
+        self.save(client, theirs)
+        resp = client.post("/api/save/plans", data={"content": "## Two\n\nSecond, mine.", "set_aside": "1",
+                                                    "force_section": "2", "section_heading": "## Two"}, headers=HOST)
+        assert resp.get_json() == {"set_aside": True} and page.read_text() == theirs
+        shown = subprocess.run(["git", "show", "HEAD~1:plans.md"], cwd=page.parent, capture_output=True, text=True)
+        assert shown.stdout == theirs.rstrip("\n") + "\n\n## Two\n\nSecond, mine.\n"
+
     def test_left_drafts_go_after_30_days(self, client, page, git_wiki_dir):
         kept = git_wiki_dir / ".zone/drafts/_/plans.json"
         kept.parent.mkdir(parents=True)

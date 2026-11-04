@@ -71,12 +71,12 @@ func TestDedent(t *testing.T) {
 	}
 }
 
-// Sections and their offsets count characters, as the editor does.
-func TestSectionsCountCharacters(t *testing.T) {
+// A splice's offsets count characters, as the editor does.
+func TestSpliceCountsCharacters(t *testing.T) {
 	text := "# Ü\n\nä\n## Zwei\nö\n### Drei\nx\n"
-	start, end, ok := SectionCharRange(text, 1)
-	if !ok || start != 7 || end != 17 || RuneSlice(text, start, end) != "## Zwei\nö\n" {
-		t.Fatalf("%d %d %v", start, end, ok)
+	start, end := 7, 17
+	if RuneSlice(text, start, end) != "## Zwei\nö\n" {
+		t.Fatalf("%q", RuneSlice(text, start, end))
 	}
 	merged, _, s, e, ok := SpliceSection(&text, ContentHash(text), start, end, "## Zwei\nneu")
 	if !ok || merged != "# Ü\n\nä\n## Zwei\nneu\n### Drei\nx\n" || s != 7 || e != 19 {

@@ -1,6 +1,6 @@
 // Package mdtext is markdown source text: frontmatter, fenced code, code
-// and math masking, headings and their anchors, wikilink syntax, sections,
-// task-list checkboxes, slugs. Pure functions on strings, no files and no
+// and math masking, headings and their anchors, wikilink syntax, splicing a
+// section's text, task-list checkboxes, slugs. Pure functions on strings, no files and no
 // Zone state. Offsets into a text (sections, splices) count characters
 // (runes): the editor sends them back.
 package mdtext
@@ -274,8 +274,9 @@ func FencedLines(lines []string) []FencedLine {
 		s := strings.TrimSpace(line)
 		if !inFence {
 			if strings.HasPrefix(s, "```") || strings.HasPrefix(s, "~~~") {
-				inFence = true
 				marker = strings.Repeat(s[:1], len(s)-len(strings.TrimLeft(s, s[:1])))
+				// A backtick after a ``` is inline code (```x``` y), no fence.
+				inFence = s[0] != '`' || !strings.Contains(s[len(marker):], "`")
 			} else if opens, whole := MathFence(line); opens {
 				inFence, marker = true, "$$"
 			} else if whole {
@@ -546,73 +547,10 @@ func TrimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.I
 
 // ---- sections ----
 
-var (
-	atxSectionRE  = regexp.MustCompile(`^ {0,3}#{2,3} `)
-	listItemRE    = regexp.MustCompile(`^[-*+]` + SpaceClass)
-	listItemIndRE = regexp.MustCompile(`^[ \t]{0,3}[-*+]` + SpaceClass)
-)
-
-// SplitSections splits at ## and ### headings outside fenced code (ATX with
-// up to 3 leading spaces, and setext h2: a text line, then dashes):
-// [preamble, section1, section2, …].
-func SplitSections(content string) []string {
-	lines := SplitLines(content)
-	var headings []int
-	prevText := -1 // for setext h2
-	for i, l := range FencedLines(lines) {
-		stripped := strings.TrimSpace(l.Line)
-		switch {
-		case l.InFence:
-			prevText = -1
-		case atxSectionRE.MatchString(l.Line):
-			headings = append(headings, i)
-			prevText = -1
-		case stripped != "" && strings.Trim(stripped, "-=") == "":
-			// A setext underline (--- h2, === h1) or a thematic break; a
-			// list item's "- " is neither.
-			isListItem := listItemRE.MatchString(l.Line)
-			prevIsList := prevText >= 0 && listItemIndRE.MatchString(lines[prevText])
-			if strings.Trim(stripped, "-") == "" && prevText >= 0 && !isListItem && !prevIsList {
-				headings = append(headings, prevText)
-			}
-			prevText = -1
-		case stripped != "":
-			prevText = i
-		default:
-			prevText = -1
-		}
-	}
-	if len(headings) == 0 {
-		return []string{content}
-	}
-	sections := []string{strings.Join(lines[:headings[0]], "")}
-	for j, pos := range headings {
-		end := len(lines)
-		if j+1 < len(headings) {
-			end = headings[j+1]
-		}
-		sections = append(sections, strings.Join(lines[pos:end], ""))
-	}
-	return sections
-}
-
 // ContentHash is a short hex hash of text, for change detection.
 func ContentHash(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])[:16]
-}
-
-// SectionCharRange: the start and end (characters) of section idx (1-based;
-// 0, the preamble, is no section); ok false for an invalid index.
-func SectionCharRange(content string, idx int) (start, end int, ok bool) {
-	sections := SplitSections(content)
-	if idx < 1 || idx > len(sections)-1 {
-		return 0, 0, false
-	}
-	for _, s := range sections[:idx] {
-		start += utf8.RuneCountInString(s)
-	}
-	return start, start + utf8.RuneCountInString(sections[idx]), true
 }
 
 // RuneSlice is s[a:b] in characters.
@@ -634,8 +572,8 @@ func SpliceSection(full *string, fileHash string, start, end int, newContent str
 		return "", "", 0, 0, false
 	}
 	orig := string(r[start:end])
-	trailing := orig[len(strings.TrimRight(orig, "\n")):]
-	replacement := strings.TrimRight(newContent, "\n") + trailing
+	trailing := orig[len(strings.TrimRight(orig, "\r\n")):]
+	replacement := strings.TrimRight(newContent, "\r\n") + trailing
 	merged = string(r[:start]) + replacement + string(r[end:])
 	return merged, ContentHash(merged), start, start + utf8.RuneCountInString(replacement), true
 }
@@ -643,12 +581,15 @@ func SpliceSection(full *string, fileHash string, start, end int, newContent str
 var h1LineRE = regexp.MustCompile(`^#` + SpaceClass + `+`)
 
 // StripH1 removes the first H1 line, so it isn't shown twice under the
-// page header.
+// page header. A --- right under a title on a page's first line stays no
+// frontmatter: the title's line stays, empty.
 func StripH1(content string) string {
 	lines := strings.Split(content, "\n")
 	for i := bodyStart(lines); i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) != "" {
-			if h1LineRE.MatchString(lines[i]) {
+			if h1LineRE.MatchString(lines[i]) && i == 0 && len(lines) > 1 && strings.TrimSpace(lines[1]) == "---" {
+				lines[0] = ""
+			} else if h1LineRE.MatchString(lines[i]) {
 				lines = append(lines[:i], lines[i+1:]...)
 			}
 			break

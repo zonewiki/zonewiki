@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 	"zonewiki/internal/mdtext"
@@ -62,17 +63,22 @@ func TestGolden(t *testing.T) {
 		var text string
 		_ = json.Unmarshal(c["text"], &text)
 		slug := "folder/sub/page"
-		sections := mdtext.SplitSections(text)
+		sections := pageSections(text)
 		check("split_sections", text, sections, c["split_sections"])
 		var ranges []any
 		for i := 0; i <= len(sections); i++ {
-			if s, e, ok := mdtext.SectionCharRange(text, i); ok {
+			if s, e, ok := sectionRange(text, i); ok {
 				ranges = append(ranges, []int{s, e})
 			} else {
 				ranges = append(ranges, nil)
 			}
 		}
 		check("section_char_range", text, ranges, c["section_char_range"])
+		// Whatever the text, each ✎ has its section.
+		_, shown := mdtext.ParseFrontmatter(mdtext.StripH1(text))
+		if n := strings.Count(markdown(shown, &Env{EditSlug: "p"}, false), `class="section-edit-btn"`); n != len(sections)-1 {
+			t.Errorf("%d ✎ for %d sections: %q", n, len(sections)-1, text)
+		}
 		meta, body := mdtext.ParseFrontmatter(text)
 		m := map[string]any{}
 		if meta.Tags != nil {

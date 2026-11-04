@@ -33,6 +33,7 @@ import (
 // request's Host (links to it are not external).
 type Env struct {
 	EditSlug     string
+	SectionKeys  []string
 	SectionChips map[string]string
 	Host         string
 	HeadingIDs   headingIDs // what a heading's id becomes
@@ -363,15 +364,15 @@ func attr(n ast.Node, name string) string {
 	return s
 }
 
-// heading: a ## or ### heading on the page view sits in a section header
-// with the ✎ that edits the section (numbered as mdtext.split_sections
-// counts them), after its ☑ N chip when tasks link to it.
+// heading: a section's heading on the page view sits in a section header
+// with the ✎ that edits the section (numbered as pageSections cuts them),
+// after its ☑ N chip when tasks link to it, which any ## or ### may have.
 func (r *zoneRenderer) heading(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Heading)
 	tag := fmt.Sprintf("h%d", n.Level)
-	sectioned := n.Level == 2 || n.Level == 3
+	editable := r.env.EditSlug != "" && sectionHeading(n)
 	if entering {
-		if r.env.EditSlug != "" && sectioned {
+		if editable {
 			fmt.Fprintf(w, `<div class="section-header section-header-%s">`, tag)
 		}
 		w.WriteString("<" + tag)
@@ -392,13 +393,17 @@ func (r *zoneRenderer) heading(w util.BufWriter, src []byte, node ast.Node, ente
 		return ast.WalkContinue, nil
 	}
 	w.WriteString("</" + tag + ">")
-	if sectioned {
+	if n.Level == 2 || n.Level == 3 {
 		w.WriteString(r.env.SectionChips[attr(n, "id")])
-		if r.env.EditSlug != "" {
-			r.sections++
-			fmt.Fprintf(w, `<a href="%s?section=%d" class="section-edit-btn" title="Edit section">✎</a></div>`,
-				pathURL("edit", r.env.EditSlug), r.sections)
+	}
+	if editable {
+		r.sections++
+		key := ""
+		if r.sections <= len(r.env.SectionKeys) {
+			key = "&amp;h=" + r.env.SectionKeys[r.sections-1]
 		}
+		fmt.Fprintf(w, `<a href="%s?section=%d%s" class="section-edit-btn" title="Edit section">✎</a></div>`,
+			pathURL("edit", r.env.EditSlug), r.sections, key)
 	}
 	w.WriteString("\n")
 	return ast.WalkContinue, nil

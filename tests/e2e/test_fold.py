@@ -251,3 +251,13 @@ def test_folded_label_in_the_wavy_line_unfolds(page, wiki):
     # Not part of the heading's text for search highlights.
     page.goto("/page/folds?hl=folded")
     expect(page.locator(".search-hl-bar")).to_have_count(0)
+
+
+def test_presentation_edit_button_is_the_sections_pencil(page, wiki):
+    wiki.write("folds", FOLDS)
+    page.goto("/page/folds")
+    pencil = page.locator(".section-edit-btn").first.get_attribute("href")
+    assert "&h=" in pencil
+    page.keyboard.press("p")
+    page.keyboard.press("ArrowRight")
+    expect(page.locator(".pres-edit-btn")).to_have_attribute("href", pencil)

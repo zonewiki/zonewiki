@@ -363,3 +363,14 @@ def test_emoji_completion_in_task_title(page, wiki):
     expect(page.locator("#task-edit-desc")).to_have_value("yay 🎉")
     page.keyboard.press("Control+Enter")
     expect(page.locator(".task-item .task-title", has_text="Ship it 🚀")).to_be_visible()
+
+
+def test_checkbox_after_inline_code_at_a_lines_start(page, wiki):
+    # ```x``` is inline code, no fence: the box below it counts, here as on the server.
+    text = "# T\n\n```x``` y\n\n- [ ] box\n"
+    wiki.write("inline", text)
+    page.goto("/edit/inline")
+    boxes = page.locator("#editor-preview .task-list-item-checkbox")
+    expect(boxes).to_have_count(1)
+    boxes.first.click()
+    expect(page.locator("#editor-textarea")).to_have_value(text.replace("- [ ]", "- [x]"))

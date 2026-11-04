@@ -76,6 +76,7 @@ type RenderOpts struct {
 	HideTags, HideTldr bool
 	PreferLists        []string
 	EditSlug           string
+	SectionKeys        []string // a key per section, for its ✎ link (sectionKeys)
 	SectionTasks       []TaskLink
 	HeadingIDs         headingIDs // as data-pid in a preview (Env.HeadingIDs)
 }
@@ -93,7 +94,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, embeds := processTasksEmbeds(rq, text, o.Page)
 	text, refs := maskTaskRefs(text)
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
-	env := &Env{EditSlug: o.EditSlug, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
+	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
 		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page)}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs, prefer)

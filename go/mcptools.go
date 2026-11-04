@@ -708,55 +708,41 @@ func instructionsWithGuide() string {
 
 // ── Sections ────────────────────────────────────────────────────────────────
 
-var mcpHeadingRE = regexp.MustCompile(`^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$`)
-
-// headingMatch: a line (without its "\n") as a heading: level and text.
-func headingMatch(line string) (int, string, bool) {
-	m := mcpHeadingRE.FindStringSubmatch(strings.TrimSuffix(line, "\n"))
-	if m == nil {
-		return 0, "", false
-	}
-	return len(m[1]), m[2], true
-}
-
 // sectionLines: the lines of the section under heading (any level; its
 // text compared without markup and case), from the heading to before the
-// next heading of the same or a higher level, subsections included.
+// next heading of the same or a higher level, subsections included. The
+// lines are a whole text, split with their line breaks (mdtext.SplitLines).
 func sectionLines(lines []string, heading string) (int, int, bool) {
 	want := strings.ToLower(mdtext.PlainHeading(strings.TrimSpace(strings.TrimLeft(heading, "#"))))
-	start, level, end := -1, 0, len(lines)
-	for i, l := range mdtext.FencedLines(lines) {
-		if l.InFence {
-			continue
-		}
-		n, text, ok := headingMatch(l.Line)
-		if !ok {
-			continue
-		}
-		if start < 0 {
-			if strings.ToLower(mdtext.PlainHeading(text)) == want {
-				start, level = i, n
+	lineAt := func(offset int) int {
+		for i, l := range lines {
+			if offset -= len(l); offset < 0 {
+				return i
 			}
-		} else if n <= level {
-			end = i
-			break
 		}
+		return len(lines)
 	}
-	return start, end, start >= 0
+	headings := pageHeadings(strings.Join(lines, ""))
+	for i, h := range headings {
+		if strings.ToLower(mdtext.PlainHeading(h.text)) != want {
+			continue
+		}
+		for _, next := range headings[i+1:] {
+			if next.level <= h.level {
+				return lineAt(h.start), lineAt(next.start), true
+			}
+		}
+		return lineAt(h.start), len(lines), true
+	}
+	return -1, len(lines), false
 }
 
 // noHeading: the error for a heading the page doesn't have, naming those
 // it has.
 func noHeading(slug, content, heading string) string {
-	lines := mdtext.SplitLines(content)
-	for i := range lines {
-		lines[i] = mdtext.LineBody(lines[i])
-	}
 	var names []string
-	for _, l := range mdtext.FencedLines(lines) {
-		if _, text, ok := headingMatch(l.Line); ok && !l.InFence {
-			names = append(names, strconv.Quote(text))
-		}
+	for _, h := range pageHeadings(content) {
+		names = append(names, strconv.Quote(h.text))
 	}
 	list := strings.Join(names, ", ")
 	if list == "" {

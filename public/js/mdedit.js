@@ -473,6 +473,12 @@ export function mathFence(line) {
 }
 export const mathFenceEnd = line => line.trimEnd().endsWith('$$');
 
+// A line (trimmed) that opens a code fence: a backtick after a ``` is inline
+// code (```x``` y), no fence, as mdtext.FencedLines reads it.
+export function opensCodeFence(t) {
+  return t.startsWith('~~~') || (t.startsWith('```') && !t.replace(/^`+/, '').includes('`'));
+}
+
 // ── Checkboxes in a preview ───────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
@@ -500,7 +506,7 @@ export function taskCheckboxOffsets(text, frontmatter = true) {
     } else if (fence) {
       // Closing fence: same char, at least as long, nothing else on the line
       if (t[0] === fence[0] && run >= fence.length && run === t.length) fence = null;
-    } else if (run >= 3) {
+    } else if (opensCodeFence(t)) {
       fence = t.slice(0, run);
     } else if (math.opens) {
       fence = '$$';
